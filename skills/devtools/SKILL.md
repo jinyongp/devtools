@@ -1,6 +1,6 @@
 ---
 name: devtools
-description: Use the devtools CLI to manage project variables and secrets, plan workstreams, coordinate claimed tasks across agent sessions, record verification, and inspect dependency graphs.
+description: Use the devtools CLI to manage project variables and secrets, back up and restore profiles, plan workstreams, coordinate claimed tasks across agent sessions, record verification, and inspect dependency graphs.
 ---
 
 # devtools
@@ -93,3 +93,18 @@ the default classification protects the remaining values as secrets.
 `devtools dashboard` returns a short-lived entry link for a read-only local D3 Canvas graph.
 Pass the link to the user when a visual overview helps. Profile selection and node expansion
 request their own scope. `dashboard status` and `dashboard stop` manage the local server.
+
+## Back up and restore
+
+Use `backup create` for all stored profiles, or select one with `--profile`.
+Configure the destination and public recipient with `backup configure`; creation
+also accepts explicit `--output` and `--recipient-file`. Keep the private identity
+in the user's separate key storage and pass its file path only for inspection or recovery.
+
+`backup inspect --file PATH --identity-file PATH` returns metadata.
+`backup restore` previews the source `--profile` and destination `--as`.
+Apply the reviewed digest with `--apply DIGEST --request-id UUID`, preserving
+both inputs for retries. Existing targets require `--replace` in preview and apply,
+and a configured destination/recipient for the automatic safety backup.
+On `revision_conflict`, obtain a fresh preview and reassess the target.
+Restored tasks preserve history and use new claims; reconnect project paths and ports.

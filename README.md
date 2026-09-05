@@ -22,6 +22,9 @@ Profiles, workstreams, and details load as you select them.
 See the [management roadmap](docs/management-roadmap.md) for planned dashboard
 editing, encrypted backup and recovery, process management, and storage cleanup.
 
+`devtools backup` encrypts profile values and task history with a public key and
+restores whole profiles with preview and retry protection. See [backup and recovery](docs/backup.md).
+
 `devtools doctor` diagnoses project requirements, exact tool versions, and
 required variable/secret registrations. Named commands check declared
 prerequisites before running. See [environment diagnosis](docs/doctor.md).

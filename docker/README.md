@@ -20,6 +20,9 @@ just verify-docker doctor
 # 포트 할당·실제 서버 실행·프로젝트 간 참조
 just verify-docker ports
 
+# 암호화 백업·복구·재시도·충돌·직전 백업
+just verify-docker backup
+
 # 시나리오 목록
 just verify-docker --list
 ```

@@ -19,6 +19,9 @@ and [agent skill](skills/devtools/SKILL.md).
 `devtools dashboard` returns an authenticated local link to the D3 Canvas graph.
 Profiles, workstreams, and details load as you select them.
 
+See the [management roadmap](docs/management-roadmap.md) for planned dashboard
+editing, encrypted backup and recovery, process management, and storage cleanup.
+
 `devtools doctor` diagnoses project requirements, exact tool versions, and
 required variable/secret registrations. Named commands check declared
 prerequisites before running. See [environment diagnosis](docs/doctor.md).

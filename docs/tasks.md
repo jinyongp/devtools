@@ -102,8 +102,10 @@ lasts eight idle hours or until the server stops.
 
 Task journals live under the `tasks` subdirectory of the data path reported by
 `devtools project inspect`. Files are private to the user. The dashboard server
-registry uses the cache directory; query snapshots and sessions live in server
-memory. The browser keeps its credential in origin-scoped sessionStorage and
+registry uses the cache directory. Query snapshots are stored under
+`task-queries` for CLI queries and `dashboard/queries` for dashboard queries,
+relative to the cache path. Sessions and the dashboard response cache live in
+server memory. The browser keeps its credential in origin-scoped sessionStorage and
 sends it explicitly in the Authorization header. Task records and execution context
 receipts are separate from the variable/secret store.
 

@@ -16,22 +16,25 @@ import (
 const Filename = "devtools.toml"
 
 type Config struct {
-	Profile  string             `toml:"profile"`
-	Commands map[string]Command `toml:"commands,omitempty"`
+	Requirements Requirements       `toml:"requirements,omitempty"`
+	Profile      string             `toml:"profile"`
+	Commands     map[string]Command `toml:"commands,omitempty"`
 }
 
 type Command struct {
-	Exec   []string `toml:"exec"`
-	Inject bool     `toml:"inject,omitempty"`
-	Env    string   `toml:"env,omitempty"`
+	Requirements Requirements `toml:"requirements,omitempty"`
+	Exec         []string     `toml:"exec"`
+	Inject       bool         `toml:"inject,omitempty"`
+	Env          string       `toml:"env,omitempty"`
 }
 
 type Context struct {
-	Profile    string             `json:"profile"`
-	Source     string             `json:"source"`
-	ConfigPath string             `json:"config_path,omitempty"`
-	Root       string             `json:"root,omitempty"`
-	Commands   map[string]Command `json:"-"`
+	Requirements Requirements       `json:"-"`
+	Profile      string             `json:"profile"`
+	Source       string             `json:"source"`
+	ConfigPath   string             `json:"config_path,omitempty"`
+	Root         string             `json:"root,omitempty"`
+	Commands     map[string]Command `json:"-"`
 }
 
 const ProfilePattern = `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`
@@ -98,6 +101,9 @@ func parse(data []byte, path, root string) (Context, *protocol.Error) {
 		return Context{}, protocol.NewError("invalid_config", "A valid profile identifier is required.", 3, map[string]any{"path": path, "field": "profile"})
 	}
 	for name, command := range config.Commands {
+		if !command.Requirements.Valid() || !config.Requirements.Merge(command.Requirements).Valid() {
+			return Context{}, protocol.NewError("invalid_config", "Invalid command requirements.", 3, map[string]any{"path": path, "field": "commands"})
+		}
 		if !ValidProfile(name) || len(command.Exec) == 0 || command.Exec[0] == "" || (command.Env != "" && !ValidProfile(command.Env)) {
 			return Context{}, protocol.NewError("invalid_config", "Invalid command definition.", 3, map[string]any{"path": path, "field": "commands"})
 		}
@@ -107,7 +113,10 @@ func parse(data []byte, path, root string) (Context, *protocol.Error) {
 			}
 		}
 	}
-	return Context{Profile: config.Profile, Source: "file", ConfigPath: path, Root: root, Commands: config.Commands}, nil
+	if !config.Requirements.Valid() {
+		return Context{}, protocol.NewError("invalid_config", "Invalid project requirements. Use exact tool versions and distinct variable/secret keys.", 3, map[string]any{"path": path, "field": "requirements"})
+	}
+	return Context{Profile: config.Profile, Source: "file", ConfigPath: path, Root: root, Commands: config.Commands, Requirements: config.Requirements}, nil
 }
 
 func ioError(path string) *protocol.Error {

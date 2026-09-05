@@ -174,3 +174,38 @@ func TestGraphContinuationKeepsRevision(t *testing.T) {
 		t.Fatal(nodes)
 	}
 }
+
+func TestAttachMaintainsReferences(t *testing.T) {
+	s := fixture(t)
+	a := itemID(call(t, s, "workstream.create", "", Object{"title": "A"}))
+	b := itemID(call(t, s, "workstream.create", "", Object{"title": "B"}))
+	id := itemID(call(t, s, "task.add", "", Object{"title": "Move", "workstream_id": a}))
+	v := itemID(call(t, s, "validation.add", "", Object{"title": "Check", "method": "test", "task_id": id}))
+	call(t, s, "plan.set", a, Object{"body": "Plan A", "task_ids": []string{id}, "validation_ids": []string{v}})
+	call(t, s, "plan.set", b, Object{"body": "Plan B", "task_ids": []string{}, "validation_ids": []string{}})
+	o := call(t, s, "task.attach", id, Object{"workstream_id": b})
+	if str(o["item"].(Object), "workstream_id") != b {
+		t.Fatal("stale displayed owner")
+	}
+	state, _ := s.Read()
+	old := state.Items[a].Props["plan"].(map[string]any)
+	next := state.Items[b].Props["plan"].(map[string]any)
+	if len(arr(old, "task_ids"))+len(arr(old, "validation_ids")) != 0 || !contains(arr(next, "task_ids"), id) || !contains(arr(next, "validation_ids"), v) {
+		t.Fatal("orphaned plan references")
+	}
+}
+
+func TestImpactPreviewIsReadOnly(t *testing.T) {
+	s := fixture(t)
+	a := itemID(call(t, s, "workstream.create", "", Object{"title": "A"}))
+	b := itemID(call(t, s, "workstream.create", "", Object{"title": "B"}))
+	before, _ := s.Read()
+	out, e := s.Query(Query{Command: "workstream impact", Target: b, Body: Object{"depends_on": []string{a}}})
+	if e != nil || out["proposed_changes"] == nil {
+		t.Fatal(out, e)
+	}
+	after, _ := s.Read()
+	if before.Revision != after.Revision || len(after.Items[b].Depends) > 0 {
+		t.Fatal("preview changed journal")
+	}
+}

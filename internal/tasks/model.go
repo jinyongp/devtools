@@ -58,6 +58,25 @@ type State struct {
 	Revision int
 }
 
+func (r Run) MarshalJSON() ([]byte, error) {
+	type plain Run
+	b, e := json.Marshal(plain(r))
+	if e != nil {
+		return nil, e
+	}
+	v := Object{}
+	if e = json.Unmarshal(b, &v); e != nil {
+		return nil, e
+	}
+	if r.Previous == "" {
+		v["previous_run_id"] = nil
+	}
+	if r.Ended == "" {
+		v["ended_at"] = nil
+	}
+	return json.Marshal(v)
+}
+
 func NewState() *State {
 	return &State{Items: map[string]*Item{}, Runs: map[string]*Run{}, Events: []Event{}}
 }
@@ -215,6 +234,7 @@ func (s *State) Apply(e Event) {
 	case "task.attach", "task.detach":
 		old := i.Workstream
 		i.Workstream = str(d, "workstream_id")
+		i.Props["workstream_id"] = i.Workstream
 		i.Revision = e.Sequence
 		for _, w := range []string{old, i.Workstream} {
 			if ws := s.Items[w]; ws != nil {

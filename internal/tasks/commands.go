@@ -179,6 +179,9 @@ func validateBody(def *Definition, b Object) *protocol.Error {
 			if e := stringArray(v, false); e != nil {
 				return e
 			}
+			if k == "acceptance_keys" {
+				b[k] = unique(arr(b, k))
+			}
 		default:
 			s, ok := v.(string)
 			if !ok || !utf8.ValidString(s) || strings.ContainsRune(s, 0) {
@@ -193,6 +196,9 @@ func validateBody(def *Definition, b Object) *protocol.Error {
 			}
 			if len([]rune(s)) > max {
 				return failure("invalid_argument", "Input string exceeds its size limit.")
+			}
+			if k == "body" && len(s) > 1<<20 {
+				return failure("invalid_argument", "Document body exceeds 1 MiB.")
 			}
 			if k != "body" && k != "description" && strings.TrimSpace(s) == "" {
 				return failure("invalid_argument", "Expected nonempty input.")

@@ -15,6 +15,7 @@ type Query struct {
 	Command string
 	Target  string
 	Options map[string]string
+	Body    Object
 }
 type Snapshot struct {
 	Fingerprint string    `json:"fingerprint"`
@@ -113,6 +114,27 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 		out["issues"] = issues
 		return out, nil
 	case "impact":
+		if q.Body != nil {
+			fields := []string{"title", "description", "depends_on"}
+			if kind == "task" {
+				fields = append(fields, "workstream_id", "acceptance", "acceptance_keys")
+			}
+			if e := validateBody(&Definition{Action: "preview", Fields: fields}, q.Body); e != nil {
+				return nil, e
+			}
+			if _, ok := q.Body["depends_on"]; ok {
+				if e := s.checkEdges(item, arr(q.Body, "depends_on")); e != nil {
+					return nil, e
+				}
+				item.Depends = arr(q.Body, "depends_on")
+			}
+			if id := str(q.Body, "workstream_id"); id != "" {
+				if _, e := s.Get(id, "workstream"); e != nil {
+					return nil, e
+				}
+			}
+			out["proposed_changes"] = q.Body
+		}
 		for k, v := range s.Impact(item.ID) {
 			out[k] = v
 		}

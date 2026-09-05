@@ -66,16 +66,7 @@ func (a *App) registerTasks() {
 				opts = append(opts, Option{Name: "expected-run", Required: true, Description: "Observed current run UUID."})
 			}
 		}
-		props := map[string]any{}
 		for _, f := range def.Fields {
-			schema := map[string]any{"type": "string"}
-			if taskArray(f) || structured(f) {
-				schema = map[string]any{"type": "array"}
-			}
-			if f == "required" {
-				schema = map[string]any{"type": "boolean"}
-			}
-			props[f] = schema
 			if structured(f) || f == "acceptance" && def.Action == "spec.set" {
 				continue
 			}
@@ -146,6 +137,9 @@ func (a *App) registerTasks() {
 		for _, n := range []string{"state", "workstream", "limit", "cursor", "direction", "depth", "dir"} {
 			opts = append(opts, Option{Name: n, Description: "Query option: " + n})
 		}
+		if strings.HasSuffix(name, "impact") {
+			opts = append(opts, Option{Name: "file", Description: "Proposed definition changes as JSON."}, Option{Name: "stdin", Boolean: true, Description: "Read proposed changes from a pipe."})
+		}
 		required := strings.HasSuffix(name, "show") || strings.HasSuffix(name, "context") || strings.HasSuffix(name, "impact") || strings.HasSuffix(name, "export") || strings.HasSuffix(name, "check") || name == "checkpoint list"
 		args := []Argument{}
 		if required || strings.HasSuffix(name, "history") || strings.HasSuffix(name, "tree") {
@@ -160,7 +154,18 @@ func (a *App) registerTasks() {
 			if len(r.Args) > 0 {
 				target = r.Args[0]
 			}
-			return store.Query(tasks.Query{Command: name, Target: target, Options: r.Options})
+			var body tasks.Object
+			if r.Options["file"] != "" || r.Options["stdin"] == "true" {
+				raw, e := taskInput(streams, r)
+				if e != nil {
+					return nil, e
+				}
+				body, e = tasks.Decode(raw)
+				if e != nil {
+					return nil, e
+				}
+			}
+			return store.Query(tasks.Query{Command: name, Target: target, Options: r.Options, Body: body})
 		}})
 	}
 }

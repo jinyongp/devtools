@@ -11,6 +11,14 @@ and installed-Linux verification through Docker.
 The [Linux sandbox](docker/README.md) runs isolated verification scenarios with
 `just verify-docker`.
 
+Task and workstream commands coordinate specifications, dependencies, execution
+claims, recovery checkpoints, and validation evidence across worktrees.
+See the [usage guide](docs/tasks.md), [API contract](docs/task-api-contract.md),
+and [agent skill](skills/devtools/SKILL.md).
+
+`devtools dashboard` returns an authenticated local link to the D3 Canvas graph.
+Profiles, workstreams, and details load as you select them.
+
 ## Install and update
 
 [GitHub Releases](https://github.com/jinyongp/devtools/releases) distributes

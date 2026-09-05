@@ -6,7 +6,10 @@ provide JSON discovery and results; `run` passes through child process output.
 
 See [사용법과 CLI 계약](docs/cli-contract.md) for the profile, variable,
 secret, environment, and execution interfaces, including named commands in TOML.
-See [설치와 업데이트](docs/install.md) for release packaging and the installer.
+See [설치와 업데이트](docs/install.md) for release packaging, the installer,
+and installed-Linux verification through Docker.
+The [Linux sandbox](docker/README.md) runs isolated verification scenarios with
+`just verify-docker`.
 
 ## Build and verify
 

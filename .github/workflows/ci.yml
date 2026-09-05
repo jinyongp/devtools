@@ -26,3 +26,12 @@ jobs:
       - run: just check
       - run: just build
       - run: ./bin/devtools project inspect
+
+  linux-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v4
+        with:
+          just-version: '1.58.0'
+      - run: just verify-docker

@@ -9,17 +9,17 @@ secret, environment, and execution interfaces, including named commands in TOML.
 
 ## Build and verify
 
-Requires Go 1.27.x, Git (for integration tests), and Make.
+Requires Go 1.27.x, Git (for integration tests), and just.
 
 ```sh
-make build
-make check
+just build
+just check
 ./bin/devtools version
 ./bin/devtools schema
 ./bin/devtools project inspect
 ```
 
-`make check` checks formatting, runs `go vet`, and runs tests with the race
+`just check` checks formatting, runs `go vet`, and runs tests with the race
 detector. CI runs on macOS and Linux with the latest Go 1.27 patch. WSL uses
 the Linux build; testing in an actual WSL environment is a separate check.
 

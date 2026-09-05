@@ -17,7 +17,7 @@ func argumentError(message, field string) *protocol.Error {
 }
 
 func parseRequest(command Command, tokens []string) (Request, *protocol.Error) {
-	request := Request{Options: map[string]string{}, Args: []string{}}
+	request := Request{Options: map[string]string{}, ListOptions: map[string][]string{}, Args: []string{}}
 	definitions := map[string]Option{}
 	for _, option := range command.Options {
 		definitions[option.Name] = option
@@ -47,7 +47,7 @@ func parseRequest(command Command, tokens []string) (Request, *protocol.Error) {
 		if !exists {
 			return request, argumentError("Unknown option. Run devtools schema for accepted inputs.", "")
 		}
-		if _, exists := request.Options[name]; exists {
+		if _, exists := request.Options[name]; exists && !option.Repeatable {
 			return request, argumentError("Specify each option once.", name)
 		}
 		if option.Boolean {
@@ -65,6 +65,9 @@ func parseRequest(command Command, tokens []string) (Request, *protocol.Error) {
 			value = tokens[i]
 		}
 		request.Options[name] = value
+		if option.Repeatable {
+			request.ListOptions[name] = append(request.ListOptions[name], value)
+		}
 	}
 	if request.Help {
 		return request, nil
@@ -81,9 +84,15 @@ func parseRequest(command Command, tokens []string) (Request, *protocol.Error) {
 			value = option.Default
 			request.Options[option.Name] = value
 		}
-		length := utf8.RuneCountInString(value)
-		if length < option.MinLength || (option.MaxLength > 0 && length > option.MaxLength) || (option.Pattern != "" && !regexp.MustCompile(option.Pattern).MatchString(value)) {
-			return request, argumentError("Option does not match its schema.", option.Name)
+		values := []string{value}
+		if option.Repeatable {
+			values = request.ListOptions[option.Name]
+		}
+		for _, value := range values {
+			length := utf8.RuneCountInString(value)
+			if length < option.MinLength || (option.MaxLength > 0 && length > option.MaxLength) || (option.Pattern != "" && !regexp.MustCompile(option.Pattern).MatchString(value)) {
+				return request, argumentError("Option does not match its schema.", option.Name)
+			}
 		}
 	}
 	if len(request.Args) > len(command.Arguments) {

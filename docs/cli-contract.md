@@ -171,6 +171,49 @@ secret에는 값을 명령 인자로 넘기는 `--value`를 제공하지 않는�
 
 키의 종류는 profile 단위로 고정한다. 같은 키를 어떤 env에서는 var, 다른 env에서는 sec로 취급하지 않는다. env는 값만 덮어쓴다.
 
+## 기존 dotenv 파일 가져오기: import
+
+var와 sec가 섞인 `.env` 파일을 한 번에 가져온다. 에이전트는 파일 경로와 공개할 키 이름을 전달한다.
+
+```sh
+# 값 없이 키별 분류와 변경·충돌 여부 확인
+devtools import --file .env.local --env local --dry-run
+
+# 새 키 중 공개할 키를 반복 지정
+devtools import --file .env.local --env local --var NODE_ENV --var LOG_LEVEL --var PORT
+
+# 기존 값 교체를 포함해 가져오기
+devtools import --file .env.local --env local --overwrite
+
+# 프로젝트 연결 대신 profile 지정, 공통 영역에 등록
+devtools import --file .env --profile myapp
+```
+
+기존 키는 profile에 등록된 var/sec 종류를 유지한다. 새 키 중 `--var KEY`로 지정한 키는 var, 나머지는 sec가 된다. `--var`로 지정한 키는 입력 파일에 있어야 한다. 기존 sec를 `--var`로 지정하면 종류 충돌로 처리한다. 종류는 값을 모두 제거한 키에도 유지된다.
+
+`--env`를 생략하면 공통 영역, 지정하면 이미 존재하는 해당 env에 등록한다. 비교 대상은 선택한 영역에 직접 저장된 값이다. 공통 값을 상속하던 env에 값을 등록하면 새 덮어쓰기 항목이 된다.
+
+같은 값은 `unchanged`로 성공한다. 기존 값이 다르면 `conflict`가 되고, `--overwrite`를 지정하면 `update`로 처리한다. 입력 전체를 검증하고 저장 잠금 안에서 최신 상태와 비교한 뒤 한 번에 저장한다. 문법 오류나 충돌이 있으면 기존 값 전체를 유지한다. 원본 파일은 가져오기 후에도 유지된다.
+
+`--dry-run`은 저장소를 수정하지 않고 현재 상태를 미리 확인한다. 성공 응답의 `items`는 키 이름순이며 각 항목은 `key`, `kind`, `action`을 가진다. `action`은 `add`, `update`, `unchanged`, `conflict`, `kind_conflict` 중 하나다. 결과에는 값 대신 메타데이터만 포함한다.
+
+```json
+{"schema_version":1,"ok":true,"data":{"profile":"myapp","env":"local","dry_run":true,"changed":false,"applicable":true,"items":[{"key":"PORT","kind":"variable","action":"add"},{"key":"TOKEN","kind":"secret","action":"add"}]}}
+```
+
+`changed`는 실제 저장 변경 여부이고, 미리보기에서는 항상 false다. `applicable`은 현재 옵션으로 전체를 적용할 수 있는지 나타낸다. 미리보기는 충돌이 있어도 종료 코드 0과 `applicable: false`를 반환한다. 실제 적용에서 충돌하면 `import_conflict`와 종료 코드 3을 반환하고 `error.details.items`에 메타데이터를 제공한다. 미리보기와 실제 적용 사이의 변경은 실제 적용 시 다시 검사한다.
+
+입력은 UTF-8 일반 파일이다. 지원 문법은 다음과 같다.
+
+- `KEY=value`, 선택적인 `export` 접두사, 빈 값, 빈 줄, `#` 주석.
+- CRLF 개행과 파일 처음의 UTF-8 BOM.
+- 따옴표 없는 값은 양끝 공백을 정리한다. `#`가 값의 처음이거나 공백·탭 뒤에 있으면 주석으로 해석한다. `a#b`는 그대로 저장한다.
+- 작은따옴표 안의 값은 리터럴로 저장한다. 큰따옴표 안에서는 `\n`, `\r`, `\t`, `\"`, `\\`, `\$`를 해석하고 나머지 백슬래시 조합은 그대로 보존한다.
+- 따옴표로 감싼 여러 줄 값은 개행을 포함해 저장한다. 닫는 따옴표 뒤에는 공백과 주석을 허용한다.
+- `$NAME`, `${NAME}`, `$(...)`는 문자열로 저장한다. 파일은 셸 명령으로 실행하지 않는다.
+
+중복 키·잘못된 키·닫히지 않은 따옴표·NUL·잘못된 UTF-8은 `invalid_dotenv`와 종료 코드 2로 처리한다. 문법 오류에는 `error.details.line`과 고정된 원인 설명을 제공한다. 파일 내용과 값은 진단에 포함하지 않는다.
+
 ## 명령 실행: run
 
 `run`은 이름으로 등록한 명령과 직접 지정한 명령을 실행한다. 환경변수 주입을 선택하면 var와 sec를 함께 적용한다.

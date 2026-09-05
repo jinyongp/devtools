@@ -28,6 +28,9 @@ func (a *App) catalog() map[string]any {
 			if option.MaxLength != 0 {
 				s["maxLength"] = option.MaxLength
 			}
+			if option.Repeatable {
+				s = map[string]any{"type": "array", "items": s, "minItems": 1, "description": option.Description}
+			}
 			properties[option.Name] = s
 		}
 		argumentSchemas := []any{}
@@ -72,7 +75,7 @@ func (a *App) catalog() map[string]any {
 		"protocol_version": protocol.Version,
 		"commands":         commands,
 		"transport":        map[string]any{"input": "CLI flags and positional args; child_args follow --. Schemas describe parsed inputs, not a JSON stdin endpoint. Secret --stdin reads a raw UTF-8 value.", "success": "one JSON response on stdout; run passes through child streams", "failure": "one JSON response on stderr before execution; run preserves child exit status", "interactive": false, "help_flags": []string{"--help", "-h"}},
-		"exit_codes":       map[string]string{"0": "success", "1": "io_error or storage_error", "2": "invalid_argument", "3": "project_not_found, invalid_config, profile_conflict, env_not_found, env_not_empty, key_not_found, kind_conflict, invalid_storage, or undefined project command", "126": "execution_failed", "127": "command_not_found executable", "130": "canceled; run otherwise preserves child exit code or 128 + signal"},
+		"exit_codes":       map[string]string{"0": "success", "1": "io_error or storage_error", "2": "invalid_argument or invalid_dotenv", "3": "project_not_found, invalid_config, profile_conflict, env_not_found, env_not_empty, key_not_found, kind_conflict, import_conflict, invalid_storage, or undefined project command", "126": "execution_failed", "127": "command_not_found executable", "130": "canceled; run otherwise preserves child exit code or 128 + signal"},
 		"response_schema": map[string]any{
 			"$schema":              "https://json-schema.org/draft/2020-12/schema",
 			"type":                 "object",

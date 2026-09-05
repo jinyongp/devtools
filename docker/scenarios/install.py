@@ -61,6 +61,27 @@ api("sec", "set", "TOKEN", "--stdin", input="fixture-secret")
 api("var", "get", "TOKEN", expected=3)
 api("sec", "list", "--env", "local")
 
+# Migrate a mixed dotenv file using only its path and public key names.
+dotenv = home / "legacy.env"
+dotenv.write_text("LEVEL=common\nTOKEN=fixture-secret\nPORT=3000\nMODE=dev\nPRIVATE=fixture-secret\n")
+preview = api("import", "--file", str(dotenv), "--var", "PORT", "--var", "MODE", "--dry-run")["data"]
+assert preview["applicable"] and not preview["changed"]
+assert {item["key"]: item["kind"] for item in preview["items"]} == {
+    "LEVEL": "variable", "TOKEN": "secret", "PORT": "variable", "MODE": "variable", "PRIVATE": "secret"}
+api("import", "--file", str(dotenv), "--var", "PORT", "--var", "MODE")
+assert not api("import", "--file", str(dotenv))["data"]["changed"]
+api("var", "get", "PRIVATE", expected=3)
+dotenv.write_text("PORT=4000\nNEW=fixture-secret\n")
+assert not api("import", "--file", str(dotenv), "--dry-run")["data"]["applicable"]
+api("import", "--file", str(dotenv), expected=3)
+assert api("var", "get", "PORT")["data"]["value"] == "3000"
+assert "NEW" not in {item["key"] for item in api("sec", "list")["data"]["items"]}
+api("import", "--file", str(dotenv), "--overwrite")
+api("import", "--file", str(dotenv), "--env", "local")
+dotenv.write_text("BROKEN='fixture-secret\n")
+api("import", "--file", str(dotenv), expected=2)
+assert dotenv.exists()
+
 # Existing project commands also run on their own.
 (project / "app.py").write_text(
     "import json,os,sys\n"
@@ -208,6 +229,6 @@ finally:
         child.wait()
 
 assert not list((home / ".local/bin").glob(".devtools-install*"))
-print("PASS: install, PATH, profile values, project commands, worktrees, permissions, "
+print("PASS: install, PATH, profile values, mixed dotenv import, project commands, worktrees, permissions, "
       "failed-update preservation, update, repeat update, HTTPS delivery, latest and "
       "pinned releases, discovery failure preservation, and signals")

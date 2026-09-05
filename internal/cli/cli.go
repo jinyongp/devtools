@@ -18,6 +18,7 @@ type IO struct {
 }
 
 type Option struct {
+	Repeatable  bool   `json:"repeatable,omitempty"`
 	Boolean     bool   `json:"boolean,omitempty"`
 	Required    bool   `json:"required"`
 	Name        string `json:"name"`
@@ -52,10 +53,11 @@ type Argument struct {
 	Pattern  string `json:"pattern,omitempty"`
 }
 type Request struct {
-	Options map[string]string
-	Args    []string
-	Child   []string
-	Help    bool
+	Options     map[string]string
+	ListOptions map[string][]string
+	Args        []string
+	Child       []string
+	Help        bool
 }
 type processResult struct{ ExitCode int }
 
@@ -87,6 +89,7 @@ func New(version, commit string) *App {
 		}, "project", "paths"), Run: inspect},
 	}
 	a.registerTools()
+	a.registerImport()
 	for i := range a.commands {
 		if a.commands[i].Aliases == nil {
 			a.commands[i].Aliases = []string{}

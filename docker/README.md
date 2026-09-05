@@ -11,6 +11,9 @@ just verify-docker
 # 설치·업데이트 시나리오
 just verify-docker install
 
+# 작업 관리·인계·대시보드 시나리오
+just verify-docker tasks
+
 # 시나리오 목록
 just verify-docker --list
 ```
@@ -25,4 +28,4 @@ just verify-docker --list
 
 시나리오는 제공된 HOME 안에서 필요한 프로젝트·파일·설치 상태를 준비한다. 각 시나리오가 독립적으로 준비하므로 앞서 실행한 시나리오의 상태에 영향을 받지 않는다. 성공 시 종료 코드 0, 실패 시 0 이외의 값을 반환한다.
 
-현재 `install` 시나리오는 설치·업데이트, profile 값, 혼합 dotenv 가져오기, 프로젝트 명령, worktree, 파일 권한, HTTPS 다운로드, 신호 전달을 검증한다. 빌드 단계는 포맷·vet·race 테스트를 수행하고 공통 테스트 배포물을 만든다. 실행 이미지에는 배포물·설치기·검증 도구를 제공한다.
+`install` 시나리오는 설치·업데이트, profile 값, 혼합 dotenv 가져오기, 프로젝트 명령, worktree, 파일 권한, HTTPS 다운로드, 신호 전달을 검증한다. `tasks` 시나리오는 명세·계획·검증 등록, 동시 점유, worktree 간 공유, 체크포인트·인계·완료 재시도, 대시보드의 일회용 링크·세션·종료를 검증한다. 빌드 단계는 포맷·vet·race 테스트를 수행하고 공통 테스트 배포물을 만든다. 실행 이미지에는 배포물·설치기·검증 도구를 제공한다.

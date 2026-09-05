@@ -6,7 +6,11 @@ COPY cmd/ cmd/
 COPY internal/ internal/
 COPY scripts/package.sh scripts/package.sh
 RUN test -z "$(gofmt -l cmd internal)" && go vet ./... && go test -race ./...
-RUN VERSION=0.0.0-test.1 OUTPUT_DIR=/releases sh scripts/package.sh \
+RUN set -eu; for target_os in darwin linux; do \
+      for target_arch in amd64 arm64; do \
+        TARGET_OS="$target_os" TARGET_ARCH="$target_arch" VERSION=0.0.0-test.1 OUTPUT_DIR=/releases sh scripts/package.sh; \
+      done; \
+    done \
  && VERSION=0.0.0-test.2 OUTPUT_DIR=/releases sh scripts/package.sh
 
 FROM debian:bookworm-slim AS sandbox

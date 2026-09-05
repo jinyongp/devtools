@@ -22,3 +22,6 @@ vet:
 
 clean:
     rm -rf bin coverage.out
+
+release version:
+    VERSION="$1" sh scripts/package.sh

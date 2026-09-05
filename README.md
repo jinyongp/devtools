@@ -6,6 +6,7 @@ provide JSON discovery and results; `run` passes through child process output.
 
 See [사용법과 CLI 계약](docs/cli-contract.md) for the profile, variable,
 secret, environment, and execution interfaces, including named commands in TOML.
+See [설치와 업데이트](docs/install.md) for release packaging and the installer.
 
 ## Build and verify
 

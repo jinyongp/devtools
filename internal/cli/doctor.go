@@ -60,6 +60,7 @@ func (a *App) diagnose(ctx context.Context, streams IO, r Request) (any, *protoc
 	requirements := p.Requirements.Merge(project.Requirements{})
 	inject := true
 	executable := ""
+	var boundPath *string
 	if report.Command != "" {
 		command, ok := p.Commands[report.Command]
 		if !ok {
@@ -97,25 +98,32 @@ func (a *App) diagnose(ctx context.Context, streams IO, r Request) (any, *protoc
 	} else {
 		report.Add("task_storage", "pass", "Profile task storage is readable.", "")
 	}
-	for _, check := range doctor.CheckRequirements(ctx, doctor.Input{Directory: report.Directory, Env: report.Env, Requirements: requirements, State: state, Inject: inject, Executable: executable}) {
-		report.Checks = append(report.Checks, check)
-		if check.Status == "fail" {
-			report.Ready = false
-		}
-	}
 	if command, ok := p.Commands[report.Command]; ok && (len(command.Bind) > 0 || len(command.Serve) > 0) {
 		s, e := a.portStore()
 		if e == nil {
 			var defaults []int
 			defaults, e = portDefaults()
 			if e == nil {
-				_, _, e = s.Prepare(ctx, p, command, report.Env, state, defaults, true)
+				prepared, _, prepareErr := s.Prepare(ctx, p, command, report.Env, state, defaults, true)
+				e = prepareErr
+				if e == nil {
+					executable = prepared.Args[0]
+					if path, ok := prepared.Bind["PATH"]; ok {
+						boundPath = &path
+					}
+				}
 			}
 		}
 		if e != nil {
 			report.Add("ports", "fail", "Port or binding diagnosis failed: "+e.Code+".", "Check service assignments, references, and active runs.")
 		} else {
 			report.Add("ports", "pass", "Port and binding checks passed; new assignments are finalized by run.", "")
+		}
+	}
+	for _, check := range doctor.CheckRequirements(ctx, doctor.Input{Directory: report.Directory, Env: report.Env, Requirements: requirements, State: state, Inject: inject, Executable: executable, PathOverride: boundPath}) {
+		report.Checks = append(report.Checks, check)
+		if check.Status == "fail" {
+			report.Ready = false
 		}
 	}
 	return report, nil

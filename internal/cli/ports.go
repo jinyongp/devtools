@@ -31,7 +31,7 @@ func portOptions() []Option {
 	return append(profileOptions(false), Option{Name: "instance", MinLength: 1, Description: "Instance alias or id:ID."}, Option{Name: "dir", MinLength: 1, Description: "Select a project directory."})
 }
 func instanceFields() map[string]any {
-	return map[string]any{"profile": stringSchema(), "instance_id": stringSchema(), "alias": map[string]any{"type": []string{"string", "null"}}, "directory": stringSchema()}
+	return map[string]any{"profile": stringSchema(), "instance_id": stringSchema(), "alias": map[string]any{"type": []string{"string", "null"}}, "directory": stringSchema(), "location_status": map[string]any{"enum": []string{"available", "missing", "unknown"}}}
 }
 func assignmentFields() map[string]any {
 	f := instanceFields()
@@ -127,10 +127,19 @@ func portTarget(r Request) (profile, selector, dir string, e *protocol.Error) {
 	return profile, selector, p.Root, nil
 }
 func assignmentResult(a ports.Assignment) map[string]any {
-	return map[string]any{"profile": a.Profile, "instance_id": a.ID, "alias": a.Alias, "directory": a.Directory, "name": a.Name, "port": a.Port}
+	row := instanceResult(a.Instance)
+	row["name"], row["port"] = a.Name, a.Port
+	return row
 }
 func instanceResult(i ports.Instance) map[string]any {
-	return map[string]any{"profile": i.Profile, "instance_id": i.ID, "alias": i.Alias, "directory": i.Directory}
+	status := "available"
+	info, e := os.Stat(i.Directory)
+	if errors.Is(e, os.ErrNotExist) || e == nil && !info.IsDir() {
+		status = "missing"
+	} else if e != nil {
+		status = "unknown"
+	}
+	return map[string]any{"profile": i.Profile, "instance_id": i.ID, "alias": i.Alias, "directory": i.Directory, "location_status": status}
 }
 func checkRelease(ctx context.Context, s ports.Store, st *ports.State, id string) *protocol.Error {
 	for _, a := range st.Assignments {
@@ -166,13 +175,13 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 	apply := func(st *ports.State) (bool, *protocol.Error) {
 		i := st.Find(profile, selector, dir)
 		if action == "list" {
-			items := []ports.Assignment{}
+			items := []map[string]any{}
 			if selector != "" && i == nil {
 				return false, portFailure("instance_not_found")
 			}
 			for _, v := range st.Assignments {
 				if v.Profile == profile && (selector == "" && r.Options["dir"] == "" || i != nil && v.ID == i.ID) {
-					items = append(items, v)
+					items = append(items, assignmentResult(v))
 				}
 			}
 			result = map[string]any{"items": items}
@@ -182,7 +191,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 			if selector != "" && i == nil {
 				return false, portFailure("instance_not_found")
 			}
-			removed := []ports.Instance{}
+			removed := []map[string]any{}
 			retained := []map[string]any{}
 			ids := map[string]bool{}
 			for _, v := range st.Instances {
@@ -206,7 +215,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 					continue
 				}
 				ids[v.ID] = true
-				removed = append(removed, v)
+				removed = append(removed, instanceResult(v))
 			}
 			instances := []ports.Instance{}
 			assignments := []ports.Assignment{}
@@ -280,7 +289,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 		}
 		switch action {
 		case "show":
-			result = *v
+			result = assignmentResult(*v)
 		case "check":
 			row := assignmentResult(*v)
 			free, e := ports.Available(v.Port)
@@ -363,13 +372,13 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 	apply := func(st *ports.State) (bool, *protocol.Error) {
 		i := st.Find(profile, selector, dir)
 		if action == "list" {
-			items := []ports.Instance{}
+			items := []map[string]any{}
 			if selector != "" && i == nil {
 				return false, portFailure("instance_not_found")
 			}
 			for _, v := range st.Instances {
 				if v.Profile == profile && (selector == "" && r.Options["dir"] == "" || i != nil && v.ID == i.ID) {
-					items = append(items, v)
+					items = append(items, instanceResult(v))
 				}
 			}
 			result = map[string]any{"items": items}
@@ -405,7 +414,7 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 		}
 		switch action {
 		case "show":
-			result = *i
+			result = instanceResult(*i)
 		case "move":
 			p, e := project.Resolve(destination, "")
 			if e != nil {

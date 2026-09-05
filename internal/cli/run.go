@@ -50,6 +50,7 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 	}
 	injected := map[string]string{}
 	var state *values.State
+	var boundPath *string
 	if inject || len(requirements.Vars)+len(requirements.Secs) > 0 || len(command.Bind) > 0 {
 		directory, err := a.dataDirectory()
 		if err != nil {
@@ -84,9 +85,12 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 		for k, v := range prepared.Bind {
 			injected[k] = v
 		}
+		if path, ok := prepared.Bind["PATH"]; ok {
+			boundPath = &path
+		}
 	}
 	if !requirements.Empty() {
-		checks := doctor.CheckRequirements(ctx, doctor.Input{Directory: dir, Env: env, Requirements: requirements, State: state, Inject: inject, Executable: args[0]})
+		checks := doctor.CheckRequirements(ctx, doctor.Input{Directory: dir, Env: env, Requirements: requirements, State: state, Inject: inject, Executable: args[0], PathOverride: boundPath})
 		for _, check := range checks {
 			if check.Status != "pass" {
 				return nil, protocol.NewError("requirements_failed", "Command prerequisites are not satisfied. Run devtools doctor for diagnostics.", 3, map[string]any{"checks": checks})

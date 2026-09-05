@@ -48,6 +48,7 @@ type Input struct {
 	Inject       bool
 	Executable   string
 	Environment  []string
+	PathOverride *string
 }
 
 func CheckRequirements(ctx context.Context, in Input) []Check {
@@ -63,6 +64,9 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 				probeEnv = process.Environment(probeEnv, map[string]string{"PATH": path})
 			}
 		}
+	}
+	if in.PathOverride != nil {
+		probeEnv = process.Environment(probeEnv, map[string]string{"PATH": *in.PathOverride})
 	}
 	checkTool := func(name string, tool project.Tool) {
 		executable := tool.Executable

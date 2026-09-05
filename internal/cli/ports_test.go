@@ -21,6 +21,14 @@ serve=["web"]
 [commands.test.bind]
 P={port="web"}
 URL={template="http://${var.HOST}:${bind.P}/api"}
+[commands.path]
+exec=["${bind.EXE}"]
+inject=true
+[requirements.tools.true]
+executable="true"
+[commands.path.bind]
+EXE={template="true"}
+PATH={template="/bin"}
 `
 	if e := os.WriteFile("devtools.toml", []byte(config), 0600); e != nil {
 		t.Fatal(e)
@@ -34,6 +42,12 @@ URL={template="http://${var.HOST}:${bind.P}/api"}
 		return out
 	}
 	call("var", "set", "HOST", "--value", "localhost")
+	call("var", "set", "PATH", "--value", "/missing")
+	if out := call("doctor", "path"); !strings.Contains(out, `"ready":true`) {
+		t.Fatal(out)
+	}
+	call("run", "path")
+	call("var", "unset", "PATH")
 	if out := call("doctor", "test"); !strings.Contains(out, `"ready":true`) {
 		t.Fatal(out)
 	}

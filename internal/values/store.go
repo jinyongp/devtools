@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -74,6 +75,11 @@ func (s Store) read() (*State, *protocol.Error) {
 }
 
 func (s Store) Read() (*State, *protocol.Error) {
+	release, gateErr := maintenance.Acquire(context.Background(), maintenance.Root(s.Directory))
+	if gateErr != nil {
+		return nil, storageError()
+	}
+	defer release()
 	if !project.ValidProfile(s.Profile) {
 		return nil, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
@@ -89,6 +95,11 @@ func (s Store) Read() (*State, *protocol.Error) {
 
 // Update serializes read/modify/write and publishes a complete snapshot atomically.
 func (s Store) Update(ctx context.Context, change func(*State) (bool, *protocol.Error)) (bool, *protocol.Error) {
+	release, gateErr := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
+	if gateErr != nil {
+		return false, storageError()
+	}
+	defer release()
 	if !project.ValidProfile(s.Profile) {
 		return false, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}

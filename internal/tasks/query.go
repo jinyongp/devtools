@@ -1,7 +1,9 @@
 package tasks
 
 import (
+	"context"
 	"encoding/json"
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"os"
 	"path/filepath"
@@ -49,7 +51,12 @@ func positive(o map[string]string, k string, def, max int) (int, *protocol.Error
 	return n, nil
 }
 func (store Store) Query(q Query) (Object, *protocol.Error) {
-	s, e := store.Read()
+	release, gateErr := maintenance.Acquire(context.Background(), maintenance.Root(store.Directory))
+	if gateErr != nil {
+		return nil, storageError()
+	}
+	defer release()
+	_, s, e := store.load()
 	if e != nil {
 		return nil, e
 	}

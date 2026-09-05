@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -173,8 +174,21 @@ func safeApply(s *State, e Event) (err error) {
 	s.Apply(e)
 	return nil
 }
-func (s Store) Read() (*State, *protocol.Error) { _, state, e := s.load(); return state, e }
+func (s Store) Read() (*State, *protocol.Error) {
+	release, e := maintenance.Acquire(context.Background(), maintenance.Root(s.Directory))
+	if e != nil {
+		return nil, storageError()
+	}
+	defer release()
+	_, state, err := s.load()
+	return state, err
+}
 func (s Store) Profiles() ([]string, *protocol.Error) {
+	release, gateErr := maintenance.Acquire(context.Background(), maintenance.Root(s.Directory))
+	if gateErr != nil {
+		return nil, storageError()
+	}
+	defer release()
 	entries, e := os.ReadDir(s.Directory)
 	if errors.Is(e, os.ErrNotExist) {
 		return []string{}, nil
@@ -203,6 +217,11 @@ type Request struct {
 }
 
 func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error) {
+	releaseGate, gateErr := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
+	if gateErr != nil {
+		return nil, storageError()
+	}
+	defer releaseGate()
 	def := Find(r.Action)
 	if def == nil {
 		return nil, failure("invalid_argument", "Unknown task action.")

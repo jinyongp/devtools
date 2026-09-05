@@ -142,7 +142,7 @@ func (s Store) Serve(ctx context.Context, id string, execute Execute) error {
 			if st, ok := exit.Sys().(syscall.WaitStatus); ok && st.Signaled() {
 				childExit = 128 + int(st.Signal())
 			}
-		} else if waitErr != nil {
+		} else if waitErr != nil && !errors.Is(waitErr, exec.ErrWaitDelay) {
 			childExit = 1
 		}
 		return childExit, nil

@@ -33,6 +33,19 @@ PORT={port="web"}
 exec=["sh","-c","exit 7"]
 [commands.log]
 exec=["python3","-c","print('x'*2000000)"]
+[ports.tree]
+port=24200
+range=[24200,24299]
+[commands.tree]
+exec=["python3","tree.py"]
+serve=["tree"]
+[commands.tree.bind]
+PORT={port="tree"}
+[commands.stubborn]
+exec=["python3","tree.py","hold"]
+serve=["tree"]
+[commands.stubborn.bind]
+PORT={port="tree"}
 '''
 (root/"devtools.toml").write_text(config)
 (root/"server.py").write_text('''import http.server,os
@@ -42,6 +55,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
  def log_message(self,*args):pass
 http.server.HTTPServer.allow_reuse_address=True
 http.server.HTTPServer(('127.0.0.1',int(os.environ['PORT'])),Handler).serve_forever()
+''')
+(root/"tree.py").write_text('''import os,signal,subprocess,sys,time
+child=subprocess.Popen([sys.executable,"-c","import os,signal,socket,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);s=socket.socket();s.bind(('127.0.0.1',int(os.environ['PORT'])));s.listen();print('ready',flush=True);time.sleep(60)"],stdout=subprocess.PIPE)
+assert child.stdout.readline().strip()==b'ready'
+if len(sys.argv)>1:
+ signal.signal(signal.SIGTERM,signal.SIG_IGN)
+ while True:time.sleep(1)
 ''')
 api("var","set","MESSAGE","--value","first")
 api("env","create","local")
@@ -87,4 +107,18 @@ failed=finished(mutate("start","fail")["item"]["id"])
 assert failed["exit_code"]==7 and failed["reason"]=="nonzero_exit"
 logged=finished(mutate("start","log","--capture-logs")["item"]["id"])
 assert len(api("process","logs",logged["id"])["content"].encode())<=1<<20
+tree=finished(mutate("start","tree")["item"]["id"])
+assert tree["exit_code"]==0,tree
+tree_port=api("port","show","tree")["port"]
+def free_tree():
+    for _ in range(80):
+        with socket.socket() as s:
+            try:s.bind(("127.0.0.1",tree_port));return
+            except OSError:time.sleep(.025)
+    raise AssertionError("Descendant still holds port")
+free_tree()
+stubborn=mutate("start","stubborn")["item"]
+time.sleep(.2)
+assert mutate("stop",stubborn["id"])["item"]["exit_code"]==137
+free_tree()
 print("Installed process lifetime, idempotency, concurrent starts, env conflict, restart, ports and bounded logs verified")

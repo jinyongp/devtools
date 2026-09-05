@@ -103,5 +103,20 @@ func (a *App) diagnose(ctx context.Context, streams IO, r Request) (any, *protoc
 			report.Ready = false
 		}
 	}
+	if command, ok := p.Commands[report.Command]; ok && (len(command.Bind) > 0 || len(command.Serve) > 0) {
+		s, e := a.portStore()
+		if e == nil {
+			var defaults []int
+			defaults, e = portDefaults()
+			if e == nil {
+				_, _, e = s.Prepare(ctx, p, command, report.Env, state, defaults, true)
+			}
+		}
+		if e != nil {
+			report.Add("ports", "fail", "Port or binding diagnosis failed: "+e.Code+".", "Check service assignments, references, and active runs.")
+		} else {
+			report.Add("ports", "pass", "Port and binding checks passed; new assignments are finalized by run.", "")
+		}
+	}
 	return report, nil
 }

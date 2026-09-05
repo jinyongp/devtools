@@ -17,12 +17,14 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 	args, dir, inject := request.Child, ".", true
 	env := request.Options["env"]
 	requirements := project.Requirements{}
+	var command project.Command
 	if len(request.Args) == 1 {
 		p, err = project.Resolve(".", "")
 		if err != nil {
 			return nil, err
 		}
-		command, exists := p.Commands[request.Args[0]]
+		var exists bool
+		command, exists = p.Commands[request.Args[0]]
 		if !exists {
 			return nil, protocol.NewError("command_not_found", "The selected project command is not defined.", 3, nil)
 		}
@@ -48,7 +50,7 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 	}
 	injected := map[string]string{}
 	var state *values.State
-	if inject || len(requirements.Vars)+len(requirements.Secs) > 0 {
+	if inject || len(requirements.Vars)+len(requirements.Secs) > 0 || len(command.Bind) > 0 {
 		directory, err := a.dataDirectory()
 		if err != nil {
 			return nil, err
@@ -62,6 +64,25 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 			if err != nil {
 				return nil, err
 			}
+		}
+	}
+	if len(command.Bind) > 0 || len(command.Serve) > 0 {
+		s, e := a.portStore()
+		if e != nil {
+			return nil, e
+		}
+		defaults, e := portDefaults()
+		if e != nil {
+			return nil, e
+		}
+		prepared, release, e := s.Prepare(ctx, p, command, env, state, defaults, false)
+		if e != nil {
+			return nil, e
+		}
+		defer release()
+		args = append(prepared.Args, request.Child...)
+		for k, v := range prepared.Bind {
+			injected[k] = v
 		}
 	}
 	if !requirements.Empty() {

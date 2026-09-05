@@ -96,6 +96,7 @@ func New(version, commit string) *App {
 	a.registerImport()
 	a.registerTasks()
 	a.registerDashboard()
+	a.registerDoctor()
 	for i := range a.commands {
 		if a.commands[i].Aliases == nil {
 			a.commands[i].Aliases = []string{}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -15,6 +16,7 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 	var err *protocol.Error
 	args, dir, inject := request.Child, ".", true
 	env := request.Options["env"]
+	requirements := project.Requirements{}
 	if len(request.Args) == 1 {
 		p, err = project.Resolve(".", "")
 		if err != nil {
@@ -25,6 +27,7 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 			return nil, protocol.NewError("command_not_found", "The selected project command is not defined.", 3, nil)
 		}
 		args = append(append([]string{}, command.Exec...), request.Child...)
+		requirements = p.Requirements.Merge(command.Requirements)
 		dir, inject = p.Root, command.Inject
 		if _, explicit := request.Options["env"]; explicit {
 			inject = true
@@ -44,18 +47,29 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 		}
 	}
 	injected := map[string]string{}
-	if inject {
+	var state *values.State
+	if inject || len(requirements.Vars)+len(requirements.Secs) > 0 {
 		directory, err := a.dataDirectory()
 		if err != nil {
 			return nil, err
 		}
-		state, err := (values.Store{Directory: directory, Profile: p.Profile}).Read()
+		state, err = (values.Store{Directory: directory, Profile: p.Profile}).Read()
 		if err != nil {
 			return nil, err
 		}
-		injected, err = state.Environment(env)
-		if err != nil {
-			return nil, err
+		if inject {
+			injected, err = state.Environment(env)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if !requirements.Empty() {
+		checks := doctor.CheckRequirements(ctx, doctor.Input{Directory: dir, Env: env, Requirements: requirements, State: state, Inject: inject, Executable: args[0]})
+		for _, check := range checks {
+			if check.Status != "pass" {
+				return nil, protocol.NewError("requirements_failed", "Command prerequisites are not satisfied. Run devtools doctor for diagnostics.", 3, map[string]any{"checks": checks})
+			}
 		}
 	}
 	exit, err := process.Execute(ctx, args, dir, process.Environment(os.Environ(), injected), streams.In, streams.Out, streams.Err)

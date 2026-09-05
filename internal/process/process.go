@@ -42,7 +42,8 @@ func Environment(parent []string, injected map[string]string) []string {
 	return result
 }
 
-func executable(name, dir string, env []string) (string, *protocol.Error) {
+// LookPath resolves an executable using the command's directory and environment.
+func LookPath(name, dir string, env []string) (string, *protocol.Error) {
 	check := func(path string) bool {
 		info, err := os.Stat(path)
 		return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0111 != 0
@@ -83,7 +84,7 @@ func Execute(ctx context.Context, args []string, dir string, env []string, in io
 	if err != nil {
 		return 0, protocol.NewError("io_error", "Cannot resolve execution directory.", 1, nil)
 	}
-	path, lookupErr := executable(args[0], absolute, env)
+	path, lookupErr := LookPath(args[0], absolute, env)
 	if lookupErr != nil {
 		return 0, lookupErr
 	}

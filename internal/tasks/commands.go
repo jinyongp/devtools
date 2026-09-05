@@ -324,7 +324,7 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 	if e := validateBody(def, r.Body); e != nil {
 		return nil, nil, "", e
 	}
-	if def.Revision {
+	if def.Revision || r.Options["if-revision"] != "" {
 		rev, e := strconv.Atoi(r.Options["if-revision"])
 		if e != nil || rev < 0 {
 			return nil, nil, "", failure("invalid_argument", "Provide if-revision from the latest read.")

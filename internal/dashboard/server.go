@@ -1,4 +1,4 @@
-// Package dashboard serves the embedded, read-only task graph on loopback.
+// Package dashboard serves the authenticated local management interface.
 package dashboard
 
 import (
@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -27,7 +28,7 @@ import (
 //go:embed assets/*
 var assets embed.FS
 
-const authProtocol = 2
+const authProtocol = 3
 
 type Registry struct {
 	ID      string `json:"id"`
@@ -265,8 +266,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/") {
-		if r.Method != "GET" {
-			http.Error(w, "Read-only API", 405)
+		if r.Method != "GET" && !(r.Method == "POST" && r.URL.Path == "/api/actions") {
+			http.Error(w, "Method not allowed", 405)
 			return
 		}
 		header := r.Header.Get("Authorization")
@@ -286,6 +287,27 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Session expired. Run devtools dashboard for a new link.", 401)
 			return
 		}
+		if r.URL.Path == "/api/actions" {
+			if r.Method != "POST" {
+				http.Error(w, "Method not allowed", 405)
+				return
+			}
+			if r.Header.Get("Origin") != origin {
+				http.Error(w, "Forbidden", 403)
+				return
+			}
+			s.action(w, r)
+			return
+		}
+		if r.URL.Path == "/api/values" {
+			result, e := s.valueStore(r.URL.Query().Get("profile")).Inspect(r.Context(), r.URL.Query().Get("env"))
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			reply(result)
+			return
+		}
 		store := tasks.Store{Directory: s.data, Profile: r.URL.Query().Get("profile"), Cache: s.cache}
 		if r.URL.Path == "/api/profiles" {
 			profiles, e := store.Profiles()
@@ -293,6 +315,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, e.Message, 500)
 				return
 			}
+			other, e := (tasks.Store{Directory: s.valueStore("").Directory}).Profiles()
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			seen := map[string]bool{}
+			for _, p := range profiles {
+				seen[p] = true
+			}
+			for _, p := range other {
+				if !seen[p] {
+					profiles = append(profiles, p)
+					seen[p] = true
+				}
+			}
+			sort.Strings(profiles)
 			reply(tasks.Object{"profiles": profiles})
 			return
 		}

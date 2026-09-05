@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>devtools · Dashboard</title>
+    <link rel="stylesheet" href="style.css" />
+    <script defer src="d3.min.js"></script>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <header>
+      <a href="/" class="brand">devtools <span>/ dashboard</span></a
+      ><label
+        >Profile
+        <select id="profile">
+          <option value="">All profiles</option>
+        </select></label
+      ><button id="refresh">Refresh</button>
+    </header>
+    <main>
+      <aside class="navigation">
+        <div class="section-label">WORKSPACE</div>
+        <button id="overview" class="nav-button">Workstreams</button
+        ><button id="independent" class="nav-button">Independent tasks</button>
+        <div class="section-label">IN THIS VIEW</div>
+        <label class="search-label" for="search">Find an item</label
+        ><input id="search" type="search" placeholder="Filter by title or ID" />
+        <div id="items" role="list" aria-label="Graph items"></div>
+        <button id="more" hidden>Load more</button>
+      </aside>
+      <section class="workspace">
+        <div class="heading">
+          <div>
+            <div id="eyebrow" class="section-label">DEPENDENCIES</div>
+            <h1 id="title">Your work, connected.</h1>
+            <p id="subtitle">
+              Choose a profile to explore its workstreams and tasks.
+            </p>
+          </div>
+          <button id="fit" aria-label="Fit graph to view">Fit graph</button>
+        </div>
+        <div id="notice" role="status" aria-live="polite"></div>
+        <div id="stage">
+          <canvas
+            id="graph"
+            tabindex="0"
+            aria-label="Dependency graph. Use the item list to navigate, plus and minus to zoom, and arrow keys to pan."
+          ></canvas>
+          <div id="empty">Choose a profile to get started.</div>
+          <div class="legend">
+            <span class="open">Open / active</span
+            ><span class="running">Running</span><span class="done">Done</span
+            ><span class="canceled">Canceled</span>
+          </div>
+        </div>
+        <footer>
+          <span id="count">0 items</span
+          ><span>Prerequisite → dependent · Scroll to zoom · Drag to pan</span>
+        </footer>
+      </section>
+      <aside class="details" aria-label="Item details">
+        <div class="section-label">DETAILS</div>
+        <h2 id="detail-title">Select an item</h2>
+        <p id="detail-hint">
+          Explore a node or choose an item from the list to see its context.
+        </p>
+        <button id="expand" hidden>Explore tasks →</button>
+        <div id="detail-content"></div>
+      </aside>
+    </main>
+  </body>
+</html>

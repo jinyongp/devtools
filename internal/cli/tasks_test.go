@@ -49,3 +49,14 @@ func TestTaskCLIAndSchema(t *testing.T) {
 		t.Fatal("task body schema missing")
 	}
 }
+
+func TestLongAlias(t *testing.T) {
+	a := New("test", "test")
+	var out, err bytes.Buffer
+	if code := a.Run(context.Background(), []string{"dashboard", "start", "--help"}, IO{In: strings.NewReader(""), Out: &out, Err: &err}); code != 0 {
+		t.Fatal(code, err.String())
+	}
+	if !strings.Contains(out.String(), `"name":"dashboard"`) {
+		t.Fatal(out.String())
+	}
+}

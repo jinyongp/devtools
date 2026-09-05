@@ -63,6 +63,9 @@ type Request struct {
 type processResult struct{ ExitCode int }
 
 func object(properties map[string]any, required ...string) map[string]any {
+	if required == nil {
+		required = []string{}
+	}
 	return map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
 }
 
@@ -92,6 +95,7 @@ func New(version, commit string) *App {
 	a.registerTools()
 	a.registerImport()
 	a.registerTasks()
+	a.registerDashboard()
 	for i := range a.commands {
 		if a.commands[i].Aliases == nil {
 			a.commands[i].Aliases = []string{}
@@ -142,7 +146,6 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 			words := strings.Fields(name)
 			if len(args) >= len(words) && strings.Join(args[:len(words)], " ") == name && (selected == nil || len(words) > len(args)-len(rest)) {
 				selected, rest = &a.commands[i], args[len(words):]
-				break
 			}
 		}
 	}

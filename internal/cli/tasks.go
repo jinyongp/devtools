@@ -85,7 +85,7 @@ func (a *App) registerTasks() {
 		if def.Target || def.OptionalTarget {
 			args = append(args, Argument{Name: "id", Required: def.Target})
 		}
-		a.commands = append(a.commands, Command{Name: "task " + def.Command, Description: "Apply " + def.Action + " atomically.", Options: opts, Arguments: args, BodySchema: object(props, def.Required...), Output: map[string]any{"type": "object"}, Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+		a.commands = append(a.commands, Command{Name: "task " + def.Command, Description: "Apply " + def.Action + " atomically.", Options: opts, Arguments: args, BodySchema: taskBody(def), Output: taskOutput(true), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			store, e := a.taskStore(r)
 			if e != nil {
 				return nil, e
@@ -151,7 +151,7 @@ func (a *App) registerTasks() {
 		if required || strings.HasSuffix(name, "history") || strings.HasSuffix(name, "tree") {
 			args = append(args, Argument{Name: "id", Required: required})
 		}
-		a.commands = append(a.commands, Command{Name: "task " + name, Description: "Read task domain: " + name + ".", Options: opts, Arguments: args, Output: map[string]any{"type": "object"}, Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+		a.commands = append(a.commands, Command{Name: "task " + name, Description: "Read task domain: " + name + ".", Options: opts, Arguments: args, Output: taskOutput(false), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			store, e := a.taskStore(r)
 			if e != nil {
 				return nil, e

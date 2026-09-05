@@ -20,6 +20,17 @@ func (s *State) basisFingerprint(v *Item) string {
 		p, _ := w.Props["plan"].(map[string]any)
 		b["spec"] = w.Props["spec_revision"]
 		b["plan_body"] = p["body"]
+		if o.Kind == "workstream" {
+			children := []Object{}
+			for _, t := range s.List("task") {
+				if t.Workstream == w.ID {
+					children = append(children, Object{"id": t.ID, "revision": t.Revision, "state": t.State})
+				}
+			}
+			b["tasks"] = children
+			b["plan_tasks"] = p["task_ids"]
+			b["plan_validations"] = p["validation_ids"]
+		}
 	}
 	return hash(b)
 }

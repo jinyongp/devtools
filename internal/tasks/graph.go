@@ -79,7 +79,24 @@ func (s *State) Impact(id string) Object {
 		}
 	}
 	_ = target
-	return Object{"target_ids": []string{id}, "affected_ids": unique(affected), "running_ids": unique(runs), "completed_ids": unique(done), "allowed": len(runs) == 0 && len(done) == 0}
+	ts, ws := []string{}, []string{}
+	for _, id := range unique(affected) {
+		if i := s.Items[id]; i != nil {
+			if i.Kind == "task" {
+				ts = append(ts, id)
+			} else if i.Kind == "workstream" {
+				ws = append(ws, id)
+			}
+		}
+	}
+	blockers := []Object{}
+	for _, id := range runs {
+		blockers = append(blockers, Object{"code": "running", "target_id": id, "message": "Release the current run before changing its basis."})
+	}
+	for _, id := range done {
+		blockers = append(blockers, Object{"code": "completed", "target_id": id, "message": "Reopen the completed successor before changing its basis."})
+	}
+	return Object{"target_ids": []string{id}, "affected_ids": unique(affected), "affected_task_ids": ts, "affected_workstream_ids": ws, "blockers": blockers, "running_ids": unique(runs), "completed_ids": unique(done), "allowed": len(runs) == 0 && len(done) == 0}
 }
 func (s *State) TaskCovered(t *Item) bool {
 	if t.Workstream == "" {

@@ -152,3 +152,25 @@ func TestStrictJSON(t *testing.T) {
 		t.Fatal("unknown field")
 	}
 }
+
+func TestGraphContinuationKeepsRevision(t *testing.T) {
+	s := fixture(t)
+	a := itemID(call(t, s, "workstream.create", "", Object{"title": "A"}))
+	b := itemID(call(t, s, "workstream.create", "", Object{"title": "B"}))
+	c := itemID(call(t, s, "workstream.create", "", Object{"title": "C"}))
+	call(t, s, "workstream.depends", b, Object{"depends_on": []string{a}})
+	call(t, s, "workstream.depends", c, Object{"depends_on": []string{b}})
+	first, e := s.Query(Query{Command: "workstream tree", Target: c, Options: map[string]string{"depth": "1"}})
+	if e != nil || first["truncated"] != true {
+		t.Fatal(first, e)
+	}
+	call(t, s, "workstream.create", "", Object{"title": "Later"})
+	next, e := s.Query(Query{Command: "workstream tree", Target: b, Options: map[string]string{"cursor": str(first, "cursor")}})
+	if e != nil || num(next, "revision") != num(first, "revision") {
+		t.Fatal("graph drift", next, e)
+	}
+	nodes := next["nodes"].([]Object)
+	if len(nodes) != 2 {
+		t.Fatal(nodes)
+	}
+}

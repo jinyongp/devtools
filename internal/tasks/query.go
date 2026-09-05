@@ -23,6 +23,20 @@ type Snapshot struct {
 	Items       []any     `json:"items"`
 }
 
+type GraphSnapshot struct {
+	Profile string    `json:"profile"`
+	Kind    string    `json:"kind"`
+	Expires time.Time `json:"expires"`
+	Events  []Event   `json:"events"`
+}
+
+func (s Store) cacheDirectory() string {
+	if s.Cache != "" {
+		return s.Cache
+	}
+	return filepath.Join(s.Directory, "cache")
+}
+
 func positive(o map[string]string, k string, def, max int) (int, *protocol.Error) {
 	if o[k] == "" {
 		return def, nil
@@ -48,6 +62,23 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 	if strings.HasPrefix(cmd, "validation ") {
 		kind = "validation"
 		cmd = strings.TrimPrefix(cmd, "validation ")
+	}
+	if cmd == "tree" && q.Options["cursor"] != "" {
+		id := q.Options["cursor"]
+		if !validID(id) {
+			return nil, failure("cursor_invalid", "Start a new graph query.")
+		}
+		var snapshot GraphSnapshot
+		if e := ReadPrivate(filepath.Join(store.cacheDirectory(), id+".json"), &snapshot); e != nil || snapshot.Profile != store.Profile || snapshot.Kind != kind || time.Now().After(snapshot.Expires) {
+			return nil, failure("cursor_invalid", "Start a new graph query.")
+		}
+		s = NewState()
+		for _, event := range snapshot.Events {
+			if e := safeApply(s, event); e != nil {
+				return nil, storageError()
+			}
+		}
+		out["revision"] = s.Revision
 	}
 	var item *Item
 	if q.Target != "" && q.Command != "checkpoint list" {
@@ -100,6 +131,22 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 		}
 		for k, v := range s.Tree(kind, q.Target, q.Options["workstream"], direction, depth, limit) {
 			out[k] = v
+		}
+		out["cursor"] = nil
+		if out["truncated"] == true {
+			token := q.Options["cursor"]
+			if token == "" {
+				dir := store.cacheDirectory()
+				if e := PrivateDir(dir); e != nil {
+					return nil, storageError()
+				}
+				token = ID()
+				snapshot := GraphSnapshot{Profile: store.Profile, Kind: kind, Expires: time.Now().Add(30 * time.Minute), Events: s.Events}
+				if e := WritePrivate(filepath.Join(dir, token+".json"), snapshot); e != nil {
+					return nil, storageError()
+				}
+			}
+			out["cursor"] = token
 		}
 		return out, nil
 	case "next":
@@ -193,7 +240,19 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 			}
 		}
 	case "history":
-		ids:=map[string]bool{q.Target:true};if item!=nil{for _,t:=range s.List("task"){if item.Kind=="workstream"&&t.Workstream==item.ID{ids[t.ID]=true}};for _,v:=range s.List("validation"){if o:=s.owner(v);o!=nil&&ids[o.ID]{ids[v.ID]=true}}}
+		ids := map[string]bool{q.Target: true}
+		if item != nil {
+			for _, t := range s.List("task") {
+				if item.Kind == "workstream" && t.Workstream == item.ID {
+					ids[t.ID] = true
+				}
+			}
+			for _, v := range s.List("validation") {
+				if o := s.owner(v); o != nil && ids[o.ID] {
+					ids[v.ID] = true
+				}
+			}
+		}
 		for _, ev := range s.Events {
 			if q.Target == "" || ids[ev.Target] {
 				items = append(items, ev)
@@ -209,7 +268,9 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 			return nil, failure("invalid_argument", "Invalid state filter.")
 		}
 		for _, i := range s.List(kind) {
-			if state==""&&(i.State=="done"||i.State=="canceled"){continue}
+			if state == "" && (i.State == "done" || i.State == "canceled") {
+				continue
+			}
 			if state != "" && state != "all" && i.State != state {
 				continue
 			}

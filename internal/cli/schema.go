@@ -69,7 +69,11 @@ func (a *App) catalog() map[string]any {
 				map[string]any{"required": []string{"child_args"}, "properties": map[string]any{"child_args": map[string]any{"minItems": 1}}},
 			}
 		}
-		commands = append(commands, map[string]any{"name": command.Name, "aliases": command.Aliases, "description": command.Description, "options": command.Options, "arguments": command.Arguments, "accepts_child_args": command.ChildArgs, "stream_output": command.StreamOutput, "input_schema": input, "output_schema": command.Output})
+		entry := map[string]any{"name": command.Name, "aliases": command.Aliases, "description": command.Description, "options": command.Options, "arguments": command.Arguments, "accepts_child_args": command.ChildArgs, "stream_output": command.StreamOutput, "input_schema": input, "output_schema": command.Output}
+		if command.BodySchema != nil {
+			entry["body_schema"] = command.BodySchema
+		}
+		commands = append(commands, entry)
 	}
 	return map[string]any{
 		"protocol_version": protocol.Version,

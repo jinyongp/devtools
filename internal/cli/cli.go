@@ -30,6 +30,7 @@ type Option struct {
 }
 
 type Command struct {
+	BodySchema   map[string]any                                            `json:"body_schema,omitempty"`
 	Aliases      []string                                                  `json:"aliases"`
 	Arguments    []Argument                                                `json:"arguments"`
 	ChildArgs    bool                                                      `json:"accepts_child_args"`
@@ -90,6 +91,7 @@ func New(version, commit string) *App {
 	}
 	a.registerTools()
 	a.registerImport()
+	a.registerTasks()
 	for i := range a.commands {
 		if a.commands[i].Aliases == nil {
 			a.commands[i].Aliases = []string{}
@@ -138,13 +140,10 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	for i := range a.commands {
 		for _, name := range append([]string{a.commands[i].Name}, a.commands[i].Aliases...) {
 			words := strings.Fields(name)
-			if len(args) >= len(words) && strings.Join(args[:len(words)], " ") == name {
+			if len(args) >= len(words) && strings.Join(args[:len(words)], " ") == name && (selected == nil || len(words) > len(args)-len(rest)) {
 				selected, rest = &a.commands[i], args[len(words):]
 				break
 			}
-		}
-		if selected != nil {
-			break
 		}
 	}
 	if selected == nil {

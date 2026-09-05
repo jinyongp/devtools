@@ -17,10 +17,12 @@ See the [usage guide](docs/tasks.md), [API contract](docs/task-api-contract.md),
 and [agent skill](skills/devtools/SKILL.md).
 
 `devtools dashboard` returns an authenticated local link to the D3 Canvas graph.
-Profiles, workstreams, and details load as you select them.
+Profiles, workstreams, and details load as you select them. Create and edit tasks,
+manage dependencies and checkpoints, and edit common values and environment
+overrides from the same session. See the [management API](docs/management-api-contract.md).
 
-See the [management roadmap](docs/management-roadmap.md) for planned dashboard
-editing, encrypted backup and recovery, process management, and storage cleanup.
+See the [management roadmap](docs/management-roadmap.md) for process management,
+storage cleanup, and the next dashboard integrations.
 
 `devtools backup` encrypts profile values and task history with a public key and
 restores whole profiles with preview and retry protection. See [backup and recovery](docs/backup.md).

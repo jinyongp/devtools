@@ -90,7 +90,10 @@ Use `devtools run -- ...` or a configured project command to inject values into 
 For mixed dotenv migration, use `import --file PATH` and identify public variable keys;
 the default classification protects the remaining values as secrets.
 
-`devtools dashboard` returns a short-lived entry link for a read-only local D3 Canvas graph.
+`devtools dashboard` returns a short-lived entry link for a local D3 Canvas graph and management UI.
+The authenticated session can edit tasks, workstreams, common values, and env overrides.
+Secret reads expose metadata; replacement accepts a new value. Task mutations share CLI
+revision and execution-context checks. Browser execution contexts live in page memory.
 Pass the link to the user when a visual overview helps. Profile selection and node expansion
 request their own scope. `dashboard status` and `dashboard stop` manage the local server.
 

@@ -64,6 +64,8 @@ devtools를 현재 컴퓨터의 여러 프로젝트를 관리하는 공통 진�
 
 ## 3. dashboard 편집
 
+현재 task/workstream 생성·의존성·명세·계획·실행 action과 var/sec/env 편집을 제공한다. 전체 Go race 테스트와 vet, macOS/Linux amd64·arm64 패키징, 격리된 Linux 설치 시나리오를 통과했다. 브라우저에서는 변수 저장과 env override, 작업 생성·점유·체크포인트, CLI 동시 변경 충돌 안내를 확인했다. 프로젝트·프로세스·보관 화면은 후속 연결 범위다.
+
 profile을 중심으로 다음 화면을 구성한다.
 
 | 화면 | 관리 내용 |

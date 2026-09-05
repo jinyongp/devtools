@@ -10,6 +10,23 @@
   background: #f8f9f6;
   font-synthesis: none;
 }
+[hidden] { display: none !important; }
+button:disabled { opacity: .55; cursor: wait; }
+.manage-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.manage-toolbar button { font-size: 12px; }
+#create-item { margin-top: 12px; width: 100%; }
+#values-panel { overflow: auto; padding: 10px 0; }
+#values-panel table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#values-panel th, #values-panel td { text-align: left; border-bottom: 1px solid #dce1da; padding: 12px 8px; overflow-wrap: anywhere; max-width: 260px; }
+#values-panel td button { margin: 2px; font-size: 12px; }
+#editor { border: 1px solid #cbd4ce; border-radius: 10px; width: min(600px, 90vw); max-height: 85vh; padding: 24px; color: inherit; }
+#editor::backdrop { background: #173c3870; }
+#editor h2 { margin-top: 0; }
+#editor-fields label { display: block; margin: 14px 0; font-size: 13px; }
+#editor-fields input, #editor-fields textarea, #editor-fields select { display: block; width: 100%; margin-top: 6px; }
+#editor-fields textarea { min-height: 110px; resize: vertical; padding: 10px; border: 1px solid #cbd4ce; border-radius: 5px; font: inherit; }
+#editor-error { color: #9c342a; }
+.editor-actions { display: flex; justify-content: flex-end; gap: 10px; }
 * {
   box-sizing: border-box;
 }

@@ -98,6 +98,19 @@ selector for the profile overview, and select a node to emphasize its connected
 paths. The entry link is valid for five minutes and one use; the browser session
 lasts eight idle hours or until the server stops.
 
+Use **Choose profile** to select an existing or new profile identifier. The graph
+view offers workstream/task creation and editing actions in item details, including
+dependencies, specification, plan, claim, takeover, checkpoint, and completion.
+Execution contexts stay in page memory; after a reload, review the checkpoint
+and take over the current run to continue. CLI claim and transition checks apply.
+
+**Variables & secrets** selects common values or an environment. Variables display
+their values; secrets display storage metadata and accept a replacement value.
+Editing an inherited value creates an override in the selected environment.
+Removing an override restores the common value. Concurrent changes require a
+refresh before editing again. See the [management API](management-api-contract.md)
+for request and retry behavior.
+
 ## Storage and dependencies
 
 Task journals live under the `tasks` subdirectory of the data path reported by

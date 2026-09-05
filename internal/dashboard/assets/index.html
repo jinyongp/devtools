@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css" />
     <script defer src="d3.min.js"></script>
     <script defer src="app.js"></script>
+    <script defer src="manage.js"></script>
   </head>
   <body>
     <header>
@@ -16,13 +17,15 @@
         <select id="profile">
           <option value="">All profiles</option>
         </select></label
-      ><button id="refresh">Refresh</button>
+      ><button id="new-profile">Choose profile</button><button id="refresh">Refresh</button>
     </header>
     <main>
       <aside class="navigation">
         <div class="section-label">WORKSPACE</div>
         <button id="overview" class="nav-button">Workstreams</button
         ><button id="independent" class="nav-button">Independent tasks</button>
+        <button id="values-nav" class="nav-button">Variables &amp; secrets</button>
+        <button id="create-item">Create workstream</button>
         <div class="section-label">IN THIS VIEW</div>
         <label class="search-label" for="search">Find an item</label
         ><input id="search" type="search" placeholder="Filter by title or ID" />
@@ -41,6 +44,7 @@
           <button id="fit" aria-label="Fit graph to view">Fit graph</button>
         </div>
         <div id="notice" role="status" aria-live="polite"></div>
+        <section id="values-panel" hidden aria-label="Variables and secrets"></section>
         <div id="stage">
           <canvas
             id="graph"
@@ -69,5 +73,14 @@
         <div id="detail-content"></div>
       </aside>
     </main>
+    <dialog id="editor" aria-labelledby="editor-title">
+      <form id="edit-form">
+        <h2 id="editor-title">Edit</h2>
+        <p id="editor-target"></p>
+        <div id="editor-fields"></div>
+        <p id="editor-error" role="alert"></p>
+        <div class="editor-actions"><button id="editor-cancel" type="button">Cancel</button><button id="editor-save" type="submit">Save</button></div>
+      </form>
+    </dialog>
   </body>
 </html>

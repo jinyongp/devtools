@@ -158,6 +158,28 @@ try:
     assert json.loads(http("/api/profiles"))["profiles"] == ["fixture"]
     graph = json.loads(http("/api/query?" + urllib.parse.urlencode({"profile": "fixture", "command": "workstream tree"})))
     assert graph["nodes"][0]["id"] == w
+    mutation_headers = {"Origin": origin, "Content-Type": "application/json"}
+    view = json.loads(http("/api/values?profile=fixture"))
+    change = {"domain": "values", "profile": "fixture", "change": {
+        "action": "variable.set", "key": "DASHBOARD_PUBLIC", "value": "true",
+        "revision": view["revision"], "request_id": str(uuid.uuid4())}}
+    http("/api/actions", change, expected=403, headers={"Content-Type": "application/json"})
+    assert json.loads(http("/api/actions", change, headers=mutation_headers))["data"]["changed"]
+    assert json.loads(http("/api/actions", change, headers=mutation_headers))["data"]["replayed"]
+    values = json.loads(http("/api/values?profile=fixture"))
+    assert any(item.get("value") == "true" for item in values["items"])
+    change["change"].update(action="secret.set", key="DASHBOARD_SECRET", value="synthetic-private-input",
+                            revision=values["revision"], request_id=str(uuid.uuid4()))
+    response = http("/api/actions", change, headers=mutation_headers)
+    assert b"synthetic-private-input" not in response
+    assert b"synthetic-private-input" not in http("/api/values?profile=fixture")
+    action = {"domain": "task", "profile": "fixture", "action": "task.add", "body": {"title": "Dashboard task"},
+              "options": {"request-id": str(uuid.uuid4()), "if-revision": str(revision())}}
+    created = json.loads(http("/api/actions", action, headers=mutation_headers))["data"]["item"]["id"]
+    assert api("task", "show", created)["item"]["title"] == "Dashboard task"
+    assert json.loads(http("/api/actions", action, headers=mutation_headers))["data"]["replayed"]
+    action["options"]["request-id"] = str(uuid.uuid4())
+    http("/api/actions", action, expected=409, headers=mutation_headers)
     http("/api/profiles", expected=403, headers={"Origin": "https://example.invalid"})
     assert api("dashboard", "status")["running"]
 finally:

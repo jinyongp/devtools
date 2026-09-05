@@ -18,7 +18,7 @@ func (a *App) registerDashboard() {
 			name = "dashboard"
 			aliases = []string{"dashboard start"}
 		}
-		a.commands = append(a.commands, Command{Name: name, Aliases: aliases, Description: "Manage the local read-only D3 Canvas dashboard.", Options: taskOptions(), Output: map[string]any{"type": "object"}, Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+		a.commands = append(a.commands, Command{Name: name, Aliases: aliases, Description: "Manage the local D3 Canvas dashboard and editing session.", Options: taskOptions(), Output: map[string]any{"type": "object"}, Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			dirs, e := paths.Current()
 			if e != nil {
 				return nil, argumentError("Cannot resolve user directories.", "")

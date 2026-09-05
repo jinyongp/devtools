@@ -34,11 +34,13 @@ function rememberSession(value) {
     else sessionStorage.removeItem("devtools.session");
   } catch {}
 }
-async function api(path) {
+async function api(path, body) {
   const response = await fetch(path, {
     credentials: "omit",
     redirect: "error",
-    headers: { Authorization: "Bearer " + sessionToken },
+    method: body === undefined ? "GET" : "POST",
+    headers: { Authorization: "Bearer " + sessionToken, ...(body === undefined ? {} : {"Content-Type":"application/json"}) },
+    ...(body === undefined ? {} : {body: JSON.stringify(body)}),
   });
   if (response.status === 401) rememberSession("");
   if (!response.ok) {
@@ -46,7 +48,7 @@ async function api(path) {
     try {
       message = JSON.parse(message).error.message;
     } catch {}
-    throw Error(message);
+    const error = Error(message); error.responded = true; throw error;
   }
   return response.json();
 }
@@ -284,6 +286,7 @@ async function select(node) {
       { id: node.id },
     );
     if (version !== detailGeneration) return;
+    itemActions(node, data, root);
     const dl = text("dl", "", root);
     for (const [label, value] of [
       ["ID", node.id],
@@ -325,6 +328,12 @@ async function select(node) {
 async function load(more = false) {
   const version = ++generation;
   notice("");
+  $("values-panel").hidden = scope !== "values";
+  $("stage").hidden = scope === "values";
+  $("fit").hidden = scope === "values";
+  $("create-item").hidden = scope === "values" || !profile;
+  $("create-item").textContent = scope === "workstreams" ? "Create workstream" : "Create task";
+  $("values-nav").classList.toggle("active", scope === "values");
   if (!more) {
     nodes = [];
     cursor = null;
@@ -347,6 +356,12 @@ async function load(more = false) {
     : "Choose a profile to explore its workstreams and tasks.";
   $("overview").classList.toggle("active", scope === "workstreams");
   $("independent").classList.toggle("active", scope === "independent");
+  if(scope === "values") {
+    $("title").textContent = "Variables & secrets";
+    $("subtitle").textContent = profile ? `${profile} · Common values and environment overrides.` : "Choose a profile to manage its values.";
+    renderList();
+    return loadValues(version);
+  }
   if (!profile) {
     $("title").textContent = "Profiles";
     nodes = Array.from($("profile").options)

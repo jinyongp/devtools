@@ -328,7 +328,9 @@ async function select(node) {
 async function load(more = false) {
   const version = ++generation;
   notice("");
-  const management = scope === "values" || scope === "processes";
+  const management = scope === "values" || scope === "processes" || scope === "storage";
+  document.body.classList.toggle("management-view",management);
+  $("eyebrow").textContent=management?"MANAGEMENT":"DEPENDENCIES";
   $("values-panel").hidden = !management;
   $("stage").hidden = management;
   $("fit").hidden = management;
@@ -336,6 +338,7 @@ async function load(more = false) {
   $("create-item").textContent = scope === "workstreams" ? "Create workstream" : "Create task";
   $("values-nav").classList.toggle("active", scope === "values");
   $("processes-nav").classList.toggle("active", scope === "processes");
+  $("storage-nav").classList.toggle("active", scope === "storage");
   if (!more) {
     nodes = [];
     cursor = null;
@@ -368,6 +371,11 @@ async function load(more = false) {
     $("title").textContent = "Processes";
     $("subtitle").textContent = profile ? `${profile} · Named development commands.` : "Choose a profile to manage its processes.";
     renderList();return loadProcesses(version);
+  }
+  if(scope === "storage") {
+    $("title").textContent = "Storage & recovery";
+    $("subtitle").textContent = `${profile || "All profiles"} · Backup, preview, archive and restore.`;
+    renderList();return loadStorage(version);
   }
   if (!profile) {
     $("title").textContent = "Profiles";

@@ -28,6 +28,9 @@ button:disabled { opacity: .55; cursor: wait; }
 #editor-error { color: #9c342a; }
 .editor-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .raw-output { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 350px; overflow: auto; }
+.management-view .workspace { grid-column: 2 / -1; }
+.management-view .details, .management-view footer, .management-view #graph-navigation { display: none; }
+#editor-fields input[type="checkbox"] { display: inline-block; width: auto; margin-left: 8px; }
 * {
   box-sizing: border-box;
 }

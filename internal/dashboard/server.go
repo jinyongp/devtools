@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -332,6 +333,70 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			reply(map[string]any{"items": items, "instances": instances})
 			return
 		}
+		if r.URL.Path == "/api/project" {
+			st, e := (ports.Store{Directory: filepath.Join(filepath.Dir(s.data), "ports")}).Read()
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			i := st.Find(r.URL.Query().Get("profile"), "id:"+r.URL.Query().Get("instance"), "")
+			if i == nil {
+				invalidAction(w)
+				return
+			}
+			p, e := project.Resolve(i.Directory, "")
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			if p.Root != i.Directory || p.Profile != i.Profile {
+				invalidAction(w)
+				return
+			}
+			commands := []map[string]any{}
+			names := []string{}
+			for name := range p.Commands {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				c := p.Commands[name]
+				commands = append(commands, map[string]any{"name": name, "env": c.Env, "inject": c.Inject, "serve": c.Serve})
+			}
+			assignments := []ports.Assignment{}
+			for _, a := range st.Assignments {
+				if a.ID == i.ID {
+					assignments = append(assignments, a)
+				}
+			}
+			reply(map[string]any{"instance": i, "commands": commands, "ports": assignments})
+			return
+		}
+		if r.URL.Path == "/api/cleanup-preview" {
+			result, e := s.cleanupEngine().Preview(r.Context(), r.URL.Query().Get("profile"))
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			reply(result)
+			return
+		}
+		if r.URL.Path == "/api/archives" {
+			items, e := s.cleanupEngine().Archives()
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			profile := r.URL.Query().Get("profile")
+			visible := items[:0]
+			for _, item := range items {
+				if profile == "" || item.Profile == "" || item.Profile == profile {
+					visible = append(visible, item)
+				}
+			}
+			reply(map[string]any{"items": visible})
+			return
+		}
 		if r.URL.Path == "/api/process-logs" {
 			manager := services.Store{Data: filepath.Dir(s.data)}
 			id := r.URL.Query().Get("id")
@@ -363,6 +428,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if e != nil {
 				apiError(w, e)
 				return
+			}
+			portState, e := (ports.Store{Directory: filepath.Join(filepath.Dir(s.data), "ports")}).Read()
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			for _, i := range portState.Instances {
+				other = append(other, i.Profile)
 			}
 			seen := map[string]bool{}
 			for _, p := range profiles {

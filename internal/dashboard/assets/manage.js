@@ -33,7 +33,9 @@ function edit(title, build, request, after = () => load(), destructive = false) 
       if (!pending) pending = request(read());
       busy = true; controls().forEach(c => c.disabled = true);
       const response = pending.local ? pending.local() : (await api("/api/actions", pending)).data;
-      pending = null; busy = false; dialog.close(); await after(response);
+      pending = null; busy = false;
+      await new Promise(resolve => { dialog.addEventListener("close", resolve, {once:true}); dialog.close(); });
+      await after(response);
     } catch (error) {
       busy = false;
       if (error.responded) pending = null;

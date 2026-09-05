@@ -9,6 +9,7 @@
     <script defer src="app.js"></script>
     <script defer src="manage.js"></script>
     <script defer src="processes.js"></script>
+    <script defer src="storage.js"></script>
   </head>
   <body>
     <header>
@@ -27,12 +28,13 @@
         ><button id="independent" class="nav-button">Independent tasks</button>
         <button id="values-nav" class="nav-button">Variables &amp; secrets</button>
         <button id="processes-nav" class="nav-button">Processes</button>
+        <button id="storage-nav" class="nav-button">Storage &amp; recovery</button>
         <button id="create-item">Create workstream</button>
-        <div class="section-label">IN THIS VIEW</div>
+        <div id="graph-navigation"><div class="section-label">IN THIS VIEW</div>
         <label class="search-label" for="search">Find an item</label
         ><input id="search" type="search" placeholder="Filter by title or ID" />
         <div id="items" role="list" aria-label="Graph items"></div>
-        <button id="more" hidden>Load more</button>
+        <button id="more" hidden>Load more</button></div>
       </aside>
       <section class="workspace">
         <div class="heading">
@@ -46,7 +48,7 @@
           <button id="fit" aria-label="Fit graph to view">Fit graph</button>
         </div>
         <div id="notice" role="status" aria-live="polite"></div>
-        <section id="values-panel" hidden aria-label="Variables and secrets"></section>
+        <section id="values-panel" hidden aria-label="Profile management"></section>
         <div id="stage">
           <canvas
             id="graph"

@@ -13,6 +13,14 @@ async function loadProcesses(version) {
       const capture=field(p,"Capture raw output (may contain secrets)","","checkbox");
       return()=>({action:"start",directory:directory.value,command:command.value,capture_logs:capture.checked,...(env.value?{env:env.value}:{})});
     },body=>processRequest(current,body)));
+    if(data.instances.length)text("h3","Projects & worktrees",panel);
+    for(const instance of data.instances){
+      const section=text("section","",panel);text("p",`${instance.alias||instance.instance_id} · ${instance.directory}`,section);
+      button(section,"Show commands & ports",async()=>{try{const details=await api("/api/project?"+new URLSearchParams({profile:current,instance:instance.instance_id}));if(generation!==version)return;
+        const available=text("div","",section);for(const port of details.ports)text("p",`${port.name}: 127.0.0.1:${port.port}`,available);
+        for(const command of details.commands)button(available,`Start ${command.name}`,()=>edit(`Start ${command.name}`,p=>{text("p",`${instance.directory} · ${command.env||"common"}`,p);return()=>null;},()=>processRequest(current,{action:"start",directory:instance.directory,command:command.name}),()=>load()));
+      }catch(e){notice(e.message);}});
+    }
     for(const item of data.items){
       const section=text("section","",panel);text("h3",`${item.command} · ${item.state}`,section);
       text("p",`${item.directory} · ${item.env||"common"}`,section);

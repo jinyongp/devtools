@@ -57,6 +57,7 @@ type Request struct {
 	Child   []string
 	Help    bool
 }
+type processResult struct{ ExitCode int }
 
 func object(properties map[string]any, required ...string) map[string]any {
 	return map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
@@ -159,6 +160,9 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	data, err := selected.Run(ctx, streams, request)
 	if err != nil {
 		return fail(err)
+	}
+	if result, ok := data.(processResult); ok {
+		return result.ExitCode
 	}
 	if ctx.Err() != nil {
 		return fail(protocol.NewError("canceled", "Execution canceled.", 130, nil))

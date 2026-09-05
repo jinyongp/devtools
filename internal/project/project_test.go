@@ -112,3 +112,17 @@ func TestSymlinkAndMissingDirectory(t *testing.T) {
 		t.Fatalf("missing dir: %v", err)
 	}
 }
+
+func TestCommandDefinitions(t *testing.T) {
+	valid := []byte("profile='app'\n[commands.test]\nexec=['go','test','./...']\ninject=true\nenv='test'\n")
+	got, err := parse(valid, "/project/devtools.toml", "/project")
+	if err != nil || !got.Commands["test"].Inject || got.Commands["test"].Env != "test" {
+		t.Fatalf("%+v %v", got, err)
+	}
+	for _, definition := range []string{"exec=[]", "exec=['']", "exec='go'", "exec=['go']\nenv='../bad'", "exec=['go']\ninject='yes'", "exec=['go']\nunknown=true"} {
+		_, err := parse([]byte("profile='app'\n[commands.test]\n"+definition), "/project/devtools.toml", "/project")
+		if err == nil || err.Code != "invalid_config" {
+			t.Fatalf("accepted %s: %v", definition, err)
+		}
+	}
+}

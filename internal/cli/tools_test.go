@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -71,6 +72,89 @@ func TestValueCommands(t *testing.T) {
 	call(2, "", "var", "list", "--profile", "duplicate")
 }
 
+func TestNamedAndDirectRun(t *testing.T) {
+	app := testApp(t)
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv("LEVEL", "parent")
+	config := `profile = "app"
+[commands.check]
+exec = ["/bin/sh", "-c", "printf '%s|%s|%s' \"$PWD\" \"$LEVEL\" \"$1\"", "label"]
+inject = true
+env = "local"
+[commands.plain]
+exec = ["/bin/sh", "-c", "printf '%s' \"$LEVEL\""]
+[commands.fail]
+exec = ["/bin/sh", "-c", "printf raw; printf diagnostic >&2; exit 23"]
+`
+	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"env", "create", "local"}, {"env", "create", "staging"},
+		{"var", "set", "LEVEL", "--value", "common"},
+		{"var", "set", "LEVEL", "--env", "local", "--value", "local"},
+		{"var", "set", "LEVEL", "--env", "staging", "--value", "staging"},
+	} {
+		if code, _, err := invoke(t, app, "", args...); code != 0 {
+			t.Fatal(err)
+		}
+	}
+	sub := filepath.Join(root, "sub")
+	if err := os.Mkdir(sub, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(sub)
+	current, cwdErr := os.Getwd()
+	if cwdErr != nil {
+		t.Fatal(cwdErr)
+	}
+	canonical, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		args       []string
+		want       string
+		exit       int
+		diagnostic string
+	}{
+		{[]string{"run", "check", "--", "extra space"}, canonical + "|local|extra space", 0, ""},
+		{[]string{"run", "check", "--env", "staging", "--", "--watch"}, canonical + "|staging|--watch", 0, ""},
+		{[]string{"run", "plain"}, "parent", 0, ""},
+		{[]string{"run", "plain", "--env", "staging"}, "staging", 0, ""},
+		{[]string{"run", "--", "/bin/sh", "-c", "printf '%s|%s' \"$PWD\" \"$LEVEL\""}, current + "|common", 0, ""},
+		{[]string{"run", "fail"}, "raw", 23, "diagnostic"},
+	} {
+		code, out, diagnostic := invoke(t, app, "", tc.args...)
+		if code != tc.exit || out != tc.want || diagnostic != tc.diagnostic {
+			t.Fatalf("%v: %d %q %q", tc.args, code, out, diagnostic)
+		}
+	}
+	if code, out, diagnostic := invoke(t, app, "", "run", "plain", "--env", "missing"); code != 3 || out != "" || !strings.Contains(diagnostic, "env_not_found") {
+		t.Fatalf("%d %s %s", code, out, diagnostic)
+	}
+	if os.Getenv("LEVEL") != "parent" {
+		t.Fatal("changed parent environment")
+	}
+}
+
+func TestSecretFileAndRawOutput(t *testing.T) {
+	app := testApp(t)
+	root := t.TempDir()
+	file := filepath.Join(root, "secret")
+	if err := os.WriteFile(file, []byte("true\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, diagnostic := invoke(t, app, "", "sec", "set", "TOKEN", "--file", file, "--profile", "app"); code != 0 {
+		t.Fatal(diagnostic)
+	}
+	code, out, diagnostic := invoke(t, app, "", "run", "--profile", "app", "--", "/bin/sh", "-c", "printf '%s' \"$TOKEN\"; printf true")
+	if code != 0 || out != "true\ntrue" || diagnostic != "" {
+		t.Fatalf("%d %q %s", code, out, diagnostic)
+	}
+}
+
 func TestSchemaDescribesAliasesAndInputs(t *testing.T) {
 	_, out, _ := invoke(t, testApp(t), "", "schema")
 	var result struct {
@@ -111,5 +195,28 @@ func TestSecretInputCancellation(t *testing.T) {
 	_, err := readSecret(ctx, IO{In: reader}, map[string]string{"stdin": "true"})
 	if err == nil || err.Code != "canceled" {
 		t.Fatal(err)
+	}
+}
+
+func TestNamedProfileOverrideAndNoInjection(t *testing.T) {
+	app := testApp(t)
+	root := t.TempDir()
+	t.Chdir(root)
+	config := "profile='base'\n[commands.show]\nexec=['/bin/sh','-c','printf %s \"$MARKER\"']\ninject=true\n[commands.plain]\nexec=['/bin/sh','-c','printf plain']\ninject=false\n"
+	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	code, _, diagnostic := invoke(t, app, "", "var", "set", "MARKER", "--profile", "other", "--value", "override")
+	if code != 0 {
+		t.Fatal(diagnostic)
+	}
+	code, out, diagnostic := invoke(t, app, "", "run", "show", "--profile", "other")
+	if code != 0 || out != "override" || diagnostic != "" {
+		t.Fatalf("%d %s %s", code, out, diagnostic)
+	}
+	app.dataDirectory = func() (string, *protocol.Error) { t.Error("plain command accessed value storage"); return "", nil }
+	code, out, diagnostic = invoke(t, app, "", "run", "plain")
+	if code != 0 || out != "plain" || diagnostic != "" {
+		t.Fatalf("%d %s %s", code, out, diagnostic)
 	}
 }

@@ -120,6 +120,7 @@ func (a *App) registerTools() {
 		}
 		a.commands = append(a.commands, command)
 	}
+	a.commands = append(a.commands, Command{Name: "run", Description: "Execute a configured command or a command after -- with profile values.", Options: profileOptions(true), Arguments: []Argument{{Name: "command", Pattern: project.ProfilePattern}}, ChildArgs: true, StreamOutput: true, Output: map[string]any{}, Run: a.runCommand})
 }
 
 func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kind values.Kind, action string) (any, *protocol.Error) {

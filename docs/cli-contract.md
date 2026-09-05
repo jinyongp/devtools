@@ -2,6 +2,9 @@
 
 이 문서는 확정된 사용 방식과 공개 CLI 계약을 정리한다.
 
+구현 예정인 포트 할당과 명령별 `bind`·템플릿의 사용 방향은
+[포트 관리 계약](port-design.md)에 정리한다.
+
 현재 제공하는 명령은 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `env`, `run`이다. 이 문서의 예시는 빌드한 `devtools`가 PATH에 있는 환경을 기준으로 한다.
 
 ## 사용 목적

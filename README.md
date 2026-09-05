@@ -23,6 +23,9 @@ Profiles, workstreams, and details load as you select them.
 required variable/secret registrations. Named commands check declared
 prerequisites before running. See [environment diagnosis](docs/doctor.md).
 
+The planned [port management contract](docs/port-design.md) describes per-location
+allocation, command `bind` declarations, and simple variable/port templates.
+
 ## Install and update
 
 [GitHub Releases](https://github.com/jinyongp/devtools/releases) distributes

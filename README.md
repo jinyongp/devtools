@@ -31,6 +31,9 @@ restores whole profiles with preview and retry protection. See [backup and recov
 their lifecycle across agent sessions. The dashboard provides the same start,
 stop, and restart actions. See [process management](docs/processes.md).
 
+`devtools cleanup` previews expired and inactive storage, archives selected items,
+and restores or purges archives. See [storage cleanup](docs/cleanup.md).
+
 `devtools doctor` diagnoses project requirements, exact tool versions, and
 required variable/secret registrations. Named commands check declared
 prerequisites before running. See [environment diagnosis](docs/doctor.md).

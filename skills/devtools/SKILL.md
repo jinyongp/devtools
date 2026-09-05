@@ -97,6 +97,15 @@ revision and execution-context checks. Browser execution contexts live in page m
 Pass the link to the user when a visual overview helps. Profile selection and node expansion
 request their own scope. `dashboard status` and `dashboard stop` manage the local server.
 
+Use `devtools process start NAME --request-id UUID` for detached named commands.
+List/status return execution metadata; stop/restart target an immutable execution ID.
+Reuse request IDs for retries. Restart applies current configuration and values.
+Raw logs require explicit `--capture-logs` and a separate `process logs ID` request.
+
+Use `cleanup preview` to inspect eligible storage, then apply selected candidate IDs
+with `cleanup apply PLAN --item ID --request-id UUID`. Archived data can be restored;
+purge removes its payload after the 30-day recovery period. Refresh stale previews.
+
 ## Back up and restore
 
 Use `backup create` for all stored profiles, or select one with `--profile`.

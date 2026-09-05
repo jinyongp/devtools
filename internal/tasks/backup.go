@@ -6,7 +6,41 @@ import (
 	"errors"
 	"io"
 	"sort"
+	"time"
 )
+
+// ArchiveReady only accepts a complete, inactive profile journal. Keeping its
+// dependency graph together preserves all cross-item references in the archive.
+func ArchiveReady(data []byte, profile string, before time.Time) bool {
+	var j Journal
+	if json.Unmarshal(data, &j) != nil || j.Profile != profile || j.Version != 1 || len(j.Events) == 0 {
+		return false
+	}
+	s := NewState()
+	for n, e := range j.Events {
+		if e.Sequence != n+1 || safeApply(s, e) != nil {
+			return false
+		}
+	}
+	last, e := time.Parse(time.RFC3339Nano, j.Events[len(j.Events)-1].At)
+	if e != nil || !last.Before(before) {
+		return false
+	}
+	for _, run := range s.Runs {
+		if run.State == "running" {
+			return false
+		}
+	}
+	for _, item := range s.Items {
+		if item.Kind == "task" && item.State != "done" && item.State != "canceled" {
+			return false
+		}
+		if item.Kind == "workstream" && item.State != "done" && item.State != "canceled" {
+			return false
+		}
+	}
+	return true
+}
 
 // RestoreSnapshot preserves history while releasing active claims and dropping
 // credentials/retry receipts that belong to the source execution environment.

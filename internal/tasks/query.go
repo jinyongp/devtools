@@ -56,6 +56,7 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 		return nil, storageError()
 	}
 	defer release()
+	pruneQueries(store.cacheDirectory())
 	_, s, e := store.load()
 	if e != nil {
 		return nil, e
@@ -312,6 +313,23 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 		return nil, failure("invalid_argument", "Unknown task query.")
 	}
 	return store.page(q, out, items, limit)
+}
+
+func pruneQueries(dir string) {
+	entries, e := os.ReadDir(dir)
+	if e != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !validID(strings.TrimSuffix(entry.Name(), ".json")) || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		info, e := entry.Info()
+		if e == nil && info.Mode().IsRegular() && info.Mode().Perm()&0077 == 0 && time.Since(info.ModTime()) > 30*time.Minute {
+			_ = os.Remove(path)
+		}
+	}
 }
 func (s Store) page(q Query, out Object, items []any, limit int) (Object, *protocol.Error) {
 	opts := Object{}

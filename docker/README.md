@@ -14,6 +14,9 @@ just verify-docker install
 # 작업 관리·인계·대시보드 시나리오
 just verify-docker tasks
 
+# 환경 진단·명령 실행 전 필수 조건 시나리오
+just verify-docker doctor
+
 # 시나리오 목록
 just verify-docker --list
 ```
@@ -23,6 +26,9 @@ just verify-docker --list
 각 시나리오는 별도의 임시 HOME과 XDG 경로, 작업 디렉터리에서 실행된다. 시나리오가 끝나면 해당 데이터가 정리되고, 실패하면 종료 코드를 반환하며 전체 실행을 멈춘다. Docker 실행은 외부 네트워크를 차단하고 일반 사용자 권한으로 수행한다. 호스트 디렉터리는 마운트하지 않는다.
 
 ## 시나리오 추가
+
+`doctor` 시나리오는 설치된 CLI의 정확한 도구 버전 검사, var/sec 등록 확인,
+명령 실행 차단, env 선택과 진단 출력의 값 비노출을 검증한다.
 
 `scenarios/<이름>.py`를 추가하면 실행기가 파일명으로 시나리오를 찾는다. `all`은 등록된 전체 시나리오를 이름순으로 실행한다. 여러 이름은 실행할 순서대로 지정할 수 있다.
 

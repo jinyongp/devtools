@@ -356,6 +356,9 @@ env = "test"
 
 ## 출력과 비대화형 사용
 
+`devtools doctor [COMMAND]`로 프로젝트 환경과 필수 조건을 진단한다.
+설정의 requirements와 실행 전 검사는 [개발환경 진단](doctor.md)을 따른다.
+
 조회·변경 명령은 기본적으로 JSON을 반환한다. `--json`은 필요하지 않다. 성공은 stdout, 오류는 stderr로 분리하고, 오류에는 에이전트가 분기할 수 있는 고정된 코드가 포함된다. 응답의 `schema_version`은 도구가 제공하는 정보이며 사용자 설정값이 아니다.
 
 일반 명령은 입력을 요구하는 프롬프트를 띄우지 않는다. 명시적으로 지정한 stdin 입력은 데이터 입력 경로이며 대화형 질의가 아니다.
@@ -383,6 +386,7 @@ env = "test"
 | `invalid_storage` | 저장 데이터 형식 오류 |
 | `command_not_found` | 이름 명령 또는 실행 파일 탐색 실패 |
 | `execution_failed` | 자식 프로세스 시작 실패 |
+| `requirements_failed` | 선언한 명령 필수 조건이 충족되지 않음; details.checks로 원인 확인 |
 
 ## 로컬 저장과 secret 보호 범위
 

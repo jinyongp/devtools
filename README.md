@@ -19,6 +19,10 @@ and [agent skill](skills/devtools/SKILL.md).
 `devtools dashboard` returns an authenticated local link to the D3 Canvas graph.
 Profiles, workstreams, and details load as you select them.
 
+`devtools doctor` diagnoses project requirements, exact tool versions, and
+required variable/secret registrations. Named commands check declared
+prerequisites before running. See [environment diagnosis](docs/doctor.md).
+
 ## Install and update
 
 [GitHub Releases](https://github.com/jinyongp/devtools/releases) distributes

@@ -10,6 +10,14 @@ Commands return one JSON envelope: read `data` on success and `error.code` on fa
 Select a profile through the project's tracked `devtools.toml` or `--profile`.
 Worktrees sharing that profile see the same workstreams, tasks, and history.
 
+Use `devtools doctor` when preparing a project or diagnosing its environment.
+For a named command, use `devtools doctor COMMAND` with the intended env.
+Read `data.ready` and each check's `status` and `remedy`; diagnosis can return
+successfully with `ready: false`. Requirements declare exact tool versions and
+var/sec key presence in `devtools.toml`. Named `run` commands enforce declared
+requirements before execution. Version probes execute the configured tool
+arguments and keep their output and profile values out of diagnostic responses.
+
 ## Plan and coordinate
 
 Use a workstream for a goal with a specification, implementation plan, and related tasks.

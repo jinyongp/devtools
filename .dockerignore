@@ -16,3 +16,6 @@
 !docker/run.py
 !docker/scenarios/
 !docker/scenarios/*.py
+!README.md
+!docs/
+!docs/install.md

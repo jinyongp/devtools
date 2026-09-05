@@ -35,18 +35,35 @@ The installer selects the platform and installs the latest stable release into
 `~/.local/bin/devtools`. Downloads require curl and HTTPS access.
 
 ```sh
-curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-  https://github.com/jinyongp/devtools/releases/latest/download/install.sh -o /tmp/devtools-install.sh
-sh /tmp/devtools-install.sh install
+(
+  devtools_install_dir=$(mktemp -d "${TMPDIR:-/tmp}/devtools-install.XXXXXXXX") || exit 1
+  trap 'rm -rf "$devtools_install_dir"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM HUP
+  curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+    https://github.com/jinyongp/devtools/releases/latest/download/install.sh \
+    -o "$devtools_install_dir/install.sh" || exit 1
+  sh "$devtools_install_dir/install.sh" install
+)
 export PATH="$HOME/.local/bin:$PATH"
 devtools version
 
 # Update to the latest stable release.
-sh /tmp/devtools-install.sh update
-
-# Select a specific release (including prereleases).
-sh /tmp/devtools-install.sh update --version 0.1.0
+(
+  devtools_install_dir=$(mktemp -d "${TMPDIR:-/tmp}/devtools-install.XXXXXXXX") || exit 1
+  trap 'rm -rf "$devtools_install_dir"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM HUP
+  curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+    https://github.com/jinyongp/devtools/releases/latest/download/install.sh \
+    -o "$devtools_install_dir/install.sh" || exit 1
+  sh "$devtools_install_dir/install.sh" update
+)
 ```
+
+Add `--version 0.1.0` to the installer's `install` or `update` invocation to
+select a release. Each invocation downloads into a private temporary directory
+and removes it when finished.
 
 Include the same PATH in the agent's process configuration. Installation and
 updates run noninteractively and return JSON. Updates preserve profile data and

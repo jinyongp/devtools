@@ -23,6 +23,8 @@ COPY --from=build /releases/ /opt/releases/
 COPY scripts/install.sh /opt/devtools-install.sh
 COPY docker/run.py /opt/verify/run.py
 COPY docker/scenarios/ /opt/verify/scenarios/
+COPY README.md /opt/verify/docs/README.md
+COPY docs/install.md /opt/verify/docs/install.md
 USER tester
 WORKDIR /home/tester
 ENV HOME=/home/tester

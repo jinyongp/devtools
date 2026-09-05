@@ -1,7 +1,7 @@
 # 포트 관리와 명령별 값 연결
 
-상태: 구현 예정인 port 기능의 사용 계약이다. 아래 설정은 port 기능이
-추가된 버전에 적용한다. 현재 값 관리와 실행 방식은 [CLI 계약](cli-contract.md)을 따른다.
+port·instance 명령과 serve·bind의 사용 계약이다. 실행 예시는
+[포트 사용 가이드](ports.md), 값 관리와 실행 방식은 [CLI 계약](cli-contract.md)을 따른다.
 
 개발 서버의 포트를 전역으로 관리하고, 명령 실행 시 필요한 포트와 주소를
 환경변수로 전달한다. 같은 프로젝트의 여러 worktree를 동시에 실행하거나
@@ -317,7 +317,8 @@ TCP 연결 성공은 애플리케이션 준비와 별개이며, HTTP health 확�
 프로젝트의 명시적인 명령으로 수행한다. run의 주소 참조는 서버 준비를 기다리지 않는다.
 
 할당 응답의 공통 필드는 `profile`, `instance_id`, `alias`, `directory`,
-`name`, `port`다. alias가 없으면 null이다. show는 이 객체를, list는
+`name`, `port`, `location_status`다. location_status는 `available`, `missing`,
+`unknown`으로 실행 위치의 접근 상태를 나타낸다. alias가 없으면 null이다. show는 이 객체를, list는
 `items` 배열을 반환한다. allocate는 할당 필드와 `created`를 반환한다.
 고정된 host나 URL 대신 bind 템플릿으로 접속 문자열을 구성한다.
 
@@ -328,7 +329,7 @@ release는 `released`를 반환하고 이미 해제된 서비스는 false다.
 prune은 `removed`와 사유 코드가 포함된 `retained` instance 배열을 반환한다.
 활성 run이 있는 할당은 OS 포트가 아직 비어 있어도 release·prune에서 보류한다.
 
-instance 응답은 `profile`, `instance_id`, `alias`, `directory`를 사용한다.
+instance 응답은 `profile`, `instance_id`, `alias`, `directory`, `location_status`를 사용한다.
 list는 `items`, name·move는 instance 필드와 `changed`, remove는 `removed`를
 반환한다. 같은 요청의 반복은 기존 결과를 유지하며, 삭제된 대상을 다시 remove하면
 removed는 false다. 모호한 대상 선택은 오류로 처리한다.

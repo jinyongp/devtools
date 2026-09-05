@@ -18,6 +18,20 @@ var/sec key presence in `devtools.toml`. Named `run` commands enforce declared
 requirements before execution. Version probes execute the configured tool
 arguments and keep their output and profile values out of diagnostic responses.
 
+## Local ports
+
+Use `port list`, `port show NAME`, and `instance list` to discover stored local
+TCP assignments. `instance name ALIAS` names the current project location;
+cross-project bindings select its profile and instance alias explicitly.
+Commands declare `serve = ["api"]` for servers they start and `bind` for values
+they consume. `doctor COMMAND` previews the checks; `run COMMAND` allocates
+missing serve ports and prevents concurrent runs of the same service.
+Assignments persist until release or prune. A busy stored port is an error;
+coordinate an explicit release/reallocation and restart consumers when changing it.
+Use `${var.KEY}` and `${bind.NAME}` in binding templates; exec arguments support
+`${bind.NAME}`. Binding output overrides variables, and a secret-name collision
+fails. Template values stay out of diagnostics. Check the CLI schema for options.
+
 ## Plan and coordinate
 
 Use a workstream for a goal with a specification, implementation plan, and related tasks.

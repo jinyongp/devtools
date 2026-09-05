@@ -17,6 +17,9 @@ just verify-docker tasks
 # 환경 진단·명령 실행 전 필수 조건 시나리오
 just verify-docker doctor
 
+# 포트 할당·실제 서버 실행·프로젝트 간 참조
+just verify-docker ports
+
 # 시나리오 목록
 just verify-docker --list
 ```

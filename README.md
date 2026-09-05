@@ -23,8 +23,9 @@ Profiles, workstreams, and details load as you select them.
 required variable/secret registrations. Named commands check declared
 prerequisites before running. See [environment diagnosis](docs/doctor.md).
 
-The planned [port management contract](docs/port-design.md) describes per-location
-allocation, command `bind` declarations, and simple variable/port templates.
+`devtools port` persists local TCP assignments per execution location.
+Commands declare `serve` to start services and `bind` to inject ports or compose
+URLs. See the [port guide](docs/ports.md) and [contract](docs/port-design.md).
 
 ## Install and update
 

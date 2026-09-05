@@ -7,7 +7,7 @@ fail() {
 }
 
 usage() {
-  printf '%s\n' 'Usage: sh install.sh install|update --version VERSION --source DIRECTORY_OR_HTTPS_URL [--bin-dir DIRECTORY]'
+  printf '%s\n' 'Usage: sh install.sh install|update [--version VERSION] [--source DIRECTORY_OR_HTTPS_URL] [--bin-dir DIRECTORY]'
 }
 
 if [ "${1:-}" = '--help' ]; then usage; exit 0; fi
@@ -31,8 +31,19 @@ while [ "$#" -gt 0 ]; do
   esac
   shift 2
 done
-case "$version" in ''|.|..|*[!a-zA-Z0-9._-]*) fail 'Specify a valid release version.' ;; esac
-[ -n "$source" ] || fail 'Specify a release directory or HTTPS URL.'
+download() {
+  curl --fail --silent --location --proto '=https' --proto-redir '=https' \
+    --connect-timeout 15 --max-time 120 "$@" 2>/dev/null
+}
+if [ -z "$source" ]; then
+  release_url=${DEVTOOLS_RELEASE_URL:-https://github.com/jinyongp/devtools/releases}
+  case "$release_url" in https://*) ;; *) fail 'Release URL must use HTTPS.' ;; esac
+  if [ -z "$version" ]; then
+    version=$(download "${release_url%/}/latest/download/version.txt") || fail 'Cannot resolve the latest stable release.'
+  fi
+  source="${release_url%/}/download/v$version"
+fi
+case "$version" in ''|.|..|*[!a-zA-Z0-9._-]*) fail 'Specify a valid release version; custom sources require --version.' ;; esac
 case "$(uname -s)" in Linux) platform=linux ;; Darwin) platform=darwin ;; *) fail 'Unsupported operating system.' ;; esac
 case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) fail 'Unsupported architecture.' ;; esac
 
@@ -60,8 +71,7 @@ scratch=$(mktemp -d "$bin_dir/.devtools-install.XXXXXXXX") || fail 'Cannot prepa
 fetch() {
   case "$source" in
     https://*)
-      curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-        --connect-timeout 15 --max-time 120 "${source%/}/$1" -o "$2" || fail 'Cannot download release artifact.'
+      download "${source%/}/$1" -o "$2" || fail 'Cannot download release artifact.'
       ;;
     *://*) fail 'Remote release sources must use HTTPS.' ;;
     *) cp "${source%/}/$1" "$2" || fail 'Cannot read release artifact.' ;;

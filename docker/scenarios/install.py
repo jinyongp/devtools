@@ -126,13 +126,21 @@ assert api("version")["data"]["version"] == "0.0.0-test.2"
 with tempfile.TemporaryDirectory() as temporary:
     cert = Path(temporary) / "certificate.pem"
     key = Path(temporary) / "key.pem"
+    releases = Path(temporary) / "releases"
+    latest = releases / "latest/download"
+    latest.mkdir(parents=True)
+    for version in ("0.0.0-test.1", "0.0.0-test.2"):
+        target = releases / "download" / f"v{version}"
+        target.mkdir(parents=True)
+        for artifact in Path("/opt/releases").glob(f"*{version}*"):
+            shutil.copy(artifact, target / artifact.name)
     execute(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
              "-keyout", str(key), "-out", str(cert), "-days", "1",
              "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost"])
 
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
-            super().__init__(*args, directory="/opt/releases", **kwargs)
+            super().__init__(*args, directory=str(releases), **kwargs)
 
         def log_message(self, *args):
             pass
@@ -144,10 +152,34 @@ with tempfile.TemporaryDirectory() as temporary:
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     env["CURL_CA_BUNDLE"] = str(cert)
+    env["DEVTOOLS_RELEASE_URL"] = f"https://localhost:{server.server_port}"
     try:
-        install("update", "0.0.0-test.2", f"https://localhost:{server.server_port}")
+        install("update", "0.0.0-test.2", env["DEVTOOLS_RELEASE_URL"] + "/download/v0.0.0-test.2")
+        download_bin = home / "download-bin"
+
+        def released(action, *args, expected=0):
+            result = execute(installer + [action, "--bin-dir", str(download_bin), *args],
+                             expected=expected)
+            return json.loads(result.stdout if expected == 0 else result.stderr)
+
+        # Latest discovery resolves once, then uses the version-specific URL.
+        (latest / "version.txt").write_text("0.0.0-test.1\n")
+        assert released("install")["data"]["version"] == "0.0.0-test.1"
+        (latest / "version.txt").write_text("0.0.0-test.2\n")
+        assert released("update")["data"]["version"] == "0.0.0-test.2"
+        downloaded = download_bin / "devtools"
+        preserved = downloaded.read_bytes()
+        (latest / "version.txt").write_text("../../invalid\n")
+        assert not released("update", expected=1)["ok"]
+        assert downloaded.read_bytes() == preserved
+        (latest / "version.txt").unlink()
+        assert not released("update", expected=1)["ok"]
+        assert downloaded.read_bytes() == preserved
+        assert released("update", "--version", "0.0.0-test.1")["data"]["version"] == "0.0.0-test.1"
+        assert not released("update", "--source", "/opt/releases", expected=1)["ok"]
     finally:
         del env["CURL_CA_BUNDLE"]
+        del env["DEVTOOLS_RELEASE_URL"]
         server.shutdown()
         server.server_close()
         worker.join()
@@ -177,4 +209,5 @@ finally:
 
 assert not list((home / ".local/bin").glob(".devtools-install*"))
 print("PASS: install, PATH, profile values, project commands, worktrees, permissions, "
-      "failed-update preservation, update, repeat update, HTTPS delivery, and signals")
+      "failed-update preservation, update, repeat update, HTTPS delivery, latest and "
+      "pinned releases, discovery failure preservation, and signals")

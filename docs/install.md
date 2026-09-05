@@ -27,7 +27,17 @@ devtools_0.1.0_linux_amd64.tar.gz.sha256
 
 ## 처음 설치하기
 
-설치 스크립트에 배포물 위치와 버전을 전달한다. 아래 예시는 저장소 루트에서 로컬 배포물을 설치한다.
+기본 배포 주소는 `https://github.com/jinyongp/devtools/releases`다. GitHub Releases에 게시된 설치 스크립트를 받아 실행한다.
+
+```sh
+curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+  https://github.com/jinyongp/devtools/releases/latest/download/install.sh -o /tmp/devtools-install.sh
+sh /tmp/devtools-install.sh install
+```
+
+버전을 생략하면 최신 안정 릴리스의 `version.txt`를 조회하고, 해당 버전의 고정 주소에서 배포물과 체크섬을 받는다. `--version 0.1.0`으로 특정 버전을 선택할 수 있다. 버전 인자는 태그의 `v`를 제외한 값이다.
+
+로컬 배포물을 사용할 때는 위치와 버전을 함께 전달한다.
 
 ```sh
 sh scripts/install.sh install --version 0.1.0 --source ./dist
@@ -49,20 +59,20 @@ devtools schema
 sh scripts/install.sh install --version 0.1.0 --source ./dist --bin-dir /path/to/bin
 ```
 
-HTTPS 배포 서버를 운영한다면 `--source`에 아카이브와 체크섬이 있는 디렉터리 URL을 지정한다. HTTPS 다운로드에는 curl이 필요하다. 이 저장소에는 실제 배포 서버의 기본 주소가 설정되어 있지 않으므로 사용할 위치를 직접 전달한다.
+HTTPS 배포 서버를 운영한다면 `--source`에 아카이브와 체크섬이 있는 디렉터리 URL과 `--version`을 지정한다. HTTPS 다운로드에는 curl이 필요하다. `DEVTOOLS_RELEASE_URL`은 GitHub Releases와 같은 `latest/download/version.txt`, `download/v<버전>/<파일>` 경로를 제공하는 HTTPS 미러 주소로 기본 배포 주소를 바꾼다.
 
 체크섬은 배포물의 전송 무결성을 확인한다. 설치 스크립트와 배포물은 신뢰하는 출처에서 받아 사용한다.
 
 ## 업데이트하기
 
-새 버전의 배포물을 준비한 뒤 같은 설치기에 `update`를 전달한다.
+같은 설치기에 `update`를 전달하면 최신 안정 버전으로 업데이트한다.
 
 ```sh
-sh scripts/install.sh update --version 0.2.0 --source ./dist
+sh /tmp/devtools-install.sh update
 devtools version
 ```
 
-사용자 지정 경로에 설치했다면 업데이트에도 같은 `--bin-dir`를 전달한다. `install`은 첫 설치에, `update`는 기존 실행 파일 교체에 사용한다. 버전 선택은 호출자가 담당하며, 같은 버전으로 다시 업데이트할 수도 있다.
+`--version 0.2.0`으로 특정 버전을 선택하거나, `--version 0.2.0 --source ./dist`로 로컬 배포물을 사용한다. 사용자 지정 경로에 설치했다면 업데이트에도 같은 `--bin-dir`를 전달한다. `install`은 첫 설치에, `update`는 기존 실행 파일 교체에 사용한다. 같은 버전 재설치와 이전 버전 선택도 가능하다.
 
 설치기는 체크섬, 아카이브 구성, 실행 가능 여부와 프로그램의 버전을 확인한 뒤 실행 파일을 원자적으로 교체한다. 확인 중 오류가 발생하면 기존 실행 파일을 유지한다. profile 데이터와 프로젝트의 `devtools.toml`은 업데이트 전후에 보존된다.
 
@@ -73,6 +83,12 @@ devtools version
 ```
 
 동일한 설치 경로의 갱신은 설치 잠금으로 직렬화한다. 실행 중인 설치기가 있으면 새 호출은 오류를 반환한다. 강제 종료 등으로 잠금이 남았다면 실행 중인 설치기가 있는지 확인한 뒤 설치 디렉터리의 빈 `.devtools-install.lock` 디렉터리를 제거하고 다시 실행한다.
+
+## GitHub Releases 게시
+
+`v0.1.0` 형태의 태그를 원격 저장소에 올리면 Release 워크플로가 코드 검사와 Docker 검증을 수행하고 네 플랫폼 배포물을 생성한다. 아카이브·체크섬·설치기·버전 파일을 GitHub Releases에 함께 게시한다. 빌드에는 태그의 버전과 커밋 식별자를 기록한다.
+
+`v0.2.0-rc.1`처럼 접미사가 붙은 태그는 사전 릴리스로 게시한다. 기본 설치는 GitHub가 최신으로 선택한 안정 릴리스를 사용하고, 사전 릴리스는 버전을 지정해 설치한다.
 
 ## Docker에서 설치 환경 검증하기
 
@@ -92,6 +108,7 @@ just verify-docker install
 - 손상된 배포물의 업데이트 실패와 기존 실행 파일 보존.
 - 정상 업데이트 후 버전 변경, profile 데이터·프로젝트 설정 보존.
 - 컨테이너 내부 HTTPS 서버에서 배포물 다운로드와 체크섬 확인.
+- 최신 릴리스 조회, 버전 지정, 조회 실패 시 설치된 실행 파일 보존.
 - 같은 버전 재업데이트와 자식 프로세스 신호·종료 코드 전달.
 
 컨테이너는 자체 HOME과 테스트 데이터를 사용하며 종료 시 삭제된다. 실행 단계는 외부 네트워크를 차단하고, 호스트 디렉터리 마운트 없이 동작한다. 이미지와 빌드 캐시는 Docker에서 관리한다.

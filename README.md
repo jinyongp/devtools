@@ -11,6 +11,39 @@ and installed-Linux verification through Docker.
 The [Linux sandbox](docker/README.md) runs isolated verification scenarios with
 `just verify-docker`.
 
+## Install and update
+
+[GitHub Releases](https://github.com/jinyongp/devtools/releases) distributes
+macOS and Linux binaries for amd64 and arm64. WSL uses the Linux binary.
+The installer selects the platform and installs the latest stable release into
+`~/.local/bin/devtools`. Downloads require curl and HTTPS access.
+
+```sh
+curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+  https://github.com/jinyongp/devtools/releases/latest/download/install.sh -o /tmp/devtools-install.sh
+sh /tmp/devtools-install.sh install
+export PATH="$HOME/.local/bin:$PATH"
+devtools version
+
+# Update to the latest stable release.
+sh /tmp/devtools-install.sh update
+
+# Select a specific release (including prereleases).
+sh /tmp/devtools-install.sh update --version 0.1.0
+```
+
+Include the same PATH in the agent's process configuration. Installation and
+updates run noninteractively and return JSON. Updates preserve profile data and
+project configuration. See [installation details](docs/install.md) for custom
+directories, local artifacts, and release verification.
+
+## Publishing releases
+
+Pushing a version tag such as `v0.1.0` starts GitHub Actions validation, packages
+all four targets, and publishes the archives, SHA-256 checksums, `install.sh`, and
+`version.txt` to GitHub Releases. Tags such as `v0.2.0-rc.1` publish prereleases;
+the installer selects GitHub's latest stable release by default.
+
 ## Build and verify
 
 Requires Go 1.27.x, Git (for integration tests), and just.

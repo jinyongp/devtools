@@ -18,6 +18,15 @@ import (
 
 type SignalError struct{ Signal syscall.Signal }
 
+// Runner lets a detached supervisor own the process lifetime while reusing
+// command preparation, environment injection, and prerequisite checks.
+type Runner func(context.Context, []string, string, []string, io.Reader, io.Writer, io.Writer) (int, *protocol.Error)
+type runnerKey struct{}
+
+func WithRunner(ctx context.Context, runner Runner) context.Context {
+	return context.WithValue(ctx, runnerKey{}, runner)
+}
+
 func (s SignalError) Error() string { return "execution interrupted by signal" }
 
 func Environment(parent []string, injected map[string]string) []string {
@@ -74,6 +83,9 @@ func LookPath(name, dir string, env []string) (string, *protocol.Error) {
 }
 
 func Execute(ctx context.Context, args []string, dir string, env []string, in io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
+	if runner, ok := ctx.Value(runnerKey{}).(Runner); ok {
+		return runner(ctx, args, dir, env, in, out, diagnostic)
+	}
 	if len(args) == 0 || args[0] == "" {
 		return 0, protocol.NewError("invalid_argument", "Specify a command to execute.", 2, nil)
 	}

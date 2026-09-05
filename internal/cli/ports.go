@@ -11,6 +11,7 @@ import (
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/services"
 )
 
 func portFailure(code string) *protocol.Error {
@@ -142,6 +143,9 @@ func instanceResult(i ports.Instance) map[string]any {
 	return map[string]any{"profile": i.Profile, "instance_id": i.ID, "alias": i.Alias, "directory": i.Directory, "location_status": status}
 }
 func checkRelease(ctx context.Context, s ports.Store, st *ports.State, id string) *protocol.Error {
+	if e := (services.Store{Data: filepath.Dir(s.Directory)}).Active(ctx, id); e != nil {
+		return e
+	}
 	for _, a := range st.Assignments {
 		if a.ID != id {
 			continue
@@ -160,6 +164,17 @@ func checkRelease(ctx context.Context, s ports.Store, st *ports.State, id string
 	return nil
 }
 func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *protocol.Error) {
+	if action == "prune" {
+		manager, e := a.serviceStore()
+		if e != nil {
+			return nil, e
+		}
+		unlock, err := manager.Lock(ctx)
+		if err != nil {
+			return nil, portFailure("io_error")
+		}
+		defer unlock()
+	}
 	profile, selector, dir, e := portTarget(r)
 	if (action == "list" || action == "prune") && r.Options["profile"] != "" && r.Options["instance"] == "" && r.Options["dir"] == "" {
 		profile, selector, dir, e = r.Options["profile"], "", "", nil
@@ -340,6 +355,17 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 }
 
 func (a *App) instanceCommand(ctx context.Context, action string, r Request) (any, *protocol.Error) {
+	if action == "move" || action == "remove" {
+		manager, e := a.serviceStore()
+		if e != nil {
+			return nil, e
+		}
+		unlock, err := manager.Lock(ctx)
+		if err != nil {
+			return nil, portFailure("io_error")
+		}
+		defer unlock()
+	}
 	if (action == "name" || action == "move" || action == "remove") && r.Options["instance"] != "" {
 		return nil, argumentError("Use the positional instance name.", "instance")
 	}
@@ -416,6 +442,9 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 		case "show":
 			result = instanceResult(*i)
 		case "move":
+			if e := (services.Store{Data: filepath.Dir(s.Directory)}).Active(ctx, i.ID); e != nil {
+				return false, e
+			}
 			p, e := project.Resolve(destination, "")
 			if e != nil {
 				return false, e
@@ -442,6 +471,9 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 			result = row
 			return changed, nil
 		case "remove":
+			if e := (services.Store{Data: filepath.Dir(s.Directory)}).Active(ctx, i.ID); e != nil {
+				return false, e
+			}
 			for _, v := range st.Assignments {
 				if v.ID == i.ID {
 					return false, portFailure("instance_conflict")

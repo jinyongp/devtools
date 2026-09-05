@@ -27,6 +27,7 @@ button:disabled { opacity: .55; cursor: wait; }
 #editor-fields textarea { min-height: 110px; resize: vertical; padding: 10px; border: 1px solid #cbd4ce; border-radius: 5px; font: inherit; }
 #editor-error { color: #9c342a; }
 .editor-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.raw-output { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 350px; overflow: auto; }
 * {
   box-sizing: border-box;
 }

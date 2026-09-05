@@ -21,14 +21,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
 //go:embed assets/*
 var assets embed.FS
 
-const authProtocol = 3
+const authProtocol = 4
 
 type Registry struct {
 	ID      string `json:"id"`
@@ -306,6 +308,48 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			reply(result)
+			return
+		}
+		if r.URL.Path == "/api/processes" {
+			profile := r.URL.Query().Get("profile")
+			manager := services.Store{Data: filepath.Dir(s.data)}
+			items, e := manager.List(r.Context(), profile)
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			st, e := (ports.Store{Directory: filepath.Join(filepath.Dir(s.data), "ports")}).Read()
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			instances := []ports.Instance{}
+			for _, i := range st.Instances {
+				if i.Profile == profile {
+					instances = append(instances, i)
+				}
+			}
+			reply(map[string]any{"items": items, "instances": instances})
+			return
+		}
+		if r.URL.Path == "/api/process-logs" {
+			manager := services.Store{Data: filepath.Dir(s.data)}
+			id := r.URL.Query().Get("id")
+			record, e := manager.Status(r.Context(), id)
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			if record.Profile != r.URL.Query().Get("profile") {
+				invalidAction(w)
+				return
+			}
+			content, e := manager.Logs(r.Context(), id)
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			reply(map[string]string{"content": content})
 			return
 		}
 		store := tasks.Store{Directory: s.data, Profile: r.URL.Query().Get("profile"), Cache: s.cache}

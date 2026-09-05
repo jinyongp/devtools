@@ -27,6 +27,10 @@ storage cleanup, and the next dashboard integrations.
 `devtools backup` encrypts profile values and task history with a public key and
 restores whole profiles with preview and retry protection. See [backup and recovery](docs/backup.md).
 
+`devtools process` starts named project commands in the background and manages
+their lifecycle across agent sessions. The dashboard provides the same start,
+stop, and restart actions. See [process management](docs/processes.md).
+
 `devtools doctor` diagnoses project requirements, exact tool versions, and
 required variable/secret registrations. Named commands check declared
 prerequisites before running. See [environment diagnosis](docs/doctor.md).

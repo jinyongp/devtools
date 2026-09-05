@@ -99,6 +99,7 @@ func New(version, commit string) *App {
 	a.registerDoctor()
 	a.registerPorts()
 	a.registerBackup()
+	a.registerProcesses()
 	for i := range a.commands {
 		if a.commands[i].Aliases == nil {
 			a.commands[i].Aliases = []string{}

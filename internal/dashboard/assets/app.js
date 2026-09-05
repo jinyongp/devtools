@@ -328,12 +328,14 @@ async function select(node) {
 async function load(more = false) {
   const version = ++generation;
   notice("");
-  $("values-panel").hidden = scope !== "values";
-  $("stage").hidden = scope === "values";
-  $("fit").hidden = scope === "values";
-  $("create-item").hidden = scope === "values" || !profile;
+  const management = scope === "values" || scope === "processes";
+  $("values-panel").hidden = !management;
+  $("stage").hidden = management;
+  $("fit").hidden = management;
+  $("create-item").hidden = management || !profile;
   $("create-item").textContent = scope === "workstreams" ? "Create workstream" : "Create task";
   $("values-nav").classList.toggle("active", scope === "values");
+  $("processes-nav").classList.toggle("active", scope === "processes");
   if (!more) {
     nodes = [];
     cursor = null;
@@ -361,6 +363,11 @@ async function load(more = false) {
     $("subtitle").textContent = profile ? `${profile} · Common values and environment overrides.` : "Choose a profile to manage its values.";
     renderList();
     return loadValues(version);
+  }
+  if(scope === "processes") {
+    $("title").textContent = "Processes";
+    $("subtitle").textContent = profile ? `${profile} · Named development commands.` : "Choose a profile to manage its processes.";
+    renderList();return loadProcesses(version);
   }
   if (!profile) {
     $("title").textContent = "Profiles";

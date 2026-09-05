@@ -9,6 +9,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
 )
@@ -21,6 +22,7 @@ type actionRequest struct {
 	Body    tasks.Object      `json:"body"`
 	Options map[string]string `json:"options"`
 	Change  *values.Change    `json:"change,omitempty"`
+	Process *services.Request `json:"process,omitempty"`
 }
 
 func apiError(w http.ResponseWriter, e *protocol.Error) {
@@ -58,14 +60,42 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	var result any
 	var err *protocol.Error
 	switch req.Domain {
+	case "process":
+		if req.Process == nil || req.Change != nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
+			invalidAction(w)
+			return
+		}
+		manager := services.Store{Data: filepath.Dir(s.data)}
+		if req.Process.Action == "start" {
+			p, e := project.Resolve(req.Process.Directory, "")
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			if p.Profile != req.Profile {
+				invalidAction(w)
+				return
+			}
+		} else {
+			record, e := manager.Status(r.Context(), req.Process.ID)
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			if record.Profile != req.Profile {
+				invalidAction(w)
+				return
+			}
+		}
+		result, err = manager.Apply(r.Context(), *req.Process)
 	case "values":
-		if req.Change == nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
+		if req.Process != nil || req.Change == nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
 			invalidAction(w)
 			return
 		}
 		result, err = s.valueStore(req.Profile).Apply(r.Context(), *req.Change)
 	case "task":
-		if req.Change != nil || tasks.Find(req.Action) == nil || req.Options["request-id"] == "" || req.Options["if-revision"] == "" {
+		if req.Process != nil || req.Change != nil || tasks.Find(req.Action) == nil || req.Options["request-id"] == "" || req.Options["if-revision"] == "" {
 			invalidAction(w)
 			return
 		}

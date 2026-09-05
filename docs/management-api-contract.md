@@ -64,6 +64,8 @@ secret은 입력·교체를 지원하고 조회 응답과 이력에는 메타데
 
 ## 화면에서 관리하기
 
+프로세스 목록은 `GET /api/processes?profile=app`으로 조회한다. 변경은 `POST /api/actions`에 `{domain:"process", profile:"app", process:{action:"start", directory:"/projects/app", command:"web", request_id:"UUID"}}`를 전달한다. stop·restart는 directory·command 대신 `id`에 실행 UUID를 전달한다. start·restart는 선택적으로 `env`와 `capture_logs`를 받는다. 실행 UUID가 변경 대상을 고정하고 요청 UUID가 재시도를 구분한다. 값·작업 편집 리비전은 프로세스 실행에 적용하지 않는다. `GET /api/process-logs?profile=app&id=UUID`는 명시적으로 요청한 원문을 `{content}`로 반환한다.
+
 `Choose profile`로 대상을 선택하고 `Variables & secrets`에서 공통 값과 env override를 편집한다. secret 필드는 새 값을 입력하는 방식이며, 저장 후 입력을 비운다. 작업 목록에서는 생성과 상세 편집, 의존성, workstream 명세·계획과 상태 전이, task 점유·인계·체크포인트·완료를 실행한다.
 
 화면은 변경 대상을 표시하고 제거·취소·인계·완료 전에 확인 단계를 제공한다. 응답 수신이 불확실하면 같은 요청을 재전송하며, 충돌 시 최신 내용을 조회한 후 다시 편집한다. 브라우저가 받은 실행 컨텍스트는 현재 페이지 메모리에 보관한다. 새로고침 후에는 최신 기록을 확인하고 takeover로 실행을 이어간다. 인증 세션은 origin별 sessionStorage에 유지한다.

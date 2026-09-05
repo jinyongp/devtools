@@ -101,8 +101,10 @@ lasts eight idle hours or until the server stops.
 ## Storage and dependencies
 
 Task journals live under the `tasks` subdirectory of the data path reported by
-`devtools project inspect`. Files are private to the user. Query snapshots and
-dashboard sessions use the cache directory. Task records and execution context
+`devtools project inspect`. Files are private to the user. The dashboard server
+registry uses the cache directory; query snapshots and sessions live in server
+memory. The browser keeps its credential in origin-scoped sessionStorage and
+sends it explicitly in the Authorization header. Task records and execution context
 receipts are separate from the variable/secret store.
 
 The project pins Go 1.27.1 and go-toml 2.4.3. The dashboard includes the exact

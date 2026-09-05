@@ -1,11 +1,14 @@
 """Exercise installed task workflows and authenticated dashboard on loopback."""
 import concurrent.futures
+import fcntl
 import http.cookiejar
+import http.server as http_server
 import json
 import os
 from pathlib import Path
 import subprocess
 import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -79,13 +82,45 @@ assert claim["context"] not in history and takeover["context"] not in history
 assert "Implementation saved" in history
 
 # Use only a compiled installed app; no application sources are mounted.
+cache = Path(api("project", "inspect")["paths"]["cache"]) / "dashboard"
+cache.mkdir(mode=0o700, parents=True, exist_ok=True)
+legacy_lock = (cache / "serve.lock").open("w")
+os.chmod(legacy_lock.name, 0o600)
+fcntl.flock(legacy_lock, fcntl.LOCK_EX)
+legacy_id = "legacy-auth-fixture"
+class Legacy(http_server.BaseHTTPRequestHandler):
+    def log_message(self, *args): pass
+    def do_POST(self):
+        action = json.loads(self.rfile.read(int(self.headers["Content-Length"])))["action"]
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(json.dumps({"server_id": legacy_id}).encode())
+        if action == "stop":
+            def finish():
+                legacy.shutdown()
+                (cache / "server.json").unlink()
+                fcntl.flock(legacy_lock, fcntl.LOCK_UN)
+                legacy_lock.close()
+            threading.Thread(target=finish, daemon=True).start()
+legacy = http_server.ThreadingHTTPServer(("127.0.0.1", 0), Legacy)
+(cache / "server.json").write_text(json.dumps({"id": legacy_id, "address": f"http://127.0.0.1:{legacy.server_port}", "token": "legacy-fixture"}))
+os.chmod(cache / "server.json", 0o600)
+threading.Thread(target=legacy.serve_forever, daemon=True).start()
 dashboard = api("dashboard")
+assert dashboard["server_id"] != legacy_id
+legacy.server_close()
+assert api("dashboard")["server_id"] == dashboard["server_id"]
 url = urllib.parse.urlsplit(dashboard["url"])
 origin = f"{url.scheme}://{url.netloc}"
 bootstrap = urllib.parse.parse_qs(url.fragment)["token"][0]
-client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+cookie_jar = http.cookiejar.CookieJar()
+client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+session_token = ""
 def http(path, body=None, expected=200, headers=None):
-    request = urllib.request.Request(origin + path, data=None if body is None else json.dumps(body).encode(), headers=headers or {})
+    request_headers = dict(headers or {})
+    if session_token and path.startswith("/api/"):
+        request_headers["Authorization"] = "Bearer " + session_token
+    request = urllib.request.Request(origin + path, data=None if body is None else json.dumps(body).encode(), headers=request_headers)
     try:
         response = client.open(request, timeout=3)
     except urllib.error.HTTPError as error:
@@ -97,7 +132,28 @@ try:
     assert b"canvas" in http("/")
     assert b"v7.9.0" in http("/d3.min.js")
     http("/api/profiles", expected=401)
-    http("/session", {"token": bootstrap}, headers={"Origin": origin, "Content-Type": "application/json"})
+    session_token = json.loads(http("/session", {"token": bootstrap}, headers={"Origin": origin, "Content-Type": "application/json"}))["token"]
+    assert len(cookie_jar) == 0
+    cookie_only = urllib.request.Request(origin + "/api/profiles", headers={"Cookie": "devtools_session=" + session_token})
+    try:
+        client.open(cookie_only, timeout=3)
+        raise AssertionError("Cookie-only request authenticated")
+    except urllib.error.HTTPError as e:
+        assert e.code == 401
+    received = []
+    class OtherService(http_server.BaseHTTPRequestHandler):
+        def log_message(self, *args): pass
+        def do_GET(self):
+            received.append((self.headers.get("Cookie"), self.headers.get("Authorization")))
+            self.send_response(200)
+            self.end_headers()
+    other = http_server.ThreadingHTTPServer(("127.0.0.1", 0), OtherService)
+    thread = threading.Thread(target=other.handle_request, daemon=True)
+    thread.start()
+    client.open(f"http://127.0.0.1:{other.server_port}/", timeout=3).close()
+    thread.join(timeout=3)
+    other.server_close()
+    assert received == [(None, None)]
     http("/session", {"token": bootstrap}, expected=401, headers={"Origin": origin})
     assert json.loads(http("/api/profiles"))["profiles"] == ["fixture"]
     graph = json.loads(http("/api/query?" + urllib.parse.urlencode({"profile": "fixture", "command": "workstream tree"})))

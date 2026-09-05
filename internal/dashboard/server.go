@@ -27,6 +27,8 @@ import (
 //go:embed assets/*
 var assets embed.FS
 
+const authProtocol = 2
+
 type Registry struct {
 	ID      string `json:"id"`
 	Address string `json:"address"`
@@ -89,6 +91,19 @@ func Manage(ctx context.Context, action, cache, data, profile string) (tasks.Obj
 			return nil, fail()
 		}
 		return tasks.Object{"stopped": true}, nil
+	}
+	if running && status["auth_protocol"] != float64(authProtocol) {
+		if _, e = admin(ctx, r, "stop"); e != nil {
+			return nil, fail()
+		}
+		waitCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+		defer cancel()
+		released, err := tasks.Lock(waitCtx, filepath.Join(dir, "serve.lock"))
+		if err != nil {
+			return nil, fail()
+		}
+		released()
+		running = false
 	}
 	if !running {
 		exe, e := os.Executable()
@@ -202,7 +217,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		switch v.Action {
 		case "status":
-			reply(tasks.Object{"server_id": s.registry.ID})
+			reply(tasks.Object{"server_id": s.registry.ID, "auth_protocol": authProtocol})
 		case "link":
 			s.mu.Lock()
 			now := time.Now()
@@ -246,8 +261,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		k := token()
 		s.sessions[k] = time.Now().Add(8 * time.Hour)
 		s.mu.Unlock()
-		http.SetCookie(w, &http.Cookie{Name: "devtools_session", Value: k, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
-		reply(tasks.Object{"ok": true})
+		reply(tasks.Object{"ok": true, "token": k})
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/") {
@@ -255,11 +269,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Read-only API", 405)
 			return
 		}
-		c, e := r.Cookie("devtools_session")
+		header := r.Header.Get("Authorization")
+		credential, hasBearer := strings.CutPrefix(header, "Bearer ")
 		s.mu.Lock()
-		valid := e == nil && time.Now().Before(s.sessions[cookieValue(c)])
+		valid := hasBearer && credential != "" && time.Now().Before(s.sessions[credential])
 		if valid {
-			s.sessions[c.Value] = time.Now().Add(8 * time.Hour)
+			s.sessions[credential] = time.Now().Add(8 * time.Hour)
 		}
 		for k, t := range s.sessions {
 			if time.Now().After(t) {
@@ -365,10 +380,4 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	}
 	_, _ = w.Write(b)
-}
-func cookieValue(c *http.Cookie) string {
-	if c == nil {
-		return ""
-	}
-	return c.Value
 }

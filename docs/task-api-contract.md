@@ -158,7 +158,7 @@ JSON 오류는 invalid_argument, 대상 없음은 not_found, 리비전 불일치
 
 dashboard의 start/status/stop은 작업 action과 분리된 서버 관리다. start는 `{url, server_id, running, initial_profile}`, status는 `{running, server_id|null}`, stop은 `{stopped}`를 data에 반환한다. 실행 중 서버가 없을 때 status·stop은 정상 결과다.
 
-로컬 조회 서버는 Host와 Origin을 검사하고 외부 사이트가 localhost API를 읽는 것을 차단한다. 접속 링크의 bootstrap 증명은 5분 동안 한 번 사용할 수 있으며, 교환한 브라우저 세션은 마지막 요청부터 8시간 또는 서버 종료까지 유지한다. 링크가 만료되면 dashboard 명령으로 새 링크를 받는다. 서버 실행은 브라우저를 자동으로 열지 않고 URL을 반환한다.
+로컬 조회 서버는 Host와 Origin을 검사하고 외부 사이트가 localhost API를 읽는 것을 차단한다. 접속 링크의 bootstrap 증명은 5분 동안 한 번 사용할 수 있으며, 교환한 브라우저 세션은 마지막 요청부터 8시간 또는 서버 종료까지 유지한다. 세션 증명은 포트를 포함한 origin의 sessionStorage에 보관하고 API 요청의 Authorization 헤더로 전달한다. 링크가 만료되면 dashboard 명령으로 새 링크를 받는다. 서버 실행은 브라우저를 자동으로 열지 않고 URL을 반환한다. dashboard 시작은 기존 서버의 인증 프로토콜을 확인하고 이전 방식의 서버를 교체한다.
 
 목록 cursor는 조회 범위·필터·리비전에 연결하며 잘못되거나 만료되면 `cursor_invalid`와 종료 코드 3으로 새 조회를 안내한다. tree의 잘린 가지는 같은 기준 리비전으로 이어 조회할 수 있는 cursor를 제공한다. 캐시를 잃으면 새 리비전의 전체 조회부터 다시 시작한다.
 

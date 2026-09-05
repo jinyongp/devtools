@@ -26,8 +26,21 @@ d3.select(canvas).call(zoom);
 function notice(message) {
   $("notice").textContent = message;
 }
+let sessionToken = "";
+function rememberSession(value) {
+  sessionToken = value;
+  try {
+    if (value) sessionStorage.setItem("devtools.session", value);
+    else sessionStorage.removeItem("devtools.session");
+  } catch {}
+}
 async function api(path) {
-  const response = await fetch(path);
+  const response = await fetch(path, {
+    credentials: "omit",
+    redirect: "error",
+    headers: { Authorization: "Bearer " + sessionToken },
+  });
+  if (response.status === 401) rememberSession("");
   if (!response.ok) {
     let message = await response.text();
     try {
@@ -401,13 +414,17 @@ $("search").oninput = renderList;
   try {
     const params = new URLSearchParams(location.hash.slice(1));
     history.replaceState(null, "", location.pathname);
+    try { sessionToken = sessionStorage.getItem("devtools.session") || ""; } catch {}
     if (params.has("token")) {
       const response = await fetch("/session", {
         method: "POST",
+        credentials: "omit",
+        redirect: "error",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: params.get("token") }),
       });
       if (!response.ok) throw Error(await response.text());
+      rememberSession((await response.json()).token);
     }
     const result = await api("/api/profiles");
     for (const p of result.profiles) {

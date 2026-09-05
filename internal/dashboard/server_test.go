@@ -25,7 +25,7 @@ func TestQueryCacheInvalidatesOnMutation(t *testing.T) {
 	s := &Server{registry: Registry{Address: "http://127.0.0.1:1234"}, data: store.Directory, sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)}}
 	read := func() map[string]any {
 		req := httptest.NewRequest("GET", s.registry.Address+"/api/query?profile=test&command=list", nil)
-		req.AddCookie(&http.Cookie{Name: "devtools_session", Value: "session"})
+		req.Header.Set("Authorization", "Bearer session")
 		out := httptest.NewRecorder()
 		s.ServeHTTP(out, req)
 		if out.Code != 200 {
@@ -72,7 +72,7 @@ func TestPinnedBundle(t *testing.T) {
 
 func TestSessionAndReadBoundary(t *testing.T) {
 	s := &Server{registry: Registry{ID: "test", Address: "http://127.0.0.1:1234", Token: token()}, data: t.TempDir(), boot: map[string]time.Time{}, sessions: map[string]time.Time{}, stop: func() {}}
-	invoke := func(method, path, body, origin, host string, cookie *http.Cookie) *httptest.ResponseRecorder {
+	invoke := func(method, path, body, origin, host string, credential string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, s.registry.Address+path, strings.NewReader(body))
 		if origin != "" {
 			req.Header.Set("Origin", origin)
@@ -80,50 +80,65 @@ func TestSessionAndReadBoundary(t *testing.T) {
 		if host != "" {
 			req.Host = host
 		}
-		if cookie != nil {
-			req.AddCookie(cookie)
+		if credential != "" {
+			req.Header.Set("Authorization", "Bearer "+credential)
 		}
 		out := httptest.NewRecorder()
 		s.ServeHTTP(out, req)
 		return out
 	}
-	if r := invoke("GET", "/api/profiles", "", "", "", nil); r.Code != 401 {
+	if r := invoke("GET", "/api/profiles", "", "", "", ""); r.Code != 401 {
 		t.Fatal(r.Code)
 	}
 	key := token()
 	s.boot[key] = time.Now().Add(time.Minute)
 	body, _ := json.Marshal(map[string]string{"token": key})
-	r := invoke("POST", "/session", string(body), s.registry.Address, "", nil)
+	r := invoke("POST", "/session", string(body), s.registry.Address, "", "")
 	if r.Code != 200 {
 		t.Fatal(r.Code, r.Body)
 	}
-	cookie := r.Result().Cookies()[0]
-	if !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
-		t.Fatal("cookie protections")
+	if len(r.Result().Cookies()) != 0 {
+		t.Fatal("session must not use ambient cookies")
 	}
-	if r = invoke("POST", "/session", string(body), s.registry.Address, "", nil); r.Code != 401 {
+	var session struct {
+		Token string `json:"token"`
+	}
+	if e := json.Unmarshal(r.Body.Bytes(), &session); e != nil || session.Token == "" {
+		t.Fatal("missing bearer session")
+	}
+	credential := session.Token
+	for _, supplied := range []string{credential, s.registry.Token} {
+		req := httptest.NewRequest("GET", s.registry.Address+"/api/profiles", nil)
+		req.AddCookie(&http.Cookie{Name: "devtools_session", Value: supplied})
+		out := httptest.NewRecorder()
+		s.ServeHTTP(out, req)
+		if out.Code != 401 {
+			t.Fatal("cookie authorized API")
+		}
+	}
+	if r = invoke("POST", "/session", string(body), s.registry.Address, "", ""); r.Code != 401 {
 		t.Fatal("bootstrap reused")
 	}
-	if r = invoke("GET", "/api/profiles", "", "", "", cookie); r.Code != 200 {
+	if r = invoke("GET", "/api/profiles", "", "", "", credential); r.Code != 200 {
 		t.Fatal(r.Code, r.Body)
 	}
-	if r = invoke("GET", "/api/profiles", "", "https://other.example", "", cookie); r.Code != 403 {
+	if r = invoke("GET", "/api/profiles", "", "https://other.example", "", credential); r.Code != 403 {
 		t.Fatal("cross-origin allowed")
 	}
-	if r = invoke("GET", "/api/profiles", "", "", "other.example", cookie); r.Code != 403 {
+	if r = invoke("GET", "/api/profiles", "", "", "other.example", credential); r.Code != 403 {
 		t.Fatal("host allowed")
 	}
-	if r = invoke("POST", "/api/query", "{}", s.registry.Address, "", cookie); r.Code != 405 {
+	if r = invoke("POST", "/api/query", "{}", s.registry.Address, "", credential); r.Code != 405 {
 		t.Fatal("mutation allowed")
 	}
-	if r = invoke("GET", "/admin", "", "", "", cookie); r.Code != 403 {
+	if r = invoke("POST", "/admin", `{"action":"stop"}`, "", "", credential); r.Code != 403 {
 		t.Fatal("browser administration")
 	}
-	s.sessions[cookie.Value] = time.Now().Add(-time.Second)
-	if r = invoke("GET", "/api/profiles", "", "", "", cookie); r.Code != 401 {
+	s.sessions[credential] = time.Now().Add(-time.Second)
+	if r = invoke("GET", "/api/profiles", "", "", "", credential); r.Code != 401 {
 		t.Fatal("expired session")
 	}
-	if r = invoke("GET", "/d3.min.js", "", "", "", nil); r.Code != 200 || !strings.Contains(r.Body.String(), "v7.9.0") {
+	if r = invoke("GET", "/d3.min.js", "", "", "", ""); r.Code != 200 || !strings.Contains(r.Body.String(), "v7.9.0") {
 		t.Fatal("embedded D3 missing")
 	}
 }

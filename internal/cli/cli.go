@@ -49,6 +49,11 @@ func stringSchema() map[string]any { return map[string]any{"type": "string"} }
 func New(version, commit string) *App {
 	a := &App{}
 	a.commands = []Command{
+		{Name: "init", Description: "Create project configuration in the current directory without overwriting existing files.", Options: []Option{
+			{Name: "profile", Description: "Project profile identifier.", Required: true, Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128},
+		}, Output: object(map[string]any{"created": map[string]any{"type": "boolean"}, "config_path": stringSchema(), "profile": stringSchema()}, "created", "config_path", "profile"), Run: func(ctx context.Context, streams IO, options map[string]string) (any, *protocol.Error) {
+			return project.Init(".", options["profile"])
+		}},
 		{Name: "help", Description: "Describe commands and their options.", Options: []Option{}, Output: map[string]any{"$ref": "#/$defs/catalog"}, Run: func(context.Context, IO, map[string]string) (any, *protocol.Error) { return a.catalog(), nil }},
 		{Name: "version", Description: "Report build and protocol versions.", Options: []Option{}, Output: object(map[string]any{"version": stringSchema(), "commit": stringSchema()}, "version", "commit"), Run: func(context.Context, IO, map[string]string) (any, *protocol.Error) {
 			return map[string]string{"version": version, "commit": commit}, nil

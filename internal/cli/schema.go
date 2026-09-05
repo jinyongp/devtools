@@ -37,7 +37,7 @@ func (a *App) catalog() map[string]any {
 		"protocol_version": protocol.Version,
 		"commands":         commands,
 		"transport":        map[string]any{"input": "CLI flags; input schemas describe flag names and values, not a JSON stdin endpoint", "success": "one JSON response on stdout", "failure": "one JSON response on stderr", "interactive": false, "help_flags": []string{"--help", "-h"}},
-		"exit_codes":       map[string]string{"0": "success", "1": "io_error or internal failure", "2": "invalid_argument", "3": "project_not_found or invalid_config", "130": "canceled"},
+		"exit_codes":       map[string]string{"0": "success", "1": "io_error or internal failure", "2": "invalid_argument", "3": "project_not_found, invalid_config, or profile_conflict", "130": "canceled"},
 		"response_schema": map[string]any{
 			"$schema":              "https://json-schema.org/draft/2020-12/schema",
 			"type":                 "object",

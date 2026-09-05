@@ -20,6 +20,8 @@ func TestCommandContract(t *testing.T) {
 	}{
 		{"default", nil, 0, ""},
 		{"schema", []string{"schema"}, 0, ""},
+		{"init missing profile", []string{"init"}, 2, "invalid_argument"},
+		{"init help", []string{"init", "--help"}, 0, ""},
 		{"version", []string{"--version"}, 0, ""},
 		{"help", []string{"project", "inspect", "--help"}, 0, ""},
 		{"explicit", []string{"project", "inspect", "--profile", "myapp"}, 0, ""},

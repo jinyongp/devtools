@@ -12,6 +12,9 @@ func (a *App) catalog() map[string]any {
 				required = append(required, option.Name)
 			}
 			s := stringSchema()
+			if option.Boolean {
+				s = map[string]any{"type": "boolean"}
+			}
 			s["description"] = option.Description
 			if option.Default != "" {
 				s["default"] = option.Default
@@ -27,17 +30,49 @@ func (a *App) catalog() map[string]any {
 			}
 			properties[option.Name] = s
 		}
+		argumentSchemas := []any{}
+		minimum := 0
+		for _, argument := range command.Arguments {
+			s := map[string]any{"type": "string", "minLength": 1, "description": argument.Name}
+			if argument.Pattern != "" {
+				s["pattern"] = argument.Pattern
+			}
+			argumentSchemas = append(argumentSchemas, s)
+			if argument.Required {
+				minimum++
+			}
+		}
+		argsSchema := map[string]any{"type": "array", "minItems": minimum, "maxItems": len(command.Arguments)}
+		if len(argumentSchemas) > 0 {
+			argsSchema["prefixItems"] = argumentSchemas
+		}
+		properties["args"] = argsSchema
+		if minimum > 0 {
+			required = append(required, "args")
+		}
+		if command.ChildArgs {
+			properties["child_args"] = map[string]any{"type": "array", "items": stringSchema()}
+		}
 		input := object(properties, required...)
 		if len(required) == 0 {
 			delete(input, "required")
 		}
-		commands = append(commands, map[string]any{"name": command.Name, "description": command.Description, "options": command.Options, "input_schema": input, "output_schema": command.Output})
+		if command.InputOneOf != nil {
+			input["oneOf"] = command.InputOneOf
+		}
+		if command.ChildArgs {
+			input["anyOf"] = []any{
+				map[string]any{"required": []string{"args"}, "properties": map[string]any{"args": map[string]any{"minItems": 1}}},
+				map[string]any{"required": []string{"child_args"}, "properties": map[string]any{"child_args": map[string]any{"minItems": 1}}},
+			}
+		}
+		commands = append(commands, map[string]any{"name": command.Name, "aliases": command.Aliases, "description": command.Description, "options": command.Options, "arguments": command.Arguments, "accepts_child_args": command.ChildArgs, "stream_output": command.StreamOutput, "input_schema": input, "output_schema": command.Output})
 	}
 	return map[string]any{
 		"protocol_version": protocol.Version,
 		"commands":         commands,
-		"transport":        map[string]any{"input": "CLI flags; input schemas describe flag names and values, not a JSON stdin endpoint", "success": "one JSON response on stdout", "failure": "one JSON response on stderr", "interactive": false, "help_flags": []string{"--help", "-h"}},
-		"exit_codes":       map[string]string{"0": "success", "1": "io_error or internal failure", "2": "invalid_argument", "3": "project_not_found, invalid_config, or profile_conflict", "130": "canceled"},
+		"transport":        map[string]any{"input": "CLI flags and positional args; child_args follow --. Schemas describe parsed inputs, not a JSON stdin endpoint. Secret --stdin reads a raw UTF-8 value.", "success": "one JSON response on stdout", "failure": "one JSON response on stderr", "interactive": false, "help_flags": []string{"--help", "-h"}},
+		"exit_codes":       map[string]string{"0": "success", "1": "io_error or storage_error", "2": "invalid_argument", "3": "project_not_found, invalid_config, profile_conflict, env_not_found, env_not_empty, key_not_found, kind_conflict, invalid_storage", "130": "canceled"},
 		"response_schema": map[string]any{
 			"$schema":              "https://json-schema.org/draft/2020-12/schema",
 			"type":                 "object",

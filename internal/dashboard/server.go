@@ -31,7 +31,7 @@ import (
 //go:embed assets/*
 var assets embed.FS
 
-const authProtocol = 4
+const authProtocol = 5
 
 type Registry struct {
 	ID      string `json:"id"`
@@ -175,7 +175,7 @@ func Serve(ctx context.Context, dir, data string) error {
 	}
 	defer listener.Close()
 	r := Registry{ID: tasks.ID(), Address: "http://" + listener.Addr().String(), Token: token()}
-	server := &http.Server{ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: time.Minute}
+	server := &http.Server{ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: time.Minute}
 	s := &Server{registry: r, data: data, cache: filepath.Join(dir, "queries"), boot: map[string]time.Time{}, sessions: map[string]time.Time{}}
 	s.stop = func() {
 		go func() {

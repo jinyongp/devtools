@@ -38,21 +38,23 @@ func writePrivate(path string, v any) error {
 }
 
 type Record struct {
-	ID          string     `json:"id"`
-	Profile     string     `json:"profile"`
-	Instance    string     `json:"instance_id"`
-	Directory   string     `json:"directory"`
-	Command     string     `json:"command"`
-	Env         string     `json:"env"`
-	EnvOverride *string    `json:"env_override"`
-	Capture     bool       `json:"capture_logs"`
-	CreatedAt   time.Time  `json:"created_at"`
-	StartedAt   *time.Time `json:"started_at"`
-	EndedAt     *time.Time `json:"ended_at"`
-	ExitCode    *int       `json:"exit_code"`
-	Reason      string     `json:"reason"`
-	State       string     `json:"state"`
-	Previous    string     `json:"previous_id,omitempty"`
+	ReadyConfigured bool       `json:"ready_configured"`
+	Readiness       *Readiness `json:"readiness,omitempty"`
+	ID              string     `json:"id"`
+	Profile         string     `json:"profile"`
+	Instance        string     `json:"instance_id"`
+	Directory       string     `json:"directory"`
+	Command         string     `json:"command"`
+	Env             string     `json:"env"`
+	EnvOverride     *string    `json:"env_override"`
+	Capture         bool       `json:"capture_logs"`
+	CreatedAt       time.Time  `json:"created_at"`
+	StartedAt       *time.Time `json:"started_at"`
+	EndedAt         *time.Time `json:"ended_at"`
+	ExitCode        *int       `json:"exit_code"`
+	Reason          string     `json:"reason"`
+	State           string     `json:"state"`
+	Previous        string     `json:"previous_id,omitempty"`
 }
 type Request struct {
 	Action    string  `json:"action"`
@@ -126,7 +128,11 @@ func (s Store) rpc(ctx context.Context, id, action string) (Record, error) {
 		return out, e
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
-	client := http.Client{Timeout: time.Second, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	timeout := time.Second
+	if action == "check" {
+		timeout = 35 * time.Second
+	}
+	client := http.Client{Timeout: timeout, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	defer client.CloseIdleConnections()
 	response, e := client.Do(req)
 	if e != nil {

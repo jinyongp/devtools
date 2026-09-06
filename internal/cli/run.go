@@ -8,6 +8,7 @@ import (
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/values"
 )
 
@@ -97,7 +98,7 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 			}
 		}
 	}
-	exit, err := process.Execute(ctx, args, dir, process.Environment(os.Environ(), injected), streams.In, streams.Out, streams.Err)
+	exit, err := process.Execute(services.WithReadyProbe(ctx, command.Ready), args, dir, process.Environment(os.Environ(), injected), streams.In, streams.Out, streams.Err)
 	if err != nil {
 		return nil, err
 	}

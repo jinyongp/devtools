@@ -11,7 +11,7 @@ devtools process stop EXECUTION_ID --request-id UUID
 devtools process restart EXECUTION_ID --request-id UUID
 ```
 
-start는 `item`에 실행 ID, profile, instance ID, 디렉터리, 명령, env, 시간과 상태를 반환한다. `changed`는 실행 변경 여부, `replayed`는 같은 요청의 재전송 여부다. `running`은 OS 프로세스의 시작을 뜻하며, 서비스 준비 상태는 `port check`나 서비스 자체의 health endpoint로 확인한다.
+start는 `item`에 실행 ID, profile, instance ID, 디렉터리, 명령, env, 시간과 상태를 반환한다. `changed`는 실행 변경 여부, `replayed`는 같은 요청의 재전송 여부다. `running`은 OS 프로세스의 시작을 뜻한다. 선언한 서비스 준비 검사는 `process check ID`로 확인하고 `process wait ID --timeout 30s`로 대기한다. 설정·결과·종료 조건은 [프로세스 준비 확인](process-readiness.md)을 따른다.
 
 같은 `profile + instance + 명령`이 실행 중이면 같은 실행을 반환한다. env나 로그 설정이 다르면 `process_conflict`다. restart는 이전 실행을 종료하고 최신 프로젝트 설정과 값을 적용한 새 실행 ID를 반환하며 `previous_id`로 이전 실행을 연결한다. env를 지정했던 실행은 그 선택을 유지하고, 명령의 기본 env를 따랐던 실행은 현재 기본값을 적용한다. 이전 실행 ID에 대한 stop은 새 실행에 영향을 주지 않는다.
 

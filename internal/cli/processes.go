@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
@@ -17,7 +18,7 @@ func (a *App) serviceStore() (services.Store, *protocol.Error) {
 	return services.Store{Data: filepath.Dir(d)}, e
 }
 func (a *App) registerProcesses() {
-	for _, action := range []string{"start", "list", "status", "stop", "restart", "logs"} {
+	for _, action := range []string{"start", "list", "status", "stop", "restart", "logs", "check", "wait"} {
 		c := Command{Name: "process " + action, Description: action + " managed project processes.", Options: []Option{}, Output: map[string]any{"type": "object"}}
 		if action == "list" {
 			c.Options = profileOptions(false)
@@ -30,6 +31,17 @@ func (a *App) registerProcesses() {
 		}
 		if action == "start" || action == "restart" {
 			c.Options = append(c.Options, Option{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment."}, Option{Name: "capture-logs", Boolean: true, Description: "Retain bounded raw output for seven days after exit."})
+		}
+		if action == "wait" {
+			c.Options = append(c.Options, Option{Name: "timeout", Default: "30s", Description: "Overall readiness wait, greater than zero and at most 10m."})
+		}
+		if action == "check" || action == "wait" {
+			c.Output = map[string]any{"type": "object", "required": []string{"id", "ready_configured", "readiness"}, "properties": map[string]any{
+				"id": map[string]any{"type": "string"}, "ready_configured": map[string]any{"type": "boolean"},
+				"readiness": map[string]any{"type": "object", "required": []string{"ready", "checked_at", "reason", "exit_code"}, "properties": map[string]any{
+					"ready": map[string]any{"type": "boolean"}, "checked_at": map[string]any{"type": "string", "format": "date-time"}, "reason": map[string]any{"type": "string"}, "exit_code": map[string]any{"type": []string{"integer", "null"}},
+				}},
+			}}
 		}
 		if action == "start" || action == "stop" || action == "restart" {
 			c.Options = append(c.Options, Option{Name: "request-id", Required: true, MinLength: 36, MaxLength: 36, Description: "UUID for retry-safe mutation."})
@@ -45,6 +57,16 @@ func (a *App) registerProcesses() {
 			}
 			if action == "status" {
 				return s.Status(ctx, r.Args[0])
+			}
+			if action == "check" {
+				return s.Check(ctx, r.Args[0])
+			}
+			if action == "wait" {
+				timeout, err := time.ParseDuration(r.Options["timeout"])
+				if err != nil || timeout <= 0 || timeout > 10*time.Minute {
+					return nil, argumentError("Expected a positive duration up to 10m.", "timeout")
+				}
+				return s.Wait(ctx, r.Args[0], timeout)
 			}
 			if action == "logs" {
 				content, e := s.Logs(ctx, r.Args[0])

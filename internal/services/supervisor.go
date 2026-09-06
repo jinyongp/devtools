@@ -18,6 +18,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -50,6 +51,10 @@ func (s Store) Serve(ctx context.Context, id string, execute Execute) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var mu sync.Mutex
+	var probe func(context.Context) Readiness
+	probeGate := make(chan struct{}, 1)
+	probeGate <- struct{}{}
+	defer func() { cancel(); <-probeGate }()
 	listener, e := net.Listen("tcp4", "127.0.0.1:0")
 	if e != nil {
 		return e
@@ -60,20 +65,47 @@ func (s Store) Serve(ctx context.Context, id string, execute Execute) error {
 		return e
 	}
 	c := control{ID: id, Address: "http://" + listener.Addr().String(), Token: hex.EncodeToString(b)}
-	server := &http.Server{ReadHeaderTimeout: time.Second, ReadTimeout: 2 * time.Second, WriteTimeout: 2 * time.Second, MaxHeaderBytes: 8192}
+	server := &http.Server{ReadHeaderTimeout: time.Second, ReadTimeout: 2 * time.Second, WriteTimeout: 35 * time.Second, MaxHeaderBytes: 8192}
 	server.Handler = http.HandlerFunc(func(w http.ResponseWriter, q *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		if q.Host != strings.TrimPrefix(c.Address, "http://") || q.Header.Get("Origin") != "" || q.Method != "POST" || q.Header.Get("Authorization") != "Bearer "+c.Token {
 			http.Error(w, "Forbidden", 403)
 			return
 		}
-		if q.URL.Path != "/status" && q.URL.Path != "/stop" {
+		if q.URL.Path != "/status" && q.URL.Path != "/stop" && q.URL.Path != "/check" {
 			http.NotFound(w, q)
 			return
 		}
 		mu.Lock()
 		snapshot := r
+		check := probe
 		mu.Unlock()
+		if q.URL.Path == "/check" && snapshot.State == "running" && check != nil {
+			select {
+			case <-q.Context().Done():
+				return
+			case <-ctx.Done():
+				return
+			case <-probeGate:
+			}
+			defer func() { probeGate <- struct{}{} }()
+			if ctx.Err() != nil {
+				return
+			}
+			query, cancelQuery := context.WithCancel(q.Context())
+			stop := context.AfterFunc(ctx, cancelQuery)
+			result := check(query)
+			stop()
+			cancelQuery()
+			mu.Lock()
+			snapshot = r
+			mu.Unlock()
+			if ctx.Err() != nil || snapshot.EndedAt != nil {
+				result.Ready = false
+				result.Reason = "process_stopped"
+			}
+			snapshot.Readiness = &result
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(snapshot)
 		if q.URL.Path == "/stop" {
@@ -113,6 +145,13 @@ func (s Store) Serve(ctx context.Context, id string, execute Execute) error {
 		}
 		now := time.Now().UTC()
 		mu.Lock()
+		if config, ok := ctx.Value(readyKey{}).(*project.ReadyProbe); ok && config != nil {
+			copy := *config
+			copy.Exec = append([]string{}, config.Exec...)
+			preparedEnv := append([]string{}, env...)
+			probe = func(query context.Context) Readiness { return runProbe(query, copy, dir, preparedEnv) }
+			r.ReadyConfigured = true
+		}
 		r.StartedAt = &now
 		r.State = "running"
 		writeErr := writePrivate(s.path(id, "record.json"), r)

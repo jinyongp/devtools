@@ -27,6 +27,16 @@ async function loadProcesses(version) {
       text("p",`Execution ${item.id}`,section);
       if(item.reason)text("p",`${item.reason}${item.exit_code===null?"":` · exit ${item.exit_code}`}`,section);
       const actions=text("div","",section);actions.className="manage-toolbar";
+      if(item.ready_configured&&!item.ended_at){
+        const readiness=text("p","Readiness: check on demand",section);
+        const check=button(actions,"Check readiness",async()=>{
+          check.disabled=true;
+          try{const result=(await api("/api/actions",processRequest(current,{action:"check",id:item.id}))).data;
+            if(generation!==version)return;
+            readiness.textContent=`${result.readiness.ready?"Ready":"Not ready"} · ${result.readiness.reason} · ${result.readiness.checked_at}`;
+          }catch(e){if(generation===version)notice(e.message);}finally{check.disabled=false;}
+        });
+      }
       for(const action of ["stop","restart"]){
         if(action==="stop"&&item.ended_at)continue;
         button(actions,action==="stop"?"Stop":"Restart",()=>edit(`${action} ${item.command}`,p=>{

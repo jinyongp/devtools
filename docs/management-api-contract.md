@@ -66,6 +66,8 @@ CLI와 dashboard는 task/workstream, var/sec/env, 프로세스, 백업·복구, 
 
 프로세스 목록은 `GET /api/processes?profile=app`으로 조회한다. 변경은 `POST /api/actions`에 `{domain:"process", profile:"app", process:{action:"start", directory:"/projects/app", command:"web", request_id:"UUID"}}`를 전달한다. stop·restart는 directory·command 대신 `id`에 실행 UUID를 전달한다. start·restart는 선택적으로 `env`와 `capture_logs`를 받는다. 실행 UUID가 변경 대상을 고정하고 요청 UUID가 재시도를 구분한다. 값·작업 편집 리비전은 프로세스 실행에 적용하지 않는다. `GET /api/process-logs?profile=app&id=UUID`는 명시적으로 요청한 원문을 `{content}`로 반환한다.
 
+준비 확인은 같은 endpoint에 `{domain:"process", profile:"app", process:{action:"check", id:"UUID"}}`를 전달한다. 대상 profile을 검사한 뒤 실행 시점의 설정·환경으로 한 번 확인하고, 실행 메타데이터와 `readiness`를 반환한다. 매 요청은 새 관측이며 변경 영수증을 사용하지 않는다. [준비 확인 계약](process-readiness.md)에 결과와 시간 제한을 정의한다.
+
 `GET /api/project?profile=app&instance=ID`는 선택한 프로젝트의 이름 명령과 port 할당 메타데이터를 조회한다. 명령의 실행 인자와 환경변수 원문은 조회 응답에 포함하지 않는다.
 
 정리 미리 보기는 `GET /api/cleanup-preview?profile=app`, 보관함 목록은 `GET /api/archives?profile=app`이다. profile을 생략하면 전체 범위다. 적용 요청은 `{domain:"cleanup", profile:"app", cleanup:{action:"apply", plan:"PLAN_UUID", ids:["ITEM_UUID"], request_id:"UUID"}}`다. restore·purge는 `{action:"restore", id:"ARCHIVE_UUID"}`처럼 보관함 ID를 전달한다. 전체 범위 요청은 profile에 빈 문자열을 사용한다. 선택된 미리 보기 항목과 archive ID가 변경 대상을 고정한다.

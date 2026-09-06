@@ -100,6 +100,10 @@ request their own scope. `dashboard status` and `dashboard stop` manage the loca
 Use `devtools process start NAME --request-id UUID` for detached named commands.
 List/status return execution metadata; stop/restart target an immutable execution ID.
 Reuse request IDs for retries. Restart applies current configuration and values.
+When `ready_configured` is true, use `process check ID` for one readiness sample
+or `process wait ID --timeout 30s` before dependent work. Check returns exit 0
+for a completed probe; inspect `readiness.ready`. Wait returns exit 3 on timeout.
+Probes use the running execution's original environment and configuration.
 Raw logs require explicit `--capture-logs` and a separate `process logs ID` request.
 
 Use `cleanup preview` to inspect eligible storage, then apply selected candidate IDs

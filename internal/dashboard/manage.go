@@ -156,7 +156,15 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		result, err = manager.Apply(r.Context(), *req.Process)
+		if req.Process.Action == "check" {
+			if req.Process.Directory != "" || req.Process.Command != "" || req.Process.Env != nil || req.Process.Capture != nil {
+				invalidAction(w)
+				return
+			}
+			result, err = manager.Check(r.Context(), req.Process.ID)
+		} else {
+			result, err = manager.Apply(r.Context(), *req.Process)
+		}
 	case "values":
 		if req.Process != nil || req.Change == nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
 			invalidAction(w)

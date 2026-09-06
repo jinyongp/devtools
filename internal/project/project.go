@@ -23,6 +23,7 @@ type Config struct {
 }
 
 type Command struct {
+	Ready        *ReadyProbe        `toml:"ready,omitempty"`
 	Serve        []string           `toml:"serve,omitempty"`
 	Bind         map[string]Binding `toml:"bind,omitempty"`
 	Requirements Requirements       `toml:"requirements,omitempty"`
@@ -105,6 +106,9 @@ func parse(data []byte, path, root string) (Context, *protocol.Error) {
 		return Context{}, protocol.NewError("invalid_config", "A valid profile identifier is required.", 3, map[string]any{"path": path, "field": "profile"})
 	}
 	for name, command := range config.Commands {
+		if command.Ready != nil && !command.Ready.Valid() {
+			return Context{}, protocol.NewError("invalid_config", "Invalid readiness command or timeout.", 3, nil)
+		}
 		if !validBindings(command, config.Ports) {
 			return Context{}, protocol.NewError("invalid_config", "Invalid port, serve, or bind declaration.", 3, nil)
 		}

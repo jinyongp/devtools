@@ -30,6 +30,8 @@ restores whole profiles with preview and retry protection. See [backup and recov
 `devtools process` starts named project commands in the background and manages
 their lifecycle across agent sessions. The dashboard provides the same start,
 stop, and restart actions. See [process management](docs/processes.md).
+Declared readiness commands support `process check` and bounded `process wait`;
+see [readiness checks](docs/process-readiness.md).
 
 `devtools cleanup` previews expired and inactive storage, archives selected items,
 and restores or purges archives. See [storage cleanup](docs/cleanup.md).

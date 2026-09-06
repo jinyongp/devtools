@@ -111,3 +111,11 @@ Dashboard의 Processes 화면에서 `Check readiness`로 동일 검사를 수행
 동시 검사, 시작 시점 설정 유지, 재시작 후 설정 변경, 종료된 실행과 미설정 실행,
 원문 출력 비노출, Dashboard 인증 요청을 포함한다.
 설치 실행 파일 검증은 `readiness` 시나리오로 실행한다.
+
+2026-09-06 검증 결과:
+
+- Linux Docker: 전체 10개 설치 시나리오, 전체 Go race 테스트·vet,
+  macOS/Linux amd64·arm64 배포 빌드 통과.
+- macOS arm64: readiness·processes 설치 시나리오와
+  project·services·cli·dashboard 패키지 race 테스트 통과.
+- 브라우저: 준비 실패와 성공 결과, 검사 시각 갱신 확인.

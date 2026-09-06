@@ -28,7 +28,7 @@ inject=true
 executable="true"
 [commands.path.bind]
 EXE={template="true"}
-PATH={template="/bin"}
+PATH={template="/bin:/usr/bin"}
 `
 	if e := os.WriteFile("devtools.toml", []byte(config), 0600); e != nil {
 		t.Fatal(e)

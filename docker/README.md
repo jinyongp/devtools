@@ -25,6 +25,9 @@ just verify-docker ports
 # 암호화 백업·복구·재시도·충돌·직전 백업
 just verify-docker backup
 
+# 프로세스 준비 확인·대기·취소·실행 기준 유지
+just verify-docker readiness
+
 # 시나리오 목록
 just verify-docker --list
 ```

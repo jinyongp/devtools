@@ -1,4 +1,4 @@
-"""Installation and update scenario for the shared Linux sandbox."""
+"""Install and update packaged releases on macOS and Linux."""
 
 import hashlib
 import json
@@ -11,16 +11,16 @@ import ssl
 import subprocess
 import tempfile
 import threading
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import SimpleHTTPRequestHandler
+from socketserver import ThreadingTCPServer
 
 
 assert os.getuid() != 0, "Use an ordinary installation user"
-assert shutil.which("go") is None, "Runtime image should contain the installed app"
-assert not Path("/src/go.mod").exists()
 home = Path.home()
 env = dict(os.environ, PATH=str(home / ".local/bin") + ":" + os.environ["PATH"])
 env.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
-installer = ["sh", "/opt/devtools-install.sh"]
+installer = ["sh", os.environ["DEVTOOLS_TEST_INSTALLER"]]
+release_directory = os.environ["DEVTOOLS_TEST_RELEASES"]
 project = home / "project"
 project.mkdir()
 
@@ -40,7 +40,7 @@ def api(*args, input=None, expected=0, cwd=project):
     return response
 
 
-def install(action, version, source="/opt/releases", expected=0):
+def install(action, version, source=release_directory, expected=0):
     result = execute(installer + [action, "--version", version, "--source", source],
                      expected=expected)
     response = json.loads(result.stdout if expected == 0 else result.stderr)
@@ -120,7 +120,7 @@ worktree = home / "worktree"
 execute(["git", "worktree", "add", "--quiet", "--detach", str(worktree)])
 verify_project(worktree)
 
-profile_dir = home / ".local/share/devtools/profiles"
+profile_dir = Path(api("project", "inspect")["data"]["paths"]["data"]) / "profiles"
 assert profile_dir.stat().st_mode & 0o777 == 0o700
 for file in profile_dir.iterdir():
     assert file.stat().st_mode & 0o777 == 0o600
@@ -132,7 +132,7 @@ original_binary = hashlib.sha256(binary.read_bytes()).hexdigest()
 # A failed update preserves both the installed program and user data.
 with tempfile.TemporaryDirectory() as temporary:
     source = Path(temporary)
-    for file in Path("/opt/releases").glob("*test.2*"):
+    for file in Path(release_directory).glob("*test.2*"):
         shutil.copy(file, source / file.name)
     for archive in source.glob("*.tar.gz"):
         with archive.open("ab") as stream:
@@ -143,7 +143,7 @@ assert hashlib.sha256(binary.read_bytes()).hexdigest() == original_binary
 install("update", "0.0.0-test.2")
 assert api("version")["data"]["version"] == "0.0.0-test.2"
 
-# Exercise HTTPS delivery on container loopback with a test-only trust root.
+# Exercise HTTPS delivery on loopback with a test-only trust root.
 with tempfile.TemporaryDirectory() as temporary:
     cert = Path(temporary) / "certificate.pem"
     key = Path(temporary) / "key.pem"
@@ -153,7 +153,7 @@ with tempfile.TemporaryDirectory() as temporary:
     for version in ("0.0.0-test.1", "0.0.0-test.2"):
         target = releases / "download" / f"v{version}"
         target.mkdir(parents=True)
-        for artifact in Path("/opt/releases").glob(f"*{version}*"):
+        for artifact in Path(release_directory).glob(f"*{version}*"):
             shutil.copy(artifact, target / artifact.name)
     execute(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
              "-keyout", str(key), "-out", str(cert), "-days", "1",
@@ -166,14 +166,14 @@ with tempfile.TemporaryDirectory() as temporary:
         def log_message(self, *args):
             pass
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = ThreadingTCPServer(("127.0.0.1", 0), Handler)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(cert, key)
     server.socket = context.wrap_socket(server.socket, server_side=True)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     env["CURL_CA_BUNDLE"] = str(cert)
-    env["DEVTOOLS_RELEASE_URL"] = f"https://localhost:{server.server_port}"
+    env["DEVTOOLS_RELEASE_URL"] = f"https://localhost:{server.server_address[1]}"
     try:
         install("update", "0.0.0-test.2", env["DEVTOOLS_RELEASE_URL"] + "/download/v0.0.0-test.2")
         download_bin = home / "download-bin"
@@ -197,7 +197,7 @@ with tempfile.TemporaryDirectory() as temporary:
         assert not released("update", expected=1)["ok"]
         assert downloaded.read_bytes() == preserved
         assert released("update", "--version", "0.0.0-test.1")["data"]["version"] == "0.0.0-test.1"
-        assert not released("update", "--source", "/opt/releases", expected=1)["ok"]
+        assert not released("update", "--source", release_directory, expected=1)["ok"]
     finally:
         del env["CURL_CA_BUNDLE"]
         del env["DEVTOOLS_RELEASE_URL"]

@@ -17,7 +17,7 @@ def call(args, input=None, error=None):
     assert r.returncode == 0, r.stderr
     return data['data']
 def api(*args, **kwargs): return call(['devtools', *args], **kwargs)
-call(['sh','/opt/devtools-install.sh','install','--version','0.0.0-test.1','--source','/opt/releases'])
+call(['sh',os.environ['DEVTOOLS_TEST_INSTALLER'],'install','--version','0.0.0-test.1','--source',os.environ['DEVTOOLS_TEST_RELEASES']])
 identity, recipient = str(home / 'identity'), str(home / 'recipient')
 api('backup','keygen','--identity-file',identity,'--recipient-file',recipient)
 api('backup','configure','--directory',str(home / 'backups'),'--recipient-file',recipient)

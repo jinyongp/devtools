@@ -122,9 +122,10 @@ task의 실행 기록과 OS 프로세스의 수명을 구분해 관리한다. �
 관리 API, 암호화 백업·복구, dashboard 편집, 프로세스 수명 관리, 저장소 정리와 통합 사용 흐름을 구현했다.
 
 - Go 1.27.1의 전체 race 테스트와 vet를 통과했다.
-- macOS/Linux의 amd64·arm64 실행 파일을 패키징했다. 실제 OS 실행 검증은 Linux arm64 Docker에서 수행했다.
+- macOS/Linux의 amd64·arm64 실행 파일을 패키징했다. 실제 OS 실행 검증은 macOS 26.6.2 arm64와 Linux arm64 Docker에서 수행했다.
 - 설치된 실행 파일로 backup, bootstrap, cleanup, doctor, install, ports, processes, tasks, workflow의 9개 시나리오를 통과했다.
 - workflow는 격리된 Git 프로젝트와 두 worktree에서 task 인계·완료, 서로 다른 서버 port, 다른 profile의 URL 주입, dashboard 백업·복구, worktree 정리와 보관함 복구를 확인한다.
 - 브라우저에서 이름 명령 조회·시작·종료, 정리 후보 선택·보관·복구, 암호화 백업 생성과 복구 미리 보기·적용을 확인했다. 연속 확인창이 내용을 유지하는지도 검증했다.
+- macOS에서는 주소별 포트 점유 감지와 서버 종료 직후 포트 재사용을 race 테스트로 확인했다. 설치된 실행 파일의 전체 9개 시나리오도 통과했다.
 
-`just verify-docker`로 전체 설치 검증을 실행한다. `just verify-docker workflow`는 통합 사용 흐름을 실행한다. macOS와 WSL의 실제 OS 실행 검증은 별도 환경에서 수행할 수 있다.
+`just verify-docker`로 전체 설치 검증을 실행한다. `just verify-docker workflow`는 통합 사용 흐름을 실행한다. macOS 호스트에서는 [설치 실행 파일 검증](../docker/README.md)의 `--releases` 실행 방법을 사용한다. WSL의 실제 OS 실행 검증은 별도 환경에서 수행할 수 있다.

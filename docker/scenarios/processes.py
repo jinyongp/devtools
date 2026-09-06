@@ -16,7 +16,7 @@ def execute(*args,input=None,expected=0):
     p=subprocess.run(args,cwd=root,env=env,input=input,text=True,capture_output=True,timeout=25)
     assert p.returncode==expected,(args,p.stdout,p.stderr)
     return json.loads(p.stdout if expected==0 else p.stderr)
-execute("sh","/opt/devtools-install.sh","install","--version","0.0.0-test.1","--source","/opt/releases")
+execute("sh",os.environ["DEVTOOLS_TEST_INSTALLER"],"install","--version","0.0.0-test.1","--source",os.environ["DEVTOOLS_TEST_RELEASES"])
 def api(*args,**kwargs): return execute("devtools",*args,**kwargs)["data" if kwargs.get("expected",0)==0 else "error"]
 def mutate(action,*args,**kwargs): return api("process",action,*args,"--request-id",str(uuid.uuid4()),**kwargs)
 config='''profile="services"
@@ -48,13 +48,13 @@ serve=["tree"]
 PORT={port="tree"}
 '''
 (root/"devtools.toml").write_text(config)
-(root/"server.py").write_text('''import http.server,os
+(root/"server.py").write_text('''import http.server,os,socketserver
 class Handler(http.server.BaseHTTPRequestHandler):
  def do_GET(self):
   self.send_response(200);self.end_headers();self.wfile.write(os.environ.get('MESSAGE','empty').encode())
  def log_message(self,*args):pass
-http.server.HTTPServer.allow_reuse_address=True
-http.server.HTTPServer(('127.0.0.1',int(os.environ['PORT'])),Handler).serve_forever()
+socketserver.TCPServer.allow_reuse_address=True
+socketserver.TCPServer(('127.0.0.1',int(os.environ['PORT'])),Handler).serve_forever()
 ''')
 (root/"tree.py").write_text('''import os,signal,subprocess,sys,time
 child=subprocess.Popen([sys.executable,"-c","import os,signal,socket,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);s=socket.socket();s.bind(('127.0.0.1',int(os.environ['PORT'])));s.listen();print('ready',flush=True);time.sleep(60)"],stdout=subprocess.PIPE)

@@ -14,7 +14,7 @@ def execute(*args,input=None,expected=0):
     p=subprocess.run(args,cwd=root,env=env,input=input,text=True,capture_output=True,timeout=25)
     assert p.returncode==expected,(args,p.stdout,p.stderr)
     return json.loads(p.stdout if expected==0 else p.stderr)["data" if expected==0 else "error"]
-execute("sh","/opt/devtools-install.sh","install","--version","0.0.0-test.1","--source","/opt/releases")
+execute("sh",os.environ["DEVTOOLS_TEST_INSTALLER"],"install","--version","0.0.0-test.1","--source",os.environ["DEVTOOLS_TEST_RELEASES"])
 def api(*args,**kwargs):return execute("devtools",*args,**kwargs)
 api("init","--profile","cleanup-fixture")
 paths=api("project","inspect")["paths"]

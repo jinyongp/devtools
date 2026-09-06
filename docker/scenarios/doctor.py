@@ -17,7 +17,7 @@ def execute(args, input=None, expected=0, cwd=project):
     assert canary not in result.stdout + result.stderr, "Diagnostic leaked a value or probe output"
     return result
 
-execute(["sh", "/opt/devtools-install.sh", "install", "--version", "0.0.0-test.1", "--source", "/opt/releases"])
+execute(["sh", os.environ["DEVTOOLS_TEST_INSTALLER"], "install", "--version", "0.0.0-test.1", "--source", os.environ["DEVTOOLS_TEST_RELEASES"]])
 def api(*args, **kwargs):
     result = execute(["devtools", *args], **kwargs)
     return json.loads(result.stdout or result.stderr)

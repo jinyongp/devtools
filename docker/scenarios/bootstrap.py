@@ -22,8 +22,8 @@ if [ "$MODE" = partial ]; then exit 22; fi
 ''')
     fake_curl.chmod(0o700)
     snippets = []
-    for name in ("README.md", "install.md"):
-        text = (Path("/opt/verify/docs") / name).read_text()
+    for name in ("DEVTOOLS_TEST_README", "DEVTOOLS_TEST_INSTALL_DOC"):
+        text = Path(os.environ[name]).read_text()
         snippets.extend(re.findall(r'^\(\n.*?^\)', text, re.M | re.S))
         assert "/tmp/devtools-install.sh" not in text
     assert len(snippets) == 4

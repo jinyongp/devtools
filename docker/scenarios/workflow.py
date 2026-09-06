@@ -10,7 +10,7 @@ import urllib.request
 import uuid
 
 # Reuse the complete workstream specification, validation and takeover fixture.
-fixture=runpy.run_path("/opt/verify/scenarios/tasks.py")
+fixture=runpy.run_path(str(Path(__file__).with_name("tasks.py")))
 api=fixture["api"];project=fixture["project"];worktree=fixture["worktree"];env=fixture["env"]
 config='''profile="fixture"
 [ports.web]
@@ -23,13 +23,13 @@ serve=["web"]
 [commands.web.bind]
 PORT={port="web"}
 '''
-server='''import http.server,os
+server='''import http.server,os,socketserver
 class Handler(http.server.BaseHTTPRequestHandler):
  def do_GET(self):
   self.send_response(200);self.end_headers();self.wfile.write(os.environ['MESSAGE'].encode())
  def log_message(self,*args):pass
-http.server.HTTPServer.allow_reuse_address=True
-http.server.HTTPServer(('127.0.0.1',int(os.environ['PORT'])),Handler).serve_forever()
+socketserver.TCPServer.allow_reuse_address=True
+socketserver.TCPServer(('127.0.0.1',int(os.environ['PORT'])),Handler).serve_forever()
 '''
 for directory in (project,worktree):
     (directory/"devtools.toml").write_text(config)

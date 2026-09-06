@@ -24,7 +24,7 @@ def api(*args, **kwargs):
     r = execute("devtools", *args, **kwargs)
     return json.loads(r.stdout or r.stderr)
 
-execute("sh", "/opt/devtools-install.sh", "install", "--version", "0.0.0-test.1", "--source", "/opt/releases")
+execute("sh", os.environ["DEVTOOLS_TEST_INSTALLER"], "install", "--version", "0.0.0-test.1", "--source", os.environ["DEVTOOLS_TEST_RELEASES"])
 config = '''profile="backend"
 [ports.api]
 port=23000

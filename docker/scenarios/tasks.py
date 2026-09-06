@@ -25,7 +25,7 @@ def execute(args, input=None, expected=0, cwd=project):
     assert result.returncode == expected, (args, result.returncode, result.stderr)
     return json.loads(result.stdout if expected == 0 else result.stderr)["data" if expected == 0 else "error"]
 
-execute(["sh", "/opt/devtools-install.sh", "install", "--version", "0.0.0-test.1", "--source", "/opt/releases"])
+execute(["sh", os.environ["DEVTOOLS_TEST_INSTALLER"], "install", "--version", "0.0.0-test.1", "--source", os.environ["DEVTOOLS_TEST_RELEASES"]])
 def api(*args, **kwargs):
     return execute(["devtools", *args], **kwargs)
 def mutate(command, target=None, body=None, revision=None, **options):

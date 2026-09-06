@@ -1,6 +1,8 @@
-# Linux 샌드박스
+# 설치 실행 파일 검증
 
 devtools의 설치 후 사용 흐름을 검증하는 공통 Docker 환경이다. 일반 사용자, 독립적인 HOME, 배포물과 검증용 도구를 제공한다. 시나리오는 설치된 실행 파일의 공개 CLI를 사용한다.
+
+같은 실행기로 macOS와 Linux 호스트에서도 배포 아카이브를 설치해 검증할 수 있다.
 
 ## 실행
 
@@ -30,6 +32,27 @@ just verify-docker --list
 이미지 이름의 기본값은 `devtools-sandbox:local`이다. `VERIFY_IMAGE`로 바꿀 수 있다.
 
 각 시나리오는 별도의 임시 HOME과 XDG 경로, 작업 디렉터리에서 실행된다. 시나리오가 끝나면 해당 데이터가 정리되고, 실패하면 종료 코드를 반환하며 전체 실행을 멈춘다. Docker 실행은 외부 네트워크를 차단하고 일반 사용자 권한으로 수행한다. 호스트 디렉터리는 마운트하지 않는다.
+
+## macOS·Linux 호스트에서 실행
+
+Go, Python 3, just, Git, curl, OpenSSL을 준비하고 저장소 루트에서 실행한다.
+OpenSSL은 테스트용 인증서를 만드는 `req -addext` 옵션을 지원해야 한다.
+
+```sh
+verification=$(mktemp -d)
+for version in 0.0.0-test.1 0.0.0-test.2; do
+  VERSION="$version" OUTPUT_DIR="$verification/releases" sh scripts/package.sh
+done
+python3 docker/run.py --releases "$verification/releases" all
+```
+
+각 시나리오는 임시 HOME의 `.local/bin/devtools`에 실행 파일을 설치한다.
+macOS 데이터는 그 HOME 아래 `Library/Application Support/devtools`에,
+Linux 데이터는 격리된 XDG 경로에 저장한다. Git 전역 설정도 검증용으로 분리한다.
+`all` 대신 `ports processes cleanup workflow`처럼 시나리오를 선택할 수 있다.
+
+테스트용 HTTP 서버는 지정한 loopback 주소에 바로 바인딩한다. 서버 준비 시간은
+호스트의 역방향 DNS 설정과 독립적으로 유지한다.
 
 ## 시나리오 추가
 

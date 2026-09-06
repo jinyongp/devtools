@@ -70,7 +70,7 @@ active에서 새 task·검증을 등록하면 목록과 구조 검사에 즉시 
 
 ## 응답 객체
 
-기존 `schema_version`, `ok`, `data`/`error` 봉투를 사용한다. 다음 객체는 모두 JSON으로 직렬화하며 실제 구현 시 `schema`의 출력 정의에도 같은 필드를 제공한다.
+기존 `schema_version`, `ok`, `data`/`error` 봉투를 사용한다. 다음 객체는 모두 JSON으로 직렬화하며 `schema`의 출력 정의에도 같은 필드를 제공한다.
 
 | 결과 | data 필드 |
 | --- | --- |

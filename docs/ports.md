@@ -36,12 +36,23 @@ doctor는 할당 후보와 참조를 진단한다. run은 최초 실행에서 �
 
 backend 프로젝트에서 api 서비스를 선언하고 실행 위치에 별칭을 붙인다.
 
+backend 디렉터리의 `devtools.toml`에 다음을 저장한다.
+
+```toml
+profile = "backend"
+
+[ports.api]
+port = 8000
+range = [8000, 8099]
+```
+
 ```sh
 devtools instance name main
 devtools port allocate api
 ```
 
-frontend의 명령에서 해당 할당을 참조한다.
+frontend 디렉터리로 이동해 기존 `devtools.toml`에 다음 명령을 추가한다.
+예시는 pnpm과 프로젝트의 test 스크립트가 준비된 환경을 기준으로 한다.
 
 ```toml
 [commands.check]
@@ -59,7 +70,7 @@ devtools run check
 ```
 
 bind가 기존 주소를 참조할 때는 서버가 이미 포트를 사용하고 있어도 정상이다.
-애플리케이션 준비 확인은 프로젝트의 health 명령으로 수행한다. var는 선택한
+애플리케이션 준비 확인은 [프로세스 준비 검사](process-readiness.md)나 프로젝트의 health 명령으로 수행한다. var는 선택한
 profile·env에서 읽고, 템플릿은 문자열을 한 번 치환한다.
 
 ## 조회와 정리

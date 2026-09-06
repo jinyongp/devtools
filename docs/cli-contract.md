@@ -5,19 +5,19 @@
 포트 할당과 명령별 `serve`·`bind`·템플릿은 [포트 사용 가이드](ports.md)와
 [포트 관리 계약](port-design.md)을 따른다.
 
-현재 제공하는 명령은 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `env`, `run`이다. 이 문서의 예시는 빌드한 `devtools`가 PATH에 있는 환경을 기준으로 한다.
+이 문서는 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `import`, `env`, `run`의 사용법을 다룬다. 전체 기능 안내는 [README](../README.md), 설치된 바이너리의 명령 목록은 `devtools schema`에서 확인한다. 예시는 설치한 `devtools`가 PATH에 있는 환경을 기준으로 한다.
 
 ## 사용 목적
 
-devtools는 개인용 개발 도구를 하나의 CLI로 제공한다. macOS, Linux, WSL에서 GUI와 대화형 입력 없이 사용하며, 주 사용자는 에이전트다.
+devtools는 개인용 개발 도구를 하나의 CLI로 제공한다. macOS, Linux, WSL에서 에이전트가 비대화형 CLI로 사용하고, 사용자는 선택적으로 dashboard에서 같은 데이터를 관리한다.
 
 프로젝트는 일반 환경변수를 읽고 기존 실행 명령을 유지한다. devtools는 프로젝트 명령을 호출하는 앞단의 실행 진입점이다. `package.json`이나 기존 task runner의 명령은 독립적으로 실행할 수 있고, 에이전트는 `devtools.toml`에 정의한 이름 또는 직접 지정한 명령으로 실행한다.
 
-값은 사용자 전역 저장소에서 관리한다. 프로젝트에 `.env.*` 파일을 생성하거나 포함하는 방식이 아니다.
+값은 사용자 전역 저장소에서 관리하고 실행 시 환경변수로 주입한다.
 
 ## profile과 프로젝트 연결
 
-profile은 프로젝트를 식별하는 사용자 지정 이름이다. `myapp`, `work-api`처럼 지정하며, `local`, `dev`, `staging`은 profile 아래의 env로 구분한다. 이후 task 도구도 같은 profile을 프로젝트 식별자로 사용한다.
+profile은 프로젝트를 식별하는 사용자 지정 이름이다. `myapp`, `work-api`처럼 지정하며, `local`, `dev`, `staging`은 profile 아래의 env로 구분한다. task 도구도 같은 profile을 프로젝트 식별자로 사용한다.
 
 `var`, `sec`, `env`, `run`에는 profile이 필요하다. profile은 다음 순서로 선택한다.
 
@@ -368,7 +368,7 @@ env = "test"
 
 `run`은 데이터 조회 명령과 출력 계약이 다르다. 실행 준비 중의 실패는 devtools의 오류로 반환하고, 자식 프로세스가 실행된 뒤에는 그 프로세스의 출력과 종료 상태를 전달한다.
 
-정확한 JSON 필드와 오류 코드는 `devtools schema`에서 확인한다. 스키마의 `args`는 위치 인자, `child_args`는 `--` 이후 인자를 뜻한다. `aliases`에는 같은 동작을 하는 별칭이 포함된다.
+명령별 입력·출력 JSON 필드는 `devtools schema`에서 확인하고, 기능별 오류 코드는 각 사용 계약을 참고한다. 스키마의 `args`는 위치 인자, `child_args`는 `--` 이후 인자를 뜻한다. `aliases`에는 같은 동작을 하는 별칭이 포함된다.
 
 | 작업 | 성공 응답의 `data` |
 | --- | --- |
@@ -393,7 +393,7 @@ env = "test"
 
 ## 로컬 저장과 secret 보호 범위
 
-첫 버전은 사용자 전용 로컬 파일 저장소를 사용하며 secret 자체를 암호화하지 않는다. 저장 디렉터리는 `0700`, 파일은 `0600` 권한을 사용한다. OS 로그인 인증이나 별도 복호화 키 준비를 요구하지 않는다.
+활성 값 저장소는 사용자 전용 로컬 파일에 평문으로 보관한다. 저장 디렉터리는 `0700`, 파일은 `0600` 권한을 사용한다. 별도로 생성하는 [백업](backup.md)은 공개키로 암호화한다.
 
 devtools의 기본 목록, 오류, 로그에는 secret 값을 포함하지 않는다. secret은 실행할 프로세스에 직접 주입한다. 보호 목표는 에이전트가 정상적인 CLI 사용 중 실수로 값을 읽어 대화나 로그에 남기지 않게 하는 것이다.
 

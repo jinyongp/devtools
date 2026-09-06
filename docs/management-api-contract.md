@@ -1,6 +1,6 @@
 # 관리 API 계약
 
-상태: dashboard의 task/workstream 및 var/sec/env 조회·변경 API 계약.
+dashboard의 task/workstream, var/sec/env, 프로젝트·프로세스, 백업·복구와 저장소 정리 API 계약이다.
 
 ## 접속과 요청
 
@@ -16,7 +16,7 @@
 
 secret은 입력·교체를 지원하고 조회 응답과 이력에는 메타데이터만 기록한다. HTTP 요청 본문과 오류 원문을 로그에 남기지 않는다. 프로세스 실행은 등록된 이름 명령을 대상으로 삼는다.
 
-## 기능 연결 순서
+## 관리 범위
 
 CLI와 dashboard는 task/workstream, var/sec/env, 프로세스, 백업·복구, 정리를 같은 접근 인증과 작업별 검증으로 연결한다. 백업 키 생성과 기본 저장 위치 설정은 CLI에서 준비한다.
 

@@ -10,7 +10,7 @@ devtools를 현재 컴퓨터의 여러 프로젝트를 관리하는 공통 진�
 
 프로젝트의 기존 실행 명령은 그대로 활용한다. `devtools.toml`의 이름 명령과 `devtools run -- ...`이 환경변수 주입과 실행의 진입점이 된다. macOS, Linux, WSL에서 같은 사용 모델을 제공한다.
 
-현재 제공하는 기능과 API는 [CLI 계약](cli-contract.md), [task API 계약](task-api-contract.md), [port 계약](port-design.md)을 따른다. 이 로드맵의 관리 기능은 단계별로 구현하고 해당 계약에 반영한다.
+현재 제공하는 기능과 API는 [CLI 계약](cli-contract.md), [task API 계약](task-api-contract.md), [port 계약](port-design.md), [관리 API 계약](management-api-contract.md)을 따른다. 아래는 구현한 관리 기능의 구성과 검증 기록이다.
 
 ## 작업 순서
 

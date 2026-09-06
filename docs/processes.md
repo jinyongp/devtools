@@ -21,6 +21,17 @@ start는 `item`에 실행 ID, profile, instance ID, 디렉터리, 명령, env, �
 
 종료는 살아 있는 supervisor의 인증 채널을 통해 요청한다. supervisor는 자신이 소유한 프로세스 그룹에 TERM을 보내고 3초 후 남은 자식을 정리한다. 같은 그룹의 자식 프로세스는 직접 자식이 먼저 종료된 경우에도 정리한다. 자체적으로 새 OS 세션을 만드는 명령은 별도 수명 관리가 필요하다. supervisor가 강제 종료된 경우 잔여 프로세스는 실제 port 점유와 진단 결과로 확인한다. 저장된 PID를 사용해 다른 프로세스를 종료하지 않는다.
 
+## 대상과 요청 ID 선택
+
+위 예시의 `web`은 프로젝트에 선언한 이름 명령이고, `local`은 미리 생성한 env다.
+완전한 서버 설정 예시는 [준비 확인 가이드](process-readiness.md#설정과-사용)를 참고한다.
+`UUID`에는 `uuidgen` 등으로 생성한 새 요청 ID를 넣고, `EXECUTION_ID`에는
+start 응답의 `data.item.id`를 넣는다. 응답이 불확실한 재시도에는 원래 요청 ID를 유지한다.
+
+start는 `--dir` 또는 현재 디렉터리의 프로젝트 설정에서 profile을 선택한다.
+`process list`는 모든 profile의 실행을 조회하고 `--profile NAME`으로 범위를 좁힌다.
+status·check·wait·logs·stop·restart는 실행 ID로 대상을 선택하므로 프로젝트 밖에서도 사용할 수 있다.
+
 ## 원문 로그
 
 기본 출력은 버리고 상태와 종료 원인을 보관한다. 원문이 필요한 실행에는 `--capture-logs`를 명시한다.

@@ -7,6 +7,9 @@ returns the resulting profile revision. States are projected from those actions.
 
 ## Start with one task
 
+Run these commands in a project with `devtools.toml`, or add `--profile NAME`
+to each command. To prepare a new directory, use `devtools init --profile myapp`.
+
 ```sh
 devtools task add --title 'Review installer failure handling' --request-id UUID
 devtools task next
@@ -18,7 +21,11 @@ devtools task done TASK_ID --summary 'Rollback verified' \
 ```
 
 Replace each new `UUID` with a generated UUID, for example the output of `uuidgen`.
-Use IDs and context from the JSON responses. For an uncertain response, retry with
+Use `data.item.id` from add as `TASK_ID`. A successful claim returns
+`data.claimed: true`, `data.run.id` as `RUN_ID`, and `data.context` as `CONTEXT`.
+Check `data.context_valid` before continuing; an unsuccessful claim explains its
+blockers. Keep the context private and use the same profile for every step.
+For an uncertain response, retry with
 the original request ID and unchanged inputs. A revised request gets a new UUID.
 `DEVTOOLS_TASK_CONTEXT` supplies the default execution context.
 
@@ -28,6 +35,15 @@ Create with `task workstream create --title TEXT --request-id UUID`. Document an
 definition edits take `--if-revision N` from the latest query and a request ID.
 JSON bodies use a regular file with `--file PATH` or redirected input with `--stdin`.
 Command help and `devtools schema` describe both options and JSON body schemas.
+
+The command names below describe individual steps. Every mutation takes a new
+`--request-id UUID`; document and definition edits also take `--if-revision N`.
+For example, save the following specification as `spec.json`, read `data.revision`
+from `task workstream show WS_ID`, and run:
+
+```sh
+devtools task workstream spec set WS_ID --file spec.json --if-revision N --request-id UUID
+```
 
 `task workstream spec set WS_ID` accepts:
 
@@ -43,7 +59,8 @@ Command help and `devtools schema` describe both options and JSON body schemas.
 }
 ```
 
-Add tasks with `workstream_id` and `acceptance_keys`, then add validation definitions
+In JSON bodies, add tasks with `workstream_id` and `acceptance_keys`
+(CLI flags: `--workstream WS_ID --acceptance-keys A1`), then add validation definitions
 with one owner: `task_id` or `workstream_id`. `task workstream plan set WS_ID` takes
 a Markdown `body`, all `task_ids`, and all related `validation_ids`.
 `workstream check` identifies coverage gaps; `workstream activate` enables execution.
@@ -57,8 +74,9 @@ in the same profile. Every prerequisite must be done before execution proceeds.
 
 Use `task current --dir PATH` and `task context TASK_ID` to inspect saved work.
 `task takeover TASK_ID --expected-run RUN_ID --request-id UUID` creates a new run
-and context. The previous context becomes inactive. `task release RUN_ID` ends a
-claim explicitly, and `task resume` continues an existing context.
+and context. The previous context becomes inactive.
+`task release RUN_ID --context CONTEXT --request-id UUID` ends a claim explicitly,
+and `task resume --context CONTEXT --request-id UUID` continues an existing context.
 
 Validation definitions describe the method and required evidence. Create a basis
 with `task validation basis VAL_ID --file FILE --request-id UUID`:

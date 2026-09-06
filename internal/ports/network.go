@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -14,20 +15,22 @@ import (
 
 // Available checks both supported address families without retaining listeners.
 func Available(port int) (bool, *protocol.Error) {
-	listeners := []net.Listener{}
-	defer func() {
-		for _, l := range listeners {
-			l.Close()
+	targets := []probeAddress{{"tcp4", "0.0.0.0"}, {"tcp6", "::"}}
+	if runtime.GOOS == "darwin" {
+		// BSD permits a reusable wildcard listener alongside an address-specific
+		// listener. Probe local addresses too, preserving SO_REUSEADDR so closed
+		// connections in TIME_WAIT do not prevent a development server restart.
+		local, err := localProbeAddresses()
+		if err != nil {
+			return false, storageError()
 		}
-	}()
-	for _, network := range []string{"tcp4", "tcp6"} {
-		host := "0.0.0.0"
-		if network == "tcp6" {
-			host = "::"
-		}
-		l, e := net.Listen(network, net.JoinHostPort(host, strconv.Itoa(port)))
+		targets = append(targets, local...)
+	}
+	checked := false
+	for _, target := range targets {
+		l, e := net.Listen(target.network, net.JoinHostPort(target.host, strconv.Itoa(port)))
 		if e != nil {
-			if errors.Is(e, syscall.EAFNOSUPPORT) || errors.Is(e, syscall.EPROTONOSUPPORT) || network == "tcp6" && errors.Is(e, syscall.EADDRNOTAVAIL) {
+			if errors.Is(e, syscall.EAFNOSUPPORT) || errors.Is(e, syscall.EPROTONOSUPPORT) || errors.Is(e, syscall.EADDRNOTAVAIL) {
 				continue
 			}
 			if errors.Is(e, syscall.EADDRINUSE) {
@@ -35,12 +38,52 @@ func Available(port int) (bool, *protocol.Error) {
 			}
 			return false, storageError()
 		}
-		listeners = append(listeners, l)
+		// Each probe closes before the next address is tested, so our own
+		// wildcard listener cannot make a subsequent specific probe conflict.
+		l.Close()
+		checked = true
 	}
-	if len(listeners) == 0 {
+	if !checked {
 		return false, storageError()
 	}
 	return true, nil
+}
+
+type probeAddress struct{ network, host string }
+
+func localProbeAddresses() ([]probeAddress, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	var targets []probeAddress
+	seen := map[probeAddress]bool{}
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		addresses, err := iface.Addrs()
+		if err != nil {
+			return nil, err
+		}
+		for _, address := range addresses {
+			ip, _, err := net.ParseCIDR(address.String())
+			if err != nil || ip.IsUnspecified() || ip.IsMulticast() {
+				continue
+			}
+			target := probeAddress{"tcp6", ip.String()}
+			if ip.To4() != nil {
+				target.network = "tcp4"
+			} else if ip.IsLinkLocalUnicast() {
+				target.host += "%" + iface.Name
+			}
+			if !seen[target] {
+				seen[target] = true
+				targets = append(targets, target)
+			}
+		}
+	}
+	return targets, nil
 }
 func Reachable(ctx context.Context, port int) bool {
 	for _, host := range []string{"127.0.0.1", "::1"} {

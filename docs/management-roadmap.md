@@ -129,3 +129,24 @@ task의 실행 기록과 OS 프로세스의 수명을 구분해 관리한다. �
 - macOS에서는 주소별 포트 점유 감지와 서버 종료 직후 포트 재사용을 race 테스트로 확인했다. 설치된 실행 파일의 전체 9개 시나리오도 통과했다.
 
 `just verify-docker`로 전체 설치 검증을 실행한다. `just verify-docker workflow`는 통합 사용 흐름을 실행한다. macOS 호스트에서는 [설치 실행 파일 검증](../docker/README.md)의 `--releases` 실행 방법을 사용한다. WSL의 실제 OS 실행 검증은 별도 환경에서 수행할 수 있다.
+
+## 프로세스 준비 확인 확장
+
+사용법과 API는 [프로세스 준비 확인](process-readiness.md)에 정의한다.
+
+1. `project`가 검사 명령과 제한 시간을 검증한다.
+2. `runCommand`가 선택한 설정을 전달하고, supervisor가 준비된 환경과 함께 보관한다.
+3. supervisor의 인증된 검사 요청이 제한 시간·직렬 실행·종료 처리를 맡는다.
+4. CLI check·wait와 Dashboard가 같은 검사 경로를 사용한다.
+
+2026-09-06 검증 결과:
+
+- Linux Docker: readiness를 포함한 전체 10개 설치 시나리오, 전체 Go race 테스트·vet,
+  macOS/Linux amd64·arm64 배포 빌드 통과.
+- macOS arm64: readiness·processes 설치 시나리오와
+  project·services·cli·dashboard 패키지 race 테스트 통과.
+- 브라우저: 준비 실패와 성공 결과, 검사 시각 갱신 확인.
+
+검증은 지연 준비, HTTP 확인, 비정상 종료 코드, 검사 시간 초과, 호출 취소,
+동시 검사, 시작 시점 설정 유지, 재시작 후 설정 변경, 종료된 실행과 미설정 실행,
+원문 출력 비노출, Dashboard 인증과 profile 일치 검사를 포함한다.

@@ -127,6 +127,7 @@ aside {
   margin-bottom: 12px;
 }
 .nav-button {
+  white-space: nowrap;
   display: block;
   width: 100%;
   text-align: left;

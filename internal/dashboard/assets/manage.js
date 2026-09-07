@@ -97,23 +97,31 @@ function itemActions(node, data, parent) {
   const current=profile, rev=data.revision, item=data.item || node;
   const actions=text("div","",parent);actions.className="manage-toolbar";
   const send=(action,body,extra={})=>taskRequest(action,node.id,body,rev,extra,current);
-  if(node.kind==="task") button(actions,"Edit",()=>edit("Edit task",p=>{const title=field(p,"Title",item.title),description=field(p,"Description",item.description,"textarea");return()=>({title:title.value,description:description.value});},body=>send("task.update",body)));
-  button(actions,"Dependencies",()=>edit("Edit prerequisites",p=>{const ids=field(p,"Prerequisite IDs (one per line)",(item.depends_on||[]).join("\n"),"textarea");text("p","Dependencies use the existing workstream and cycle checks.",p);return()=>({depends_on:ids.value.split(/\s+/).filter(Boolean)});},body=>send(node.kind==="workstream"?"workstream.depends":"task.depends",body)));
+  if (["done", "canceled", "closed"].includes(item.state || node.state)) {
+    button(actions,"Reopen",()=>edit(`Reopen ${node.kind}`,p=>{const reason=field(p,"Reason","","textarea");return()=>({reason:reason.value});},body=>send(`${node.kind}.reopen`,body),()=>load(),true));
+    return;
+  }
+  const menu=text("details","",parent);menu.className="item-management";
+  text("summary","Manage item",menu);
+  const secondary=text("div","",menu);secondary.className="manage-toolbar";
+  if(node.kind==="task") button(secondary,"Edit",()=>edit("Edit task",p=>{const title=field(p,"Title",item.title),description=field(p,"Description",item.description,"textarea");return()=>({title:title.value,description:description.value});},body=>send("task.update",body)));
+  button(secondary,"Dependencies",()=>edit("Edit prerequisites",p=>{const ids=field(p,"Prerequisite IDs (one per line)",(item.depends_on||[]).join("\n"),"textarea");text("p","Dependencies use the existing workstream and cycle checks.",p);return()=>({depends_on:ids.value.split(/\s+/).filter(Boolean)});},body=>send(node.kind==="workstream"?"workstream.depends":"task.depends",body)));
   if(node.kind==="workstream") {
-    for(const [label,action,name] of [["Specification","spec.set","spec"],["Plan","plan.set","plan"]])button(actions,label,()=>edit(`Edit ${label.toLowerCase()}`,p=>{
+    for(const [label,action,name] of [["Specification","spec.set","spec"],["Plan","plan.set","plan"]])button(secondary,label,()=>edit(`Edit ${label.toLowerCase()}`,p=>{
       const doc=data.documents?.[name]||{},body=field(p,"Document",doc.body||"","textarea");
       const fields=action==="spec.set"?["requirements","acceptance"]:["task_ids","validation_ids"];
       const inputs=fields.map(key=>field(p,key.replaceAll("_"," ")+(action==="spec.set"?" (JSON array of key/text entries)":" (one ID per line)"),action==="spec.set"?JSON.stringify(doc[key]||[],null,2):(doc[key]||[]).join("\n"),"textarea"));
       return()=>{const out={body:body.value};fields.forEach((key,i)=>out[key]=action==="spec.set"?JSON.parse(inputs[i].value):inputs[i].value.split(/\s+/).filter(Boolean));return out;};
     },body=>send(action,body)));
-    for(const [label,action] of [["Activate","workstream.activate"],["Close workstream","workstream.close"]])button(actions,label,()=>edit(label,p=>{text("p",`${label}: ${node.title}. Coverage and completion checks apply.`,p);return()=>({});},body=>send(action,body),()=>load(),true));
+    for(const [label,action] of [["Activate","workstream.activate"],["Close workstream","workstream.close"]].filter(([, action]) => action === ((item.state || node.state) === "draft" ? "workstream.activate" : "workstream.close")))button(actions,label,()=>edit(label,p=>{text("p",`${label}: ${node.title}. Coverage and completion checks apply.`,p);return()=>({});},body=>send(action,body),()=>load(),true));
   }
-  for(const [label,suffix] of [["Cancel","cancel"],["Reopen","reopen"]])button(actions,label,()=>edit(`${label} ${node.kind}`,p=>{const reason=field(p,"Reason","","textarea");return()=>({reason:reason.value});},body=>send(`${node.kind}.${suffix}`,body),()=>load(),true));
+  for(const [label,suffix] of [["Cancel","cancel"]])button(secondary,label,()=>edit(`${label} ${node.kind}`,p=>{const reason=field(p,"Reason","","textarea");return()=>({reason:reason.value});},body=>send(`${node.kind}.${suffix}`,body),()=>load(),true));
   if(node.kind!=="task")return;
-  const key=current+":"+node.id,owned=executionContexts.get(key),run=item.current_run;
+  const key=current+":"+node.id,run=item.current_run;
+  const saved=executionContexts.get(key),owned=run && saved?.run===run.id ? saved : null;
   const accept=result=>{if(result.context&&result.run)executionContexts.set(key,{context:result.context,run:result.run.id});load();};
-  button(actions,"Claim",()=>edit("Claim task",p=>{text("p",`Claim ${node.title} for this browser tab.`,p);return()=>({});},body=>send("run.claimed",body),accept));
-  if(run)button(actions,"Take over",()=>edit("Take over task",p=>{text("p","This invalidates the previous execution context. Review the latest checkpoint before continuing.",p);return()=>({});},body=>send("run.taken_over",body,{"expected-run":run.id}),accept,true));
+  if(!run && !node.blockers?.length) button(actions,"Claim",()=>edit("Claim task",p=>{text("p",`Claim ${node.title} for this browser tab.`,p);return()=>({});},body=>send("run.claimed",body),accept));
+  if(run && !owned)button(actions,"Take over",()=>edit("Take over task",p=>{text("p","This invalidates the previous execution context. Review the latest checkpoint before continuing.",p);return()=>({});},body=>send("run.taken_over",body,{"expected-run":run.id}),accept,true));
   if(owned)for(const [label,action]of[["Checkpoint","run.checkpointed"],["Release","run.released"],["Complete","task.completed"]])button(actions,label,()=>edit(label,p=>{const summary=field(p,"Summary","","textarea");return()=>({summary:summary.value});},body=>taskRequest(action,action==="task.completed"?node.id:owned.run,body,rev,{context:owned.context},current),()=>{if(action!=="run.checkpointed")executionContexts.delete(key);load();},action!=="run.checkpointed"));
 }
 $("values-nav").onclick=()=>{scope="values";ws="";valueEnv="";load();};

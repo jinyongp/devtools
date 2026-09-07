@@ -29,12 +29,6 @@
         <button id="values-nav" class="nav-button">Variables &amp; secrets</button>
         <button id="processes-nav" class="nav-button">Processes</button>
         <button id="storage-nav" class="nav-button">Storage &amp; recovery</button>
-        <button id="create-item">Create workstream</button>
-        <div id="graph-navigation"><div class="section-label">IN THIS VIEW</div>
-        <label class="search-label" for="search">Find an item</label
-        ><input id="search" type="search" placeholder="Filter by title or ID" />
-        <div id="items" role="list" aria-label="Graph items"></div>
-        <button id="more" hidden>Load more</button></div>
       </aside>
       <section class="workspace">
         <div class="heading">
@@ -45,10 +39,20 @@
               Choose a profile to explore its workstreams and tasks.
             </p>
           </div>
-          <button id="fit" aria-label="Fit graph to view">Fit graph</button>
+          <button id="create-item">Create workstream</button>
         </div>
         <div id="notice" role="status" aria-live="polite"></div>
         <section id="values-panel" hidden aria-label="Profile management"></section>
+        <div id="graph-navigation">
+          <div class="view-switch" role="group" aria-label="View">
+            <button id="list-view" aria-pressed="true">List</button>
+            <button id="graph-view" aria-pressed="false">Graph</button>
+          </div>
+          <label class="search-label" for="search">Find an item</label>
+          <input id="search" type="search" placeholder="Filter by title or ID" />
+          <button id="fit" aria-label="Fit graph to view" hidden>Fit graph</button>
+        </div>
+        <div id="list-panel"><div id="items" role="list" aria-label="Items"></div><p id="list-empty" hidden>No items yet.</p></div>
         <div id="stage">
           <canvas
             id="graph"
@@ -62,9 +66,10 @@
             ><span class="canceled">Canceled</span>
           </div>
         </div>
+        <button id="more" hidden>Load more</button>
         <footer>
           <span id="count">0 items</span
-          ><span>Prerequisite → dependent · Scroll to zoom · Drag to pan</span>
+          ><span id="graph-hint" hidden>Prerequisite → dependent · Scroll to zoom · Drag to pan</span>
         </footer>
       </section>
       <aside class="details" aria-label="Item details">

@@ -201,7 +201,10 @@ function draw() {
   ctx.restore();
 }
 function fit() {
-  if (!nodes.length) return;
+  if (!nodes.length || $("stage").hidden) return;
+  width = $("stage").clientWidth;
+  height = $("stage").clientHeight;
+  if (!width || !height) return;
   const maxX = d3.max(nodes, (n) => n.x) + 200,
     maxY = d3.max(nodes, (n) => n.y) + 64;
   const k = Math.min(1.2, (width - 70) / maxX, (height - 80) / maxY);
@@ -246,6 +249,22 @@ canvas.addEventListener("keydown", (event) => {
     );
   }
 });
+let viewMode = "list";
+function applyView() {
+  const management = ["values", "processes", "storage"].includes(scope);
+  const graph = viewMode === "graph";
+  $("list-panel").hidden = management || graph;
+  $("stage").hidden = management || !graph;
+  $("fit").hidden = management || !graph;
+  $("search").hidden = graph;
+  $("graph-hint").hidden = !graph;
+  $("list-view").setAttribute("aria-pressed", String(!graph));
+  $("graph-view").setAttribute("aria-pressed", String(graph));
+}
+function readableDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unknown date" : new Intl.DateTimeFormat(undefined, {dateStyle:"medium", timeStyle:"short"}).format(date);
+}
 function renderList() {
   const root = $("items");
   root.replaceChildren();
@@ -254,12 +273,17 @@ function renderList() {
     if (!(n.title + " " + n.id).toLowerCase().includes(search)) continue;
     const entry = text("div", "", root);
     entry.setAttribute("role", "listitem");
-    const b = text("button", n.title, entry);
+    const b = text("button", "", entry);
+    text("span", n.title, b);
     b.className = n.id === selected ? "selected" : "";
-    text("small", state(n), b);
+    b.setAttribute("aria-pressed", String(n.id === selected));
+    const badge = text("small", state(n), b);
+    badge.className = "state-badge " + state(n);
     b.onclick = () => select(n);
   }
-  $("count").textContent = `${nodes.length} items · revision ${revision}`;
+  $("count").textContent = `${root.children.length} of ${nodes.length} items`;
+  $("list-empty").hidden = root.children.length > 0;
+  $("list-empty").textContent = search ? "No matching items. Try another title or ID." : "No items yet. Create one to get started.";
   $("more").hidden = !cursor;
   $("empty").hidden = nodes.length > 0;
   $("empty").textContent = profile
@@ -279,7 +303,7 @@ async function select(node) {
   renderList();
   $("detail-title").textContent = node.title;
   $("detail-hint").textContent =
-    node.description || `${node.kind} · ${state(node)}`;
+    `${node.kind} · ${state(node)}`;
   const root = $("detail-content");
   root.replaceChildren();
   $("expand").hidden = node.kind !== "workstream";
@@ -296,39 +320,67 @@ async function select(node) {
     );
     if (version !== detailGeneration) return;
     itemActions(node, data, root);
-    const dl = text("dl", "", root);
+    const switches = text("div", "", root);
+    switches.className = "detail-switch";
+    switches.setAttribute("role", "group");
+    switches.setAttribute("aria-label", "Detail sections");
+    const panels = ["Overview", "Documents", "Activity"].map(label => {
+      const panel = text("section", "", root);
+      panel.setAttribute("aria-label", label);
+      panel.className = "detail-section";
+      const control = button(switches, label, () => {
+        for (const entry of panels) {
+          entry.panel.hidden = entry.panel !== panel;
+          entry.control.setAttribute("aria-pressed", String(entry.panel === panel));
+        }
+      });
+      panel.hidden = label !== "Overview";
+      control.setAttribute("aria-pressed", String(!panel.hidden));
+      return {panel, control};
+    });
+    const [overview, documents, activity] = panels.map(entry => entry.panel);
+    text("p", data.item?.description || node.description || "No description yet.", overview).className = "prose";
+    text("p", `Updated ${readableDate(node.updated_at)}`, overview).className = "muted";
+    const metadata = text("details", "", overview);
+    text("summary", "Technical details", metadata);
+    const dl = text("dl", "", metadata);
     for (const [label, value] of [
       ["ID", node.id],
-      ["State", state(node)],
-      ["Updated", node.updated_at],
+      ["Revision", data.revision],
     ]) {
       text("dt", label, dl);
       text("dd", value, dl);
     }
     if (node.blockers?.length) {
-      text("h3", "Blockers", root);
-      const list = text("ul", "", root);
+      text("h3", "Blockers", overview);
+      const list = text("ul", "", overview);
       for (const b of node.blockers) text("li", b.message, list);
     }
     for (const [name, doc] of Object.entries(data.documents || {})) {
       if (doc?.body) {
-        text("h3", name, root);
-        text("pre", doc.body, root);
+        text("h3", name, documents);
+        text("p", doc.body, documents).className = "prose";
       }
     }
     const history = data.history || [];
     if (history.length) {
-      text("h3", "Recent activity", root);
+      text("h3", "Recent activity", activity);
       for (const h of history.slice(-5).reverse()) {
-        text("p", `${h.action} · ${h.occurred_at}`, root);
-        if (h.data.summary) text("pre", h.data.summary, root);
+        const entry = text("article", "", activity);
+        entry.className = "activity-entry";
+        text("strong", h.action.replaceAll(/[._]/g, " "), entry);
+        const time = text("time", readableDate(h.occurred_at), entry);
+        time.dateTime = h.occurred_at;
+        if (h.data?.summary) text("p", h.data.summary, entry).className = "prose";
       }
     }
+    if (!documents.children.length) text("p", "No documents yet.", documents);
+    if (!history.length) text("p", "No activity yet.", activity);
     if (data.truncated)
       text(
         "p",
         "Additional context is available through the CLI context and document commands.",
-        root,
+        activity,
       );
   } catch (e) {
     if (version === detailGeneration) notice(e.message);
@@ -343,6 +395,7 @@ async function load(more = false) {
   $("values-panel").hidden = !management;
   $("stage").hidden = management;
   $("fit").hidden = management;
+  applyView();
   $("create-item").hidden = management || !profile;
   $("create-item").textContent = scope === "workstreams" ? "Create workstream" : "Create task";
   $("values-nav").classList.toggle("active", scope === "values");
@@ -366,7 +419,7 @@ async function load(more = false) {
         ? "Independent tasks"
         : "Workstream tasks";
   $("subtitle").textContent = profile
-    ? `${profile} · Select an item for its specification and activity.`
+    ? "Select an item to view details and manage its progress."
     : "Choose a profile to explore its workstreams and tasks.";
   $("overview").classList.toggle("active", scope === "workstreams");
   $("independent").classList.toggle("active", scope === "independent");
@@ -450,6 +503,8 @@ $("refresh").onclick = () => load();
 $("more").onclick = () => load(true);
 $("fit").onclick = fit;
 $("search").oninput = renderList;
+$("list-view").onclick = () => { viewMode = "list"; applyView(); };
+$("graph-view").onclick = () => { viewMode = "graph"; applyView(); requestAnimationFrame(fit); };
 (async () => {
   try {
     const params = new URLSearchParams(location.hash.slice(1).replaceAll("\\u0026", "&"));

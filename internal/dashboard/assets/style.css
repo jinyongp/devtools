@@ -367,6 +367,12 @@ button[aria-pressed="true"] { background: #e1eee7; color: #145d51; }
 .inline-value input { margin:0; }
 .inline-value .manage-toolbar { margin:8px 0 0; }
 .inline-value small { display:block; margin-top:8px; }
+.value-inherited { background:#f0f3ef; }
+.value-inherited > td { color:#52635a; }
+.value-source { display:inline-block; padding:4px 8px; border-radius:4px; font-size:12px; white-space:nowrap; }
+.value-source.inherited, .value-source.common { background:#e5eae5; color:#465b4e; }
+.value-source.override { background:#dbece3; color:#195e49; font-weight:600; }
+.value-source.local { background:#e4ebf4; color:#345474; }
 #editor-fields fieldset { border: 1px solid #dce1da; border-radius: 5px; margin: 20px 0; padding: 12px; min-width: 0; }
 #editor-fields legend { font-size: 14px; font-weight: 600; padding: 0 6px; }
 .choice-list { max-height: 240px; overflow: auto; }

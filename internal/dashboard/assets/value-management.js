@@ -42,6 +42,7 @@ function bulkValues(view) {
 }
 
 function inlineValue(cell, item, view, version) {
+  const inherited = !!view.env && item.source === "common";
   cell.replaceChildren();
   const form = text("form", "", cell); form.className = "inline-value";
   const input = document.createElement("input"); input.type = item.kind === "secret" ? "password" : "text";
@@ -49,7 +50,8 @@ function inlineValue(cell, item, view, version) {
   input.autocomplete = "off"; form.append(input);
   if (item.source === "common" && view.env) text("small", `Creates an override in ${view.env}.`, form);
   const actions = text("div", "", form); actions.className = "manage-toolbar";
-  const save = button(actions,"Save",()=>{}); save.type="submit";
+  const saveLabel = inherited ? "Create override" : "Save";
+  const save = button(actions,saveLabel,()=>{}); save.type="submit";
   const cancel = button(actions,"Cancel",()=>load());
   const error = text("p","",form); error.setAttribute("role","alert");
   let pending=null, busy=false;
@@ -61,7 +63,7 @@ function inlineValue(cell, item, view, version) {
     catch(e){
       if(e.responded)pending=null;
       error.textContent=e.message+(pending?" Retry sends the same change.":"");
-      input.disabled=!!pending; save.disabled=cancel.disabled=false; save.textContent=pending?"Retry":"Save";
+      input.disabled=!!pending; save.disabled=cancel.disabled=false; save.textContent=pending?"Retry":saveLabel;
     } finally{busy=false;}
   };
   input.onkeydown=e=>{if(e.key==="Escape"&&!busy){e.preventDefault();load();}};
@@ -103,15 +105,27 @@ async function loadValues(version) {
       count.textContent=`${items.length} of ${view.items.length} keys`;empty.hidden=!!items.length;
       for(const item of items){
         const row=text("tr","",body);text("td",item.key,row);text("td",item.kind,row);
+        const inherited=!!view.env&&item.source==="common";
+        row.classList.toggle("value-inherited",inherited);
         const cell=text("td","",row);cell.className="value-cell";
         const edit=button(cell,item.kind==="secret"?"Replace secret":item.value===""?"Empty value":item.value,()=>inlineValue(cell,item,view,version));
-        edit.className="value-edit";edit.setAttribute("aria-label",`Edit ${item.key}`);
-        text("td",item.source==="common"&&view.env?"Inherited · Common":item.source==="env"?view.env:"Common",row);
+        edit.className="value-edit";edit.setAttribute("aria-label",inherited?`Create override for ${item.key} in ${view.env}`:`Edit ${item.key}`);
+        edit.title=inherited?`Create an override in ${view.env}`:`Edit ${item.key}`;
+        const source=text("td","",row);
+        const badge=text("span",!view.env?"Common":inherited?"Inherited common":item.overrides?"Overrides common":"Env only",source);
+        badge.className="value-source "+(!view.env?"common":inherited?"inherited":item.overrides?"override":"local");
         const actions=text("td","",row);
-        if(!view.env||item.source==="env")button(actions,"Remove",()=>editRemoval(item));
+        if(!view.env||item.source==="env")button(actions,view.env&&item.overrides?"Remove override":"Delete",()=>editRemoval(item));
       }
     }
-    function editRemoval(item){edit(`Remove ${item.key}`,p=>{text("p",`Remove from ${view.env||"Common"}.${item.overrides?" The common value will apply afterward.":""}`,p);return()=>({key:item.key,env:view.env});},body=>valueRequest(view,item.kind+".unset",body),()=>load(),true);}
+    function editRemoval(item){
+      const override=!!view.env&&item.overrides;
+      edit(`${override?"Remove override for":"Delete"} ${item.key}`,p=>{
+        text("p",override?`Remove the value stored in ${view.env}. This environment will inherit the common value again.`:`Delete the value from ${view.env||"Common"}.`,p);
+        return()=>({key:item.key,env:view.env});
+      },body=>valueRequest(view,item.kind+".unset",body),()=>load(),true);
+      $("editor-save").textContent=override?"Remove override":"Delete value";
+    }
     search.oninput=()=>{valueFilters.search=search.value;render();};kind.onchange=()=>{valueFilters.kind=kind.value;render();};render();
   }catch(e){if(generation===version)notice(e.message);}
 }

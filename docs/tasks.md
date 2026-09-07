@@ -149,6 +149,11 @@ previous context return `context_invalid`; the revocation reason remains in hist
 **Variables & secrets** selects common values or an environment. Variables display
 their values; secrets display storage metadata and accept a replacement value.
 Editing an inherited value creates an override in the selected environment.
+With an environment selected, **Inherited common**, **Overrides common**, and
+**Env only** distinguish storage layers. Inherited rows use a muted background;
+editing them offers **Create override**. **Remove override** restores inheritance,
+while **Delete** removes an environment-only value. These labels apply equally to
+variables and secrets and reflect stored layers, even when values are equal.
 Search keys and filter by variable or secret. Click a value to edit it in place,
 then save or cancel; secret cells accept a replacement. **Import .env** accepts
 a file or pasted assignments and previews key names and actions. New keys default

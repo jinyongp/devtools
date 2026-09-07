@@ -169,14 +169,15 @@ func Manage(ctx context.Context, action, cache, data, profile string) (tasks.Obj
 }
 
 type Server struct {
-	mu       sync.Mutex
-	registry Registry
-	data     string
-	cache    string
-	boot     map[string]time.Time
-	sessions map[string]time.Time
-	stop     func()
-	results  map[string]cachedQuery
+	mu        sync.Mutex
+	registry  Registry
+	data      string
+	cache     string
+	boot      map[string]time.Time
+	sessions  map[string]time.Time
+	stop      func()
+	results   map[string]cachedQuery
+	assetRoot *os.Root
 }
 type cachedQuery struct {
 	Stamp   string
@@ -185,6 +186,10 @@ type cachedQuery struct {
 }
 
 func Serve(ctx context.Context, dir, data string) error {
+	return serve(ctx, dir, data, nil, nil)
+}
+
+func serve(ctx context.Context, dir, data string, assetRoot *os.Root, ready func(*Server) error) error {
 	lockCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	unlock, e := tasks.Lock(lockCtx, filepath.Join(dir, "serve.lock"))
@@ -199,7 +204,7 @@ func Serve(ctx context.Context, dir, data string) error {
 	defer listener.Close()
 	r := Registry{ID: tasks.ID(), Address: "http://" + listener.Addr().String(), Token: token()}
 	server := &http.Server{ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: time.Minute}
-	s := &Server{registry: r, data: data, cache: filepath.Join(dir, "queries"), boot: map[string]time.Time{}, sessions: map[string]time.Time{}}
+	s := &Server{registry: r, data: data, cache: filepath.Join(dir, "queries"), boot: map[string]time.Time{}, sessions: map[string]time.Time{}, assetRoot: assetRoot}
 	s.stop = func() {
 		go func() {
 			ctx, c := context.WithTimeout(context.Background(), 2*time.Second)
@@ -212,6 +217,11 @@ func Serve(ctx context.Context, dir, data string) error {
 		return e
 	}
 	defer os.Remove(filepath.Join(dir, "server.json"))
+	if ready != nil {
+		if err := ready(s); err != nil {
+			return err
+		}
+	}
 	go func() { <-ctx.Done(); s.stop() }()
 	e = server.Serve(listener)
 	if e == http.ErrServerClosed {
@@ -544,7 +554,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	b, e := assets.ReadFile("assets/" + name)
+	var b []byte
+	var e error
+	if s.assetRoot != nil {
+		switch filepath.Ext(name) {
+		case ".html", ".js", ".css", ".svg", ".json":
+			b, e = s.assetRoot.ReadFile(name)
+		default:
+			http.NotFound(w, r)
+			return
+		}
+	} else {
+		b, e = assets.ReadFile("assets/" + name)
+	}
 	if e != nil {
 		http.NotFound(w, r)
 		return

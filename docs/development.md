@@ -19,6 +19,28 @@ detector. Tag-triggered release validation runs on macOS and Linux with Go 1.27.
 the Linux build; testing in an actual WSL environment is a separate check.
 
 
+## Dashboard 화면 개발
+
+저장소에서 다음 명령을 실행하고 출력된 링크를 연다.
+
+```sh
+just dashboard
+```
+
+개발 전용 실행 파일을 빌드한 뒤 서버를 터미널에서 실행한다.
+`internal/dashboard/assets`의 HTML·JS·CSS를 수정하고 브라우저를 새로고침하면
+수정 내용이 바로 반영된다. 응답은 `Cache-Control: no-store`로 제공한다.
+Go 코드를 수정했을 때는 `Ctrl+C`로 종료하고 `just dashboard`를 다시 실행한다.
+
+현재 사용자의 devtools 데이터와 저장소의 profile을 사용한다. 개발 서버는
+별도의 임시 registry와 포트를 사용하며 종료할 때 임시 파일을 정리한다.
+기존 dashboard와 개발 서버를 동시에 열어둘 수 있다.
+격리 데이터로 확인하려면 별도의 HOME을 사용한다. Linux와 WSL에서는
+XDG_DATA_HOME·XDG_CONFIG_HOME·XDG_CACHE_HOME도 격리 디렉터리로 지정한다.
+
+일반 `devtools dashboard`는 실행 파일에 내장된 화면을 제공한다.
+URL 상태 복원 회귀 테스트는 `pnpm test:dashboard`로 실행한다.
+
 ## 도구 추가
 
 - Add the tool's behavior in its own `internal/` package.

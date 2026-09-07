@@ -146,6 +146,14 @@ Use `task show TASK_ID` to obtain the current run and profile revision. After
 revocation, a new CLI `task claim` starts a new execution. Late writes using the
 previous context return `context_invalid`; the revocation reason remains in history.
 
+Dashboard navigation is stored in the URL query: profile, workspace tab, environment,
+search and filters, list/graph view, selected item and its detail tab, expanded process
+details, and graph position. Reloading restores the current view. Browser Back and
+Forward restore navigation; typing a filter updates the current history entry.
+Values and secrets, edit forms, imported content, and raw logs stay in memory.
+Authentication remains in the current browser session, so a view URL also requires
+an authenticated session. If an environment was removed, the view returns to Common.
+
 **Variables & secrets** selects common values or an environment. Variables display
 their values; secrets display storage metadata and accept a replacement value.
 Editing an inherited value creates an override in the selected environment.

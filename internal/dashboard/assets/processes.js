@@ -17,6 +17,8 @@ async function loadProcesses(version) {
     },body=>processRequest(current,body)));
     const projects=text("details","",panel);projects.className="process-projects";
     text("summary",`Projects & worktrees (${data.instances.length})`,projects);
+    projects.open=projectsExpanded;
+    projects.ontoggle=()=>{if(generation===version){projectsExpanded=projects.open;saveNavigation();}};
     for(const instance of data.instances){
       const section=text("section","",projects);text("strong",instance.alias||projectName(instance.directory),section);text("p",instance.directory,section);
       const available=text("div","",section);
@@ -31,13 +33,15 @@ async function loadProcesses(version) {
     const search=text("input","",columns[0]);search.type="search";search.placeholder="Search commands";search.setAttribute("aria-label","Search processes");search.value=processFilters.search;
     const filter=text("select","",columns[1]);filter.setAttribute("aria-label","Filter process state");
     for(const state of ["all",...new Set(data.items.map(item=>item.state))])text("option",state==="all"?"All states":state,filter).value=state;
-    if(!Array.from(filter.options).some(option=>option.value===processFilters.state))processFilters.state="all";
+    if(!Array.from(filter.options).some(option=>option.value===processFilters.state)){processFilters.state="all";saveNavigation();}
     filter.value=processFilters.state;
     const body=text("tbody","",table), entries=[];
     for(const item of data.items){
       const row=text("tr","",body);
       const command=text("td","",row);text("strong",item.command,command);
       const section=text("details","",command);section.className="process-details";text("summary","Details",section);
+      section.open=expandedProcesses.has(item.id);
+      section.ontoggle=()=>{if(generation===version){if(section.open)expandedProcesses.add(item.id);else expandedProcesses.delete(item.id);saveNavigation();}};
       text("p",item.directory,section);text("p",`Execution ${item.id}`,section);
       if(item.reason)text("p",`${item.reason.replaceAll("_"," ")}${item.exit_code==null?"":` · exit ${item.exit_code}`}`,section);
       const stateCell=text("td","",row),badge=text("span",item.state,stateCell);badge.className="process-state";
@@ -71,7 +75,7 @@ async function loadProcesses(version) {
     }
     const count=text("p","",panel);count.setAttribute("role","status");
     function render(){let visible=0;for(const {row,item} of entries){row.hidden=!(item.command+" "+item.directory+" "+(item.env||"")).toLowerCase().includes(processFilters.search.toLowerCase())||(processFilters.state!=="all"&&processFilters.state!==item.state);if(!row.hidden)visible++;}count.textContent=visible?`${visible} of ${entries.length} executions`:entries.length?"No matching executions.":"Start a named command from devtools.toml to manage it here.";}
-    search.oninput=()=>{processFilters.search=search.value;render();};filter.onchange=()=>{processFilters.state=filter.value;render();};render();
+    search.oninput=()=>{processFilters.search=search.value;render();saveNavigation();};filter.onchange=()=>{processFilters.state=filter.value;render();saveNavigation();};render();
   } catch(e){if(generation===version)notice(e.message);}
 }
 $("processes-nav").onclick=()=>{scope="processes";ws="";load();};

@@ -65,10 +65,12 @@ async function api(path, body, signal) {
   }
   if (!response.ok) {
     let message = await response.text();
+    let code;
     try {
-      message = JSON.parse(message).error.message;
+      const failure = JSON.parse(message).error;
+      message = failure.message; code = failure.code;
     } catch {}
-    const error = Error(message); error.responded = true; throw error;
+    const error = Error(message); error.responded = true; error.code = code; throw error;
   }
   return response.json();
 }
@@ -251,6 +253,7 @@ canvas.addEventListener("keydown", (event) => {
   if (["+", "=", "-"].includes(event.key)) {
     event.preventDefault();
     d3.select(canvas).call(zoom.scaleBy, event.key === "-" ? 0.8 : 1.25);
+    rememberGraphPosition();
   } else if (event.key.startsWith("Arrow")) {
     event.preventDefault();
     d3.select(canvas).call(
@@ -258,6 +261,7 @@ canvas.addEventListener("keydown", (event) => {
       event.key === "ArrowLeft" ? 40 : event.key === "ArrowRight" ? -40 : 0,
       event.key === "ArrowUp" ? 40 : event.key === "ArrowDown" ? -40 : 0,
     );
+    rememberGraphPosition();
   }
 });
 let viewMode = "list";
@@ -311,6 +315,7 @@ async function select(node) {
     return load();
   }
   selected = node.id;
+  saveNavigation(true);
   renderList();
   $("detail-title").textContent = node.title;
   $("detail-hint").textContent =
@@ -340,12 +345,14 @@ async function select(node) {
       panel.setAttribute("aria-label", label);
       panel.className = "detail-section";
       const control = button(switches, label, () => {
+        detailTab = label;
+        saveNavigation(true);
         for (const entry of panels) {
           entry.panel.hidden = entry.panel !== panel;
           entry.control.setAttribute("aria-pressed", String(entry.panel === panel));
         }
       });
-      panel.hidden = label !== "Overview";
+      panel.hidden = label !== detailTab;
       control.setAttribute("aria-pressed", String(!panel.hidden));
       return {panel, control};
     });
@@ -423,6 +430,8 @@ async function select(node) {
   }
 }
 async function load(more = false) {
+  saveNavigation(true);
+  const restoreSelected = selected;
   const version = ++generation;
   notice("");
   const management = scope === "values" || scope === "processes" || scope === "storage";
@@ -440,7 +449,6 @@ async function load(more = false) {
   if (!more) {
     nodes = [];
     cursor = null;
-    selected = "";
     detailGeneration++;
     $("detail-title").textContent = "Select an item";
     $("detail-hint").textContent =
@@ -508,7 +516,19 @@ async function load(more = false) {
     revision = data.revision;
     layout();
     renderList();
-    if (!more) fit();
+    if (!more) {
+      if (graphPosition) d3.select(canvas).call(zoom.transform, d3.zoomIdentity.translate(graphPosition[0], graphPosition[1]).scale(graphPosition[2]));
+      else fit();
+      const item = nodes.find(node => node.id === restoreSelected);
+      if (item) await select(item);
+      else if (restoreSelected) {
+        try {
+          const context = await query(scope === "workstreams" ? "workstream context" : "context", {id:restoreSelected});
+          if (version !== generation) return;
+          if (context.item) await select({...context.item, kind:scope === "workstreams" ? "workstream" : "task"});
+        } catch { if (version === generation) { selected = ""; saveNavigation(); } }
+      }
+    }
     if (cursor)
       notice("More items are available. Load more to extend this graph.");
   } catch (e) {
@@ -537,17 +557,22 @@ $("independent").onclick = () => {
 };
 $("refresh").onclick = () => load();
 $("more").onclick = () => load(true);
-$("fit").onclick = fit;
-$("search").oninput = renderList;
-$("list-view").onclick = () => { viewMode = "list"; applyView(); };
-$("graph-view").onclick = () => { viewMode = "graph"; applyView(); requestAnimationFrame(fit); };
+$("fit").onclick = () => { graphPosition = null; fit(); saveNavigation(); };
+$("search").oninput = () => { renderList(); saveNavigation(); };
+$("list-view").onclick = () => { viewMode = "list"; applyView(); saveNavigation(true); };
+$("graph-view").onclick = () => { viewMode = "graph"; applyView(); saveNavigation(true); if (!graphPosition) requestAnimationFrame(fit); };
+zoom.on("end.navigation", event => {
+  if (!event.sourceEvent) return;
+  rememberGraphPosition();
+});
 window.addEventListener("hashchange", () => {
   if (new URLSearchParams(location.hash.slice(1).replaceAll("\\u0026", "&")).has("token")) location.reload();
 });
 (async () => {
   try {
+    if (document.readyState === "loading") await new Promise(resolve => document.addEventListener("DOMContentLoaded", resolve, {once:true}));
     const params = new URLSearchParams(location.hash.slice(1).replaceAll("\\u0026", "&"));
-    history.replaceState(null, "", location.pathname);
+    history.replaceState(null, "", location.pathname + location.search);
     try { sessionToken = sessionStorage.getItem("devtools.session") || ""; } catch {}
     if (params.has("token")) {
       const response = await fetch("/session", {
@@ -568,13 +593,14 @@ window.addEventListener("hashchange", () => {
       const option = text("option", p, $("profile"));
       option.value = p;
     }
-    profile = params.get("profile") || "";
+    readNavigation(params.get("profile") || "");
     if (profile && !result.profiles.includes(profile)) {
       const option = text("option", profile, $("profile"));
       option.value = profile;
     }
     $("profile").value = profile;
     setAuthenticated(true);
+    saveNavigation();
     await load();
   } catch (e) {
     setAuthenticated(false);

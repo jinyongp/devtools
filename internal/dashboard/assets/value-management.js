@@ -124,7 +124,7 @@ async function loadValues(version) {
     kind.value=valueFilters.kind;
     const sourceFilter=text("select","",columns[3]);sourceFilter.setAttribute("aria-label","Filter by source");
     const sources=view.env?[["all","All sources"],["inherited","Inherited common"],["override","Overrides common"],["local","Env only"]]:[["all","All sources"],["common","Common"]];
-    if(!sources.some(([value])=>value===valueFilters.source))valueFilters.source="all";
+    if(!sources.some(([value])=>value===valueFilters.source)){valueFilters.source="all";saveNavigation();}
     for(const [value,label] of sources)text("option",label,sourceFilter).value=value;
     sourceFilter.value=valueFilters.source;
     const sourceOf=item=>!view.env?"common":item.source==="common"?"inherited":item.overrides?"override":"local";
@@ -164,6 +164,9 @@ async function loadValues(version) {
       },body=>valueRequest(view,item.kind+".unset",body),()=>load(),true);
       $("editor-save").textContent=override?"Remove override":"Delete value";
     }
-    search.oninput=()=>{valueFilters.search=search.value;render();};kind.onchange=()=>{valueFilters.kind=kind.value;render();};sourceFilter.onchange=()=>{valueFilters.source=sourceFilter.value;render();};render();
-  }catch(e){if(generation===version)notice(e.message);}
+    search.oninput=()=>{valueFilters.search=search.value;render();saveNavigation();};kind.onchange=()=>{valueFilters.kind=kind.value;render();saveNavigation();};sourceFilter.onchange=()=>{valueFilters.source=sourceFilter.value;render();saveNavigation();};render();
+  }catch(e){if(generation===version){
+    if(e.code==="env_not_found"&&valueEnv){valueEnv="";saveNavigation();await load();notice("The selected environment was removed. Showing Common.");}
+    else notice(e.message);
+  }}
 }

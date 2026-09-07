@@ -56,5 +56,5 @@ function createItem() {
   const current=profile, workstream=scope==="workstreams", owner=ws;
   edit(workstream?"Create workstream":"Create task",p=>{const title=field(p,"Title"),description=field(p,"Description","","textarea");return()=>({title:title.value,description:description.value,...(!workstream&&owner?{workstream_id:owner}:{})});},body=>taskRequest(workstream?"workstream.create":"task.add","",body,revision,{},current));
 }
-$("values-nav").onclick=()=>{scope="values";ws="";valueEnv="";load();};
+$("values-nav").onclick=()=>{scope="values";ws="";load();};
 $("create-item").onclick=createItem;

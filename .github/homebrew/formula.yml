@@ -6,6 +6,7 @@ dependencies:
     - go
 install: |
   ENV["CGO_ENABLED"] = "0"
+  ENV["GOTOOLCHAIN"] = "go#{File.read("go.mod").match(/^go (\S+)$/)[1]}"
   ldflags = "-s -w -X main.version=#{version} -X github.com/jinyongp/devtools/internal/cli.updateManager=homebrew"
   system "go", "build", *std_go_args(ldflags: ldflags), "./cmd/devtools"
 test: |

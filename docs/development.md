@@ -52,3 +52,5 @@ pnpm release --publish
 배포에는 devtools 저장소의 `HOMEBREW_TAP_DEPLOY_KEY` Actions secret을 사용합니다.
 Homebrew 단계가 실패하면 GitHub 릴리스는 유지되며 해당 실패 job을 재실행할 수 있습니다.
 Formula 빌드는 `updateManager=homebrew`를 기록해 업데이트를 Homebrew로 안내합니다.
+빌드 도구는 `go.mod`에 선언한 정확한 Go 버전을 사용합니다. Homebrew의 Go 패치
+버전이 다르면 Go의 toolchain 다운로드 기능으로 필요한 버전을 준비합니다.

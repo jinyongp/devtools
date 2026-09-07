@@ -6,6 +6,8 @@ description: Use the devtools CLI to manage project variables and secrets, back 
 # devtools
 
 Discover the installed contract with `devtools schema` or a command's `--help`.
+Use `devtools update` for the latest stable executable, or select `--version`.
+The command updates its own installation path and preserves profile data.
 Data commands return one JSON envelope: read `data` on success and `error.code` on failure.
 `run` forwards child stdout/stderr and its exit code; setup failures use the JSON error envelope.
 Select a profile through the project's tracked `devtools.toml` or `--profile`.

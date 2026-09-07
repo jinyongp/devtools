@@ -70,7 +70,7 @@ secret은 `devtools sec`로 등록하며 조회에는 메타데이터만 제공�
 이미 설치한 devtools를 최신 안정 버전으로 바꾸려면 아래 명령을 실행하세요.
 
 ```sh
-curl -fsSL https://github.com/jinyongp/devtools/releases/latest/download/install.sh | sh -s -- update
+devtools update
 ```
 
 기존 profile 데이터와 프로젝트 설정을 유지하며 실행 파일을 교체합니다.

@@ -24,7 +24,7 @@ printf '%s\\n' '}'
         text = Path(os.environ[name]).read_text()
         snippets.extend(re.findall(r'^curl .* \| sh -s -- (?:install|update)$', text, re.M))
         assert "/tmp/devtools-install.sh" not in text
-    assert len(snippets) == 4
+    assert len(snippets) == 3
     for index, snippet in enumerate(snippets):
         for mode in ("success", "fail", "partial"):
             temporary = root / f"tmp-{index}-{mode}"

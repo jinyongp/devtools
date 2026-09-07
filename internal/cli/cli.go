@@ -101,6 +101,7 @@ func New(version, commit string) *App {
 	a.registerBackup()
 	a.registerProcesses()
 	a.registerCleanup()
+	a.registerUpdate()
 	for i := range a.commands {
 		if a.commands[i].Aliases == nil {
 			a.commands[i].Aliases = []string{}

@@ -91,6 +91,7 @@ CLI는 참조 대상의 존재, 의존성 순환, 완료 조건과 검증의 연
 | `run.resumed` | 현재 점유 증명을 확인하고 같은 run의 재개를 기록한다. |
 | `run.checkpointed` | 현재 run의 진행 내용과 다음 행동을 기록한다. |
 | `run.released` | 해당 run의 점유를 반납한다. 다음 실행 가능 여부는 현재 조건에서 계산한다. |
+| `run.revoked` | 관리자가 관찰한 run의 점유를 해제하고 사유를 기록한다. 기존 실행 컨텍스트를 무효화하고 task는 open으로 유지한다. |
 | `run.taken_over` | 이전 run과 새 run을 연결하고 점유 증명을 교체한다. |
 | `task.completed` | 완료 결과와 근거를 기록하고 현재 점유를 해제한다. |
 | `task.reopened` | 완료 기록을 보존하면서 task를 다시 작업 대상으로 만든다. 새 점유는 별도 요청한다. |
@@ -189,6 +190,7 @@ task와 workstream 모두 여러 선행 항목을 가질 수 있다. 선행 항�
 | `task resume` | 현재 연결과 유효한 점유 증명을 확인해 같은 run을 계속한다. |
 | `task resume TASK_ID` | 지정한 task의 유효한 점유 증명으로 같은 run을 계속한다. |
 | `task takeover TASK_ID` | 관찰한 기존 점유를 새 run으로 명시적으로 인계받는다. |
+| `task unclaim TASK_ID` | 최신 profile 리비전과 관찰한 run을 검사하여 관리 목적으로 점유를 해제한다. 사유를 기록하며 실행 프로세스의 종료는 별도로 관리한다. |
 | `task done TASK_ID --file FILE` | 최종 결과와 검증 근거를 연결해 완료 처리한다. |
 
 점유를 변경하는 요청은 실행 컨텍스트를 통해 현재 점유 증명을 확인한다. 위 예시에 공통 `--context` 또는 `DEVTOOLS_TASK_CONTEXT` 전달 규칙을 적용한다. 표시용 owner 이름과 실제 점유 권한은 구분한다.

@@ -126,6 +126,7 @@ var Definitions = []Definition{
 	{Action: "run.claimed", Command: "claim", Kind: "task", OptionalTarget: true},
 	{Action: "run.resumed", Command: "resume", Kind: "task", OptionalTarget: true, Context: true},
 	{Action: "run.taken_over", Command: "takeover", Kind: "task", Target: true},
+	{Action: "run.revoked", Command: "unclaim", Kind: "task", Target: true, Fields: []string{"reason"}, Required: []string{"reason"}, Revision: true},
 	{Action: "run.checkpointed", Command: "checkpoint", Kind: "run", Target: true, Fields: []string{"summary", "decisions", "validation_record_ids", "remaining", "next_action", "blockers"}, Required: []string{"summary"}, Context: true},
 	{Action: "run.released", Command: "release", Kind: "run", Target: true, Fields: []string{"summary", "decisions", "validation_record_ids", "remaining", "next_action", "blockers"}, Context: true},
 	{Action: "task.completed", Command: "done", Kind: "task", Target: true, Fields: []string{"summary", "validation_record_ids", "commits"}, Required: []string{"summary"}, Context: true},
@@ -461,6 +462,12 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 		credential = secret()
 		result["claimed"] = true
 		result["blockers"] = []Object{}
+	case "run.revoked":
+		old := s.Current(target)
+		if old == nil || old.ID != r.Options["expected-run"] {
+			return fail(conflict("claim_conflict", []string{target}))
+		}
+		b["run_id"] = old.ID
 	case "run.resumed", "run.checkpointed", "run.released", "task.completed":
 		if i.State != "open" {
 			return fail(conflict("transition_conflict", []string{target}))

@@ -58,6 +58,9 @@ func (a *App) registerTasks() {
 			opts = append(opts, Option{Name: "if-revision", Required: true, Description: "Latest profile revision."})
 		}
 		opts = append(opts, Option{Name: "context", Description: "Current execution context; defaults to DEVTOOLS_TASK_CONTEXT."})
+		if def.Action == "run.revoked" {
+			opts = append(opts, Option{Name: "expected-run", Required: true, Description: "Observed current run UUID to revoke."})
+		}
 		if def.Action == "run.claimed" || def.Action == "run.taken_over" {
 			opts = append(opts, Option{Name: "dir", Default: ".", Description: "Execution working directory."})
 			if def.Action == "run.claimed" {

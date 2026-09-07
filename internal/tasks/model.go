@@ -311,6 +311,11 @@ func (s *State) Apply(e Event) {
 		s.Runs[r.ID] = r
 	case "run.resumed", "run.checkpointed":
 		s.Runs[str(d, "run_id")].Activity = e.At
+	case "run.revoked":
+		r := s.Runs[str(d, "run_id")]
+		r.State = "revoked"
+		r.Ended = e.At
+		r.Activity = e.At
 	case "run.released", "task.completed":
 		r := s.Runs[str(d, "run_id")]
 		r.Activity = e.At

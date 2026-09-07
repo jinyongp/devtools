@@ -27,7 +27,7 @@ task·workstream의 공개 계약이다. [workstream 설계](task-workstream-des
 | `--request-id UUID` | task 도메인의 모든 변경에 필수. dashboard 서버 관리와 조회에는 적용하지 않음. |
 | `--if-revision N` | 문서·관계·정의 수정, 연결 변경, hold/unhold, 취소·재개·활성화·마감, 면제·면제 철회에 필수. |
 | `--context REF` | resume·checkpoint·release·done·task 검증 결과 기록에 필수. `DEVTOOLS_TASK_CONTEXT`를 기본값으로 사용. |
-| `--expected-run UUID` | takeover에 필수. 현재 점유의 run과 일치해야 함. |
+| `--expected-run UUID` | takeover·unclaim에 필수. 현재 점유의 run과 일치해야 함. |
 | `--dir PATH` | claim·takeover·current. 기본값은 현재 디렉터리. |
 
 add·workstream create·claim·takeover·실행 기록 추가는 별도의 profile 리비전 없이 현재 상태를 원자적으로 검사한다. workstream 통합 검증 기록은 해당 검증의 기준 식별자를 검사한다. CLI나 이벤트 기록에서 임의의 `state`를 받는 수정 API는 제공하지 않는다.
@@ -106,6 +106,7 @@ context 조회는 목표·문서 본문·최근 결정·현재 실행·다음 �
 | claim | open, ready | open + running | 같은 task의 점유 없음. workstream task는 계획 연결과 활성화 확인. |
 | resume / checkpoint | open + running | 유지 | 현재 run 컨텍스트. |
 | takeover | open + running | open + 새 running | 관찰한 run 일치, 이전 컨텍스트 폐기, 현재 실행 조건 충족. |
+| unclaim | open + running | open | 최신 profile 리비전·관찰한 run 일치, 사유 기록, 기존 컨텍스트 무효화. run은 revoked로 종료된다. |
 | release | open + running | open, 점유 없음 | 현재 run 컨텍스트. 반납 자체는 선행 조건과 무관하게 허용. |
 | done | open + running | done, 점유 없음 | 현재 컨텍스트, 현재 기준 검증·완료 근거. |
 | hold / unhold | open, 점유 없음 | open | hold 사유 변경. 같은 사유 재설정·이미 해제는 no-op. |

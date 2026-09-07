@@ -102,6 +102,23 @@ devtools version
 
 ## GitHub Releases 게시
 
+Node.js와 pnpm이 있는 저장소에서 다음 명령으로 버전을 추천받는다.
+
+```sh
+pnpm release
+pnpm release --publish
+```
+
+origin이 있으면 태그를 가져온 뒤 HEAD에 포함된 가장 높은 안정 버전 태그 이후의
+커밋을 확인한다. 버전은 `0.x`를 유지하며 Conventional Commits의 `!`,
+`BREAKING CHANGE:`, `feat`는 minor, 나머지는 patch를 추천한다. 첫 릴리스는 `0.1.0`이며,
+추가 커밋이 없으면 완료 메시지를 반환한다. 커밋 메시지에 기록된 변경을 기준으로
+추천하므로 출력된 커밋 목록과 버전을 함께 확인한다.
+
+`--publish`는 깨끗한 main에서 추천 버전의 태그를 생성하고 main과 태그를
+atomic push로 함께 올린다. 원격 main과 충돌하면 두 참조 모두 보존하며,
+로컬 태그와 재시도 명령을 안내한다. 배포 결과는 GitHub Actions의 Release 실행에서 확인한다.
+
 `v0.1.0` 형태의 태그를 원격 저장소에 올리면 Release 워크플로가 코드 검사와 Docker 검증을 수행하고 네 플랫폼 배포물을 생성한다. 아카이브·체크섬·설치기·버전 파일을 GitHub Releases에 함께 게시한다. 빌드에는 태그의 버전과 커밋 식별자를 기록한다.
 
 `v0.2.0-rc.1`처럼 접미사가 붙은 태그는 사전 릴리스로 게시한다. 기본 설치는 GitHub가 최신으로 선택한 안정 릴리스를 사용하고, 사전 릴리스는 버전을 지정해 설치한다.

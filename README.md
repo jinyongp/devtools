@@ -103,6 +103,11 @@ directories, local artifacts, and release verification.
 
 ## Publishing releases
 
+Run `pnpm release` to recommend the next version from commits since the latest
+reachable stable tag. Releases stay on 0.x: features and breaking changes bump
+minor; other commits bump patch. Run `pnpm release --publish` from a clean main
+to push main and the recommended tag atomically. Requires Node.js and pnpm.
+
 Pushing a version tag such as `v0.1.0` starts GitHub Actions validation, packages
 all four targets, and publishes the archives, SHA-256 checksums, `install.sh`, and
 `version.txt` to GitHub Releases. Tags such as `v0.2.0-rc.1` publish prereleases;

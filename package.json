@@ -1,0 +1,8 @@
+{
+  "name": "devtools",
+  "private": true,
+  "packageManager": "pnpm@11.24.0",
+  "scripts": {
+    "release": "node scripts/release.mjs"
+  }
+}

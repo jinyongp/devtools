@@ -43,4 +43,4 @@ devtools process logs EXECUTION_ID
 
 stdout과 stderr는 합쳐서 마지막 1 MiB까지 보관한다. logs는 JSON의 `content`로 원문을 반환한다. 출력에는 명령이 출력한 secret이 포함될 수 있으므로 일반 상태 조회와 분리해 사용한다. 종료 후 7일이 지나면 `logs_expired`를 반환하며 정리 대상이 된다. restart는 로그 설정을 이어받는다.
 
-실행 메타데이터와 인증 정보, 선택적으로 수집한 로그는 전역 데이터의 `processes` 아래에 개인 권한으로 저장한다. dashboard의 Processes 화면에서 profile별 실행을 조회하고 이름 명령 시작·종료·재시작을 할 수 있다. 원문 로그는 별도의 확인 동작으로 읽는다.
+실행 메타데이터와 인증 정보, 선택적으로 수집한 로그는 전역 데이터의 `processes` 아래에 개인 권한으로 저장한다. dashboard의 Processes 화면은 명령·상태·env·프로젝트를 실행별 한 행으로 보여준다. 표 머리글에서 검색과 상태 필터를 적용하고 이름 명령을 시작·종료·재시작할 수 있다. Details를 펼치면 전체 경로·실행 ID·종료 원인을 확인한다. 원문 로그는 별도의 확인 동작으로 읽는다. Projects & worktrees를 펼치면 프로젝트별 명령과 포트를 조회할 수 있다.

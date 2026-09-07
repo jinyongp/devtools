@@ -366,6 +366,24 @@ button[aria-pressed="true"] { background: #e1eee7; color: #145d51; }
 .values-table th:first-child { min-width:190px; }
 .values-table th:nth-child(4) { min-width:170px; }
 .value-count { margin:12px 0; font-size:12px; }
+.process-projects { margin:24px 0; border-block:1px solid #dce1da; padding:16px 0; }
+.process-projects summary, .process-details summary { cursor:pointer; }
+.process-projects section { padding:16px 0; }
+.process-projects p { overflow-wrap:anywhere; margin:8px 0; }
+#values-panel .process-table th { vertical-align:top; }
+.process-table th input, .process-table th select { display:block; margin:10px 0 0; font-size:12px; font-weight:400; width:100%; }
+.process-table { table-layout:fixed; }
+.process-table th:first-child { width:32%; }
+#values-panel .process-table td { vertical-align:top; padding-block:18px; }
+.process-details { margin-top:8px; font-size:12px; }
+.process-details summary { color:#52675b; }
+.process-details p { font-size:12px; margin:12px 0; overflow-wrap:anywhere; }
+.process-state { display:inline-block; padding:4px 8px; border-radius:4px; background:#e6eae5; color:#4b5e50; text-transform:capitalize; }
+.process-state.active { background:#dbeee3; color:#196045; }
+.process-state.failed { background:#f7e4dd; color:#893e27; }
+.process-actions { margin:0; }
+.process-actions button { white-space:nowrap; }
+.process-readiness { font-size:12px; margin:8px 0; }
 #values-panel .value-edit { display:block; text-align:left; background:transparent; border-color:transparent; width:100%; margin:0; padding:8px; overflow-wrap:anywhere; }
 #values-panel .value-edit:hover { background:#e1eee7; border-color:#cbd4ce; }
 #values-panel .value-cell { width:40%; }

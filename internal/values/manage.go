@@ -29,18 +29,21 @@ type ManagedView struct {
 	Items    []ManagedItem `json:"items"`
 }
 type Change struct {
-	Action    string  `json:"action"`
-	Key       string  `json:"key"`
-	Env       string  `json:"env"`
-	Value     *string `json:"value,omitempty"`
-	Revision  string  `json:"revision"`
-	RequestID string  `json:"request_id"`
+	Import    *BatchImport `json:"import,omitempty"`
+	Action    string       `json:"action"`
+	Key       string       `json:"key"`
+	Env       string       `json:"env"`
+	Value     *string      `json:"value,omitempty"`
+	Revision  string       `json:"revision"`
+	RequestID string       `json:"request_id"`
 }
 type ChangeResult struct {
-	Profile  string `json:"profile"`
-	Changed  bool   `json:"changed"`
-	Revision string `json:"revision"`
-	Replayed bool   `json:"replayed"`
+	Items      []ImportItem `json:"items,omitempty"`
+	Applicable bool         `json:"applicable,omitempty"`
+	Profile    string       `json:"profile"`
+	Changed    bool         `json:"changed"`
+	Revision   string       `json:"revision"`
+	Replayed   bool         `json:"replayed"`
 }
 type changeReceipt struct {
 	Fingerprint string       `json:"fingerprint"`
@@ -151,7 +154,32 @@ func (s Store) Apply(ctx context.Context, c Change) (ChangeResult, *protocol.Err
 	if signed(key, state) != c.Revision {
 		return out, failure("revision_conflict", "Profile changed; reload before editing.")
 	}
+	if c.Import != nil && c.Action != "import" {
+		return out, protocol.NewError("invalid_argument", "Import input requires the import action.", 2, nil)
+	}
 	switch c.Action {
+	case "import":
+		if c.Import == nil || c.Key != "" || c.Value != nil {
+			return out, protocol.NewError("invalid_argument", "Provide import input and options.", 2, nil)
+		}
+		if len(c.Import.Content) > 500000 {
+			return out, protocol.NewError("invalid_argument", "Use at most 500 KB of .env content.", 2, nil)
+		}
+		var input map[string]string
+		input, err = ParseDotenv(c.Import.Content)
+		if err != nil {
+			return out, err
+		}
+		out.Items, out.Applicable, err = state.batchImport(input, c.Import.Variables, c.Env, c.Import.Overwrite, !c.Import.Preview)
+		if c.Import.Preview && err == nil {
+			out.Revision = c.Revision
+			return out, nil
+		}
+		for _, item := range out.Items {
+			if item.Action == "add" || item.Action == "update" {
+				out.Changed = true
+			}
+		}
 	case "variable.set", "secret.set":
 		if c.Value == nil || c.Key == "" {
 			return out, protocol.NewError("invalid_argument", "Provide key and value.", 2, nil)

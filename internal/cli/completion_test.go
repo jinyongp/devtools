@@ -10,6 +10,12 @@ import (
 
 func TestCompletionScripts(t *testing.T) {
 	a := New("test", "test")
+	// Static script checks use a quiet helper, isolated from installed user data.
+	helperDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(helperDir, "devtools"), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", helperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	for _, shell := range []string{"bash", "zsh", "fish"} {
 		t.Run(shell, func(t *testing.T) {
 			code, script, stderr := invoke(t, a, "", "completion", shell)

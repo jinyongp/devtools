@@ -93,6 +93,37 @@ func (s Store) Read() (*State, *protocol.Error) {
 	return s.read()
 }
 
+// CompletionNames reads one atomic snapshot without creating directories or locks.
+// Only identifiers cross this boundary; stored values stay inside the values package.
+func (s Store) CompletionNames(kind Kind, env string) ([]string, *protocol.Error) {
+	if !project.ValidProfile(s.Profile) {
+		return nil, storageError()
+	}
+	info, err := os.Lstat(s.Directory)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+		return nil, storageError()
+	}
+	state, e := s.read()
+	if e != nil {
+		return nil, e
+	}
+	if kind == "" {
+		return state.EnvNames(), nil
+	}
+	items, e := state.List(kind, env)
+	if e != nil {
+		return nil, e
+	}
+	names := make([]string, 0, len(items))
+	for _, item := range items {
+		names = append(names, item.Key)
+	}
+	return names, nil
+}
+
 // Update serializes read/modify/write and publishes a complete snapshot atomically.
 func (s Store) Update(ctx context.Context, change func(*State) (bool, *protocol.Error)) (bool, *protocol.Error) {
 	release, gateErr := maintenance.Acquire(ctx, maintenance.Root(s.Directory))

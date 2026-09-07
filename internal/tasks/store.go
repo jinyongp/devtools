@@ -183,6 +183,27 @@ func (s Store) Read() (*State, *protocol.Error) {
 	_, state, err := s.load()
 	return state, err
 }
+
+// CompletionIDs reads an atomic journal snapshot, without query caches or locks.
+func (s Store) CompletionIDs(kind, workstream string) ([]string, *protocol.Error) {
+	_, state, e := s.load()
+	if e != nil {
+		return nil, e
+	}
+	ids := []string{}
+	if kind == "run" {
+		for id := range state.Runs {
+			ids = append(ids, id)
+		}
+		return ids, nil
+	}
+	for id, item := range state.Items {
+		if item.Kind == kind && (workstream == "" || kind != "task" || item.Workstream == workstream) {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
 func (s Store) Profiles() ([]string, *protocol.Error) {
 	release, gateErr := maintenance.Acquire(context.Background(), maintenance.Root(s.Directory))
 	if gateErr != nil {

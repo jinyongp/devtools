@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 
 binary = str(Path.home() / '.local/bin/devtools')
+os.environ['PATH'] = str(Path(binary).parent) + os.pathsep + os.environ['PATH']
 subprocess.run(['sh', os.environ['DEVTOOLS_TEST_INSTALLER'], 'install',
                 '--version', '0.0.0-test.1', '--source', os.environ['DEVTOOLS_TEST_RELEASES']],
                check=True, capture_output=True)
@@ -39,8 +40,10 @@ for line, expected in [
     ('devtools var set KEY --profile demo ', '--value'),
     ('devtools run -- ', None),
 ]:
-    output = subprocess.check_output(
+    result = subprocess.run(
         ['fish', '-c', 'source "$argv[1]"; complete -C "$argv[2]"',
-         str(completion), line], text=True)
+         str(completion), line], text=True, capture_output=True, check=True)
+    assert not result.stderr, result.stderr
+    output = result.stdout
     assert (expected in output) if expected else not output.strip(), (line, output)
 print('Installed fish completion resolves commands and respects argument boundaries')

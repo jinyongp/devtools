@@ -151,6 +151,9 @@ func inspect(ctx context.Context, streams IO, request Request) (any, *protocol.E
 }
 
 func (a *App) Run(ctx context.Context, args []string, streams IO) int {
+	if len(args) == 1 && args[0] == "__complete" {
+		return a.completeDynamic(ctx, streams)
+	}
 	fail := func(err *protocol.Error) int {
 		if protocol.Failure(streams.Err, err) != nil {
 			return 1

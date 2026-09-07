@@ -31,7 +31,7 @@ import (
 //go:embed assets/*
 var assets embed.FS
 
-const authProtocol = 7
+const authProtocol = 8
 
 type Registry struct {
 	ID      string `json:"id"`

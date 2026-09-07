@@ -48,42 +48,6 @@ function edit(title, build, request, after = () => load(), destructive = false) 
 function valueRequest(view, action, body) {
   return {domain:"values", profile:view.profile, change:{action, revision:view.revision, request_id:crypto.randomUUID(), ...body}};
 }
-async function loadValues(version) {
-  const panel = $("values-panel"); panel.replaceChildren();
-  if (!profile) {text("p", "Choose a profile above to begin.", panel); return;}
-  try {
-    const view = await api("/api/values?" + new URLSearchParams({profile, env:valueEnv}));
-    if (generation !== version) return;
-    const toolbar = text("div", "", panel); toolbar.className = "manage-toolbar";
-    const label = text("label", "Environment ", toolbar), select = document.createElement("select"); label.append(select);
-    for (const env of ["", ...view.envs]) {const option = text("option", env || "Common", select); option.value = env;}
-    select.value = view.env; select.onchange = () => {valueEnv = select.value; load();};
-    button(toolbar, "Create env", () => edit("Create environment", p => {const input=field(p,"Name");return()=>({env:input.value});}, body=>valueRequest(view,"env.create",body)));
-    if(view.env) button(toolbar,"Remove env",()=>edit("Remove empty environment",p=>{text("p",`Remove ${view.env}. Remove its overrides first.`,p);return()=>({env:view.env});},body=>valueRequest(view,"env.remove",body),()=>{valueEnv="";load();},true));
-    const setValue = item => edit(item ? `Edit ${item.key}` : "Add value", p => {
-      const key=field(p,"Key",item?.key || ""); if(item) key.readOnly=true;
-      const label=text("label","Kind",p), kind=document.createElement("select"); label.append(kind);
-      for(const k of ["variable","secret"]){const o=text("option",k,kind);o.value=k;}
-      kind.value=item?.kind || "variable"; if(item) kind.disabled=true;
-      const value=field(p,item?.kind==="secret"?"New secret value":"Value",item?.value??"",kind.value==="secret"?"password":"text");
-      kind.onchange=()=>{value.value="";value.type=kind.value==="secret"?"password":"text";};
-      text("p",`Writes to ${view.env || "common"}. Secret values are available for replacement only.`,p);
-      return()=>({action:kind.value+".set",key:key.value,value:value.value,env:view.env});
-    },body=>{const {action,...rest}=body;return valueRequest(view,action,rest);});
-    button(toolbar,"Add value",()=>setValue(null));
-    const table=document.createElement("table");panel.append(table);
-    const head=document.createElement("thead"), row=document.createElement("tr");head.append(row);table.append(head);
-    for(const title of ["Key","Kind","Value","Source","Actions"])text("th",title,row);
-    const body=document.createElement("tbody");table.append(body);
-    for(const item of view.items){
-      const row=document.createElement("tr");body.append(row);
-      for(const value of [item.key,item.kind,item.kind==="secret"?"Stored":item.value,item.source])text("td",value,row);
-      const actions=text("td","",row);button(actions,"Edit",()=>setValue(item));
-      if(!view.env || item.source==="env") button(actions,"Remove",()=>edit(`Remove ${item.key}`,p=>{text("p",`Remove ${item.key} from ${view.env || "common"}. ${item.overrides?"The common value will apply afterward.":""}`,p);return()=>({key:item.key,env:view.env});},body=>valueRequest(view,item.kind+".unset",body),()=>load(),true));
-    }
-    if(!view.items.length)text("p","No values in this scope. Add a value or create an environment.",panel);
-  }catch(error){if(generation===version)notice(error.message);}
-}
 
 function taskRequest(action, target, body, rev, extra = {}, targetProfile = profile) {
   return {domain:"task",profile:targetProfile,action,target,body,options:{"request-id":crypto.randomUUID(),"if-revision":String(rev),...extra}};

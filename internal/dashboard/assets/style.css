@@ -357,6 +357,16 @@ button[aria-pressed="true"] { background: #e1eee7; color: #145d51; }
 .detail-section h3:first-child { margin-top: 0; }
 .management-view #list-panel, .management-view #more { display: none; }
 .execution-summary { overflow-wrap: anywhere; border-top: 1px solid #dce1da; }
+.value-filters { display:flex; align-items:end; gap:20px; margin:24px 0 12px; flex-wrap:wrap; }
+.value-filters label { font-size:13px; }
+.value-filters input { display:block; margin:8px 0 0; min-width:240px; }
+.value-filters p { margin:0 0 10px auto; }
+#values-panel .value-edit { display:block; text-align:left; background:transparent; border-color:transparent; width:100%; margin:0; padding:8px; overflow-wrap:anywhere; }
+#values-panel .value-edit:hover { background:#e1eee7; border-color:#cbd4ce; }
+#values-panel .value-cell { width:40%; }
+.inline-value input { margin:0; }
+.inline-value .manage-toolbar { margin:8px 0 0; }
+.inline-value small { display:block; margin-top:8px; }
 #editor-fields fieldset { border: 1px solid #dce1da; border-radius: 5px; margin: 20px 0; padding: 12px; min-width: 0; }
 #editor-fields legend { font-size: 14px; font-weight: 600; padding: 0 6px; }
 .choice-list { max-height: 240px; overflow: auto; }

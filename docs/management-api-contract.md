@@ -64,6 +64,10 @@ task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, 
 
 값 action은 `variable.set`, `secret.set`, `variable.unset`, `secret.unset`, `env.create`, `env.remove`다. set은 빈 문자열을 포함한 `value`를 받는다. unset은 `key`와 `env`, env action은 `env`를 받는다. `env`의 빈 문자열은 공통 영역이다. env 삭제는 override를 먼저 정리한 상태에서 가능하다.
 
+일괄 등록은 `change.action: "import"`와 `change.import: {content:"KEY=value", variables:[], overwrite:false, preview:true}`를 사용한다. `env`, `revision`, `request_id`는 다른 값 변경과 같은 위치에 전달한다. `preview:true`는 원문 값을 포함하지 않는 `items`와 `applicable`을 반환하고, `preview:false`는 같은 리비전을 검사한 뒤 전체 변경을 원자적으로 저장한다. 새 키는 secret이 기본이며 `variables`로 공개 키를 선택한다. 기존 키는 profile에 등록된 종류를 유지한다.
+
+`overwrite:false`는 선택 env의 유효 값과 상속한 공통 값을 유지하고 `skip`으로 표시한다. `overwrite:true`는 선택한 계층에 값을 저장하며 공통 값을 상속하던 키에는 env override를 만든다. 미리 보기와 적용은 기존 CLI의 `.env` 파서를 사용한다. 화면은 최대 500 KB의 파일 또는 붙여넣기를 받고, 변경 API는 전체 JSON 요청을 1 MiB로 제한한다.
+
 변경 성공은 `{ok: true, data: ...}`, 실패는 기존 오류 envelope를 반환한다. 리비전·요청 ID·점유 충돌의 HTTP 상태는 409다. 값 변경 결과에는 `profile`, `changed`, `revision`, `replayed`가 포함된다. 값 재시도 기록에는 입력 원문 대신 서명된 식별값과 결과 메타데이터를 보관한다.
 
 ## 화면에서 관리하기

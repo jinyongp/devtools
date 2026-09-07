@@ -149,6 +149,13 @@ previous context return `context_invalid`; the revocation reason remains in hist
 **Variables & secrets** selects common values or an environment. Variables display
 their values; secrets display storage metadata and accept a replacement value.
 Editing an inherited value creates an override in the selected environment.
+Search keys and filter by variable or secret. Click a value to edit it in place,
+then save or cancel; secret cells accept a replacement. **Import .env** accepts
+a file or pasted assignments and previews key names and actions. New keys default
+to secret; select public variables in the preview. **Overwrite existing values**
+writes to the selected layer. Keeping existing values skips effective keys,
+including inherited common values. The import is applied atomically.
+Each import accepts up to 500 KB and 5,000 keys.
 Removing an override restores the common value. Concurrent changes require a
 refresh before editing again. See the [management API](management-api-contract.md)
 for request and retry behavior.

@@ -12,6 +12,10 @@
 !scripts/package.sh
 !scripts/install.sh
 !scripts/embed.go
+!skills/
+!skills/embed.go
+!skills/devtools/
+!skills/devtools/SKILL.md
 !docker/
 !docker/Dockerfile
 !docker/run.py

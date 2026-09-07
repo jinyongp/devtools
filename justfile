@@ -9,10 +9,10 @@ build:
     go build -o bin/devtools ./cmd/devtools
 
 fmt:
-    gofmt -w cmd internal scripts
+    gofmt -w cmd internal scripts skills
 
 check:
-    test -z "$(gofmt -l cmd internal scripts)"
+    test -z "$(gofmt -l cmd internal scripts skills)"
     go vet ./...
     go test -race ./...
 

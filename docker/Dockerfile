@@ -4,9 +4,10 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
+COPY skills/ skills/
 COPY scripts/package.sh scripts/package.sh
 COPY scripts/embed.go scripts/install.sh scripts/
-RUN test -z "$(gofmt -l cmd internal scripts)" && go vet ./... && go test -race ./...
+RUN test -z "$(gofmt -l cmd internal scripts skills)" && go vet ./... && go test -race ./...
 RUN set -eu; for target_os in darwin linux; do \
       for target_arch in amd64 arm64; do \
         TARGET_OS="$target_os" TARGET_ARCH="$target_arch" VERSION=0.0.0-test.1 OUTPUT_DIR=/releases sh scripts/package.sh; \

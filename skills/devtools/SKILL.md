@@ -1,132 +1,73 @@
 ---
 name: devtools
-description: Use the devtools CLI to manage project variables and secrets, back up and restore profiles, plan workstreams, coordinate claimed tasks across agent sessions, record verification, and inspect dependency graphs.
+description: Use the devtools CLI for project environment setup, managed local servers, and task/workstream coordination across agent sessions.
 ---
 
 # devtools
 
-Start with `devtools` or `devtools task --help` for concise text guidance.
-`devtools schema` returns a compact group index. Drill down with `devtools schema task`,
-then request only the needed contract, such as `devtools schema task claim`.
-`devtools schema --all` explicitly requests the large full catalog.
-Use `devtools update` for the latest stable executable, or select `--version`.
-The command updates its own installation path and preserves profile data.
-Data commands return one JSON envelope: read `data` on success and `error.code` on failure.
-`run` forwards child stdout/stderr and its exit code; setup failures use the JSON error envelope.
-Select a profile through the project's tracked `devtools.toml` or `--profile`.
-Worktrees sharing that profile see the same workstreams, tasks, and history.
+## Discover only what you need
 
-Use `devtools doctor` when preparing a project or diagnosing its environment.
-For a named command, use `devtools doctor COMMAND` with the intended env.
-Read `data.ready` and each check's `status` and `remedy`; diagnosis can return
-successfully with `ready: false`. Requirements declare exact tool versions and
-var/sec key presence in `devtools.toml`. Named `run` commands enforce declared
-requirements before execution. Version probes execute the configured tool
-arguments and keep their output and profile values out of diagnostic responses.
+Start with `devtools <group> --help`. For structured input, request one contract,
+such as `devtools schema task claim`. Bare `schema` lists groups; `schema --all`
+is for explicit full-catalog work. Reuse discovered contracts during the session.
+Command examples here name operations; obtain required flags from their help.
 
-## Local ports
+Resolve the profile from tracked `devtools.toml` or explicit `--profile`.
+Worktrees with the same profile share values and task history.
+Data commands return JSON: check the exit code, then `data` or `error.code`.
+Help and `skill` return text; `run` forwards the child's output and exit code.
 
-Use `port list`, `port show NAME`, and `instance list` to discover stored local
-TCP assignments. `instance name ALIAS` names the current project location;
-cross-project bindings select its profile and instance alias explicitly.
-Commands declare `serve = ["api"]` for servers they start and `bind` for values
-they consume. `doctor COMMAND` previews the checks; `run COMMAND` allocates
-missing serve ports and prevents concurrent runs of the same service.
-Assignments persist until release or prune. A busy stored port is an error;
-coordinate an explicit release/reallocation and restart consumers when changing it.
-Use `${var.KEY}` and `${bind.NAME}` in binding templates; exec arguments support
-`${bind.NAME}`. Binding output overrides variables, and a secret-name collision
-fails. Template values stay out of diagnostics. Check the CLI schema for options.
+## Prepare and run
 
-## Plan and coordinate
+Use `doctor COMMAND` before a configured command when setup is uncertain.
+A successful diagnosis can still have `data.ready: false`; inspect checks and remedies.
+Variables are readable; secrets are metadata-only and enter processes through
+`run` or managed commands. Import mixed dotenv files by path, marking public keys
+with `--var`; new unmarked keys become secrets. Keep secret values out of arguments,
+conversation, and logs. Child output and explicitly captured logs may contain secrets.
 
-Use a workstream for a goal with a specification, implementation plan, and related tasks.
-Create its draft, set the specification with stable requirement and acceptance keys,
-add tasks and validation definitions, then set the plan's complete task and validation references.
-`task workstream check WS_ID` reports coverage gaps; `activate` makes covered tasks claimable.
-Independent tasks support small jobs with their own acceptance conditions.
+Use `run NAME` for foreground work and `process start NAME` for a persistent server.
+Save the returned execution ID. `process status` reports lifetime; a configured
+`process wait ID` establishes readiness before dependent work. `process check`
+can exit successfully with `readiness.ready: false`.
+Restart applies current config and values.
 
-Task dependencies stay inside one workstream. Workstream dependencies link goals within a profile.
-`task next` explains the oldest ready task. `task tree` and `task workstream tree` traverse
-upstream or downstream; follow returned continuations with the same graph cursor.
-Use `--state all` to include completed and canceled items in lists.
+Ports belong to execution locations. Inspect `port` and `instance` before changing
+assignments. Commands declare `serve` for servers and `bind` for injected values.
+Coordinate consumers when a stored port changes.
 
-Every task mutation requires a fresh UUID `--request-id`. Preserve it while resolving an uncertain
-response and replay the exact request. A revised decision uses a new request ID.
-Definition, document, relation, and lifecycle edits require `--if-revision` from a recent query.
-On `revision_conflict`, read the current state and reassess the edit.
+## Plan, claim, recover
 
-## Execute and recover
+Use an independent task for a small job, or a workstream for a goal needing a
+specification and plan. In a workstream, connect requirements, acceptance criteria,
+tasks, and validations; set the plan's complete references, then check and activate.
+Task dependencies stay within a workstream; workstream dependencies stay within a profile.
 
-Claim a task with `task claim TASK_ID` or choose ready work with `task claim --workstream WS_ID`.
-Save the returned execution `context` privately and pass it as `--context` or
-`DEVTOOLS_TASK_CONTEXT`. The context authorizes the current run; general notes and dashboard
-content should contain the public task/run IDs and progress, keeping the context private.
+Before source work, claim the task and check `claimed` and `context_valid`.
+Keep the returned context private; pass it explicitly or through
+`DEVTOOLS_TASK_CONTEXT`. Public task/run IDs identify work but do not authorize it.
+Claims coordinate records; coordinate overlapping files separately.
 
-Use separate worktrees for concurrent source changes. Claims coordinate task records;
-check overlapping files and running processes when splitting implementation work.
-Record useful recovery points with `task checkpoint RUN_ID`: summary, decisions, remaining work,
-next action, blockers, and validation references. `release RUN_ID` returns the task to the queue.
+Checkpoint decisions, remaining work, next action, and evidence before a handoff.
+In a new session, use `task current --dir PATH` and `task context TASK_ID`,
+then inspect the actual working tree. Resume with an existing valid context,
+take over the observed active run using `--expected-run`, or claim released work.
+Claims end through explicit actions, not elapsed time.
 
-For a new session, find execution with `task current --dir PATH`, read `task context TASK_ID`
-and relevant checkpoints, inspect the actual worktree and processes, then use
-`task takeover TASK_ID --expected-run RUN_ID` to receive a new context.
-An existing context continues through `task resume`; a released task starts through `claim`.
-Claims remain until an explicit action ends or transfers them.
+## Retry and finish
 
-## Verify and finish
+Each task mutation needs a request UUID. Reuse the UUID and identical input after
+an uncertain response; changed input gets a new UUID. For revision-guarded edits,
+use the latest query revision. On conflict, refresh and reassess before resubmitting.
 
-Define each validation's owner, method, acceptance references, and whether it is required.
-Perform the verification in the project's agreed environment, then create a
-`validation basis VAL_ID` describing the observed code state and record evidence against its
-`basis_id`. Task-owned results use the current execution context.
-The CLI records evidence; the executing agent checks that it matches the actual code.
+Perform validation, record its code basis and evidence, then complete the task.
+The CLI stores evidence; it does not execute or verify the supplied evidence.
+After takeover, explicitly accept reusable validation results for the new run.
+Close a workstream after its task results and required integration checks satisfy
+the acceptance criteria. Use waivers only within the user's agreed scope.
 
-When taking over, explicitly accept reusable passing evidence with
-`validation accept VAL_ID --basis BASIS_ID --record RECORD_ID --reason TEXT`.
-Use a reasoned `waive` only when the user's accepted scope permits the exception.
-Complete the claimed task with `done TASK_ID --summary TEXT` and close the workstream after
-its tasks and required integration validations satisfy its acceptance criteria.
-History and export preserve the recovery record. Reopen follows dependency guards.
-
-## Variables, secrets, and dashboard
-
-Variables are readable through `var`; secrets use `sec` metadata and process injection.
-Use `devtools run -- ...` or a configured project command to inject values into the child process.
-For mixed dotenv migration, use `import --file PATH` and identify public variable keys;
-the default classification protects the remaining values as secrets.
-
-`devtools dashboard` returns a short-lived entry link for a local D3 Canvas graph and management UI.
-The authenticated session can edit tasks, workstreams, common values, and env overrides.
-Secret reads expose metadata; replacement accepts a new value. Task mutations share CLI
-revision and execution-context checks. Browser execution contexts live in page memory.
-Pass the link to the user when a visual overview helps. Profile selection and node expansion
-request their own scope. `dashboard status` and `dashboard stop` manage the local server.
-
-Use `devtools process start NAME --request-id UUID` for detached named commands.
-List/status return execution metadata; stop/restart target an immutable execution ID.
-Reuse request IDs for retries. Restart applies current configuration and values.
-When `ready_configured` is true, use `process check ID` for one readiness sample
-or `process wait ID --timeout 30s` before dependent work. Check returns exit 0
-for a completed probe; inspect `readiness.ready`. Wait returns exit 3 on timeout.
-Probes use the running execution's original environment and configuration.
-Raw logs require explicit `--capture-logs` and a separate `process logs ID` request.
-
-Use `cleanup preview` to inspect eligible storage, then apply selected candidate IDs
-with `cleanup apply PLAN --item ID --request-id UUID`. Archived data can be restored;
-purge removes its payload after the 30-day recovery period. Refresh stale previews.
-
-## Back up and restore
-
-Use `backup create` for all stored profiles, or select one with `--profile`.
-Configure the destination and public recipient with `backup configure`; creation
-also accepts explicit `--output` and `--recipient-file`. Keep the private identity
-in the user's separate key storage and pass its file path only for inspection or recovery.
-
-`backup inspect --file PATH --identity-file PATH` returns metadata.
-`backup restore` previews the source `--profile` and destination `--as`.
-Apply the reviewed digest with `--apply DIGEST --request-id UUID`, preserving
-both inputs for retries. Existing targets require `--replace` in preview and apply,
-and a configured destination/recipient for the automatic safety backup.
-On `revision_conflict`, obtain a fresh preview and reassess the target.
-Restored tasks preserve history and use new claims; reconnect project paths and ports.
+Cleanup and restore start with a preview. Apply the selected IDs or digest,
+refreshing stale previews. Keep backup identities separate from project files.
+Provide a dashboard link when the user needs visual management; its session can
+modify all of the user's profiles. Creating a plan does not authorize unrelated
+publishing, deletion, or changes to external systems.

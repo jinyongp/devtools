@@ -21,3 +21,10 @@ assert len(index) < 2000 and len(specific) < len(full) / 5
 assert 'input_schema' in json.loads(specific)['data']
 assert 'options' not in json.loads(specific)['data']
 print('Concise help, group discovery, scoped schema, and explicit full catalog passed')
+skill = call('skill')
+assert skill.startswith('---\nname: devtools\n')
+destination = Path.home() / 'agent-skills/devtools/SKILL.md'
+destination.parent.mkdir(parents=True)
+destination.write_text(skill)
+assert destination.read_text() == skill
+print('Bundled skill exported from installed binary')

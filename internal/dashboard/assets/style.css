@@ -70,6 +70,7 @@ button:hover {
 }
 button:focus-visible,
 input:focus-visible,
+textarea:focus-visible,
 select:focus-visible,
 canvas:focus-visible {
   outline: 3px solid #23847d;
@@ -355,6 +356,17 @@ button[aria-pressed="true"] { background: #e1eee7; color: #145d51; }
 .activity-entry .prose { margin-bottom: 0; }
 .detail-section h3:first-child { margin-top: 0; }
 .management-view #list-panel, .management-view #more { display: none; }
+.execution-summary { overflow-wrap: anywhere; border-top: 1px solid #dce1da; }
+#editor-fields fieldset { border: 1px solid #dce1da; border-radius: 5px; margin: 20px 0; padding: 12px; min-width: 0; }
+#editor-fields legend { font-size: 14px; font-weight: 600; padding: 0 6px; }
+.choice-list { max-height: 240px; overflow: auto; }
+#editor-fields .choice-list label { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; margin: 0; border-bottom: 1px solid #e1e6df; }
+#editor-fields .choice-list input { flex: none; margin: 4px 0; }
+.choice-list span { overflow-wrap: anywhere; }
+.choice-list small { display: block; margin-top: 4px; color: #69776f; }
+.document-row + .document-row { margin-top: 24px; border-top: 1px solid #dce1da; padding-top: 12px; }
+.document-row > button { margin-bottom: 12px; }
+#editor-fields .document-row textarea { min-height: 70px; }
 @media (max-width: 1100px) {
   main {
     grid-template-columns: 195px minmax(280px, 1fr);

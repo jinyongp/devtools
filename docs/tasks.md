@@ -122,11 +122,29 @@ selector for the profile overview, and select a node to emphasize its connected
 paths. The entry link is valid for five minutes and one use; the browser session
 lasts eight idle hours or until the server stops.
 
-Use **Choose profile** to select an existing or new profile identifier. The graph
-view offers workstream/task creation and editing actions in item details, including
-dependencies, specification, plan, claim, takeover, checkpoint, and completion.
-Execution contexts stay in page memory; after a reload, review the checkpoint
-and take over the current run to continue. CLI claim and transition checks apply.
+Use the **Profile** selector to choose a profile. The central list opens item
+details; switch to **Graph** to explore dependencies. Details separate overview,
+documents, and activity. Agents claim tasks and record progress and completion
+through the CLI. The dashboard manages plans, definitions, and interventions.
+
+**Dependencies** selects prerequisites by title. Workstream **Specification**
+edits requirements and acceptance criteria as rows, with selectable requirement
+references. **Plan** selects tasks and validations belonging to that workstream.
+**Cancel** previews the open tasks that will also be canceled. Apply uses the
+previewed profile revision; concurrent changes require a fresh review.
+
+For a running task, **Revoke claim** records a reason and invalidates the observed
+run's execution context. It leaves the task open. Running commands continue until
+stopped separately; coordinate with the agent before assigning the work again.
+The equivalent CLI command is:
+
+```sh
+devtools task unclaim TASK_ID --expected-run RUN_ID --if-revision REVISION --reason "Agent session ended" --request-id UUID
+```
+
+Use `task show TASK_ID` to obtain the current run and profile revision. After
+revocation, a new CLI `task claim` starts a new execution. Late writes using the
+previous context return `context_invalid`; the revocation reason remains in history.
 
 **Variables & secrets** selects common values or an environment. Variables display
 their values; secrets display storage metadata and accept a replacement value.

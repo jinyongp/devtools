@@ -31,7 +31,7 @@ import (
 //go:embed assets/*
 var assets embed.FS
 
-const authProtocol = 6
+const authProtocol = 7
 
 type Registry struct {
 	ID      string `json:"id"`
@@ -456,7 +456,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		command := r.URL.Query().Get("command")
-		allowed := map[string]bool{"workstream list": true, "workstream tree": true, "workstream context": true, "list": true, "tree": true, "context": true, "history": true, "validation show": true}
+		allowed := map[string]bool{"workstream list": true, "workstream tree": true, "workstream context": true, "workstream impact": true, "impact": true, "list": true, "tree": true, "context": true, "history": true, "validation show": true}
 		if !allowed[command] {
 			http.Error(w, "Unknown query", 400)
 			return

@@ -183,6 +183,21 @@ try:
     assert json.loads(http("/api/actions", action, headers=mutation_headers))["data"]["replayed"]
     action["options"]["request-id"] = str(uuid.uuid4())
     http("/api/actions", action, expected=409, headers=mutation_headers)
+    agent_run = mutate("claim", created)
+    for forbidden in ["run.claimed", "run.taken_over", "run.checkpointed", "task.completed"]:
+        rejected = {"domain": "task", "profile": "fixture", "action": forbidden, "target": created,
+                    "body": {}, "options": {"request-id": str(uuid.uuid4()), "if-revision": str(revision())}}
+        http("/api/actions", rejected, expected=400, headers=mutation_headers)
+    revoke = {"domain": "task", "profile": "fixture", "action": "run.revoked", "target": created,
+              "body": {"reason": "Ended agent session"}, "options": {"request-id": str(uuid.uuid4()),
+              "if-revision": str(revision()), "expected-run": agent_run["run"]["id"]}}
+    assert json.loads(http("/api/actions", revoke, headers=mutation_headers))["data"]["changed"]
+    assert api("task", "show", created)["item"]["current_run"] is None
+    err = api("task", "checkpoint", agent_run["run"]["id"], "--summary", "Late write",
+              "--context", agent_run["context"], "--request-id", str(uuid.uuid4()), expected=3)
+    assert err["code"] == "context_invalid"
+    next_run = mutate("claim", created)
+    mutate("unclaim", created, {"reason": "CLI management check"}, expected_run=next_run["run"]["id"], revision=revision())
     http("/api/profiles", expected=403, headers={"Origin": "https://example.invalid"})
     assert api("dashboard", "status")["running"]
 finally:

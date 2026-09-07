@@ -90,7 +90,7 @@ task item은 `id`, `title`, `description`, `workstream_id: UUID|null`, `acceptan
 
 workstream item은 `id`, `title`, `description`, `state`, `depends_on`, `blockers`, `spec_revision`, `plan_revision`, `counts`, 생성·변경 시각을 가진다. counts는 task 상태별 수이며 진행률로 해석하지 않는다. 상세 문서 본문은 context 조회의 documents 항목으로 제공한다.
 
-run은 `id`, `task_id`, `state`(running·released·taken_over·completed), `previous_run_id: UUID|null`, `directory`, 시작·마지막 활동 시각, `ended_at: timestamp|null`, 기준 spec·plan·task 정의 리비전을 가진다. 일반 run 객체에는 컨텍스트나 점유 증명을 넣지 않는다.
+run은 `id`, `task_id`, `state`(running·released·revoked·taken_over·completed), `previous_run_id: UUID|null`, `directory`, 시작·마지막 활동 시각, `ended_at: timestamp|null`, 기준 spec·plan·task 정의 리비전을 가진다. 일반 run 객체에는 컨텍스트나 점유 증명을 넣지 않는다.
 
 각 변경이 여러 업무 기록을 원자적으로 적용할 수 있어 action_ids는 배열이다. no-op은 빈 배열이며 업무 리비전을 증가시키지 않는다. 단, 요청 처리 영수증은 보존한다. 소속·graph·문서 관계 변경과 부수 효과는 같은 원자적 단위에 포함한다.
 

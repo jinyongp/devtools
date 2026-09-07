@@ -55,6 +55,17 @@ type backupRequest struct {
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
+// Dashboard sessions manage definitions and interventions; agents own execution.
+func managementTaskAction(action string) bool {
+	switch action {
+	case "task.add", "task.update", "task.depends", "task.cancel", "task.reopen",
+		"workstream.create", "workstream.depends", "workstream.cancel", "workstream.reopen",
+		"workstream.activate", "workstream.close", "spec.set", "plan.set", "run.revoked":
+		return true
+	}
+	return false
+}
+
 func (s *Server) cleanupEngine() cleanup.Engine {
 	d, _ := paths.Current()
 	return cleanup.Engine{Data: filepath.Dir(s.data), Cache: filepath.Dir(filepath.Dir(s.cache)), Config: d.Config}
@@ -172,13 +183,13 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		}
 		result, err = s.valueStore(req.Profile).Apply(r.Context(), *req.Change)
 	case "task":
-		if req.Process != nil || req.Change != nil || tasks.Find(req.Action) == nil || req.Options["request-id"] == "" || req.Options["if-revision"] == "" {
+		if req.Process != nil || req.Change != nil || !managementTaskAction(req.Action) || req.Options["request-id"] == "" || req.Options["if-revision"] == "" {
 			invalidAction(w)
 			return
 		}
 		for k := range req.Options {
 			switch k {
-			case "request-id", "if-revision", "context", "expected-run", "workstream", "dir":
+			case "request-id", "if-revision", "expected-run":
 			default:
 				invalidAction(w)
 				return

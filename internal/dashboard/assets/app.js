@@ -341,6 +341,31 @@ async function select(node) {
     const [overview, documents, activity] = panels.map(entry => entry.panel);
     text("p", data.item?.description || node.description || "No description yet.", overview).className = "prose";
     text("p", `Updated ${readableDate(node.updated_at)}`, overview).className = "muted";
+    if (data.validations?.length) {
+      text("h3", "Validations", overview);
+      for (const validation of data.validations) {
+        const section = text("section", "", overview);
+        text("p", `${validation.title} · ${validation.required ? "Required" : "Optional"}`, section);
+        const show = button(section, "View evidence", async () => {
+          show.disabled = true;
+          try {
+            const evidence = await query("validation show", {id:validation.id});
+            if (version !== detailGeneration) return;
+            const records = evidence.records || [];
+            text("p", "Recorded evidence is historical. Completion checks validate it against the current definition and execution.", section);
+            const recent = records.slice(-5).reverse();
+            if (!recent.length) text("p", "No recorded evidence yet.", section);
+            for (const record of recent) {
+              text("strong", record.result, section);
+              text("p", record.summary || record.reason || "", section).className = "prose";
+              for (const source of record.evidence || []) text("p", `${source.kind}: ${source.reference}\n${source.description}`, section).className = "prose";
+            }
+            if (records.length > 5) text("p", "Showing the latest five records. Full history is available through the CLI.", section);
+            show.remove();
+          } catch (error) { if (version === detailGeneration) notice(error.message); show.disabled = false; }
+        });
+      }
+    }
     const metadata = text("details", "", overview);
     text("summary", "Technical details", metadata);
     const dl = text("dl", "", metadata);
@@ -371,7 +396,7 @@ async function select(node) {
         text("strong", h.action.replaceAll(/[._]/g, " "), entry);
         const time = text("time", readableDate(h.occurred_at), entry);
         time.dateTime = h.occurred_at;
-        if (h.data?.summary) text("p", h.data.summary, entry).className = "prose";
+        if (h.data?.summary || h.data?.reason) text("p", h.data.summary || h.data.reason, entry).className = "prose";
       }
     }
     if (!documents.children.length) text("p", "No documents yet.", documents);

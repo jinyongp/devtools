@@ -44,7 +44,9 @@ pnpm release --publish
 ### Homebrew 배포
 
 안정 릴리스 게시가 성공하면 같은 Release 실행의 Homebrew job이
-`.github/homebrew/formula.yml`을 tap의 고정된 재사용 워크플로에 전달합니다.
+`.github/homebrew/formula.yml`을 tap의 고정된 생성 action에 전달합니다.
+자동화 코드는 고정 SHA의 `tap-tools`, Formula 변경 대상은 최신 main의 `tap`으로
+각각 체크아웃합니다. 기존 Formula 위에서 갱신하므로 이후 릴리스도 같은 경로로 배포합니다.
 태그 커밋의 소스로 Formula를 생성하고 audit·소스 설치·테스트를 통과하면
 `jinyongp/homebrew-tap`의 `Formula/devtools.rb`를 갱신합니다.
 사전 릴리스는 GitHub Releases에 게시하고, Homebrew에는 안정 버전을 제공합니다.

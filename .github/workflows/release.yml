@@ -15,13 +15,64 @@ jobs:
   homebrew:
     needs: release
     if: ${{ !contains(github.ref_name, '-') }}
-    uses: jinyongp/homebrew-tap/.github/workflows/publish-formula.yml@c0a9c0e0236a97ce6b1c6385bbd69830bfc0d890
-    with:
-      formula: devtools
-      ref: ${{ github.sha }}
-      version: ${{ github.ref_name }}
-    secrets:
-      deploy_key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+    runs-on: macos-latest
+    concurrency:
+      group: homebrew-devtools
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source
+          persist-credentials: false
+      - name: Checkout current tap
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jinyongp/homebrew-tap
+          ref: main
+          path: tap
+          fetch-depth: 0
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+      - name: Checkout pinned publishing tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jinyongp/homebrew-tap
+          ref: c0a9c0e0236a97ce6b1c6385bbd69830bfc0d890
+          path: tap-tools
+          persist-credentials: false
+      - name: Generate formula
+        id: formula
+        uses: ./tap-tools/actions/publish/formula
+        with:
+          tap-path: tap
+          source-path: source
+          formula: devtools
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+          version: ${{ github.ref_name }}
+      - name: Validate formula
+        run: |
+          validation_root="$(mktemp -d)"
+          cp -R tap "$validation_root/homebrew-validation"
+          rm -rf "$validation_root/homebrew-validation/.git"
+          git -C "$validation_root/homebrew-validation" init --initial-branch=main
+          git -C "$validation_root/homebrew-validation" -c user.name=validation -c user.email=validation@example.invalid add -A
+          git -C "$validation_root/homebrew-validation" -c user.name=validation -c user.email=validation@example.invalid commit -m 'Validate devtools'
+          brew tap jinyongp/validation "$validation_root/homebrew-validation"
+          brew audit --strict --formula jinyongp/validation/devtools
+          HOMEBREW_NO_INSTALL_FROM_API=1 brew install --build-from-source jinyongp/validation/devtools
+          brew test jinyongp/validation/devtools
+      - name: Commit formula
+        id: commit
+        working-directory: tap
+        env:
+          FORMULA_PATH: ${{ steps.formula.outputs.formula-path }}
+          FORMULA: devtools
+          VERSION: ${{ steps.formula.outputs.version }}
+        run: bash ../tap-tools/.github/workflows/scripts/commit-formula.sh
+      - name: Push formula
+        if: steps.commit.outputs.changed == 'true'
+        working-directory: tap
+        run: bash ../tap-tools/.github/workflows/scripts/push-formula.sh
 
   validate-tag:
     runs-on: ubuntu-latest

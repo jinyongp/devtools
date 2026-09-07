@@ -1,5 +1,5 @@
 "use strict";
-const valueFilters = {search:"", kind:"all"};
+const valueFilters = {search:"", kind:"all", source:"all"};
 
 function bulkValues(view) {
   let input;
@@ -89,19 +89,27 @@ async function loadValues(version) {
       return()=>({action:kind.value+".set",key:key.value,value:value.value,env:view.env});
     },body=>{const {action,...rest}=body;return valueRequest(view,action,rest);}));
     button(toolbar,"Import .env",()=>bulkValues(view));
-    const filters=text("div","",panel);filters.className="value-filters";
-    const search=field(filters,"Search keys","","search");search.value=valueFilters.search;
-    const kindLabel=text("label","Kind ",filters),kind=text("select","",kindLabel);
+    const table=text("table","",panel);table.className="values-table";
+    const head=text("thead","",table),heading=text("tr","",head);
+    const columns=["Key","Kind","Value — click to edit","Source", "Actions"].map(title=>{
+      const cell=text("th","",heading);cell.scope="col";text("span",title,cell);return cell;
+    });
+    const search=text("input","",columns[0]);search.type="search";search.placeholder="Search keys";search.setAttribute("aria-label","Search keys");search.value=valueFilters.search;
+    const kind=text("select","",columns[1]);kind.setAttribute("aria-label","Filter by kind");
     for(const [value,label] of [["all","All kinds"],["variable","Variables"],["secret","Secrets"]])text("option",label,kind).value=value;
     kind.value=valueFilters.kind;
-    const count=text("p","",filters);count.setAttribute("role","status");
-    const table=text("table","",panel),head=text("thead","",table),heading=text("tr","",head);
-    for(const title of ["Key","Kind","Value — click to edit","Source",""])text("th",title,heading);
+    const sourceFilter=text("select","",columns[3]);sourceFilter.setAttribute("aria-label","Filter by source");
+    const sources=view.env?[["all","All sources"],["inherited","Inherited common"],["override","Overrides common"],["local","Env only"]]:[["all","All sources"],["common","Common"]];
+    if(!sources.some(([value])=>value===valueFilters.source))valueFilters.source="all";
+    for(const [value,label] of sources)text("option",label,sourceFilter).value=value;
+    sourceFilter.value=valueFilters.source;
+    const sourceOf=item=>!view.env?"common":item.source==="common"?"inherited":item.overrides?"override":"local";
     const body=text("tbody","",table);
+    const count=text("p","",panel);count.className="value-count";count.setAttribute("role","status");
     const empty=text("p","No matching keys.",panel);
     function render(){
       body.replaceChildren();
-      const items=view.items.filter(item=>item.key.toLowerCase().includes(valueFilters.search.toLowerCase())&&(valueFilters.kind==="all"||item.kind===valueFilters.kind)).sort((a,b)=>a.key.localeCompare(b.key));
+      const items=view.items.filter(item=>item.key.toLowerCase().includes(valueFilters.search.toLowerCase())&&(valueFilters.kind==="all"||item.kind===valueFilters.kind)&&(valueFilters.source==="all"||sourceOf(item)===valueFilters.source)).sort((a,b)=>a.key.localeCompare(b.key));
       count.textContent=`${items.length} of ${view.items.length} keys`;empty.hidden=!!items.length;
       for(const item of items){
         const row=text("tr","",body);text("td",item.key,row);text("td",item.kind,row);
@@ -126,6 +134,6 @@ async function loadValues(version) {
       },body=>valueRequest(view,item.kind+".unset",body),()=>load(),true);
       $("editor-save").textContent=override?"Remove override":"Delete value";
     }
-    search.oninput=()=>{valueFilters.search=search.value;render();};kind.onchange=()=>{valueFilters.kind=kind.value;render();};render();
+    search.oninput=()=>{valueFilters.search=search.value;render();};kind.onchange=()=>{valueFilters.kind=kind.value;render();};sourceFilter.onchange=()=>{valueFilters.source=sourceFilter.value;render();};render();
   }catch(e){if(generation===version)notice(e.message);}
 }

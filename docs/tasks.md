@@ -154,7 +154,8 @@ With an environment selected, **Inherited common**, **Overrides common**, and
 editing them offers **Create override**. **Remove override** restores inheritance,
 while **Delete** removes an environment-only value. These labels apply equally to
 variables and secrets and reflect stored layers, even when values are equal.
-Search keys and filter by variable or secret. Click a value to edit it in place,
+Use the Key, Kind, and Source column headers to search keys and filter by kind
+and inheritance status together. Click a value to edit it in place,
 then save or cancel; secret cells accept a replacement. **Import .env** accepts
 a file or pasted assignments and previews key names and actions. New keys default
 to secret; select public variables in the preview. **Overwrite existing values**

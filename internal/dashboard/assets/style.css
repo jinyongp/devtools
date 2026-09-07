@@ -357,10 +357,12 @@ button[aria-pressed="true"] { background: #e1eee7; color: #145d51; }
 .detail-section h3:first-child { margin-top: 0; }
 .management-view #list-panel, .management-view #more { display: none; }
 .execution-summary { overflow-wrap: anywhere; border-top: 1px solid #dce1da; }
-.value-filters { display:flex; align-items:end; gap:20px; margin:24px 0 12px; flex-wrap:wrap; }
-.value-filters label { font-size:13px; }
-.value-filters input { display:block; margin:8px 0 0; min-width:240px; }
-.value-filters p { margin:0 0 10px auto; }
+.values-table { margin-top:24px; }
+#values-panel .values-table th { vertical-align:top; }
+.values-table th input, .values-table th select { display:block; width:100%; min-width:125px; margin:10px 0 0; font-size:12px; font-weight:400; }
+.values-table th:first-child { min-width:190px; }
+.values-table th:nth-child(4) { min-width:170px; }
+.value-count { margin:12px 0; font-size:12px; }
 #values-panel .value-edit { display:block; text-align:left; background:transparent; border-color:transparent; width:100%; margin:0; padding:8px; overflow-wrap:anywhere; }
 #values-panel .value-edit:hover { background:#e1eee7; border-color:#cbd4ce; }
 #values-panel .value-cell { width:40%; }

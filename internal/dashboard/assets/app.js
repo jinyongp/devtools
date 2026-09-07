@@ -27,6 +27,13 @@ function notice(message) {
   $("notice").textContent = message;
 }
 let sessionToken = "";
+function setAuthenticated(value) {
+  document.querySelectorAll("main button, main input, main select").forEach(control => { control.disabled = !value; });
+  $("graph").inert = !value;
+  $("profile").disabled = !value;
+  $("refresh").disabled = !value;
+}
+setAuthenticated(false);
 function rememberSession(value) {
   sessionToken = value;
   try {
@@ -35,6 +42,8 @@ function rememberSession(value) {
   } catch {}
 }
 async function api(path, body) {
+  if (!sessionToken) throw Error("Open the full link printed by devtools dashboard to connect this tab.");
+  const credential = sessionToken;
   const response = await fetch(path, {
     credentials: "omit",
     redirect: "error",
@@ -42,7 +51,7 @@ async function api(path, body) {
     headers: { Authorization: "Bearer " + sessionToken, ...(body === undefined ? {} : {"Content-Type":"application/json"}) },
     ...(body === undefined ? {} : {body: JSON.stringify(body)}),
   });
-  if (response.status === 401) rememberSession("");
+  if (response.status === 401 && credential === sessionToken) { rememberSession(""); setAuthenticated(false); }
   if (!response.ok) {
     let message = await response.text();
     try {
@@ -424,6 +433,7 @@ $("profile").onchange = () => {
   profile = $("profile").value;
   scope = "workstreams";
   ws = "";
+  valueEnv = "";
   load();
 };
 $("overview").onclick = () => {
@@ -442,7 +452,7 @@ $("fit").onclick = fit;
 $("search").oninput = renderList;
 (async () => {
   try {
-    const params = new URLSearchParams(location.hash.slice(1));
+    const params = new URLSearchParams(location.hash.slice(1).replaceAll("\\u0026", "&"));
     history.replaceState(null, "", location.pathname);
     try { sessionToken = sessionStorage.getItem("devtools.session") || ""; } catch {}
     if (params.has("token")) {
@@ -456,6 +466,7 @@ $("search").oninput = renderList;
       if (!response.ok) throw Error(await response.text());
       rememberSession((await response.json()).token);
     }
+    if (!sessionToken) throw Error("Open the full link printed by devtools dashboard to connect this tab.");
     const result = await api("/api/profiles");
     for (const p of result.profiles) {
       const option = text("option", p, $("profile"));
@@ -467,6 +478,7 @@ $("search").oninput = renderList;
       option.value = profile;
     }
     $("profile").value = profile;
+    setAuthenticated(true);
     await load();
   } catch (e) {
     notice(e.message);

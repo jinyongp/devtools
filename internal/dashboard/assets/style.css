@@ -54,6 +54,15 @@ input {
 button {
   cursor: pointer;
 }
+select {
+  appearance: none;
+  padding-right: 36px;
+  background-image: url("chevron.svg");
+  background-position: right 12px center;
+  background-size: 14px 14px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
 button:hover {
   background: #edf3ef;
 }

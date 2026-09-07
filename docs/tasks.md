@@ -103,6 +103,7 @@ devtools task list --state all --limit 50
 devtools task tree TASK_ID --direction upstream --depth 3
 devtools task workstream tree --direction downstream
 devtools dashboard
+devtools dashboard --json
 devtools dashboard status
 devtools dashboard stop
 ```
@@ -110,6 +111,10 @@ devtools dashboard stop
 Lists return `next_cursor`. Graphs return a `cursor` and continuation roots when
 truncated. Continue with the same cursor to keep the original revision for up to
 30 minutes. A fresh query observes the latest profile revision.
+
+`devtools dashboard` prints a clickable URL. Open the full link, including its
+fragment, to connect the browser tab. Use `--json` for server metadata. Choose a
+profile from the header's dropdown; controls become available after authentication.
 
 The dashboard embeds D3 7.9.0 and renders directed dependencies on Canvas. The
 keyboard-accessible item list opens context and workstream tasks. Use the profile

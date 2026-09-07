@@ -84,7 +84,7 @@ try:
     changed=config.replace('exec=["python3","probe.py"]','exec=["sh","-c","exit 9"]')
     (root/'devtools.toml').write_text(changed)
     assert api('process','check',id)['readiness']['ready'], 'Running execution lost its snapshot'
-    url=urllib.parse.urlsplit(api('dashboard')['url']);origin=f'{url.scheme}://{url.netloc}'
+    url=urllib.parse.urlsplit(api('dashboard', '--json')['url']);origin=f'{url.scheme}://{url.netloc}'
     def http(path,body,token=''):
         headers={'Origin':origin,'Content-Type':'application/json'}
         if token:headers['Authorization']='Bearer '+token

@@ -118,4 +118,3 @@ function itemActions(node, data, parent) {
 }
 $("values-nav").onclick=()=>{scope="values";ws="";valueEnv="";load();};
 $("create-item").onclick=createItem;
-$("new-profile").onclick=()=>edit("Choose profile",p=>{const input=field(p,"Profile identifier",profile);return()=>input.value;},name=>{if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name))throw Error("Use a valid profile identifier.");return{local:()=>{if(!Array.from($("profile").options).some(o=>o.value===name)){const o=text("option",name,$("profile"));o.value=name;}profile=name;$("profile").value=name;valueEnv="";}};});

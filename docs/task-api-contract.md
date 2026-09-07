@@ -156,7 +156,7 @@ JSON 오류는 invalid_argument, 대상 없음은 not_found, 리비전 불일치
 
 ## Dashboard·조회 경계
 
-dashboard의 start/status/stop은 작업 action과 분리된 서버 관리다. start는 `{url, server_id, running, initial_profile}`, status는 `{running, server_id|null}`, stop은 `{stopped}`를 data에 반환한다. 실행 중 서버가 없을 때 status·stop은 정상 결과다.
+dashboard의 start/status/stop은 작업 action과 분리된 서버 관리다. `devtools dashboard`와 `dashboard start`는 접속 URL 한 줄을 출력한다. `--json`을 지정한 start는 `{url, server_id, running, initial_profile}`, status는 `{running, server_id|null}`, stop은 `{stopped}`를 data에 반환한다. 실행 중 서버가 없을 때 status·stop은 정상 결과다.
 
 화면의 task/workstream 변경은 같은 action과 실행 컨텍스트 규칙을 사용한다. HTTP 요청 형식과 var/sec/env 변경은 [관리 API 계약](management-api-contract.md)을 따른다. 선택적인 `if-revision`을 전달한 action도 현재 리비전과 일치해야 한다.
 

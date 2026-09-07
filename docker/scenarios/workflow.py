@@ -62,7 +62,7 @@ assert result.returncode==0 and result.stdout.strip()=="first"
 identity=project/"identity";recipient=project/"recipient";backups=project/"backups"
 api("backup","keygen","--identity-file",str(identity),"--recipient-file",str(recipient))
 api("backup","configure","--directory",str(backups),"--recipient-file",str(recipient))
-url=urllib.parse.urlsplit(api("dashboard")["url"]);origin=f"{url.scheme}://{url.netloc}"
+url=urllib.parse.urlsplit(api("dashboard", "--json")["url"]);origin=f"{url.scheme}://{url.netloc}"
 def http(path,body=None,token=""):
     headers={"Origin":origin,"Content-Type":"application/json"}
     if token:headers["Authorization"]="Bearer "+token

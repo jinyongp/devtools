@@ -31,7 +31,7 @@ import (
 //go:embed assets/*
 var assets embed.FS
 
-const authProtocol = 5
+const authProtocol = 6
 
 type Registry struct {
 	ID      string `json:"id"`
@@ -533,6 +533,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css")
 	case ".html":
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	case ".svg":
+		w.Header().Set("Content-Type", "image/svg+xml")
 	}
 	_, _ = w.Write(b)
 }

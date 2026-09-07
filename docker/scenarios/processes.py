@@ -83,7 +83,7 @@ def read(expected):
         time.sleep(.05)
     raise AssertionError("Server response mismatch")
 read("first")
-api("dashboard")
+api("dashboard", "--json")
 api("dashboard","stop")
 read("first")
 assert api("process","logs",id,expected=3)["code"]=="logs_disabled"

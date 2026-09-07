@@ -183,6 +183,12 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		}
 		data, text, found := a.discovery(strings.Join(targetArgs, " "), schema)
 		if !found {
+			if !schema {
+				if writeHelp(streams.Err, "Unknown command. Run devtools --help.\n") != nil {
+					return 1
+				}
+				return 2
+			}
 			return fail(protocol.NewError("invalid_argument", "Unknown help or schema target. Run devtools --help.", 2, nil))
 		}
 		var err error

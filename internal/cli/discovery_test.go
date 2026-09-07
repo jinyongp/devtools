@@ -1,9 +1,26 @@
 package cli
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
+
+func TestUnknownHelpCommand(t *testing.T) {
+	a := New("test", "test")
+	for _, args := range [][]string{{"get", "--help"}, {"get", "-h"}, {"help", "get"}, {"var", "missing", "--help"}} {
+		code, out, stderr := invoke(t, a, "", args...)
+		if code != 2 || out != "" || stderr != "Unknown command. Run devtools --help.\n" {
+			t.Fatalf("%v: %d %q %q", args, code, out, stderr)
+		}
+	}
+	for _, args := range [][]string{{"get"}, {"schema", "get"}} {
+		code, out, stderr := invoke(t, a, "", args...)
+		if code != 2 || out != "" || !json.Valid([]byte(stderr)) || !strings.Contains(stderr, `"code":"invalid_argument"`) {
+			t.Fatalf("%v: %d %q %q", args, code, out, stderr)
+		}
+	}
+}
 
 func TestScopedDiscovery(t *testing.T) {
 	a := New("test", "test")

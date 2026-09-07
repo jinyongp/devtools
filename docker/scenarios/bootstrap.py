@@ -11,20 +11,17 @@ with tempfile.TemporaryDirectory() as directory:
     tools.mkdir()
     fake_curl = tools / "curl"
     fake_curl.write_text('''#!/bin/sh
-while [ "$#" -gt 0 ]; do
-  if [ "$1" = -o ]; then destination=$2; shift 2; else shift; fi
-done
 case "$MODE" in
   fail) exit 22 ;;
 esac
-printf '%s\\n' 'printf "%s\\n" "$@" > "$MARKER"' > "$destination"
+printf '%s\\n' 'printf "%s\\n" "$@" > "$MARKER"'
 if [ "$MODE" = partial ]; then exit 22; fi
 ''')
     fake_curl.chmod(0o700)
     snippets = []
     for name in ("DEVTOOLS_TEST_README", "DEVTOOLS_TEST_INSTALL_DOC"):
         text = Path(os.environ[name]).read_text()
-        snippets.extend(re.findall(r'^\(\n.*?^\)', text, re.M | re.S))
+        snippets.extend(re.findall(r'^devtools_installer=.*\n  sh -c .*', text, re.M))
         assert "/tmp/devtools-install.sh" not in text
     assert len(snippets) == 4
     for index, snippet in enumerate(snippets):
@@ -41,7 +38,7 @@ if [ "$MODE" = partial ]; then exit 22; fi
             assert (result.returncode == 0) == (mode == "success")
             assert marker.exists() == (mode == "success")
             if marker.exists():
-                assert marker.read_text().strip() == ("update" if 'install.sh" update' in snippet else "install")
+                assert marker.read_text().strip() == ("update" if '-- update' in snippet else "install")
             assert sentinel.read_text() == "fixture remains untouched\n"
             assert list(temporary.iterdir()) == [sentinel], "Temporary directory was not cleaned"
-print("Documented install/update bootstrap gates execution on download success and cleans private temporary files")
+print("Documented install/update bootstrap executes only complete successful downloads")

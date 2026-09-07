@@ -28,3 +28,19 @@ destination.parent.mkdir(parents=True)
 destination.write_text(skill)
 assert destination.read_text() == skill
 print('Bundled skill exported from installed binary')
+
+completion = Path.home() / 'devtools.fish'
+completion.write_text(call('completion', 'fish'))
+for line, expected in [
+    ('devtools ', 'var'),
+    ('devtools variable set KEY ', '--value'),
+    ('devtools task workstream ', 'create'),
+    ('devtools var set KEY --profile ', None),
+    ('devtools var set KEY --profile demo ', '--value'),
+    ('devtools run -- ', None),
+]:
+    output = subprocess.check_output(
+        ['fish', '-c', 'source "$argv[1]"; complete -C "$argv[2]"',
+         str(completion), line], text=True)
+    assert (expected in output) if expected else not output.strip(), (line, output)
+print('Installed fish completion resolves commands and respects argument boundaries')

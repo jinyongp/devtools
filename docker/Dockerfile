@@ -17,7 +17,7 @@ RUN set -eu; for target_os in darwin linux; do \
 
 FROM debian:bookworm-slim AS sandbox
 RUN apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git python3 openssl \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git python3 openssl fish \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 10001 tester
 COPY --from=ghcr.io/casey/just:1.58.0 /just /usr/local/bin/just

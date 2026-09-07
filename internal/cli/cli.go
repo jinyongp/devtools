@@ -109,6 +109,7 @@ func New(version, commit string) *App {
 	a.registerProcesses()
 	a.registerCleanup()
 	a.registerUpdate()
+	a.registerCompletion()
 	for i := range a.commands {
 		if a.commands[i].Name == "schema" || a.commands[i].Name == "help" {
 			a.commands[i].Arguments = []Argument{{Name: "command"}, {Name: "subcommand"}, {Name: "action"}, {Name: "operation"}}

@@ -14,6 +14,9 @@ import (
 	"github.com/jinyongp/devtools/scripts"
 )
 
+// Set by package-manager builds to preserve ownership of installed files.
+var updateManager string
+
 func (a *App) registerUpdate() {
 	a.commands = append(a.commands, Command{
 		Name: "update", Description: "Update the installed executable while preserving user data.",
@@ -36,6 +39,9 @@ func (a *App) registerUpdate() {
 }
 
 func updateExecutable(ctx context.Context, executable string, options map[string]string) (any, *protocol.Error) {
+	if updateManager == "homebrew" {
+		return nil, protocol.NewError("package_managed", "Update this Homebrew installation with brew upgrade jinyongp/tap/devtools.", 3, map[string]any{"manager": "homebrew", "command": "brew upgrade jinyongp/tap/devtools"})
+	}
 	if source := options["source"]; source != "" && !strings.Contains(source, "://") {
 		absolute, err := filepath.Abs(source)
 		if err != nil {

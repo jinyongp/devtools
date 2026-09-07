@@ -14,14 +14,15 @@ with tempfile.TemporaryDirectory() as directory:
 case "$MODE" in
   fail) exit 22 ;;
 esac
-printf '%s\\n' 'printf "%s\\n" "$@" > "$MARKER"'
+printf '%s\\n' '{' 'printf "%s\\n" "$@" > "$MARKER"'
 if [ "$MODE" = partial ]; then exit 22; fi
+printf '%s\\n' '}'
 ''')
     fake_curl.chmod(0o700)
     snippets = []
     for name in ("DEVTOOLS_TEST_README", "DEVTOOLS_TEST_INSTALL_DOC"):
         text = Path(os.environ[name]).read_text()
-        snippets.extend(re.findall(r'^devtools_installer=.*\n  sh -c .*', text, re.M))
+        snippets.extend(re.findall(r'^curl .* \| sh -s -- (?:install|update)$', text, re.M))
         assert "/tmp/devtools-install.sh" not in text
     assert len(snippets) == 4
     for index, snippet in enumerate(snippets):
@@ -35,10 +36,13 @@ if [ "$MODE" = partial ]; then exit 22; fi
             env = dict(os.environ, PATH=str(tools) + ":" + os.environ["PATH"],
                        TMPDIR=str(temporary), MODE=mode, MARKER=str(marker))
             result = subprocess.run(["sh", "-c", snippet], env=env, capture_output=True, timeout=5)
-            assert (result.returncode == 0) == (mode == "success")
+            if mode == "partial":
+                assert result.returncode != 0
+            if mode == "success":
+                assert result.returncode == 0
             assert marker.exists() == (mode == "success")
             if marker.exists():
                 assert marker.read_text().strip() == ("update" if '-- update' in snippet else "install")
             assert sentinel.read_text() == "fixture remains untouched\n"
             assert list(temporary.iterdir()) == [sentinel], "Temporary directory was not cleaned"
-print("Documented install/update bootstrap executes only complete successful downloads")
+print("Documented one-line install/update passes arguments and rejects truncated scripts")

@@ -30,8 +30,7 @@ devtools_0.1.0_linux_amd64.tar.gz.sha256
 기본 배포 주소는 `https://github.com/jinyongp/devtools/releases`다. GitHub Releases에 게시된 설치 스크립트를 받아 실행한다.
 
 ```sh
-devtools_installer=$(curl -fsSL https://github.com/jinyongp/devtools/releases/latest/download/install.sh) &&
-  sh -c "$devtools_installer" -- install
+curl -fsSL https://github.com/jinyongp/devtools/releases/latest/download/install.sh | sh -s -- install
 ```
 
 버전을 생략하면 최신 안정 릴리스의 `version.txt`를 조회하고, 해당 버전의 고정 주소에서 배포물과 체크섬을 받는다. `--version 0.1.0`으로 특정 버전을 선택할 수 있다. 버전 인자는 태그의 `v`를 제외한 값이다.
@@ -67,8 +66,7 @@ HTTPS 배포 서버를 운영한다면 `--source`에 아카이브와 체크섬�
 같은 설치기에 `update`를 전달하면 최신 안정 버전으로 업데이트한다.
 
 ```sh
-devtools_installer=$(curl -fsSL https://github.com/jinyongp/devtools/releases/latest/download/install.sh) &&
-  sh -c "$devtools_installer" -- update
+curl -fsSL https://github.com/jinyongp/devtools/releases/latest/download/install.sh | sh -s -- update
 devtools version
 ```
 

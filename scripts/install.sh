@@ -1,4 +1,6 @@
 #!/bin/sh
+# Parse the complete installer before executing streamed input.
+{
 set -eu
 
 fail() {
@@ -99,3 +101,4 @@ chmod 0755 "$scratch/devtools" || fail 'Cannot set executable permissions.'
 grep -F '"version":"'"$version"'"' "$scratch/version.json" >/dev/null || fail 'Release version does not match the request.'
 mv -f "$scratch/devtools" "$destination" || fail 'Cannot publish installed executable.'
 printf '{"schema_version":1,"ok":true,"data":{"action":"%s","version":"%s"}}\n' "$action" "$version"
+}

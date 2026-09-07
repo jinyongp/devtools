@@ -70,7 +70,9 @@ secret은 `devtools sec`로 등록하며 조회에는 메타데이터만 제공�
 | 백업·복구, 오래된 데이터 정리 | [백업](docs/backup.md) · [정리](docs/cleanup.md) |
 
 에이전트는 [devtools 스킬](skills/devtools/SKILL.md)을 참고하고,
-`devtools schema` 또는 `devtools COMMAND --help`로 명령을 탐색할 수 있습니다.
+`devtools task --help`처럼 기능별 도움말로 명령을 탐색할 수 있습니다.
+JSON 계약은 `devtools schema task claim`처럼 필요한 명령만 조회하세요.
+`devtools schema`는 짧은 그룹 목록을, `devtools schema --all`은 전체 계약을 제공합니다.
 조회·변경 결과는 JSON이며, `run`은 자식 프로그램의 출력과 종료 코드를 전달합니다.
 
 ## 업데이트

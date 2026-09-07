@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -50,6 +51,12 @@ func TestCommandContract(t *testing.T) {
 			}
 			if bytes.Contains(payload.Bytes(), []byte("DO_NOT_ECHO")) {
 				t.Fatal("echoed unrecognized argument")
+			}
+			if tc.name == "default" || tc.name == "help" || tc.name == "init help" {
+				if !strings.Contains(out.String(), "Usage:") || out.Len() > 4000 {
+					t.Fatalf("unexpected help: %s", &out)
+				}
+				return
 			}
 			var response struct {
 				SchemaVersion int             `json:"schema_version"`

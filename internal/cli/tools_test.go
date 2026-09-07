@@ -156,7 +156,7 @@ func TestSecretFileAndRawOutput(t *testing.T) {
 }
 
 func TestSchemaDescribesAliasesAndInputs(t *testing.T) {
-	_, out, _ := invoke(t, testApp(t), "", "schema")
+	_, out, _ := invoke(t, testApp(t), "", "schema", "--all")
 	var result struct {
 		Data struct {
 			Commands []struct {

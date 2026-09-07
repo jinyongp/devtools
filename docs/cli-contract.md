@@ -59,13 +59,21 @@ devtools version
 | --- | --- |
 | `init --profile NAME` | 현재 디렉터리에 `devtools.toml`을 생성한다. |
 | `project inspect` | 선택된 profile, 설정 출처와 경로, 사용자 전역 경로를 반환한다. |
-| `schema` | 현재 바이너리가 지원하는 명령, 옵션, 입력 제약, 출력 스키마를 반환한다. |
+| `schema` | 짧은 명령 그룹 목록을 JSON으로 반환한다. |
+| `schema var get` | 지정한 명령의 입력·출력 스키마를 반환한다. |
+| `schema --all` | 전체 카탈로그를 반환한다. 전체 계약 수집이 필요할 때 사용한다. |
 | `version` | 빌드 버전 정보를 반환한다. |
-| `help` | 명령 목록과 사용법을 JSON으로 반환한다. |
+| `help`, `--help` | 사람이 읽을 수 있는 짧은 텍스트 도움말을 출력한다. |
 
 `init`은 profile을 명시적으로 받는다. 같은 profile의 유효한 설정이 있으면 내용을 바꾸지 않고 성공한다. 다른 profile이거나 잘못된 설정이면 기존 파일을 보존하고 오류를 반환한다. 생성 결과에는 `created`, `config_path`, `profile`이 포함된다. Git 스테이징은 수행하지 않는다.
 
 `schema`와 `project inspect`는 조회 명령이다. 전자는 호출 방법을 확인하고, 후자는 현재 프로젝트 연결을 확인하는 데 사용한다.
+
+인자 없이 실행한 `devtools`도 텍스트 도움말을 제공합니다. `devtools task --help`로
+하위 명령을 찾고, `devtools task claim --help`로 사용법을 확인하세요.
+에이전트는 `devtools schema task`로 그룹을 탐색한 뒤 `devtools schema task claim`처럼
+필요한 명령만 조회할 수 있습니다. 명령별 스키마에는 입력 스키마와 중복되는 옵션
+목록을 생략하며, 참조에 필요한 `$defs`는 해당 응답에 함께 제공합니다.
 
 ## 공통 값과 env
 
@@ -368,7 +376,7 @@ env = "test"
 
 `run`은 데이터 조회 명령과 출력 계약이 다르다. 실행 준비 중의 실패는 devtools의 오류로 반환하고, 자식 프로세스가 실행된 뒤에는 그 프로세스의 출력과 종료 상태를 전달한다.
 
-명령별 입력·출력 JSON 필드는 `devtools schema`에서 확인하고, 기능별 오류 코드는 각 사용 계약을 참고한다. 스키마의 `args`는 위치 인자, `child_args`는 `--` 이후 인자를 뜻한다. `aliases`에는 같은 동작을 하는 별칭이 포함된다.
+명령별 입력·출력 JSON 필드는 `devtools schema COMMAND`에서 확인하고, 기능별 오류 코드는 각 사용 계약을 참고한다. 스키마의 `args`는 위치 인자, `child_args`는 `--` 이후 인자를 뜻한다. `aliases`에는 같은 동작을 하는 별칭이 포함된다.
 
 | 작업 | 성공 응답의 `data` |
 | --- | --- |

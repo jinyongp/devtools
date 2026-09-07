@@ -34,7 +34,8 @@ the original request ID and unchanged inputs. A revised request gets a new UUID.
 Create with `task workstream create --title TEXT --request-id UUID`. Document and
 definition edits take `--if-revision N` from the latest query and a request ID.
 JSON bodies use a regular file with `--file PATH` or redirected input with `--stdin`.
-Command help and `devtools schema` describe both options and JSON body schemas.
+Command help lists options. Use `devtools schema task workstream spec set` to
+retrieve the input and JSON body schema for that command.
 
 The command names below describe individual steps. Every mutation takes a new
 `--request-id UUID`; document and definition edits also take `--if-revision N`.

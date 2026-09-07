@@ -5,7 +5,10 @@ description: Use the devtools CLI to manage project variables and secrets, back 
 
 # devtools
 
-Discover the installed contract with `devtools schema` or a command's `--help`.
+Start with `devtools` or `devtools task --help` for concise text guidance.
+`devtools schema` returns a compact group index. Drill down with `devtools schema task`,
+then request only the needed contract, such as `devtools schema task claim`.
+`devtools schema --all` explicitly requests the large full catalog.
 Use `devtools update` for the latest stable executable, or select `--version`.
 The command updates its own installation path and preserves profile data.
 Data commands return one JSON envelope: read `data` on success and `error.code` on failure.

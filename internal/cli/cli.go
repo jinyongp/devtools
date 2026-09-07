@@ -103,6 +103,19 @@ func New(version, commit string) *App {
 	a.registerCleanup()
 	a.registerUpdate()
 	for i := range a.commands {
+		if a.commands[i].Name == "schema" || a.commands[i].Name == "help" {
+			a.commands[i].Arguments = []Argument{{Name: "command"}, {Name: "subcommand"}, {Name: "action"}, {Name: "operation"}}
+			a.commands[i].Output = map[string]any{"type": "object"}
+			if a.commands[i].Name == "schema" {
+				a.commands[i].Description = "List command groups or return one command's JSON schema."
+				a.commands[i].Options = []Option{{Name: "all", Boolean: true, Description: "Return the complete catalog (large output)."}}
+			} else {
+				a.commands[i].Description = "Show concise text usage for a command or group."
+				a.commands[i].StreamOutput = true
+			}
+		}
+	}
+	for i := range a.commands {
 		if a.commands[i].Aliases == nil {
 			a.commands[i].Aliases = []string{}
 		}
@@ -145,6 +158,37 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	if len(args) == 1 && args[0] == "--version" {
 		args = []string{"version"}
 	}
+	if args[0] == "help" || args[0] == "schema" || ((args[len(args)-1] == "--help" || args[len(args)-1] == "-h") && !strings.Contains(strings.Join(args[:len(args)-1], " "), "--")) {
+		schema := args[0] == "schema"
+		targetArgs := args[1:]
+		if len(targetArgs) == 1 && (targetArgs[0] == "--help" || targetArgs[0] == "-h") {
+			schema = false
+			targetArgs = []string{args[0]}
+		}
+		if args[0] != "help" && !schema {
+			targetArgs = args[:len(args)-1]
+		}
+		if schema && len(targetArgs) == 1 && targetArgs[0] == "--all" {
+			if protocol.Success(streams.Out, a.catalog()) != nil {
+				return fail(protocol.NewError("io_error", "Cannot write output.", 1, nil))
+			}
+			return 0
+		}
+		data, text, found := a.discovery(strings.Join(targetArgs, " "), schema)
+		if !found {
+			return fail(protocol.NewError("invalid_argument", "Unknown help or schema target. Run devtools --help.", 2, nil))
+		}
+		var err error
+		if schema {
+			err = protocol.Success(streams.Out, data)
+		} else {
+			err = writeHelp(streams.Out, text)
+		}
+		if err != nil {
+			return fail(protocol.NewError("io_error", "Cannot write output.", 1, nil))
+		}
+		return 0
+	}
 	var selected *Command
 	var rest []string
 	for i := range a.commands {
@@ -163,7 +207,8 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		return fail(parseErr)
 	}
 	if request.Help {
-		if protocol.Success(streams.Out, selected) != nil {
+		_, text, _ := a.discovery(selected.Name, false)
+		if writeHelp(streams.Out, text) != nil {
 			return fail(protocol.NewError("io_error", "Cannot write output.", 1, nil))
 		}
 		return 0

@@ -37,7 +37,7 @@ func TestTaskCLIAndSchema(t *testing.T) {
 	if len(rows["items"].([]any)) != 1 {
 		t.Fatal("longest command match")
 	}
-	catalog := run("", "schema")
+	catalog := run("", "schema", "--all")
 	found := false
 	for _, raw := range catalog["commands"].([]any) {
 		c := raw.(map[string]any)
@@ -56,7 +56,7 @@ func TestLongAlias(t *testing.T) {
 	if code := a.Run(context.Background(), []string{"dashboard", "start", "--help"}, IO{In: strings.NewReader(""), Out: &out, Err: &err}); code != 0 {
 		t.Fatal(code, err.String())
 	}
-	if !strings.Contains(out.String(), `"name":"dashboard"`) {
+	if !strings.Contains(out.String(), "Usage: devtools dashboard") {
 		t.Fatal(out.String())
 	}
 }

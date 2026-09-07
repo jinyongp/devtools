@@ -61,7 +61,7 @@ func TestImportCLI(t *testing.T) {
 
 func TestImportSchema(t *testing.T) {
 	a := testApp(t)
-	_, out, _ := invoke(t, a, "", "schema")
+	_, out, _ := invoke(t, a, "", "schema", "--all")
 	var envelope struct {
 		Data struct {
 			Commands []struct {

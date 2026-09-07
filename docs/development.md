@@ -40,3 +40,15 @@ pnpm release --publish
 버전을 추천받고 main과 태그를 함께 올린다. 태그가 단일 Release 워크플로의
 검증·패키징·게시를 시작한다. [배포 상세](install.md#github-releases-게시)와
 [격리된 설치 검증](../docker/README.md)을 참고한다.
+
+### Homebrew 배포
+
+안정 릴리스 게시가 성공하면 같은 Release 실행의 Homebrew job이
+`.github/homebrew/formula.yml`을 tap의 고정된 재사용 워크플로에 전달합니다.
+태그 커밋의 소스로 Formula를 생성하고 audit·소스 설치·테스트를 통과하면
+`jinyongp/homebrew-tap`의 `Formula/devtools.rb`를 갱신합니다.
+사전 릴리스는 GitHub Releases에 게시하고, Homebrew에는 안정 버전을 제공합니다.
+
+배포에는 devtools 저장소의 `HOMEBREW_TAP_DEPLOY_KEY` Actions secret을 사용합니다.
+Homebrew 단계가 실패하면 GitHub 릴리스는 유지되며 해당 실패 job을 재실행할 수 있습니다.
+Formula 빌드는 `updateManager=homebrew`를 기록해 업데이트를 Homebrew로 안내합니다.

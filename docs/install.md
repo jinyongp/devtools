@@ -27,6 +27,10 @@ devtools_0.1.0_linux_amd64.tar.gz.sha256
 
 ## 처음 설치하기
 
+Homebrew에서는 `brew install jinyongp/tap/devtools`로 설치할 수 있습니다.
+이 경로는 태그 커밋의 소스를 내려받아 Go로 빌드하며 필요한 Go 도구는 Homebrew가 준비합니다.
+업데이트는 `brew upgrade jinyongp/tap/devtools`로 수행합니다.
+
 기본 배포 주소는 `https://github.com/jinyongp/devtools/releases`다. GitHub Releases에 게시된 설치 스크립트를 받아 실행한다.
 
 ```sh
@@ -62,6 +66,9 @@ HTTPS 배포 서버를 운영한다면 `--source`에 아카이브와 체크섬�
 체크섬은 배포물의 전송 무결성을 확인한다. 설치 스크립트와 배포물은 신뢰하는 출처에서 받아 사용한다.
 
 ## 업데이트하기
+
+Homebrew 설치본에서 `devtools update`를 호출하면 종료 코드 3의 `package_managed`와
+`brew upgrade jinyongp/tap/devtools` 안내를 반환합니다. Homebrew가 설치 파일의 버전을 관리합니다.
 
 설치된 실행 파일에서 다음 명령을 실행하세요. 현재 실행 파일의 실제 설치 위치를
 찾아 최신 안정 버전으로 교체합니다. 프로젝트 디렉터리나 profile 선택은 필요하지 않습니다.

@@ -12,6 +12,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  homebrew:
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    uses: jinyongp/homebrew-tap/.github/workflows/publish-formula.yml@c0a9c0e0236a97ce6b1c6385bbd69830bfc0d890
+    with:
+      formula: devtools
+      ref: ${{ github.sha }}
+      version: ${{ github.ref_name }}
+    secrets:
+      deploy_key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+
   validate-tag:
     runs-on: ubuntu-latest
     steps:
@@ -72,6 +83,7 @@ jobs:
             done
           done
           cp scripts/install.sh dist/install.sh
+          cp LICENSE dist/LICENSE
           printf '%s\n' "$VERSION" > dist/version.txt
       - name: Publish release
         env:

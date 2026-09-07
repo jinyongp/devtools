@@ -1,0 +1,16 @@
+desc: Agent-first developer environment and task management
+homepage: https://github.com/jinyongp/devtools
+license: MIT
+dependencies:
+  build:
+    - go
+install: |
+  ENV["CGO_ENABLED"] = "0"
+  ldflags = "-s -w -X main.version=#{version} -X github.com/jinyongp/devtools/internal/cli.updateManager=homebrew"
+  system "go", "build", *std_go_args(ldflags: ldflags), "./cmd/devtools"
+test: |
+  assert_match version.to_s, shell_output("#{bin}/devtools version")
+  system bin/"devtools", "init", "--profile", "homebrew-test"
+  system bin/"devtools", "var", "set", "LEVEL", "--value", "debug"
+  assert_match "debug", shell_output("#{bin}/devtools var get LEVEL")
+  assert_match "package_managed", shell_output("#{bin}/devtools update 2>&1", 3)

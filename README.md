@@ -7,6 +7,14 @@ macOS, Linux, WSL에서 사용할 수 있습니다.
 
 ## 설치
 
+Homebrew를 사용한다면 다음 명령으로 설치하세요. 설치 후 바로 `devtools`로 실행할 수 있습니다.
+
+```sh
+brew install jinyongp/tap/devtools
+```
+
+### 설치 스크립트 사용
+
 아래 명령을 터미널에 붙여 넣으세요. 설치기가 운영체제와 CPU를 확인해 최신 안정
 버전을 `~/.local/bin/devtools`에 설치합니다. curl이 필요하며 Go 설치는 필요하지 않습니다.
 
@@ -67,6 +75,14 @@ secret은 `devtools sec`로 등록하며 조회에는 메타데이터만 제공�
 
 ## 업데이트
 
+Homebrew로 설치했다면 Homebrew로 업데이트하세요.
+
+```sh
+brew upgrade jinyongp/tap/devtools
+```
+
+설치 스크립트로 설치했다면 다음 명령을 사용하세요.
+
 이미 설치한 devtools를 최신 안정 버전으로 바꾸려면 아래 명령을 실행하세요.
 
 ```sh
@@ -79,3 +95,5 @@ devtools update
 ## 개발
 
 devtools 자체를 수정하거나 배포하려면 [개발 안내](docs/development.md)를 참고하세요.
+
+MIT 라이선스로 제공됩니다. 자세한 내용은 [LICENSE](LICENSE)를 참고하세요.

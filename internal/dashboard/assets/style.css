@@ -11,7 +11,10 @@
   font-synthesis: none;
 }
 [hidden] { display: none !important; }
-button:disabled { opacity: .55; cursor: wait; }
+button:disabled { opacity: .55; cursor: default; }
+body[data-connection="connecting"] button:disabled { cursor: wait; }
+#connection-status { padding:14px 26px; color:#704418; background:#fff3dd; border-bottom:1px solid #e2cba5; font-size:14px; line-height:1.6; }
+body[data-connection="disconnected"] main { height: auto; min-height:calc(100dvh - 140px); }
 .manage-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
 .manage-toolbar button { font-size: 12px; }
 #create-item { flex-shrink: 0; }

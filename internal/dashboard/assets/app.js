@@ -27,12 +27,19 @@ function notice(message) {
   $("notice").textContent = message;
 }
 let sessionToken = "";
+function connectionState(state, message = "") {
+  document.body.dataset.connection = state;
+  $("connection-status").hidden = state === "connected";
+  $("connection-status").textContent = message;
+}
 function setAuthenticated(value) {
   document.querySelectorAll("main button, main input, main select").forEach(control => { control.disabled = !value; });
   $("graph").inert = !value;
   $("profile").disabled = !value;
   $("refresh").disabled = !value;
+  if (value) connectionState("connected");
 }
+connectionState("connecting", "Connecting to dashboard…");
 setAuthenticated(false);
 function rememberSession(value) {
   sessionToken = value;
@@ -41,17 +48,21 @@ function rememberSession(value) {
     else sessionStorage.removeItem("devtools.session");
   } catch {}
 }
-async function api(path, body) {
+async function api(path, body, signal) {
   if (!sessionToken) throw Error("Open the full link printed by devtools dashboard to connect this tab.");
   const credential = sessionToken;
   const response = await fetch(path, {
+    signal,
     credentials: "omit",
     redirect: "error",
     method: body === undefined ? "GET" : "POST",
     headers: { Authorization: "Bearer " + sessionToken, ...(body === undefined ? {} : {"Content-Type":"application/json"}) },
     ...(body === undefined ? {} : {body: JSON.stringify(body)}),
   });
-  if (response.status === 401 && credential === sessionToken) { rememberSession(""); setAuthenticated(false); }
+  if (response.status === 401 && credential === sessionToken) {
+    rememberSession(""); setAuthenticated(false);
+    connectionState("disconnected", "Session expired. Run devtools dashboard again and open the newly printed link.");
+  }
   if (!response.ok) {
     let message = await response.text();
     try {
@@ -530,6 +541,9 @@ $("fit").onclick = fit;
 $("search").oninput = renderList;
 $("list-view").onclick = () => { viewMode = "list"; applyView(); };
 $("graph-view").onclick = () => { viewMode = "graph"; applyView(); requestAnimationFrame(fit); };
+window.addEventListener("hashchange", () => {
+  if (new URLSearchParams(location.hash.slice(1).replaceAll("\\u0026", "&")).has("token")) location.reload();
+});
 (async () => {
   try {
     const params = new URLSearchParams(location.hash.slice(1).replaceAll("\\u0026", "&"));
@@ -537,17 +551,19 @@ $("graph-view").onclick = () => { viewMode = "graph"; applyView(); requestAnimat
     try { sessionToken = sessionStorage.getItem("devtools.session") || ""; } catch {}
     if (params.has("token")) {
       const response = await fetch("/session", {
+        signal: AbortSignal.timeout(15000),
         method: "POST",
         credentials: "omit",
         redirect: "error",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: params.get("token") }),
       });
-      if (!response.ok) throw Error(await response.text());
-      rememberSession((await response.json()).token);
+      if (!response.ok) {
+        if (!sessionToken || response.status !== 401) throw Error(await response.text());
+      } else rememberSession((await response.json()).token);
     }
     if (!sessionToken) throw Error("Open the full link printed by devtools dashboard to connect this tab.");
-    const result = await api("/api/profiles");
+    const result = await api("/api/profiles", undefined, AbortSignal.timeout(15000));
     for (const p of result.profiles) {
       const option = text("option", p, $("profile"));
       option.value = p;
@@ -561,6 +577,8 @@ $("graph-view").onclick = () => { viewMode = "graph"; applyView(); requestAnimat
     setAuthenticated(true);
     await load();
   } catch (e) {
-    notice(e.message);
+    setAuthenticated(false);
+    const reason = e.name === "TimeoutError" ? "Dashboard connection timed out." : "Dashboard connection unavailable.";
+    connectionState("disconnected", reason + " Run devtools dashboard again and open the newly printed link.");
   }
 })();

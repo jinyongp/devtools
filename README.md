@@ -108,7 +108,8 @@ reachable stable tag. Releases stay on 0.x: features and breaking changes bump
 minor; other commits bump patch. Run `pnpm release --publish` from a clean main
 to push main and the recommended tag atomically. Requires Node.js and pnpm.
 
-Pushing a version tag such as `v0.1.0` starts GitHub Actions validation, packages
+Pushing a version tag such as `v0.1.0` starts the single Release workflow. It checks
+that the tagged commit belongs to main, validates on macOS and Linux, packages
 all four targets, and publishes the archives, SHA-256 checksums, `install.sh`, and
 `version.txt` to GitHub Releases. Tags such as `v0.2.0-rc.1` publish prereleases;
 the installer selects GitHub's latest stable release by default.
@@ -126,7 +127,7 @@ just check
 ```
 
 `just check` checks formatting, runs `go vet`, and runs tests with the race
-detector. CI runs on macOS and Linux with the latest Go 1.27 patch. WSL uses
+detector. Tag-triggered release validation runs on macOS and Linux with Go 1.27.1. WSL uses
 the Linux build; testing in an actual WSL environment is a separate check.
 
 ## Project configuration

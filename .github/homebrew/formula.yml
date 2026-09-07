@@ -9,7 +9,7 @@ install: |
   ENV["GOTOOLCHAIN"] = "go#{File.read("go.mod").match(/^go (\S+)$/)[1]}"
   ldflags = "-s -w -X main.version=#{version} -X github.com/jinyongp/devtools/internal/cli.updateManager=homebrew"
   system "go", "build", *std_go_args(ldflags: ldflags), "./cmd/devtools"
-  generate_completions_from_executable(bin/"devtools", "completion", shell_parameter_format: :arg)
+  generate_completions_from_executable(bin/"devtools", "completion")
 test: |
   assert_path_exists bash_completion/"devtools"
   assert_path_exists zsh_completion/"_devtools"

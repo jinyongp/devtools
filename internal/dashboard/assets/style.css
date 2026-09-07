@@ -55,11 +55,13 @@ button {
   cursor: pointer;
 }
 select {
+  -webkit-appearance: none;
   appearance: none;
   padding-right: 36px;
   background-image: url("chevron.svg");
-  background-position: right 12px center;
-  background-size: 14px 14px;
+  /* The SVG has a 4px inset: 8px + 4px matches the 12px text inset. */
+  background-position: right 8px center;
+  background-size: 16px 16px;
   background-repeat: no-repeat;
   cursor: pointer;
 }

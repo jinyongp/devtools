@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
@@ -32,6 +33,28 @@ import (
 var assets embed.FS
 
 const authProtocol = 8
+
+// Embedded assets identify the UI even for local builds without a release version.
+var assetVersion = func() string {
+	h := sha256.New()
+	entries, err := assets.ReadDir("assets")
+	if err != nil {
+		panic(err)
+	}
+	for _, entry := range entries {
+		content, err := assets.ReadFile("assets/" + entry.Name())
+		if err != nil {
+			panic(err)
+		}
+		fmt.Fprintf(h, "%s\x00%d\x00", entry.Name(), len(content))
+		h.Write(content)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}()
+
+func compatibleServer(status tasks.Object) bool {
+	return status["auth_protocol"] == float64(authProtocol) && status["asset_version"] == assetVersion
+}
 
 type Registry struct {
 	ID      string `json:"id"`
@@ -96,7 +119,7 @@ func Manage(ctx context.Context, action, cache, data, profile string) (tasks.Obj
 		}
 		return tasks.Object{"stopped": true}, nil
 	}
-	if running && status["auth_protocol"] != float64(authProtocol) {
+	if running && !compatibleServer(status) {
 		if _, e = admin(ctx, r, "stop"); e != nil {
 			return nil, fail()
 		}
@@ -221,7 +244,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		switch v.Action {
 		case "status":
-			reply(tasks.Object{"server_id": s.registry.ID, "auth_protocol": authProtocol})
+			reply(tasks.Object{"server_id": s.registry.ID, "auth_protocol": authProtocol, "asset_version": assetVersion})
 		case "link":
 			s.mu.Lock()
 			now := time.Now()

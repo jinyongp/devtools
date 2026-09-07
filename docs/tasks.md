@@ -149,6 +149,8 @@ previous context return `context_invalid`; the revocation reason remains in hist
 **Variables & secrets** selects common values or an environment. Variables display
 their values; secrets display storage metadata and accept a replacement value.
 Editing an inherited value creates an override in the selected environment.
+From **Common**, choose **Override in…** on a key, select an environment, and enter its value. Existing overrides are identified before saving. Saving opens that environment; the common value stays unchanged. Create an environment first if none exists. Secrets accept a new value with a masked input.
+
 With an environment selected, **Inherited common**, **Overrides common**, and
 **Env only** distinguish storage layers. Inherited rows use a muted background;
 editing them offers **Create override**. **Remove override** restores inheritance,

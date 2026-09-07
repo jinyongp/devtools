@@ -366,6 +366,7 @@ button[aria-pressed="true"] { background: #e1eee7; color: #145d51; }
 .values-table th:first-child { min-width:190px; }
 .values-table th:nth-child(4) { min-width:170px; }
 .value-count { margin:12px 0; font-size:12px; }
+.value-override { white-space:nowrap; }
 .process-projects { margin:24px 0; border-block:1px solid #dce1da; padding:16px 0; }
 .process-projects summary, .process-details summary { cursor:pointer; }
 .process-projects section { padding:16px 0; }

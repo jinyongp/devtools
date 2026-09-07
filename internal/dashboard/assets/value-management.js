@@ -1,6 +1,30 @@
 "use strict";
 const valueFilters = {search:"", kind:"all", source:"all"};
 
+function overrideValue(item, view, version) {
+  edit(`Override ${item.key}`, p => {
+    text("p", "Choose the environment that will store its own value. Common stays unchanged.", p);
+    const label = text("label", "Environment", p), target = text("select", "", label);
+    for (const name of view.envs) text("option", name, target).value = name;
+    return () => target.value;
+  }, env => ({local:() => env}), async env => {
+    try {
+      const target = await api("/api/values?" + new URLSearchParams({profile:view.profile, env}));
+      if (generation !== version) return;
+      const existing = target.items.find(value => value.key === item.key);
+      const replacing = existing?.source === "env";
+      const kind = existing?.kind || item.kind;
+      edit(`${replacing ? "Edit override" : "Create override"}: ${item.key}`, p => {
+        text("p", `Target: ${view.profile} / ${env}. ${replacing ? "Saving replaces this environment’s existing override." : "Common stays unchanged."}`, p);
+        const value = field(p, kind === "secret" ? "New secret value" : "Value", kind === "secret" ? "" : (existing?.value ?? item.value ?? ""), kind === "secret" ? "password" : "text");
+        return () => ({key:item.key, env, value:value.value});
+      }, body => valueRequest(target, kind + ".set", body), () => { valueEnv = env; valueFilters.source = "all"; load(); });
+      $("editor-save").textContent = replacing ? "Save override" : "Create override";
+    } catch (error) { if (generation === version) notice(error.message); }
+  });
+  $("editor-save").textContent = "Continue";
+}
+
 function bulkValues(view) {
   let input;
   edit("Import .env values", p => {
@@ -123,6 +147,12 @@ async function loadValues(version) {
         const badge=text("span",!view.env?"Common":inherited?"Inherited common":item.overrides?"Overrides common":"Env only",source);
         badge.className="value-source "+(!view.env?"common":inherited?"inherited":item.overrides?"override":"local");
         const actions=text("td","",row);
+        if(!view.env){
+          const override=button(actions,"Override in…",()=>overrideValue(item,view,version));
+          override.className="value-override";
+          override.disabled=!view.envs.length;
+          override.title=view.envs.length?`Override ${item.key} in an environment`:"Create an environment first.";
+        }
         if(!view.env||item.source==="env")button(actions,view.env&&item.overrides?"Remove override":"Delete",()=>editRemoval(item));
       }
     }

@@ -154,6 +154,11 @@ Values and secrets, edit forms, imported content, and raw logs stay in memory.
 Authentication remains in the current browser session, so a view URL also requires
 an authenticated session. If an environment was removed, the view returns to Common.
 
+The visible dashboard checks for changes every five seconds and redraws when its
+data changes. Polling pauses while the browser tab is hidden, a dialog or inline
+editor is open, or an input has focus. Returning to the tab checks immediately.
+Raw logs and validation evidence are loaded through their explicit controls.
+
 **Variables & secrets** selects common values or an environment. Variables display
 their values; secrets display storage metadata and accept a replacement value.
 Editing an inherited value creates an override in the selected environment.

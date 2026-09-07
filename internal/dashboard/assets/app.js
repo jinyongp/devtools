@@ -48,7 +48,8 @@ function rememberSession(value) {
     else sessionStorage.removeItem("devtools.session");
   } catch {}
 }
-async function api(path, body, signal) {
+async function api(path, body, signal, track = true) {
+  const readVersion = generation, readDetailVersion = detailGeneration;
   if (!sessionToken) throw Error("Open the full link printed by devtools dashboard to connect this tab.");
   const credential = sessionToken;
   const response = await fetch(path, {
@@ -72,7 +73,9 @@ async function api(path, body, signal) {
     } catch {}
     const error = Error(message); error.responded = true; error.code = code; throw error;
   }
-  return response.json();
+  const data = await response.json();
+  if (track && body === undefined && generation === readVersion && detailGeneration === readDetailVersion) rememberRefreshRead(path, data);
+  return data;
 }
 function query(command, extra = {}) {
   return api(
@@ -307,6 +310,9 @@ function renderList() {
   draw();
 }
 async function select(node) {
+  for (const path of refreshReads.keys()) {
+    if (path.startsWith("/api/query?") && ["context", "workstream context", "validation show"].includes(new URLSearchParams(path.split("?")[1]).get("command"))) refreshReads.delete(path);
+  }
   if (node.kind === "profile") {
     profile = node.id;
     $("profile").value = profile;
@@ -429,7 +435,14 @@ async function select(node) {
     if (version === detailGeneration) notice(e.message);
   }
 }
+let loadedPages = 0;
 async function load(more = false) {
+  activeLoads++;
+  if (!more) { refreshReads.clear(); loadedPages = 0; }
+  try { return await loadView(more); }
+  finally { activeLoads--; }
+}
+async function loadView(more = false) {
   saveNavigation(true);
   const restoreSelected = selected;
   const version = ++generation;
@@ -485,6 +498,13 @@ async function load(more = false) {
   }
   if (!profile) {
     $("title").textContent = "Profiles";
+    try {
+      const data = await api("/api/profiles");
+      if (version !== generation) return;
+      $("profile").replaceChildren();
+      text("option", "All profiles", $("profile")).value = "";
+      for (const name of data.profiles) text("option", name, $("profile")).value = name;
+    } catch (error) { if (version === generation) notice(error.message); return; }
     nodes = Array.from($("profile").options)
       .filter((o) => o.value)
       .map((o) => ({
@@ -512,6 +532,7 @@ async function load(more = false) {
     if (scope === "independent")
       incoming = incoming.filter((n) => !n.workstream_id);
     nodes.push(...incoming);
+    loadedPages++;
     cursor = data.next_cursor;
     revision = data.revision;
     layout();
@@ -519,9 +540,9 @@ async function load(more = false) {
     if (!more) {
       if (graphPosition) d3.select(canvas).call(zoom.transform, d3.zoomIdentity.translate(graphPosition[0], graphPosition[1]).scale(graphPosition[2]));
       else fit();
-      const item = nodes.find(node => node.id === restoreSelected);
+      const item = selected === restoreSelected ? nodes.find(node => node.id === restoreSelected) : undefined;
       if (item) await select(item);
-      else if (restoreSelected) {
+      else if (restoreSelected && selected === restoreSelected) {
         try {
           const context = await query(scope === "workstreams" ? "workstream context" : "context", {id:restoreSelected});
           if (version !== generation) return;
@@ -570,7 +591,7 @@ window.addEventListener("hashchange", () => {
 });
 (async () => {
   try {
-    if (document.readyState === "loading") await new Promise(resolve => document.addEventListener("DOMContentLoaded", resolve, {once:true}));
+    if (document.readyState !== "complete") await new Promise(resolve => document.addEventListener("DOMContentLoaded", resolve, {once:true}));
     const params = new URLSearchParams(location.hash.slice(1).replaceAll("\\u0026", "&"));
     history.replaceState(null, "", location.pathname + location.search);
     try { sessionToken = sessionStorage.getItem("devtools.session") || ""; } catch {}

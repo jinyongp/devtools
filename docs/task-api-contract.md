@@ -1,6 +1,6 @@
 # Task API 상세 계약과 전이 검증
 
-task·workstream의 공개 계약이다. [workstream 설계](task-workstream-design.md)의 기본 동작을 입력·출력·전이·오류 기준으로 구체화한다. 명령별 입력과 JSON 본문 스키마는 `devtools schema`로 확인한다.
+task·workstream의 공개 계약이다. 계획 상시 편집·sync·저장 v2의 상세 계약은 [계획 편집 API](task-edit-api.md)를 함께 따른다. [workstream 설계](task-workstream-design.md)의 기본 동작을 입력·출력·전이·오류 기준으로 구체화한다. 명령별 입력과 JSON 본문 스키마는 `devtools schema`로 확인한다.
 
 ## 공통 입력
 
@@ -26,7 +26,7 @@ task·workstream의 공개 계약이다. [workstream 설계](task-workstream-des
 | --- | --- |
 | `--request-id UUID` | task 도메인의 모든 변경에 필수. dashboard 서버 관리와 조회에는 적용하지 않음. |
 | `--if-revision N` | 문서·관계·정의 수정, 연결 변경, hold/unhold, 취소·재개·활성화·마감, 면제·면제 철회에 필수. |
-| `--context REF` | resume·checkpoint·release·done·task 검증 결과 기록에 필수. `DEVTOOLS_TASK_CONTEXT`를 기본값으로 사용. |
+| `--context REF` | resume·sync·checkpoint·release·done 및 task 검증 basis/결과/재사용/면제에 필수. `DEVTOOLS_TASK_CONTEXT`를 기본값으로 사용. |
 | `--expected-run UUID` | takeover·unclaim에 필수. 현재 점유의 run과 일치해야 함. |
 | `--dir PATH` | claim·takeover·current. 기본값은 현재 디렉터리. |
 
@@ -102,8 +102,8 @@ context 조회는 목표·문서 본문·최근 결정·현재 실행·다음 �
 
 | action | 이전 | 이후 | 추가 조건 |
 | --- | --- | --- | --- |
-| task create | 없음 | open | 소속을 지정하면 draft 또는 active workstream. |
-| claim | open, ready | open + running | 같은 task의 점유 없음. workstream task는 계획 연결과 활성화 확인. |
+| task create | 없음 | open | 소속 workstream의 lifecycle과 별도로 정의 추가. |
+| claim | open 또는 done+stale, ready | open + running | 같은 task의 점유 없음. done+stale는 reopen+claim 원자 기록. 계획 연결과 활성화 확인. |
 | resume / checkpoint | open + running | 유지 | 현재 run 컨텍스트. |
 | takeover | open + running | open + 새 running | 관찰한 run 일치, 이전 컨텍스트 폐기, 현재 실행 조건 충족. |
 | unclaim | open + running | open | 최신 profile 리비전·관찰한 run 일치, 사유 기록, 기존 컨텍스트 무효화. run은 revoked로 종료된다. |
@@ -113,19 +113,19 @@ context 조회는 목표·문서 본문·최근 결정·현재 실행·다음 �
 | task cancel | open, 점유 없음 | canceled | 후행 영향 검사. done은 cancel 대신 reopen 검사 필요. |
 | task reopen | done 또는 canceled | open | 후행 done·running 보호. 소속 workstream은 draft 또는 active. |
 | workstream activate | draft | active | 구조 검사 통과. |
-| workstream close | active | done | 선행 workstream done, 모든 소속 task 종료, 전체 조건·통합 검증 충족. |
+| workstream close | active 또는 activate 이력이 있는 done | done | 선행 current 마감, 현재 조건·통합 검증 충족, 제외 항목을 포함한 모든 running 종료. |
 | workstream cancel | draft 또는 active | canceled | 보호할 후행 완료·현재 점유 없음. 소속 open task 취소를 함께 적용. |
 | workstream reopen | done 또는 canceled | draft | 외부 후행 done·running 보호. 내부 task 결과 유지. |
 
-새 요청 ID로 종료된 run에 done·release를 보내면 transition_conflict 또는 context_invalid다. 정확한 기존 요청의 재시도는 영수증을 복구한다. 반복 activate·close·cancel처럼 이미 같은 수명주기 상태인 새 요청은 transition_conflict다. 내부 순서에 의존해 조용히 재실행하지 않는다.
+새 요청 ID로 종료된 run에 done·release를 보내면 transition_conflict 또는 context_invalid다. 정확한 기존 요청의 재시도는 영수증을 복구한다. 완료 workstream의 close는 현재 조건으로 다시 마감한다. 반복 activate·cancel은 기존 전이 제약을 유지한다. 내부 순서에 의존해 조용히 재실행하지 않는다.
 
 ### 영향 범위의 구분
 
 `affected`는 변경 대상과 영향받는 모든 항목, `protected_successors`는 의존 관계상 후행 항목이다. reopen 대상 자신의 완료는 허용 전이이며 그 자체가 충돌 원인이 아니다. workstream에 속한다는 소속 관계만으로 내부 done task를 외부 후행 완료로 취급하지 않는다.
 
-task 정의·의존성 변경은 해당 task와 task DAG의 후행 경로를 검사한다. workstream의 현재 완료 보장을 바꾸는 cancel·reopen은 workstream DAG의 후행 경로와 거기에 속한 task를 검사한다. 현재 점유는 두 범위 모두에서 보호한다. workstream reopen은 내부 완료 기록을 그대로 유지한다.
+task 정의·의존성 편집은 해당 task와 후행의 현재 유효성을 다시 계산하고 점유를 유지한다. cancel·명시 reopen은 기존 후행 보호 제약을 적용한다. workstream reopen은 내부 완료 기록을 그대로 유지한다.
 
-명세·계획의 기존 본문과 조건 변경은 소속 task의 실행 기준에 영향을 주므로 관련 done task의 명시적 reopen이 필요하다. task를 후행부터 역순으로 재개하면 다음 선행 재개가 가능하다. 이미 완료된 후행 결과를 유지하려면 후속 수정 workstream으로 진행한다.
+정의 편집은 완료 이력을 유지하며 의미가 바뀐 작업만 stale로 표시한다. title·표시 순서는 근거를 유지한다. 본문 변경은 소속 전체, 구조화된 조건은 참조 작업과 후행에 전파한다. 무관한 삽입·제외는 기존 task 완료를 유지한다.
 
 attach/detach에는 양방향 task 의존 관계와 acceptance_keys가 없어야 한다. validation은 task 소유이면 같이 유지하되 workstream 조건 참조를 먼저 정리한다. 기존·새 workstream 계획 참조의 제거·추가를 같은 action 묶음으로 처리한다. 새 workstream의 구조 검사는 다시 계산한다.
 
@@ -133,13 +133,13 @@ attach/detach에는 양방향 task 의존 관계와 acceptance_keys가 없어야
 
 profile revision은 동시 수정과 캐시 무효화 기준이다. 검증 근거의 유효성은 별도의 불변 `basis_id`로 판정한다. 검증 대상의 정의·완료 조건·연관 명세·계획·코드 증거를 기준으로 구성하며 무관한 checkpoint나 다른 task의 변경은 기준을 바꾸지 않는다.
 
-`validation basis VAL_ID --file FILE`로 확인할 코드 상태와 범위를 제시하고 basis_id를 받는다. 파일 본문은 `code: {repository,commit,dirty,evidence}[]`이며 Git 밖에서는 commit을 null로 두고 파일 근거를 사용한다. 기준 생성은 요청 ID를 받는 기록 action이다. 대상 정의가 바뀌면 새 basis를 생성한다.
+`validation basis VAL_ID --file FILE`로 확인할 코드 상태와 범위를 제시하고 basis_id를 받는다. 파일 본문은 `code: {repository,commit,dirty,evidence}[]`이며 Git 밖에서는 commit을 null로 두고 파일 근거를 사용한다. 기준 생성은 요청 ID를 받는 기록 action이다. task basis는 현재 context, workstream basis는 관찰한 --if-revision이 필수다. 대상 정의가 바뀌면 새 basis를 생성한다.
 
-검증 결과 기록은 제시한 basis가 대상 정의에 여전히 적용 가능한지 검사한다. 코드 상태는 에이전트가 검증 직전에 확인한 값으로 기록하며 CLI가 커밋 문자열만 보고 파일 일치를 보증하지 않는다. pass 기록은 자신이 추가된 profile revision 때문에 무효화되지 않는다.
+늦은 결과도 해당 run에서 만든 이전 basis에 저장할 수 있고 applicable:false를 반환한다. 다른 run의 basis로 새 결과는 거절하며 늦은 결과는 현재 basis 선택을 바꾸지 않는다. 코드 상태는 에이전트가 검증 직전에 확인한 값으로 기록하며 CLI가 커밋 문자열만 보고 파일 일치를 보증하지 않는다. pass 기록은 자신이 추가된 profile revision 때문에 무효화되지 않는다.
 
 done·close는 적용 가능한 최신 검증 결과와 basis를 참조한다. 다른 run으로 인계해도 대상 기준과 코드가 같으면 기존 근거를 명시적으로 재사용할 수 있다. `validation accept VAL_ID --basis BASIS_ID --record RECORD_ID --reason TEXT`로 재사용 판단을 기록하며 task 소유 검증에는 현재 컨텍스트가 필요하다.
 
-waive는 해당 검증 정의 리비전·basis에만 적용한다. `validation unwaive VAL_ID --reason TEXT`로 철회한다. 면제도 현재 결과에 적용되는 명시적 근거이며 변경된 정의에 자동 상속하지 않는다. 면제의 이유는 누가 요청했는지와 함께 기록하지만 CLI 입력만으로 별도의 사용자 승인을 입증했다고 주장하지 않는다.
+waive는 해당 검증 의미 epoch·basis에만 적용한다. `validation unwaive VAL_ID --reason TEXT`로 철회한다. 면제도 현재 결과에 적용되는 명시적 근거이며 변경된 정의에 자동 상속하지 않는다. 면제의 이유는 누가 요청했는지와 함께 기록하지만 CLI 입력만으로 별도의 사용자 승인을 입증했다고 주장하지 않는다.
 
 ## 재시도와 실패 우선순위
 
@@ -161,7 +161,7 @@ dashboard의 start/status/stop은 작업 action과 분리된 서버 관리다. `
 
 화면의 task/workstream 변경은 같은 action과 실행 컨텍스트 규칙을 사용한다. HTTP 요청 형식과 var/sec/env 변경은 [관리 API 계약](management-api-contract.md)을 따른다. 선택적인 `if-revision`을 전달한 action도 현재 리비전과 일치해야 한다.
 
-로컬 조회 서버는 Host와 Origin을 검사하고 외부 사이트가 localhost API를 읽는 것을 차단한다. 접속 링크의 bootstrap 증명은 5분 동안 한 번 사용할 수 있으며, 교환한 브라우저 세션은 마지막 요청부터 8시간 또는 서버 종료까지 유지한다. 세션 증명은 포트를 포함한 origin의 sessionStorage에 보관하고 API 요청의 Authorization 헤더로 전달한다. 링크가 만료되면 dashboard 명령으로 새 링크를 받는다. 서버 실행은 브라우저를 자동으로 열지 않고 URL을 반환한다. dashboard 시작은 기존 서버의 인증 프로토콜을 확인하고 이전 방식의 서버를 교체한다.
+로컬 조회 서버는 Host와 Origin을 검사하고 외부 사이트가 localhost API를 읽는 것을 차단한다. 접속 링크의 bootstrap 증명은 5분 동안 한 번 사용할 수 있으며, 교환한 브라우저 세션은 마지막 요청부터 8시간 또는 서버 종료까지 유지한다. 세션 증명은 포트를 포함한 origin의 sessionStorage에 보관하고 API 요청의 Authorization 헤더로 전달한다. 링크가 만료되면 dashboard 명령으로 새 링크를 받는다. 서버 실행은 브라우저를 자동으로 열지 않고 URL을 반환한다. dashboard 시작은 기존 서버의 인증·UI·task 프로토콜 호환성을 확인하고 이전 방식의 서버를 교체한다.
 
 목록 cursor는 조회 범위·필터·리비전에 연결하며 잘못되거나 만료되면 `cursor_invalid`와 종료 코드 3으로 새 조회를 안내한다. tree의 잘린 가지는 같은 기준 리비전으로 이어 조회할 수 있는 cursor를 제공한다. 캐시를 잃으면 새 리비전의 전체 조회부터 다시 시작한다.
 
@@ -180,7 +180,7 @@ export와 history는 컨텍스트와 점유 증명을 제거한 공개 기록 �
 | C07 | 검증 결과 기록으로 profile revision 증가 | 해당 pass는 같은 basis에 계속 유효. |
 | C08 | 선행 task 재개 시 자신만 done | 후행 done·running이 없으면 open으로 재개. |
 | C09 | workstream 재개 시 내부 task가 done | 내부 기록 유지, 외부 후행 조건만 별도로 검사. |
-| C10 | 의존성 변경과 후행 claim 경쟁 | 원자적 순서에 따라 변경 또는 claim의 조건 검사 실패. |
+| C10 | 의존성 변경과 후행 claim 경쟁 | 원자적 순서에 따라 변경 전 기준의 실행이 stale가 되거나 변경 후 조건으로 claim 판정. |
 | C11 | task 이동 시 기존 계획이 참조 중 | 관계 조건 통과 후 계획 참조까지 함께 갱신, 고아 참조 없음. |
 | C12 | 아직 문서 참조가 비어 있는 draft | 저장 가능, check valid:false, activate 거절. |
 | C13 | canceled 선행 workstream | 후행 계획 작성 가능, task claim은 blocked. |

@@ -79,12 +79,13 @@ function specificationFields(parent, doc) {
   for (const entry of doc.acceptance || []) addRow(acceptanceRows, acceptanceList, entry, true);
   button(requirements, "Add requirement", () => addRow(requirementRows, requirementsList, {}, false));
   button(acceptance, "Add acceptance criterion", () => addRow(acceptanceRows, acceptanceList, {}, true));
-  return () => ({body:body.value, requirements:requirementsList.map(row => ({key:row.key.value, text:row.value.value})), acceptance:acceptanceList.map(row => ({key:row.key.value, text:row.value.value, requirement_keys:[...row.selected]}))});
+  return () => ({body:body.value, requirements:requirementsList.map(row => ({key:row.key.value, text:row.value.value})), acceptance:acceptanceList.map(row => ({key:row.key.value, text:row.value.value, requirement_keys:[...row.selected].filter(key => requirementsList.some(row => row.key.value === key))}))});
 }
 
 function itemActions(node, data, parent) {
   const current = profile, rev = data.revision, item = data.item || node;
   const send = (action, body, extra = {}) => taskRequest(action, node.id, body, rev, extra, current);
+  const editPlan = (reason, operations) => taskRequest("workstream.edited", node.kind === "workstream" ? node.id : item.workstream_id, {reason, operations}, rev, {}, current);
   const actions = text("div", "", parent); actions.className = "manage-toolbar";
   const terminal = ["done", "canceled"].includes(item.state);
   const run = item.current_run;
@@ -99,7 +100,6 @@ function itemActions(node, data, parent) {
       const reason = field(p, "Reason", "", "textarea"); reason.required = true;
       return () => ({reason:reason.value});
     }, body => send(`${node.kind}.reopen`, body), () => load(), true));
-    return;
   }
   if (run) {
     const summary = text("section", "", parent); summary.className = "execution-summary";
@@ -120,11 +120,16 @@ function itemActions(node, data, parent) {
   const menu = text("details", "", parent); menu.className = "item-management";
   text("summary", "Manage item", menu);
   const secondary = text("div", "", menu); secondary.className = "manage-toolbar";
-  if (node.kind === "task" && !run) button(secondary, "Edit", () => edit("Edit task", p => {
+  if (node.kind === "task" && (item.workstream_id || (!run && !terminal))) button(secondary, "Edit", () => edit("Edit task", p => {
     const title = field(p, "Title", item.title), description = field(p, "Description", item.description, "textarea"); title.required = true;
     return () => ({title:title.value, description:description.value});
-  }, body => send("task.update", body)));
-  if (!run && (node.kind === "workstream" || item.workstream_id)) button(secondary, "Dependencies", () => prepare(async () => {
+  }, body => item.workstream_id ? editPlan("Update task definition", [{op:"task.update", id:item.id, value:body}]) : send("task.update", body)));
+  if (node.kind === "task" && item.workstream_id) button(secondary, item.scope === "removed" ? "Restore to plan" : "Remove from plan", () => edit("Change plan scope", p => {
+    text("p", "History is retained. Related links and current completion checks will be shown in the preview.", p);
+    const reason = field(p, "Reason", "", "textarea"); reason.required = true;
+    return () => ({reason:reason.value});
+  }, body => editPlan(body.reason, [{op:item.scope === "removed" ? "task.restore" : "task.remove", id:item.id}])));
+  if (node.kind === "workstream" || item.workstream_id) button(secondary, "Dependencies", () => prepare(async () => {
     const candidates = await taskChoices(current, node.kind === "workstream" ? "workstream list" : "list", rev, item.workstream_id ? {workstream:item.workstream_id} : {});
     const successors = new Set([item.id]);
     let changed;
@@ -146,17 +151,28 @@ function itemActions(node, data, parent) {
       const doc = data.documents?.plan || {};
       edit("Edit plan", p => {
         const body = field(p, "Implementation plan", doc.body || "", "textarea");
-        const tasks = choiceField(p, "Tasks in this plan", data.tasks || [], doc.task_ids || []);
-        const validations = choiceField(p, "Validations in this plan", data.validations || [], doc.validation_ids || []);
-        return () => ({body:body.value, task_ids:tasks(), validation_ids:validations()});
-      }, body => send("plan.set", body));
+        text("p", "Manage scope from each task using Remove from plan or Restore to plan.", p);
+        return () => ({body:body.value});
+      }, body => editPlan("Update implementation plan", [{op:"plan.update", value:body}]));
     });
+    button(secondary, "Restore excluded tasks", () => prepare(async () => {
+      const excluded = await taskChoices(current, "list", rev, {workstream:item.id, scope:"removed"});
+      if (!fresh()) return;
+      edit("Restore excluded tasks", p => {
+        const selected = choiceField(p, "Excluded tasks", excluded);
+        const reason = field(p, "Reason", "", "textarea"); reason.required = true;
+        return () => ({ids:selected(), reason:reason.value});
+      }, body => {
+        if (!body.ids.length) throw Error("Select at least one task.");
+        return editPlan(body.reason, body.ids.map(id => ({op:"task.restore", id})));
+      });
+    }));
     const label = item.state === "draft" ? "Activate" : "Close workstream";
-    button(actions, label, () => edit(label, p => {
+    if (item.state !== "canceled" && (item.state !== "done" || item.completion_status === "stale")) button(actions, label, () => edit(label, p => {
       text("p", `${label}: ${item.title}. Coverage and completion checks apply.`, p); return () => ({});
     }, body => send(item.state === "draft" ? "workstream.activate" : "workstream.close", body), () => load(), true));
   }
-  if (!run) button(secondary, "Cancel", () => prepare(async () => {
+  if (!run && !terminal) button(secondary, "Cancel", () => prepare(async () => {
     const impact = await api("/api/query?" + new URLSearchParams({profile:current, command:node.kind === "workstream" ? "workstream impact" : "impact", id:node.id}));
     if (!fresh()) return;
     if (impact.revision !== rev) throw Error("The profile changed. Refresh the item before canceling.");

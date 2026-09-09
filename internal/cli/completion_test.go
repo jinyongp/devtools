@@ -16,6 +16,8 @@ func TestCompletionScripts(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", helperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// User .zshenv can replace PATH and invoke the installed binary instead.
+	t.Setenv("ZDOTDIR", helperDir)
 	for _, shell := range []string{"bash", "zsh", "fish"} {
 		t.Run(shell, func(t *testing.T) {
 			code, script, stderr := invoke(t, a, "", "completion", shell)

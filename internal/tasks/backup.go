@@ -13,14 +13,12 @@ import (
 // dependency graph together preserves all cross-item references in the archive.
 func ArchiveReady(data []byte, profile string, before time.Time) bool {
 	var j Journal
-	if json.Unmarshal(data, &j) != nil || j.Profile != profile || j.Version != 1 || len(j.Events) == 0 {
+	if json.Unmarshal(data, &j) != nil || j.Profile != profile || len(j.Events) == 0 {
 		return false
 	}
-	s := NewState()
-	for n, e := range j.Events {
-		if e.Sequence != n+1 || safeApply(s, e) != nil {
-			return false
-		}
+	s, replayErr := replayJournal(&j)
+	if replayErr != nil {
+		return false
 	}
 	last, e := time.Parse(time.RFC3339Nano, j.Events[len(j.Events)-1].At)
 	if e != nil || !last.Before(before) {
@@ -32,10 +30,15 @@ func ArchiveReady(data []byte, profile string, before time.Time) bool {
 		}
 	}
 	for _, item := range s.Items {
-		if item.Kind == "task" && item.State != "done" && item.State != "canceled" {
-			return false
+		if !s.Included(item) || item.State == "canceled" || item.Kind == "validation" {
+			continue
 		}
-		if item.Kind == "workstream" && item.State != "done" && item.State != "canceled" {
+		if item.Kind == "task" && item.Workstream != "" {
+			if owner := s.Items[item.Workstream]; owner != nil && owner.State == "canceled" {
+				continue
+			}
+		}
+		if item.State != "done" || s.Assessment(item.ID).CompletionStatus != "current" {
 			return false
 		}
 	}
@@ -48,14 +51,12 @@ func RestoreSnapshot(data []byte, source, target string) ([]byte, error) {
 	var j Journal
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
-	if d.Decode(&j) != nil || d.Decode(new(any)) != io.EOF || j.Version != 1 || j.Profile != source || j.Contexts == nil || j.Receipts == nil {
+	if d.Decode(&j) != nil || d.Decode(new(any)) != io.EOF || j.Profile != source || j.Contexts == nil || j.Receipts == nil {
 		return nil, errors.New("invalid task snapshot")
 	}
-	s := NewState()
-	for n, e := range j.Events {
-		if e.Sequence != n+1 || safeApply(s, e) != nil {
-			return nil, errors.New("invalid task history")
-		}
+	s, replayErr := replayJournal(&j)
+	if replayErr != nil {
+		return nil, errors.New("invalid task history")
 	}
 	ids := []string{}
 	for id, r := range s.Runs {

@@ -3,6 +3,9 @@ package tasks
 import "sort"
 
 func (s *State) Blockers(i *Item) []Object {
+	if s.Version == JournalVersion {
+		return s.Assessment(i.ID).Blockers
+	}
 	out := []Object{}
 	add := func(code, id, msg string) { out = append(out, Object{"code": code, "target_id": id, "message": msg}) }
 	for _, id := range i.Depends {
@@ -118,6 +121,9 @@ func (s *State) TaskCovered(t *Item) bool {
 	return false
 }
 func (s *State) Check(w *Item) []Object {
+	if s.Version == JournalVersion {
+		return s.EditIssues(w)
+	}
 	issues := []Object{}
 	add := func(id, msg string) {
 		issues = append(issues, Object{"code": "coverage", "target_id": id, "message": msg})
@@ -191,7 +197,7 @@ func (s *State) Tree(kind, id, ws, direction string, depth, limit int) Object {
 		roots = append(roots, id)
 	} else {
 		for _, i := range s.List(kind) {
-			if ws == "" || i.Workstream == ws {
+			if (ws == "" || i.Workstream == ws) && s.Included(i) {
 				roots = append(roots, i.ID)
 			}
 		}

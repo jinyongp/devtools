@@ -69,7 +69,27 @@ a Markdown `body`, all `task_ids`, and all related `validation_ids`.
 Set prerequisite IDs with `task depends set TASK_ID --file FILE` or
 `task workstream depends set WS_ID --file FILE`, using `{"depends_on":["UUID"]}`.
 Task edges connect tasks in the same workstream; workstream edges connect goals
-in the same profile. Every prerequisite must be done before execution proceeds.
+in the same profile. Every prerequisite must have current completion before execution proceeds.
+
+## Edit plans at any lifecycle state
+
+Use `task workstream edit WS_ID --file edit.json --if-revision N --dry-run` to preview
+an atomic batch, then use the same body and revision with `--request-id UUID` to save.
+The body contains `reason` and 1–200 `operations`. Insert, update, remove, restore,
+change dependencies and reorder tasks without reopening completed work first.
+See [the edit API](task-edit-api.md) for operations and examples.
+
+Removal preserves history and claims. Restoring a task requires explicit acceptance
+and dependency links. Coverage gaps can be saved and are checked before execution
+or closure. Legacy plan-set arrays assert the complete included membership.
+
+Read `completion_status` and `execution_status` alongside lifecycle `state`.
+A ready done+stale task can be claimed atomically. A stale running task uses
+`task sync TASK_ID --reason TEXT --if-revision N --request-id UUID` with its current
+context after reviewing the changed definition. Sync creates no passing evidence.
+`task list --scope removed` finds excluded history; `--completion stale` finds work
+whose prior completion no longer covers its definition. `workstream plan show`
+accepts `--at-revision N` for a complete historical request boundary.
 
 ## Recover and verify
 
@@ -80,7 +100,8 @@ and context. The previous context becomes inactive.
 and `task resume --context CONTEXT --request-id UUID` continues an existing context.
 
 Validation definitions describe the method and required evidence. Create a basis
-with `task validation basis VAL_ID --file FILE --request-id UUID`:
+with `task validation basis VAL_ID --file FILE --request-id UUID` and the current
+task execution context. For a workstream validation, supply `--if-revision N` instead:
 
 ```json
 {"code":[{"repository":"/workspace/project","commit":"COMMIT","dirty":false,"evidence":"git status and revision checked"}]}

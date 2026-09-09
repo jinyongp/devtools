@@ -50,12 +50,17 @@ type Run struct {
 	Definition int    `json:"definition_revision"`
 	Spec       int    `json:"spec_revision"`
 	Plan       int    `json:"plan_revision"`
+	Signature  string `json:"definition_signature,omitempty"`
 }
 type State struct {
-	Items    map[string]*Item
-	Runs     map[string]*Run
-	Events   []Event
-	Revision int
+	Items       map[string]*Item
+	Runs        map[string]*Run
+	Events      []Event
+	Revision    int
+	Version     int
+	Tracking    map[string]*DefinitionBasis
+	assessments map[string]Assessment
+	migrating   bool
 }
 
 func (r Run) MarshalJSON() ([]byte, error) {
@@ -78,7 +83,7 @@ func (r Run) MarshalJSON() ([]byte, error) {
 }
 
 func NewState() *State {
-	return &State{Items: map[string]*Item{}, Runs: map[string]*Run{}, Events: []Event{}}
+	return &State{Items: map[string]*Item{}, Runs: map[string]*Run{}, Events: []Event{}, Version: 1, Tracking: map[string]*DefinitionBasis{}}
 }
 func ID() string {
 	var b [16]byte
@@ -193,7 +198,12 @@ func (s *State) List(kind string) []*Item {
 			r = append(r, i)
 		}
 	}
-	sort.Slice(r, func(a, b int) bool { return r[a].Order < r[b].Order })
+	sort.Slice(r, func(a, b int) bool {
+		if r[a].Order == r[b].Order {
+			return r[a].ID < r[b].ID
+		}
+		return r[a].Order < r[b].Order
+	})
 	return r
 }
 
@@ -201,7 +211,24 @@ func (s *State) List(kind string) []*Item {
 func (s *State) Apply(e Event) {
 	d := e.Data
 	i := s.Items[e.Target]
+	previousCompletions := map[string]bool{}
+	if s.Version == JournalVersion {
+		for _, w := range s.List("workstream") {
+			previousCompletions[w.ID] = s.Assessment(w.ID).CompletionStatus == "current"
+		}
+	}
+	beforeDefinition := hash(s.ownDefinition(i))
+	beforeSpec, beforePlan := Object{}, Object{}
+	if i != nil {
+		beforeSpec = objectValue(i.Props["spec"])
+		beforePlan = objectValue(i.Props["plan"])
+	}
+	s.assessments = nil
 	switch e.Action {
+	case "profile.upgraded":
+		s.applyUpgrade(e)
+	case "workstream.edited":
+		s.applyEdit(e)
 	case "task.add", "workstream.create", "validation.add":
 		kind := strings.Split(e.Action, ".")[0]
 		state := "open"
@@ -238,6 +265,22 @@ func (s *State) Apply(e Event) {
 		i.Revision = e.Sequence
 		for _, w := range []string{old, i.Workstream} {
 			if ws := s.Items[w]; ws != nil {
+				if s.Version == JournalVersion {
+					basis := s.definition(w)
+					order := []string{}
+					for _, id := range basis.Order {
+						if id != i.ID {
+							order = append(order, id)
+						}
+					}
+					if w == i.Workstream {
+						order = append(order, i.ID)
+					}
+					basis.Order = order
+					if _, ok := ws.Props["plan"]; !ok {
+						ws.Props["plan"] = map[string]any{"body": ""}
+					}
+				}
 				if p, ok := ws.Props["plan"].(map[string]any); ok {
 					ids := []string{}
 					for _, id := range arr(p, "task_ids") {
@@ -245,7 +288,7 @@ func (s *State) Apply(e Event) {
 							ids = append(ids, id)
 						}
 					}
-					if w == i.Workstream {
+					if w == i.Workstream && (s.Version != JournalVersion || s.Included(i)) {
 						ids = append(ids, i.ID)
 					}
 					p["task_ids"] = unique(ids)
@@ -258,7 +301,7 @@ func (s *State) Apply(e Event) {
 					}
 					if w == i.Workstream {
 						for _, v := range s.List("validation") {
-							if str(v.Props, "task_id") == i.ID {
+							if str(v.Props, "task_id") == i.ID && (s.Version != JournalVersion || s.Included(v)) {
 								vals = append(vals, v.ID)
 							}
 						}
@@ -278,7 +321,9 @@ func (s *State) Apply(e Event) {
 	case "task.reopen":
 		i.State = "open"
 		i.Revision = e.Sequence
-		delete(i.Props, "hold")
+		if str(d, "cause") != "definition_changed" {
+			delete(i.Props, "hold")
+		}
 	case "workstream.activate":
 		i.State = "active"
 	case "workstream.close":
@@ -311,6 +356,15 @@ func (s *State) Apply(e Event) {
 		s.Runs[r.ID] = r
 	case "run.resumed", "run.checkpointed":
 		s.Runs[str(d, "run_id")].Activity = e.At
+	case "run.synced":
+		r := s.Runs[str(d, "run_id")]
+		r.Activity = e.At
+		r.Signature = str(d, "definition_signature")
+		r.Definition = i.Revision
+		if w := s.Items[i.Workstream]; w != nil {
+			r.Spec = num(w.Props, "spec_revision")
+			r.Plan = num(w.Props, "plan_revision")
+		}
 	case "run.revoked":
 		r := s.Runs[str(d, "run_id")]
 		r.State = "revoked"
@@ -342,12 +396,25 @@ func (s *State) Apply(e Event) {
 		i.Props["waiver"] = map[string]any(d)
 	case "validation.unwaive":
 		delete(i.Props, "waiver")
+	default:
+		panic("unknown task event")
 	}
 	if i != nil {
 		i.Updated = e.At
 	}
 	s.Revision = e.Sequence
 	s.Events = append(s.Events, e)
+	if s.Version == JournalVersion && e.Action != "profile.upgraded" && e.Action != "workstream.edited" {
+		s.trackEvent(e, beforeDefinition, beforeSpec, beforePlan)
+	}
+	if s.Version == JournalVersion {
+		for id, wasCurrent := range previousCompletions {
+			if wasCurrent && s.Assessment(id).CompletionStatus != "current" {
+				s.definition(id).CloseEpoch = e.Sequence
+			}
+		}
+		s.assessments = nil
+	}
 }
 func (s *State) View(i *Item) Object {
 	b, _ := json.Marshal(i)
@@ -374,14 +441,46 @@ func (s *State) View(i *Item) Object {
 			v["workstream_id"] = nil
 		}
 	}
+	if i.Kind == "task" || i.Kind == "validation" {
+		v["scope"] = "included"
+		if !s.Included(i) {
+			v["scope"] = "removed"
+		}
+	}
+	if i.Kind == "task" || i.Kind == "workstream" {
+		a := s.Assessment(i.ID)
+		v["completion_status"] = a.CompletionStatus
+		v["execution_status"] = a.ExecutionStatus
+		v["needs_work"] = a.NeedsWork
+		v["definition_signature"] = a.Signature
+		v["last_completion_revision"] = s.lastCompletion(i.ID).Revision
+		v["change_reasons"] = []Object{}
+		if a.CompletionStatus == "stale" || a.ExecutionStatus == "stale" {
+			v["change_reasons"] = []Object{{"code": "definition_or_evidence_changed", "target_id": i.ID}}
+		}
+		if i.Kind == "task" {
+			v["ready"] = a.Ready
+			v["blockers"] = a.Blockers
+		}
+	}
 	if i.Kind == "workstream" {
 		c := Object{"open": 0, "done": 0, "canceled": 0}
+		completed := Object{"none": 0, "current": 0, "stale": 0}
+		removed := 0
 		for _, t := range s.Items {
 			if t.Kind == "task" && t.Workstream == i.ID {
+				if !s.Included(t) {
+					removed++
+					continue
+				}
 				c[t.State] = num(c, t.State) + 1
+				status := s.Assessment(t.ID).CompletionStatus
+				completed[status] = num(completed, status) + 1
 			}
 		}
 		v["counts"] = c
+		v["completion_counts"] = completed
+		v["removed_count"] = removed
 		v["blockers"] = s.Blockers(i)
 	}
 	return v

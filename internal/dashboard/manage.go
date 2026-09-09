@@ -60,7 +60,7 @@ func managementTaskAction(action string) bool {
 	switch action {
 	case "task.add", "task.update", "task.depends", "task.cancel", "task.reopen",
 		"workstream.create", "workstream.depends", "workstream.cancel", "workstream.reopen",
-		"workstream.activate", "workstream.close", "spec.set", "plan.set", "run.revoked":
+		"workstream.activate", "workstream.close", "workstream.edited", "spec.set", "plan.set", "run.revoked":
 		return true
 	}
 	return false
@@ -183,13 +183,19 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		}
 		result, err = s.valueStore(req.Profile).Apply(r.Context(), *req.Change)
 	case "task":
-		if req.Process != nil || req.Change != nil || !managementTaskAction(req.Action) || req.Options["request-id"] == "" || req.Options["if-revision"] == "" {
+		preview := req.Action == "workstream.edited" && req.Options["dry-run"] == "true"
+		if req.Process != nil || req.Change != nil || !managementTaskAction(req.Action) || (!preview && req.Options["request-id"] == "") || req.Options["if-revision"] == "" {
 			invalidAction(w)
 			return
 		}
 		for k := range req.Options {
 			switch k {
 			case "request-id", "if-revision", "expected-run":
+			case "dry-run":
+				if req.Action != "workstream.edited" || (req.Options[k] != "true" && req.Options[k] != "false") {
+					invalidAction(w)
+					return
+				}
 			default:
 				invalidAction(w)
 				return

@@ -70,7 +70,7 @@ mutate("checkpoint", claim["run"]["id"], {"summary": "Implementation saved", "ne
 takeover = mutate("takeover", t, expected_run=claim["run"]["id"])
 err = api("task", "checkpoint", claim["run"]["id"], "--summary", "Stale session", "--context", claim["context"], "--request-id", str(uuid.uuid4()), expected=3)
 assert err["code"] == "context_invalid"
-basis = mutate("validation basis", v, {"code": []})["basis_id"]
+basis = mutate("validation basis", v, {"code": []}, context=takeover["context"])["basis_id"]
 mutate("validation record", v, {"basis_id": basis, "result": "pass", "summary": "Recovery verified", "evidence": [{"kind": "command", "reference": "installed CLI scenario", "description": "claim, checkpoint, and takeover passed"}]}, context=takeover["context"])
 request_id = str(uuid.uuid4())
 done_args = ["task", "done", t, "--summary", "Recovery works", "--context", takeover["context"], "--request-id", request_id]

@@ -53,7 +53,7 @@ var assetVersion = func() string {
 }()
 
 func compatibleServer(status tasks.Object) bool {
-	return status["auth_protocol"] == float64(authProtocol) && status["asset_version"] == assetVersion
+	return status["auth_protocol"] == float64(authProtocol) && status["asset_version"] == assetVersion && status["task_protocol"] == float64(tasks.ProjectionVersion)
 }
 
 type Registry struct {
@@ -254,7 +254,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		switch v.Action {
 		case "status":
-			reply(tasks.Object{"server_id": s.registry.ID, "auth_protocol": authProtocol, "asset_version": assetVersion})
+			reply(tasks.Object{"server_id": s.registry.ID, "auth_protocol": authProtocol, "asset_version": assetVersion, "task_protocol": tasks.ProjectionVersion})
 		case "link":
 			s.mu.Lock()
 			now := time.Now()
@@ -489,13 +489,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		command := r.URL.Query().Get("command")
-		allowed := map[string]bool{"workstream list": true, "workstream tree": true, "workstream context": true, "workstream impact": true, "impact": true, "list": true, "tree": true, "context": true, "history": true, "validation show": true}
+		allowed := map[string]bool{"workstream list": true, "workstream tree": true, "workstream context": true, "workstream impact": true, "workstream plan show": true, "workstream check": true, "impact": true, "list": true, "tree": true, "context": true, "history": true, "validation list": true, "validation show": true}
 		if !allowed[command] {
 			http.Error(w, "Unknown query", 400)
 			return
 		}
 		opts := map[string]string{}
-		for _, k := range []string{"workstream", "cursor", "limit", "depth", "direction", "state"} {
+		for _, k := range []string{"workstream", "cursor", "limit", "depth", "direction", "state", "scope", "completion", "at-revision"} {
 			opts[k] = r.URL.Query().Get(k)
 		}
 		key := r.URL.Query().Encode()

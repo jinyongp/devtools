@@ -106,6 +106,8 @@ type Definition struct {
 }
 
 var Definitions = []Definition{
+	{Action: "run.synced", Command: "sync", Kind: "task", Target: true, Fields: []string{"reason"}, Required: []string{"reason"}, Revision: true, Context: true},
+	{Action: "workstream.edited", Command: "workstream edit", Kind: "workstream", Target: true, Fields: []string{"reason", "operations"}, Required: []string{"reason", "operations"}, Revision: true},
 	{Action: "workstream.create", Command: "workstream create", Kind: "workstream", Fields: []string{"title", "description"}, Required: []string{"title"}},
 	{Action: "task.add", Command: "add", Kind: "task", Fields: []string{"title", "description", "workstream_id", "acceptance", "acceptance_keys"}, Required: []string{"title"}},
 	{Action: "task.update", Command: "update", Kind: "task", Target: true, Fields: []string{"title", "description", "acceptance", "acceptance_keys"}, Revision: true},
@@ -148,6 +150,10 @@ func Find(action string) *Definition {
 	return nil
 }
 func validateBody(def *Definition, b Object) *protocol.Error {
+	if def.Action == "workstream.edited" {
+		_, e := editOperations(b)
+		return e
+	}
 	for k, v := range b {
 		if !contains(def.Fields, k) || v == nil {
 			return failure("invalid_argument", "Unknown or null input field.")
@@ -176,7 +182,7 @@ func validateBody(def *Definition, b Object) *protocol.Error {
 				return e
 			}
 			b[k] = unique(arr(b, k))
-		case "acceptance_keys", "decisions", "remaining", "blockers":
+		case "acceptance_keys", "requirement_keys", "decisions", "remaining", "blockers":
 			if e := stringArray(v, false); e != nil {
 				return e
 			}
@@ -365,7 +371,17 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 			return nil, nil, "", err
 		}
 	}
+	if evaluation, handled, e := s.legacyEdit(r); handled {
+		if e != nil {
+			return nil, nil, "", e
+		}
+		if evaluation.Result["would_change"] == false {
+			return nil, evaluation.Result, "", nil
+		}
+		return []Event{evaluation.Event}, evaluation.Result, "", nil
+	}
 	result := Object{}
+	prefixEvents := []Event{}
 	credential := ""
 	fail := func(e *protocol.Error) ([]Event, Object, string, *protocol.Error) { return nil, nil, "", e }
 	ensureFree := func(x *Item) *protocol.Error {
@@ -376,12 +392,34 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 		return nil
 	}
 	ensureOpen := func(x *Item) *protocol.Error {
+		if s.Version == JournalVersion && r.Action == "workstream.close" && x.State == "done" && s.definition(x.ID).Activated {
+			return nil
+		}
 		if x.Kind == "task" && x.State != "open" || x.Kind == "workstream" && (x.State != "draft" && x.State != "active") {
 			return conflict("transition_conflict", []string{x.ID})
 		}
 		return nil
 	}
 	switch r.Action {
+	case "workstream.edited":
+		ops, e := editOperations(b)
+		if e != nil {
+			return fail(e)
+		}
+		allocations := map[int]string{}
+		for _, op := range ops {
+			if op.Name == "task.add" || op.Name == "validation.add" {
+				allocations[op.Index] = ID()
+			}
+		}
+		evaluation, e := EvaluateEdit(s, target, b, allocations)
+		if e != nil {
+			return fail(e)
+		}
+		if evaluation.Result["would_change"] == false {
+			return nil, evaluation.Result, "", nil
+		}
+		return []Event{evaluation.Event}, evaluation.Result, "", nil
 	case "task.add", "workstream.create", "validation.add":
 		target = ID()
 		if r.Action == "task.add" {
@@ -437,7 +475,7 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 				if ws := r.Options["workstream"]; ws != "" && t.Workstream != ws {
 					continue
 				}
-				if t.State == "open" && s.Current(t.ID) == nil && len(s.Blockers(t)) == 0 {
+				if s.Version == JournalVersion && s.CanClaim(t.ID) || s.Version == 1 && t.State == "open" && s.Current(t.ID) == nil && len(s.Blockers(t)) == 0 {
 					i = t
 					target = t.ID
 					break
@@ -447,7 +485,11 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 				return nil, Object{"claimed": false, "run": nil, "context": nil, "context_valid": false, "blockers": []Object{}}, "", nil
 			}
 		}
-		if i.State != "open" || len(s.Blockers(i)) > 0 {
+		eligible := i.State == "open"
+		if s.Version == JournalVersion {
+			eligible = s.Assessment(i.ID).NeedsWork
+		}
+		if !eligible || len(s.Blockers(i)) > 0 {
 			return fail(conflict("dependency_conflict", []string{i.ID}))
 		}
 		old := s.Current(target)
@@ -456,6 +498,9 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 		}
 		if r.Action == "run.taken_over" && (old == nil || old.ID != r.Options["expected-run"]) {
 			return fail(conflict("claim_conflict", []string{target}))
+		}
+		if i.State == "done" {
+			prefixEvents = append(prefixEvents, Event{Action: "task.reopen", Target: target, Data: Object{"reason": "Execute against the changed definition.", "cause": "definition_changed"}})
 		}
 		b["run_id"] = ID()
 		b["directory"] = r.Options["dir"]
@@ -468,12 +513,28 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 			return fail(conflict("claim_conflict", []string{target}))
 		}
 		b["run_id"] = old.ID
-	case "run.resumed", "run.checkpointed", "run.released", "task.completed":
+	case "run.synced", "run.resumed", "run.checkpointed", "run.released", "task.completed":
 		if i.State != "open" {
 			return fail(conflict("transition_conflict", []string{target}))
 		}
 		b["run_id"] = run.ID
+		if r.Action == "run.synced" {
+			if len(s.Blockers(i)) > 0 {
+				return fail(conflict("transition_conflict", []string{i.ID}))
+			}
+			signature := s.Assessment(i.ID).Signature
+			if run.Signature == signature {
+				return nil, Object{"target_id": target}, "", nil
+			}
+			b["previous_signature"] = run.Signature
+			b["definition_signature"] = signature
+		}
 		if r.Action == "task.completed" {
+			if s.Version == JournalVersion {
+				if e := s.CanComplete(i); e != nil {
+					return fail(e)
+				}
+			}
 			if len(s.Blockers(i)) > 0 {
 				return fail(conflict("dependency_conflict", []string{i.ID}))
 			}
@@ -576,6 +637,12 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 				return fail(e)
 			}
 		case "workstream.close":
+			if s.Version == JournalVersion {
+				if e := s.CanClose(i); e != nil {
+					return fail(e)
+				}
+				break
+			}
 			if i.State != "active" || len(s.Blockers(i)) > 0 {
 				return fail(conflict("transition_conflict", []string{target}))
 			}
@@ -654,6 +721,9 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 		}
 	}
 	result["target_id"] = target
+	if applicable, ok := b["applicable"]; ok {
+		result["applicable"] = applicable
+	}
 	if i != nil && (r.Action == "task.update" || r.Action == "validation.update") {
 		same := true
 		for k, v := range b {
@@ -668,7 +738,7 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 	if i != nil && (r.Action == "task.unhold" && str(i.Props, "hold") == "" || r.Action == "task.hold" && str(i.Props, "hold") == str(b, "reason")) {
 		return nil, result, "", nil
 	}
-	return []Event{{Action: r.Action, Target: target, Data: b}}, result, credential, nil
+	return append(prefixEvents, Event{Action: r.Action, Target: target, Data: b}), result, credential, nil
 }
 func (s *State) checkEdges(i *Item, ids []string) *protocol.Error {
 	for _, id := range ids {

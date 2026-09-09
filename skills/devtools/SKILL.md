@@ -43,6 +43,14 @@ specification and plan. In a workstream, connect requirements, acceptance criter
 tasks, and validations; set the plan's complete references, then check and activate.
 Task dependencies stay within a workstream; workstream dependencies stay within a profile.
 
+Use `task workstream edit` for atomic insertion, definition updates, scope removal,
+restoration and ordering in any lifecycle state. Read its schema, preview with
+`--dry-run --if-revision`, then submit the same body with a request UUID and the
+observed revision. Preview does not consume a request ID. Incomplete coverage can
+be saved; resolve returned issues before execution or closure. Removed tasks keep
+history and claims; restoring them requires explicit dependency/acceptance links.
+Legacy plan set arrays assert the complete included membership.
+
 Before source work, claim the task and check `claimed` and `context_valid`.
 Keep the returned context private; pass it explicitly or through
 `DEVTOOLS_TASK_CONTEXT`. Public task/run IDs identify work but do not authorize it.
@@ -54,17 +62,33 @@ then inspect the actual working tree. Resume with an existing valid context,
 take over the observed active run using `--expected-run`, or claim released work.
 Claims end through explicit actions, not elapsed time.
 
+Check `completion_status` and `execution_status` alongside lifecycle `state`.
+A done task with stale completion is claimable when ready. A stale current run
+must review the changed definition and use `task sync` with context, reason and
+observed revision before current validation/completion. Sync preserves the run
+and does not create passing evidence. Checkpoint and release remain available.
+
 ## Retry and finish
 
 Each task mutation needs a request UUID. Reuse the UUID and identical input after
 an uncertain response; changed input gets a new UUID. For revision-guarded edits,
 use the latest query revision. On conflict, refresh and reassess before resubmitting.
 
-Perform validation, record its code basis and evidence, then complete the task.
+Create a code basis for the observed definition, perform validation, record its
+evidence, then complete the task. Task basis requires the current execution
+context; workstream basis requires the observed profile revision. Late records
+stay on their run-owned basis and may return `applicable:false`.
 The CLI stores evidence; it does not execute or verify the supplied evidence.
 After takeover, explicitly accept reusable validation results for the new run.
 Close a workstream after its task results and required integration checks satisfy
 the acceptance criteria. Use waivers only within the user's agreed scope.
+After a closed workstream becomes stale, explicitly close it again once current
+evidence is complete. A later pass alone does not close it.
+
+The first real task mutation upgrades a v1 journal to v2 atomically. All writers
+sharing the profile must support v2; older binaries reject it. Read, no-op and
+preview do not upgrade. Use error details and remedy argv to recover conflicts;
+never copy a context credential into shared diagnostics.
 
 Cleanup and restore start with a preview. Apply the selected IDs or digest,
 refreshing stale previews. Keep backup identities separate from project files.

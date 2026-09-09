@@ -20,7 +20,7 @@ function edit(title, build, request, after = () => load(), destructive = false) 
   $("editor-save").textContent = destructive ? "Confirm change" : "Save";
   $("editor-save").disabled = false; $("editor-cancel").disabled = false;
   const read = build(fields);
-  let pending = null, busy = false;
+  let pending = null, busy = false, reviewed = false;
   const controls = () => Array.from(form.querySelectorAll("input,textarea,select,button"));
   const fixed = new Set(controls().filter(c => c.disabled));
   dialog.oncancel = event => { if (busy) event.preventDefault(); };
@@ -31,13 +31,21 @@ function edit(title, build, request, after = () => load(), destructive = false) 
     try {
       if (!pending) pending = request(read());
       busy = true; controls().forEach(c => c.disabled = true);
+      if (pending.action === "workstream.edited" && !reviewed) {
+        const preview = (await api("/api/actions", {...pending, options:{...pending.options, "dry-run":"true"}})).data;
+        reviewed = true; busy = false;
+        $("editor-error").textContent = `Preview: ${preview.changes.length} changes, ${preview.effects.length} related adjustments, ${preview.impact.affected_ids.length} affected items. ${preview.issues.length} coverage issues. Confirm to save this revision. ${preview.issues.map(issue => issue.message).join(" ")}`;
+        $("editor-save").disabled = false; $("editor-cancel").disabled = false;
+        $("editor-save").textContent = "Confirm change";
+        return;
+      }
       const response = pending.local ? pending.local() : (await api("/api/actions", pending)).data;
       pending = null; busy = false;
       await new Promise(resolve => { dialog.addEventListener("close", resolve, {once:true}); dialog.close(); });
       await after(response);
     } catch (error) {
       busy = false;
-      if (error.responded) pending = null;
+      if (error.responded) { pending = null; reviewed = false; }
       $("editor-error").textContent = error.message + (pending ? " Retry sends the same request." : " Reopen after reloading if the profile changed.");
       controls().forEach(c => c.disabled = fixed.has(c) || (!!pending && c.id !== "editor-save" && c.id !== "editor-cancel"));
       $("editor-save").textContent = pending ? "Retry" : "Save";

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -32,6 +33,8 @@ type Store struct {
 	Directory string
 	Profile   string
 	Cache     string
+	// Test seam for failures before the atomic journal replacement.
+	commit func(string, any) error
 }
 
 func (s Store) path() string {
@@ -151,19 +154,11 @@ func (s Store) load() (*Journal, *State, *protocol.Error) {
 	if e := ReadPrivate(s.path(), j); e != nil && !errors.Is(e, os.ErrNotExist) {
 		return nil, nil, storageError()
 	}
-	if j.Version != 1 || j.Profile != s.Profile || j.Receipts == nil || j.Contexts == nil {
+	if j.Profile != s.Profile || j.Receipts == nil || j.Contexts == nil {
 		return nil, nil, storageError()
 	}
-	state := NewState()
-	for n, e := range j.Events {
-		if e.Sequence != n+1 {
-			return nil, nil, storageError()
-		}
-		if err := safeApply(state, e); err != nil {
-			return nil, nil, storageError()
-		}
-	}
-	return j, state, nil
+	state, err := replayJournal(j)
+	return j, state, err
 }
 func safeApply(s *State, e Event) (err error) {
 	defer func() {
@@ -268,6 +263,29 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 	if e := validateBody(def, body); e != nil {
 		return nil, e
 	}
+	if r.Action == "workstream.edited" && r.Options["dry-run"] == "true" {
+		_, state, e := s.load()
+		if e != nil {
+			return nil, e
+		}
+		if r.Options["if-revision"] != fmt.Sprint(state.Revision) {
+			return nil, state.explain(r, failure("revision_conflict", "Profile changed; read the latest revision."), s.Profile)
+		}
+		evaluation, e := EvaluateEdit(state, r.Target, r.Body, nil)
+		if e != nil {
+			return nil, state.explain(r, e, s.Profile)
+		}
+		out := evaluation.Result
+		delete(out, "target_id")
+		out["profile"] = s.Profile
+		out["revision"] = state.Revision
+		out["current_revision"] = state.Revision
+		out["changed"] = false
+		out["action_ids"] = []string{}
+		out["request_id"] = r.Options["request-id"]
+		out["replayed"] = false
+		return out, nil
+	}
 	if !validID(r.Options["request-id"]) {
 		return nil, failure("invalid_argument", "Provide a UUID request-id.")
 	}
@@ -302,14 +320,23 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 		}
 		return result, nil
 	}
-	events, result, credential, err := state.prepare(r, j.Contexts)
+	prepared := state
+	if state.Version == 1 {
+		prepared = state.clone()
+		prepared.applyUpgrade(state.upgradeEvent())
+	}
+	events, result, credential, err := prepared.prepare(r, j.Contexts)
 	if err != nil {
-		return nil, err
+		return nil, prepared.explain(r, err, s.Profile)
 	}
 	if ctx.Err() != nil {
 		return nil, protocol.NewError("canceled", "Request canceled.", 130, nil)
 	}
 	ids := []string{}
+	if len(events) > 0 && state.Version == 1 {
+		events = append([]Event{state.upgradeEvent()}, events...)
+		j.Version = JournalVersion
+	}
 	for _, e := range events {
 		e.ID = ID()
 		e.Sequence = state.Revision + 1
@@ -349,8 +376,18 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 	result["replayed"] = false
 	result["changed"] = len(events) > 0
 	result["action_ids"] = ids
+	if r.Action == "workstream.edited" {
+		raw, _ := json.Marshal(result)
+		if len(raw) > 2<<20 {
+			return nil, failure("invalid_argument", "Edit result exceeds 2 MiB; split the request.")
+		}
+	}
 	j.Receipts[r.Options["request-id"]] = Receipt{Fingerprint: fingerprint, ContextHash: hash(token), Result: result}
-	if e := WritePrivate(s.path(), j); e != nil {
+	commit := s.commit
+	if commit == nil {
+		commit = WritePrivate
+	}
+	if e := commit(s.path(), j); e != nil {
 		return nil, storageError()
 	}
 	return result, nil

@@ -20,6 +20,7 @@ type Query struct {
 	Body    Object
 }
 type Snapshot struct {
+	Projection  int       `json:"projection_version"`
 	Fingerprint string    `json:"fingerprint"`
 	Expires     time.Time `json:"expires"`
 	Revision    int       `json:"revision"`
@@ -27,10 +28,11 @@ type Snapshot struct {
 }
 
 type GraphSnapshot struct {
-	Profile string    `json:"profile"`
-	Kind    string    `json:"kind"`
-	Expires time.Time `json:"expires"`
-	Events  []Event   `json:"events"`
+	Projection int       `json:"projection_version"`
+	Profile    string    `json:"profile"`
+	Kind       string    `json:"kind"`
+	Expires    time.Time `json:"expires"`
+	Events     []Event   `json:"events"`
 }
 
 func (s Store) cacheDirectory() string {
@@ -62,6 +64,20 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 		return nil, e
 	}
 	out := Object{"profile": store.Profile, "revision": s.Revision}
+	if value := q.Options["at-revision"]; value != "" {
+		if q.Command != "workstream plan show" {
+			return nil, failure("invalid_argument", "at-revision is available for workstream plan show.")
+		}
+		revision, err := strconv.Atoi(value)
+		if err != nil {
+			return nil, failure("invalid_argument", "Provide a numeric revision.")
+		}
+		s, e = s.AtRevision(revision)
+		if e != nil {
+			return nil, e
+		}
+		out["revision"] = s.Revision
+	}
 	kind := "task"
 	cmd := q.Command
 	if strings.HasPrefix(cmd, "workstream ") {
@@ -78,7 +94,7 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 			return nil, failure("cursor_invalid", "Start a new graph query.")
 		}
 		var snapshot GraphSnapshot
-		if e := ReadPrivate(filepath.Join(store.cacheDirectory(), id+".json"), &snapshot); e != nil || snapshot.Profile != store.Profile || snapshot.Kind != kind || time.Now().After(snapshot.Expires) {
+		if e := ReadPrivate(filepath.Join(store.cacheDirectory(), id+".json"), &snapshot); e != nil || snapshot.Projection != ProjectionVersion || snapshot.Profile != store.Profile || snapshot.Kind != kind || time.Now().After(snapshot.Expires) {
 			return nil, failure("cursor_invalid", "Start a new graph query.")
 		}
 		s = NewState()
@@ -115,11 +131,40 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 	case "spec show", "plan show":
 		name := strings.Fields(cmd)[0]
 		out["item"] = item.Props[name]
+		if name == "plan" {
+			out["documents"] = Object{"spec": item.Props["spec"], "plan": item.Props["plan"]}
+			order := []string{}
+			for _, id := range s.definition(item.ID).Order {
+				if s.Included(s.Items[id]) {
+					order = append(order, id)
+				}
+			}
+			for _, task := range s.List("task") {
+				if task.Workstream == item.ID && s.Included(task) && !contains(order, task.ID) {
+					order = append(order, task.ID)
+				}
+			}
+			out["task_order"] = order
+			members := []Object{}
+			for _, t := range s.List("task") {
+				if t.Workstream == item.ID && s.Included(t) {
+					members = append(members, s.View(t))
+				}
+			}
+			out["tasks"] = members
+		}
 		return out, nil
 	case "check":
 		issues := s.Check(item)
 		out["valid"] = len(issues) == 0
 		out["issues"] = issues
+		out["closable"] = s.CanClose(item) == nil
+		out["execution_ready"] = false
+		for _, task := range s.List("task") {
+			if task.Workstream == item.ID && s.CanClaim(task.ID) {
+				out["execution_ready"] = true
+			}
+		}
 		return out, nil
 	case "impact":
 		if q.Body != nil {
@@ -171,7 +216,7 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 					return nil, storageError()
 				}
 				token = ID()
-				snapshot := GraphSnapshot{Profile: store.Profile, Kind: kind, Expires: time.Now().Add(30 * time.Minute), Events: s.Events}
+				snapshot := GraphSnapshot{Projection: ProjectionVersion, Profile: store.Profile, Kind: kind, Expires: time.Now().Add(30 * time.Minute), Events: s.Events}
 				if e := WritePrivate(filepath.Join(dir, token+".json"), snapshot); e != nil {
 					return nil, storageError()
 				}
@@ -186,7 +231,7 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 			if q.Options["workstream"] != "" && t.Workstream != q.Options["workstream"] {
 				continue
 			}
-			if t.State == "open" && s.Current(t.ID) == nil && len(s.Blockers(t)) == 0 {
+			if s.CanClaim(t.ID) {
 				out["item"] = s.View(t)
 				out["reason"] = "Oldest ready task."
 				break
@@ -216,13 +261,13 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 			}
 		}
 		for _, v := range s.List("validation") {
-			if ids[s.owner(v).ID] {
+			if owner := s.owner(v); owner != nil && ids[owner.ID] {
 				vs = append(vs, s.View(v))
 				ids[v.ID] = true
 			}
 		}
 		for _, ev := range s.Events {
-			if ids[ev.Target] {
+			if eventTouches(ev, ids) {
 				history = append(history, ev)
 			}
 		}
@@ -265,7 +310,7 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 			return nil, failure("not_found", "Run does not exist.")
 		}
 		for _, ev := range s.Events {
-			if str(ev.Data, "run_id") == q.Target && contains([]string{"run.checkpointed", "run.released", "task.completed"}, ev.Action) {
+			if str(ev.Data, "run_id") == q.Target && contains([]string{"run.synced", "run.checkpointed", "run.released", "task.completed"}, ev.Action) {
 				items = append(items, ev)
 			}
 		}
@@ -284,12 +329,19 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 			}
 		}
 		for _, ev := range s.Events {
-			if q.Target == "" || ids[ev.Target] {
+			if q.Target == "" || eventTouches(ev, ids) {
 				items = append(items, ev)
 			}
 		}
 	case "list":
 		state := q.Options["state"]
+		scope, completion := q.Options["scope"], q.Options["completion"]
+		if scope != "" && (!contains([]string{"included", "removed", "all"}, scope) || kind == "workstream") {
+			return nil, failure("invalid_argument", "Use included, removed, or all scope for tasks and validations.")
+		}
+		if completion != "" && (!contains([]string{"none", "current", "stale", "all"}, completion) || kind == "validation") {
+			return nil, failure("invalid_argument", "Use none, current, stale, or all completion for tasks and workstreams.")
+		}
 		allowed := []string{"open", "done", "canceled", "all"}
 		if kind == "workstream" {
 			allowed = []string{"draft", "active", "done", "canceled", "all"}
@@ -298,7 +350,15 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 			return nil, failure("invalid_argument", "Invalid state filter.")
 		}
 		for _, i := range s.List(kind) {
-			if state == "" && (i.State == "done" || i.State == "canceled") {
+			included := s.Included(i)
+			if kind != "workstream" && ((scope == "" || scope == "included") && !included || scope == "removed" && included) {
+				continue
+			}
+			status := s.Assessment(i.ID).CompletionStatus
+			if completion != "" && completion != "all" && status != completion {
+				continue
+			}
+			if state == "" && completion == "" && scope != "removed" && scope != "all" && (i.State == "done" && status != "stale" || i.State == "canceled") {
 				continue
 			}
 			if state != "" && state != "all" && i.State != state {
@@ -345,7 +405,7 @@ func (s Store) page(q Query, out Object, items []any, limit int) (Object, *proto
 	}
 	offset := 0
 	token := ""
-	snapshot := Snapshot{Fingerprint: fp, Expires: time.Now().Add(30 * time.Minute), Revision: num(out, "revision"), Items: items}
+	snapshot := Snapshot{Projection: ProjectionVersion, Fingerprint: fp, Expires: time.Now().Add(30 * time.Minute), Revision: num(out, "revision"), Items: items}
 	if c := q.Options["cursor"]; c != "" {
 		parts := strings.Split(c, ":")
 		if len(parts) != 2 || !validID(parts[0]) {
@@ -357,7 +417,7 @@ func (s Store) page(q Query, out Object, items []any, limit int) (Object, *proto
 			return nil, failure("cursor_invalid", "Start a new query.")
 		}
 		offset = n
-		if e = ReadPrivate(filepath.Join(dir, token+".json"), &snapshot); e != nil || snapshot.Fingerprint != fp || time.Now().After(snapshot.Expires) || offset > len(snapshot.Items) {
+		if e = ReadPrivate(filepath.Join(dir, token+".json"), &snapshot); e != nil || snapshot.Projection != ProjectionVersion || snapshot.Fingerprint != fp || time.Now().After(snapshot.Expires) || offset > len(snapshot.Items) {
 			return nil, failure("cursor_invalid", "Start a new query.")
 		}
 		items = snapshot.Items

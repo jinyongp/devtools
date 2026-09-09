@@ -11,6 +11,9 @@ func (s *State) owner(v *Item) *Item {
 }
 func (s *State) basisFingerprint(v *Item) string {
 	o := s.owner(v)
+	if s.Version == JournalVersion {
+		return s.fingerprintFor(v, s.Assessment(o.ID).Signature)
+	}
 	b := Object{"validation": v.Revision, "owner": o.Revision}
 	w := o
 	if o.Kind == "task" {
@@ -40,6 +43,9 @@ func (s *State) basis(v *Item, id string) Object {
 	return b
 }
 func (s *State) validationAction(v *Item, action string, b Object, opts map[string]string, run *Run) *protocol.Error {
+	if s.Version == JournalVersion {
+		return s.validationActionCurrent(v, action, b, opts, run)
+	}
 	o := s.owner(v)
 	if o == nil {
 		return failure("not_found", "Validation owner is missing.")
@@ -120,6 +126,19 @@ func (s *State) validationKeys(o *Item, keys []string) *protocol.Error {
 	return s.acceptance(w, keys)
 }
 func (s *State) validateCompletion(o *Item) *protocol.Error {
+	if s.Version == JournalVersion {
+		signature := s.Assessment(o.ID).Signature
+		run := ""
+		if r := s.Current(o.ID); r != nil {
+			run = r.ID
+		}
+		for _, v := range s.List("validation") {
+			if s.owner(v) == o && s.Included(v) && v.Props["required"] != false && !s.evidenceCurrent(v, signature, run) {
+				return conflict("validation_required", []string{v.ID})
+			}
+		}
+		return nil
+	}
 	for _, v := range s.List("validation") {
 		if s.owner(v) != o || v.Props["required"] == false {
 			continue

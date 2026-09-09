@@ -70,6 +70,8 @@ async function api(path, body, signal, track = true) {
     try {
       const failure = JSON.parse(message).error;
       message = failure.message; code = failure.code;
+      const related = failure.details?.related || [];
+      if (related.length) message += " " + related.map(item => `${item.title}: ${(item.blockers || []).map(blocker => `${blocker.title || ""} ${blocker.message || ""}`).join(" ")}`).join(" ");
     } catch {}
     const error = Error(message); error.responded = true; error.code = code; throw error;
   }
@@ -89,6 +91,9 @@ function text(tag, value, parent) {
   return element;
 }
 function state(node) {
+	if (node.scope === "removed") return node.running ? "removed-running" : "removed";
+	if (node.execution_status === "stale") return "stale-running";
+	if (node.completion_status === "stale") return "stale";
   return node.kind === "profile"
     ? "profile"
     : node.running

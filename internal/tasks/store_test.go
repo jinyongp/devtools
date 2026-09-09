@@ -109,7 +109,7 @@ func TestWorkstreamValidationAndReopen(t *testing.T) {
 	call(t, s, "plan.set", w, Object{"body": "Implement and test", "task_ids": []string{id}, "validation_ids": []string{v}})
 	call(t, s, "workstream.activate", w, Object{})
 	claim := call(t, s, "run.claimed", id, Object{})
-	basis := call(t, s, "validation.basis", v, Object{"code": []any{}})
+	basis := call(t, s, "validation.basis", v, Object{"code": []any{}}, "context", str(claim, "context"))
 	call(t, s, "validation.record", v, Object{"basis_id": basis["basis_id"], "result": "pass", "summary": "Passed", "evidence": []Object{{"kind": "command", "reference": "go test", "description": "All tests passed"}}}, "context", str(claim, "context"))
 	call(t, s, "run.checkpointed", runID(claim), Object{"summary": "Evidence recorded"}, "context", str(claim, "context"))
 	call(t, s, "task.completed", id, Object{"summary": "Done"}, "context", str(claim, "context"))
@@ -192,6 +192,9 @@ func TestAttachMaintainsReferences(t *testing.T) {
 	next := state.Items[b].Props["plan"].(map[string]any)
 	if len(arr(old, "task_ids"))+len(arr(old, "validation_ids")) != 0 || !contains(arr(next, "task_ids"), id) || !contains(arr(next, "validation_ids"), v) {
 		t.Fatal("orphaned plan references")
+	}
+	if contains(state.definition(a).Order, id) || !contains(state.definition(b).Order, id) {
+		t.Fatal("moved task absent from display order")
 	}
 }
 

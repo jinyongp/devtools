@@ -39,9 +39,11 @@ CLI와 dashboard는 task/workstream, var/sec/env, 프로세스, 백업·복구, 
 }
 ```
 
-대상 작업이 있는 action은 `target`에 UUID를 전달한다. action과 body는 task schema를 따르며, 옵션은 `request-id`, `if-revision`, `expected-run`을 받는다. 모든 변경에 요청 UUID와 조회한 profile 리비전이 필요하다.
+대상 작업이 있는 action은 `target`에 UUID를 전달한다. action과 body는 task schema를 따르며, 옵션은 `request-id`, `if-revision`, `expected-run`을 받는다. 모든 변경에 요청 UUID와 조회한 profile 리비전이 필요하다. `workstream.edited`는 추가로 문자열 `dry-run: "true"`를 받아 같은 평가기로 미리보기만 수행한다. 이때 요청 UUID는 선택이며 영수증·업무 상태를 저장하지 않는다.
 
-task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, `task.reopen`, `workstream.create`, `workstream.depends`, `workstream.cancel`, `workstream.reopen`, `workstream.activate`, `workstream.close`, `spec.set`, `plan.set`, `run.revoked`다. 에이전트의 점유·인계·체크포인트·검증 기록·완료는 CLI 실행 컨텍스트로 수행한다.
+task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, `task.reopen`, `workstream.create`, `workstream.depends`, `workstream.cancel`, `workstream.reopen`, `workstream.activate`, `workstream.close`, `workstream.edited`, `spec.set`, `plan.set`, `run.revoked`다. 에이전트의 점유·sync·인계·체크포인트·검증 기록·완료는 CLI 실행 컨텍스트로 수행한다.
+
+`GET /api/query`는 `workstream plan show`, `workstream check`, `validation list`와 `scope`, `completion`, `at-revision` 옵션을 지원한다. 제외 항목은 상세 조회나 `scope=removed`로 조회한다. 서버 재사용은 인증 프로토콜·UI asset version·task protocol version이 모두 일치할 때만 허용한다.
 
 `run.revoked`는 task UUID를 target으로, `{reason:"사유"}`를 body로 받는다. `expected-run`과 현재 점유가 일치할 때 기존 run을 revoked로 종료한다. task는 open을 유지하며 프로세스 종료는 별도로 관리한다. 새 실행 컨텍스트는 CLI claim에서 발급한다.
 
@@ -82,6 +84,6 @@ task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, 
 
 암호화 백업 생성은 `{domain:"backup", profile:"app", backup:{action:"create", request_id:"UUID"}}`로 요청하며 `{path, replayed}`를 반환한다. 백업 파일명은 요청 UUID로 고정한다. 복구 미리 보기는 backup에 `{action:"restore", file:"/backups/app.age", identity_file:"/secure/identity", source_profile:"app", replace:false}`를 전달한다. envelope의 profile이 복원 대상이며 source_profile은 백업 안의 원본이다. 적용은 같은 입력에 미리 보기의 `digest`와 새 `request_id`를 추가한다. 원문 secret과 개인키는 응답에 포함하지 않는다.
 
-`Profile` 선택기로 대상을 선택하고 `Variables & secrets`에서 공통 값과 env override를 편집한다. secret 필드는 새 값을 입력하는 방식이며, 저장 후 입력을 비운다. 작업 목록에서는 생성과 상세 편집, 의존성, workstream 명세·계획과 관리 상태 전이, task 점유 해제를 수행한다. 의존성과 계획은 제목으로 항목을 선택하고 명세는 요구사항과 완료 조건을 행 단위로 편집한다.
+`Profile` 선택기로 대상을 선택하고 `Variables & secrets`에서 공통 값과 env override를 편집한다. secret 필드는 새 값을 입력하는 방식이며, 저장 후 입력을 비운다. workstream 소속 작업은 실행 중·완료 후에도 정의와 의존성을 편집한다. 계획 본문 편집, 범위 제외·복원은 영향 미리보기 후 같은 리비전으로 저장한다. 제외 항목은 workstream의 복원 메뉴에서 선택한다. 명세는 요구사항과 완료 조건을 행 단위로 편집한다. `stale`, `stale-running`, `removed-running`은 lifecycle과 별도로 표시한다.
 
 화면은 변경 대상을 표시하고 제거·취소·점유 해제 전에 확인 단계를 제공한다. workstream 취소는 함께 취소할 open task의 제목 목록을 보여주며, 미리 보기의 리비전을 적용 요청에 사용한다. 응답 수신이 불확실하면 같은 요청을 재전송하며, 충돌 시 최신 내용을 조회한 후 다시 편집한다. 인증 세션은 origin별 sessionStorage에 유지한다. 실행 컨텍스트는 실제 작업하는 에이전트가 CLI에서 관리한다.

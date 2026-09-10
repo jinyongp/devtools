@@ -41,7 +41,7 @@ CLI와 dashboard는 task/workstream, var/sec/env, 프로세스, 백업·복구, 
 
 대상 작업이 있는 action은 `target`에 UUID를 전달한다. action과 body는 task schema를 따르며, 옵션은 `request-id`, `if-revision`, `expected-run`을 받는다. 모든 변경에 요청 UUID와 조회한 profile 리비전이 필요하다. `workstream.edited`는 추가로 문자열 `dry-run: "true"`를 받아 같은 평가기로 미리보기만 수행한다. 이때 요청 UUID는 선택이며 영수증·업무 상태를 저장하지 않는다.
 
-task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, `task.reopen`, `workstream.create`, `workstream.depends`, `workstream.cancel`, `workstream.reopen`, `workstream.activate`, `workstream.close`, `workstream.edited`, `spec.set`, `plan.set`, `run.revoked`다. 에이전트의 점유·sync·인계·체크포인트·검증 기록·완료는 CLI 실행 컨텍스트로 수행한다.
+task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, `task.reopen`, `workstream.create`, `workstream.update`, `workstream.depends`, `workstream.cancel`, `workstream.reopen`, `workstream.activate`, `workstream.close`, `workstream.edited`, `spec.set`, `plan.set`, `run.revoked`다. `workstream.update`는 metadata 부분 수정을 받으며 초기 지원 필드는 `title`, `description`이다. 에이전트의 점유·sync·인계·체크포인트·검증 기록·완료는 CLI 실행 컨텍스트로 수행한다.
 
 `GET /api/query`는 `workstream plan show`, `workstream check`, `validation list`와 `scope`, `completion`, `at-revision` 옵션을 지원한다. 제외 항목은 상세 조회나 `scope=removed`로 조회한다. 서버 재사용은 인증 프로토콜·UI asset version·task protocol version이 모두 일치할 때만 허용한다.
 

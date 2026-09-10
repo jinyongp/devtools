@@ -59,7 +59,7 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 func managementTaskAction(action string) bool {
 	switch action {
 	case "task.add", "task.update", "task.depends", "task.cancel", "task.reopen",
-		"workstream.create", "workstream.depends", "workstream.cancel", "workstream.reopen",
+		"workstream.create", "workstream.update", "workstream.depends", "workstream.cancel", "workstream.reopen",
 		"workstream.activate", "workstream.close", "workstream.edited", "spec.set", "plan.set", "run.revoked":
 		return true
 	}

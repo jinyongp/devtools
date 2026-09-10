@@ -41,6 +41,7 @@ claim의 task ID와 `--workstream`은 택일이다. 둘 다 생략하면 현재 
 | 요청 | 본문 |
 | --- | --- |
 | workstream create | `title`, `description?` |
+| workstream update | metadata 부분 수정. 초기 지원 필드는 `title?`, `description?`이며 하나 이상 필요. |
 | task add | `title`, `description?`, `workstream_id?`, `acceptance?: string[]`, `acceptance_keys?: string[]` |
 | task update | `title?`, `description?`, `acceptance?`, `acceptance_keys?`; 하나 이상 필요. 소속은 attach/detach 사용. |
 | spec set | `body`, `requirements: {key,text}[]`, `acceptance: {key,requirement_keys,text}[]` |
@@ -125,7 +126,7 @@ context 조회는 목표·문서 본문·최근 결정·현재 실행·다음 �
 
 task 정의·의존성 편집은 해당 task와 후행의 현재 유효성을 다시 계산하고 점유를 유지한다. cancel·명시 reopen은 기존 후행 보호 제약을 적용한다. workstream reopen은 내부 완료 기록을 그대로 유지한다.
 
-정의 편집은 완료 이력을 유지하며 의미가 바뀐 작업만 stale로 표시한다. title·표시 순서는 근거를 유지한다. 본문 변경은 소속 전체, 구조화된 조건은 참조 작업과 후행에 전파한다. 무관한 삽입·제외는 기존 task 완료를 유지한다.
+정의 편집은 완료 이력을 유지하며 의미가 바뀐 작업만 stale로 표시한다. metadata의 초기 지원 필드는 title과 description이다. title·표시 순서는 근거를 유지한다. description은 해당 항목의 의미 기준이며, workstream description 변경은 해당 workstream과 외부 후행 workstream에 전파하되 소속 task의 실행·완료 기준은 바꾸지 않는다. 본문 변경은 소속 전체, 구조화된 조건은 참조 작업과 후행에 전파한다. 무관한 삽입·제외는 기존 task 완료를 유지한다.
 
 attach/detach에는 양방향 task 의존 관계와 acceptance_keys가 없어야 한다. validation은 task 소유이면 같이 유지하되 workstream 조건 참조를 먼저 정리한다. 기존·새 workstream 계획 참조의 제거·추가를 같은 action 묶음으로 처리한다. 새 workstream의 구조 검사는 다시 계산한다.
 

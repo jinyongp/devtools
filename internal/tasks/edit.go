@@ -143,6 +143,17 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 			doc := objectValue(w.Props[kind])
 			doc["body"] = v["body"]
 			w.Props[kind] = doc
+		case name == "workstream.update":
+			v, err := operationValue(op, refs)
+			if err != nil {
+				return nil, err
+			}
+			for field, x := range v {
+				w.Props[field] = x
+				mark(target, field)
+			}
+			w.Title = str(w.Props, "title")
+			w.Description = str(w.Props, "description")
 		case kind == "requirement" || kind == "acceptance":
 			doc := objectValue(w.Props["spec"])
 			field := "acceptance"

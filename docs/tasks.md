@@ -37,6 +37,12 @@ JSON bodies use a regular file with `--file PATH` or redirected input with `--st
 Command help lists options. Use `devtools schema task workstream spec set` to
 retrieve the input and JSON body schema for that command.
 
+Update existing workstream metadata with `task workstream update WS_ID`. Metadata
+is the public concept; `title` and `description` are the initial supported fields.
+Provide at least one field with the latest revision and a request ID. An empty
+description clears it. Use the `workstream.update` operation of `task workstream
+edit` when metadata must change atomically with other plan content.
+
 The command names below describe individual steps. Every mutation takes a new
 `--request-id UUID`; document and definition edits also take `--if-revision N`.
 For example, save the following specification as `spec.json`, read `data.revision`

@@ -76,6 +76,15 @@ func TestManagementEditPreviewAndExecutionBoundary(t *testing.T) {
 	if out := call(); out.Code != 200 {
 		t.Fatal(out.Code, out.Body)
 	}
+	state, _ = store.Read()
+	req = actionRequest{Domain: "task", Profile: store.Profile, Action: "workstream.update", Target: w, Body: tasks.Object{"title": "Updated metadata"}, Options: map[string]string{"if-revision": fmt.Sprint(state.Revision), "request-id": tasks.ID()}}
+	if out := call(); out.Code != 200 {
+		t.Fatal("management metadata update", out.Code, out.Body)
+	}
+	state, _ = store.Read()
+	if state.Items[w].Title != "Updated metadata" {
+		t.Fatal("management metadata was not saved")
+	}
 	for _, action := range []string{"run.synced", "run.claimed", "validation.basis", "validation.record", "validation.waive"} {
 		req.Action = action
 		if out := call(); out.Code != 400 {

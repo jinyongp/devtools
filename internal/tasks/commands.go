@@ -109,6 +109,7 @@ var Definitions = []Definition{
 	{Action: "run.synced", Command: "sync", Kind: "task", Target: true, Fields: []string{"reason"}, Required: []string{"reason"}, Revision: true, Context: true},
 	{Action: "workstream.edited", Command: "workstream edit", Kind: "workstream", Target: true, Fields: []string{"reason", "operations"}, Required: []string{"reason", "operations"}, Revision: true},
 	{Action: "workstream.create", Command: "workstream create", Kind: "workstream", Fields: []string{"title", "description"}, Required: []string{"title"}},
+	{Action: "workstream.update", Command: "workstream update", Kind: "workstream", Target: true, Fields: []string{"title", "description"}, Revision: true},
 	{Action: "task.add", Command: "add", Kind: "task", Fields: []string{"title", "description", "workstream_id", "acceptance", "acceptance_keys"}, Required: []string{"title"}},
 	{Action: "task.update", Command: "update", Kind: "task", Target: true, Fields: []string{"title", "description", "acceptance", "acceptance_keys"}, Revision: true},
 	{Action: "spec.set", Command: "workstream spec set", Kind: "workstream", Target: true, Fields: []string{"body", "requirements", "acceptance"}, Required: []string{"body", "requirements", "acceptance"}, Revision: true},

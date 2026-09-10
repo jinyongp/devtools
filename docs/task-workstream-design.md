@@ -34,7 +34,7 @@ Linux·WSL의 XDG 경로가 비어 있거나 상대 경로이면 기본값을 �
 
 ## 계획 편집과 현재 완료 기준
 
-[계획 편집 API](task-edit-api.md)가 원자적 삽입·변경·범위 제외·복원과 실행 기준의 계약이다. lifecycle은 실행·완료 이력으로 유지하고 scope, completion_status, execution_status를 별도로 계산한다. 계획은 실행 중·완료 후에도 저장하며 미완성 coverage는 실행·마감 단계에서 검사한다. 의미 epoch는 단조 증가하고 제목·표시 순서는 의미 기준을 바꾸지 않는다.
+[계획 편집 API](task-edit-api.md)가 metadata와 원자적 삽입·변경·범위 제외·복원, 실행 기준의 계약이다. metadata의 초기 지원 필드는 title과 description이다. lifecycle은 실행·완료 이력으로 유지하고 scope, completion_status, execution_status를 별도로 계산한다. 계획은 실행 중·완료 후에도 저장하며 미완성 coverage는 실행·마감 단계에서 검사한다. 의미 epoch는 단조 증가하고 title·표시 순서는 의미 기준을 바꾸지 않는다. description은 해당 항목의 의미 기준으로 유지한다.
 
 저장 v2는 첫 실제 변경에서 baseline과 이벤트를 한 번에 기록한다. 구버전 writer는 v2를 거절한다. 조회·no-op·preview는 업그레이드하지 않는다. 과거 계획은 원자 요청의 마지막 리비전에서 재생한다. backup은 이력을 보존하고 실행 권한을 폐기하며 cleanup은 stale와 모든 running을 보호한다.
 
@@ -119,6 +119,7 @@ workstream의 생성·실행 준비·완료·재개도 action으로 기록한다
 | 제안 명령 | 동작 |
 | --- | --- |
 | `task workstream create --title TITLE` | 목표를 관리할 workstream을 생성한다. |
+| `task workstream update WORKSTREAM_ID --title TITLE --description TEXT` | workstream metadata를 부분 수정한다. title과 description은 초기 지원 필드다. |
 | `task workstream list` | 현재 profile의 workstream을 조회한다. |
 | `task workstream show WORKSTREAM_ID` | 목표·단계·진행 상태·다음 행동을 조회한다. |
 | `task workstream spec set WORKSTREAM_ID --file FILE` | Markdown 명세를 등록한다. |

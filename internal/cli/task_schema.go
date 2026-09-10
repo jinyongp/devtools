@@ -52,7 +52,11 @@ func taskBody(def tasks.Definition) map[string]any {
 		}
 		properties[field] = s
 	}
-	return object(properties, def.Required...)
+	body := object(properties, def.Required...)
+	if strings.HasSuffix(def.Action, ".update") {
+		body["minProperties"] = 1
+	}
+	return body
 }
 func taskOutput(mutation bool) map[string]any {
 	str := stringSchema()
@@ -90,6 +94,8 @@ func editBodySchema() map[string]any {
 		props["op"] = map[string]any{"const": name}
 		variants = append(variants, object(props, append([]string{"op"}, required...)...))
 	}
+	metadata := taskBody(*tasks.Find("workstream.update"))
+	add("workstream.update", map[string]any{"value": metadata}, "value")
 	for _, name := range []string{"spec.update", "plan.update"} {
 		add(name, map[string]any{"value": object(map[string]any{"body": map[string]any{"type": "string", "maxLength": 1 << 20}}, "body")}, "value")
 	}

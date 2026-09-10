@@ -42,7 +42,7 @@ func parseEdit(body Object) ([]editOperation, *protocol.Error) {
 		fields := []string{"op"}
 		required := []string{"op"}
 		switch {
-		case name == "spec.update" || name == "plan.update":
+		case name == "spec.update" || name == "plan.update" || name == "workstream.update":
 			fields = append(fields, "value")
 			required = append(required, "value")
 		case name == "task.move":
@@ -166,7 +166,7 @@ func operationValue(op editOperation, refs map[string]string) (Object, *protocol
 	switch name {
 	case "spec.update", "plan.update":
 		d = Definition{Fields: []string{"body"}, Required: []string{"body"}}
-	case "task.add", "task.update", "validation.add", "validation.update":
+	case "workstream.update", "task.add", "task.update", "validation.add", "validation.update":
 		d = *Find(name)
 	case "requirement.add", "requirement.update":
 		fields := []string{"text"}

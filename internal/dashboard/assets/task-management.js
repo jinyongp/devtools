@@ -120,6 +120,10 @@ function itemActions(node, data, parent) {
   const menu = text("details", "", parent); menu.className = "item-management";
   text("summary", "Manage item", menu);
   const secondary = text("div", "", menu); secondary.className = "manage-toolbar";
+  if (node.kind === "workstream") button(secondary, "Edit", () => edit("Edit workstream metadata", p => {
+    const title = field(p, "Title", item.title), description = field(p, "Description", item.description, "textarea"); title.required = true;
+    return () => ({title:title.value, description:description.value});
+  }, body => editPlan("Update workstream metadata", [{op:"workstream.update", value:body}])));
   if (node.kind === "task" && (item.workstream_id || (!run && !terminal))) button(secondary, "Edit", () => edit("Edit task", p => {
     const title = field(p, "Title", item.title), description = field(p, "Description", item.description, "textarea"); title.required = true;
     return () => ({title:title.value, description:description.value});

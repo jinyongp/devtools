@@ -31,10 +31,28 @@ func TestTaskEditCLI(t *testing.T) {
 	}
 	w := run("", "task", "workstream", "create", "--profile", "test", "--title", "Editable", "--request-id", tasks.ID())
 	id := w["item"].(map[string]any)["id"].(string)
+	updateArgs := []string{"task", "workstream", "update", id, "--profile", "test", "--title", "Metadata", "--description", "Updated goal", "--if-revision", fmt.Sprint(w["revision"]), "--request-id", tasks.ID()}
+	updated := run("", updateArgs...)
+	item := updated["item"].(map[string]any)
+	if item["title"] != "Metadata" || item["description"] != "Updated goal" {
+		t.Fatal("standalone metadata update missing", item)
+	}
+	if replayed := run("", updateArgs...); replayed["replayed"] != true || replayed["revision"] != updated["revision"] {
+		t.Fatal("standalone metadata retry did not replay", replayed)
+	}
+	shown := run("", "task", "workstream", "show", id, "--profile", "test")
+	if shown["item"].(map[string]any)["title"] != "Metadata" {
+		t.Fatal("updated metadata missing from show", shown)
+	}
+	history := run("", "task", "workstream", "history", id, "--profile", "test")
+	historyRaw, _ := json.Marshal(history)
+	if !strings.Contains(string(historyRaw), "workstream.edited") {
+		t.Fatal("canonical metadata event missing from history", string(historyRaw))
+	}
 	body := `{"reason":"Add work","operations":[{"op":"task.add","ref":"new","value":{"title":"Inserted"}}]}`
-	args := []string{"task", "workstream", "edit", id, "--profile", "test", "--stdin", "--if-revision", fmt.Sprint(w["revision"])}
+	args := []string{"task", "workstream", "edit", id, "--profile", "test", "--stdin", "--if-revision", fmt.Sprint(updated["revision"])}
 	preview := run(body, append(append([]string{}, args...), "--dry-run")...)
-	if preview["changed"] != false || preview["would_change"] != true || preview["revision"] != w["revision"] {
+	if preview["changed"] != false || preview["would_change"] != true || preview["revision"] != updated["revision"] {
 		t.Fatal(preview)
 	}
 	commitArgs := append(append([]string{}, args...), "--request-id", tasks.ID())
@@ -48,9 +66,14 @@ func TestTaskEditCLI(t *testing.T) {
 	}
 	schema := run("", "schema", "task", "workstream", "edit")
 	raw, _ := json.Marshal(schema)
-	for _, fragment := range []string{"task.move", "dry-run", "oneOf", "request-id"} {
+	for _, fragment := range []string{"workstream.update", "task.move", "dry-run", "oneOf", "request-id"} {
 		if !strings.Contains(string(raw), fragment) {
 			t.Fatal("missing schema contract", fragment)
 		}
+	}
+	standalone := run("", "schema", "task", "workstream", "update")
+	standaloneRaw, _ := json.Marshal(standalone)
+	if !strings.Contains(string(standaloneRaw), `"minProperties":1`) {
+		t.Fatal("standalone metadata schema allows an empty update", string(standaloneRaw))
 	}
 }

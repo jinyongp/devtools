@@ -15,6 +15,9 @@ func (s *State) legacyEdit(r Request) (*EditEvaluation, bool, *protocol.Error) {
 	resultID := r.Target
 	i := s.Items[r.Target]
 	switch r.Action {
+	case "workstream.update":
+		ws = r.Target
+		op = Object{"op": "workstream.update", "value": r.Body}
 	case "task.add":
 		ws = str(r.Body, "workstream_id")
 		if ws == "" {

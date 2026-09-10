@@ -2,7 +2,9 @@ package tasks
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -25,6 +27,46 @@ func TestLegacyEditsKeepRunAndCompletionHistory(t *testing.T) {
 	_, e := s.Execute(context.Background(), Request{Action: "plan.set", Target: w, Body: Object{"body": "plan", "task_ids": []string{}, "validation_ids": []string{}}, Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision)}})
 	if e == nil || e.Details["related"] == nil || e.Details["remedies"] == nil {
 		t.Fatal("membership omission silently removed work or lacks diagnostics", e)
+	}
+}
+
+func TestStandaloneWorkstreamMetadataUpdateUsesCanonicalEdit(t *testing.T) {
+	s := fixture(t)
+	w := itemID(call(t, s, "workstream.create", "", Object{"title": "Original", "description": "Goal"}))
+	state, e := s.Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	request := Request{Action: "workstream.update", Target: w, Body: Object{"title": "Renamed", "description": "New goal"}, Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision)}}
+	out, e := s.Execute(context.Background(), request)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if str(out["item"].(Object), "title") != "Renamed" || str(out["item"].(Object), "description") != "New goal" {
+		t.Fatal("metadata update missing", out)
+	}
+	replayed, e := s.Execute(context.Background(), request)
+	if e != nil || replayed["replayed"] != true {
+		t.Fatal("metadata update retry did not replay", replayed, e)
+	}
+	state, e = s.Read()
+	if e != nil || state.Events[len(state.Events)-1].Action != "workstream.edited" {
+		t.Fatal("standalone update did not use canonical edit event", e)
+	}
+	exported, e := s.Query(Query{Command: "workstream export", Target: w})
+	encoded, _ := json.Marshal(exported)
+	if e != nil || !strings.Contains(string(encoded), "Renamed") || !strings.Contains(string(encoded), "workstream.edited") {
+		t.Fatal("metadata missing from export or history", e, string(encoded))
+	}
+	noChange := call(t, s, "workstream.update", w, Object{"title": "Renamed"})
+	if noChange["changed"] != false {
+		t.Fatal("identical standalone update was not a no-op", noChange)
+	}
+	task := itemID(call(t, s, "task.add", "", Object{"title": "Wrong kind"}))
+	state, _ = s.Read()
+	_, e = s.Execute(context.Background(), Request{Action: "workstream.update", Target: task, Body: Object{"title": "Rejected"}, Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision)}})
+	if e == nil || e.Code != "not_found" {
+		t.Fatal("task target accepted as workstream", e)
 	}
 }
 

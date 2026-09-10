@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -117,6 +118,63 @@ func TestEditCompletedTaskMetadataIsNoOpForEvidence(t *testing.T) {
 	}
 }
 
+func TestEditWorkstreamMetadataSemantics(t *testing.T) {
+	s, w, a, b := assessmentFixture(t)
+	finishTestTask(s, a)
+	finishTestTask(s, b)
+	applyTestEvent(s, "workstream.close", w, Object{})
+	completed := s.Assessment(w)
+	downstream := ID()
+	applyTestEvent(s, "workstream.create", downstream, Object{"title": "Downstream"})
+	applyTestEvent(s, "workstream.depends", downstream, Object{"depends_on": []string{w}})
+
+	renamed, e := EvaluateEdit(s, w, editBody(Object{"op": "workstream.update", "value": Object{"title": "New display name"}}), nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if renamed.Candidate.Items[w].Title != "New display name" || renamed.Candidate.Assessment(w).Signature != completed.Signature || renamed.Candidate.Assessment(w).CompletionStatus != "current" {
+		t.Fatal("title changed semantic status", renamed.Candidate.Assessment(w))
+	}
+
+	described, e := EvaluateEdit(s, w, editBody(Object{"op": "workstream.update", "value": Object{"description": "Changed goal"}}), nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if described.Candidate.Items[w].Description != "Changed goal" || described.Candidate.Assessment(w).CompletionStatus != "stale" {
+		t.Fatal("description did not change workstream definition", described.Candidate.Assessment(w))
+	}
+	if !contains(DefinitionChanges(s, described.Candidate), downstream) {
+		t.Fatal("description impact did not reach downstream workstream")
+	}
+	for _, id := range []string{a, b} {
+		if described.Candidate.Assessment(id).CompletionStatus != "current" {
+			t.Fatal("workstream metadata invalidated child task", id, described.Candidate.Assessment(id))
+		}
+	}
+}
+
+func TestEditWorkstreamMetadataValidationAndNoOp(t *testing.T) {
+	s, w, _, _ := assessmentFixture(t)
+	for _, value := range []Object{{}, {"title": "  "}, {"title": nil}, {"unknown": "value"}, {"title": strings.Repeat("x", 201)}, {"description": strings.Repeat("x", 16385)}} {
+		if _, e := EvaluateEdit(s, w, editBody(Object{"op": "workstream.update", "value": value}), nil); e == nil {
+			t.Fatal("invalid metadata update accepted", value)
+		}
+	}
+	original := s.Items[w].Title
+	if _, e := EvaluateEdit(s, w, editBody(Object{"op": "workstream.update", "value": Object{"title": "Must roll back"}}, Object{"op": "workstream.depends.set", "depends_on": []string{ID()}}), nil); e == nil || s.Items[w].Title != original {
+		t.Fatal("failed atomic edit changed metadata", e)
+	}
+	updated, e := EvaluateEdit(s, w, editBody(Object{"op": "workstream.update", "value": Object{"description": ""}}), nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	applyTestEvent(s, "workstream.edited", w, updated.Event.Data)
+	repeated, e := EvaluateEdit(s, w, editBody(Object{"op": "workstream.update", "value": Object{"description": ""}}), nil)
+	if e != nil || repeated.Result["would_change"] != false {
+		t.Fatal("identical metadata update was not a no-op", e, repeated.Result)
+	}
+}
+
 func TestEditDocumentRemovalAndExplicitValidationRemoval(t *testing.T) {
 	s, w, a, _ := assessmentFixture(t)
 	var val string
@@ -147,6 +205,10 @@ func TestEditEveryLifecycleAndOperationLimit(t *testing.T) {
 			x, e := EvaluateEdit(s, w, editBody(Object{"op": "task.move", "id": a, "after_id": b}), nil)
 			if e != nil || x.Candidate.Items[w].State != state || x.Candidate.definition(w).Order[0] != b {
 				t.Fatal("lifecycle blocked edit", e)
+			}
+			x, e = EvaluateEdit(s, w, editBody(Object{"op": "workstream.update", "value": Object{"title": "Updated " + state}}), nil)
+			if e != nil || x.Candidate.Items[w].State != state || x.Candidate.Items[w].Title != "Updated "+state {
+				t.Fatal("lifecycle blocked metadata edit", e)
 			}
 		})
 	}

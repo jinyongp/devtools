@@ -39,7 +39,7 @@ CLI와 dashboard는 task/workstream, var/sec/env, 프로세스, 백업·복구, 
 }
 ```
 
-대상 작업이 있는 action은 `target`에 UUID를 전달한다. action과 body는 task schema를 따르며, 옵션은 `request-id`, `if-revision`, `expected-run`을 받는다. 모든 변경에 요청 UUID와 조회한 profile 리비전이 필요하다. `workstream.edited`는 추가로 문자열 `dry-run: "true"`를 받아 같은 평가기로 미리보기만 수행한다. 이때 요청 UUID는 선택이며 영수증·업무 상태를 저장하지 않는다.
+대상 작업이 있는 action은 `target`에 UUID를 전달한다. action과 body는 task schema를 따르며, 옵션은 `request-id`, `if-revision`, `expected-run`을 받는다. 모든 변경에 요청 UUID와 조회한 profile 리비전이 필요하다. 실행 context는 해당 action이 권한이나 선택적 guard로 소비할 때만 검증하고 영수증 identity에 결합한다. context-free action의 ambient context는 무시한다. `workstream.edited`는 추가로 문자열 `dry-run: "true"`를 받아 같은 평가기로 미리보기만 수행한다. 이때 요청 UUID는 선택이며 영수증·업무 상태를 저장하지 않는다.
 
 task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, `task.reopen`, `workstream.create`, `workstream.update`, `workstream.depends`, `workstream.cancel`, `workstream.reopen`, `workstream.activate`, `workstream.close`, `workstream.edited`, `spec.set`, `plan.set`, `run.revoked`다. `workstream.update`는 metadata 부분 수정을 받으며 초기 지원 필드는 `title`, `description`이다. 에이전트의 점유·sync·인계·체크포인트·검증 기록·완료는 CLI 실행 컨텍스트로 수행한다.
 
@@ -70,7 +70,7 @@ task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, 
 
 `overwrite:false`는 선택 env의 유효 값과 상속한 공통 값을 유지하고 `skip`으로 표시한다. `overwrite:true`는 선택한 계층에 값을 저장하며 공통 값을 상속하던 키에는 env override를 만든다. 미리 보기와 적용은 기존 CLI의 `.env` 파서를 사용한다. 화면은 최대 500 KB의 파일 또는 붙여넣기를 받고, 변경 API는 전체 JSON 요청을 1 MiB로 제한한다.
 
-변경 성공은 `{ok: true, data: ...}`, 실패는 기존 오류 envelope를 반환한다. 리비전·요청 ID·점유 충돌의 HTTP 상태는 409다. 값 변경 결과에는 `profile`, `changed`, `revision`, `replayed`가 포함된다. 값 재시도 기록에는 입력 원문 대신 서명된 식별값과 결과 메타데이터를 보관한다.
+변경 성공은 `{ok: true, data: ...}`, 실패는 기존 오류 envelope를 반환한다. task 변경의 `no_change`와 리비전·요청 ID·점유 충돌의 HTTP 상태는 409다. task 변경 성공은 CLI와 같은 before/after 리비전과 affected 항목을 반환한다. 값 변경 결과에는 `profile`, `changed`, `revision`, `replayed`가 포함된다. 값 재시도 기록에는 입력 원문 대신 서명된 식별값과 결과 메타데이터를 보관한다.
 
 ## 화면에서 관리하기
 

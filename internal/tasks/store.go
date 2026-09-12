@@ -278,9 +278,12 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 		out := evaluation.Result
 		delete(out, "target_id")
 		out["profile"] = s.Profile
+		out["previous_revision"] = state.Revision
 		out["revision"] = state.Revision
 		out["current_revision"] = state.Revision
 		out["changed"] = false
+		out["affected_ids"] = []string{}
+		out["affected_count"] = 0
 		out["action_ids"] = []string{}
 		out["request_id"] = r.Options["request-id"]
 		out["replayed"] = false
@@ -301,16 +304,42 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 	if err != nil {
 		return nil, err
 	}
+	contextUsed := state.usesContext(r)
+	if !contextUsed {
+		options := map[string]string{}
+		for key, value := range r.Options {
+			if key != "context" {
+				options[key] = value
+			}
+		}
+		r.Options = options
+	}
 	fingerprint := hash(Object{"action": r.Action, "target": r.Target, "body": r.Body, "options": fingerprintOptions(r.Options)})
 	token := r.Options["context"]
 	if old, ok := j.Receipts[r.Options["request-id"]]; ok {
-		if old.Fingerprint != fingerprint || old.ContextHash != hash(token) {
+		if old.Fingerprint != fingerprint || contextUsed && old.ContextHash != hash(token) {
 			return nil, failure("request_conflict", "This request ID was used with different input.")
 		}
-		result := old.Result
+		result := copyObject(old.Result)
+		if result["changed"] == false && result["claimed"] != false {
+			return nil, state.noChangeFailure(r, s.Profile)
+		}
+		result, err = normalizeReceipt(result, state)
+		if err != nil {
+			return nil, err
+		}
 		result["replayed"] = true
 		result["current_revision"] = state.Revision
-		if run, ok := result["run"].(map[string]any); ok {
+		if contextUsed {
+			current := state.Runs[j.Contexts[hash(token)]]
+			valid := current != nil && current.State == "running"
+			result["context_valid"] = valid
+			if !valid {
+				if _, exists := result["context"]; exists {
+					result["context"] = nil
+				}
+			}
+		} else if run, ok := result["run"].(map[string]any); ok {
 			current := state.Runs[str(run, "id")]
 			valid := current != nil && current.State == "running"
 			result["context_valid"] = valid
@@ -329,9 +358,14 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 	if err != nil {
 		return nil, prepared.explain(r, err, s.Profile)
 	}
+	if len(events) == 0 && !(r.Action == "run.claimed" && result["claimed"] == false) {
+		return nil, prepared.noChangeFailure(r, s.Profile)
+	}
 	if ctx.Err() != nil {
 		return nil, protocol.NewError("canceled", "Request canceled.", 130, nil)
 	}
+	previousRevision := state.Revision
+	before := state.clone()
 	ids := []string{}
 	if len(events) > 0 && state.Version == 1 {
 		events = append([]Event{state.upgradeEvent()}, events...)
@@ -360,7 +394,7 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 		result["context"] = credential
 		result["context_valid"] = true
 	}
-	if def.Context {
+	if contextUsed {
 		result["context_valid"] = r.Action != "run.released" && r.Action != "task.completed"
 	}
 	if id := str(result, "target_id"); id != "" {
@@ -370,19 +404,30 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 	}
 	delete(result, "target_id")
 	result["profile"] = s.Profile
+	result["previous_revision"] = previousRevision
 	result["revision"] = state.Revision
 	result["current_revision"] = state.Revision
 	result["request_id"] = r.Options["request-id"]
 	result["replayed"] = false
 	result["changed"] = len(events) > 0
 	result["action_ids"] = ids
+	affected := changedItemIDs(before, state)
+	if len(events) > 0 && len(affected) == 0 {
+		return nil, before.noChangeFailure(r, s.Profile)
+	}
+	result["affected_ids"] = affected
+	result["affected_count"] = len(affected)
 	if r.Action == "workstream.edited" {
 		raw, _ := json.Marshal(result)
 		if len(raw) > 2<<20 {
 			return nil, failure("invalid_argument", "Edit result exceeds 2 MiB; split the request.")
 		}
 	}
-	j.Receipts[r.Options["request-id"]] = Receipt{Fingerprint: fingerprint, ContextHash: hash(token), Result: result}
+	contextHash := ""
+	if contextUsed {
+		contextHash = hash(token)
+	}
+	j.Receipts[r.Options["request-id"]] = Receipt{Fingerprint: fingerprint, ContextHash: contextHash, Result: result}
 	commit := s.commit
 	if commit == nil {
 		commit = WritePrivate
@@ -392,6 +437,60 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 	}
 	return result, nil
 }
+
+func changedItemIDs(before, after *State) []string {
+	seen := map[string]bool{}
+	for id := range before.Items {
+		seen[id] = true
+	}
+	for id := range after.Items {
+		seen[id] = true
+	}
+	ids := []string{}
+	for id := range seen {
+		if hash(before.Items[id]) != hash(after.Items[id]) || hash(before.Tracking[id]) != hash(after.Tracking[id]) {
+			ids = append(ids, id)
+		}
+	}
+	return unique(ids)
+}
+
+func normalizeReceipt(result Object, state *State) (Object, *protocol.Error) {
+	applied := num(result, "revision")
+	if _, ok := result["previous_revision"]; !ok {
+		result["previous_revision"] = applied - len(arr(result, "action_ids"))
+	}
+	if _, ok := result["affected_ids"]; !ok {
+		before, e := snapshotAt(state, num(result, "previous_revision"))
+		if e != nil {
+			return nil, e
+		}
+		after, e := snapshotAt(state, applied)
+		if e != nil {
+			return nil, e
+		}
+		affected := changedItemIDs(before, after)
+		result["affected_ids"] = affected
+		result["affected_count"] = len(affected)
+	} else if _, ok := result["affected_count"]; !ok {
+		result["affected_count"] = len(arr(result, "affected_ids"))
+	}
+	return result, nil
+}
+
+func snapshotAt(state *State, revision int) (*State, *protocol.Error) {
+	if revision < 0 || revision > state.Revision {
+		return nil, storageError()
+	}
+	out := NewState()
+	for _, event := range state.Events[:revision] {
+		if safeApply(out, event) != nil {
+			return nil, storageError()
+		}
+	}
+	return out, nil
+}
+
 func fingerprintOptions(o map[string]string) Object {
 	r := Object{}
 	for k, v := range o {

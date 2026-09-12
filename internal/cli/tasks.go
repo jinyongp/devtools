@@ -63,7 +63,10 @@ func (a *App) registerTasks() {
 		if def.Revision {
 			opts = append(opts, Option{Name: "if-revision", Required: true, Description: "Latest profile revision."})
 		}
-		opts = append(opts, Option{Name: "context", Description: "Current execution context; defaults to DEVTOOLS_TASK_CONTEXT."})
+		contextCapable := def.Context || def.ContextGuard || def.ContextOwner
+		if contextCapable {
+			opts = append(opts, Option{Name: "context", Description: "Current execution context; defaults to DEVTOOLS_TASK_CONTEXT."})
+		}
 		if def.Action == "run.revoked" {
 			opts = append(opts, Option{Name: "expected-run", Required: true, Description: "Observed current run UUID to revoke."})
 		}
@@ -127,7 +130,7 @@ func (a *App) registerTasks() {
 			if def.Action == "run.claimed" && target != "" && r.Options["workstream"] != "" {
 				return nil, argumentError("Choose a task ID or workstream filter.", "workstream")
 			}
-			if r.Options["context"] == "" {
+			if contextCapable && r.Options["context"] == "" {
 				r.Options["context"] = os.Getenv("DEVTOOLS_TASK_CONTEXT")
 			}
 			if dir := r.Options["dir"]; dir != "" {

@@ -103,6 +103,8 @@ type Definition struct {
 	Required       []string
 	Revision       bool
 	Context        bool
+	ContextGuard   bool
+	ContextOwner   bool
 }
 
 var Definitions = []Definition{
@@ -111,7 +113,7 @@ var Definitions = []Definition{
 	{Action: "workstream.create", Command: "workstream create", Kind: "workstream", Fields: []string{"title", "description"}, Required: []string{"title"}},
 	{Action: "workstream.update", Command: "workstream update", Kind: "workstream", Target: true, Fields: []string{"title", "description"}, Revision: true},
 	{Action: "task.add", Command: "add", Kind: "task", Fields: []string{"title", "description", "workstream_id", "acceptance", "acceptance_keys"}, Required: []string{"title"}},
-	{Action: "task.update", Command: "update", Kind: "task", Target: true, Fields: []string{"title", "description", "acceptance", "acceptance_keys"}, Revision: true},
+	{Action: "task.update", Command: "update", Kind: "task", Target: true, Fields: []string{"title", "description", "acceptance", "acceptance_keys"}, Revision: true, ContextGuard: true},
 	{Action: "spec.set", Command: "workstream spec set", Kind: "workstream", Target: true, Fields: []string{"body", "requirements", "acceptance"}, Required: []string{"body", "requirements", "acceptance"}, Revision: true},
 	{Action: "plan.set", Command: "workstream plan set", Kind: "workstream", Target: true, Fields: []string{"body", "task_ids", "validation_ids"}, Required: []string{"body", "task_ids", "validation_ids"}, Revision: true},
 	{Action: "task.depends", Command: "depends set", Kind: "task", Target: true, Fields: []string{"depends_on"}, Required: []string{"depends_on"}, Revision: true},
@@ -135,11 +137,11 @@ var Definitions = []Definition{
 	{Action: "task.completed", Command: "done", Kind: "task", Target: true, Fields: []string{"summary", "validation_record_ids", "commits"}, Required: []string{"summary"}, Context: true},
 	{Action: "validation.add", Command: "validation add", Kind: "validation", Fields: []string{"title", "method", "required", "task_id", "workstream_id", "acceptance_keys"}, Required: []string{"title", "method"}},
 	{Action: "validation.update", Command: "validation update", Kind: "validation", Target: true, Fields: []string{"title", "method", "required", "acceptance_keys"}, Revision: true},
-	{Action: "validation.basis", Command: "validation basis", Kind: "validation", Target: true, Fields: []string{"code"}, Required: []string{"code"}},
-	{Action: "validation.record", Command: "validation record", Kind: "validation", Target: true, Fields: []string{"result", "summary", "basis_id", "evidence"}, Required: []string{"result", "summary", "basis_id", "evidence"}},
-	{Action: "validation.accept", Command: "validation accept", Kind: "validation", Target: true, Fields: []string{"basis_id", "record_id", "reason"}, Required: []string{"basis_id", "record_id", "reason"}},
-	{Action: "validation.waive", Command: "validation waive", Kind: "validation", Target: true, Fields: []string{"reason"}, Required: []string{"reason"}, Revision: true},
-	{Action: "validation.unwaive", Command: "validation unwaive", Kind: "validation", Target: true, Fields: []string{"reason"}, Required: []string{"reason"}, Revision: true},
+	{Action: "validation.basis", Command: "validation basis", Kind: "validation", Target: true, Fields: []string{"code"}, Required: []string{"code"}, ContextOwner: true},
+	{Action: "validation.record", Command: "validation record", Kind: "validation", Target: true, Fields: []string{"result", "summary", "basis_id", "evidence"}, Required: []string{"result", "summary", "basis_id", "evidence"}, ContextOwner: true},
+	{Action: "validation.accept", Command: "validation accept", Kind: "validation", Target: true, Fields: []string{"basis_id", "record_id", "reason"}, Required: []string{"basis_id", "record_id", "reason"}, ContextOwner: true},
+	{Action: "validation.waive", Command: "validation waive", Kind: "validation", Target: true, Fields: []string{"reason"}, Required: []string{"reason"}, Revision: true, ContextOwner: true},
+	{Action: "validation.unwaive", Command: "validation unwaive", Kind: "validation", Target: true, Fields: []string{"reason"}, Required: []string{"reason"}, Revision: true, ContextOwner: true},
 }
 
 func Find(action string) *Definition {
@@ -149,6 +151,36 @@ func Find(action string) *Definition {
 		}
 	}
 	return nil
+}
+
+func (s *State) usesContext(r Request) bool {
+	def := Find(r.Action)
+	if def == nil || def.Context {
+		return def != nil
+	}
+	if def.ContextGuard {
+		return r.Options["context"] != ""
+	}
+	if !def.ContextOwner {
+		return false
+	}
+	v := s.Items[r.Target]
+	return v != nil && v.Kind == "validation" && s.owner(v) != nil && s.owner(v).Kind == "task"
+}
+
+func (s *State) resolveContext(contexts map[string]string, token string) (*Run, *protocol.Error) {
+	if token == "" {
+		return nil, contextFailure("missing")
+	}
+	runID, known := contexts[hash(token)]
+	run := s.Runs[runID]
+	if !known || run == nil {
+		return nil, contextFailure("unknown")
+	}
+	if run.State != "running" {
+		return nil, contextFailure("inactive")
+	}
+	return run, nil
 }
 func validateBody(def *Definition, b Object) *protocol.Error {
 	if def.Action == "workstream.edited" {
@@ -346,21 +378,23 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 	var i *Item
 	var run *Run
 	var err *protocol.Error
-	contextRun := s.Runs[contexts[hash(r.Options["context"])]]
-	if def.Context {
-		if contextRun == nil || contextRun.State != "running" {
-			return nil, nil, "", failure("context_invalid", "Provide the current execution context.")
+	contextToken := r.Options["context"]
+	var contextRun *Run
+	if def.Context || def.ContextGuard && contextToken != "" {
+		contextRun, err = s.resolveContext(contexts, contextToken)
+		if err != nil {
+			return nil, nil, "", err
 		}
 		run = contextRun
 		if def.Kind == "run" {
 			if target != run.ID {
-				return nil, nil, "", failure("context_invalid", "Context does not match the requested run.")
+				return nil, nil, "", contextFailure("target_mismatch")
 			}
 			target = run.TaskID
 		} else if target == "" {
 			target = run.TaskID
 		} else if target != run.TaskID {
-			return nil, nil, "", failure("context_invalid", "Context does not match this task.")
+			return nil, nil, "", contextFailure("target_mismatch")
 		}
 	}
 	if target != "" {
@@ -371,6 +405,21 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 		if err != nil {
 			return nil, nil, "", err
 		}
+	}
+	if def.ContextOwner && s.Version == JournalVersion && i != nil {
+		owner := s.owner(i)
+		if owner != nil && owner.Kind == "task" {
+			contextRun, err = s.resolveContext(contexts, contextToken)
+			if err != nil {
+				return nil, nil, "", err
+			}
+			if contextRun.TaskID != owner.ID {
+				return nil, nil, "", contextFailure("target_mismatch")
+			}
+			run = contextRun
+		}
+	} else if def.ContextOwner && contextToken != "" {
+		contextRun = s.Runs[contexts[hash(contextToken)]]
 	}
 	if evaluation, handled, e := s.legacyEdit(r); handled {
 		if e != nil {
@@ -738,6 +787,34 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 	}
 	if i != nil && (r.Action == "task.unhold" && str(i.Props, "hold") == "" || r.Action == "task.hold" && str(i.Props, "hold") == str(b, "reason")) {
 		return nil, result, "", nil
+	}
+	if i != nil {
+		switch r.Action {
+		case "task.depends", "workstream.depends":
+			if hash(unique(i.Depends)) == hash(unique(arr(b, "depends_on"))) {
+				return nil, result, "", nil
+			}
+		case "task.attach":
+			if i.Workstream == str(b, "workstream_id") {
+				return nil, result, "", nil
+			}
+		case "task.detach":
+			if i.Workstream == "" {
+				return nil, result, "", nil
+			}
+		case "validation.waive":
+			if hash(objectValue(i.Props["waiver"])) == hash(b) {
+				return nil, result, "", nil
+			}
+		case "validation.unwaive":
+			if i.Props["waiver"] == nil {
+				return nil, result, "", nil
+			}
+		case "workstream.close":
+			if i.State == "done" && s.Assessment(i.ID).CompletionStatus == "current" {
+				return nil, result, "", nil
+			}
+		}
 	}
 	return append(prefixEvents, Event{Action: r.Action, Target: target, Data: b}), result, credential, nil
 }

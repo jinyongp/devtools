@@ -48,7 +48,7 @@ devtools task workstream edit WORKSTREAM_ID --file edit.json --if-revision N --r
 
 task.remove는 논리적 제외다. 이력·점유를 유지하며 활성 의존성의 양방향 연결과 task의 완료 조건 연결을 정리한다. A→B→C에서 B를 제외해도 A→C를 만들지 않는다. task.restore는 같은 ID를 포함하지만 과거 task 연결·근거를 되살리지 않는다. 필요한 관계는 같은 요청에서 설정한다.
 
-owner 때문에만 숨겨진 validation은 task 복원 시 다시 포함된다. 명시 제외한 validation은 계속 제외된다. requirement/acceptance 제거는 참조를 정리하며 다른 정의를 삭제하지 않는다. ID와 문서 key는 재사용 대신 restore한다. validation restore는 현재 포함된 대상을 가리키는 정의 참조를 보존한다. 명시 설정한 관계가 최종 제외 대상을 참조하면 오류다. 반복 remove/restore는 최종 scope가 같으면 no-op이다.
+owner 때문에만 숨겨진 validation은 task 복원 시 다시 포함된다. 명시 제외한 validation은 계속 제외된다. requirement/acceptance 제거는 참조를 정리하며 다른 정의를 삭제하지 않는다. ID와 문서 key는 재사용 대신 restore한다. validation restore는 현재 포함된 대상을 가리키는 정의 참조를 보존한다. 명시 설정한 관계가 최종 제외 대상을 참조하면 오류다. 반복 remove/restore처럼 최종 투영이 같은 실제 저장 요청은 `no_change`로 실패한다. dry-run에서는 `would_change:false`로 안전하게 확인한다.
 
 metadata는 workstream 자체를 대상으로 하므로 operation에 ID를 받지 않는다. `title`과 `description`은 초기 지원 필드이며 하나 이상 필요하다. title은 표시 metadata라 의미 기준을 바꾸지 않는다. description은 workstream의 목표 정의에 포함되어 해당 workstream과 외부 후행의 현재 완료 기준에 영향을 주지만, 소속 task 정의에는 전파하지 않는다. 빈 description은 설명을 제거한다.
 
@@ -76,7 +76,7 @@ workstream 검증은 active 또는 activate 이력이 있는 done에서 허용�
 
 ## 조회와 진단
 
-edit 결과에는 dry_run, would_change, changes, effects, impact, issues, next_actions, created_refs, created_items가 추가된다. preview의 changed는 false다. required 변경과 필수 validation 제외도 effects에 기록한다.
+edit 결과에는 dry_run, would_change, changes, effects, impact, issues, next_actions, created_refs, created_items가 추가된다. preview의 changed는 false이고 실제 `affected_ids`는 비어 있다. required 변경과 필수 validation 제외도 effects에 기록한다. 저장 성공은 공통 변경 응답의 previous_revision, revision, current_revision, affected_ids, affected_count로 커밋 효과를 확인한다.
 
 기본 task 목록은 included open과 done+stale다. --state done은 lifecycle done 전체이며 --completion none/current/stale/all로 좁힌다. --scope included/removed/all로 제외 이력을 조회한다. completion/scope를 명시하고 state를 생략하면 기본 lifecycle 필터를 해제한다. workstream completion 필터도 같다. validation 기본 목록은 effective included다. next와 claim은 동일 판정을 사용한다.
 

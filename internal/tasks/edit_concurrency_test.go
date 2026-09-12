@@ -131,7 +131,7 @@ func TestEditRacesWithExecution(t *testing.T) {
 					defer wg.Done()
 					<-start
 					_, e := s.Execute(context.Background(), r)
-					if e != nil && !contains([]string{"revision_conflict", "transition_conflict", "validation_required", "context_invalid", "claim_conflict", "dependency_conflict"}, e.Code) {
+					if e != nil && !contains([]string{"revision_conflict", "transition_conflict", "validation_required", "context_invalid", "claim_conflict", "dependency_conflict", "no_change"}, e.Code) {
 						errs <- e
 					}
 				}(r)

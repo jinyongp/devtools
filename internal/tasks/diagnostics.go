@@ -2,6 +2,24 @@ package tasks
 
 import "github.com/jinyongp/devtools/internal/protocol"
 
+func contextFailure(reason string) *protocol.Error {
+	messages := map[string]string{
+		"missing":         "Provide the current execution context.",
+		"unknown":         "The execution context is not recognized.",
+		"inactive":        "The execution context belongs to a run that is no longer active.",
+		"target_mismatch": "The execution context belongs to another task or run.",
+	}
+	e := failure("context_invalid", messages[reason])
+	e.Details = map[string]any{"context_reason": reason}
+	return e
+}
+
+func (s *State) noChangeFailure(r Request, profile string) *protocol.Error {
+	e := failure("no_change", "The request would not change any task state.")
+	e.Details = map[string]any{"affected_count": 0, "affected_ids": []string{}}
+	return s.explain(r, e, profile)
+}
+
 func (s *State) explain(r Request, e *protocol.Error, profile string) *protocol.Error {
 	if e.Details == nil {
 		e.Details = map[string]any{}

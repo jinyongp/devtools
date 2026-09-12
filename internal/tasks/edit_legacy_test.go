@@ -58,9 +58,10 @@ func TestStandaloneWorkstreamMetadataUpdateUsesCanonicalEdit(t *testing.T) {
 	if e != nil || !strings.Contains(string(encoded), "Renamed") || !strings.Contains(string(encoded), "workstream.edited") {
 		t.Fatal("metadata missing from export or history", e, string(encoded))
 	}
-	noChange := call(t, s, "workstream.update", w, Object{"title": "Renamed"})
-	if noChange["changed"] != false {
-		t.Fatal("identical standalone update was not a no-op", noChange)
+	state, _ = s.Read()
+	_, e = s.Execute(context.Background(), Request{Action: "workstream.update", Target: w, Body: Object{"title": "Renamed"}, Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision)}})
+	if e == nil || e.Code != "no_change" {
+		t.Fatal("identical standalone update did not fail loudly", e)
 	}
 	task := itemID(call(t, s, "task.add", "", Object{"title": "Wrong kind"}))
 	state, _ = s.Read()

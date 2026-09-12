@@ -18,7 +18,7 @@ task·workstream의 공개 계약이다. 계획 상시 편집·sync·저장 v2�
 | timestamp | UTC RFC 3339. 적용 시각은 도구가 기록. |
 | 배열 | ID·key 집합은 중복 제거 후 정렬. 설명·체크포인트 배열은 입력 순서 유지. |
 
-본문의 누락 필드는 아래 기본값을 적용한다. `null`은 명시적으로 nullable인 필드에서만 허용한다. update는 허용된 필드의 부분 수정이며 배열은 전체 교체한다. spec set·plan set은 전체 문서 교체다. 의미가 같은 update는 `changed: false`로 처리한다.
+본문의 누락 필드는 아래 기본값을 적용한다. `null`은 명시적으로 nullable인 필드에서만 허용한다. update는 허용된 필드의 부분 수정이며 배열은 전체 교체한다. spec set·plan set은 전체 문서 교체다. 실제 상태가 같은 변경 요청은 `no_change`로 거절한다.
 
 ### 호출 제어
 
@@ -26,7 +26,7 @@ task·workstream의 공개 계약이다. 계획 상시 편집·sync·저장 v2�
 | --- | --- |
 | `--request-id UUID` | task 도메인의 모든 변경에 필수. dashboard 서버 관리와 조회에는 적용하지 않음. |
 | `--if-revision N` | 문서·관계·정의 수정, 연결 변경, hold/unhold, 취소·재개·활성화·마감, 면제·면제 철회에 필수. |
-| `--context REF` | resume·sync·checkpoint·release·done 및 task 검증 basis/결과/재사용/면제에 필수. `DEVTOOLS_TASK_CONTEXT`를 기본값으로 사용. |
+| `--context REF` | resume·sync·checkpoint·release·done 및 task 검증 basis/결과/재사용/면제에 필수. task update에서는 선택적인 현재 run guard다. `DEVTOOLS_TASK_CONTEXT`를 기본값으로 사용. |
 | `--expected-run UUID` | takeover·unclaim에 필수. 현재 점유의 run과 일치해야 함. |
 | `--dir PATH` | claim·takeover·current. 기본값은 현재 디렉터리. |
 
@@ -77,7 +77,7 @@ active에서 새 task·검증을 등록하면 목록과 구조 검사에 즉시 
 | --- | --- |
 | 단건 조회 | `profile`, `revision`, `item` |
 | 목록 | `profile`, `revision`, `items`, `next_cursor: string|null` |
-| 일반 변경 | `profile`, `revision`(적용 당시), `current_revision`, `request_id`, `replayed`, `changed`, `action_ids: UUID[]`, `item` |
+| 일반 변경 | `profile`, `previous_revision`, `revision`(적용 당시), `current_revision`, `request_id`, `replayed`, `changed`, `action_ids: UUID[]`, `affected_ids: UUID[]`, `affected_count`, `item` |
 | claim / takeover | 일반 변경 필드와 `claimed`, `run: object|null`, `context: string|null`, `context_valid`, `blockers` |
 | next | `profile`, `revision`, `item: task|null`, `reason` |
 | current | 목록 형식의 `items: run[]`. 디렉터리에 연결된 현재 run만 반환. |
@@ -93,7 +93,9 @@ workstream item은 `id`, `title`, `description`, `state`, `depends_on`, `blocker
 
 run은 `id`, `task_id`, `state`(running·released·revoked·taken_over·completed), `previous_run_id: UUID|null`, `directory`, 시작·마지막 활동 시각, `ended_at: timestamp|null`, 기준 spec·plan·task 정의 리비전을 가진다. 일반 run 객체에는 컨텍스트나 점유 증명을 넣지 않는다.
 
-각 변경이 여러 업무 기록을 원자적으로 적용할 수 있어 action_ids는 배열이다. no-op은 빈 배열이며 업무 리비전을 증가시키지 않는다. 단, 요청 처리 영수증은 보존한다. 소속·graph·문서 관계 변경과 부수 효과는 같은 원자적 단위에 포함한다.
+각 변경이 여러 업무 기록을 원자적으로 적용할 수 있어 action_ids는 배열이다. `previous_revision`과 `revision`은 원자 변경 전후의 profile 리비전이며 재시도 응답에서도 원래 값을 유지한다. `current_revision`은 응답 시점의 최신 profile 리비전이다. `affected_ids`와 `affected_count`는 실제 저장으로 투영이 바뀐 항목을 나타낸다. 기존 버전의 성공 영수증을 재생할 때도 저장된 action 경계에서 이 필드를 복원한다. 실제 domain 상태가 같은 정의·관계·lifecycle 변경은 `no_change`로 실패하며 action·영수증·리비전을 만들지 않는다. checkpoint·resume·검증 결과처럼 호출 자체가 새 이력인 append-only action, 자동 claim의 `claimed:false`, dry-run은 의도적인 예외다.
+
+checkpoint는 run 이력 변경이다. 성공하면 profile `revision`과 task의 `updated_at`/`current_run` 투영이 바뀌고 해당 task가 `affected_ids`에 포함되지만 `definition_revision`은 유지된다. checkpoint 본문은 `checkpoint list RUN_ID`나 history에서 확인한다.
 
 context 조회는 목표·문서 본문·최근 결정·현재 실행·다음 행동과 각 기록의 참조를 제공한다. 최대 응답은 2MiB이며 넘으면 `truncated: true`와 생략 문서 ID를 반환한다. `workstream spec show`, `workstream plan show`, `checkpoint list RUN_ID`, `validation show VAL_ID`로 필요한 내용을 추가 조회한다.
 
@@ -118,7 +120,7 @@ context 조회는 목표·문서 본문·최근 결정·현재 실행·다음 �
 | workstream cancel | draft 또는 active | canceled | 보호할 후행 완료·현재 점유 없음. 소속 open task 취소를 함께 적용. |
 | workstream reopen | done 또는 canceled | draft | 외부 후행 done·running 보호. 내부 task 결과 유지. |
 
-새 요청 ID로 종료된 run에 done·release를 보내면 transition_conflict 또는 context_invalid다. 정확한 기존 요청의 재시도는 영수증을 복구한다. 완료 workstream의 close는 현재 조건으로 다시 마감한다. 반복 activate·cancel은 기존 전이 제약을 유지한다. 내부 순서에 의존해 조용히 재실행하지 않는다.
+새 요청 ID로 종료된 run에 done·release를 보내면 transition_conflict 또는 context_invalid다. 정확한 기존 요청의 재시도는 영수증을 복구한다. 완료 workstream은 정의나 근거가 stale일 때만 현재 조건으로 다시 마감하며, 이미 current인 close 반복은 `no_change`다. 반복 activate·cancel은 기존 전이 제약을 유지한다. 내부 순서에 의존해 조용히 재실행하지 않는다.
 
 ### 영향 범위의 구분
 
@@ -145,16 +147,16 @@ waive는 해당 검증 의미 epoch·basis에만 적용한다. `validation unwai
 ## 재시도와 실패 우선순위
 
 1. 입력을 파싱하고 profile을 선택한다.
-2. 같은 요청 ID의 영수증이 있으면 정규화된 입력과 원래 실행 증명 연결을 비교한다.
+2. 같은 요청 ID의 영수증이 있으면 정규화된 입력을 비교하고, 해당 action이 실행 증명을 소비할 때만 원래 증명 연결도 비교한다.
 3. 일치하면 원래 적용 결과와 현재 리비전을 반환한다. 원래 점유가 끝났다면 context는 null, context_valid는 false다.
 4. 새로운 요청은 대상 존재, 리비전, 현재 컨텍스트 또는 expected-run, 전이·의존·검증을 검사한다.
 5. action·결과 영수증·점유 정보를 함께 커밋한 뒤 응답한다.
 
-입력 동일성에는 명령·대상·정규화된 본문·제어 조건을 포함하며 request-id 자체와 파일 경로는 제외한다. 파일은 내용으로 비교하고 실행 컨텍스트는 원래 실행의 증명 연결로 비교한다. done 재시도에서는 같은 원래 증명을 검증할 수 있도록 검증용 정보를 보존하며, 그 증명으로 새 변경은 허용하지 않는다.
+입력 동일성에는 명령·대상·정규화된 본문·제어 조건을 포함하며 request-id 자체와 파일 경로는 제외한다. 파일은 내용으로 비교한다. 실행 컨텍스트는 action이 이를 권한이나 선택적 guard로 실제 소비할 때만 원래 실행의 증명 연결로 비교한다. context-free action은 `DEVTOOLS_TASK_CONTEXT`를 읽거나 영수증에 결합하지 않는다. done 재시도에서는 같은 원래 증명을 검증할 수 있도록 검증용 정보를 보존하며, 그 증명으로 새 변경은 허용하지 않는다.
 
-실패한 새 요청은 적용 영수증을 만들지 않는다. 성공했는지 응답을 받지 못한 경우 같은 요청 ID로 재시도한다. 충돌을 읽고 입력이나 리비전을 바꾼 새 판단에는 새 요청 ID를 사용한다. 자동 claim의 claimed:false도 성공 영수증으로 저장하므로 나중에 새 작업을 선택할 때 새 요청 ID를 사용한다.
+실패한 새 요청은 적용 영수증을 만들지 않는다. `no_change` 뒤 같은 요청 ID를 고친 입력에 재사용해도 이전 실패와 충돌하지 않는다. 성공했는지 응답을 받지 못한 경우 같은 요청 ID로 재시도한다. 충돌을 읽고 입력이나 리비전을 바꾼 새 판단에는 새 요청 ID를 사용한다. 자동 claim의 claimed:false도 성공 영수증으로 저장하므로 나중에 새 작업을 선택할 때 새 요청 ID를 사용한다.
 
-JSON 오류는 invalid_argument, 대상 없음은 not_found, 리비전 불일치는 revision_conflict, 기존 ID의 다른 입력은 request_conflict, 증명 불일치는 context_invalid, 점유 경쟁은 claim_conflict, 관계 조건은 dependency_conflict, 허용되지 않은 action은 transition_conflict, 필수 근거 부족은 validation_required다. 구조 check는 valid:false를 정상 조회로 반환하지만 activate는 구조 실패 시 validation_required로 변경을 거절한다.
+JSON 오류는 invalid_argument, 대상 없음은 not_found, 리비전 불일치는 revision_conflict, 기존 ID의 다른 입력은 request_conflict, 실변경 없음은 no_change, 증명 불일치는 context_invalid, 점유 경쟁은 claim_conflict, 관계 조건은 dependency_conflict, 허용되지 않은 action은 transition_conflict, 필수 근거 부족은 validation_required다. `no_change` details는 `affected_count:0`, 빈 `affected_ids`, 현재 리비전을 제공한다. `context_invalid` details의 `context_reason`은 `missing`, `unknown`, `inactive`, `target_mismatch` 중 하나이며 증명 원문은 포함하지 않는다. 구조 check는 valid:false를 정상 조회로 반환하지만 activate는 구조 실패 시 validation_required로 변경을 거절한다.
 
 ## Dashboard·조회 경계
 
@@ -187,5 +189,8 @@ export와 history는 컨텍스트와 점유 증명을 제거한 공개 기록 �
 | C13 | canceled 선행 workstream | 후행 계획 작성 가능, task claim은 blocked. |
 | C14 | dashboard 종료 후 기존 링크·세션 | 접근 거절, task 점유와 이력 유지. |
 | C15 | claim 영수증을 history/export에서 조회 | 컨텍스트와 점유 증명 제외. |
+| C16 | 같은 task update를 새 요청 ID로 반복 | no_change, 종료 코드 3, action·영수증·리비전 변화 없음. |
+| C17 | 현재 task와 다른 claim context로 task update | context_invalid와 context_reason:target_mismatch. |
+| C18 | checkpoint 성공 후 task 조회 | profile revision·run 활동·updated_at 변경, definition_revision 유지, affected_ids에 task 포함. |
 
 위 시나리오는 전이·응답의 일관성 기준이다. `internal/tasks`의 race 테스트와 `docker/scenarios/tasks.py`의 설치 검증에서 동시 점유, 인계, 이전 컨텍스트 거절, 완료 재시도, worktree 공유, 검증 근거와 마감, 조회 세션 경계를 확인한다. `just verify-docker`로 실행한다.

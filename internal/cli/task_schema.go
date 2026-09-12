@@ -76,10 +76,10 @@ func taskOutput(mutation bool) map[string]any {
 	props["impact"] = map[string]any{"type": "object"}
 	required := []string{"profile", "revision"}
 	if mutation {
-		for k, v := range map[string]any{"current_revision": integer, "request_id": str, "replayed": boolean, "changed": boolean, "action_ids": map[string]any{"type": "array", "items": str}, "claimed": boolean, "run": map[string]any{"type": []string{"object", "null"}}, "context": nullable, "context_valid": boolean, "basis_id": str, "record_id": str} {
+		for k, v := range map[string]any{"previous_revision": integer, "current_revision": integer, "affected_count": integer, "affected_ids": map[string]any{"type": "array", "items": str}, "request_id": str, "replayed": boolean, "changed": boolean, "action_ids": map[string]any{"type": "array", "items": str}, "claimed": boolean, "run": map[string]any{"type": []string{"object", "null"}}, "context": nullable, "context_valid": boolean, "basis_id": str, "record_id": str} {
 			props[k] = v
 		}
-		required = append(required, "current_revision", "request_id", "replayed", "changed", "action_ids")
+		required = append(required, "previous_revision", "current_revision", "affected_count", "affected_ids", "request_id", "replayed", "changed", "action_ids")
 	}
 	return object(props, required...)
 }

@@ -331,17 +331,17 @@ task당 workstream은 최대 하나다. 연결 변경·해제는 open이고 점�
 
 ID는 도구가 발급하는 불변 식별자이며 API는 응답의 전체 ID를 사용한다. 요구사항·완료 조건은 문서 내부의 불변 key로 참조한다. 예시로 `REQ-001`, `AC-001`을 사용할 수 있으며 workstream ID와 조합해 식별한다.
 
-간단한 생성은 CLI 옵션, 여러 필드의 등록·수정은 `--file FILE` 또는 `--stdin`의 JSON 객체로 받는다. 파일과 stdin은 택일이다. 본문 필드와 같은 의미의 CLI 옵션을 함께 전달하면 입력 오류다. `--profile`, `--context`, `--request-id`, `--if-revision`은 호출 제어 정보로 별도 전달한다.
+간단한 생성은 CLI 옵션, 여러 필드의 등록·수정은 `--file FILE` 또는 `--stdin`의 JSON 객체로 받는다. 파일과 stdin은 택일이다. 본문 필드와 같은 의미의 CLI 옵션을 함께 전달하면 입력 오류다. `--profile`, `--request-id`, `--if-revision`과 해당 명령이 지원하는 `--context`는 호출 제어 정보로 별도 전달한다.
 
 명세 JSON은 `body` Markdown, `requirements` 배열의 `key`·`text`, `acceptance` 배열의 `key`·`requirement_keys`·`text`를 가진다. 계획 JSON은 `body`, `task_ids`, `validation_ids`를 가진다. 처음에는 참조를 비워 작성할 수 있고 activate 전에 완성한다. task JSON은 `title`, `description`, 선택적인 `workstream_id`, 자체 완료 조건 `acceptance`, workstream 조건 참조 `acceptance_keys`를 가진다.
 
-변경 요청은 호출자가 생성한 `--request-id`를 받는다. profile·요청 ID·정규화된 입력이 같으면 원래 결과를 복구하고, ID가 같고 입력이 다르면 충돌한다. 요청 기록은 해당 profile의 이력과 함께 보존한다. 같은 요청의 재시도는 action을 다시 적용하거나 종료된 점유를 복원하지 않는다.
+변경 요청은 호출자가 생성한 `--request-id`를 받는다. profile·요청 ID·정규화된 입력이 같으면 원래 결과를 복구하고, ID가 같고 입력이 다르면 충돌한다. 요청 기록은 해당 profile의 이력과 함께 보존한다. 같은 요청의 재시도는 action을 다시 적용하거나 종료된 점유를 복원하지 않는다. 실제 투영 변경이 0건인 요청은 `no_change`로 실패하며 action·영수증을 저장하지 않는다.
 
 문서·관계·완료 조건 수정과 취소·재개·활성화·마감·면제 요청에는 읽었던 profile 리비전을 `--if-revision`으로 제출한다. 현재 리비전이 다르면 최신 내용을 조회하여 재판단한다. 실행 변경은 현재 컨텍스트를 검사하고 인계는 `--expected-run RUN_ID`를 검사한다. action 적용 직전에 관련 조건을 모두 다시 확인한다.
 
 ### 실행 컨텍스트와 현재 연결
 
-변경 명령은 `--context CONTEXT` 또는 `DEVTOOLS_TASK_CONTEXT`로 참조를 받으며 명시 옵션이 우선한다. 선택된 profile·task·run과 현재 점유가 일치해야 한다. 컨텍스트를 사용하는 명령도 profile은 기존 규칙대로 명시 옵션 또는 devtools.toml로 선택한다.
+실행 증명을 소비하는 변경 명령만 `--context CONTEXT` 또는 `DEVTOOLS_TASK_CONTEXT`로 참조를 받으며 명시 옵션이 우선한다. 선택된 profile·task·run과 현재 점유가 일치해야 한다. task update는 context 없이 관리용 정의 변경으로 실행할 수 있지만, context가 전달되면 현재 run과 대상 task의 일치를 필수 guard로 검사한다. context-free 명령은 환경 context를 읽거나 영수증 identity에 결합하지 않는다. 컨텍스트를 사용하는 명령도 profile은 기존 규칙대로 명시 옵션 또는 devtools.toml로 선택한다.
 
 CLI는 전역 저장소에 정규화된 디렉터리와 run의 연결을 기록한다. Git에서는 worktree 루트, Git 밖에서는 claim의 `--dir` 또는 현재 디렉터리를 사용한다. 같은 디렉터리에 여러 run이 연결될 수 있으므로 `current`는 목록을 반환한다. 대상 없는 resume는 전달한 컨텍스트가 가리키는 실행을 사용하며, 컨텍스트가 없으면 필요한 입력을 안내한다.
 
@@ -374,16 +374,16 @@ validation은 `title`, `method`, `required`, 연결 대상 task 또는 workstrea
 
 의존성 JSON은 `{ "depends_on": ["선행 ID"] }`다. 배열 전체를 교체하며 빈 배열은 해제한다. 중복 ID는 하나로 정규화한다. 관계 검사와 영향 검사는 변경 직전에 다시 수행한다.
 
-기존 JSON 봉투를 사용하며 data에는 `profile`, 기준 `revision`과 명령별 결과를 담는다. 변경 결과에는 적용 action과 대상, 재시도 여부를 포함한다. 자동 claim에서 ready 항목이 없으면 `claimed: false`와 이유로 성공한다. 특정 task의 조건 위반은 충돌이다. 자동 선택은 ready 항목의 생성 순번·ID 순서다.
+기존 JSON 봉투를 사용하며 data에는 `profile`, 변경 전 `previous_revision`, 적용 `revision`, 응답 시점 `current_revision`과 명령별 결과를 담는다. 변경 결과에는 적용 action, `affected_ids`/`affected_count`, 재시도 여부를 포함한다. 구버전 영수증도 저장된 action 경계로 현재 응답 필드를 복원한다. 실제 domain 상태가 같은 정의·관계·lifecycle 변경은 `no_change`이며, checkpoint·resume·검증 결과처럼 호출 자체가 이력인 action만 반복 기록을 허용한다. 자동 claim에서 ready 항목이 없으면 `claimed: false`와 이유로 성공한다. 특정 task의 조건 위반은 충돌이다. 자동 선택은 ready 항목의 생성 순번·ID 순서다.
 
 | 종료 코드 | 오류 |
 | --- | --- |
 | 1 | `storage_error`, `io_error`, `dashboard_unavailable` |
 | 2 | `invalid_argument` |
-| 3 | `not_found`, `revision_conflict`, `request_conflict`, `claim_conflict`, `context_invalid`, `dependency_conflict`, `transition_conflict`, `validation_required`, `cursor_invalid` |
+| 3 | `not_found`, `revision_conflict`, `request_conflict`, `no_change`, `claim_conflict`, `context_invalid`, `dependency_conflict`, `transition_conflict`, `validation_required`, `cursor_invalid` |
 | 130 | `canceled` |
 
-profile 해석 오류는 기존 CLI 계약을 따른다. 오류 details에는 대상과 차단·충돌 원인을 담고 점유 증명과 컨텍스트는 포함하지 않는다.
+profile 해석 오류는 기존 CLI 계약을 따른다. 오류 details에는 대상과 차단·충돌 원인을 담고 점유 증명과 컨텍스트는 포함하지 않는다. `context_invalid`는 원문 대신 `context_reason`으로 missing·unknown·inactive·target_mismatch를 구분한다.
 
 목록은 기본 50개, 최대 200개와 cursor로 조회한다. ID 순으로 정렬하고 이어 읽기는 같은 리비전의 결과를 사용한다. 스냅샷은 마지막 접근 후 30분 동안 유지하며 만료하면 새 조회를 안내한다. 트리는 `--direction upstream|downstream`과 `--depth`를 제공한다. 기본은 upstream·깊이 3, 최대 깊이는 20이다. JSON에는 `nodes`, `edges`, `roots`, 리비전을 반환하고 응답당 최대 200개 노드 이후의 가지는 이어 조회할 ID를 표시한다.
 

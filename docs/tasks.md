@@ -25,9 +25,32 @@ Use `data.item.id` from add as `TASK_ID`. A successful claim returns
 `data.claimed: true`, `data.run.id` as `RUN_ID`, and `data.context` as `CONTEXT`.
 Check `data.context_valid` before continuing; an unsuccessful claim explains its
 blockers. Keep the context private and use the same profile for every step.
+Every committed mutation reports `previous_revision`, `revision`,
+`current_revision`, `affected_ids`, and `affected_count`. Treat exit code 0 as a
+committed change only when `changed` is true and `affected_count` is positive.
+An identical mutation fails with `no_change` and exit code 3; it does not create
+an action, receipt, or revision. Empty automatic claims and dry-runs remain
+intentional non-changing successes.
 For an uncertain response, retry with
 the original request ID and unchanged inputs. A revised request gets a new UUID.
 `DEVTOOLS_TASK_CONTEXT` supplies the default execution context.
+Only commands that consume execution context or optionally use it as a guard
+expose `--context`. Context-free mutations ignore ambient context and do not
+bind it to their retry receipts. Receipts written by older versions are
+normalized to the current revision-boundary and affected-item response fields.
+
+`task update` can run without a claim context as an administrative definition
+edit. If `--context` or `DEVTOOLS_TASK_CONTEXT` supplies one, devtools validates
+that it belongs to the current run for the target task. A rejected context uses
+`context_invalid` with `details.context_reason` set to `missing`, `unknown`,
+`inactive`, or `target_mismatch`, without returning the credential.
+Task-owned validation basis, record, accept, waive, and unwaive operations use
+the same reason codes. Workstream-owned validations do not consume task context.
+
+A checkpoint changes execution history, not the task definition. Its success
+advances the profile revision, updates the task/run projection, and names the
+task in `affected_ids`; the task's `definition_revision` stays unchanged. Read
+the saved payload with `task checkpoint list RUN_ID` or task history.
 
 ## Plan a workstream
 

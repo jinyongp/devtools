@@ -73,7 +73,7 @@ func (s *Server) cleanupEngine() cleanup.Engine {
 
 func apiError(w http.ResponseWriter, e *protocol.Error) {
 	status := 400
-	if e.Code == "revision_conflict" || e.Code == "request_conflict" || e.Code == "claim_conflict" {
+	if e.Code == "revision_conflict" || e.Code == "request_conflict" || e.Code == "no_change" || e.Code == "claim_conflict" {
 		status = 409
 	}
 	if e.ExitCode == 1 {

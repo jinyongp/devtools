@@ -388,13 +388,13 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 		run = contextRun
 		if def.Kind == "run" {
 			if target != run.ID {
-				return nil, nil, "", contextFailure("target_mismatch")
+				return nil, nil, "", targetMismatchFailure(targetMismatch{Expected: "run", Actual: s.targetKind(target), Relation: "different_id"})
 			}
 			target = run.TaskID
 		} else if target == "" {
 			target = run.TaskID
 		} else if target != run.TaskID {
-			return nil, nil, "", contextFailure("target_mismatch")
+			return nil, nil, "", targetMismatchFailure(targetMismatch{Expected: def.Kind, Actual: s.targetKind(target), Relation: "different_id"})
 		}
 	}
 	if target != "" {
@@ -414,7 +414,7 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 				return nil, nil, "", err
 			}
 			if contextRun.TaskID != owner.ID {
-				return nil, nil, "", contextFailure("target_mismatch")
+				return nil, nil, "", targetMismatchFailure(targetMismatch{Expected: def.Kind, Actual: s.targetKind(r.Target), Relation: "different_owner"})
 			}
 			run = contextRun
 		}

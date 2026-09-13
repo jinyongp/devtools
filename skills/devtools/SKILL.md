@@ -28,7 +28,7 @@ conversation, and logs. Child output and explicitly captured logs may contain se
 
 Use `run NAME` for foreground work and `process start NAME` for a persistent server.
 Save the returned execution ID. `process status` reports lifetime; a configured
-`process wait ID` establishes readiness before dependent work. `process check`
+`process wait EXECUTION_ID` establishes readiness before dependent work. `process check`
 can exit successfully with `readiness.ready: false`.
 Restart applies current config and values.
 
@@ -57,6 +57,8 @@ Keep the returned context private; pass it explicitly or through
 Claims coordinate records; coordinate overlapping files separately.
 
 Checkpoint decisions, remaining work, next action, and evidence before a handoff.
+Checkpoint and release target the run ID returned by claim or takeover; done and
+sync target the task ID.
 In a new session, use `task current --dir PATH` and `task context TASK_ID`,
 then inspect the actual working tree. Resume with an existing valid context,
 take over the observed active run using `--expected-run`, or claim released work.

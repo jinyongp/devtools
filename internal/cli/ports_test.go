@@ -81,3 +81,35 @@ PATH={template="/bin:/usr/bin"}
 	call("port", "list", "--profile", "app")
 	call("instance", "list", "--profile", "app")
 }
+
+func TestPortFailureExitCodes(t *testing.T) {
+	if err := portFailure("io_error"); err.ExitCode != 1 {
+		t.Fatal("I/O error exit code", err.ExitCode)
+	}
+	if err := portFailure("instance_not_found"); err.ExitCode != 3 {
+		t.Fatal("condition error exit code", err.ExitCode)
+	}
+}
+
+func TestInstancePositionalSchema(t *testing.T) {
+	app := testApp(t)
+	for _, args := range [][]string{{"instance", "name", "--help"}, {"instance", "move", "--help"}, {"instance", "remove", "--help"}} {
+		code, out, diagnostic := invoke(t, app, "", args...)
+		if code != 0 || diagnostic != "" || strings.Contains(out, "--instance") {
+			t.Errorf("%v advertises conflicting --instance: exit=%d stdout=%s stderr=%s", args, code, out, diagnostic)
+		}
+		if args[1] == "move" && (!strings.Contains(out, "--dir VALUE") || !strings.Contains(out, "(required)")) {
+			t.Errorf("move does not require --dir: %s", out)
+		}
+		if args[1] == "remove" && strings.Contains(out, "--dir") {
+			t.Errorf("remove advertises unsupported --dir: %s", out)
+		}
+		if args[1] == "name" && !strings.Contains(out, "selected project execution location") {
+			t.Errorf("name does not account for --dir selection: %s", out)
+		}
+	}
+	code, out, diagnostic := invoke(t, app, "", "instance", "move", "main")
+	if code != 2 || out != "" || !strings.Contains(diagnostic, `"field":"dir"`) {
+		t.Errorf("move accepted missing --dir: exit=%d stdout=%s stderr=%s", code, out, diagnostic)
+	}
+}

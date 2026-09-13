@@ -383,7 +383,7 @@ validation은 `title`, `method`, `required`, 연결 대상 task 또는 workstrea
 | 3 | `not_found`, `revision_conflict`, `request_conflict`, `no_change`, `claim_conflict`, `context_invalid`, `dependency_conflict`, `transition_conflict`, `validation_required`, `cursor_invalid` |
 | 130 | `canceled` |
 
-profile 해석 오류는 기존 CLI 계약을 따른다. 오류 details에는 대상과 차단·충돌 원인을 담고 점유 증명과 컨텍스트는 포함하지 않는다. `context_invalid`는 원문 대신 `context_reason`으로 missing·unknown·inactive·target_mismatch를 구분한다.
+profile 해석 오류는 기존 CLI 계약을 따른다. 오류 details에는 대상과 차단·충돌 원인을 담고 점유 증명과 컨텍스트는 포함하지 않는다. `context_invalid`는 원문 대신 `context_reason`으로 missing·unknown·inactive·target_mismatch를 구분한다. `target_mismatch`는 명령 위치 인자의 기대 종류와 실제 종류를 `expected_target_kind`·`actual_target_kind`로 함께 반환한다.
 
 목록은 기본 50개, 최대 200개와 cursor로 조회한다. ID 순으로 정렬하고 이어 읽기는 같은 리비전의 결과를 사용한다. 스냅샷은 마지막 접근 후 30분 동안 유지하며 만료하면 새 조회를 안내한다. 트리는 `--direction upstream|downstream`과 `--depth`를 제공한다. 기본은 upstream·깊이 3, 최대 깊이는 20이다. JSON에는 `nodes`, `edges`, `roots`, 리비전을 반환하고 응답당 최대 200개 노드 이후의 가지는 이어 조회할 ID를 표시한다.
 

@@ -82,7 +82,16 @@ type control struct {
 }
 
 func failure(code string) *protocol.Error {
-	return protocol.NewError(code, "Process operation could not satisfy the requested condition.", 3, nil)
+	exit := 3
+	switch code {
+	case "invalid_argument":
+		exit = 2
+	case "canceled":
+		exit = 130
+	case "execution_failed":
+		exit = 126
+	}
+	return protocol.NewError(code, "Process operation could not satisfy the requested condition.", exit, nil)
 }
 func storageError() *protocol.Error {
 	return protocol.NewError("io_error", "Cannot access private process storage.", 1, nil)

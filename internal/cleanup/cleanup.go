@@ -71,7 +71,14 @@ func validID(id string) bool {
 	return e == nil && len(b) == 16 && len(id) == 36 && id[8] == '-' && id[13] == '-' && id[18] == '-' && id[23] == '-'
 }
 func fail(code string) *protocol.Error {
-	return protocol.NewError(code, "Cleanup condition changed or could not be satisfied. Refresh the preview.", 3, nil)
+	exit := 3
+	switch code {
+	case "invalid_argument":
+		exit = 2
+	case "storage_error":
+		exit = 1
+	}
+	return protocol.NewError(code, "Cleanup condition changed or could not be satisfied. Refresh the preview.", exit, nil)
 }
 func write(path string, v any) error {
 	b, e := json.Marshal(v)

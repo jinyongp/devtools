@@ -364,8 +364,14 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 			if state != "" && state != "all" && i.State != state {
 				continue
 			}
-			if ws := q.Options["workstream"]; ws != "" && i.Workstream != ws {
-				continue
+			if ws := q.Options["workstream"]; ws != "" {
+				itemWorkstream := i.Workstream
+				if kind == "validation" {
+					itemWorkstream = s.validationWorkstream(i)
+				}
+				if itemWorkstream != ws {
+					continue
+				}
 			}
 			items = append(items, s.View(i))
 		}

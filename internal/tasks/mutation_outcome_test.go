@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -73,6 +74,14 @@ func TestTaskUpdateContextGuardAndContextReasons(t *testing.T) {
 	}
 	assertReason("unknown-context", "unknown")
 	assertReason(str(second, "context"), "target_mismatch")
+	_, mismatch := s.Execute(context.Background(), Request{Action: "run.checkpointed", Target: task, Body: Object{"summary": "Wrong target kind"}, Options: map[string]string{"request-id": ID(), "context": str(first, "context")}})
+	if mismatch == nil || mismatch.Details["expected_target_kind"] != "run" || mismatch.Details["actual_target_kind"] != "task" {
+		t.Fatal("checkpoint target mismatch omitted target kinds", mismatch)
+	}
+	_, mismatch = s.Execute(context.Background(), Request{Action: "run.checkpointed", Target: runID(second), Body: Object{"summary": "Wrong run"}, Options: map[string]string{"request-id": ID(), "context": str(first, "context")}})
+	if mismatch == nil || mismatch.Details["expected_target_kind"] != "run" || mismatch.Details["actual_target_kind"] != "run" || !strings.Contains(mismatch.Message, "different runs") {
+		t.Fatal("same-kind run mismatch is unclear", mismatch)
+	}
 
 	requestID := ID()
 	changed, e := update(str(first, "context"), "Guarded update", requestID)
@@ -162,6 +171,10 @@ func TestValidationContextReasonsAndConditionalUse(t *testing.T) {
 		if e := request(token); e == nil || e.Code != "context_invalid" || e.Details["context_reason"] != reason {
 			t.Fatalf("validation context reason %s: %+v", reason, e)
 		}
+	}
+	ownerMismatch := request(str(otherClaim, "context"))
+	if !strings.Contains(ownerMismatch.Message, "different task") {
+		t.Fatal("validation owner mismatch is unclear", ownerMismatch)
 	}
 	basisRequest := Request{Action: "validation.basis", Target: validation, Body: Object{"code": []any{}}, Options: map[string]string{"request-id": ID(), "context": str(claim, "context")}}
 	basis, basisError := s.Execute(context.Background(), basisRequest)

@@ -61,7 +61,16 @@ type Target struct {
 }
 
 func failure(code string) *protocol.Error {
-	return protocol.NewError(code, "Backup operation could not be completed; check the selected files and target state.", 3, nil)
+	exit := 3
+	switch code {
+	case "invalid_argument":
+		exit = 2
+	case "storage_error":
+		exit = 1
+	case "canceled":
+		exit = 130
+	}
+	return protocol.NewError(code, "Backup operation could not be completed; check the selected files and target state.", exit, nil)
 }
 func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 func file(domain, profile string) string {

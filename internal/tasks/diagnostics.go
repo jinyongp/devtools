@@ -1,6 +1,10 @@
 package tasks
 
-import "github.com/jinyongp/devtools/internal/protocol"
+import (
+	"fmt"
+
+	"github.com/jinyongp/devtools/internal/protocol"
+)
 
 func contextFailure(reason string) *protocol.Error {
 	messages := map[string]string{
@@ -12,6 +16,36 @@ func contextFailure(reason string) *protocol.Error {
 	e := failure("context_invalid", messages[reason])
 	e.Details = map[string]any{"context_reason": reason}
 	return e
+}
+
+type targetMismatch struct {
+	Expected string
+	Actual   string
+	Relation string
+}
+
+func targetMismatchFailure(mismatch targetMismatch) *protocol.Error {
+	e := contextFailure("target_mismatch")
+	if mismatch.Relation == "different_owner" {
+		e.Message = "The execution context belongs to a different task than the command target."
+	} else if mismatch.Expected == mismatch.Actual {
+		e.Message = fmt.Sprintf("The execution context and command target refer to different %ss.", mismatch.Expected)
+	} else {
+		e.Message = fmt.Sprintf("Expected a %s target, but received a %s target.", mismatch.Expected, mismatch.Actual)
+	}
+	e.Details["expected_target_kind"] = mismatch.Expected
+	e.Details["actual_target_kind"] = mismatch.Actual
+	return e
+}
+
+func (s *State) targetKind(id string) string {
+	if s.Runs[id] != nil {
+		return "run"
+	}
+	if item := s.Items[id]; item != nil {
+		return item.Kind
+	}
+	return "unknown"
 }
 
 func (s *State) noChangeFailure(r Request, profile string) *protocol.Error {

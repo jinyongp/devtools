@@ -43,7 +43,8 @@ normalized to the current revision-boundary and affected-item response fields.
 edit. If `--context` or `DEVTOOLS_TASK_CONTEXT` supplies one, devtools validates
 that it belongs to the current run for the target task. A rejected context uses
 `context_invalid` with `details.context_reason` set to `missing`, `unknown`,
-`inactive`, or `target_mismatch`, without returning the credential.
+`inactive`, or `target_mismatch`, without returning the credential. Target
+mismatches also report `expected_target_kind` and `actual_target_kind`.
 Task-owned validation basis, record, accept, waive, and unwaive operations use
 the same reason codes. Workstream-owned validations do not consume task context.
 

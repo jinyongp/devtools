@@ -84,3 +84,18 @@ func TestActiveTaskProfileRetained(t *testing.T) {
 		t.Fatal(plan, err)
 	}
 }
+
+func TestErrorExitCodes(t *testing.T) {
+	engine := Engine{Data: t.TempDir(), Cache: t.TempDir()}
+	if _, err := engine.Apply(context.Background(), "bad-id", []string{"bad-id"}, "bad-id"); err == nil || err.Code != "invalid_argument" || err.ExitCode != 2 {
+		t.Fatal("invalid cleanup input contract", err)
+	}
+	if _, err := engine.Restore(context.Background(), tasks.ID()); err == nil || err.Code != "archive_not_found" || err.ExitCode != 3 {
+		t.Fatal("missing archive contract", err)
+	}
+	for code, want := range map[string]int{"invalid_argument": 2, "revision_conflict": 3, "storage_error": 1} {
+		if err := fail(code); err.ExitCode != want {
+			t.Errorf("%s exit code = %d, want %d", code, err.ExitCode, want)
+		}
+	}
+}

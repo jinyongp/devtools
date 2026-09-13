@@ -7,6 +7,10 @@ import (
 
 func TestCurrentQueriesAgreeOnStaleAndRemoved(t *testing.T) {
 	s, w, task, v := currentFixture(t)
+	validations, e := s.Query(Query{Command: "validation list", Options: map[string]string{"workstream": w}})
+	if e != nil || len(validations["items"].([]any)) != 1 || str(objectValue(validations["items"].([]any)[0]), "id") != v {
+		t.Fatal("workstream filter omitted task-owned validation", validations, e)
+	}
 	claim := call(t, s, "run.claimed", task, Object{})
 	token := str(claim, "context")
 	recordPass(t, s, v, token)

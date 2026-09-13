@@ -18,12 +18,22 @@ func (a *App) serviceStore() (services.Store, *protocol.Error) {
 	return services.Store{Data: filepath.Dir(d)}, e
 }
 func (a *App) registerProcesses() {
+	descriptions := map[string]string{
+		"start":   "Start a configured command as a managed execution.",
+		"list":    "List managed executions.",
+		"status":  "Show one managed execution.",
+		"stop":    "Stop one managed execution.",
+		"restart": "Replace one managed execution using current configuration.",
+		"logs":    "Read retained output for one managed execution.",
+		"check":   "Check readiness once for one managed execution.",
+		"wait":    "Wait for one managed execution to become ready.",
+	}
 	for _, action := range []string{"start", "list", "status", "stop", "restart", "logs", "check", "wait"} {
-		c := Command{Name: "process " + action, Description: action + " managed project processes.", Options: []Option{}, Output: map[string]any{"type": "object"}}
+		c := Command{Name: "process " + action, Description: descriptions[action], Options: []Option{}, Output: map[string]any{"type": "object"}}
 		if action == "list" {
 			c.Options = profileOptions(false)
 		} else {
-			c.Arguments = []Argument{{Name: "id", Required: true}}
+			c.Arguments = []Argument{{Name: "execution-id", Required: true, Pattern: uuidPattern}}
 		}
 		if action == "start" {
 			c.Arguments = []Argument{{Name: "command", Required: true, Pattern: project.ProfilePattern}}
@@ -44,7 +54,7 @@ func (a *App) registerProcesses() {
 			}}
 		}
 		if action == "start" || action == "stop" || action == "restart" {
-			c.Options = append(c.Options, Option{Name: "request-id", Required: true, MinLength: 36, MaxLength: 36, Description: "UUID for retry-safe mutation."})
+			c.Options = append(c.Options, Option{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe mutation."})
 		}
 		c.Run = func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			s, e := a.serviceStore()

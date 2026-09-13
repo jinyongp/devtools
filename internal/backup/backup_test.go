@@ -138,3 +138,15 @@ func TestStalePreviewPreservesTarget(t *testing.T) {
 		t.Fatal("stale preview applied", err)
 	}
 }
+
+func TestErrorExitCodes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "same-key-file")
+	if _, err := Keygen(path, path); err == nil || err.Code != "invalid_argument" || err.ExitCode != 2 {
+		t.Fatal("invalid backup input contract", err)
+	}
+	for code, want := range map[string]int{"invalid_argument": 2, "invalid_backup": 3, "storage_error": 1, "canceled": 130} {
+		if err := failure(code); err.ExitCode != want {
+			t.Errorf("%s exit code = %d, want %d", code, err.ExitCode, want)
+		}
+	}
+}

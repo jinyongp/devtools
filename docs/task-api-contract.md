@@ -156,7 +156,7 @@ waive는 해당 검증 의미 epoch·basis에만 적용한다. `validation unwai
 
 실패한 새 요청은 적용 영수증을 만들지 않는다. `no_change` 뒤 같은 요청 ID를 고친 입력에 재사용해도 이전 실패와 충돌하지 않는다. 성공했는지 응답을 받지 못한 경우 같은 요청 ID로 재시도한다. 충돌을 읽고 입력이나 리비전을 바꾼 새 판단에는 새 요청 ID를 사용한다. 자동 claim의 claimed:false도 성공 영수증으로 저장하므로 나중에 새 작업을 선택할 때 새 요청 ID를 사용한다.
 
-JSON 오류는 invalid_argument, 대상 없음은 not_found, 리비전 불일치는 revision_conflict, 기존 ID의 다른 입력은 request_conflict, 실변경 없음은 no_change, 증명 불일치는 context_invalid, 점유 경쟁은 claim_conflict, 관계 조건은 dependency_conflict, 허용되지 않은 action은 transition_conflict, 필수 근거 부족은 validation_required다. `no_change` details는 `affected_count:0`, 빈 `affected_ids`, 현재 리비전을 제공한다. `context_invalid` details의 `context_reason`은 `missing`, `unknown`, `inactive`, `target_mismatch` 중 하나이며 증명 원문은 포함하지 않는다. 구조 check는 valid:false를 정상 조회로 반환하지만 activate는 구조 실패 시 validation_required로 변경을 거절한다.
+JSON 오류는 invalid_argument, 대상 없음은 not_found, 리비전 불일치는 revision_conflict, 기존 ID의 다른 입력은 request_conflict, 실변경 없음은 no_change, 증명 불일치는 context_invalid, 점유 경쟁은 claim_conflict, 관계 조건은 dependency_conflict, 허용되지 않은 action은 transition_conflict, 필수 근거 부족은 validation_required다. `no_change` details는 `affected_count:0`, 빈 `affected_ids`, 현재 리비전을 제공한다. `context_invalid` details의 `context_reason`은 `missing`, `unknown`, `inactive`, `target_mismatch` 중 하나이며 증명 원문은 포함하지 않는다. `target_mismatch`는 `expected_target_kind`와 `actual_target_kind`도 제공한다. 구조 check는 valid:false를 정상 조회로 반환하지만 activate는 구조 실패 시 validation_required로 변경을 거절한다.
 
 ## Dashboard·조회 경계
 

@@ -36,8 +36,11 @@ func TestStaleSupervisorAndRetryConflict(t *testing.T) {
 	if _, e = s.Apply(context.Background(), req); e == nil || e.Code != "request_conflict" {
 		t.Fatal(e)
 	}
-	if _, e = s.Status(context.Background(), "../../outside"); e == nil {
-		t.Fatal("invalid ID accepted")
+	if _, e = s.Status(context.Background(), "../../outside"); e == nil || e.Code != "invalid_argument" || e.ExitCode != 2 {
+		t.Fatal("invalid ID contract", e)
+	}
+	if _, e = s.Status(context.Background(), tasks.ID()); e == nil || e.Code != "process_not_found" || e.ExitCode != 3 {
+		t.Fatal("missing execution contract", e)
 	}
 }
 func TestBoundedRawLogs(t *testing.T) {
@@ -57,5 +60,13 @@ func TestBoundedRawLogs(t *testing.T) {
 	i, _ := os.Stat(path)
 	if i.Mode().Perm() != 0600 {
 		t.Fatal(i.Mode())
+	}
+}
+
+func TestErrorExitCodes(t *testing.T) {
+	for code, want := range map[string]int{"invalid_argument": 2, "process_not_found": 3, "canceled": 130, "execution_failed": 126} {
+		if err := failure(code); err.ExitCode != want {
+			t.Errorf("%s exit code = %d, want %d", code, err.ExitCode, want)
+		}
 	}
 }

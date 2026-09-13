@@ -33,6 +33,10 @@ func TestCommandContract(t *testing.T) {
 		{"empty profile", []string{"project", "inspect", "--profile="}, 2, "invalid_argument"},
 		{"empty directory", []string{"project", "inspect", "--dir="}, 2, "invalid_argument"},
 		{"missing flag value", []string{"project", "inspect", "--dir"}, 2, "invalid_argument"},
+		{"invalid execution id", []string{"process", "status", "not-a-uuid"}, 2, "invalid_argument"},
+		{"invalid cleanup plan id", []string{"cleanup", "apply", "not-a-uuid", "--item", "not-a-uuid", "--request-id", "not-a-uuid"}, 2, "invalid_argument"},
+		{"invalid instance option", []string{"port", "show", "web", "--instance", "id:not-an-id"}, 2, "invalid_argument"},
+		{"invalid instance selector", []string{"instance", "remove", "id:not-an-id"}, 2, "invalid_argument"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out, diagnostic bytes.Buffer

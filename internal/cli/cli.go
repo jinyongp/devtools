@@ -12,6 +12,9 @@ import (
 	"github.com/jinyongp/devtools/skills"
 )
 
+const uuidPattern = `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
+const positiveIntegerPattern = `^[1-9][0-9]*$`
+
 type IO struct {
 	In  io.Reader
 	Out io.Writer

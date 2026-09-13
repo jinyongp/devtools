@@ -14,8 +14,14 @@ import (
 	"github.com/jinyongp/devtools/internal/services"
 )
 
+const instanceSelectorPattern = `^([A-Za-z0-9][A-Za-z0-9._-]{0,127}|id:[0-9a-fA-F]{32})$`
+
 func portFailure(code string) *protocol.Error {
-	return protocol.NewError(code, "The requested port or instance condition is not satisfied.", 3, nil)
+	exit := 3
+	if code == "io_error" {
+		exit = 1
+	}
+	return protocol.NewError(code, "The requested port or instance condition is not satisfied.", exit, nil)
 }
 func (a *App) portStore() (ports.Store, *protocol.Error) {
 	d, e := a.dataDirectory()
@@ -29,7 +35,7 @@ func portDefaults() ([]int, *protocol.Error) {
 	return ports.DefaultRange(filepath.Join(d.Config, "config.toml"))
 }
 func portOptions() []Option {
-	return append(profileOptions(false), Option{Name: "instance", MinLength: 1, Description: "Instance alias or id:ID."}, Option{Name: "dir", MinLength: 1, Description: "Select a project directory."})
+	return append(profileOptions(false), Option{Name: "instance", Pattern: instanceSelectorPattern, Description: "Instance alias or id:ID."}, Option{Name: "dir", MinLength: 1, Description: "Select a project directory."})
 }
 func instanceFields() map[string]any {
 	return map[string]any{"profile": stringSchema(), "instance_id": stringSchema(), "alias": map[string]any{"type": []string{"string", "null"}}, "directory": stringSchema(), "location_status": map[string]any{"enum": []string{"available", "missing", "unknown"}}}
@@ -49,10 +55,18 @@ func fieldsSchema(f map[string]any) map[string]any {
 	return object(f, keys...)
 }
 func (a *App) registerPorts() {
+	portDescriptions := map[string]string{
+		"list":     "List persistent port assignments.",
+		"show":     "Show one persistent port assignment.",
+		"allocate": "Allocate or reuse a configured port assignment.",
+		"check":    "Check occupancy and reachability for a port assignment.",
+		"release":  "Release one unused port assignment.",
+		"prune":    "Remove eligible records for unavailable execution locations.",
+	}
 	for _, action := range []string{"list", "show", "allocate", "check", "release", "prune"} {
-		cmd := Command{Name: "port " + action, Description: action + " persistent local TCP assignments.", Options: portOptions()}
+		cmd := Command{Name: "port " + action, Description: portDescriptions[action], Options: portOptions()}
 		if action != "list" && action != "prune" {
-			cmd.Arguments = []Argument{{Name: "name", Required: true, Pattern: project.ProfilePattern}}
+			cmd.Arguments = []Argument{{Name: "port-name", Required: true, Pattern: project.ProfilePattern}}
 		}
 		f := assignmentFields()
 		switch action {
@@ -79,10 +93,34 @@ func (a *App) registerPorts() {
 		}
 		a.commands = append(a.commands, cmd)
 	}
+	instanceDescriptions := map[string]string{
+		"list":   "List project execution locations.",
+		"show":   "Show the selected project execution location.",
+		"name":   "Assign an alias to the selected project execution location.",
+		"move":   "Update the directory for a selected project execution location.",
+		"remove": "Remove a selected project execution location when it is unused.",
+	}
 	for _, action := range []string{"list", "show", "name", "move", "remove"} {
-		cmd := Command{Name: "instance " + action, Description: action + " a profile execution location.", Options: portOptions()}
+		cmd := Command{Name: "instance " + action, Description: instanceDescriptions[action], Options: portOptions()}
+		if action == "name" {
+			cmd.Arguments = []Argument{{Name: "alias", Required: true, Pattern: project.ProfilePattern}}
+		}
+		if action == "move" || action == "remove" {
+			cmd.Arguments = []Argument{{Name: "instance-selector", Required: true, Pattern: instanceSelectorPattern}}
+		}
 		if action == "name" || action == "move" || action == "remove" {
-			cmd.Arguments = []Argument{{Name: "name", Required: true}}
+			options := []Option{}
+			for _, option := range cmd.Options {
+				if option.Name == "instance" || action == "remove" && option.Name == "dir" {
+					continue
+				}
+				if action == "move" && option.Name == "dir" {
+					option.Required = true
+					option.Description = "New project directory."
+				}
+				options = append(options, option)
+			}
+			cmd.Options = options
 		}
 		f := instanceFields()
 		switch action {
@@ -366,11 +404,8 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 		}
 		defer unlock()
 	}
-	if (action == "name" || action == "move" || action == "remove") && r.Options["instance"] != "" {
-		return nil, argumentError("Use the positional instance name.", "instance")
-	}
 	if action == "name" && !project.ValidProfile(r.Args[0]) {
-		return nil, argumentError("Invalid instance alias.", "name")
+		return nil, argumentError("Invalid instance alias.", "alias")
 	}
 	destination := ""
 	if action == "move" {

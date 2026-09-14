@@ -1,6 +1,8 @@
 ---
 name: devtools
-description: Use the devtools CLI for project environment setup, ports and local reverse proxy routes, managed servers, and task/workstream coordination across agent sessions.
+description: Operate the devtools CLI for project setup, managed servers, stable local proxy routes, ports, and task/workstream coordination. Use when a repository has devtools.toml or when the user asks to inspect, configure, run, coordinate, or recover devtools-managed work.
+license: MIT
+compatibility: Requires the devtools CLI in PATH and filesystem access to the target project and the user's devtools data directory.
 ---
 
 # devtools
@@ -15,7 +17,7 @@ Command examples here name operations; obtain required flags from their help.
 Resolve the profile from tracked `devtools.toml` or explicit `--profile`.
 Worktrees with the same profile share values and task history.
 Data commands return JSON: check the exit code, then `data` or `error.code`.
-Help and `skill` return text; `run` forwards the child's output and exit code.
+Help returns text; `run` forwards the child's output and exit code.
 
 ## Prepare and run
 

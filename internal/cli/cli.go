@@ -10,7 +10,6 @@ import (
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/proxy"
-	"github.com/jinyongp/devtools/skills"
 )
 
 const uuidPattern = `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
@@ -80,12 +79,6 @@ func stringSchema() map[string]any { return map[string]any{"type": "string"} }
 func New(version, commit string) *App {
 	a := &App{dataDirectory: userDataDirectory, proxyManager: func(data string) proxy.Manager { return proxy.Manager{Data: data} }}
 	a.commands = []Command{
-		{Name: "skill", Description: "Print the bundled agent SKILL.md for installation.", StreamOutput: true, Output: map[string]any{"type": "string"}, Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
-			if _, err := io.WriteString(streams.Out, skills.Devtools); err != nil {
-				return nil, protocol.NewError("io_error", "Cannot write skill.", 1, nil)
-			}
-			return processResult{ExitCode: 0}, nil
-		}},
 		{Name: "init", Description: "Create project configuration in the current directory without overwriting existing files.", Options: []Option{
 			{Name: "profile", Description: "Project profile identifier.", Required: true, Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128},
 		}, Output: object(map[string]any{"created": map[string]any{"type": "boolean"}, "config_path": stringSchema(), "profile": stringSchema()}, "created", "config_path", "profile"), Run: func(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {

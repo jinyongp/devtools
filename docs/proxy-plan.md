@@ -214,7 +214,7 @@ proxy daemon은 전역 singleton이므로 profile·instance·이름 명령을 �
 - `proxy start`, `status`, `list`, `stop`을 등록한다.
 - JSON schema, text help, shell completion 테스트를 추가한다.
 - README와 사용 가이드에 instance alias 설정부터 접속까지의 흐름을 추가한다.
-- 번들 devtools 스킬에 alias·port 준비, 전역 daemon과 UUID 재시도 규칙을 추가한다.
+- 공개 devtools Agent Skill에 alias·port 준비, 전역 daemon과 UUID 재시도 규칙을 추가한다.
 
 ### 6. 설치 통합 검증
 
@@ -243,7 +243,7 @@ proxy daemon은 전역 singleton이므로 profile·instance·이름 명령을 �
 - outbound proxy 환경변수가 upstream dial 경로를 바꾸지 않는다.
 - WebSocket 기반 개발 서버 HMR 연결이 동작한다.
 - CLI process가 끝난 뒤 daemon이 유지되고, stop은 해당 daemon만 종료한다.
-- `devtools skill`이 proxy 설정 준비와 전역 daemon 운용 규칙을 안내한다.
+- 공개 Agent Skill이 proxy 설정 준비와 전역 daemon 운용 규칙을 안내한다.
 - 관련 package race test, `go vet ./...`, macOS/Linux build, Docker proxy 시나리오가
   통과한다.
 

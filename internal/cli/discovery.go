@@ -126,7 +126,6 @@ func (a *App) commandSummary(name string) string {
 		"init":                    "Create devtools.toml for a project.",
 		"run":                     "Run a command with project environment values.",
 		"schema":                  "Discover command input and output contracts.",
-		"skill":                   "Export the bundled agent skill.",
 		"update":                  "Update the installed executable.",
 		"backup":                  "Back up and restore profile data.",
 		"cleanup":                 "Preview and clean up stored data.",

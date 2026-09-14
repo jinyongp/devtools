@@ -5,7 +5,8 @@ RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
 COPY skills/ skills/
-COPY scripts/package.sh scripts/package.sh
+COPY scripts/package.sh scripts/package-skill.sh scripts/
+COPY scripts/package-skill/ scripts/package-skill/
 COPY scripts/embed.go scripts/install.sh scripts/
 RUN test -z "$(gofmt -l cmd internal scripts skills)" && go vet ./... && go test -race ./...
 RUN set -eu; for target_os in darwin linux; do \
@@ -13,7 +14,8 @@ RUN set -eu; for target_os in darwin linux; do \
         TARGET_OS="$target_os" TARGET_ARCH="$target_arch" VERSION=0.0.0-test.1 OUTPUT_DIR=/releases sh scripts/package.sh; \
       done; \
     done \
- && VERSION=0.0.0-test.2 OUTPUT_DIR=/releases sh scripts/package.sh
+ && VERSION=0.0.0-test.2 OUTPUT_DIR=/releases sh scripts/package.sh \
+ && VERSION=0.0.0-test.1 OUTPUT_DIR=/releases sh scripts/package-skill.sh
 
 FROM debian:bookworm-slim AS sandbox
 RUN apt-get update \
@@ -22,6 +24,7 @@ RUN apt-get update \
  && useradd --create-home --uid 10001 tester
 COPY --from=ghcr.io/casey/just:1.58.0 /just /usr/local/bin/just
 COPY --from=build /releases/ /opt/releases/
+COPY --from=build /src/skills/devtools/SKILL.md /opt/verify/skills/devtools/SKILL.md
 COPY scripts/install.sh /opt/devtools-install.sh
 COPY docker/run.py /opt/verify/run.py
 COPY docker/scenarios/ /opt/verify/scenarios/

@@ -4,7 +4,7 @@
 사용자 설치와 실행은 [README](../README.md)를 참고한다.
 
 
-Requires Go 1.27.x, Git (for integration tests), and just.
+Requires Go 1.27.x, Git (for integration tests), just, and uv with `uvx`.
 
 ```sh
 just build
@@ -15,9 +15,13 @@ just verify-docker proxies
 ./bin/devtools project inspect
 ```
 
-`just check` checks formatting, runs `go vet`, and runs tests with the race
-detector. Tag-triggered release validation runs on macOS and Linux with Go 1.27.1. WSL uses
-the Linux build; testing in an actual WSL environment is a separate check.
+`just check` validates the Agent Skill and its release archive with
+`skills-ref==0.1.1`, checks formatting, runs `go vet`, and runs tests with the race
+detector. `just check-skill` runs only the official format validator, while
+`just check-skill-release` also tests archive structure, checksums, source identity,
+and invalid fixtures. Tag-triggered release validation runs on macOS and Linux with
+Go 1.27.1. WSL uses the Linux build; testing in an actual WSL environment is a
+separate check.
 `just verify-docker proxies`는 배포 아카이브를 설치한 격리 환경에서 HTTP route,
 WebSocket, 동적 port 변경, daemon 재시작과 listener reservation을 검증한다.
 
@@ -53,7 +57,7 @@ URL 상태 복원 회귀 테스트는 `pnpm test:dashboard`로 실행한다.
 - Resolve project context only for commands that need it. Use `paths` for user
   storage locations. Handlers receive context and injectable input/output.
 - Test valid input, failure behavior, and command-specific risks.
-- Update the public guide and bundled agent skill when the command changes how
+- Update the public guide and Agent Skill when the command changes how
   users or agents should prepare, retry, or coordinate work.
 - Add an installed-binary Docker scenario when packaging, storage compatibility,
   or detached process behavior is part of the feature.
@@ -67,7 +71,8 @@ pnpm release --publish
 ```
 
 버전을 추천받고 main과 태그를 함께 올린다. 태그가 단일 Release 워크플로의
-검증·패키징·게시를 시작한다. [배포 상세](install.md#github-releases-게시)와
+검증·CLI 패키징·독립 Agent Skill 패키징·게시를 시작한다. 로컬에서 스킬 배포물만
+확인하려면 `just release-skill VERSION`을 실행한다. [배포 상세](install.md#github-releases-게시)와
 [격리된 설치 검증](../docker/README.md)을 참고한다.
 
 ### Homebrew 배포

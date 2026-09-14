@@ -30,10 +30,12 @@ def main():
     installer = repository / "scripts/install.sh"
     readme = repository / "README.md"
     install_doc = repository / "docs/install.md"
+    canonical_skill = repository / "skills/devtools/SKILL.md"
     if not installer.is_file():
         installer = Path("/opt/devtools-install.sh")
         readme = root / "docs/README.md"
         install_doc = root / "docs/install.md"
+        canonical_skill = root / "skills/devtools/SKILL.md"
     for name in selected:
         with tempfile.TemporaryDirectory(prefix=f"devtools-{name}-") as temporary:
             home = Path(temporary).resolve() / "home"
@@ -46,7 +48,8 @@ def main():
                        DEVTOOLS_TEST_INSTALLER=str(installer),
                        DEVTOOLS_TEST_RELEASES=str(args.releases.resolve()),
                        DEVTOOLS_TEST_README=str(readme),
-                       DEVTOOLS_TEST_INSTALL_DOC=str(install_doc))
+                       DEVTOOLS_TEST_INSTALL_DOC=str(install_doc),
+                       DEVTOOLS_TEST_CANONICAL_SKILL=str(canonical_skill))
             print(f"Running scenario: {name}", flush=True)
             result = subprocess.run([sys.executable, str(scenarios[name])],
                                     cwd=home, env=env)

@@ -49,6 +49,7 @@ verification=$(mktemp -d)
 for version in 0.0.0-test.1 0.0.0-test.2; do
   VERSION="$version" OUTPUT_DIR="$verification/releases" sh scripts/package.sh
 done
+VERSION=0.0.0-test.1 OUTPUT_DIR="$verification/releases" sh scripts/package-skill.sh
 python3 docker/run.py --releases "$verification/releases" all
 ```
 

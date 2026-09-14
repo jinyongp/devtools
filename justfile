@@ -16,10 +16,16 @@ dashboard:
 fmt:
     gofmt -w cmd internal scripts skills
 
-check:
+check: check-skill-release
     test -z "$(gofmt -l cmd internal scripts skills)"
     go vet ./...
     go test -race ./...
+
+check-skill:
+    sh scripts/validate-skill.sh
+
+check-skill-release:
+    sh scripts/check-skill-release.sh
 
 test:
     go test ./...
@@ -32,6 +38,9 @@ clean:
 
 release version:
     VERSION="$1" sh scripts/package.sh
+
+release-skill version:
+    VERSION="$1" sh scripts/package-skill.sh
 
 verify-docker +scenarios='all':
     docker build -f docker/Dockerfile -t "$VERIFY_IMAGE" .

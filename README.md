@@ -39,6 +39,20 @@ devtools version
 추가하세요. 에이전트에도 실행 환경의 PATH에 `~/.local/bin`을 포함해 주세요.
 [설치 안내](docs/install.md)에서 버전 지정과 설치 위치 변경 방법을 확인할 수 있습니다.
 
+### Agent Skill 설치
+
+에이전트가 devtools의 작업 점유, 재시도, proxy와 port 운용 규칙을 따르게 하려면
+CLI와 같은 릴리스의 독립 Agent Skill을 설치하세요. 프로젝트에서 함께 사용할 때는
+아카이브의 `devtools/` 디렉터리를 `.agents/skills/` 아래에 둡니다.
+
+```text
+.agents/skills/devtools/SKILL.md
+```
+
+`.agents/skills/`는 여러 호환 클라이언트가 함께 사용하는 관례이며, 실제 검색 위치는
+사용하는 클라이언트가 결정합니다. 다운로드와 체크섬 확인 방법은
+[Agent Skill 설치](docs/agent-skill.md)를 참고하세요.
+
 ## 시작하기
 
 프로젝트 디렉터리로 이동한 뒤 아래 예시를 실행해 보세요. `myapp`은 프로젝트를
@@ -74,11 +88,11 @@ secret은 `devtools sec`로 등록하며 조회에는 메타데이터만 제공�
 | 브라우저에서 프로젝트 관리 | [dashboard](docs/management-api-contract.md) |
 | 백업·복구, 오래된 데이터 정리 | [백업](docs/backup.md) · [정리](docs/cleanup.md) |
 
-에이전트에는 [devtools 스킬을 설치](docs/agent-skill.md)해 주세요.
+에이전트에는 [devtools Agent Skill을 설치](docs/agent-skill.md)해 주세요.
 `devtools task --help`처럼 기능별 도움말로 명령을 탐색할 수 있습니다.
 JSON 계약은 `devtools schema task claim`처럼 필요한 명령만 조회하세요.
 `devtools schema`는 짧은 그룹 목록을, `devtools schema --all`은 전체 계약을 제공합니다.
-조회·변경 결과는 JSON이며, 도움말과 `devtools skill`은 텍스트를 출력합니다.
+조회·변경 결과는 JSON이며 도움말은 텍스트를 출력합니다.
 `run`은 자식 프로그램의 출력과 종료 코드를 전달합니다.
 
 ## 업데이트

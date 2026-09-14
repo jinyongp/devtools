@@ -25,6 +25,22 @@ devtools_0.1.0_linux_amd64.tar.gz.sha256
 
 `OUTPUT_DIR`로 출력 디렉터리, `COMMIT`으로 빌드의 커밋 식별자를 지정할 수 있다. 배포 버전은 명시적으로 선택한다.
 
+같은 버전의 플랫폼 독립 Agent Skill 배포물은 별도로 만든다. 이 단계에는 `uvx`와
+`skills-ref` 검증기가 필요하지 않지만, 게시 전 `just check`가 공식 검증을 수행한다.
+
+```sh
+just release-skill 0.1.0
+```
+
+`dist/`에는 `devtools/` 스킬 디렉터리를 담은 아카이브와 체크섬이 생성된다.
+
+```text
+devtools-skill_0.1.0.tar.gz
+devtools-skill_0.1.0.tar.gz.sha256
+```
+
+Agent Skill 설치 방법은 [Agent Skill 설치](agent-skill.md)를 참고한다.
+
 ## 처음 설치하기
 
 Homebrew에서는 `brew install jinyongp/tap/devtools`로 설치할 수 있습니다.
@@ -85,9 +101,9 @@ curl을 사용합니다. 로컬 배포물은 `devtools update --version 0.2.0 --
 지정할 수 있습니다. 실행 중인 process, proxy daemon과 dashboard는 업데이트 후
 재시작하면 새 버전을 사용합니다.
 
-에이전트용 devtools 스킬을 별도로 저장해 사용 중이면 바이너리 업데이트 후
-`devtools skill`로 다시 설치해야 새 명령과 운용 지침이 반영됩니다. 자세한 절차는
-[에이전트 스킬 설치](agent-skill.md)를 참고하세요.
+에이전트용 devtools Agent Skill을 사용 중이면 CLI와 함께 공개 스킬 배포물도
+업데이트해야 새 명령과 운용 지침이 반영됩니다. 자세한 절차는
+[Agent Skill 설치](agent-skill.md)를 참고하세요.
 
 `update` 명령이 추가되기 전에 설치한 버전은 아래 설치기로 한 번 업데이트하세요.
 
@@ -132,7 +148,8 @@ atomic push로 함께 올린다. 원격 main과 충돌하면 두 참조 모두 �
 자동 실행의 진입점은 `v0.1.0` 형태의 태그 푸시다. 하나의 Release 워크플로에서
 태그 커밋이 원격 main에 포함됐는지 확인하고 macOS 검사, Linux 검사와 Docker
 설치 검증을 거쳐 네 플랫폼 배포물을 생성한다. 모든 검증이 성공하면
-아카이브·체크섬·설치기·버전 파일을 GitHub Releases에 함께 게시한다.
+플랫폼별 CLI 아카이브·체크섬, 플랫폼 독립 Agent Skill 아카이브·체크섬,
+설치기와 버전 파일을 GitHub Releases에 함께 게시한다.
 빌드에는 태그의 버전과 커밋 식별자를 기록한다.
 
 `v0.2.0-rc.1`처럼 접미사가 붙은 태그는 사전 릴리스로 게시한다. 기본 설치는 GitHub가 최신으로 선택한 안정 릴리스를 사용하고, 사전 릴리스는 버전을 지정해 설치한다.

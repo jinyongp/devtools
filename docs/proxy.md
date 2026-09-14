@@ -63,10 +63,10 @@ devtools proxy start --port 20201 --request-id "$(uuidgen)"
 `host_conflict`, `config_invalid` 같은 instance별 진단도 반환한다. 미등록 hostname은
 404, 사용할 수 없는 route는 503, 연결할 수 없는 backend는 502다.
 
-에이전트가 devtools를 사용한다면 현재 바이너리의 `devtools skill`을 설치한다.
-번들 스킬은 proxy가 사용자 전역 daemon이라는 점, alias·port 준비 순서와
+에이전트가 devtools를 사용한다면 공개 Agent Skill을 설치한다.
+Agent Skill은 proxy가 사용자 전역 daemon이라는 점, alias·port 준비 순서와
 request UUID 재시도 규칙을 함께 안내한다. 설치와 업데이트 방법은
-[에이전트 스킬 설치](agent-skill.md)를 참고한다.
+[Agent Skill 설치](agent-skill.md)를 참고한다.
 
 ## 전역 config.toml
 

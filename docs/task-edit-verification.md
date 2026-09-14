@@ -24,7 +24,7 @@ workstream `97b9d991-f326-49dc-b3c1-3d9b49413bfa`의 E01–E49 검토 항목을 
 | E45 | edit_concurrency_test: 원자 교체 전 실패의 byte 보존, 교체 후 오류와 영수증 복구. WritePrivate의 temp-write/fsync/rename 순서 코드 대조 |
 | E46 | TestEditHonorsMaintenanceGate 및 maintenance_test: 복원·cleanup과 공유하는 gate 우선 잠금, 대기 취소·해제 후 실행, 복구 후 reader 일관성 |
 | E47 | assessment_test: 1,000 task DAG의 반복 위상 계산과 결정론적 영향 |
-| E48 | CLI 전체 및 Docker tasks/workflow/completion/discovery: 기존 독립 task, 설치된 명령·도움말·schema·스킬, shell completion |
+| E48 | CLI 전체 및 Docker tasks/workflow/completion/discovery: 기존 독립 task, 설치된 명령·도움말·schema, 독립 Agent Skill, shell completion |
 | E49 | execution_current_test: close 후 basis 교체·fail/blocked/skipped·unwaive, pass 회복 후에도 명시 close 필요 |
 
 구버전 호환성은 변경 전 commit `75fa433bc3c6834163c0888e6441bc8a122330b0`을 별도 임시 디렉터리에 추출해 subprocess로 컴파일·실행했다. 새 v2 fixture의 Read와 Execute가 모두 거절되고 journal 바이트가 바뀌지 않는 것을 확인했다.

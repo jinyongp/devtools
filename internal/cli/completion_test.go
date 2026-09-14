@@ -44,6 +44,7 @@ func TestCompletionScripts(t *testing.T) {
 				{[]string{"devtools", "var", ""}, "get", false},
 				{[]string{"devtools", "variable", "set", "KEY", ""}, "--value", false},
 				{[]string{"devtools", "task", "workstream", ""}, "create", false},
+				{[]string{"devtools", "proxy", ""}, "start", false},
 				{[]string{"devtools", "var", "set", "KEY", "--profile", ""}, "", true},
 				{[]string{"devtools", "var", "set", "KEY", "--profile", "demo", ""}, "--value", false},
 				{[]string{"devtools", "run", "--", ""}, "", true},

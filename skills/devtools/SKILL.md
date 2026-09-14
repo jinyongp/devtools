@@ -1,6 +1,6 @@
 ---
 name: devtools
-description: Use the devtools CLI for project environment setup, managed local servers, and task/workstream coordination across agent sessions.
+description: Use the devtools CLI for project environment setup, ports and local reverse proxy routes, managed servers, and task/workstream coordination across agent sessions.
 ---
 
 # devtools
@@ -35,6 +35,21 @@ Restart applies current config and values.
 Ports belong to execution locations. Inspect `port` and `instance` before changing
 assignments. Commands declare `serve` for servers and `bind` for injected values.
 Coordinate consumers when a stored port changes.
+
+Use `proxy` when worktrees need stable `.localhost` hostnames instead of direct
+port URLs. Routes come from each instance's tracked `[proxies.NAME]` declaration
+and current port assignment. When a route uses `${instance.alias}`, give every
+routed instance an alias with `instance name`. Allocate the referenced service
+port, then inspect `proxy list` before starting the user-global daemon. Do not
+start one daemon per project or worktree; route, alias, and assignment changes
+are picked up on the next request.
+
+`proxy start` and `proxy stop` require a request UUID. Reuse a UUID with identical
+input only after an uncertain response. The listener port remains reserved after
+stop; changing it requires starting the stopped daemon with an explicit new port.
+Treat non-`ready` list entries as diagnostics to resolve, not fallback targets.
+The proxy accepts only loopback HTTP traffic and routes only `.localhost` hosts
+to stored local assignments; use the project's own TLS setup when HTTPS is needed.
 
 ## Plan, claim, recover
 

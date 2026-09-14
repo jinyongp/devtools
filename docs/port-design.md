@@ -2,6 +2,8 @@
 
 port·instance 명령과 serve·bind의 사용 계약이다. 실행 예시는
 [포트 사용 가이드](ports.md), 값 관리와 실행 방식은 [CLI 계약](cli-contract.md)을 따른다.
+worktree별 `.localhost` route와 proxy listener reservation은
+[reverse proxy 계약](proxy-design.md)을 따른다.
 
 개발 서버의 포트를 전역으로 관리하고, 명령 실행 시 필요한 포트와 주소를
 환경변수로 전달한다. 같은 프로젝트의 여러 worktree를 동시에 실행하거나
@@ -296,14 +298,21 @@ range = [10000, 19999]
 
 설정 디렉터리는 macOS에서 `~/Library/Application Support/devtools`,
 Linux·WSL에서 `$XDG_CONFIG_HOME/devtools`이며 기존 경로 기본값 규칙을 따른다.
-할당과 instance는 사용자 데이터 디렉터리의 `ports` 아래에서 관리한다.
+할당, instance와 proxy listener reservation은 사용자 데이터 디렉터리의 `ports`
+아래에서 관리한다.
 설정 변경은 다음 신규 할당에 적용한다.
 
 관리 대상은 현재 실행 환경의 로컬 TCP 포트다. 같은 전역 저장소 안에서는
-profile·instance와 관계없이 할당 포트 번호를 유일하게 유지한다. 점유 검사는
+profile·instance와 관계없이 서비스 할당과 proxy listener reservation 전체에서
+포트 번호를 유일하게 유지한다. proxy가 중지돼도 listener reservation은 유지되며
+자동 할당 후보에서 제외된다. 점유 검사는
 지원되는 IPv4·IPv6 수신 주소를 고려하고, 확인 불가 시 오류를 반환한다.
 다른 사용자, Docker, WSL과 호스트 사이의 별도 저장소는 각각의 할당 영역이다.
 호스트 var는 접속 문자열의 재료이며 로컬 할당 영역을 변경하지 않는다.
+
+port registry version 1은 reservation이 없는 기존 저장 형식이다. 새 reader는 이를
+빈 reservation 목록으로 읽고, 첫 변경에서 기존 instance와 할당을 보존한 version 2로
+원자적으로 저장한다. 조회만으로는 저장 형식을 변경하지 않는다.
 
 ## 진단과 응답
 

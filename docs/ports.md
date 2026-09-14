@@ -73,6 +73,24 @@ bind가 기존 주소를 참조할 때는 서버가 이미 포트를 사용하�
 애플리케이션 준비 확인은 [프로세스 준비 검사](process-readiness.md)나 프로젝트의 health 명령으로 수행한다. var는 선택한
 profile·env에서 읽고, 템플릿은 문자열을 한 번 치환한다.
 
+## worktree에 고정된 로컬 hostname 연결
+
+브라우저나 HMR 클라이언트에서 worktree마다 기억하기 쉬운 주소가 필요하면
+`[proxies.NAME]`으로 port service를 `.localhost` hostname에 연결한다. route는
+instance alias와 현재 port 할당을 사용하므로 개발 서버의 실제 port가 달라져도
+같은 형태의 주소를 유지할 수 있다.
+
+```toml
+[proxies.app]
+host = "${instance.alias}.${profile}.localhost"
+port = "web"
+```
+
+proxy listener port는 프로젝트 서비스 할당과 별도의 전역 reservation으로
+관리된다. proxy가 중지돼도 예약이 유지되며, 일반 port 자동 할당은 이 번호를
+선택하지 않는다. 설정, 시작, route 진단은 [로컬 reverse proxy](proxy.md)를
+참고한다.
+
 ## 조회와 정리
 
 ```sh

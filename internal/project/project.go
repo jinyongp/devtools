@@ -17,6 +17,7 @@ const Filename = "devtools.toml"
 
 type Config struct {
 	Ports        map[string]Port    `toml:"ports,omitempty"`
+	Proxies      map[string]Proxy   `toml:"proxies,omitempty"`
 	Requirements Requirements       `toml:"requirements,omitempty"`
 	Profile      string             `toml:"profile"`
 	Commands     map[string]Command `toml:"commands,omitempty"`
@@ -34,6 +35,7 @@ type Command struct {
 
 type Context struct {
 	Ports        map[string]Port    `json:"-"`
+	Proxies      map[string]Proxy   `json:"-"`
 	Requirements Requirements       `json:"-"`
 	Profile      string             `json:"profile"`
 	Source       string             `json:"source"`
@@ -132,7 +134,12 @@ func parse(data []byte, path, root string) (Context, *protocol.Error) {
 			return Context{}, protocol.NewError("invalid_config", "Invalid port declaration.", 3, nil)
 		}
 	}
-	return Context{Profile: config.Profile, Source: "file", ConfigPath: path, Root: root, Commands: config.Commands, Requirements: config.Requirements, Ports: config.Ports}, nil
+	for name, proxy := range config.Proxies {
+		if !ValidProfile(name) || !proxy.Valid(config.Ports) {
+			return Context{}, protocol.NewError("invalid_config", "Invalid proxy declaration.", 3, map[string]any{"path": path, "field": "proxies"})
+		}
+	}
+	return Context{Profile: config.Profile, Source: "file", ConfigPath: path, Root: root, Commands: config.Commands, Requirements: config.Requirements, Ports: config.Ports, Proxies: config.Proxies}, nil
 }
 
 func ioError(path string) *protocol.Error {

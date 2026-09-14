@@ -134,6 +134,7 @@ func (a *App) commandSummary(name string) string {
 		"instance":                "Manage project locations and aliases.",
 		"port":                    "Manage local port assignments.",
 		"process":                 "Start, inspect, and stop background commands.",
+		"proxy":                   "Route local development servers through a reverse proxy.",
 		"project":                 "Inspect project configuration and profile.",
 		"secret":                  "Manage secrets without displaying their values.",
 		"sec":                     "Manage secrets (alias of secret).",

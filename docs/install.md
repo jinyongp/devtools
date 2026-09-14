@@ -82,7 +82,12 @@ devtools version
 설치기와 동일하게 체크섬·아카이브·실행 버전을 검증하고 교체하며, 실패하면
 `update_failed` 오류를 반환합니다. 설치 경로에 쓰기 권한이 필요하고 다운로드에는
 curl을 사용합니다. 로컬 배포물은 `devtools update --version 0.2.0 --source ./dist`로
-지정할 수 있습니다. 실행 중인 서버와 dashboard는 업데이트 후 재시작하면 새 버전을 사용합니다.
+지정할 수 있습니다. 실행 중인 process, proxy daemon과 dashboard는 업데이트 후
+재시작하면 새 버전을 사용합니다.
+
+에이전트용 devtools 스킬을 별도로 저장해 사용 중이면 바이너리 업데이트 후
+`devtools skill`로 다시 설치해야 새 명령과 운용 지침이 반영됩니다. 자세한 절차는
+[에이전트 스킬 설치](agent-skill.md)를 참고하세요.
 
 `update` 명령이 추가되기 전에 설치한 버전은 아래 설치기로 한 번 업데이트하세요.
 
@@ -157,4 +162,7 @@ just verify-docker install
 
 테스트용 두 버전은 같은 소스에 서로 다른 버전 정보를 넣어 만든다. 이 검증은 설치·교체·데이터 보존을 확인한다. 향후 데이터 형식이 바뀌는 릴리스에서는 해당 이전 버전의 배포물을 함께 검증해야 한다.
 
-검증 아키텍처는 Docker 빌드 환경을 따른다. CI는 `just verify-docker`로 등록된 전체 시나리오를 실행한다. macOS·WSL 고유 동작은 각 운영 환경의 검증 범위다.
+검증 아키텍처는 Docker 빌드 환경을 따른다. CI는 `just verify-docker`로 등록된 전체
+시나리오를 실행한다. 이때 `proxies` 시나리오는 설치된 실행 파일로 route 전달,
+WebSocket, 동적 port 변경, daemon 재시작과 listener reservation 유지를 확인한다.
+macOS·WSL 고유 동작은 각 운영 환경의 검증 범위다.

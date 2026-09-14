@@ -22,6 +22,9 @@ just verify-docker doctor
 # 포트 할당·실제 서버 실행·프로젝트 간 참조
 just verify-docker ports
 
+# reverse proxy route·WebSocket·daemon 재시작
+just verify-docker proxies
+
 # 암호화 백업·복구·재시도·충돌·직전 백업
 just verify-docker backup
 
@@ -52,7 +55,7 @@ python3 docker/run.py --releases "$verification/releases" all
 각 시나리오는 임시 HOME의 `.local/bin/devtools`에 실행 파일을 설치한다.
 macOS 데이터는 그 HOME 아래 `Library/Application Support/devtools`에,
 Linux 데이터는 격리된 XDG 경로에 저장한다. Git 전역 설정도 검증용으로 분리한다.
-`all` 대신 `ports processes cleanup workflow`처럼 시나리오를 선택할 수 있다.
+`all` 대신 `ports proxies processes cleanup workflow`처럼 시나리오를 선택할 수 있다.
 
 테스트용 HTTP 서버는 지정한 loopback 주소에 바로 바인딩한다. 서버 준비 시간은
 호스트의 역방향 DNS 설정과 독립적으로 유지한다.
@@ -66,4 +69,10 @@ Linux 데이터는 격리된 XDG 경로에 저장한다. Git 전역 설정도 �
 
 시나리오는 제공된 HOME 안에서 필요한 프로젝트·파일·설치 상태를 준비한다. 각 시나리오가 독립적으로 준비하므로 앞서 실행한 시나리오의 상태에 영향을 받지 않는다. 성공 시 종료 코드 0, 실패 시 0 이외의 값을 반환한다.
 
-`install` 시나리오는 설치·업데이트, profile 값, 혼합 dotenv 가져오기, 프로젝트 명령, worktree, 파일 권한, HTTPS 다운로드, 신호 전달을 검증한다. `tasks` 시나리오는 명세·계획·검증 등록, 동시 점유, worktree 간 공유, 체크포인트·인계·완료 재시도, 대시보드의 일회용 링크·세션·종료를 검증한다. 빌드 단계는 포맷·vet·race 테스트를 수행하고 공통 테스트 배포물을 만든다. 실행 이미지에는 배포물·설치기·검증 도구를 제공한다.
+`install` 시나리오는 설치·업데이트, profile 값, 혼합 dotenv 가져오기, 프로젝트 명령,
+worktree, 파일 권한, HTTPS 다운로드, 신호 전달을 검증한다. `proxies` 시나리오는 두
+worktree의 route, 404·502·503 응답, WebSocket, 동적 port 변경, daemon 재시작과
+listener reservation 유지를 검증한다. `tasks` 시나리오는 명세·계획·검증 등록,
+동시 점유, worktree 간 공유, 체크포인트·인계·완료 재시도, 대시보드의 일회용
+링크·세션·종료를 검증한다. 빌드 단계는 포맷·vet·race 테스트를 수행하고 공통 테스트
+배포물을 만든다. 실행 이미지에는 배포물·설치기·검증 도구를 제공한다.

@@ -6,8 +6,13 @@ devtools 스킬은 에이전트가 필요한 명령만 조회하고, 작업 점�
 
 현재 스킬은 원자적 계획 편집과 미리보기, lifecycle과 current/stale의 구분,
 실행 기준 sync, task basis의 실행 컨텍스트 및 workstream basis의 관찰 리비전을
-안내합니다. 첫 실제 변경은 task 저장 형식을 v2로 전환하므로 같은 profile을
-쓰는 바이너리를 함께 업데이트하세요. 조회·미리보기는 버전을 전환하지 않습니다.
+안내합니다. 또한 worktree별 `.localhost` route를 구성할 때 instance alias와 port
+할당을 먼저 확인하고, 사용자 전역 proxy daemon 하나를 재시도 안전하게 관리하도록
+안내합니다. proxy의 자세한 설정과 진단 방법은 [로컬 reverse proxy](proxy.md)를
+참고하세요.
+
+첫 실제 task 변경은 task 저장 형식을 v2로 전환하므로 같은 profile을 쓰는
+바이너리를 함께 업데이트하세요. 조회·미리보기는 버전을 전환하지 않습니다.
 
 스킬은 실행 파일에 포함되어 있습니다. 먼저 내용을 확인할 수 있습니다.
 

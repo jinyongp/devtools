@@ -9,6 +9,7 @@ import (
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/proxy"
 	"github.com/jinyongp/devtools/skills"
 )
 
@@ -50,6 +51,7 @@ type Command struct {
 type App struct {
 	commands      []Command
 	dataDirectory func() (string, *protocol.Error)
+	proxyManager  func(string) proxy.Manager
 }
 
 type Argument struct {
@@ -76,7 +78,7 @@ func object(properties map[string]any, required ...string) map[string]any {
 func stringSchema() map[string]any { return map[string]any{"type": "string"} }
 
 func New(version, commit string) *App {
-	a := &App{dataDirectory: userDataDirectory}
+	a := &App{dataDirectory: userDataDirectory, proxyManager: func(data string) proxy.Manager { return proxy.Manager{Data: data} }}
 	a.commands = []Command{
 		{Name: "skill", Description: "Print the bundled agent SKILL.md for installation.", StreamOutput: true, Output: map[string]any{"type": "string"}, Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			if _, err := io.WriteString(streams.Out, skills.Devtools); err != nil {
@@ -108,6 +110,7 @@ func New(version, commit string) *App {
 	a.registerDashboard()
 	a.registerDoctor()
 	a.registerPorts()
+	a.registerProxy()
 	a.registerBackup()
 	a.registerProcesses()
 	a.registerCleanup()

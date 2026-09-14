@@ -9,6 +9,7 @@ Requires Go 1.27.x, Git (for integration tests), and just.
 ```sh
 just build
 just check
+just verify-docker proxies
 ./bin/devtools version
 ./bin/devtools schema
 ./bin/devtools project inspect
@@ -17,6 +18,8 @@ just check
 `just check` checks formatting, runs `go vet`, and runs tests with the race
 detector. Tag-triggered release validation runs on macOS and Linux with Go 1.27.1. WSL uses
 the Linux build; testing in an actual WSL environment is a separate check.
+`just verify-docker proxies`는 배포 아카이브를 설치한 격리 환경에서 HTTP route,
+WebSocket, 동적 port 변경, daemon 재시작과 listener reservation을 검증한다.
 
 
 ## Dashboard 화면 개발
@@ -50,6 +53,10 @@ URL 상태 복원 회귀 테스트는 `pnpm test:dashboard`로 실행한다.
 - Resolve project context only for commands that need it. Use `paths` for user
   storage locations. Handlers receive context and injectable input/output.
 - Test valid input, failure behavior, and command-specific risks.
+- Update the public guide and bundled agent skill when the command changes how
+  users or agents should prepare, retry, or coordinate work.
+- Add an installed-binary Docker scenario when packaging, storage compatibility,
+  or detached process behavior is part of the feature.
 
 
 ## 릴리스

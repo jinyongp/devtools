@@ -28,10 +28,15 @@ type Assignment struct {
 	Name string `json:"name"`
 	Port int    `json:"port"`
 }
+type Reservation struct {
+	Name string `json:"name"`
+	Port int    `json:"port"`
+}
 type State struct {
-	Version     int          `json:"version"`
-	Instances   []Instance   `json:"instances"`
-	Assignments []Assignment `json:"assignments"`
+	Version      int           `json:"version"`
+	Instances    []Instance    `json:"instances"`
+	Assignments  []Assignment  `json:"assignments"`
+	Reservations []Reservation `json:"reservations"`
 }
 type Store struct{ Directory string }
 
@@ -41,7 +46,9 @@ func fail(code string) *protocol.Error {
 func storageError() *protocol.Error {
 	return protocol.NewError("io_error", "Cannot access private port storage or inspect local ports.", 1, nil)
 }
-func empty() *State { return &State{Version: 1, Instances: []Instance{}, Assignments: []Assignment{}} }
+func empty() *State {
+	return &State{Version: 1, Instances: []Instance{}, Assignments: []Assignment{}, Reservations: []Reservation{}}
+}
 func private(f *os.File) bool {
 	i, e := f.Stat()
 	return e == nil && i.Mode().IsRegular() && i.Mode().Perm()&0077 == 0
@@ -74,10 +81,10 @@ func (s Store) Read() (*State, *protocol.Error) {
 	return &st, nil
 }
 func (st *State) valid() bool {
-	if st.Version != 1 || st.Instances == nil || st.Assignments == nil {
+	if st.Version != 1 && st.Version != 2 || st.Instances == nil || st.Assignments == nil || st.Version == 2 && st.Reservations == nil || st.Version == 1 && len(st.Reservations) != 0 {
 		return false
 	}
-	ids, paths, aliases, keys, nums := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}, map[int]bool{}
+	ids, paths, aliases, keys, reservationNames, nums := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}, map[int]bool{}
 	for _, i := range st.Instances {
 		b, e := hex.DecodeString(i.ID)
 		if e != nil || len(b) != 16 || !project.ValidProfile(i.Profile) || !filepath.IsAbs(i.Directory) || ids[i.ID] || paths[i.Profile+"\x00"+i.Directory] {
@@ -101,6 +108,13 @@ func (st *State) valid() bool {
 		}
 		keys[k] = true
 		nums[a.Port] = true
+	}
+	for _, reservation := range st.Reservations {
+		if !project.ValidProfile(reservation.Name) || reservation.Port < 1 || reservation.Port > 65535 || reservationNames[reservation.Name] || nums[reservation.Port] {
+			return false
+		}
+		reservationNames[reservation.Name] = true
+		nums[reservation.Port] = true
 	}
 	return true
 }
@@ -170,6 +184,12 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 	if e != nil || !changed {
 		return e
 	}
+	if st.Version == 1 {
+		st.Version = 2
+		if st.Reservations == nil {
+			st.Reservations = []Reservation{}
+		}
+	}
 	if !st.valid() {
 		return fail("invalid_storage")
 	}
@@ -235,6 +255,14 @@ func (st *State) Get(id, name string) *Assignment {
 	for n := range st.Assignments {
 		if st.Assignments[n].ID == id && st.Assignments[n].Name == name {
 			return &st.Assignments[n]
+		}
+	}
+	return nil
+}
+func (st *State) Reservation(name string) *Reservation {
+	for index := range st.Reservations {
+		if st.Reservations[index].Name == name {
+			return &st.Reservations[index]
 		}
 	}
 	return nil

@@ -1,8 +1,8 @@
 # devtools
 
 devtools는 개발환경과 작업을 한곳에서 관리하는 CLI입니다. 프로젝트별 환경변수와
-secret을 보관하고, 로컬 포트와 백그라운드 서버를 관리하며, 에이전트가 작업을
-나누거나 다른 세션에서 이어갈 수 있도록 진행 기록을 남깁니다.
+secret을 보관하고, 로컬 포트·reverse proxy와 백그라운드 서버를 관리하며,
+에이전트가 작업을 나누거나 다른 세션에서 이어갈 수 있도록 진행 기록을 남깁니다.
 macOS, Linux, WSL에서 사용할 수 있습니다.
 
 ## 설치
@@ -68,6 +68,7 @@ secret은 `devtools sec`로 등록하며 조회에는 메타데이터만 제공�
 | 변수·secret 등록, 기존 .env 가져오기, 명령 실행 | [값과 실행](docs/cli-contract.md) |
 | 필요한 도구와 설정 확인 | [doctor](docs/doctor.md) |
 | 포트 충돌 관리, 다른 프로젝트 URL 연결 | [포트](docs/ports.md) |
+| worktree별 `.localhost` 주소로 개발 서버 연결 | [로컬 reverse proxy](docs/proxy.md) |
 | 서버를 백그라운드로 실행하고 준비 완료까지 대기 | [프로세스](docs/processes.md) · [준비 확인](docs/process-readiness.md) |
 | 계획 수립, 작업 분담, 세션 인계 | [task와 workstream](docs/tasks.md) |
 | 브라우저에서 프로젝트 관리 | [dashboard](docs/management-api-contract.md) |

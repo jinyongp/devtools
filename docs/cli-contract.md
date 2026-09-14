@@ -3,7 +3,8 @@
 이 문서는 확정된 사용 방식과 공개 CLI 계약을 정리한다.
 
 포트 할당과 명령별 `serve`·`bind`·템플릿은 [포트 사용 가이드](ports.md)와
-[포트 관리 계약](port-design.md)을 따른다.
+[포트 관리 계약](port-design.md)을 따른다. worktree별 `.localhost` route는
+[로컬 reverse proxy](proxy.md)를 참고한다.
 
 이 문서는 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `import`, `env`, `run`의 사용법을 다룬다. 전체 기능 안내는 [README](../README.md), 설치된 바이너리의 명령 목록은 `devtools schema`에서 확인한다. 예시는 설치한 `devtools`가 PATH에 있는 환경을 기준으로 한다.
 

@@ -9,12 +9,21 @@ import (
 	"github.com/jinyongp/devtools/internal/cli"
 	"github.com/jinyongp/devtools/internal/dashboard"
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/proxy"
 )
 
 var version = "dev"
 var commit = "unknown"
 
 func main() {
+	if len(os.Args) == 4 && os.Args[1] == "__proxy-serve" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		defer stop()
+		if (proxy.Manager{Data: os.Args[2]}).Serve(ctx, os.Args[3]) != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 4 && os.Args[1] == "__process-serve" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()

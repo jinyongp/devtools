@@ -111,6 +111,9 @@ func (st *State) Allocate(ctx context.Context, i Instance, name string, p projec
 	for _, a := range st.Assignments {
 		used[a.Port] = true
 	}
+	for _, reservation := range st.Reservations {
+		used[reservation.Port] = true
+	}
 	try := func(n int) (bool, *protocol.Error) {
 		if ctx.Err() != nil {
 			return false, protocol.NewError("canceled", "Execution canceled.", 130, nil)
@@ -151,4 +154,45 @@ func (st *State) Allocate(ctx context.Context, i Instance, name string, p projec
 	a := Assignment{Instance: i, Name: name, Port: selected}
 	st.Assignments = append(st.Assignments, a)
 	return a, true, nil
+}
+
+// Reserve keeps a user-global port unavailable to project assignments. A
+// replacement is committed only after the new port is known to be available.
+func (s Store) Reserve(ctx context.Context, name string, requested int) (int, bool, *protocol.Error) {
+	if !project.ValidProfile(name) || requested < 1 || requested > 65535 {
+		return 0, false, fail("invalid_config")
+	}
+	selected, changed := 0, false
+	err := s.Update(ctx, func(state *State) (bool, *protocol.Error) {
+		current := state.Reservation(name)
+		if current != nil && current.Port == requested {
+			selected = current.Port
+			return false, nil
+		}
+		for _, assignment := range state.Assignments {
+			if assignment.Port == requested {
+				return false, fail("port_in_use")
+			}
+		}
+		for _, reservation := range state.Reservations {
+			if reservation.Name != name && reservation.Port == requested {
+				return false, fail("port_in_use")
+			}
+		}
+		free, err := Available(requested)
+		if err != nil {
+			return false, err
+		}
+		if !free {
+			return false, fail("port_in_use")
+		}
+		if current == nil {
+			state.Reservations = append(state.Reservations, Reservation{Name: name, Port: requested})
+		} else {
+			current.Port = requested
+		}
+		selected, changed = requested, true
+		return true, nil
+	})
+	return selected, changed, err
 }

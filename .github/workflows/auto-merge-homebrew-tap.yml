@@ -1,0 +1,12 @@
+name: auto-merge homebrew-tap updates
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    uses: jinyongp/homebrew-tap/.github/workflows/auto-merge-homebrew-tap.yml@5e298c2d25af8f85e1d95b403cbe59c98b9a0b2d

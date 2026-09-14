@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      homebrew-tap:
+        patterns:
+          - jinyongp/homebrew-tap/.github/workflows/publish-formula.yml
+          - jinyongp/homebrew-tap/.github/workflows/auto-merge-homebrew-tap.yml
+      github-actions:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - jinyongp/homebrew-tap/.github/workflows/publish-formula.yml
+          - jinyongp/homebrew-tap/.github/workflows/auto-merge-homebrew-tap.yml

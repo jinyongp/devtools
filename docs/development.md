@@ -69,6 +69,11 @@ pnpm release --publish
 `.github/homebrew/formula.yml`을 tap의 고정된 재사용 워크플로에 전달합니다.
 공통 워크플로가 고정 SHA의 자동화 코드와 최신 main의 Formula 데이터를
 각각 체크아웃합니다. 호출자는 명세와 릴리스 정보, 배포 키를 전달합니다.
+Dependabot이 두 Homebrew 워크플로를 전용 그룹으로 묶어 매주 고정 SHA 업데이트를
+제안합니다. tap이 제공하는 권한 검사 워크플로는 검증된 Dependabot 커밋이 두 SHA만
+같은 최신 main 커밋으로 변경했는지 확인한 뒤 squash auto-merge를 예약합니다.
+저장소 설정에서 auto-merge와 squash merge를 허용하고, main 규칙에서 `auto-merge`
+검사를 필수 상태 검사로 지정해야 자동 병합이 활성화됩니다.
 태그 커밋의 소스로 Formula를 생성하고 audit·소스 설치·테스트를 통과하면
 `jinyongp/homebrew-tap`의 `Formula/devtools.rb`를 갱신합니다.
 사전 릴리스는 GitHub Releases에 게시하고, Homebrew에는 안정 버전을 제공합니다.

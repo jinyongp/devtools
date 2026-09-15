@@ -21,7 +21,14 @@ func (a *App) registerUpdate() {
 	a.commands = append(a.commands, Command{
 		Name: "update", Description: "Update the installed executable while preserving user data.",
 		Options: []Option{{Name: "version", Description: "Release version; defaults to latest stable.", Pattern: `^0\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$`}, {Name: "source", Description: "Local release directory or HTTPS artifact directory; requires version.", MinLength: 1}},
-		Output:  object(map[string]any{"action": stringSchema(), "version": stringSchema()}, "action", "version"),
+		Output: object(map[string]any{
+			"action":  stringSchema(),
+			"version": stringSchema(),
+			"alias": object(map[string]any{
+				"name":   stringSchema(),
+				"status": map[string]any{"enum": []string{"created", "unchanged", "skipped_conflict", "failed"}},
+			}, "name", "status"),
+		}, "action", "version", "alias"),
 		Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 			if r.Options["source"] != "" && r.Options["version"] == "" {
 				return nil, argumentError("Source requires an explicit version.", "version")
@@ -68,9 +75,13 @@ func updateExecutable(ctx context.Context, executable string, options map[string
 		Data struct {
 			Action  string `json:"action"`
 			Version string `json:"version"`
+			Alias   struct {
+				Name   string `json:"name"`
+				Status string `json:"status"`
+			} `json:"alias"`
 		} `json:"data"`
 	}
-	if json.Unmarshal(output.Bytes(), &response) != nil || !response.OK || response.Data.Action != "update" || response.Data.Version == "" {
+	if json.Unmarshal(output.Bytes(), &response) != nil || !response.OK || response.Data.Action != "update" || response.Data.Version == "" || response.Data.Alias.Name != "dvt" || response.Data.Alias.Status == "" {
 		return nil, protocol.NewError("update_failed", "Cannot confirm update result. Run devtools version to check the installed version.", 1, nil)
 	}
 	return response.Data, nil

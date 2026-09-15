@@ -53,6 +53,7 @@ archive="devtools_${version}_${platform}_${arch}.tar.gz"
 mkdir -p "$bin_dir" || fail 'Cannot create installation directory.'
 bin_dir=$(cd "$bin_dir" && pwd -P)
 destination="$bin_dir/devtools"
+alias_destination="$bin_dir/dvt"
 lock="$bin_dir/.devtools-install.lock"
 mkdir "$lock" 2>/dev/null || fail 'Another installation owns the installation lock.'
 scratch=
@@ -100,5 +101,15 @@ chmod 0755 "$scratch/devtools" || fail 'Cannot set executable permissions.'
 "$scratch/devtools" version > "$scratch/version.json" || fail 'Release executable cannot run on this system.'
 grep -F '"version":"'"$version"'"' "$scratch/version.json" >/dev/null || fail 'Release version does not match the request.'
 mv -f "$scratch/devtools" "$destination" || fail 'Cannot publish installed executable.'
-printf '{"schema_version":1,"ok":true,"data":{"action":"%s","version":"%s"}}\n' "$action" "$version"
+alias_status=created
+if [ -L "$alias_destination" ] && [ "$(readlink "$alias_destination")" = devtools ]; then
+  alias_status=unchanged
+elif [ -e "$alias_destination" ] || [ -L "$alias_destination" ] || command -v dvt >/dev/null 2>&1; then
+  alias_status=skipped_conflict
+  printf '%s\n' 'Warning: dvt already exists on PATH or in the install directory; alias was not changed.' >&2
+elif ! ln -s devtools "$alias_destination" 2>/dev/null; then
+  alias_status=failed
+  printf '%s\n' 'Warning: cannot create dvt alias; devtools installation completed.' >&2
+fi
+printf '{"schema_version":1,"ok":true,"data":{"action":"%s","version":"%s","alias":{"name":"dvt","status":"%s"}}}\n' "$action" "$version" "$alias_status"
 }

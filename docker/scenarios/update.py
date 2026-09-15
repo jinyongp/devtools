@@ -8,6 +8,7 @@ import tempfile
 
 home = Path.home()
 binary = home / '.local/bin/devtools'
+alias = home / '.local/bin/dvt'
 
 def execute(*args, expected=0):
     result = subprocess.run(args, text=True, capture_output=True, timeout=30)
@@ -17,8 +18,9 @@ def execute(*args, expected=0):
 execute('sh', os.environ['DEVTOOLS_TEST_INSTALLER'], 'install', '--version',
         '0.0.0-test.1', '--source', os.environ['DEVTOOLS_TEST_RELEASES'])
 execute(str(binary), 'var', 'set', 'KEEP', '--value', 'preserved', '--profile', 'update')
-execute(str(binary), 'update', '--version', '0.0.0-test.2', '--source',
-        os.environ['DEVTOOLS_TEST_RELEASES'])
+updated = execute(str(alias), 'update', '--version', '0.0.0-test.2', '--source',
+                  os.environ['DEVTOOLS_TEST_RELEASES'])
+assert updated['data']['alias'] == {'name': 'dvt', 'status': 'unchanged'}
 assert execute(str(binary), 'version')['data']['version'] == '0.0.0-test.2'
 assert execute(str(binary), 'var', 'get', 'KEEP', '--profile', 'update')['data']['value'] == 'preserved'
 before = hashlib.sha256(binary.read_bytes()).digest()

@@ -61,11 +61,12 @@ curl -fsSL https://github.com/jinyongp/devtools/releases/latest/download/install
 sh scripts/install.sh install --version 0.1.0 --source ./dist
 ```
 
-기본 설치 경로는 `~/.local/bin/devtools`다. 설치기는 현재 운영체제와 CPU에 맞는 아카이브를 선택한다. PATH에 설치 디렉터리를 포함하면 `devtools` 이름으로 실행할 수 있다.
+기본 설치 경로는 `~/.local/bin/devtools`다. 설치기는 같은 디렉터리에 `dvt` 심볼릭 링크도 만들어 짧은 이름으로 실행할 수 있게 한다. 설치 경로나 현재 PATH의 기존 명령이 `dvt`를 사용 중이면 건드리지 않고 별칭만 생략한다. 이 충돌은 stderr 경고와 성공 결과의 `skipped_conflict` 상태로 알리며 `devtools` 설치는 정상 완료한다. 설치기는 현재 운영체제와 CPU에 맞는 아카이브를 선택한다. PATH에 설치 디렉터리를 포함하면 두 이름으로 실행할 수 있다.
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
 devtools version
+dvt version
 devtools schema
 ```
 
@@ -121,7 +122,7 @@ devtools version
 설치와 업데이트는 입력 프롬프트 없이 완료하거나 오류를 반환한다. 성공은 stdout, 실패는 stderr의 JSON으로 확인한다.
 
 ```json
-{"schema_version":1,"ok":true,"data":{"action":"update","version":"0.2.0"}}
+{"schema_version":1,"ok":true,"data":{"action":"update","version":"0.2.0","alias":{"name":"dvt","status":"unchanged"}}}
 ```
 
 동일한 설치 경로의 갱신은 설치 잠금으로 직렬화한다. 실행 중인 설치기가 있으면 새 호출은 오류를 반환한다. 강제 종료 등으로 잠금이 남았다면 실행 중인 설치기가 있는지 확인한 뒤 설치 디렉터리의 빈 `.devtools-install.lock` 디렉터리를 제거하고 다시 실행한다.
@@ -165,6 +166,7 @@ just verify-docker install
 검증은 설치 명령부터 시작해 다음 동작을 확인한다.
 
 - 기본 경로 설치와 PATH 호출, 설치된 버전 조회.
+- `dvt` 별칭 생성과 기존 동명 파일 충돌 시 보존.
 - 일반 변수·secret·env 등록과 조회 권한 구분.
 - 기존 justfile 명령의 독립 실행과 devtools를 통한 주입 실행.
 - 이름 명령, env 덮어쓰기, 추가 인자, 별도 Git worktree 사용.

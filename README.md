@@ -20,7 +20,7 @@ Homebrew는 zsh·bash·fish 자동완성 파일도 함께 설치합니다. 셸 �
 ### 설치 스크립트 사용
 
 아래 명령을 터미널에 붙여 넣으세요. 설치기가 운영체제와 CPU를 확인해 최신 안정
-버전을 `~/.local/bin/devtools`에 설치합니다. curl이 필요하며 Go 설치는 필요하지 않습니다.
+버전을 `~/.local/bin/devtools`에 설치하고 짧은 명령 `dvt`도 제공합니다. curl이 필요하며 Go 설치는 필요하지 않습니다.
 
 ```sh
 curl -fsSL https://github.com/jinyongp/devtools/releases/latest/download/install.sh | sh -s -- install
@@ -32,9 +32,11 @@ curl -fsSL https://github.com/jinyongp/devtools/releases/latest/download/install
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
 devtools version
+dvt version
 ```
 
-`devtools version`이 설치된 버전을 반환하면 준비가 끝났습니다. 새 터미널에서도
+두 명령이 같은 버전을 반환하면 준비가 끝났습니다. 설치 경로나 PATH에 기존 `dvt`가 있으면
+그 파일은 보존하고 별칭만 생략하며, 설치 결과와 경고로 충돌을 알립니다. 새 터미널에서도
 사용하려면 위의 `export` 줄을 사용하는 셸의 설정 파일(예: zsh의 `~/.zshrc`)에
 추가하세요. 에이전트에도 실행 환경의 PATH에 `~/.local/bin`을 포함해 주세요.
 [설치 안내](docs/install.md)에서 버전 지정과 설치 위치 변경 방법을 확인할 수 있습니다.

@@ -21,7 +21,7 @@ func TestCompletionScripts(t *testing.T) {
 	for _, shell := range []string{"bash", "zsh", "fish"} {
 		t.Run(shell, func(t *testing.T) {
 			code, script, stderr := invoke(t, a, "", "completion", shell)
-			if code != 0 || stderr != "" || !strings.Contains(script, "--profile") {
+			if code != 0 || stderr != "" || !strings.Contains(script, "--profile") || !strings.Contains(script, "dvt") {
 				t.Fatalf("%d %s", code, stderr)
 			}
 			binary, err := exec.LookPath(shell)
@@ -49,6 +49,7 @@ func TestCompletionScripts(t *testing.T) {
 				{[]string{"devtools", "var", "set", "KEY", "--profile", "demo", ""}, "--value", false},
 				{[]string{"devtools", "run", "--", ""}, "", true},
 				{[]string{"devtools", "completion", ""}, "fish", false},
+				{[]string{"dvt", "var", ""}, "get", false},
 			}
 			for _, tc := range cases {
 				quoted := make([]string, len(tc.words))

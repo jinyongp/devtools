@@ -45,12 +45,51 @@ def install(action, version, source=release_directory, expected=0):
                      expected=expected)
     response = json.loads(result.stdout if expected == 0 else result.stderr)
     assert response["ok"] == (expected == 0)
+    return response, result
 
 
-install("install", "0.0.0-test.1")
+response, result = install("install", "0.0.0-test.1")
+assert response["data"]["alias"] == {"name": "dvt", "status": "created"}
+assert not result.stderr
 assert shutil.which("devtools", path=env["PATH"]) == str(home / ".local/bin/devtools")
+assert shutil.which("dvt", path=env["PATH"]) == str(home / ".local/bin/dvt")
+assert (home / ".local/bin/dvt").readlink() == Path("devtools")
 assert api("version")["data"]["version"] == "0.0.0-test.1"
+assert execute(["dvt", "version"]).stdout == execute(["devtools", "version"]).stdout
 install("install", "0.0.0-test.1", expected=1)
+
+# A pre-existing dvt command remains untouched and does not block installation.
+conflict_bin = home / "conflict-bin"
+conflict_bin.mkdir()
+conflicting_alias = conflict_bin / "dvt"
+conflicting_alias.write_text("existing dvt\n")
+conflict_result = execute(installer + ["install", "--version", "0.0.0-test.1",
+                          "--source", release_directory, "--bin-dir", str(conflict_bin)])
+conflict_response = json.loads(conflict_result.stdout)
+assert conflict_response["data"]["alias"] == {"name": "dvt", "status": "skipped_conflict"}
+assert "dvt already exists" in conflict_result.stderr
+assert conflicting_alias.read_text() == "existing dvt\n"
+assert (conflict_bin / "devtools").is_file()
+
+# An existing dvt elsewhere on PATH is not shadowed by a new alias.
+path_command_bin = home / "path-command-bin"
+path_command_bin.mkdir()
+path_command = path_command_bin / "dvt"
+path_command.write_text("#!/bin/sh\nprintf 'existing dvt\\n'\n")
+path_command.chmod(0o755)
+path_conflict_bin = home / "path-conflict-bin"
+original_path = env["PATH"]
+env["PATH"] = str(path_command_bin) + ":" + original_path
+try:
+    path_conflict_result = execute(installer + ["install", "--version", "0.0.0-test.1",
+                                   "--source", release_directory,
+                                   "--bin-dir", str(path_conflict_bin)])
+finally:
+    env["PATH"] = original_path
+path_conflict_response = json.loads(path_conflict_result.stdout)
+assert path_conflict_response["data"]["alias"]["status"] == "skipped_conflict"
+assert not (path_conflict_bin / "dvt").exists()
+assert execute([str(path_command)]).stdout == "existing dvt\n"
 api("init", "--profile", "fixture")
 api("env", "create", "local")
 api("env", "create", "staging")
@@ -140,7 +179,9 @@ with tempfile.TemporaryDirectory() as temporary:
     install("update", "0.0.0-test.2", str(source), expected=1)
 assert hashlib.sha256(binary.read_bytes()).hexdigest() == original_binary
 
-install("update", "0.0.0-test.2")
+response, result = install("update", "0.0.0-test.2")
+assert response["data"]["alias"] == {"name": "dvt", "status": "unchanged"}
+assert not result.stderr
 assert api("version")["data"]["version"] == "0.0.0-test.2"
 
 # Exercise HTTPS delivery on loopback with a test-only trust root.
@@ -229,6 +270,6 @@ finally:
         child.wait()
 
 assert not list((home / ".local/bin").glob(".devtools-install*"))
-print("PASS: install, PATH, profile values, mixed dotenv import, project commands, worktrees, permissions, "
+print("PASS: install, dvt alias and conflict preservation, PATH, profile values, mixed dotenv import, project commands, worktrees, permissions, "
       "failed-update preservation, update, repeat update, HTTPS delivery, latest and "
       "pinned releases, discovery failure preservation, and signals")

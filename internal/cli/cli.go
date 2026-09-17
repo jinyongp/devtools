@@ -98,6 +98,7 @@ func New(version, commit string) *App {
 		}, "project", "paths"), Run: inspect},
 	}
 	a.registerTools()
+	a.registerCommands()
 	a.registerImport()
 	a.registerTasks()
 	a.registerDashboard()

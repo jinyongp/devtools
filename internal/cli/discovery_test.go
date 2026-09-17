@@ -24,10 +24,20 @@ func TestUnknownHelpCommand(t *testing.T) {
 
 func TestScopedDiscovery(t *testing.T) {
 	a := New("test", "test")
-	for _, args := range [][]string{nil, {"--help"}, {"task", "--help"}, {"task", "workstream", "--help"}, {"var", "set", "--help"}} {
+	for _, args := range [][]string{nil, {"--help"}, {"command", "--help"}, {"task", "--help"}, {"task", "workstream", "--help"}, {"var", "set", "--help"}} {
 		code, out, err := invoke(t, a, "", args...)
 		if code != 0 || err != "" || !strings.Contains(out, "Usage:") || strings.Contains(out, "input_schema") {
 			t.Fatalf("%v: %d %s %s", args, code, out, err)
+		}
+	}
+	_, rootHelp, _ := invoke(t, a, "")
+	if !strings.Contains(rootHelp, "\n  command") || !strings.Contains(rootHelp, "\n  run") {
+		t.Fatalf("root help should expose command and run alias: %s", rootHelp)
+	}
+	_, commandHelp, _ := invoke(t, a, "", "command", "--help")
+	for _, name := range []string{"list", "inspect", "run"} {
+		if !strings.Contains(commandHelp, "\n  "+name) {
+			t.Fatalf("command help missing %s: %s", name, commandHelp)
 		}
 	}
 	_, index, _ := invoke(t, a, "", "schema")

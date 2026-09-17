@@ -14,7 +14,7 @@ subprocess.run(['sh', os.environ['DEVTOOLS_TEST_INSTALLER'], 'install',
                check=True, capture_output=True)
 def call(*args):
     return subprocess.check_output([binary, *args], text=True)
-for args in [(), ('--help',), ('task', '--help'), ('task', 'claim', '--help')]:
+for args in [(), ('--help',), ('command', '--help'), ('task', '--help'), ('task', 'claim', '--help')]:
     output = call(*args)
     assert 'Usage:' in output and 'input_schema' not in output
     assert len(output) < 4000
@@ -54,8 +54,10 @@ if fish:
         ('devtools ', 'var'),
         ('devtools variable set KEY ', '--value'),
         ('devtools task workstream ', 'create'),
+        ('devtools command ', 'list'),
         ('devtools var set KEY --profile ', None),
         ('devtools var set KEY --profile demo ', '--value'),
+        ('devtools command run -- ', None),
         ('devtools run -- ', None),
     ]:
         result = subprocess.run(

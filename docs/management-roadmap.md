@@ -8,7 +8,7 @@ devtools를 현재 컴퓨터의 여러 프로젝트를 관리하는 공통 진�
 
 중앙 관리 범위는 현재 OS 사용자의 모든 profile이다. profile 아래에서 공통 값과 env별 override를 관리하고, 프로젝트 디렉터리와 worktree의 연결을 확인한다. dashboard는 profile과 화면을 선택할 때 해당 범위의 데이터를 계산한다.
 
-프로젝트의 기존 실행 명령은 그대로 활용한다. `devtools.toml`의 이름 명령과 `devtools run -- ...`이 환경변수 주입과 실행의 진입점이 된다. macOS, Linux, WSL에서 같은 사용 모델을 제공한다.
+프로젝트의 기존 실행 명령은 그대로 활용한다. `devtools.toml`의 이름 명령과 `devtools command run -- ...`이 환경변수 주입과 실행의 진입점이 된다. macOS, Linux, WSL에서 같은 사용 모델을 제공한다.
 
 현재 제공하는 기능과 API는 [CLI 계약](cli-contract.md), [task API 계약](task-api-contract.md), [port 계약](port-design.md), [관리 API 계약](management-api-contract.md)을 따른다. 아래는 구현한 관리 기능의 구성과 검증 기록이다.
 
@@ -82,7 +82,7 @@ secret은 입력과 교체를 지원하고 일반 조회에는 키·종류·출�
 
 ## 4. 개발 프로세스 관리
 
-task의 실행 기록과 OS 프로세스의 수명을 구분해 관리한다. 기존 `run`의 전경 실행을 유지하면서, 이름 명령을 백그라운드로 실행하고 나중에 다시 관리하는 기능을 추가한다.
+task의 실행 기록과 OS 프로세스의 수명을 구분해 관리한다. 기존 `command run`의 전경 실행을 유지하면서, 이름 명령을 백그라운드로 실행하고 나중에 다시 관리하는 기능을 추가한다.
 
 - profile, instance, 명령, env와 실행 식별자를 연결한다.
 - 시작·상태·종료·재시작을 제공하고 기존 port 할당과 연계한다.

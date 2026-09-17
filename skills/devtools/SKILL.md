@@ -17,18 +17,21 @@ Command examples here name operations; obtain required flags from their help.
 Resolve the profile from tracked `devtools.toml` or explicit `--profile`.
 Worktrees with the same profile share values and task history.
 Data commands return JSON: check the exit code, then `data` or `error.code`.
-Help returns text; `run` forwards the child's output and exit code.
+Help returns text; `command run` forwards the child's output and exit code. The
+shorter `run` form remains a supported alias.
 
 ## Prepare and run
 
 Use `doctor COMMAND` before a configured command when setup is uncertain.
 A successful diagnosis can still have `data.ready: false`; inspect checks and remedies.
 Variables are readable; secrets are metadata-only and enter processes through
-`run` or managed commands. Import mixed dotenv files by path, marking public keys
+`command run` or managed commands. Import mixed dotenv files by path, marking public keys
 with `--var`; new unmarked keys become secrets. Keep secret values out of arguments,
 conversation, and logs. Child output and explicitly captured logs may contain secrets.
 
-Use `run NAME` for foreground work and `process start NAME` for a persistent server.
+Use `command list` to discover configured commands, `command inspect NAME` to
+inspect one, and `command run NAME` for foreground work. Use `process start NAME`
+for a persistent server.
 Save the returned execution ID. `process status` reports lifetime; a configured
 `process wait EXECUTION_ID` establishes readiness before dependent work. `process check`
 can exit successfully with `readiness.ready: false`.

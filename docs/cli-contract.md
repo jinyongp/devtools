@@ -6,7 +6,7 @@
 [포트 관리 계약](port-design.md)을 따른다. worktree별 `.localhost` route는
 [로컬 reverse proxy](proxy.md)를 참고한다.
 
-이 문서는 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `import`, `env`, `run`의 사용법을 다룬다. 전체 기능 안내는 [README](../README.md), 설치된 바이너리의 명령 목록은 `devtools schema`에서 확인한다. 예시는 설치한 `devtools`가 PATH에 있는 환경을 기준으로 한다.
+이 문서는 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `import`, `env`, `command`의 사용법을 다룬다. `run`은 `command run`의 호환 alias다. 전체 기능 안내는 [README](../README.md), 설치된 바이너리의 명령 목록은 `devtools schema`에서 확인한다. 예시는 설치한 `devtools`가 PATH에 있는 환경을 기준으로 한다.
 
 ## 사용 목적
 
@@ -20,7 +20,7 @@ devtools는 개인용 개발 도구를 하나의 CLI로 제공한다. macOS, Lin
 
 profile은 프로젝트를 식별하는 사용자 지정 이름이다. `myapp`, `work-api`처럼 지정하며, `local`, `dev`, `staging`은 profile 아래의 env로 구분한다. task 도구도 같은 profile을 프로젝트 식별자로 사용한다.
 
-`var`, `sec`, `env`, `run`에는 profile이 필요하다. profile은 다음 순서로 선택한다.
+`var`, `sec`, `env`, `command run`에는 profile이 필요하다. profile은 다음 순서로 선택한다.
 
 1. 명령에 명시한 `--profile`.
 2. 현재 위치에서 찾은 `devtools.toml`의 `profile`.
@@ -30,7 +30,7 @@ profile은 프로젝트를 식별하는 사용자 지정 이름이다. `myapp`, 
 
 ```sh
 devtools var list --profile myapp
-devtools run --profile myapp --env local -- pnpm dev
+devtools command run --profile myapp --env local -- pnpm dev
 ```
 
 프로젝트에서 매번 profile을 지정하지 않으려면 다음 설정을 Git으로 추적한다.
@@ -226,9 +226,17 @@ devtools import --file .env --profile myapp
 
 중복 키·잘못된 키·닫히지 않은 따옴표·NUL·잘못된 UTF-8은 `invalid_dotenv`와 종료 코드 2로 처리한다. 문법 오류에는 `error.details.line`과 고정된 원인 설명을 제공한다. 파일 내용과 값은 진단에 포함하지 않는다.
 
-## 명령 실행: run
+## 프로젝트 명령: command
 
-`run`은 이름으로 등록한 명령과 직접 지정한 명령을 실행한다. 환경변수 주입을 선택하면 var와 sec를 함께 적용한다.
+`command`는 `devtools.toml`에 등록된 명령을 조회·확인·실행한다. `command list`는 이름과 `exec`, `inject`, `env`, `serve` 요약을 이름순으로 반환하고, `command inspect NAME`은 해당 명령의 `bind`, project와 command 요구 사항을 합친 `requirements`, readiness 설정까지 보여준다. 다른 프로젝트를 조회할 때는 두 조회 명령에 `--dir PATH`를 지정할 수 있다.
+
+```sh
+devtools command list
+devtools command inspect dev
+devtools command list --dir ../other-project
+```
+
+실행의 canonical 형식은 `devtools command run`이다. 기존 `devtools run`은 같은 입력·출력·종료 코드 계약을 유지하는 alias다. 환경변수 주입을 선택하면 var와 sec를 함께 적용한다.
 
 ### 직접 명령 실행
 
@@ -236,13 +244,13 @@ devtools import --file .env --profile myapp
 
 ```sh
 # 공통 값만 주입
-devtools run -- pnpm dev
+devtools command run -- pnpm dev
 
 # 공통 값에 local 값을 덮어써 주입
-devtools run --env local -- pnpm dev
+devtools command run --env local -- pnpm dev
 
 # devtools.toml 없이 실행
-devtools run --profile myapp --env local -- pnpm dev
+devtools command run --profile myapp --env local -- pnpm dev
 ```
 
 ### 이름으로 명령 실행
@@ -267,9 +275,9 @@ exec = ["pnpm", "lint"]
 ```
 
 ```sh
-devtools run dev
-devtools run check
-devtools run lint
+devtools command run dev
+devtools command run check
+devtools command run lint
 ```
 
 `exec` 배열의 첫 항목은 실행 파일이고, 나머지는 해당 프로그램에 전달할 인자다. 각 이름은 단일 명령을 실행한다.
@@ -280,7 +288,7 @@ devtools run lint
 | `inject = true`, `env` 생략 | 부모 환경에 profile 공통 값을 주입한다. |
 | `inject = true`, `env` 지정 | 부모 환경에 공통 값과 해당 env 값을 합쳐 주입한다. |
 
-이름 명령은 선택된 `devtools.toml`이 있는 디렉터리에서 실행한다. 프로젝트 하위 폴더에서 `devtools run dev`를 호출해도 같은 실행 위치를 사용한다. worktree에서는 해당 worktree의 설정 파일과 실행 위치를 사용한다.
+이름 명령은 선택된 `devtools.toml`이 있는 디렉터리에서 실행한다. 프로젝트 하위 폴더에서 `devtools command run dev`를 호출해도 같은 실행 위치를 사용한다. worktree에서는 해당 worktree의 설정 파일과 실행 위치를 사용한다.
 
 ### 이름 명령의 env 선택
 
@@ -288,13 +296,13 @@ devtools run lint
 
 ```sh
 # commands.dev에 설정된 local 사용
-devtools run dev
+devtools command run dev
 
 # staging으로 덮어써 실행
-devtools run dev --env staging
+devtools command run dev --env staging
 
 # 주입 설정을 생략한 lint에도 local 값 주입
-devtools run lint --env local
+devtools command run lint --env local
 ```
 
 명시적인 `--env`는 `inject = false`로 설정된 명령에서도 주입을 활성화한다. `--env`를 생략하면 명령의 `inject`와 `env` 설정을 적용한다.
@@ -312,18 +320,18 @@ env = "test"
 
 ```sh
 # pnpm test --watch 실행
-devtools run test -- --watch
+devtools command run test -- --watch
 
 # staging 값을 주입하고 pnpm test --watch 실행
-devtools run test --env staging -- --watch
+devtools command run test --env staging -- --watch
 ```
 
 추가 인자는 각 인자의 경계를 유지해 실행 프로그램에 전달한다. `exec`에서 셸을 선택했다면 인자의 의미는 해당 셸의 호출 규칙을 따른다.
 
 | 호출 형식 | `--` 이후의 의미 |
 | --- | --- |
-| `devtools run -- PROGRAM ARG...` | 직접 실행할 프로그램과 인자 |
-| `devtools run NAME -- ARG...` | 등록된 `exec` 뒤에 추가할 인자 |
+| `devtools command run -- PROGRAM ARG...` | 직접 실행할 프로그램과 인자 |
+| `devtools command run NAME -- ARG...` | 등록된 `exec` 뒤에 추가할 인자 |
 
 devtools의 `--profile`, `--env` 옵션은 구분자 `--` 앞에 지정한다.
 
@@ -362,7 +370,7 @@ env = "test"
 
 주입은 실행한 자식 프로세스와 그 자식에만 적용된다. 에이전트의 부모 셸이나 다른 터미널의 환경변수는 바뀌지 않는다. 같은 profile을 공유해도 각 worktree는 실행할 때 env를 따로 선택할 수 있다.
 
-`run`은 자식 프로세스의 입출력과 신호를 전달하고 종료 코드를 보존한다. 자식 출력은 JSON으로 감싸거나 마스킹하지 않는다. 따라서 `true`, `3000` 같은 변수값 때문에 정상 출력이 변형되지 않는다.
+`command run`은 자식 프로세스의 입출력과 신호를 전달하고 종료 코드를 보존한다. 자식 출력은 JSON으로 감싸거나 마스킹하지 않는다. 따라서 `true`, `3000` 같은 변수값 때문에 정상 출력이 변형되지 않는다.
 
 실행 파일은 선택한 실행 디렉터리와 최종 환경의 PATH를 기준으로 찾는다. `SIGINT`, `SIGTERM`, `SIGHUP`을 받으면 실행한 프로세스 그룹에 같은 신호를 전달한다. 종료 신호 전달 후 3초 동안 명령이 계속 실행되면 프로세스 그룹을 강제 종료한다. 신호로 종료한 자식의 종료 코드는 `128 + 신호 번호`다.
 
@@ -375,7 +383,7 @@ env = "test"
 
 일반 명령은 입력을 요구하는 프롬프트를 띄우지 않는다. 명시적으로 지정한 stdin 입력은 데이터 입력 경로이며 대화형 질의가 아니다.
 
-`run`은 데이터 조회 명령과 출력 계약이 다르다. 실행 준비 중의 실패는 devtools의 오류로 반환하고, 자식 프로세스가 실행된 뒤에는 그 프로세스의 출력과 종료 상태를 전달한다.
+`command run`은 데이터 조회 명령과 출력 계약이 다르다. 실행 준비 중의 실패는 devtools의 오류로 반환하고, 자식 프로세스가 실행된 뒤에는 그 프로세스의 출력과 종료 상태를 전달한다.
 
 명령별 입력·출력 JSON 필드는 `devtools schema COMMAND`에서 확인하고, 기능별 오류 코드는 각 사용 계약을 참고한다. 스키마의 `args`는 위치 인자, `child_args`는 `--` 이후 인자를 뜻한다. `aliases`에는 같은 동작을 하는 별칭이 포함된다.
 
@@ -385,8 +393,10 @@ env = "test"
 | var·sec 목록 | `profile`, `items` |
 | var 값 조회 | `profile`, `value`, `metadata` |
 | env 목록 | `profile`, `envs` |
+| command 목록 | `profile`, `commands` |
+| command 상세 조회 | `profile`, `command` |
 
-목록 항목과 `metadata`에는 `key`, `kind`, `source`, `overrides`가 포함된다. `source`는 `common` 또는 `env`이며, `overrides`는 선택한 env 값이 공통 값을 덮어썼는지 나타낸다.
+var·sec 목록의 `items`와 var 조회의 `metadata`에는 `key`, `kind`, `source`, `overrides`가 포함된다. `source`는 `common` 또는 `env`이며, `overrides`는 선택한 env 값이 공통 값을 덮어썼는지 나타낸다.
 
 | 오류 코드 | 의미 |
 | --- | --- |

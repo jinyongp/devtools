@@ -65,7 +65,7 @@ devtools init --profile myapp
 devtools var set LOG_LEVEL --value info
 devtools env create local
 devtools var set LOG_LEVEL --env local --value debug
-devtools run --env local -- sh -c 'echo "$LOG_LEVEL"'
+devtools command run --env local -- sh -c 'echo "$LOG_LEVEL"'
 ```
 
 이 예시는 공통 `LOG_LEVEL`을 `info`로 등록하고, `local` 환경에서는 `debug`로
@@ -94,8 +94,8 @@ secret은 `devtools sec`로 등록하며 조회에는 메타데이터만 제공�
 `devtools task --help`처럼 기능별 도움말로 명령을 탐색할 수 있습니다.
 JSON 계약은 `devtools schema task claim`처럼 필요한 명령만 조회하세요.
 `devtools schema`는 짧은 그룹 목록을, `devtools schema --all`은 전체 계약을 제공합니다.
-조회·변경 결과는 JSON이며 도움말은 텍스트를 출력합니다.
-`run`은 자식 프로그램의 출력과 종료 코드를 전달합니다.
+등록된 프로젝트 명령은 `devtools command list`로 찾고 `devtools command inspect NAME`으로 설정을 확인할 수 있습니다.
+조회·변경 결과는 JSON이며 도움말은 텍스트를 출력합니다. `devtools command run`은 자식 프로그램의 출력과 종료 코드를 전달하며, 기존 `devtools run`도 같은 동작의 alias로 계속 지원합니다.
 
 ## 업데이트
 

@@ -77,13 +77,13 @@ var/sec는 선언한 종류까지 일치해야 한다. 진단 결과에는 키 �
 
 ## 실행 전 검사
 
-필수 조건을 선언한 이름 명령은 `devtools run COMMAND`에서 같은 검사를
+필수 조건을 선언한 이름 명령은 `devtools command run COMMAND`에서 같은 검사를
 거친다. 조건이 충족되면 실제 명령을 실행한다. 미충족 시 종료 코드 3과
 `requirements_failed` 오류에 checks를 포함한다.
 
 var/sec를 요구하는 명령은 `inject = true` 또는 명시적인 `--env`로
 주입을 활성화한다. 기존 필수 조건 선언이 없는 명령과
-`devtools run -- EXECUTABLE ...`은 기존 실행 계약을 따른다.
+`devtools command run -- EXECUTABLE ...`은 기존 실행 계약을 따른다.
 
 doctor는 진단 보고서를 제공하고, 도구 설치나 설정 수정은 에이전트가
 보고서의 remedy와 프로젝트 요구사항을 확인한 뒤 수행한다.

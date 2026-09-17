@@ -18,6 +18,18 @@ type Tool struct {
 	VersionArgs []string `toml:"version_args,omitempty" json:"version_args"`
 }
 
+// WithDefaults returns the effective tool definition used by requirement checks.
+func (t Tool) WithDefaults(name string) Tool {
+	if t.Executable == "" {
+		t.Executable = name
+	}
+	t.VersionArgs = append([]string{}, t.VersionArgs...)
+	if t.Version != "" && len(t.VersionArgs) == 0 {
+		t.VersionArgs = []string{"--version"}
+	}
+	return t
+}
+
 var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[0-9A-Za-z.-]+)?$`)
 var requiredKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 

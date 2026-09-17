@@ -78,8 +78,8 @@ func (a *App) catalog() map[string]any {
 	return map[string]any{
 		"protocol_version": protocol.Version,
 		"commands":         commands,
-		"transport":        map[string]any{"input": "CLI flags and positional args; child_args follow --. Schemas describe parsed inputs, not a JSON stdin endpoint. Secret --stdin reads a raw UTF-8 value.", "success": "one JSON response on stdout; run passes through child streams", "failure": "one JSON response on stderr before execution; run preserves child exit status", "interactive": false, "help_flags": []string{"--help", "-h"}},
-		"exit_codes":       map[string]string{"0": "success", "1": "I/O or private storage failure", "2": "invalid input or dotenv syntax", "3": "lookup, configuration, state, conflict, or precondition failure; inspect error.code and error.details", "126": "configured command could not be executed", "127": "run child executable not found", "130": "canceled; run otherwise preserves child exit code or 128 + signal"},
+		"transport":        map[string]any{"input": "CLI flags and positional args; child_args follow --. Schemas describe parsed inputs, not a JSON stdin endpoint. Secret --stdin reads a raw UTF-8 value.", "success": "one JSON response on stdout; command run (alias: run) passes through child streams", "failure": "one JSON response on stderr before execution; command run (alias: run) preserves child exit status", "interactive": false, "help_flags": []string{"--help", "-h"}},
+		"exit_codes":       map[string]string{"0": "success", "1": "I/O or private storage failure", "2": "invalid input or dotenv syntax", "3": "lookup, configuration, state, conflict, or precondition failure; inspect error.code and error.details", "126": "configured command could not be executed", "127": "command run child executable not found", "130": "canceled; command run otherwise preserves child exit code or 128 + signal"},
 		"response_schema": map[string]any{
 			"$schema":              "https://json-schema.org/draft/2020-12/schema",
 			"type":                 "object",

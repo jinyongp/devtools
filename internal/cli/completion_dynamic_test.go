@@ -83,6 +83,8 @@ func TestDynamicCompletion(t *testing.T) {
 		{[]string{"variable", "get", ""}, []string{"_LEVEL"}},
 		{[]string{"variable", "get", "--env", "local", ""}, []string{"LOCAL_ONLY", "_LEVEL"}},
 		{[]string{"sec", "unset", ""}, []string{"TOKEN"}},
+		{[]string{"command", "inspect", "--dir", projectDir, ""}, []string{"web"}},
+		{[]string{"command", "run", ""}, []string{"web"}},
 		{[]string{"run", ""}, []string{"web"}},
 		{[]string{"process", "start", "--dir", projectDir, ""}, []string{"web"}},
 		{[]string{"task", "show", taskID[:8]}, []string{taskID}},

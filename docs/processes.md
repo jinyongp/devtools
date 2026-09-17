@@ -1,6 +1,6 @@
 # 개발 프로세스 관리
 
-`devtools process`는 `devtools.toml`의 이름 명령을 백그라운드에서 실행하고 관리한다. 프로젝트 명령의 요구 사항 검사, var/sec/env 주입과 port binding은 `devtools run`과 같다. agent나 dashboard 세션을 종료해도 실행은 유지된다.
+`devtools process`는 `devtools.toml`의 이름 명령을 백그라운드에서 실행하고 관리한다. 프로젝트 명령의 요구 사항 검사, var/sec/env 주입과 port binding은 `devtools command run`과 같다. agent나 dashboard 세션을 종료해도 실행은 유지된다.
 
 ```sh
 devtools process start web --request-id UUID

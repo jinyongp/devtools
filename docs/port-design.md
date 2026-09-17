@@ -60,7 +60,7 @@ APP_URL = { template = "http://${var.APP_HOST}:${bind.APP_PORT}/api/v1" }
 devtools var set APP_HOST --value 127.0.0.1
 ```
 
-web에 3000이 할당되면 `devtools run dev`는 다음 값을 넣어 `pnpm dev`를 실행한다.
+web에 3000이 할당되면 `devtools command run dev`는 다음 값을 넣어 `pnpm dev`를 실행한다.
 
 ```text
 APP_PORT=3000
@@ -175,7 +175,7 @@ strict가 false인 경우에도 기존 할당을 유지한다. 확인 후 서버
 | `devtools port release web` | 할당 해제 |
 | `devtools port prune` | 삭제된 실행 위치의 할당·별칭 정리 |
 
-일상적인 명령 실행은 run이 serve의 포트 할당과 bind의 주입을 담당한다. list와 show는
+일상적인 명령 실행은 `command run`이 serve의 포트 할당과 bind의 주입을 담당한다. list와 show는
 조회용이고, allocate는 실행 전에 포트를 확보할 때 사용한다.
 
 ## 실행 위치의 이동과 정리
@@ -191,7 +191,7 @@ strict가 false인 경우에도 기존 할당을 유지한다. 확인 후 서버
 ## 서버 실행과 주소 참조
 
 명령의 `serve = ["web"]`는 그 명령이 현재 실행 위치의 web 서버를 시작한다는
-선언이다. 여러 서비스 이름을 지정할 수 있다. run은 serve의 미할당 포트를
+선언이다. 여러 서비스 이름을 지정할 수 있다. `command run`은 serve의 미할당 포트를
 할당하고 기존 할당은 유지한다. 실행 전 포트가 비어 있는지 확인하며,
 사용 중이면 `port_in_use`로 종료한다.
 
@@ -202,7 +202,7 @@ PID만으로 서버의 정체나 정상 실행을 판단하지 않는다.
 
 bind는 등록된 포트를 참조한다. serve에서 확보한 포트도 bind로 환경변수에
 연결한다. serve에 없는 서비스는 기존 할당이 필요하며, 참조는 실행 중인
-포트에도 성공한다. 다른 프로젝트의 서비스 시작은 해당 프로젝트의 run으로 수행한다.
+포트에도 성공한다. 다른 프로젝트의 서비스 시작은 해당 프로젝트의 `command run`으로 수행한다.
 
 여러 serve 포트는 한 요청으로 모두 확보한다. 입력과 참조를 먼저 검증하고,
 할당 단계 실패 시 해당 요청의 신규 할당을 저장하지 않는다. 할당을 확정한 뒤
@@ -264,7 +264,7 @@ inject는 기존 계약대로 profile 값 전체의 주입 여부를 결정한�
 
 exec 배열에는 `${bind.NAME}`를 사용할 수 있다. bind 평가를 완료한 뒤
 원래 배열 요소 하나를 인자 하나로 전달한다. 추가 인자 분할과 셸 평가는
-수행하지 않는다. run 호출자가 덧붙인 인자는 입력 그대로 전달한다.
+수행하지 않는다. `command run` 호출자가 덧붙인 인자는 입력 그대로 전달한다.
 
 ```toml
 [ports.web]
@@ -318,12 +318,12 @@ port registry version 1은 reservation이 없는 기존 저장 형식이다. 새
 
 doctor는 설정, 참조, serve 포트의 사용 가능 여부를 읽기 전용으로 진단한다.
 미할당 serve는 신규 할당이 필요함을 표시하고 후보 사용 가능 여부를 확인한다.
-같은 명령의 bind는 이 예정 할당을 참조할 수 있다. 실제 포트 확정은 run에서 한다.
+같은 명령의 bind는 이 예정 할당을 참조할 수 있다. 실제 포트 확정은 `command run`에서 한다.
 진단 성공은 이후의 할당·바인딩 성공을 보장하는 예약이 아니다.
 
 check는 할당 포트의 점유 상태와 로컬 루프백 TCP 접속 결과를 반환한다.
 TCP 연결 성공은 애플리케이션 준비와 별개이며, HTTP health 확인이나 대기는
-프로젝트의 명시적인 명령으로 수행한다. run의 주소 참조는 서버 준비를 기다리지 않는다.
+프로젝트의 명시적인 명령으로 수행한다. `command run`의 주소 참조는 서버 준비를 기다리지 않는다.
 
 할당 응답의 공통 필드는 `profile`, `instance_id`, `alias`, `directory`,
 `name`, `port`, `location_status`다. location_status는 `available`, `missing`,

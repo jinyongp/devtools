@@ -129,6 +129,7 @@ func (a *App) commandSummary(name string) string {
 		"update":                  "Update the installed executable.",
 		"backup":                  "Back up and restore profile data.",
 		"cleanup":                 "Preview and clean up stored data.",
+		"command":                 "List, inspect, and run configured project commands.",
 		"env":                     "Manage profile environments.",
 		"instance":                "Manage project locations and aliases.",
 		"port":                    "Manage local port assignments.",

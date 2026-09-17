@@ -158,7 +158,7 @@ func (a *App) dynamicCandidates(words []string) []string {
 			return nil
 		}
 		switch {
-		case cmd.Name == "run" || cmd.Name == "process start":
+		case cmd.Name == "command run" || cmd.Name == "command inspect" || cmd.Name == "process start":
 			source = "command"
 		case cmd.Name == "env remove":
 			source = "env"

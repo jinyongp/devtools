@@ -20,11 +20,11 @@ APP_PORT = { port = "web" }
 
 ```sh
 devtools doctor dev
-devtools run dev
+devtools command run dev
 devtools port show web
 ```
 
-doctor는 할당 후보와 참조를 진단한다. run은 최초 실행에서 포트를 할당하고,
+doctor는 할당 후보와 참조를 진단한다. `command run`은 최초 실행에서 포트를 할당하고,
 명령 실행 기간의 중복 실행을 막는다. 다음 실행에서도 저장된 포트를 사용한다.
 처음 지정한 포트가 사용 중이면 range에서 선택한다. 최초 할당부터 지정값을
 요구하려면 `strict = true`를 선언한다.
@@ -66,7 +66,7 @@ BACKEND_URL = { template = "http://${var.BACKEND_HOST}:${bind.BACKEND_PORT}/api/
 ```sh
 devtools var set BACKEND_HOST --value 127.0.0.1
 devtools doctor check
-devtools run check
+devtools command run check
 ```
 
 bind가 기존 주소를 참조할 때는 서버가 이미 포트를 사용하고 있어도 정상이다.

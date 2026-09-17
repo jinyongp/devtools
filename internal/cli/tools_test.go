@@ -123,6 +123,7 @@ exec = ["/bin/sh", "-c", "printf raw; printf diagnostic >&2; exit 23"]
 		{[]string{"run", "check", "--env", "staging", "--", "--watch"}, canonical + "|staging|--watch", 0, ""},
 		{[]string{"run", "plain"}, "parent", 0, ""},
 		{[]string{"run", "plain", "--env", "staging"}, "staging", 0, ""},
+		{[]string{"command", "run", "--", "/bin/sh", "-c", "printf '%s|%s' \"$PWD\" \"$LEVEL\""}, current + "|common", 0, ""},
 		{[]string{"run", "--", "/bin/sh", "-c", "printf '%s|%s' \"$PWD\" \"$LEVEL\""}, current + "|common", 0, ""},
 		{[]string{"run", "fail"}, "raw", 23, "diagnostic"},
 	} {
@@ -169,11 +170,18 @@ func TestSchemaDescribesAliasesAndInputs(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatal(err)
 	}
-	found := false
+	foundSecretSet := false
+	foundCommandRun := false
 	for _, command := range result.Data.Commands {
 		if command.Name == "secret set" {
-			found = true
+			foundSecretSet = true
 			if len(command.Aliases) != 1 || command.Aliases[0] != "sec set" || command.Input["oneOf"] == nil {
+				t.Fatalf("%+v", command)
+			}
+		}
+		if command.Name == "command run" {
+			foundCommandRun = true
+			if len(command.Aliases) != 1 || command.Aliases[0] != "run" {
 				t.Fatalf("%+v", command)
 			}
 		}
@@ -181,8 +189,8 @@ func TestSchemaDescribesAliasesAndInputs(t *testing.T) {
 			t.Fatal("secret read command exposed")
 		}
 	}
-	if !found {
-		t.Fatal("secret set schema missing")
+	if !foundSecretSet || !foundCommandRun {
+		t.Fatalf("schema entries missing: secret_set=%t command_run=%t", foundSecretSet, foundCommandRun)
 	}
 }
 

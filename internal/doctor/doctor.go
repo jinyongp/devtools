@@ -69,12 +69,9 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 		probeEnv = process.Environment(probeEnv, map[string]string{"PATH": *in.PathOverride})
 	}
 	checkTool := func(name string, tool project.Tool) {
-		executable := tool.Executable
-		if executable == "" {
-			executable = name
-		}
+		tool = tool.WithDefaults(name)
 		id := "tool:" + name
-		path, e := process.LookPath(executable, in.Directory, probeEnv)
+		path, e := process.LookPath(tool.Executable, in.Directory, probeEnv)
 		info, statErr := os.Stat(path)
 		if e != nil || statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
 			report.Add(id, "fail", "Required executable is unavailable.", "Install the declared tool or update the command's PATH.")
@@ -85,9 +82,6 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 			return
 		}
 		args := tool.VersionArgs
-		if len(args) == 0 {
-			args = []string{"--version"}
-		}
 		probe, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		output := &limitedOutput{}

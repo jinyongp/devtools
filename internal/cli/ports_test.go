@@ -58,14 +58,16 @@ PATH={template="/bin:/usr/bin"}
 	}
 	var response struct {
 		Data struct {
-			Port       int
-			InstanceID string `json:"instance_id"`
+			Item struct {
+				Port       int
+				InstanceID string `json:"instance_id"`
+			} `json:"item"`
 		}
 	}
-	if e := json.Unmarshal([]byte(call("port", "show", "web")), &response); e != nil || response.Data.Port == 0 {
+	if e := json.Unmarshal([]byte(call("port", "show", "web")), &response); e != nil || response.Data.Item.Port == 0 {
 		t.Fatal(e, response)
 	}
-	if out := call("port", "allocate", "web"); !strings.Contains(out, `"created":false`) {
+	if out := call("port", "allocate", "web"); !strings.Contains(out, `"changed":false`) {
 		t.Fatal(out)
 	}
 	if code, _, err := invoke(t, a, "secret-canary", "sec", "set", "URL", "--stdin"); code != 0 {

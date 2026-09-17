@@ -74,7 +74,7 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
     results=list(pool.map(lambda _:mutate("start","web"),range(4)))
 assert all(r["item"]["id"]==id and not r["changed"] for r in results)
 assert mutate("start","web","--env","local",expected=3)["code"]=="process_conflict"
-port=api("port","show","web")["port"]
+port=api("port","show","web")["item"]["port"]
 def read(expected):
     for _ in range(60):
         try:
@@ -83,7 +83,7 @@ def read(expected):
         time.sleep(.05)
     raise AssertionError("Server response mismatch")
 read("first")
-api("dashboard", "--json")
+api("dashboard")
 api("dashboard","stop")
 read("first")
 assert api("process","logs",id,expected=3)["code"]=="logs_disabled"
@@ -99,7 +99,7 @@ with socket.socket() as s:
     s.bind(("127.0.0.1",port))
 def finished(id):
     for _ in range(100):
-        r=api("process","status",id)
+        r=api("process","status",id)["item"]
         if r["ended_at"]:return r
         time.sleep(.025)
     raise AssertionError("Process did not finish")
@@ -109,7 +109,7 @@ logged=finished(mutate("start","log","--capture-logs")["item"]["id"])
 assert len(api("process","logs",logged["id"])["content"].encode())<=1<<20
 tree=finished(mutate("start","tree")["item"]["id"])
 assert tree["exit_code"]==0,tree
-tree_port=api("port","show","tree")["port"]
+tree_port=api("port","show","tree")["item"]["port"]
 def free_tree():
     for _ in range(80):
         with socket.socket() as s:

@@ -96,7 +96,7 @@ func (a *App) registerTools() {
 		if action != "list" {
 			command.Arguments = []Argument{{Name: "env", Required: true, Pattern: project.ProfilePattern}}
 		} else {
-			command.Output = object(map[string]any{"profile": stringSchema(), "envs": map[string]any{"type": "array", "items": stringSchema()}}, "profile", "envs")
+			command.Output = object(map[string]any{"profile": stringSchema(), "items": map[string]any{"type": "array", "items": stringSchema()}}, "profile", "items")
 		}
 		command.Run = func(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
 			store, err := a.store(request.Options)
@@ -108,7 +108,7 @@ func (a *App) registerTools() {
 				if err != nil {
 					return nil, err
 				}
-				return map[string]any{"profile": store.Profile, "envs": state.EnvNames()}, nil
+				return map[string]any{"profile": store.Profile, "items": state.EnvNames()}, nil
 			}
 			changed, err := store.Update(ctx, func(state *values.State) (bool, *protocol.Error) {
 				if action == "create" {

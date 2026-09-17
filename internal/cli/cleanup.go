@@ -18,7 +18,18 @@ func (a *App) registerCleanup() {
 		"purge":    "Permanently remove one eligible cleanup archive payload.",
 	}
 	for _, action := range []string{"preview", "apply", "archives", "restore", "purge"} {
-		c := Command{Name: "cleanup " + action, Description: descriptions[action], Options: []Option{}, Output: map[string]any{"type": "object"}}
+		entry := map[string]any{"type": "object"}
+		items := map[string]any{"type": "array", "items": entry}
+		output := object(map[string]any{"items": items}, "items")
+		switch action {
+		case "preview":
+			output = object(map[string]any{"id": stringSchema(), "expires": stringSchema(), "items": items}, "id", "expires", "items")
+		case "apply":
+			output = object(map[string]any{"items": items, "changed": map[string]any{"type": "boolean"}, "replayed": map[string]any{"type": "boolean"}}, "items", "changed", "replayed")
+		case "restore", "purge":
+			output = changedItemOutput(entry)
+		}
+		c := Command{Name: "cleanup " + action, Description: descriptions[action], Options: []Option{}, Output: output}
 		if action == "preview" {
 			c.Options = profileOptions(false)
 		}
@@ -43,14 +54,17 @@ func (a *App) registerCleanup() {
 			case "preview":
 				return engine.Preview(ctx, r.Options["profile"])
 			case "apply":
-				return engine.Apply(ctx, r.Args[0], r.ListOptions["item"], r.Options["request-id"])
+				result, err := engine.Apply(ctx, r.Args[0], r.ListOptions["item"], r.Options["request-id"])
+				return map[string]any{"items": append([]cleanup.Archive{}, result.Archives...), "changed": len(result.Archives) > 0, "replayed": result.Replayed}, err
 			case "archives":
 				items, e := engine.Archives()
 				return map[string]any{"items": items}, e
 			case "restore":
-				return engine.Restore(ctx, r.Args[0])
+				item, changed, err := engine.Restore(ctx, r.Args[0])
+				return map[string]any{"item": item, "changed": changed}, err
 			case "purge":
-				return engine.Purge(ctx, r.Args[0])
+				item, changed, err := engine.Purge(ctx, r.Args[0])
+				return map[string]any{"item": item, "changed": changed}, err
 			}
 			return nil, nil
 		}

@@ -74,7 +74,7 @@ try:
     time.sleep(.1)
     started = mutate("start", "--port", "24400")
     running = True
-    assert started["running"] and started["port"] == 24400
+    assert started["changed"] and not started["replayed"] and started["item"]["running"] and started["item"]["port"] == 24400
     assert read(24400, "main.shop.localhost") == "main"
     assert read(24400, "feature.shop.localhost") == "feature"
     with socket.create_connection(("127.0.0.1", 24400), timeout=2) as connection:
@@ -98,7 +98,7 @@ try:
     servers[0] = subprocess.Popen(["python3", str(server), "24302", "replacement"], env=env)
     time.sleep(.1)
     assert read(24400, "main.shop.localhost") == "replacement"
-    assert api("proxy", "status")["started_at"] == started["started_at"]
+    assert api("proxy", "status")["item"]["started_at"] == started["item"]["started_at"]
 
     mutate("stop")
     running = False
@@ -106,7 +106,7 @@ try:
     reserved.mkdir()
     (reserved / "devtools.toml").write_text('profile="reserved"\n[ports.listener]\nport=24400\nstrict=true\n')
     assert api("port", "allocate", "listener", cwd=reserved, expected=3)["code"] == "port_in_use"
-    assert mutate("start")["port"] == 24400
+    assert mutate("start")["item"]["port"] == 24400
     running = True
     assert read(24400, "feature.shop.localhost") == "feature"
 finally:

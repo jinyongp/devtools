@@ -31,6 +31,15 @@ func (a *App) registerBackup() {
 		case "restore":
 			output = object(map[string]any{"digest": stringSchema(), "applied": boolean, "safety_backup": stringSchema(), "targets": map[string]any{"type": "array", "items": object(map[string]any{"source": stringSchema(), "profile": stringSchema(), "exists": boolean}, "source", "profile", "exists")}}, "digest", "applied", "targets")
 		}
+		if name == "inspect" {
+			output = itemOutput(output)
+		} else if name != "restore" {
+			output = changedItemOutput(output)
+		} else {
+			fields := output["properties"].(map[string]any)
+			fields["changed"], fields["replayed"] = boolean, boolean
+			output["required"] = append(output["required"].([]string), "changed", "replayed")
+		}
 		a.commands = append(a.commands, Command{Name: "backup " + name, Description: description, Options: opts, Output: output, Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 			dirs, err := paths.Current()
 			if err != nil {
@@ -40,7 +49,14 @@ func (a *App) registerBackup() {
 			if e != nil {
 				return nil, e
 			}
-			return run(ctx, backup.Engine{Data: filepath.Dir(d), Config: dirs.Config, Cache: dirs.Cache}, r)
+			result, failure := run(ctx, backup.Engine{Data: filepath.Dir(d), Config: dirs.Config, Cache: dirs.Cache}, r)
+			if failure != nil || name == "restore" {
+				return result, failure
+			}
+			if name == "inspect" {
+				return map[string]any{"item": result}, nil
+			}
+			return map[string]any{"item": result, "changed": true}, nil
 		}})
 	}
 	add("keygen", "Generate private identity and public recipient files without printing key material.", []Option{pathOption("identity-file", true), pathOption("recipient-file", true)}, func(_ context.Context, _ backup.Engine, r Request) (any, *protocol.Error) {
@@ -61,6 +77,11 @@ func (a *App) registerBackup() {
 		if (r.Options["apply"] != "") != (r.Options["request-id"] != "") {
 			return nil, argumentError("Apply and request-id must be supplied together.", "")
 		}
-		return e.Restore(ctx, r.Options["file"], r.Options["identity-file"], r.Options["profile"], r.Options["as"], r.Options["apply"], r.Options["request-id"], r.Options["replace"] == "true")
+		plan, err := e.Restore(ctx, r.Options["file"], r.Options["identity-file"], r.Options["profile"], r.Options["as"], r.Options["apply"], r.Options["request-id"], r.Options["replace"] == "true")
+		return struct {
+			backup.Plan
+			Changed  bool `json:"changed"`
+			Replayed bool `json:"replayed"`
+		}{plan, plan.Applied, plan.Replayed}, err
 	})
 }

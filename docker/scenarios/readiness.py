@@ -50,10 +50,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
 socketserver.TCPServer.allow_reuse_address=True
 socketserver.TCPServer(('127.0.0.1',int(os.environ['PORT'])),Handler).serve_forever()
 ''')
-(root/'probe.py').write_text('''import os,time,urllib.request
+# An OS lock is released even when the intentional short wait kills the probe.
+# An O_EXCL marker would survive SIGTERM and poison every subsequent check.
+(root/'probe.py').write_text('''import fcntl,os,time,urllib.request
 from pathlib import Path
-fd=os.open('probe.lock',os.O_CREAT|os.O_EXCL|os.O_WRONLY)
+fd=os.open('probe.lock',os.O_CREAT|os.O_RDWR,0o600)
 try:
+ fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
  with open('checks','a') as f:f.write('check\\n')
  print(os.environ['TOKEN'])
  time.sleep(.05)
@@ -61,7 +64,7 @@ try:
  assert Path('ready').exists()
  assert urllib.request.urlopen('http://127.0.0.1:'+os.environ['PORT']+'/health',timeout=.5).read()==b'OK'
 finally:
- os.close(fd);os.unlink('probe.lock')
+ os.close(fd)
 ''')
 api('var','set','PUBLIC','--value','initial')
 api('sec','set','TOKEN','--stdin',input=canary)
@@ -73,7 +76,7 @@ try:
     assert not (root/'checks').exists(), 'Metadata query executed a probe'
     assert not api('process','check',id)['readiness']['ready']
     assert api('process','wait',id,'--timeout','100ms',expected=3)['code']=='readiness_timeout'
-    assert api('process','status',id)['state']=='running'
+    assert api('process','status',id)['item']['state']=='running'
     (root/'ready').touch()
     ready=api('process','wait',id,'--timeout','5s')['readiness']
     assert ready['ready'] and ready['exit_code']==0 and ready['checked_at']
@@ -84,7 +87,7 @@ try:
     changed=config.replace('exec=["python3","probe.py"]','exec=["sh","-c","exit 9"]')
     (root/'devtools.toml').write_text(changed)
     assert api('process','check',id)['readiness']['ready'], 'Running execution lost its snapshot'
-    url=urllib.parse.urlsplit(api('dashboard', '--json')['url']);origin=f'{url.scheme}://{url.netloc}'
+    url=urllib.parse.urlsplit(api('dashboard')['item']['url']);origin=f'{url.scheme}://{url.netloc}'
     def http(path,body,token=''):
         headers={'Origin':origin,'Content-Type':'application/json'}
         if token:headers['Authorization']='Bearer '+token
@@ -112,7 +115,7 @@ try:
     time.sleep(.2);waiter.send_signal(signal.SIGTERM)
     out,err=waiter.communicate(timeout=5)
     assert waiter.returncode==130 and canary not in out+err,(out,err)
-    assert api('process','status',slow['id'])['state']=='running'
+    assert api('process','status',slow['id'])['item']['state']=='running'
     waiter=subprocess.Popen(['devtools','process','wait',slow['id'],'--timeout','10s'],cwd=root,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     time.sleep(.05)
     mutate('stop',slow['id'])

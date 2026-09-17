@@ -73,20 +73,19 @@ func (a *App) registerPorts() {
 		case "list":
 			cmd.Output = object(map[string]any{"items": map[string]any{"type": "array", "items": fieldsSchema(f)}}, "items")
 		case "allocate":
-			f["created"] = map[string]any{"type": "boolean"}
-			cmd.Output = fieldsSchema(f)
+			cmd.Output = changedItemOutput(fieldsSchema(f))
 		case "check":
 			f["occupancy"] = map[string]any{"enum": []string{"free", "in_use", "unknown"}}
 			f["tcp_reachable"] = map[string]any{"type": []string{"boolean", "null"}}
-			cmd.Output = fieldsSchema(f)
+			cmd.Output = itemOutput(fieldsSchema(f))
 		case "release":
-			cmd.Output = object(map[string]any{"released": map[string]any{"type": "boolean"}}, "released")
+			cmd.Output = object(map[string]any{"changed": map[string]any{"type": "boolean"}}, "changed")
 		case "prune":
 			ret := instanceFields()
 			ret["reason"] = stringSchema()
-			cmd.Output = object(map[string]any{"removed": map[string]any{"type": "array", "items": fieldsSchema(instanceFields())}, "retained": map[string]any{"type": "array", "items": fieldsSchema(ret)}}, "removed", "retained")
+			cmd.Output = object(map[string]any{"changed": map[string]any{"type": "boolean"}, "removed": map[string]any{"type": "array", "items": fieldsSchema(instanceFields())}, "retained": map[string]any{"type": "array", "items": fieldsSchema(ret)}}, "changed", "removed", "retained")
 		default:
-			cmd.Output = fieldsSchema(f)
+			cmd.Output = itemOutput(fieldsSchema(f))
 		}
 		cmd.Run = func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 			return a.portCommand(ctx, action, r)
@@ -127,12 +126,11 @@ func (a *App) registerPorts() {
 		case "list":
 			cmd.Output = object(map[string]any{"items": map[string]any{"type": "array", "items": fieldsSchema(f)}}, "items")
 		case "name", "move":
-			f["changed"] = map[string]any{"type": "boolean"}
-			cmd.Output = fieldsSchema(f)
+			cmd.Output = changedItemOutput(fieldsSchema(f))
 		case "remove":
-			cmd.Output = object(map[string]any{"removed": map[string]any{"type": "boolean"}}, "removed")
+			cmd.Output = object(map[string]any{"changed": map[string]any{"type": "boolean"}}, "changed")
 		default:
-			cmd.Output = fieldsSchema(f)
+			cmd.Output = itemOutput(fieldsSchema(f))
 		}
 		cmd.Run = func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 			return a.instanceCommand(ctx, action, r)
@@ -283,7 +281,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 				}
 			}
 			st.Instances, st.Assignments = instances, assignments
-			result = map[string]any{"removed": removed, "retained": retained}
+			result = map[string]any{"changed": len(removed) > 0, "removed": removed, "retained": retained}
 			return len(removed) > 0, nil
 		}
 		name := r.Args[0]
@@ -320,14 +318,12 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 			if e != nil {
 				return false, e
 			}
-			row := assignmentResult(v)
-			row["created"] = created
-			result = row
+			result = map[string]any{"item": assignmentResult(v), "changed": created}
 			return created, nil
 		}
 		if i == nil {
 			if action == "release" {
-				result = map[string]bool{"released": false}
+				result = map[string]bool{"changed": false}
 				return false, nil
 			}
 			return false, portFailure("instance_not_found")
@@ -335,14 +331,14 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 		v := st.Get(i.ID, name)
 		if v == nil {
 			if action == "release" {
-				result = map[string]bool{"released": false}
+				result = map[string]bool{"changed": false}
 				return false, nil
 			}
 			return false, portFailure("port_not_found")
 		}
 		switch action {
 		case "show":
-			result = assignmentResult(*v)
+			result = map[string]any{"item": assignmentResult(*v)}
 		case "check":
 			row := assignmentResult(*v)
 			free, e := ports.Available(v.Port)
@@ -356,7 +352,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 				}
 				row["tcp_reachable"] = ports.Reachable(ctx, v.Port)
 			}
-			result = row
+			result = map[string]any{"item": row}
 		case "release":
 			if e := s.Active(ctx, i.ID, name); e != nil {
 				return false, e
@@ -375,7 +371,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 				}
 			}
 			st.Assignments = items
-			result = map[string]bool{"released": true}
+			result = map[string]bool{"changed": true}
 			return true, nil
 		}
 		return false, nil
@@ -461,21 +457,19 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 			changed := i.Alias == nil || *i.Alias != alias
 			i.Alias = &alias
 			st.SyncInstance(*i)
-			row := instanceResult(*i)
-			row["changed"] = changed
-			result = row
+			result = map[string]any{"item": instanceResult(*i), "changed": changed}
 			return changed, nil
 		}
 		if i == nil {
 			if action == "remove" {
-				result = map[string]bool{"removed": false}
+				result = map[string]bool{"changed": false}
 				return false, nil
 			}
 			return false, portFailure("instance_not_found")
 		}
 		switch action {
 		case "show":
-			result = instanceResult(*i)
+			result = map[string]any{"item": instanceResult(*i)}
 		case "move":
 			if e := (services.Store{Data: filepath.Dir(s.Directory)}).Active(ctx, i.ID); e != nil {
 				return false, e
@@ -501,9 +495,7 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 			changed := i.Directory != p.Root
 			i.Directory = p.Root
 			st.SyncInstance(*i)
-			row := instanceResult(*i)
-			row["changed"] = changed
-			result = row
+			result = map[string]any{"item": instanceResult(*i), "changed": changed}
 			return changed, nil
 		case "remove":
 			if e := (services.Store{Data: filepath.Dir(s.Directory)}).Active(ctx, i.ID); e != nil {
@@ -521,7 +513,7 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 				}
 			}
 			st.Instances = items
-			result = map[string]bool{"removed": true}
+			result = map[string]bool{"changed": true}
 			return true, nil
 		}
 		return false, nil

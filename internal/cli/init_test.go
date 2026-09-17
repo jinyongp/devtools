@@ -18,14 +18,16 @@ func TestInitCommand(t *testing.T) {
 		}
 		var response struct {
 			Data struct {
-				Created bool   `json:"created"`
-				Profile string `json:"profile"`
+				Changed bool `json:"changed"`
+				Item    struct {
+					Profile string `json:"profile"`
+				} `json:"item"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(out.Bytes(), &response); err != nil {
 			t.Fatal(err)
 		}
-		if response.Data.Created != expected || response.Data.Profile != "myapp" {
+		if response.Data.Changed != expected || response.Data.Item.Profile != "myapp" {
 			t.Fatalf("response: %+v", response)
 		}
 	}

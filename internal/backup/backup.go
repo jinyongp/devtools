@@ -49,6 +49,7 @@ type Summary struct {
 	Tasks   bool   `json:"tasks"`
 }
 type Plan struct {
+	Replayed     bool     `json:"-"` // Response metadata; never stored in the restore receipt.
 	Digest       string   `json:"digest"`
 	Targets      []Target `json:"targets"`
 	Applied      bool     `json:"applied"`
@@ -414,6 +415,7 @@ func (e Engine) Restore(ctx context.Context, path, identityPath, source, target,
 			if previous.Fingerprint != fingerprint {
 				return plan, failure("request_conflict")
 			}
+			previous.Plan.Replayed = true
 			return previous.Plan, nil
 		}
 		if !errors.Is(err, os.ErrNotExist) {

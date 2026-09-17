@@ -140,13 +140,14 @@ legacy = http_server.ThreadingHTTPServer(("127.0.0.1", 0), Legacy)
 (cache / "server.json").write_text(json.dumps({"id": legacy_id, "address": f"http://127.0.0.1:{legacy.server_port}", "token": "legacy-fixture"}))
 os.chmod(cache / "server.json", 0o600)
 threading.Thread(target=legacy.serve_forever, daemon=True).start()
-dashboard = api("dashboard", "--json")
+dashboard = api("dashboard")["item"]
 assert dashboard["server_id"] != legacy_id
 legacy.server_close()
-assert api("dashboard", "--json")["server_id"] == dashboard["server_id"]
-plain = subprocess.check_output(["devtools", "dashboard"], cwd=project, env=env, text=True).strip()
-assert plain.startswith("http://127.0.0.1:") and "#token=" in plain and "&profile=" in plain
-assert "\\u0026" not in plain and "\n" not in plain
+assert api("dashboard")["item"]["server_id"] == dashboard["server_id"]
+started = api("dashboard", "start")
+assert started["changed"] and started["item"]["server_id"] == dashboard["server_id"]
+assert started["item"]["url"].startswith("http://127.0.0.1:")
+assert "#token=" in started["item"]["url"] and "&profile=" in started["item"]["url"]
 url = urllib.parse.urlsplit(dashboard["url"])
 origin = f"{url.scheme}://{url.netloc}"
 bootstrap = urllib.parse.parse_qs(url.fragment)["token"][0]
@@ -233,11 +234,11 @@ try:
     next_run = mutate("claim", created)
     mutate("unclaim", created, {"reason": "CLI management check"}, expected_run=next_run["run"]["id"], revision=revision())
     http("/api/profiles", expected=403, headers={"Origin": "https://example.invalid"})
-    assert api("dashboard", "status")["running"]
+    assert api("dashboard", "status")["item"]["running"]
 finally:
-    assert api("dashboard", "stop")["stopped"]
+    assert api("dashboard", "stop")["changed"]
 for _ in range(40):
-    if not api("dashboard", "status")["running"]:
+    if not api("dashboard", "status")["item"]["running"]:
         break
     time.sleep(.05)
 else:

@@ -47,28 +47,31 @@ func TestPreviewConflictArchiveRestoreAndPurge(t *testing.T) {
 	if err != nil || !result.Replayed {
 		t.Fatal(result, err)
 	}
-	if _, err = e.Purge(ctx, id); err == nil || err.Code != "retention_active" {
-		t.Fatal(err)
+	if _, changed, err := e.Purge(ctx, id); err == nil || err.Code != "retention_active" || changed {
+		t.Fatal(changed, err)
 	}
-	if _, err = e.Restore(ctx, id); err != nil {
-		t.Fatal(err)
+	if _, changed, err := e.Restore(ctx, id); err != nil || !changed {
+		t.Fatal(changed, err)
 	}
 	restored, er := os.ReadFile(path)
 	if er != nil || string(restored) != string(other) {
 		t.Fatal("restore mismatch", er)
 	}
-	if _, err = e.Restore(ctx, id); err != nil {
-		t.Fatal(err)
+	if _, changed, err := e.Restore(ctx, id); err != nil || changed {
+		t.Fatal(changed, err)
 	}
 	var a Archive
 	tasks.ReadPrivate(e.archivePath(id, "entry.json"), &a)
 	a.ArchivedAt = time.Now().Add(-31 * 24 * time.Hour)
 	write(e.archivePath(id, "entry.json"), a)
-	if _, err = e.Purge(ctx, id); err != nil {
-		t.Fatal(err)
+	if _, changed, err := e.Purge(ctx, id); err != nil || !changed {
+		t.Fatal(changed, err)
 	}
-	if _, err = e.Restore(ctx, id); err == nil || err.Code != "archive_purged" {
-		t.Fatal(err)
+	if _, changed, err := e.Purge(ctx, id); err != nil || changed {
+		t.Fatal(changed, err)
+	}
+	if _, changed, err := e.Restore(ctx, id); err == nil || err.Code != "archive_purged" || changed {
+		t.Fatal(changed, err)
 	}
 }
 func TestActiveTaskProfileRetained(t *testing.T) {
@@ -90,7 +93,7 @@ func TestErrorExitCodes(t *testing.T) {
 	if _, err := engine.Apply(context.Background(), "bad-id", []string{"bad-id"}, "bad-id"); err == nil || err.Code != "invalid_argument" || err.ExitCode != 2 {
 		t.Fatal("invalid cleanup input contract", err)
 	}
-	if _, err := engine.Restore(context.Background(), tasks.ID()); err == nil || err.Code != "archive_not_found" || err.ExitCode != 3 {
+	if _, _, err := engine.Restore(context.Background(), tasks.ID()); err == nil || err.Code != "archive_not_found" || err.ExitCode != 3 {
 		t.Fatal("missing archive contract", err)
 	}
 	for code, want := range map[string]int{"invalid_argument": 2, "revision_conflict": 3, "storage_error": 1} {

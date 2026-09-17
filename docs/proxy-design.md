@@ -114,10 +114,11 @@ start와 stop은 request UUID를 사용한다. 같은 UUID와 입력을 재전�
 반환한다. 같은 UUID에 다른 입력을 사용하면 `request_conflict`다. 동시 start는
 daemon 하나만 만든다.
 
-status는 다음 정보를 반환한다.
-
-- `running`, `state`, `started_at`, `reason`
-- reservation에서 계산한 `port`, `url`
+status는 `data.item`에 `running`, `state`, `started_at`, `reason`과 reservation에서
+계산한 `port`, `url`을 반환한다. list는 `data.items`에 route·instance 진단을 반환한다.
+start·stop은 `data.item`의 상태와 별도로 `data.changed`·`data.replayed`를 제공하며,
+false도 생략하지 않는다. 재시도에서는 최초 changed를 유지한다.
+전체 출력 종류와 마이그레이션은 [CLI 출력 계약](cli-output.md)을 따른다.
 
 control endpoint에 접근할 수 없고 lease가 해제됐으면 상태는 `interrupted`다. 이미
 중지된 proxy의 stop은 변경 없는 성공이다.

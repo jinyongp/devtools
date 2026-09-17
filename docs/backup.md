@@ -28,6 +28,8 @@ profile 생략은 전역 데이터에 존재하는 모든 profile을 선택한�
 
 백업은 값과 작업 저장소의 공통 잠금 아래에서 일관된 스냅샷을 획득한다. 생성 응답에는 파일 경로, 생성 시각, profile별 값·작업 데이터 존재 여부가 들어간다. inspect는 개인키로 전체 암호문을 검증한 뒤 같은 메타데이터를 반환한다. 평문 문서 크기는 최대 128 MiB다.
 
+CLI의 keygen·configure·create는 `data.item`에 결과 메타데이터를, `data.changed`에 쓰기 여부를 반환한다. inspect는 `data.item`을 반환한다. restore는 `digest`·`targets`·`applied` 등 계획 보고서를 유지하며 `changed`와 `replayed`를 함께 제공한다. 미리보기에서는 둘 다 false이고, 동일한 적용 요청의 재시도에서는 최초 changed를 유지한 채 replayed가 true다. 전체 규칙은 [CLI 출력 계약](cli-output.md)을 따른다.
+
 ## 복구 미리 보기와 적용
 
 전체 백업에서도 복구는 profile 단위로 적용한다. `--profile`은 백업 안의 원본, `--as`는 복구할 대상이다. 대상을 생략하면 `<원본>-restored`를 사용한다. 이름 길이 제한에 걸리면 `--as`로 유효한 이름을 지정한다.

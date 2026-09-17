@@ -126,9 +126,9 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 			case "apply":
 				result, err = engine.Apply(r.Context(), q.Plan, q.IDs, q.RequestID)
 			case "restore":
-				result, err = engine.Restore(r.Context(), q.ID)
+				result, _, err = engine.Restore(r.Context(), q.ID)
 			case "purge":
-				result, err = engine.Purge(r.Context(), q.ID)
+				result, _, err = engine.Purge(r.Context(), q.ID)
 			default:
 				invalidAction(w)
 				return

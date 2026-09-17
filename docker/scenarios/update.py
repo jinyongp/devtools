@@ -20,6 +20,7 @@ execute('sh', os.environ['DEVTOOLS_TEST_INSTALLER'], 'install', '--version',
 execute(str(binary), 'var', 'set', 'KEEP', '--value', 'preserved', '--profile', 'update')
 updated = execute(str(alias), 'update', '--version', '0.0.0-test.2', '--source',
                   os.environ['DEVTOOLS_TEST_RELEASES'])
+assert updated['data']['changed'] is True
 assert updated['data']['alias'] == {'name': 'dvt', 'status': 'unchanged'}
 assert execute(str(binary), 'version')['data']['version'] == '0.0.0-test.2'
 assert execute(str(binary), 'var', 'get', 'KEEP', '--profile', 'update')['data']['value'] == 'preserved'

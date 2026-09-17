@@ -62,11 +62,11 @@ func TestEncryptedRestoreAndReplay(t *testing.T) {
 	}
 	id := tasks.ID()
 	result, err := e.Restore(context.Background(), path, identity, "source", "copy", plan.Digest, id, false)
-	if err != nil || !result.Applied {
+	if err != nil || !result.Applied || result.Replayed {
 		t.Fatal(err)
 	}
 	again, err := e.Restore(context.Background(), path, identity, "source", "copy", plan.Digest, id, false)
-	if err != nil || again.Digest != result.Digest {
+	if err != nil || again.Digest != result.Digest || !again.Replayed {
 		t.Fatal("retry failed", err)
 	}
 	restored, err := (values.Store{Directory: store.Directory, Profile: "copy"}).Read()

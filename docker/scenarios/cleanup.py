@@ -26,10 +26,13 @@ item=next(i for i in plan["items"] if i["kind"]=="expired_query")
 query.write_text(query.read_text()+" ")
 assert api("cleanup","apply",plan["id"],"--item",item["id"],"--request-id",str(uuid.uuid4()),expected=3)["code"]=="revision_conflict"
 plan=api("cleanup","preview");item=next(i for i in plan["items"] if i["kind"]=="expired_query");rid=str(uuid.uuid4())
-api("cleanup","apply",plan["id"],"--item",item["id"],"--request-id",rid)
+applied=api("cleanup","apply",plan["id"],"--item",item["id"],"--request-id",rid)
+assert applied["changed"] and not applied["replayed"] and len(applied["items"])==1
 assert not query.exists()
 assert api("cleanup","apply",plan["id"],"--item",item["id"],"--request-id",rid)["replayed"]
-api("cleanup","restore",item["id"])
+restored=api("cleanup","restore",item["id"])
+assert restored["changed"] and restored["item"]["id"]==item["id"]
+assert not api("cleanup","restore",item["id"])["changed"]
 assert query.exists()
 assert api("cleanup","purge",item["id"],expected=3)["code"]=="retention_active"
 created=api("task","add","--title","Completed fixture","--request-id",str(uuid.uuid4()))
@@ -47,7 +50,7 @@ api("cleanup","restore",item["id"])
 assert api("task","show",tid)["item"]["state"]=="canceled"
 ghost=root/"gone";ghost.mkdir()
 (ghost/"devtools.toml").write_text('profile="gone"\n[ports.web]\nport=25100\nrange=[25100,25199]\n')
-allocated=api("port","allocate","web","--dir",str(ghost))
+allocated=api("port","allocate","web","--dir",str(ghost))["item"]
 shutil.rmtree(ghost)
 plan=api("cleanup","preview","--profile","gone")
 item=next(i for i in plan["items"] if i["kind"]=="missing_instance")
@@ -63,7 +66,7 @@ identity=root/"identity";recipient=root/"recipient";backups=root/"backups"
 api("backup","keygen","--identity-file",str(identity),"--recipient-file",str(recipient))
 api("backup","configure","--directory",str(backups),"--recipient-file",str(recipient))
 for n in range(4):
-    path=api("backup","create")["path"];age=time.time()-(40-n)*86400;os.utime(path,(age,age))
+    path=api("backup","create")["item"]["path"];age=time.time()-(40-n)*86400;os.utime(path,(age,age))
 plan=api("cleanup","preview")
 assert len([i for i in plan["items"] if i["kind"]=="old_backup"])==1
 print("Installed cleanup stale previews, task archive/restore, occupied port protection, missing instances and backup retention verified")

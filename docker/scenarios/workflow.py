@@ -38,8 +38,8 @@ api("instance","name","main")
 api("var","set","MESSAGE","--value","first")
 def start(cwd):return api("process","start","web","--request-id",str(uuid.uuid4()),cwd=cwd)["item"]
 main=start(project);parallel=start(worktree)
-main_port=api("port","show","web")["port"]
-other_port=api("port","show","web",cwd=worktree)["port"]
+main_port=api("port","show","web")["item"]["port"]
+other_port=api("port","show","web",cwd=worktree)["item"]["port"]
 assert main_port!=other_port
 def read(port,message):
     for _ in range(80):
@@ -62,7 +62,7 @@ assert result.returncode==0 and result.stdout.strip()=="first"
 identity=project/"identity";recipient=project/"recipient";backups=project/"backups"
 api("backup","keygen","--identity-file",str(identity),"--recipient-file",str(recipient))
 api("backup","configure","--directory",str(backups),"--recipient-file",str(recipient))
-url=urllib.parse.urlsplit(api("dashboard", "--json")["url"]);origin=f"{url.scheme}://{url.netloc}"
+url=urllib.parse.urlsplit(api("dashboard")["item"]["url"]);origin=f"{url.scheme}://{url.netloc}"
 def http(path,body=None,token=""):
     headers={"Origin":origin,"Content-Type":"application/json"}
     if token:headers["Authorization"]="Bearer "+token

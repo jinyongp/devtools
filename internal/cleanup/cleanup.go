@@ -490,36 +490,36 @@ func (e Engine) Archives() ([]Archive, *protocol.Error) {
 	sort.Slice(items, func(i, j int) bool { return items[i].ArchivedAt.Before(items[j].ArchivedAt) })
 	return items, nil
 }
-func (e Engine) Restore(ctx context.Context, id string) (Archive, *protocol.Error) {
+func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protocol.Error) {
 	var a Archive
 	if !validID(id) {
-		return a, fail("invalid_argument")
+		return a, false, fail("invalid_argument")
 	}
 	release, err := e.lock(ctx)
 	if err != nil {
-		return a, err
+		return a, false, err
 	}
 	defer release()
 	if tasks.ReadPrivate(e.archivePath(id, "entry.json"), &a) != nil || a.ID != id {
-		return a, fail("archive_not_found")
+		return a, false, fail("archive_not_found")
 	}
 	if !e.validItem(a.Item) {
-		return a, fail("invalid_argument")
+		return a, false, fail("invalid_argument")
 	}
 	if a.PurgedAt != nil {
-		return a, fail("archive_purged")
+		return a, false, fail("archive_purged")
 	}
 	if a.RestoredAt != nil {
-		return a, nil
+		return a, false, nil
 	}
 	b, er := maintenance.Read(e.archivePath(id, "payload"), 128<<20)
 	if er != nil {
-		return a, fail("storage_error")
+		return a, false, fail("storage_error")
 	}
 	if a.Kind == "missing_instance" {
 		var v location
 		if json.Unmarshal(b, &v) != nil {
-			return a, fail("storage_error")
+			return a, false, fail("storage_error")
 		}
 		ps := ports.Store{Directory: filepath.Join(e.Data, "ports")}
 		err = ps.Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
@@ -550,53 +550,53 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, *protocol.Erro
 			return true, nil
 		})
 		if err != nil {
-			return a, err
+			return a, false, err
 		}
 	} else {
 		existing, er := maintenance.Read(a.Source, 128<<20)
 		if er == nil && digest(existing) != digest(b) {
-			return a, fail("revision_conflict")
+			return a, false, fail("revision_conflict")
 		}
 		if er != nil && !errors.Is(er, os.ErrNotExist) {
-			return a, fail("storage_error")
+			return a, false, fail("storage_error")
 		}
 		if er != nil && maintenance.Write(a.Source, b) != nil {
-			return a, fail("storage_error")
+			return a, false, fail("storage_error")
 		}
 	}
 	now := time.Now().UTC()
 	a.RestoredAt = &now
 	if write(e.archivePath(id, "entry.json"), a) != nil {
-		return a, fail("storage_error")
+		return a, false, fail("storage_error")
 	}
-	return a, nil
+	return a, true, nil
 }
-func (e Engine) Purge(ctx context.Context, id string) (Archive, *protocol.Error) {
+func (e Engine) Purge(ctx context.Context, id string) (Archive, bool, *protocol.Error) {
 	var a Archive
 	if !validID(id) {
-		return a, fail("invalid_argument")
+		return a, false, fail("invalid_argument")
 	}
 	release, err := e.lock(ctx)
 	if err != nil {
-		return a, err
+		return a, false, err
 	}
 	defer release()
 	if tasks.ReadPrivate(e.archivePath(id, "entry.json"), &a) != nil || a.ID != id {
-		return a, fail("archive_not_found")
+		return a, false, fail("archive_not_found")
 	}
 	if a.PurgedAt != nil {
-		return a, nil
+		return a, false, nil
 	}
 	if time.Since(a.ArchivedAt) < 30*24*time.Hour {
-		return a, fail("retention_active")
+		return a, false, fail("retention_active")
 	}
 	if er := os.Remove(e.archivePath(id, "payload")); er != nil && !errors.Is(er, os.ErrNotExist) {
-		return a, fail("storage_error")
+		return a, false, fail("storage_error")
 	}
 	now := time.Now().UTC()
 	a.PurgedAt = &now
 	if write(e.archivePath(id, "entry.json"), a) != nil {
-		return a, fail("storage_error")
+		return a, false, fail("storage_error")
 	}
-	return a, nil
+	return a, true, nil
 }

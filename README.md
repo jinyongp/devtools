@@ -95,7 +95,7 @@ secret은 `devtools sec`로 등록하며 조회에는 메타데이터만 제공�
 JSON 계약은 `devtools schema task claim`처럼 필요한 명령만 조회하세요.
 `devtools schema`는 짧은 그룹 목록을, `devtools schema --all`은 전체 계약을 제공합니다.
 등록된 프로젝트 명령은 `devtools command list`로 찾고 `devtools command inspect NAME`으로 설정을 확인할 수 있습니다.
-조회·변경 결과는 JSON이며 도움말은 텍스트를 출력합니다. `devtools command run`은 자식 프로그램의 출력과 종료 코드를 전달하며, 기존 `devtools run`도 같은 동작의 alias로 계속 지원합니다.
+조회·변경 결과는 JSON이며 목록은 `data.items`, 단일 리소스는 `data.item`, 변경 여부는 `data.changed`로 확인합니다. 도움말은 텍스트, completion은 스크립트 원문을 출력합니다. `devtools command run`은 자식 프로그램의 출력과 종료 코드를 전달하며, 기존 `devtools run`도 같은 동작의 alias로 계속 지원합니다. 출력 종류, 보고서 필드와 이전 JSON 경로의 변경은 [CLI 출력 계약](docs/cli-output.md)을 참고하세요.
 
 ## 업데이트
 

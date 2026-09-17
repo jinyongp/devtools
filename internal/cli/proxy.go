@@ -19,8 +19,6 @@ func proxyStatusSchema() map[string]any {
 		"url":        stringSchema(),
 		"started_at": map[string]any{"type": []string{"string", "null"}, "format": "date-time"},
 		"reason":     stringSchema(),
-		"changed":    map[string]any{"type": "boolean"},
-		"replayed":   map[string]any{"type": "boolean"},
 	}, "running", "state", "port", "url", "started_at", "reason")
 }
 
@@ -49,7 +47,10 @@ func (a *App) proxyStore() (proxy.Manager, *protocol.Error) {
 
 func (a *App) registerProxy() {
 	for _, action := range []string{"start", "status", "list", "stop"} {
-		command := Command{Name: "proxy " + action, Output: proxyStatusSchema()}
+		command := Command{Name: "proxy " + action, Output: itemOutput(proxyStatusSchema())}
+		if action == "start" || action == "stop" {
+			command.Output = object(map[string]any{"item": proxyStatusSchema(), "changed": map[string]any{"type": "boolean"}, "replayed": map[string]any{"type": "boolean"}}, "item", "changed", "replayed")
+		}
 		switch action {
 		case "start":
 			command.Description = "Start or reuse the user-local reverse proxy daemon."
@@ -72,28 +73,33 @@ func (a *App) registerProxy() {
 			if err != nil {
 				return nil, err
 			}
+			q := proxy.Request{Action: action, RequestID: request.Options["request-id"]}
 			switch action {
 			case "status":
-				return manager.Status(ctx)
+				item, err := manager.Status(ctx)
+				return map[string]any{"item": proxyStatusResult(item)}, err
 			case "list":
 				items, listErr := (proxy.Resolver{Ports: managerPortStore(manager)}).List(ctx, request.Options["profile"])
 				return map[string]any{"items": items}, listErr
 			case "start":
-				var port *int
 				if value := request.Options["port"]; value != "" {
 					parsed, parseErr := strconv.Atoi(value)
 					if parseErr != nil || parsed > 65535 {
 						return nil, argumentError("Expected a TCP port from 1 to 65535.", "port")
 					}
-					port = &parsed
+					q.Port = &parsed
 				}
-				return manager.Apply(ctx, proxy.Request{Action: action, Port: port, RequestID: request.Options["request-id"]})
-			default:
-				return manager.Apply(ctx, proxy.Request{Action: action, RequestID: request.Options["request-id"]})
 			}
+			result, err := manager.Apply(ctx, q)
+			return map[string]any{"item": proxyStatusResult(result), "changed": result.Changed, "replayed": result.Replayed}, err
 		}
 		a.commands = append(a.commands, command)
 	}
+}
+
+// Mutation metadata belongs beside the resource, including false values.
+func proxyStatusResult(status proxy.Status) map[string]any {
+	return map[string]any{"running": status.Running, "state": status.State, "port": status.Port, "url": status.URL, "started_at": status.StartedAt, "reason": status.Reason}
 }
 
 func managerPortStore(manager proxy.Manager) ports.Store {

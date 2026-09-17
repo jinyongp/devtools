@@ -101,9 +101,9 @@ func (a *App) registerCommands() {
 			Description: "List configured project commands and their execution summary.",
 			Options:     projectOptions,
 			Output: object(map[string]any{
-				"profile":  stringSchema(),
-				"commands": map[string]any{"type": "array", "items": projectCommandSummarySchema()},
-			}, "profile", "commands"),
+				"profile": stringSchema(),
+				"items":   map[string]any{"type": "array", "items": projectCommandSummarySchema()},
+			}, "profile", "items"),
 			Run: a.listProjectCommands,
 		},
 		Command{
@@ -113,20 +113,20 @@ func (a *App) registerCommands() {
 			Arguments:   []Argument{{Name: "command", Required: true, Pattern: project.ProfilePattern}},
 			Output: object(map[string]any{
 				"profile": stringSchema(),
-				"command": projectCommandDetailsSchema(),
-			}, "profile", "command"),
+				"item":    projectCommandDetailsSchema(),
+			}, "profile", "item"),
 			Run: a.inspectProjectCommand,
 		},
 		Command{
-			Name:         "command run",
-			Aliases:      []string{"run"},
-			Description:  "Execute a configured command or a command after -- with profile values.",
-			Options:      profileOptions(true),
-			Arguments:    []Argument{{Name: "command", Pattern: project.ProfilePattern}},
-			ChildArgs:    true,
-			StreamOutput: true,
-			Output:       map[string]any{},
-			Run:          a.runCommand,
+			Name:        "command run",
+			Aliases:     []string{"run"},
+			Description: "Execute a configured command or a command after -- with profile values.",
+			Options:     profileOptions(true),
+			Arguments:   []Argument{{Name: "command", Pattern: project.ProfilePattern}},
+			ChildArgs:   true,
+			OutputMode:  OutputPassthrough,
+			Output:      map[string]any{},
+			Run:         a.runCommand,
 		},
 	)
 }
@@ -145,7 +145,7 @@ func (a *App) listProjectCommands(_ context.Context, _ IO, request Request) (any
 	for _, name := range names {
 		commands = append(commands, summarizeProjectCommand(name, p.Commands[name]))
 	}
-	return map[string]any{"profile": p.Profile, "commands": commands}, nil
+	return map[string]any{"profile": p.Profile, "items": commands}, nil
 }
 
 func (a *App) inspectProjectCommand(_ context.Context, _ IO, request Request) (any, *protocol.Error) {
@@ -158,7 +158,7 @@ func (a *App) inspectProjectCommand(_ context.Context, _ IO, request Request) (a
 	if !exists {
 		return nil, protocol.NewError("command_not_found", "The selected project command is not defined.", 3, nil)
 	}
-	return map[string]any{"profile": p.Profile, "command": describeProjectCommand(name, command, p.Requirements)}, nil
+	return map[string]any{"profile": p.Profile, "item": describeProjectCommand(name, command, p.Requirements)}, nil
 }
 
 func summarizeProjectCommand(name string, command project.Command) projectCommandSummary {

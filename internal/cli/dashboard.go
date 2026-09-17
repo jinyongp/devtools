@@ -6,7 +6,6 @@ import (
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
-	"io"
 	"path/filepath"
 )
 
@@ -20,10 +19,16 @@ func (a *App) registerDashboard() {
 			aliases = []string{"dashboard start"}
 		}
 		options := taskOptions()
+		fields := map[string]any{"running": map[string]any{"type": "boolean"}, "server_id": map[string]any{"type": []string{"string", "null"}}}
+		output := itemOutput(fieldsSchema(fields))
 		if action == "start" {
-			options = append(options, Option{Name: "json", Boolean: true, Description: "Return server metadata as JSON instead of the dashboard URL."})
+			fields["url"] = stringSchema()
+			fields["initial_profile"] = stringSchema()
+			output = changedItemOutput(fieldsSchema(fields))
+		} else if action == "stop" {
+			output = object(map[string]any{"changed": map[string]any{"type": "boolean"}}, "changed")
 		}
-		a.commands = append(a.commands, Command{Name: name, Aliases: aliases, Description: "Manage the local D3 Canvas dashboard and editing session.", Options: options, StreamOutput: action == "start", Output: map[string]any{"type": "object"}, Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+		a.commands = append(a.commands, Command{Name: name, Aliases: aliases, Description: "Manage the local D3 Canvas dashboard and editing session.", Options: options, Output: output, Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 			dirs, e := paths.Current()
 			if e != nil {
 				return nil, argumentError("Cannot resolve user directories.", "")
@@ -45,13 +50,14 @@ func (a *App) registerDashboard() {
 			if err != nil {
 				return nil, err
 			}
-			if action == "start" && r.Options["json"] != "true" {
-				if _, err := io.WriteString(streams.Out, result["url"].(string)+"\n"); err != nil {
-					return nil, protocol.NewError("io_error", "Cannot write dashboard URL.", 1, nil)
-				}
-				return processResult{ExitCode: 0}, nil
+			if action == "stop" {
+				return map[string]any{"changed": result["stopped"]}, nil
 			}
-			return result, nil
+			if action == "start" {
+				// Starting also issues a fresh dashboard login link when reusing a server.
+				return map[string]any{"item": result, "changed": true}, nil
+			}
+			return map[string]any{"item": result}, nil
 		}})
 	}
 }

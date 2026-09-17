@@ -63,10 +63,10 @@ devtools version
 | `schema` | 짧은 명령 그룹 목록을 JSON으로 반환한다. |
 | `schema var get` | 지정한 명령의 입력·출력 스키마를 반환한다. |
 | `schema --all` | 전체 카탈로그를 반환한다. 전체 계약 수집이 필요할 때 사용한다. |
-| `version` | 빌드 버전 정보를 반환한다. |
+| `version` | 빌드 버전과 CLI `protocol_version`을 반환한다. 응답 envelope 버전은 최상위 `schema_version`에 있다. |
 | `help`, `--help` | 사람이 읽을 수 있는 짧은 텍스트 도움말을 출력한다. |
 
-`init`은 profile을 명시적으로 받는다. 같은 profile의 유효한 설정이 있으면 내용을 바꾸지 않고 성공한다. 다른 profile이거나 잘못된 설정이면 기존 파일을 보존하고 오류를 반환한다. 생성 결과에는 `created`, `config_path`, `profile`이 포함된다. Git 스테이징은 수행하지 않는다.
+`init`은 profile을 명시적으로 받는다. 같은 profile의 유효한 설정이 있으면 내용을 바꾸지 않고 성공한다. 다른 profile이거나 잘못된 설정이면 기존 파일을 보존하고 오류를 반환한다. 생성 결과는 `data.item`에 `config_path`와 `profile`, `data.changed`에 생성 여부를 반환한다. Git 스테이징은 수행하지 않는다.
 
 `schema`와 `project inspect`는 조회 명령이다. 전자는 호출 방법을 확인하고, 후자는 현재 프로젝트 연결을 확인하는 데 사용한다.
 
@@ -379,7 +379,7 @@ env = "test"
 `devtools doctor [COMMAND]`로 프로젝트 환경과 필수 조건을 진단한다.
 설정의 requirements와 실행 전 검사는 [개발환경 진단](doctor.md)을 따른다.
 
-조회·변경 명령은 기본적으로 JSON을 반환한다. `--json`은 필요하지 않다. 성공은 stdout, 오류는 stderr로 분리하고, 오류에는 에이전트가 분기할 수 있는 고정된 코드가 포함된다. 응답의 `schema_version`은 도구가 제공하는 정보이며 사용자 설정값이 아니다.
+조회·변경 명령은 항상 JSON을 반환한다. 성공은 stdout, Devtools 오류는 stderr로 분리하고, 오류에는 에이전트가 분기할 수 있는 고정된 코드가 포함된다. 도움말은 text, completion은 artifact, 명령 실행은 passthrough로 구분한다. `devtools schema COMMAND`의 `output_mode`에서 출력 종류를 확인한다. 공통 필드와 이전 버전의 JSON 경로 변경은 [CLI 출력 계약](cli-output.md)을 따른다. 응답의 `schema_version`은 도구가 제공하는 envelope 버전이며 사용자 설정값이 아니다.
 
 일반 명령은 입력을 요구하는 프롬프트를 띄우지 않는다. 명시적으로 지정한 stdin 입력은 데이터 입력 경로이며 대화형 질의가 아니다.
 
@@ -392,9 +392,11 @@ env = "test"
 | var·sec 등록/제거, env 생성/삭제 | `profile`, `changed` |
 | var·sec 목록 | `profile`, `items` |
 | var 값 조회 | `profile`, `value`, `metadata` |
-| env 목록 | `profile`, `envs` |
-| command 목록 | `profile`, `commands` |
-| command 상세 조회 | `profile`, `command` |
+| env 목록 | `profile`, `items` |
+| command 목록 | `profile`, `items` |
+| command 상세 조회 | `profile`, `item` |
+| project 상세 조회 | `item`, `paths` |
+| init | `item`, `changed` |
 
 var·sec 목록의 `items`와 var 조회의 `metadata`에는 `key`, `kind`, `source`, `overrides`가 포함된다. `source`는 `common` 또는 `env`이며, `overrides`는 선택한 env 값이 공통 값을 덮어썼는지 나타낸다.
 

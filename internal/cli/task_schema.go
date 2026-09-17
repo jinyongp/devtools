@@ -58,6 +58,21 @@ func taskBody(def tasks.Definition) map[string]any {
 	}
 	return body
 }
+func taskQueryOutput(name string) map[string]any {
+	output := taskOutput(false)
+	slot := ""
+	switch name {
+	case "list", "workstream list", "validation list", "checkpoint list", "history", "workstream history", "current":
+		slot = "items"
+	case "show", "next", "workstream show", "validation show", "workstream spec show", "workstream plan show":
+		slot = "item"
+	}
+	if slot != "" {
+		output["required"] = append(output["required"].([]string), slot)
+	}
+	return output
+}
+
 func taskOutput(mutation bool) map[string]any {
 	str := stringSchema()
 	integer := map[string]any{"type": "integer", "minimum": 0}

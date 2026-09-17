@@ -34,17 +34,17 @@ type Option struct {
 }
 
 type Command struct {
-	BodySchema   map[string]any                                            `json:"body_schema,omitempty"`
-	Aliases      []string                                                  `json:"aliases"`
-	Arguments    []Argument                                                `json:"arguments"`
-	ChildArgs    bool                                                      `json:"accepts_child_args"`
-	StreamOutput bool                                                      `json:"stream_output"`
-	InputOneOf   []map[string]any                                          `json:"-"`
-	Name         string                                                    `json:"name"`
-	Description  string                                                    `json:"description"`
-	Options      []Option                                                  `json:"options"`
-	Output       map[string]any                                            `json:"output_schema"`
-	Run          func(context.Context, IO, Request) (any, *protocol.Error) `json:"-"`
+	BodySchema  map[string]any                                            `json:"body_schema,omitempty"`
+	Aliases     []string                                                  `json:"aliases"`
+	Arguments   []Argument                                                `json:"arguments"`
+	ChildArgs   bool                                                      `json:"accepts_child_args"`
+	OutputMode  OutputMode                                                `json:"output_mode"`
+	InputOneOf  []map[string]any                                          `json:"-"`
+	Name        string                                                    `json:"name"`
+	Description string                                                    `json:"description"`
+	Options     []Option                                                  `json:"options"`
+	Output      map[string]any                                            `json:"output_schema"`
+	Run         func(context.Context, IO, Request) (any, *protocol.Error) `json:"-"`
 }
 
 type App struct {
@@ -81,21 +81,26 @@ func New(version, commit string) *App {
 	a.commands = []Command{
 		{Name: "init", Description: "Create project configuration in the current directory without overwriting existing files.", Options: []Option{
 			{Name: "profile", Description: "Project profile identifier.", Required: true, Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128},
-		}, Output: object(map[string]any{"created": map[string]any{"type": "boolean"}, "config_path": stringSchema(), "profile": stringSchema()}, "created", "config_path", "profile"), Run: func(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
-			return project.Init(".", request.Options["profile"])
+		}, Output: changedItemOutput(object(map[string]any{"config_path": stringSchema(), "profile": stringSchema()}, "config_path", "profile")), Run: func(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
+			result, err := project.Init(".", request.Options["profile"])
+			return map[string]any{"item": map[string]string{"config_path": result.ConfigPath, "profile": result.Profile}, "changed": result.Created}, err
 		}},
 		{Name: "help", Description: "Describe commands and their options.", Options: []Option{}, Output: map[string]any{"$ref": "#/$defs/catalog"}, Run: func(context.Context, IO, Request) (any, *protocol.Error) { return a.catalog(), nil }},
-		{Name: "version", Description: "Report build and protocol versions.", Options: []Option{}, Output: object(map[string]any{"version": stringSchema(), "commit": stringSchema()}, "version", "commit"), Run: func(context.Context, IO, Request) (any, *protocol.Error) {
-			return map[string]string{"version": version, "commit": commit}, nil
+		{Name: "version", Description: "Report build and protocol versions.", Options: []Option{}, Output: object(map[string]any{
+			"version":          stringSchema(),
+			"commit":           stringSchema(),
+			"protocol_version": map[string]any{"type": "integer", "const": protocol.ProtocolVersion},
+		}, "version", "commit", "protocol_version"), Run: func(context.Context, IO, Request) (any, *protocol.Error) {
+			return map[string]any{"version": version, "commit": commit, "protocol_version": protocol.ProtocolVersion}, nil
 		}},
 		{Name: "schema", Description: "Describe the machine interface using JSON Schema.", Options: []Option{}, Output: map[string]any{"$ref": "#/$defs/catalog"}, Run: func(context.Context, IO, Request) (any, *protocol.Error) { return a.catalog(), nil }},
 		{Name: "project inspect", Description: "Resolve a project profile and user data paths without reading secrets.", Options: []Option{
 			{Name: "dir", Description: "Directory to search from.", Default: ".", MinLength: 1},
 			{Name: "profile", Description: "Explicit profile; bypasses configuration lookup.", Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128},
 		}, Output: object(map[string]any{
-			"project": object(map[string]any{"profile": stringSchema(), "source": map[string]any{"enum": []string{"flag", "file"}}, "config_path": stringSchema(), "root": stringSchema()}, "profile", "source"),
-			"paths":   object(map[string]any{"config": stringSchema(), "data": stringSchema(), "cache": stringSchema()}, "config", "data", "cache"),
-		}, "project", "paths"), Run: inspect},
+			"item":  object(map[string]any{"profile": stringSchema(), "source": map[string]any{"enum": []string{"flag", "file"}}, "config_path": stringSchema(), "root": stringSchema()}, "profile", "source"),
+			"paths": object(map[string]any{"config": stringSchema(), "data": stringSchema(), "cache": stringSchema()}, "config", "data", "cache"),
+		}, "item", "paths"), Run: inspect},
 	}
 	a.registerTools()
 	a.registerCommands()
@@ -119,11 +124,14 @@ func New(version, commit string) *App {
 				a.commands[i].Options = []Option{{Name: "all", Boolean: true, Description: "Return the complete catalog (large output)."}}
 			} else {
 				a.commands[i].Description = "Show concise text usage for a command or group."
-				a.commands[i].StreamOutput = true
+				a.commands[i].OutputMode = OutputText
 			}
 		}
 	}
 	for i := range a.commands {
+		if a.commands[i].OutputMode == "" {
+			a.commands[i].OutputMode = OutputJSON
+		}
 		if a.commands[i].Aliases == nil {
 			a.commands[i].Aliases = []string{}
 		}
@@ -145,8 +153,8 @@ func inspect(ctx context.Context, streams IO, request Request) (any, *protocol.E
 		return nil, protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil)
 	}
 	return struct {
-		Project project.Context   `json:"project"`
-		Paths   paths.Directories `json:"paths"`
+		Item  project.Context   `json:"item"`
+		Paths paths.Directories `json:"paths"`
 	}{p, dirs}, nil
 }
 
@@ -187,12 +195,6 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		}
 		data, text, found := a.discovery(strings.Join(targetArgs, " "), schema)
 		if !found {
-			if !schema {
-				if writeHelp(streams.Err, "Unknown command. Run devtools --help.\n") != nil {
-					return 1
-				}
-				return 2
-			}
 			return fail(protocol.NewError("invalid_argument", "Unknown help or schema target. Run devtools --help.", 2, nil))
 		}
 		var err error
@@ -234,11 +236,24 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	if err != nil {
 		return fail(err)
 	}
-	if result, ok := data.(processResult); ok {
-		return result.ExitCode
+	if selected.OutputMode == OutputPassthrough {
+		if result, ok := data.(processResult); ok {
+			return result.ExitCode
+		}
+		return fail(protocol.NewError("internal_error", "Process command did not return an exit status.", 1, nil))
 	}
 	if ctx.Err() != nil {
 		return fail(protocol.NewError("canceled", "Execution canceled.", 130, nil))
+	}
+	if selected.OutputMode == OutputText || selected.OutputMode == OutputArtifact {
+		if data != nil {
+			return fail(protocol.NewError("internal_error", "Command output does not match its declared mode.", 1, nil))
+		}
+		return 0
+	}
+	_, processOutput := data.(processResult)
+	if selected.OutputMode != OutputJSON || processOutput {
+		return fail(protocol.NewError("internal_error", "Command output does not match its declared mode.", 1, nil))
 	}
 	if protocol.Success(streams.Out, data) != nil {
 		return fail(protocol.NewError("io_error", "Cannot write output.", 1, nil))

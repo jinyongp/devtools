@@ -32,4 +32,6 @@ restore는 원래 위치에 데이터를 복원한다. 그 위치에 변경된 �
 
 보관함으로 옮기는 단계는 복구 가능성을 유지한다. 실제 공간을 해제하는 purge는 보관 후 30일이 지난 항목에 명시적으로 실행한다. purge 후에는 보관된 payload를 제거하고 처리 메타데이터를 유지한다. restore와 purge는 같은 archive ID로 반복 실행할 수 있다.
 
+CLI의 archives는 `data.items`, apply는 `data.items`와 `data.changed`·`data.replayed`, restore·purge는 `data.item`과 `data.changed`를 반환한다. 이미 처리한 항목의 restore·purge는 changed가 false다. apply의 동일 요청 재전송은 최초 결과를 유지하면서 replayed가 true가 된다. preview의 계획 ID·만료 시각·items 보고서는 유지한다. 공통 규칙은 [CLI 출력 계약](cli-output.md)을 따른다.
+
 dashboard의 **Storage & recovery**에서 후보 선택, 보관함 복구와 영구 삭제를 실행할 수 있다. profile을 선택하면 암호화 백업 생성과 복구 미리 보기·적용도 제공한다. 백업 공개키와 기본 디렉터리는 `devtools backup configure`로 준비한다.

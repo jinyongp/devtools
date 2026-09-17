@@ -54,7 +54,15 @@ func (a *App) registerProcesses() {
 			}}
 		}
 		if action == "start" || action == "stop" || action == "restart" {
+			c.Output = object(map[string]any{"item": map[string]any{"type": "object"}, "changed": map[string]any{"type": "boolean"}, "replayed": map[string]any{"type": "boolean"}}, "item", "changed", "replayed")
 			c.Options = append(c.Options, Option{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe mutation."})
+		}
+		if action == "list" {
+			c.Output = object(map[string]any{"items": map[string]any{"type": "array", "items": map[string]any{"type": "object"}}}, "items")
+		} else if action == "status" {
+			c.Output = itemOutput(map[string]any{"type": "object"})
+		} else if action == "logs" {
+			c.Output = object(map[string]any{"id": stringSchema(), "content": stringSchema()}, "id", "content")
 		}
 		c.Run = func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			s, e := a.serviceStore()
@@ -66,7 +74,8 @@ func (a *App) registerProcesses() {
 				return map[string]any{"items": items}, e
 			}
 			if action == "status" {
-				return s.Status(ctx, r.Args[0])
+				item, err := s.Status(ctx, r.Args[0])
+				return map[string]any{"item": item}, err
 			}
 			if action == "check" {
 				return s.Check(ctx, r.Args[0])

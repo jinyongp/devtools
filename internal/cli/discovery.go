@@ -6,6 +6,8 @@ import (
 	"io"
 	"sort"
 	"strings"
+
+	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 func (a *App) discovery(target string, schema bool) (any, string, bool) {
@@ -33,6 +35,7 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 				if entry["name"] != exact.Name {
 					continue
 				}
+				entry["protocol_version"] = catalog["protocol_version"]
 				delete(entry, "options")
 				delete(entry, "arguments")
 				if len(exact.Aliases) == 0 {
@@ -40,9 +43,6 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 				}
 				if !exact.ChildArgs {
 					delete(entry, "accepts_child_args")
-				}
-				if !exact.StreamOutput {
-					delete(entry, "stream_output")
 				}
 				raw, _ := json.Marshal(entry)
 				if strings.Contains(string(raw), "#/$defs/") {
@@ -96,7 +96,7 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 	}
 	sort.Strings(names)
 	if schema {
-		return map[string]any{"commands": names, "scope": target, "usage": "devtools schema <command>; --all for full catalog"}, "", true
+		return map[string]any{"protocol_version": protocol.ProtocolVersion, "items": names, "scope": target, "usage": "devtools schema <command>; --all for full catalog"}, "", true
 	}
 	heading := "devtools"
 	if target != "" {

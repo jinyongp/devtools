@@ -16,9 +16,20 @@ Command examples here name operations; obtain required flags from their help.
 
 Resolve the profile from tracked `devtools.toml` or explicit `--profile`.
 Worktrees with the same profile share values and task history.
-Data commands return JSON: check the exit code, then `data` or `error.code`.
-Help returns text; `command run` forwards the child's output and exit code. The
-shorter `run` form remains a supported alias.
+Data commands always return JSON: check the exit code, then `data` or `error.code`.
+Lists use `data.items`; single resources use `data.item`. Scalar values and reports
+keep their named fields. Mutations expose `data.changed`; retry-safe mutations also
+expose `data.replayed`, including false values. A replay preserves the original
+changed result and must not be counted as another mutation.
+Schema metadata declares `output_mode`: json, text, artifact, or passthrough.
+Only json commands have `output_schema`, describing the envelope's data.
+Use `version` for build metadata plus `protocol_version`; every JSON response exposes
+the envelope `schema_version` at the top level, and `schema` responses also report the CLI protocol version.
+Help returns text; completion returns a raw script; `command run` forwards the
+child's output and exit code. The shorter `run` form remains a supported alias.
+Devtools errors, including help errors, use JSON stderr; child errors stay raw.
+Dashboard startup returns JSON with its login link in `data.item.url`, without
+an output-format option. Treat this link as a credential.
 
 ## Prepare and run
 

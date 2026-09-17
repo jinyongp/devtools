@@ -10,11 +10,11 @@ import (
 )
 
 func (a *App) registerCompletion() {
-	a.commands = append(a.commands, Command{Name: "completion", Description: "Generate shell completion for zsh, bash, or fish.", Arguments: []Argument{{Name: "shell", Required: true, Pattern: "^(zsh|bash|fish)$"}}, StreamOutput: true, Output: map[string]any{"type": "string"}, Run: func(_ context.Context, streams IO, r Request) (any, *protocol.Error) {
+	a.commands = append(a.commands, Command{Name: "completion", Description: "Generate shell completion for zsh, bash, or fish.", Arguments: []Argument{{Name: "shell", Required: true, Pattern: "^(zsh|bash|fish)$"}}, OutputMode: OutputArtifact, Run: func(_ context.Context, streams IO, r Request) (any, *protocol.Error) {
 		if err := writeHelp(streams.Out, a.completionScript(r.Args[0])); err != nil {
 			return nil, protocol.NewError("io_error", "Cannot write completion script.", 1, nil)
 		}
-		return processResult{ExitCode: 0}, nil
+		return nil, nil
 	}})
 }
 

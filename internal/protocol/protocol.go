@@ -6,7 +6,12 @@ import (
 	"io"
 )
 
-const Version = 1
+const (
+	// EnvelopeVersion versions the common success/error response wrapper.
+	EnvelopeVersion = 1
+	// ProtocolVersion versions the public CLI machine contract, including command data shapes.
+	ProtocolVersion = 2
+)
 
 // Error contains a stable code suitable for programmatic branching.
 type Error struct {
@@ -22,17 +27,22 @@ func NewError(code, message string, exitCode int, details map[string]any) *Error
 	return &Error{Code: code, Message: message, ExitCode: exitCode, Details: details}
 }
 
-type response struct {
+type successResponse struct {
+	SchemaVersion int  `json:"schema_version"`
+	OK            bool `json:"ok"`
+	Data          any  `json:"data"`
+}
+
+type failureResponse struct {
 	SchemaVersion int    `json:"schema_version"`
 	OK            bool   `json:"ok"`
-	Data          any    `json:"data,omitempty"`
-	Error         *Error `json:"error,omitempty"`
+	Error         *Error `json:"error"`
 }
 
 func Success(w io.Writer, data any) error {
-	return json.NewEncoder(w).Encode(response{SchemaVersion: Version, OK: true, Data: data})
+	return json.NewEncoder(w).Encode(successResponse{SchemaVersion: EnvelopeVersion, OK: true, Data: data})
 }
 
 func Failure(w io.Writer, err *Error) error {
-	return json.NewEncoder(w).Encode(response{SchemaVersion: Version, OK: false, Error: err})
+	return json.NewEncoder(w).Encode(failureResponse{SchemaVersion: EnvelopeVersion, OK: false, Error: err})
 }

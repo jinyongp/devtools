@@ -24,7 +24,17 @@ full = call('schema', '--all')
 assert len(index) < 2000 and len(specific) < len(full) / 5
 assert 'input_schema' in json.loads(specific)['data']
 assert 'options' not in json.loads(specific)['data']
-print('Concise help, group discovery, scoped schema, and explicit full catalog passed')
+for output in (index, specific, full, call('schema', 'command')):
+    envelope = json.loads(output)
+    assert envelope['schema_version'] == 1 and envelope['ok'] is True
+    assert envelope['data']['protocol_version'] == 2
+for command in json.loads(full)['data']['commands']:
+    assert command['output_mode'] in ('json', 'text', 'artifact', 'passthrough')
+    assert 'stream_output' not in command
+    assert ('output_schema' in command) == (command['output_mode'] == 'json')
+assert json.loads(index)['data']['items']
+assert json.loads(call('schema', 'command', 'run'))['data'] == json.loads(call('schema', 'run'))['data']
+print('Concise help, versioned output modes, group discovery, scoped schema, and explicit full catalog passed')
 
 release_directory = Path(os.environ['DEVTOOLS_TEST_RELEASES'])
 archive_path = release_directory / 'devtools-skill_0.0.0-test.1.tar.gz'

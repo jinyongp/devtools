@@ -52,14 +52,14 @@ paths = api("project", "inspect")["data"]["paths"]
 assert api("doctor", "server")["data"]["ready"]
 assert not (Path(paths["data"]) / "ports").exists()
 api("var", "set", "HOST", "--value", "127.0.0.1")
-instance = api("instance", "name", "main")["data"]
+instance = api("instance", "name", "main")["data"]["item"]
 first = api("port", "allocate", "api")["data"]
-assert first["created"] and first["port"] == 23000
-assert not api("port", "allocate", "api")["data"]["created"]
+assert first["changed"] and first["item"]["port"] == 23000
+assert not api("port", "allocate", "api")["data"]["changed"]
 
 # Configuration changes preserve committed assignments.
 (root / "devtools.toml").write_text(config.replace("port=23000", "port=23100\nstrict=true"))
-assert api("port", "allocate", "api")["data"]["port"] == 23000
+assert api("port", "allocate", "api")["data"]["item"]["port"] == 23000
 (root / "devtools.toml").write_text(config)
 
 server = subprocess.Popen(["devtools", "run", "server"], cwd=root, env=env,
@@ -71,7 +71,7 @@ try:
             with socket.create_connection(("127.0.0.1", 23000), timeout=.1): break
         except OSError: time.sleep(.05)
     else: raise AssertionError("server did not listen")
-    assert api("port", "check", "api")["data"]["occupancy"] == "in_use"
+    assert api("port", "check", "api")["data"]["item"]["occupancy"] == "in_use"
     assert api("run", "server", expected=3)["error"]["code"] == "port_run_active"
     assert api("port", "release", "api", expected=3)["error"]["code"] == "port_run_active"
     assert execute("devtools", "run", "read").stdout.strip() == "http://127.0.0.1:23000/api/v1"
@@ -100,7 +100,7 @@ with socket.socket() as busy:
     busy.bind(("127.0.0.1", 23000))
     busy.listen()
     assert api("run", "server", expected=3)["error"]["code"] == "port_in_use"
-    assert api("port", "show", "api")["data"]["port"] == 23000
+    assert api("port", "show", "api")["data"]["item"]["port"] == 23000
 
 # Concurrent locations sharing one profile receive distinct persisted ports.
 locations = []
@@ -110,7 +110,7 @@ for n in range(5):
     (d / "devtools.toml").write_text(config)
     locations.append(d)
 with concurrent.futures.ThreadPoolExecutor() as pool:
-    allocations = list(pool.map(lambda d: api("port", "allocate", "api", cwd=d)["data"], locations))
+    allocations = list(pool.map(lambda d: api("port", "allocate", "api", cwd=d)["data"]["item"], locations))
 assert len({a["port"] for a in allocations}) == len(locations)
 assert all(a["port"] != 23000 for a in allocations)
 
@@ -120,7 +120,7 @@ execute("git", "add", "devtools.toml", "server.py")
 execute("git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "fixture")
 worktree = home / "backend-worktree"
 execute("git", "worktree", "add", "--detach", str(worktree))
-wt = api("port", "allocate", "api", cwd=worktree)["data"]
+wt = api("port", "allocate", "api", cwd=worktree)["data"]["item"]
 assert wt["instance_id"] != instance["instance_id"] and wt["port"] != 23000
 execute("git", "worktree", "remove", str(worktree))
 assert len(api("port", "prune")["data"]["removed"]) == 1
@@ -128,11 +128,11 @@ assert len(api("port", "prune")["data"]["removed"]) == 1
 moved = home / "moved"
 root.rename(moved)
 changed = api("instance", "move", "main", "--profile", "backend", "--dir", str(moved), cwd=moved)["data"]
-assert changed["instance_id"] == instance["instance_id"]
-assert api("port", "show", "api", cwd=moved)["data"]["port"] == 23000
-assert api("port", "release", "api", cwd=moved)["data"]["released"]
-assert not api("port", "release", "api", cwd=moved)["data"]["released"]
-assert api("instance", "remove", "main", cwd=moved)["data"]["removed"]
+assert changed["changed"] and changed["item"]["instance_id"] == instance["instance_id"]
+assert api("port", "show", "api", cwd=moved)["data"]["item"]["port"] == 23000
+assert api("port", "release", "api", cwd=moved)["data"]["changed"]
+assert not api("port", "release", "api", cwd=moved)["data"]["changed"]
+assert api("instance", "remove", "main", cwd=moved)["data"]["changed"]
 for d in locations: shutil.rmtree(d)
 assert all(x["location_status"] == "missing" for x in api("instance", "list", "--profile", "backend", cwd=moved)["data"]["items"])
 assert len(api("port", "prune", cwd=moved)["data"]["removed"]) == len(locations)

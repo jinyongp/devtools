@@ -25,15 +25,16 @@ api('sec','set','TOKEN','--profile','fixture','--stdin',input='BACKUP_CANARY')
 api('var','set','MODE','--profile','fixture','--value','development')
 task = api('task','add','--profile','fixture','--title','Recover me','--request-id',str(uuid.uuid4()))
 api('task','claim',task['item']['id'],'--profile','fixture','--request-id',str(uuid.uuid4()))
-archive = api('backup','create')['path']
+archive = api('backup','create')['item']['path']
 assert b'BACKUP_CANARY' not in Path(archive).read_bytes()
-assert api('backup','inspect','--file',archive,'--identity-file',identity)['profiles'][0]['profile'] == 'fixture'
+assert api('backup','inspect','--file',archive,'--identity-file',identity)['item']['profiles'][0]['profile'] == 'fixture'
 args = ['backup','restore','--file',archive,'--identity-file',identity,'--profile','fixture','--as','recovered']
 plan = api(*args)
+assert not plan['changed'] and not plan['replayed']
 request = str(uuid.uuid4())
 result = api(*args,'--apply',plan['digest'],'--request-id',request)
-assert result['applied']
-assert api(*args,'--apply',plan['digest'],'--request-id',request) == result
+assert result['applied'] and result['changed'] and not result['replayed']
+assert api(*args,'--apply',plan['digest'],'--request-id',request) == {**result, 'replayed': True}
 assert api('var','get','MODE','--profile','recovered')['value'] == 'development'
 assert api('task','claim',task['item']['id'],'--profile','recovered','--request-id',str(uuid.uuid4()))['context_valid']
 replace = [*args,'--replace']

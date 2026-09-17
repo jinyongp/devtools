@@ -69,21 +69,31 @@ func (a *App) catalog() map[string]any {
 				map[string]any{"required": []string{"child_args"}, "properties": map[string]any{"child_args": map[string]any{"minItems": 1}}},
 			}
 		}
-		entry := map[string]any{"name": command.Name, "aliases": command.Aliases, "description": command.Description, "options": command.Options, "arguments": command.Arguments, "accepts_child_args": command.ChildArgs, "stream_output": command.StreamOutput, "input_schema": input, "output_schema": command.Output}
+		entry := map[string]any{"name": command.Name, "aliases": command.Aliases, "description": command.Description, "options": command.Options, "arguments": command.Arguments, "accepts_child_args": command.ChildArgs, "output_mode": command.OutputMode, "input_schema": input, "output_schema": command.Output}
+		if command.OutputMode != OutputJSON {
+			delete(entry, "output_schema")
+		}
 		if command.BodySchema != nil {
 			entry["body_schema"] = command.BodySchema
 		}
 		commands = append(commands, entry)
 	}
 	return map[string]any{
-		"protocol_version": protocol.Version,
+		"protocol_version": protocol.ProtocolVersion,
 		"commands":         commands,
-		"transport":        map[string]any{"input": "CLI flags and positional args; child_args follow --. Schemas describe parsed inputs, not a JSON stdin endpoint. Secret --stdin reads a raw UTF-8 value.", "success": "one JSON response on stdout; command run (alias: run) passes through child streams", "failure": "one JSON response on stderr before execution; command run (alias: run) preserves child exit status", "interactive": false, "help_flags": []string{"--help", "-h"}},
-		"exit_codes":       map[string]string{"0": "success", "1": "I/O or private storage failure", "2": "invalid input or dotenv syntax", "3": "lookup, configuration, state, conflict, or precondition failure; inspect error.code and error.details", "126": "configured command could not be executed", "127": "command run child executable not found", "130": "canceled; command run otherwise preserves child exit code or 128 + signal"},
+		"transport": map[string]any{
+			"input":         "CLI flags and positional args; child_args follow --. Schemas describe parsed inputs, not a JSON stdin endpoint. Secret --stdin reads a raw UTF-8 value.",
+			"success":       "Follow output_mode: json encodes one response envelope on stdout; text is help; artifact is generated file content; passthrough delegates stdout, stderr, and exit status to the child.",
+			"failure":       "Devtools errors use one JSON response on stderr, including help and artifact errors. After child execution starts, passthrough preserves child output and exit status.",
+			"output_modes":  []OutputMode{OutputJSON, OutputText, OutputArtifact, OutputPassthrough},
+			"output_schema": "Describes data inside the success envelope, and is present only for json commands.",
+			"interactive":   false, "help_flags": []string{"--help", "-h"},
+		},
+		"exit_codes": map[string]string{"0": "success", "1": "I/O or private storage failure", "2": "invalid input or dotenv syntax", "3": "lookup, configuration, state, conflict, or precondition failure; inspect error.code and error.details", "126": "configured command could not be executed", "127": "command run child executable not found", "130": "canceled; command run otherwise preserves child exit code or 128 + signal"},
 		"response_schema": map[string]any{
 			"$schema":              "https://json-schema.org/draft/2020-12/schema",
 			"type":                 "object",
-			"properties":           map[string]any{"schema_version": map[string]any{"const": protocol.Version}, "ok": map[string]any{"type": "boolean"}, "data": map[string]any{}, "error": object(map[string]any{"code": stringSchema(), "message": stringSchema(), "details": map[string]any{"type": "object"}}, "code", "message")},
+			"properties":           map[string]any{"schema_version": map[string]any{"const": protocol.EnvelopeVersion}, "ok": map[string]any{"type": "boolean"}, "data": map[string]any{}, "error": object(map[string]any{"code": stringSchema(), "message": stringSchema(), "details": map[string]any{"type": "object"}}, "code", "message")},
 			"required":             []string{"schema_version", "ok"},
 			"additionalProperties": false,
 			"oneOf": []any{
@@ -91,6 +101,6 @@ func (a *App) catalog() map[string]any {
 				map[string]any{"properties": map[string]any{"ok": map[string]any{"const": false}}, "required": []string{"error"}, "not": map[string]any{"required": []string{"data"}}},
 			},
 		},
-		"$defs": map[string]any{"catalog": map[string]any{"type": "object", "required": []string{"protocol_version", "commands", "transport", "exit_codes", "response_schema", "$defs"}, "properties": map[string]any{"protocol_version": map[string]any{"const": protocol.Version}, "commands": map[string]any{"type": "array", "items": map[string]any{"type": "object"}}, "transport": map[string]any{"type": "object"}, "exit_codes": map[string]any{"type": "object"}, "response_schema": map[string]any{"type": "object"}, "$defs": map[string]any{"type": "object"}}, "additionalProperties": false}},
+		"$defs": map[string]any{"catalog": map[string]any{"type": "object", "required": []string{"protocol_version", "commands", "transport", "exit_codes", "response_schema", "$defs"}, "properties": map[string]any{"protocol_version": map[string]any{"const": protocol.ProtocolVersion}, "commands": map[string]any{"type": "array", "items": map[string]any{"type": "object"}}, "transport": map[string]any{"type": "object"}, "exit_codes": map[string]any{"type": "object"}, "response_schema": map[string]any{"type": "object"}, "$defs": map[string]any{"type": "object"}}, "additionalProperties": false}},
 	}
 }

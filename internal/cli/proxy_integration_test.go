@@ -184,11 +184,13 @@ func TestProxyBinaryEndToEnd(t *testing.T) {
 	start := externalCLI(t, binary, home, mainDirectory, "proxy", "start", "--port", fmt.Sprint(listenerPort), "--request-id", "a0a0a0a0-a0a0-40a0-80a0-a0a0a0a0a0a0")
 	started = true
 	var initial struct {
-		Running   bool      `json:"running"`
-		Port      int       `json:"port"`
-		StartedAt time.Time `json:"started_at"`
+		Item struct {
+			Running   bool      `json:"running"`
+			Port      int       `json:"port"`
+			StartedAt time.Time `json:"started_at"`
+		} `json:"item"`
 	}
-	if json.Unmarshal(start.Data, &initial) != nil || !initial.Running || initial.Port != listenerPort {
+	if json.Unmarshal(start.Data, &initial) != nil || !initial.Item.Running || initial.Item.Port != listenerPort {
 		t.Fatalf("start = %s", start.Data)
 	}
 	if body := proxyRequest(t, listenerPort, "main.shop.localhost", "/"); body != "main" {
@@ -221,11 +223,15 @@ func TestProxyBinaryEndToEnd(t *testing.T) {
 	}
 	status := externalCLI(t, binary, home, mainDirectory, "proxy", "status")
 	var current struct {
-		StartedAt time.Time `json:"started_at"`
+		Item struct {
+			StartedAt time.Time `json:"started_at"`
+		} `json:"item"`
 	}
-	_ = json.Unmarshal(status.Data, &current)
-	if !current.StartedAt.Equal(initial.StartedAt) {
-		t.Fatalf("assignment change restarted daemon: %v != %v", current.StartedAt, initial.StartedAt)
+	if err := json.Unmarshal(status.Data, &current); err != nil {
+		t.Fatal(err)
+	}
+	if !current.Item.StartedAt.Equal(initial.Item.StartedAt) {
+		t.Fatalf("assignment change restarted daemon: %v != %v", current.Item.StartedAt, initial.Item.StartedAt)
 	}
 
 	externalCLI(t, binary, home, mainDirectory, "proxy", "stop", "--request-id", "b0b0b0b0-b0b0-40b0-80b0-b0b0b0b0b0b0")
@@ -241,10 +247,14 @@ func TestProxyBinaryEndToEnd(t *testing.T) {
 	restart := externalCLI(t, binary, home, mainDirectory, "proxy", "start", "--request-id", "c0c0c0c0-c0c0-40c0-80c0-c0c0c0c0c0c0")
 	started = true
 	var restarted struct {
-		Port int `json:"port"`
+		Item struct {
+			Port int `json:"port"`
+		} `json:"item"`
 	}
-	_ = json.Unmarshal(restart.Data, &restarted)
-	if restarted.Port != listenerPort || proxyRequest(t, listenerPort, "main.shop.localhost", "/") != "replacement" {
+	if err := json.Unmarshal(restart.Data, &restarted); err != nil {
+		t.Fatal(err)
+	}
+	if restarted.Item.Port != listenerPort || proxyRequest(t, listenerPort, "main.shop.localhost", "/") != "replacement" {
 		t.Fatalf("restart = %s", restart.Data)
 	}
 

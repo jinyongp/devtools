@@ -41,7 +41,7 @@ exec = ["/bin/true"]
 	var listed struct {
 		Data struct {
 			Profile  string                  `json:"profile"`
-			Commands []projectCommandSummary `json:"commands"`
+			Commands []projectCommandSummary `json:"items"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(out), &listed); err != nil {
@@ -62,7 +62,7 @@ exec = ["/bin/true"]
 	var inspected struct {
 		Data struct {
 			Profile string                `json:"profile"`
-			Command projectCommandDetails `json:"command"`
+			Command projectCommandDetails `json:"item"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(out), &inspected); err != nil {

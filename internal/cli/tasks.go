@@ -357,7 +357,7 @@ func (a *App) registerTasks() {
 			}
 			args = append(args, Argument{Name: taskTargetArgument(kind), Required: required, Pattern: uuidPattern})
 		}
-		a.commands = append(a.commands, Command{Name: "task " + name, Description: taskQueryDescription(name), Options: opts, Arguments: args, Output: taskOutput(false), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+		a.commands = append(a.commands, Command{Name: "task " + name, Description: taskQueryDescription(name), Options: opts, Arguments: args, Output: taskQueryOutput(name), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			store, e := a.taskStore(r)
 			if e != nil {
 				return nil, e

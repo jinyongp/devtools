@@ -1,6 +1,6 @@
-# 암호화 백업과 복구
+# 암호화 백업, 복구와 profile 이동
 
-`devtools backup`은 전역 var/sec/env와 task/workstream을 age로 암호화해 보관한다. 공개키로 백업하고 개인키 파일로 복구한다. 모든 명령은 JSON을 반환하며 개인키와 백업에 담긴 값 원문은 출력하지 않는다.
+`devtools backup`은 전역 var/sec/env와 task/workstream을 age로 암호화해 보관하고, `devtools profile export/import`는 같은 포맷으로 한 profile을 다른 환경에 옮긴다. 공개키로 암호화하고 개인키 파일로 복호화한다. 모든 명령은 JSON을 반환하며 개인키와 백업에 담긴 값 원문은 출력하지 않는다.
 
 ## 키와 기본 위치 준비
 
@@ -29,6 +29,27 @@ profile 생략은 전역 데이터에 존재하는 모든 profile을 선택한�
 백업은 값과 작업 저장소의 공통 잠금 아래에서 일관된 스냅샷을 획득한다. 생성 응답에는 파일 경로, 생성 시각, profile별 값·작업 데이터 존재 여부가 들어간다. inspect는 개인키로 전체 암호문을 검증한 뒤 같은 메타데이터를 반환한다. 평문 문서 크기는 최대 128 MiB다.
 
 CLI의 keygen·configure·create는 `data.item`에 결과 메타데이터를, `data.changed`에 쓰기 여부를 반환한다. inspect는 `data.item`을 반환한다. restore는 `digest`·`targets`·`applied` 등 계획 보고서를 유지하며 `changed`와 `replayed`를 함께 제공한다. 미리보기에서는 둘 다 false이고, 동일한 적용 요청의 재시도에서는 최초 changed를 유지한 채 replayed가 true다. 전체 규칙은 [CLI 출력 계약](cli-output.md)을 따른다.
+
+## 다른 환경으로 profile 이동
+
+백업 보관이 아니라 다른 개발 환경으로 현재 project profile을 그대로 옮길 때는 `profile export`와 `profile import`를 사용한다. 별도 파일 형식은 만들지 않으며 위와 같은 age 암호화 백업을 한 profile로 제한해 사용한다. var·secret·env와 task/workstream 상태가 함께 이동하고, `devtools.toml`, port 할당, 실행 중 process와 dashboard 세션처럼 환경에 종속된 상태는 포함하지 않는다.
+
+대상 환경에서 keygen으로 identity와 recipient를 만든 뒤 **recipient 파일만** 원본 환경에 전달하면 개인키를 원본 환경에 복사할 필요가 없다. 기존 backup key pair를 사용해도 된다.
+
+```sh
+# 원본 환경: 현재 devtools.toml의 profile을 암호화해서 내보낸다.
+devtools profile export --output ./myapp.age --recipient-file /secure/devtools-recipient.txt
+
+# 다른 profile을 명시적으로 선택할 수도 있다.
+devtools profile export --profile myapp --output ./myapp.age --recipient-file /secure/devtools-recipient.txt
+
+# 대상 환경: 단일-profile 파일은 source 이름을 자동 인식하고 같은 이름으로 가져온다.
+devtools profile import --file ./myapp.age --identity-file /secure/devtools-identity.txt --request-id UUID
+```
+
+`profile export`에서 `--profile`을 생략하면 `--dir`에서 프로젝트를 찾아 profile을 선택한다. `--output`이나 `--recipient-file`을 생략하면 기존 backup 설정을 사용할 수 있다. 둘 다 명시하면 `backup configure` 없이도 이동 파일을 만들 수 있다.
+
+`profile import`는 export 파일에 profile이 하나면 `--profile`을 생략할 수 있다. 여러 profile이 들어 있는 일반 backup 파일을 가져올 때는 source를 `--profile NAME`으로 지정한다. 대상 이름은 source와 같고, 다른 이름이 필요하면 `--as NAME`을 사용한다. 대상 profile이 이미 있으면 `profile_exists`로 중단하며, 명시적인 `--replace`에서만 기존 safety-backup 규칙을 적용해 교체한다. 같은 `--request-id`와 입력을 다시 보내면 최초 적용 결과를 `replayed: true`로 반환하므로 응답 유실 뒤에도 같은 요청을 안전하게 재전송할 수 있다.
 
 ## 복구 미리 보기와 적용
 

@@ -10,13 +10,27 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
+func (a *App) backupEngine() (backup.Engine, *protocol.Error) {
+	dirs, err := paths.Current()
+	if err != nil {
+		return backup.Engine{}, argumentError("Cannot resolve user directories.", "")
+	}
+	d, failure := a.dataDirectory()
+	if failure != nil {
+		return backup.Engine{}, failure
+	}
+	return backup.Engine{Data: filepath.Dir(d), Config: dirs.Config, Cache: dirs.Cache}, nil
+}
+
+func filePathOption(name string, required bool) Option {
+	return Option{Name: name, Required: required, MinLength: 1, Description: "Filesystem path."}
+}
+
+func profileIdentifierOption(name string, required bool) Option {
+	return Option{Name: name, Required: required, Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128, Description: "Profile identifier."}
+}
+
 func (a *App) registerBackup() {
-	pathOption := func(name string, required bool) Option {
-		return Option{Name: name, Required: required, MinLength: 1, Description: "Filesystem path."}
-	}
-	profileOption := func(name string, required bool) Option {
-		return Option{Name: name, Required: required, Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128, Description: "Profile identifier."}
-	}
 	add := func(name, description string, opts []Option, run func(context.Context, backup.Engine, Request) (any, *protocol.Error)) {
 		boolean := map[string]any{"type": "boolean"}
 		profiles := map[string]any{"type": "array", "items": object(map[string]any{"profile": stringSchema(), "values": boolean, "tasks": boolean}, "profile", "values", "tasks")}
@@ -41,15 +55,11 @@ func (a *App) registerBackup() {
 			output["required"] = append(output["required"].([]string), "changed", "replayed")
 		}
 		a.commands = append(a.commands, Command{Name: "backup " + name, Description: description, Options: opts, Output: output, Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
-			dirs, err := paths.Current()
-			if err != nil {
-				return nil, argumentError("Cannot resolve user directories.", "")
+			engine, failure := a.backupEngine()
+			if failure != nil {
+				return nil, failure
 			}
-			d, e := a.dataDirectory()
-			if e != nil {
-				return nil, e
-			}
-			result, failure := run(ctx, backup.Engine{Data: filepath.Dir(d), Config: dirs.Config, Cache: dirs.Cache}, r)
+			result, failure := run(ctx, engine, r)
 			if failure != nil || name == "restore" {
 				return result, failure
 			}
@@ -59,20 +69,20 @@ func (a *App) registerBackup() {
 			return map[string]any{"item": result, "changed": true}, nil
 		}})
 	}
-	add("keygen", "Generate private identity and public recipient files without printing key material.", []Option{pathOption("identity-file", true), pathOption("recipient-file", true)}, func(_ context.Context, _ backup.Engine, r Request) (any, *protocol.Error) {
+	add("keygen", "Generate private identity and public recipient files without printing key material.", []Option{filePathOption("identity-file", true), filePathOption("recipient-file", true)}, func(_ context.Context, _ backup.Engine, r Request) (any, *protocol.Error) {
 		return backup.Keygen(r.Options["identity-file"], r.Options["recipient-file"])
 	})
-	add("configure", "Store the default backup directory and public recipient.", []Option{pathOption("directory", true), pathOption("recipient-file", true)}, func(_ context.Context, e backup.Engine, r Request) (any, *protocol.Error) {
+	add("configure", "Store the default backup directory and public recipient.", []Option{filePathOption("directory", true), filePathOption("recipient-file", true)}, func(_ context.Context, e backup.Engine, r Request) (any, *protocol.Error) {
 		return e.Configure(r.Options["directory"], r.Options["recipient-file"])
 	})
-	add("create", "Encrypt all profiles or one selected profile.", []Option{profileOption("profile", false), pathOption("output", false), pathOption("recipient-file", false)}, func(ctx context.Context, e backup.Engine, r Request) (any, *protocol.Error) {
+	add("create", "Encrypt all profiles or one selected profile.", []Option{profileIdentifierOption("profile", false), filePathOption("output", false), filePathOption("recipient-file", false)}, func(ctx context.Context, e backup.Engine, r Request) (any, *protocol.Error) {
 		return e.Create(ctx, r.Options["profile"], r.Options["output"], r.Options["recipient-file"])
 	})
-	inputs := []Option{pathOption("file", true), pathOption("identity-file", true)}
+	inputs := []Option{filePathOption("file", true), filePathOption("identity-file", true)}
 	add("inspect", "Authenticate and inspect backup metadata without returning values.", inputs, func(_ context.Context, _ backup.Engine, r Request) (any, *protocol.Error) {
 		return backup.Inspect(r.Options["file"], r.Options["identity-file"])
 	})
-	opts := append(append([]Option{}, inputs...), profileOption("profile", true), profileOption("as", false), Option{Name: "replace", Boolean: true, Description: "Permit whole-profile replacement after a safety backup."}, Option{Name: "apply", MinLength: 64, MaxLength: 64, Pattern: `^[0-9a-f]+$`, Description: "Apply the exact digest returned by preview."}, Option{Name: "request-id", Pattern: `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, Description: "UUID required when applying; reuse it for retries."})
+	opts := append(append([]Option{}, inputs...), profileIdentifierOption("profile", true), profileIdentifierOption("as", false), Option{Name: "replace", Boolean: true, Description: "Permit whole-profile replacement after a safety backup."}, Option{Name: "apply", MinLength: 64, MaxLength: 64, Pattern: `^[0-9a-f]+$`, Description: "Apply the exact digest returned by preview."}, Option{Name: "request-id", Pattern: `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, Description: "UUID required when applying; reuse it for retries."})
 	add("restore", "Preview a profile restore; apply requires the preview digest and request ID.", opts, func(ctx context.Context, e backup.Engine, r Request) (any, *protocol.Error) {
 		if (r.Options["apply"] != "") != (r.Options["request-id"] != "") {
 			return nil, argumentError("Apply and request-id must be supplied together.", "")

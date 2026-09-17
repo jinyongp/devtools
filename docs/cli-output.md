@@ -96,6 +96,7 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `dashboard`·`dashboard start`, status, stop | 각각 `item`·`changed`, `item`, `changed` |
 | `backup keygen/configure/create`, inspect | 각각 `item`·`changed`, `item` |
 | `backup restore` | 복구 계획·적용 보고서와 `changed`·`replayed`; 미리보기는 둘 다 false |
+| `profile export`, `profile import` | 각각 `item`·`changed`, `item`·`changed`·`replayed`와 safety-backup 메타데이터 |
 | `cleanup archives`, apply, restore/purge | 각각 `items`, `items`·`changed`·`replayed`, `item`·`changed` |
 | `cleanup preview` | 계획 ID·만료 시각·`items` |
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |

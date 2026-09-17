@@ -28,6 +28,18 @@ api('task','claim',task['item']['id'],'--profile','fixture','--request-id',str(u
 archive = api('backup','create')['item']['path']
 assert b'BACKUP_CANARY' not in Path(archive).read_bytes()
 assert api('backup','inspect','--file',archive,'--identity-file',identity)['item']['profiles'][0]['profile'] == 'fixture'
+transfer = str(home / 'fixture-transfer.age')
+exported = api('profile','export','--profile','fixture','--output',transfer,'--recipient-file',recipient)
+assert exported['changed'] and exported['item']['profile'] == 'fixture' and exported['item']['path'] == transfer
+transfer_request = str(uuid.uuid4())
+transfer_args = ['profile','import','--file',transfer,'--identity-file',identity,'--as','portable','--request-id',transfer_request]
+imported = api(*transfer_args)
+assert imported['changed'] and not imported['replayed'] and imported['item']['source_profile'] == 'fixture' and imported['item']['profile'] == 'portable'
+assert api(*transfer_args)['replayed']
+assert api('var','get','MODE','--profile','portable')['value'] == 'development'
+assert any(item['key'] == 'TOKEN' for item in api('sec','list','--profile','portable')['items'])
+assert api('task','show',task['item']['id'],'--profile','portable')['item']['id'] == task['item']['id']
+api('profile','import','--file',transfer,'--identity-file',identity,'--as','portable','--request-id',str(uuid.uuid4()),error='profile_exists')
 args = ['backup','restore','--file',archive,'--identity-file',identity,'--profile','fixture','--as','recovered']
 plan = api(*args)
 assert not plan['changed'] and not plan['replayed']

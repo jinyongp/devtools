@@ -136,6 +136,7 @@ func (a *App) commandSummary(name string) string {
 		"process":                 "Start, inspect, and stop background commands.",
 		"proxy":                   "Route local development servers through a reverse proxy.",
 		"project":                 "Inspect project configuration and profile.",
+		"profile":                 "Export and import encrypted profile state.",
 		"secret":                  "Manage secrets without displaying their values.",
 		"sec":                     "Manage secrets (alias of secret).",
 		"variable":                "Manage readable environment variables.",

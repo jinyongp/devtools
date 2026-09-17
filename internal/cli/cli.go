@@ -111,6 +111,7 @@ func New(version, commit string) *App {
 	a.registerPorts()
 	a.registerProxy()
 	a.registerBackup()
+	a.registerProfiles()
 	a.registerProcesses()
 	a.registerCleanup()
 	a.registerUpdate()

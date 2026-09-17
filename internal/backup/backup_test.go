@@ -43,7 +43,7 @@ func TestEncryptedRestoreAndReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := out.(map[string]any)["path"].(string)
+	path := out.Path
 	ciphertext, _ := os.ReadFile(path)
 	if strings.Contains(string(ciphertext), "SECRET_CANARY") {
 		t.Fatal("plaintext backup")
@@ -112,6 +112,57 @@ func TestEncryptedRestoreAndReplay(t *testing.T) {
 	os.WriteFile(bad, ciphertext, 0600)
 	if _, err = e.Restore(context.Background(), bad, identity, "source", "copy", "", "", true); err == nil {
 		t.Fatal("tampered backup accepted")
+	}
+}
+
+func TestConcurrentImportReplaysSameRequest(t *testing.T) {
+	root := t.TempDir()
+	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
+	destination := Engine{Data: filepath.Join(root, "destination", "data"), Config: filepath.Join(root, "destination", "config"), Cache: filepath.Join(root, "destination", "cache")}
+	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
+	if _, err := Keygen(identity, recipient); err != nil {
+		t.Fatal(err)
+	}
+	store := values.Store{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
+	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+		return state.Set(values.Variable, "VALUE", "", "transferred")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(root, "portable.age")
+	if _, err := source.Create(context.Background(), "portable", archive, recipient); err != nil {
+		t.Fatal(err)
+	}
+
+	request := ImportRequest{Path: archive, IdentityPath: identity, RequestID: tasks.ID()}
+	start := make(chan struct{})
+	type outcome struct {
+		result ImportResult
+		err    *protocol.Error
+	}
+	results := make(chan outcome, 2)
+	for range 2 {
+		go func() {
+			<-start
+			result, err := destination.Import(context.Background(), request)
+			results <- outcome{result: result, err: err}
+		}()
+	}
+	close(start)
+	first, second := <-results, <-results
+	if first.err != nil || second.err != nil {
+		t.Fatalf("concurrent import failed: %v %v", first.err, second.err)
+	}
+	if !first.result.Plan.Applied || !second.result.Plan.Applied || first.result.Plan.Replayed == second.result.Plan.Replayed {
+		t.Fatalf("expected one apply and one replay: %#v %#v", first.result.Plan, second.result.Plan)
+	}
+	restored, err := (values.Store{Directory: filepath.Join(destination.Data, "profiles"), Profile: "portable"}).Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := restored.Environment("")
+	if err != nil || env["VALUE"] != "transferred" {
+		t.Fatalf("imported profile mismatch: %#v %v", env, err)
 	}
 }
 

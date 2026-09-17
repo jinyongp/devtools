@@ -123,6 +123,13 @@ sharing the profile must support v2; older binaries reject it. Read, no-op and
 preview do not upgrade. Use error details and remedy argv to recover conflicts;
 never copy a context credential into shared diagnostics.
 
+Use `profile export` and `profile import` to move one encrypted profile between
+environments. Export defaults to the current project's profile; import infers a
+single source profile and keeps the same name unless `--as` is supplied. Import
+requires a request UUID, is retry-safe, and refuses an existing target unless
+`--replace` is explicit. Transfer only the public age recipient to the source
+environment; keep the identity private on the destination side.
+
 Cleanup and restore start with a preview. Apply the selected IDs or digest,
 refreshing stale previews. Keep backup identities separate from project files.
 Provide a dashboard link when the user needs visual management; its session can

@@ -9,6 +9,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -26,6 +27,7 @@ import (
 	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/retention"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -93,7 +95,29 @@ func admin(ctx context.Context, r Registry, action string) (tasks.Object, error)
 	e = json.NewDecoder(res.Body).Decode(&o)
 	return o, e
 }
+
+// Status reads the dashboard registry and probes a live server without creating
+// locks, directories, sessions, or login links.
+func Status(ctx context.Context, cache string) (tasks.Object, *protocol.Error) {
+	path := filepath.Join(cache, "dashboard", "server.json")
+	r := Registry{}
+	if e := tasks.ReadPrivate(path, &r); e != nil {
+		if errors.Is(e, os.ErrNotExist) {
+			return tasks.Object{"running": false, "server_id": nil}, nil
+		}
+		return nil, fail()
+	}
+	status, e := admin(ctx, r, "status")
+	if e != nil || status["server_id"] != r.ID {
+		return tasks.Object{"running": false, "server_id": nil}, nil
+	}
+	return tasks.Object{"running": true, "server_id": r.ID}, nil
+}
+
 func Manage(ctx context.Context, action, cache, data, profile string) (tasks.Object, *protocol.Error) {
+	if action == "status" {
+		return Status(ctx, cache)
+	}
 	dir := filepath.Join(cache, "dashboard")
 	unlock, e := tasks.Lock(ctx, filepath.Join(dir, "start.lock"))
 	if e != nil {
@@ -105,12 +129,6 @@ func Manage(ctx context.Context, action, cache, data, profile string) (tasks.Obj
 	_ = tasks.ReadPrivate(path, &r)
 	status, e := admin(ctx, r, "status")
 	running := e == nil && status["server_id"] == r.ID
-	if action == "status" {
-		if running {
-			return tasks.Object{"running": true, "server_id": r.ID}, nil
-		}
-		return tasks.Object{"running": false, "server_id": nil}, nil
-	}
 	if action == "stop" {
 		if !running {
 			return tasks.Object{"stopped": false}, nil
@@ -513,7 +531,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if len(s.results) >= 128 {
 			s.results = map[string]cachedQuery{}
 		}
-		s.results[key] = cachedQuery{Stamp: signature, Expires: now.Add(30 * time.Minute), Body: body}
+		s.results[key] = cachedQuery{Stamp: signature, Expires: now.Add(retention.QuerySnapshotTTL), Body: body}
 		s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(body)

@@ -10,14 +10,6 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
-type readyKey struct{}
-
-// WithReadyProbe passes the selected command's configuration to its supervisor.
-// The prepared environment is retained in memory by the runner, not persisted.
-func WithReadyProbe(ctx context.Context, probe *project.ReadyProbe) context.Context {
-	return context.WithValue(ctx, readyKey{}, probe)
-}
-
 type Readiness struct {
 	Ready     bool      `json:"ready"`
 	CheckedAt time.Time `json:"checked_at"`

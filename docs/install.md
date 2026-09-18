@@ -146,9 +146,10 @@ origin이 있으면 태그를 가져온 뒤 HEAD에 포함된 가장 높은 안�
 atomic push로 함께 올린다. 원격 main과 충돌하면 두 참조 모두 보존하며,
 로컬 태그와 재시도 명령을 안내한다. 배포 결과는 GitHub Actions의 Release 실행에서 확인한다.
 
-자동 실행의 진입점은 `v0.1.0` 형태의 태그 푸시다. 하나의 Release 워크플로에서
-태그 커밋이 원격 main에 포함됐는지 확인하고 macOS 검사, Linux 검사와 Docker
-설치 검증을 거쳐 네 플랫폼 배포물을 생성한다. 모든 검증이 성공하면
+자동 실행의 진입점은 `v0.1.0` 형태의 태그 푸시다. Release 워크플로는
+태그 커밋이 원격 main에 포함됐는지 확인한 뒤 macOS와 Linux 검사를 병렬로 실행한다.
+Linux 검사는 실제 Chromium Dashboard smoke와 Docker 설치 검증을 포함한다. 두 운영체제의
+검증이 모두 성공하면 네 플랫폼 배포물을 생성한다. 이후
 플랫폼별 CLI 아카이브·체크섬, 플랫폼 독립 Agent Skill 아카이브·체크섬,
 설치기와 버전 파일을 GitHub Releases에 함께 게시한다.
 빌드에는 태그의 버전과 커밋 식별자를 기록한다.

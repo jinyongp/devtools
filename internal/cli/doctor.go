@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/doctor"
+	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -62,26 +63,31 @@ func (a *App) diagnose(ctx context.Context, streams IO, r Request) (any, *protoc
 	}
 	report.Profile = p.Profile
 	report.Add("profile", "pass", "Project profile is selected.")
-	requirements := p.Requirements.Merge(project.Requirements{})
-	inject := true
-	executable := ""
-	var boundPath *string
-	if report.Command != "" {
-		command, ok := p.Commands[report.Command]
-		if !ok {
-			report.Add("command", "fail", "The named command is undefined.", doctor.Remedy("List configured commands and choose one from devtools.toml.", []string{"devtools", "command", "list", "--dir", report.Directory}))
-			return report, nil
-		}
-		requirements = requirements.Merge(command.Requirements)
-		inject = command.Inject
-		executable = command.Exec[0]
-		if _, ok := r.Options["env"]; ok {
-			inject = true
-		} else {
-			report.Env = command.Env
-		}
-		report.Directory = p.Root
+
+	command := execution.Command{
+		Project:      p,
+		Directory:    report.Directory,
+		Env:          report.Env,
+		Inject:       true,
+		Requirements: p.Requirements,
 	}
+	if report.Command != "" {
+		var envOverride *string
+		if env, explicit := r.Options["env"]; explicit {
+			envOverride = &env
+		}
+		command, err = execution.ResolveConfigured(p, report.Command, envOverride, nil)
+		if err != nil {
+			if err.Code == "command_not_found" {
+				report.Add("command", "fail", "The named command is undefined.", doctor.Remedy("List configured commands and choose one from devtools.toml.", []string{"devtools", "command", "list", "--dir", report.Directory}))
+				return report, nil
+			}
+			return nil, err
+		}
+		report.Env = command.Env
+		report.Directory = command.Directory
+	}
+
 	directory, err := a.dataDirectory()
 	if err != nil {
 		return nil, err
@@ -104,29 +110,19 @@ func (a *App) diagnose(ctx context.Context, streams IO, r Request) (any, *protoc
 	} else {
 		report.Add("task_storage", "pass", "Profile task storage is readable.")
 	}
-	if command, ok := p.Commands[report.Command]; ok && (len(command.Bind) > 0 || len(command.Serve) > 0) {
-		s, e := a.portStore()
-		if e == nil {
-			var defaults []int
-			defaults, e = portDefaults()
-			if e == nil {
-				prepared, _, prepareErr := s.Prepare(ctx, p, command, report.Env, state, defaults, true)
-				e = prepareErr
-				if e == nil {
-					executable = prepared.Args[0]
-					if path, ok := prepared.Bind["PATH"]; ok {
-						boundPath = &path
-					}
-				}
-			}
-		}
-		if e != nil {
-			report.Add("ports", "fail", "Port or binding diagnosis failed: "+e.Code+".", doctor.Remedy("Check service assignments, references, and active runs.", nil))
+
+	prepared := execution.Prepared{Command: command, Args: command.Arguments(), State: state}
+	if report.Command != "" && (len(command.Bind) > 0 || len(command.Serve) > 0) {
+		var prepareErr *protocol.Error
+		prepared, prepareErr = a.previewExecution(ctx, command, state)
+		if prepareErr != nil {
+			report.Add("ports", "fail", "Port or binding diagnosis failed: "+prepareErr.Code+".", doctor.Remedy("Check service assignments, references, and active runs.", nil))
+			prepared = execution.Prepared{Command: command, Args: command.Arguments(), State: state}
 		} else {
 			report.Add("ports", "pass", "Port and binding checks passed; new assignments are finalized by run.")
 		}
 	}
-	for _, check := range doctor.CheckRequirements(ctx, doctor.Input{Profile: p.Profile, Directory: report.Directory, Env: report.Env, Requirements: requirements, State: state, Inject: inject, Executable: executable, PathOverride: boundPath}) {
+	for _, check := range prepared.Checks(ctx, os.Environ(), report.Command != "") {
 		report.Checks = append(report.Checks, check)
 		if check.Status == "fail" {
 			report.Ready = false

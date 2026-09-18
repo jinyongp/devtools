@@ -4,7 +4,7 @@
 사용자 설치와 실행은 [README](../README.md)를 참고한다.
 
 
-Requires Go 1.27.x, Git (for integration tests), just, and uv with `uvx`.
+Requires Go 1.27.x, Node.js 24.x, Git (for integration tests), just, and uv with `uvx`.
 
 ```sh
 just build
@@ -16,8 +16,10 @@ just verify-docker proxies
 ```
 
 `just check` validates the Agent Skill and its release archive with
-`skills-ref==0.1.1`, checks formatting, runs `go vet`, and runs tests with the race
-detector. `just check-skill` runs only the official format validator, while
+`skills-ref==0.1.1`, runs the Dashboard JavaScript regression tests with Node's
+built-in test runner, checks formatting, runs `go vet`, and runs Go tests with the
+race detector. `just check-dashboard` runs only the Dashboard JavaScript tests.
+`just check-skill` runs only the official format validator, while
 `just check-skill-release` also tests archive structure, checksums, source identity,
 and invalid fixtures. Tag-triggered release validation runs on macOS and Linux with
 Go 1.27.1. WSL uses the Linux build; testing in an actual WSL environment is a
@@ -46,7 +48,20 @@ Go 코드를 수정했을 때는 `Ctrl+C`로 종료하고 `just dashboard`를 �
 XDG_DATA_HOME·XDG_CONFIG_HOME·XDG_CACHE_HOME도 격리 디렉터리로 지정한다.
 
 일반 `devtools dashboard`는 실행 파일에 내장된 화면을 제공한다.
-URL 상태 복원 회귀 테스트는 `pnpm test:dashboard`로 실행한다.
+DOM 없이 실행하는 빠른 JavaScript 회귀 테스트는 `pnpm test:dashboard`로 확인한다.
+실제 Chromium smoke는 빌드된 CLI와 격리한 HOME/XDG 경로를 사용한다.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+just build
+pnpm test:dashboard:browser
+```
+
+Smoke는 dashboard 로그인, Values 화면의 변수 수정, URL navigation과 session 유지 상태의 reload,
+CLI에서 확인한 최종 값을 한 흐름으로 검증한다. Release의 Linux CI에서는 Chromium의 OS 의존성도
+함께 설치하며 이 smoke가 통과한 뒤 Docker 설치 검증을 실행한다. Playwright는
+`@playwright/test` 1.63.0으로 정확히 고정한다.
 
 ## 도구 추가
 
@@ -70,9 +85,11 @@ pnpm release
 pnpm release --publish
 ```
 
-버전을 추천받고 main과 태그를 함께 올린다. 태그가 단일 Release 워크플로의
-검증·CLI 패키징·독립 Agent Skill 패키징·게시를 시작한다. 로컬에서 스킬 배포물만
-확인하려면 `just release-skill VERSION`을 실행한다. [배포 상세](install.md#github-releases-게시)와
+버전을 추천받고 main과 태그를 함께 올린다. 태그가 Release 워크플로를 시작하면
+태그 검증 뒤 macOS와 Linux CI를 병렬로 실행한다. Linux CI는 실제 Chromium dashboard smoke와
+Docker 설치 검증까지 통과해야 하며, 두 CI가 모두 성공한 뒤에만 CLI·Agent Skill 패키징과 GitHub Release
+게시가 진행된다. 로컬에서 스킬 배포물만 확인하려면 `just release-skill VERSION`을 실행한다.
+[배포 상세](install.md#github-releases-게시)와
 [격리된 설치 검증](../docker/README.md)을 참고한다.
 
 ### Homebrew 배포

@@ -45,20 +45,26 @@ devtools project up web api --request-id UUID
 devtools project up web api --dir /projects/app --env local --timeout 30s --request-id UUID
 devtools project status
 devtools project status api
+devtools project logs web
+devtools project restart web api --request-id UUID
+devtools project restart web --env local --capture-logs --request-id UUID
 devtools project down api --request-id UUID
 devtools project down --request-id UUID
 ```
 
-세 명령은 현재 디렉터리 또는 `--dir`에서 찾은 프로젝트의 profile과 실제 루트 경로로
+이 project 명령들은 현재 디렉터리 또는 `--dir`에서 찾은 프로젝트의 profile과 실제 루트 경로로
 범위를 정한다. 같은 profile을 사용하는 다른 worktree의 실행은 건드리지 않는다.
 `status`와 `down`에서 이름을 생략하면 현재 instance의 활성 managed process 전체를
-대상으로 하며, 별도 `process start`로 실행한 서버도 포함한다. 종료 이력은
-`process list` 또는 실행 ID에 대한 `process status`로 확인한다.
+대상으로 하며, 별도 `process start`로 실행한 서버도 포함한다. `project logs COMMAND`는
+현재 project instance에서 해당 이름으로 실행 중인 하나의 process를 찾아 보관된 원문 로그를 읽는다.
+같은 profile의 다른 worktree 실행은 선택하지 않는다. 종료 이력과 종료된 실행의 로그는
+`process list`, `process status EXECUTION_ID`, `process logs EXECUTION_ID`로 확인한다.
 
 `up`은 신규로 시작할 명령의 필수 조건과 port/binding을 batch 변경 전에 모두 검사한 뒤 입력 순서대로 시작한다.
-같은 프로젝트에서 이미 실행 중인 singleton은 cold-start 검사를 다시 요구하지 않고 기존 process 계층이 재사용 여부와
-env·로그 설정 충돌을 판정한다. 다만 snapshot 직후 기존 singleton이 종료되어 실제 새 start가 필요해지면 process 생성
-직전에 같은 preflight를 다시 수행한다. `ready` probe가 선언된 명령은 준비 완료까지 기다리고, probe가 없으면 프로세스
+같은 프로젝트에서 이미 실행 중인 singleton은 cold-start 검사를 요구하지 않고 기존 process 계층이 재사용 여부와
+env·로그 설정 충돌을 판정한다. 실제 새 process를 만드는 경우에는 process 생성 직전 현재 project 설정과 값·port 상태로
+같은 preflight를 다시 수행한다. snapshot에서 재사용 대상으로 보였던 singleton이 그 사이 종료된 경우에도 이 검사를 거친다.
+`ready` probe가 선언된 명령은 준비 완료까지 기다리고, probe가 없으면 프로세스
 시작으로 완료한다. `--timeout`은 명령별 readiness 대기 시간이며 기본 30초, 최대 10분이다. `--env`와
 `--capture-logs`는 선택한 모든 명령에 적용된다. 같은 설정으로 이미 실행 중이면 기존 실행을 재사용하고, env나 로그
 설정이 충돌하면 `process_conflict`로 보고한다. 명령 이름을 중복해서 입력하면 오류다.
@@ -76,6 +82,15 @@ env·로그 설정 충돌을 판정한다. 다만 snapshot 직후 기존 singlet
 새 실행 시도로 처리한다. 변경된 입력에 같은 요청 ID를 사용하면 `request_conflict`다.
 재시도 결과의 `replayed: true`는 기존 작업을 재개하거나 재현했다는 뜻이다.
 현재 서버 상태가 필요하면 저장된 작업 결과 대신 `project status`를 조회한다.
+
+`restart`도 최초 호출 시 현재 project instance에서 선택한 command별 active execution ID를
+고정한다. 선택한 command가 실행 중이 아니면 새 process를 시작하지 않고 해당 항목을
+`process_not_found` 조건으로 보고한다. 같은 요청을 재전송해도 그 뒤 새로 실행된 process를
+대상으로 바꾸지 않는다. 각 restart는 기존 `process restart`와 같이 최신 project 설정과 값을
+사용한다. `--env`와 `--capture-logs`를 생략하면 기존 execution의 선택을 유지하고, 명시하면
+새 execution에 적용한다. 일부 command만 실패하면 성공한 restart는 유지하며 같은 요청 ID의
+재시도는 미완료 command만 이어간다. readiness가 선언된 command는 `--timeout` 범위에서
+다시 준비 완료까지 확인한다.
 
 `down`은 최초 호출 시 정한 실행 ID만 종료한다. 같은 요청의 재전송은 그 뒤 새로
 시작된 서버까지 종료하지 않는다. 새로운 종료 작업에는 새 요청 ID를 사용한다.

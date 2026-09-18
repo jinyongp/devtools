@@ -5,12 +5,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/lifecycle"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
-	"github.com/jinyongp/devtools/internal/values"
 )
 
 func readinessSchema() map[string]any {
@@ -61,7 +59,7 @@ func lifecycleItemSchema() map[string]any {
 
 func lifecycleOutputSchema() map[string]any {
 	return object(map[string]any{
-		"action":    map[string]any{"enum": []string{lifecycle.ActionUp, lifecycle.ActionDown}},
+		"action":    map[string]any{"enum": []string{lifecycle.ActionUp, lifecycle.ActionDown, lifecycle.ActionRestart}},
 		"profile":   stringSchema(),
 		"directory": stringSchema(),
 		"changed":   map[string]any{"type": "boolean"},
@@ -90,61 +88,6 @@ func (a *App) projectLifecycleManager() (lifecycle.Manager, *protocol.Error) {
 	manager := a.lifecycleManager(data)
 	manager.Preflight = a.preflightProjectCommand
 	return manager, nil
-}
-
-func (a *App) preflightProjectCommand(ctx context.Context, p project.Context, name string, envOverride *string) *protocol.Error {
-	command, ok := p.Commands[name]
-	if !ok {
-		return protocol.NewError("command_not_found", "The selected project command is not defined.", 3, map[string]any{"command": name})
-	}
-	env := command.Env
-	inject := command.Inject
-	if envOverride != nil {
-		env = *envOverride
-		inject = true
-	}
-	requirements := p.Requirements.Merge(command.Requirements)
-	var state *values.State
-	if inject || len(requirements.Vars)+len(requirements.Secs) > 0 || len(command.Bind) > 0 {
-		directory, err := a.dataDirectory()
-		if err != nil {
-			return err
-		}
-		state, err = (values.Store{Directory: directory, Profile: p.Profile}).Read()
-		if err != nil {
-			return err
-		}
-		if envErr := state.CheckEnv(env); envErr != nil {
-			return envErr
-		}
-	}
-	executable := command.Exec[0]
-	var boundPath *string
-	if len(command.Bind) > 0 || len(command.Serve) > 0 {
-		store, err := a.portStore()
-		if err != nil {
-			return err
-		}
-		defaults, err := portDefaults()
-		if err != nil {
-			return err
-		}
-		prepared, _, prepareErr := store.Prepare(ctx, p, command, env, state, defaults, true)
-		if prepareErr != nil {
-			return prepareErr
-		}
-		executable = prepared.Args[0]
-		if path, ok := prepared.Bind["PATH"]; ok {
-			boundPath = &path
-		}
-	}
-	checks := doctor.CheckRequirements(ctx, doctor.Input{Profile: p.Profile, Directory: p.Root, Env: env, Requirements: requirements, State: state, Inject: inject, Executable: executable, PathOverride: boundPath})
-	for _, check := range checks {
-		if check.Status != "pass" {
-			return protocol.NewError("requirements_failed", "Project command prerequisites are not satisfied.", 3, map[string]any{"command": name, "checks": checks})
-		}
-	}
-	return nil
 }
 
 func (a *App) registerProjectLifecycle() {
@@ -176,6 +119,33 @@ func (a *App) registerProjectLifecycle() {
 			Options:     []Option{directory},
 			Output:      projectStatusSchema(),
 			Run:         a.projectStatus,
+		},
+		Command{
+			Name:        "project restart",
+			UniqueArgs:  true,
+			Description: "Restart one or more active commands as a retry-safe project operation.",
+			Arguments:   []Argument{commandArgument},
+			Options: []Option{
+				directory,
+				{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment for every restarted command."},
+				{Name: "capture-logs", Boolean: true, Description: "Retain bounded raw output for every restarted command."},
+				{Name: "timeout", Default: "30s", Description: "Readiness wait per restarted command, greater than zero and at most 10m."},
+				{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe project restart."},
+			},
+			Output: lifecycleOutputSchema(),
+			Run:    a.projectRestart,
+		},
+		Command{
+			Name:        "project logs",
+			Description: "Read retained output for one active command in the current project instance.",
+			Arguments:   []Argument{{Name: "command", Required: true, Pattern: project.ProfilePattern}},
+			Options:     []Option{directory},
+			Output: object(map[string]any{
+				"id":      stringSchema(),
+				"command": stringSchema(),
+				"content": stringSchema(),
+			}, "id", "command", "content"),
+			Run: a.projectLogs,
 		},
 		Command{
 			Name:        "project down",
@@ -227,6 +197,30 @@ func (a *App) projectUp(ctx context.Context, _ IO, request Request) (any, *proto
 	return manager.Apply(ctx, input)
 }
 
+func (a *App) projectRestart(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
+	p, err := resolveLifecycleProject(request.Options["dir"])
+	if err != nil {
+		return nil, err
+	}
+	timeout, parseErr := time.ParseDuration(request.Options["timeout"])
+	if parseErr != nil || timeout <= 0 || timeout > 10*time.Minute {
+		return nil, argumentError("Expected a positive duration up to 10m.", "timeout")
+	}
+	manager, err := a.projectLifecycleManager()
+	if err != nil {
+		return nil, err
+	}
+	input := lifecycle.Request{Action: lifecycle.ActionRestart, Project: p, Commands: append([]string{}, request.Args...), Timeout: timeout, RequestID: request.Options["request-id"]}
+	if env, ok := request.Options["env"]; ok {
+		input.Env = &env
+	}
+	if capture, ok := request.Options["capture-logs"]; ok {
+		value := capture == "true"
+		input.Capture = &value
+	}
+	return manager.Apply(ctx, input)
+}
+
 func (a *App) projectDown(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
 	p, err := resolveLifecycleProject(request.Options["dir"])
 	if err != nil {
@@ -257,4 +251,35 @@ func (a *App) projectStatus(ctx context.Context, _ IO, request Request) (any, *p
 		Directory string            `json:"directory"`
 		Items     []services.Record `json:"items"`
 	}{Profile: p.Profile, Directory: p.Root, Items: items}, nil
+}
+
+func (a *App) projectLogs(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
+	p, err := resolveLifecycleProject(request.Options["dir"])
+	if err != nil {
+		return nil, err
+	}
+	manager, err := a.projectLifecycleManager()
+	if err != nil {
+		return nil, err
+	}
+	command := request.Args[0]
+	items, statusErr := manager.Status(ctx, p, []string{command})
+	if statusErr != nil {
+		return nil, statusErr
+	}
+	if len(items) == 0 {
+		return nil, protocol.NewError("process_not_found", "No active managed execution exists for the selected project command.", 3, map[string]any{"command": command})
+	}
+	if len(items) != 1 {
+		return nil, protocol.NewError("process_conflict", "Multiple active executions exist for the selected project command.", 3, map[string]any{"command": command, "count": len(items)})
+	}
+	store, storeErr := a.serviceStore()
+	if storeErr != nil {
+		return nil, storeErr
+	}
+	content, logErr := store.Logs(ctx, items[0].ID)
+	if logErr != nil {
+		return nil, logErr
+	}
+	return map[string]any{"id": items[0].ID, "command": command, "content": content}, nil
 }

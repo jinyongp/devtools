@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/execution"
+	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -92,9 +94,15 @@ func (a *App) registerProcesses() {
 				return map[string]any{"id": r.Args[0], "content": content}, e
 			}
 			q := services.Request{Action: action, RequestID: r.Options["request-id"]}
+			var startProject project.Context
 			if action == "start" {
+				p, resolveErr := project.Resolve(r.Options["dir"], "")
+				if resolveErr != nil {
+					return nil, resolveErr
+				}
+				startProject = p
 				q.Command = r.Args[0]
-				q.Directory = r.Options["dir"]
+				q.Directory = p.Root
 			} else {
 				q.ID = r.Args[0]
 			}
@@ -105,6 +113,12 @@ func (a *App) registerProcesses() {
 				v := capture == "true"
 				q.Capture = &v
 			}
+			if action == "start" {
+				command, env := q.Command, q.Env
+				q.BeforeStart = func(ctx context.Context) *protocol.Error {
+					return a.preflightProjectCommand(ctx, startProject, command, env)
+				}
+			}
 			return s.Apply(ctx, q)
 		}
 		a.commands = append(a.commands, c)
@@ -114,23 +128,39 @@ func (a *App) registerProcesses() {
 func ServeProcess(ctx context.Context, data, id string) error {
 	s := services.Store{Data: data}
 	return s.Serve(ctx, id, func(ctx context.Context, r services.Record, runner process.Runner, output io.Writer) *protocol.Error {
-		p, e := project.Resolve(r.Directory, "")
-		if e != nil {
-			return e
+		p, err := project.Resolve(r.Directory, "")
+		if err != nil {
+			return err
 		}
 		if p.Root != r.Directory || p.Profile != r.Profile {
 			return protocol.NewError("instance_conflict", "Project identity changed.", 3, nil)
 		}
-		if os.Chdir(r.Directory) != nil {
-			return protocol.NewError("io_error", "Cannot access execution directory.", 1, nil)
+		command, err := execution.ResolveConfigured(p, r.Command, r.EnvOverride, nil)
+		if err != nil {
+			return err
 		}
-		a := New("dev", "unknown")
-		a.dataDirectory = func() (string, *protocol.Error) { return filepath.Join(data, "profiles"), nil }
-		options := map[string]string{}
-		if r.EnvOverride != nil {
-			options["env"] = *r.EnvOverride
+		configRoot := ""
+		if len(command.Bind)+len(command.Serve) > 0 {
+			dirs, pathErr := paths.Current()
+			if pathErr != nil {
+				return protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil)
+			}
+			configRoot = dirs.Config
 		}
-		_, e = a.runCommand(process.WithRunner(ctx, runner), IO{Out: output, Err: output}, Request{Args: []string{r.Command}, Options: options})
-		return e
+		dependencies, err := execution.DependenciesFor(command, data, configRoot)
+		if err != nil {
+			return err
+		}
+		prepared, err := execution.Prepare(ctx, command, dependencies, false)
+		if err != nil {
+			return err
+		}
+		defer prepared.Release()
+		checks := prepared.Checks(ctx, os.Environ(), false)
+		if !execution.ChecksPassed(checks) {
+			return protocol.NewError("requirements_failed", "Command prerequisites are not satisfied. Run devtools doctor for diagnostics.", 3, map[string]any{"checks": checks})
+		}
+		_, err = prepared.Execute(ctx, os.Environ(), runner, nil, output, output)
+		return err
 	})
 }

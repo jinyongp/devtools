@@ -25,6 +25,7 @@ import (
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/retention"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
@@ -338,7 +339,12 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 			if q.Capture == nil {
 				q.Capture = &r.Capture
 			}
-			out, err = s.start(ctx, q, r.ID)
+			started, startErr := s.start(ctx, q, r.ID)
+			if started.Item.ID != "" {
+				out.Item = started.Item
+			}
+			out.Changed = out.Changed || started.Changed
+			err = startErr
 		}
 	default:
 		err = failure("invalid_argument")
@@ -541,7 +547,7 @@ func (s Store) Logs(ctx context.Context, id string) (string, *protocol.Error) {
 	if !r.Capture {
 		return "", failure("logs_disabled")
 	}
-	if r.EndedAt != nil && time.Since(*r.EndedAt) > 7*24*time.Hour {
+	if r.EndedAt != nil && time.Since(*r.EndedAt) > retention.RawProcessLogAge {
 		return "", failure("logs_expired")
 	}
 	b, err := maintenance.Read(s.path(id, "output.log"), 1<<20)

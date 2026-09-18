@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"github.com/jinyongp/devtools/internal/backup"
 	"github.com/jinyongp/devtools/internal/cleanup"
+	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/project"
@@ -89,6 +90,33 @@ func invalidAction(w http.ResponseWriter) {
 func (s *Server) valueStore(profile string) values.Store {
 	return values.Store{Directory: filepath.Join(filepath.Dir(s.data), "profiles"), Profile: profile}
 }
+
+func (s *Server) preflightProjectCommand(ctx context.Context, p project.Context, name string, envOverride *string) *protocol.Error {
+	current, err := project.Resolve(p.Root, "")
+	if err != nil {
+		return err
+	}
+	if current.Root != p.Root || current.Profile != p.Profile {
+		return protocol.NewError("instance_conflict", "Project identity changed.", 3, nil)
+	}
+	command, err := execution.ResolveConfigured(current, name, envOverride, nil)
+	if err != nil {
+		return err
+	}
+	configRoot := ""
+	if len(command.Bind)+len(command.Serve) > 0 {
+		dirs, pathErr := paths.Current()
+		if pathErr != nil {
+			return protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil)
+		}
+		configRoot = dirs.Config
+	}
+	dependencies, err := execution.DependenciesFor(command, filepath.Dir(s.data), configRoot)
+	if err != nil {
+		return err
+	}
+	return execution.Preflight(ctx, command, dependencies, os.Environ())
+}
 func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	kind, _, e := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if e != nil || kind != "application/json" {
@@ -155,6 +183,11 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 			if p.Profile != req.Profile {
 				invalidAction(w)
 				return
+			}
+			req.Process.Directory = p.Root
+			command, env := req.Process.Command, req.Process.Env
+			req.Process.BeforeStart = func(ctx context.Context) *protocol.Error {
+				return s.preflightProjectCommand(ctx, p, command, env)
 			}
 		} else {
 			record, e := manager.Status(r.Context(), req.Process.ID)

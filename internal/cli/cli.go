@@ -119,6 +119,7 @@ func New(version, commit string) *App {
 	a.registerTasks()
 	a.registerDashboard()
 	a.registerDoctor()
+	a.registerDiagnostics()
 	a.registerPorts()
 	a.registerProxy()
 	a.registerBackup()

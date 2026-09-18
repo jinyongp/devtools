@@ -38,6 +38,28 @@ stdin에 실제 값을 전달해야 하며 secret을 인자에 넣지 않는다.
 진단을 정상적으로 수행하면 종료 코드는 0이다. 환경 준비 여부는
 `data.ready`로 판단한다. 잘못된 옵션이나 취소는 기존 CLI 오류 계약을 따른다.
 
+## 전체 devtools 상태 확인
+
+`devtools diagnostics`는 현재 사용자의 devtools 저장소와 런타임 상태를 한 번에 조회한다.
+
+```sh
+devtools diagnostics
+```
+
+보고서는 profile metadata, port instance와 assignment 개수, managed process 상태 개수,
+proxy와 dashboard 실행 상태, 공개 backup 설정 상태를 포함한다. 각 영역은
+`status: "pass"` 또는 `status: "fail"`을 반환하고, 읽기나 저장소 검사가 실패한 영역은
+`error_code`와 `issues`에 기록한다. `data.ready`는 모든 영역을 정상적으로 조회했는지를
+나타낸다.
+
+proxy나 dashboard가 중지되어 있거나 backup이 아직 설정되지 않은 상태도 정상적으로 조회할 수
+있으므로 그 자체로 `ready: false`가 되지 않는다. `diagnostics`는 상태를 읽기만 하며
+dashboard 세션이나 로그인 링크를 만들지 않는다.
+
+응답에는 profile 변수·secret 값, raw process log, dashboard/process 인증 token, task execution
+context, backup recipient를 포함하지 않는다. 프로젝트 명령의 도구·env·필수 key 준비 상태는
+`doctor` 또는 `doctor COMMAND`로 확인한다.
+
 ## 필수 조건 선언
 
 프로젝트 공통 조건은 `[requirements]`, 명령별 추가 조건은

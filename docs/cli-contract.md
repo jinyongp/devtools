@@ -5,7 +5,7 @@
 포트 할당과 명령별 `serve`·`bind`·템플릿은 [포트 사용 가이드](ports.md)와
 [포트 관리 계약](port-design.md)을 따른다. worktree별 `.localhost` route는
 [로컬 reverse proxy](proxy.md)를 참고한다. 저장된 profile의 조회·비교·환경 간 이동은
-[Profile 관리](profiles.md), `project up/status/down`은 [프로세스 관리](processes.md#프로젝트-서버를-함께-관리하기)를 따른다.
+[Profile 관리](profiles.md), `project up/status/logs/restart/down`은 [프로세스 관리](processes.md#프로젝트-서버를-함께-관리하기)를 따른다.
 현재 소스의 CLI machine contract는 protocol v3이며, 전환 규칙은 [CLI 출력 계약](cli-output.md)에 있다.
 
 이 문서는 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `import`, `env`, `command`의 사용법을 다룬다. `run`은 `command run`의 호환 alias다. 전체 기능 안내는 [README](../README.md), 설치된 바이너리의 명령 목록은 `devtools schema`에서 확인한다. 예시는 설치한 `devtools`가 PATH에 있는 환경을 기준으로 한다.

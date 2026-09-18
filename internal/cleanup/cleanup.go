@@ -18,6 +18,7 @@ import (
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/retention"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -135,7 +136,7 @@ func (e Engine) lock(ctx context.Context) (func(), *protocol.Error) {
 func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protocol.Error) {
 	items := []candidate{}
 	now := time.Now()
-	cutoff := now.Add(-30 * 24 * time.Hour)
+	cutoff := now.Add(-retention.CleanupCandidateAge)
 	add := func(kind, p, path string, b []byte) {
 		items = append(items, candidate{Item: Item{ID: tasks.ID(), Kind: kind, Profile: p, Source: path, Bytes: int64(len(b))}, Stamp: digest(b)})
 	}
@@ -202,7 +203,7 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 				add("completed_process", r.Profile, filepath.Join(base, "record.json"), b)
 			}
 		}
-		if r.Capture && now.Sub(*r.EndedAt) > 7*24*time.Hour {
+		if r.Capture && now.Sub(*r.EndedAt) > retention.RawProcessLogAge {
 			path := filepath.Join(base, "output.log")
 			b, err := maintenance.Read(path, 1<<20)
 			if err == nil {
@@ -238,7 +239,7 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 		}
 		sort.Slice(files, func(i, j int) bool { return files[i].at.After(files[j].at) })
 		for n, f := range files {
-			if n < 3 || !f.at.Before(cutoff) {
+			if n < retention.MinimumBackupCopies || !f.at.Before(cutoff) {
 				continue
 			}
 			b, err := maintenance.Read(f.path, 128<<20)
@@ -299,7 +300,7 @@ func (e Engine) Preview(ctx context.Context, profile string) (Plan, *protocol.Er
 	if err != nil {
 		return out, err
 	}
-	s := snapshot{ID: tasks.ID(), Expires: time.Now().UTC().Add(10 * time.Minute), Profile: profile, Items: items}
+	s := snapshot{ID: tasks.ID(), Expires: time.Now().UTC().Add(retention.CleanupPreviewTTL), Profile: profile, Items: items}
 	if write(filepath.Join(e.Cache, "cleanup", s.ID+".json"), s) != nil {
 		return out, fail("storage_error")
 	}
@@ -587,7 +588,7 @@ func (e Engine) Purge(ctx context.Context, id string) (Archive, bool, *protocol.
 	if a.PurgedAt != nil {
 		return a, false, nil
 	}
-	if time.Since(a.ArchivedAt) < 30*24*time.Hour {
+	if time.Since(a.ArchivedAt) < retention.ArchivePurgeAge {
 		return a, false, fail("retention_active")
 	}
 	if er := os.Remove(e.archivePath(id, "payload")); er != nil && !errors.Is(er, os.ErrNotExist) {

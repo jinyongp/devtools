@@ -13,6 +13,7 @@ import (
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/retention"
 )
 
 type Query struct {
@@ -223,7 +224,7 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 					return nil, storageError()
 				}
 				token = ID()
-				snapshot := GraphSnapshot{Projection: ProjectionVersion, Profile: store.Profile, Kind: kind, Expires: time.Now().Add(30 * time.Minute), Events: s.Events}
+				snapshot := GraphSnapshot{Projection: ProjectionVersion, Profile: store.Profile, Kind: kind, Expires: time.Now().Add(retention.QuerySnapshotTTL), Events: s.Events}
 				if e := WritePrivate(filepath.Join(dir, token+".json"), snapshot); e != nil {
 					return nil, storageError()
 				}
@@ -399,7 +400,7 @@ func pruneQueries(dir string) {
 		}
 		path := filepath.Join(dir, entry.Name())
 		info, e := entry.Info()
-		if e == nil && info.Mode().IsRegular() && info.Mode().Perm()&0077 == 0 && time.Since(info.ModTime()) > 30*time.Minute {
+		if e == nil && info.Mode().IsRegular() && info.Mode().Perm()&0077 == 0 && time.Since(info.ModTime()) > retention.QuerySnapshotTTL {
 			_ = os.Remove(path)
 		}
 	}
@@ -418,7 +419,7 @@ func (s Store) page(q Query, out Object, items []any, limit int) (Object, *proto
 	}
 	offset := 0
 	token := ""
-	snapshot := Snapshot{Projection: ProjectionVersion, Fingerprint: fp, Expires: time.Now().Add(30 * time.Minute), Revision: num(out, "revision"), Items: items}
+	snapshot := Snapshot{Projection: ProjectionVersion, Fingerprint: fp, Expires: time.Now().Add(retention.QuerySnapshotTTL), Revision: num(out, "revision"), Items: items}
 	if c := q.Options["cursor"]; c != "" {
 		parts := strings.Split(c, ":")
 		if len(parts) != 2 || !validID(parts[0]) {
@@ -453,7 +454,7 @@ func (s Store) page(q Query, out Object, items []any, limit int) (Object, *proto
 			}
 			entries, _ := os.ReadDir(dir)
 			for _, entry := range entries {
-				if info, e := entry.Info(); e == nil && time.Since(info.ModTime()) > 30*time.Minute && strings.HasSuffix(entry.Name(), ".json") {
+				if info, e := entry.Info(); e == nil && time.Since(info.ModTime()) > retention.QuerySnapshotTTL && strings.HasSuffix(entry.Name(), ".json") {
 					_ = os.Remove(filepath.Join(dir, entry.Name()))
 				}
 			}

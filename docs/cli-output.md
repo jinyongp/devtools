@@ -101,10 +101,12 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `profile import` | `item`, `digest`, `target_exists`, `diff`, `changed`, `replayed`, `safety_backup`; 미리보기는 변경하지 않음 |
 | `backup status` | 공개 설정 상태를 담은 `item` |
 | `project status` | `profile`, `directory`, 활성 실행 `items` |
-| `project up/down` | `action`, `profile`, `directory`, 명령별 `items`, `changed`, `replayed` |
+| `project logs` | 활성 실행 `id`, `command`, 보관된 원문 `content` |
+| `project up/restart/down` | `action`, `profile`, `directory`, 명령별 `items`, `changed`, `replayed` |
 | `cleanup archives`, apply, restore/purge | 각각 `items`, `items`·`changed`·`replayed`, `item`·`changed` |
 | `cleanup preview` | 계획 ID·만료 시각·`items` |
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
+| `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
 
 ## v0.15.0용 protocol v3 마이그레이션
@@ -122,7 +124,7 @@ Protocol v2의 자동화는 import 입력과 doctor 응답을 함께 변경해�
 | 반복 positional | 선언한 개수로 제한 | 마지막 인자의 `repeatable`; schema의 `args.items`와 help의 `<command...>`로 표현 |
 
 `profile list/inspect/diff`, `backup status`, 직접 공개 recipient 입력과
-`project up/status/down`은 새 명령·옵션입니다. 세부 사용법은 [Profile 관리](profiles.md),
+`project up/status/logs/restart/down`은 project-scoped managed process 명령입니다. 세부 사용법은 [Profile 관리](profiles.md),
 [백업](backup.md), [프로세스 관리](processes.md), [doctor](doctor.md)를 참고하세요.
 
 Project lifecycle의 부분 실패는 stderr 오류의 `details.items`에서 확인합니다.

@@ -19,8 +19,9 @@ func TestProtocolV3DiscoveryContracts(t *testing.T) {
 		{"schema"}, {"schema", "--all"}, {"schema", "profile"},
 		{"schema", "profile", "list"}, {"schema", "profile", "inspect"},
 		{"schema", "profile", "diff"}, {"schema", "profile", "import"},
-		{"schema", "backup", "status"}, {"schema", "doctor"},
+		{"schema", "backup", "status"}, {"schema", "doctor"}, {"schema", "diagnostics"},
 		{"schema", "project", "up"}, {"schema", "project", "status"},
+		{"schema", "project", "logs"}, {"schema", "project", "restart"},
 		{"schema", "project", "down"}, {"schema", "run"},
 	} {
 		data := outputData(t, app, args)

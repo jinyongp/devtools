@@ -83,3 +83,30 @@ func TestUpRechecksPreflightIfReuseCandidateBecomesActualStart(t *testing.T) {
 		t.Fatalf("raced cold start was not preflighted: result=%#v checked=%v err=%v", result, checked, err)
 	}
 }
+
+func TestUpRechecksColdStartImmediatelyBeforeApply(t *testing.T) {
+	p := testProject(t, "web")
+	processes := &fakeProcesses{}
+	processes.apply = func(request services.Request, _ int) (services.Result, *protocol.Error) {
+		if request.BeforeStart == nil {
+			t.Fatal("cold start lost immediate preflight")
+		}
+		if err := request.BeforeStart(context.Background()); err != nil {
+			return services.Result{}, err
+		}
+		return services.Result{Item: runningRecord(p, request.Command, request.RequestID), Changed: true}, nil
+	}
+	checked := 0
+	manager := Manager{
+		Data:      t.TempDir(),
+		Processes: processes,
+		Preflight: func(context.Context, project.Context, string, *string) *protocol.Error {
+			checked++
+			return nil
+		},
+	}
+	result, err := manager.Apply(context.Background(), Request{Action: ActionUp, Project: p, Commands: []string{"web"}, Timeout: time.Second, RequestID: tasks.ID()})
+	if err != nil || !result.Changed || checked != 2 {
+		t.Fatalf("cold start was not rechecked at apply: result=%#v checked=%d err=%v", result, checked, err)
+	}
+}

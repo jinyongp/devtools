@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	ActionUp   = "up"
-	ActionDown = "down"
+	ActionUp      = "up"
+	ActionDown    = "down"
+	ActionRestart = "restart"
 )
 
 type ProcessStore interface {
@@ -71,12 +72,11 @@ type Result struct {
 }
 
 type receiptItem struct {
-	Command          string `json:"command"`
-	RequestID        string `json:"request_id"`
-	ExecutionID      string `json:"execution_id,omitempty"`
-	PreflightOnStart bool   `json:"preflight_on_start,omitempty"`
-	Done             bool   `json:"done"`
-	Result           Item   `json:"result"`
+	Command     string `json:"command"`
+	RequestID   string `json:"request_id"`
+	ExecutionID string `json:"execution_id,omitempty"`
+	Done        bool   `json:"done"`
+	Result      Item   `json:"result"`
 }
 
 type receipt struct {
@@ -109,7 +109,7 @@ func storageError() *protocol.Error {
 
 func fingerprint(request Request) string {
 	input := fingerprintInput{Action: request.Action, Profile: request.Project.Profile, Directory: request.Project.Root, Commands: append([]string{}, request.Commands...), Env: request.Env, Capture: request.Capture}
-	if request.Action == ActionUp {
+	if request.Action == ActionUp || request.Action == ActionRestart {
 		input.Timeout = int64(request.Timeout)
 	}
 	body, _ := json.Marshal(input)
@@ -137,11 +137,11 @@ func validateRequest(request Request) *protocol.Error {
 	if !filepath.IsAbs(request.Project.Root) || !project.ValidProfile(request.Project.Profile) || !requestIDPattern.MatchString(request.RequestID) {
 		return fail("invalid_argument", "Project lifecycle request is invalid.", 2, nil)
 	}
-	if request.Action != ActionUp && request.Action != ActionDown {
+	if request.Action != ActionUp && request.Action != ActionDown && request.Action != ActionRestart {
 		return fail("invalid_argument", "Project lifecycle action is invalid.", 2, nil)
 	}
-	if request.Action == ActionUp && (len(request.Commands) == 0 || request.Timeout <= 0 || request.Timeout > 10*time.Minute) {
-		return fail("invalid_argument", "Project up requires commands and a positive timeout up to 10m.", 2, nil)
+	if (request.Action == ActionUp || request.Action == ActionRestart) && (len(request.Commands) == 0 || request.Timeout <= 0 || request.Timeout > 10*time.Minute) {
+		return fail("invalid_argument", "Project start or restart requires commands and a positive timeout up to 10m.", 2, nil)
 	}
 	seen := map[string]bool{}
 	for _, name := range request.Commands {
@@ -149,7 +149,7 @@ func validateRequest(request Request) *protocol.Error {
 			return fail("invalid_argument", "Project lifecycle command selection is invalid.", 2, map[string]any{"command": name})
 		}
 		seen[name] = true
-		if request.Action == ActionUp {
+		if request.Action == ActionUp || request.Action == ActionRestart {
 			if _, ok := request.Project.Commands[name]; !ok {
 				return fail("command_not_found", "The selected project command is not defined.", 3, map[string]any{"command": name})
 			}
@@ -232,7 +232,7 @@ func (m Manager) initialUp(ctx context.Context, request Request, fp string) (rec
 	}
 	items := make([]receiptItem, 0, len(request.Commands))
 	for _, name := range request.Commands {
-		items = append(items, receiptItem{Command: name, RequestID: tasks.ID(), PreflightOnStart: existing[name], Result: Item{Command: name, Status: "pending"}})
+		items = append(items, receiptItem{Command: name, RequestID: tasks.ID(), Result: Item{Command: name, Status: "pending"}})
 	}
 	return receipt{Fingerprint: fp, Action: request.Action, Profile: request.Project.Profile, Directory: request.Project.Root, Items: items}, nil
 }
@@ -317,6 +317,39 @@ func (m Manager) initialDown(ctx context.Context, request Request, fp string) (r
 	return receipt{Fingerprint: fp, Action: request.Action, Profile: request.Project.Profile, Directory: request.Project.Root, Items: items}, nil
 }
 
+func (m Manager) initialRestart(ctx context.Context, request Request, fp string) (receipt, *protocol.Error) {
+	records, err := m.Processes.List(ctx, request.Project.Profile)
+	if err != nil {
+		return receipt{}, err
+	}
+	active := activeRecords(records, request.Project)
+	byCommand := map[string][]services.Record{}
+	for _, record := range active {
+		byCommand[record.Command] = append(byCommand[record.Command], record)
+	}
+	items := make([]receiptItem, 0, len(request.Commands))
+	for _, name := range request.Commands {
+		child := receiptItem{Command: name, RequestID: tasks.ID(), Result: Item{Command: name, Status: "pending"}}
+		matches := byCommand[name]
+		switch len(matches) {
+		case 0:
+			child.Done = true
+			child.Result.Status = "failed"
+			child.Result.Condition = &Condition{Code: "process_not_found", Message: "No active managed execution exists for the selected project command.", Details: map[string]any{"command": name}}
+		case 1:
+			record := matches[0]
+			child.ExecutionID = record.ID
+			child.Result.Item = &record
+		default:
+			child.Done = true
+			child.Result.Status = "failed"
+			child.Result.Condition = &Condition{Code: "process_conflict", Message: "Multiple active executions exist for the selected project command.", Details: map[string]any{"command": name, "count": len(matches)}}
+		}
+		items = append(items, child)
+	}
+	return receipt{Fingerprint: fp, Action: request.Action, Profile: request.Project.Profile, Directory: request.Project.Root, Items: items}, nil
+}
+
 func (m Manager) runUp(ctx context.Context, request Request, value *receipt, path string) *protocol.Error {
 	for index := range value.Items {
 		child := &value.Items[index]
@@ -325,7 +358,7 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 		}
 		child.Result.Condition = nil
 		processRequest := services.Request{Action: "start", Directory: request.Project.Root, Command: child.Command, Env: request.Env, Capture: request.Capture, RequestID: child.RequestID}
-		if child.PreflightOnStart && m.Preflight != nil {
+		if m.Preflight != nil {
 			processRequest.BeforeStart = func(ctx context.Context) *protocol.Error {
 				return m.Preflight(ctx, request.Project, child.Command, request.Env)
 			}
@@ -372,7 +405,7 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 			}
 			continue
 		}
-		if request.Project.Commands[child.Command].Ready != nil {
+		if result.Item.ReadyConfigured {
 			ready, waitErr := m.Processes.Wait(ctx, result.Item.ID, request.Timeout)
 			child.Result.Item = &ready
 			if waitErr != nil {
@@ -445,6 +478,99 @@ func (m Manager) runDown(ctx context.Context, value *receipt, path string) *prot
 	return nil
 }
 
+func (m Manager) runRestart(ctx context.Context, request Request, value *receipt, path string) *protocol.Error {
+	for index := range value.Items {
+		child := &value.Items[index]
+		if child.Done {
+			continue
+		}
+		child.Result.Condition = nil
+		preflightEnv := request.Env
+		if preflightEnv == nil && child.Result.Item != nil {
+			preflightEnv = child.Result.Item.EnvOverride
+		}
+		processRequest := services.Request{
+			Action:    "restart",
+			ID:        child.ExecutionID,
+			Env:       request.Env,
+			Capture:   request.Capture,
+			RequestID: child.RequestID,
+		}
+		if m.Preflight != nil {
+			processRequest.BeforeStart = func(ctx context.Context) *protocol.Error {
+				return m.Preflight(ctx, request.Project, child.Command, preflightEnv)
+			}
+		}
+		result, err := m.Processes.Apply(ctx, processRequest)
+		if result.Item.ID != "" {
+			child.Result.Item = &result.Item
+		}
+		child.Result.Changed = child.Result.Changed || result.Changed
+		if err != nil {
+			child.Result.Status = "failed"
+			if pending(err) {
+				child.Result.Status = "pending"
+			}
+			child.Result.Condition = condition(err)
+			if err.Code != "canceled" && !pending(err) {
+				child.RequestID = tasks.ID()
+			}
+			if writeErr := writeReceipt(path, *value); writeErr != nil {
+				return writeErr
+			}
+			if err.Code == "canceled" {
+				return err
+			}
+			continue
+		}
+		if result.Item.EndedAt != nil || result.Item.State == "failed" || result.Item.State == "interrupted" {
+			child.Result.Status = "failed"
+			child.Result.Condition = &Condition{Code: "process_failed", Message: "Restarted process did not remain running."}
+			child.RequestID = tasks.ID()
+			if writeErr := writeReceipt(path, *value); writeErr != nil {
+				return writeErr
+			}
+			continue
+		}
+		if result.Item.State != "running" {
+			child.Result.Status = "pending"
+			child.Result.Condition = &Condition{Code: "process_pending", Message: "Restarted process has not reached the running state."}
+			if writeErr := writeReceipt(path, *value); writeErr != nil {
+				return writeErr
+			}
+			continue
+		}
+		if result.Item.ReadyConfigured {
+			ready, waitErr := m.Processes.Wait(ctx, result.Item.ID, request.Timeout)
+			child.Result.Item = &ready
+			if waitErr != nil {
+				child.Result.Status = "failed"
+				if pending(waitErr) {
+					child.Result.Status = "pending"
+				} else if waitErr.Code != "canceled" {
+					child.RequestID = tasks.ID()
+				}
+				child.Result.Condition = condition(waitErr)
+				if writeErr := writeReceipt(path, *value); writeErr != nil {
+					return writeErr
+				}
+				if waitErr.Code == "canceled" {
+					return waitErr
+				}
+				continue
+			}
+			child.Result.Status = "ready"
+		} else {
+			child.Result.Status = "running"
+		}
+		child.Done = true
+		if writeErr := writeReceipt(path, *value); writeErr != nil {
+			return writeErr
+		}
+	}
+	return nil
+}
+
 func batchFailure(result Result) *protocol.Error {
 	for _, item := range result.Items {
 		if item.Condition != nil {
@@ -498,9 +624,12 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 		return Result{}, storageError()
 	} else {
 		var initErr *protocol.Error
-		if request.Action == ActionUp {
+		switch request.Action {
+		case ActionUp:
 			value, initErr = m.initialUp(ctx, request, fp)
-		} else {
+		case ActionRestart:
+			value, initErr = m.initialRestart(ctx, request, fp)
+		default:
 			value, initErr = m.initialDown(ctx, request, fp)
 		}
 		if initErr != nil {
@@ -511,12 +640,19 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 		}
 	}
 	if value.complete() {
-		return value.result(replayed), nil
+		result := value.result(replayed)
+		if failure := batchFailure(result); failure != nil {
+			return result, failure
+		}
+		return result, nil
 	}
 	var runErr *protocol.Error
-	if request.Action == ActionUp {
+	switch request.Action {
+	case ActionUp:
 		runErr = m.runUp(ctx, request, &value, path)
-	} else {
+	case ActionRestart:
+		runErr = m.runRestart(ctx, request, &value, path)
+	default:
 		runErr = m.runDown(ctx, &value, path)
 	}
 	result := value.result(replayed)

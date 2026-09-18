@@ -16,10 +16,13 @@ dashboard:
 fmt:
     gofmt -w cmd internal scripts skills
 
-check: check-skill-release
+check: check-skill-release check-dashboard
     test -z "$(gofmt -l cmd internal scripts skills)"
     go vet ./...
     go test -race ./...
+
+check-dashboard:
+    node --test scripts/dashboard-*.test.mjs
 
 check-skill:
     sh scripts/validate-skill.sh

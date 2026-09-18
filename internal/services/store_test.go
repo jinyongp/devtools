@@ -168,6 +168,71 @@ func TestStartRunsFallbackPreflightBeforeCreatingExecution(t *testing.T) {
 	}
 }
 
+func TestStartReusesSingletonWithoutColdStartPreflight(t *testing.T) {
+	s := Store{Data: t.TempDir()}
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	canonical, canonicalErr := filepath.EvalSymlinks(root)
+	if canonicalErr != nil {
+		t.Fatal(canonicalErr)
+	}
+	root = canonical
+	ps := ports.Store{Directory: filepath.Join(s.Data, "ports")}
+	var instance ports.Instance
+	if err := ps.Update(context.Background(), func(state *ports.State) (bool, *protocol.Error) {
+		created, failure := state.Register("app", root)
+		if failure != nil {
+			return false, failure
+		}
+		instance = *created
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now().UTC()
+	existing := Record{
+		ID:        tasks.ID(),
+		Profile:   "app",
+		Instance:  instance.ID,
+		Directory: root,
+		Command:   "web",
+		CreatedAt: started,
+		StartedAt: &started,
+		State:     "running",
+	}
+	if err := writePrivate(s.path(existing.ID, "record.json"), existing); err != nil {
+		t.Fatal(err)
+	}
+	token := strings.Repeat("b", 64)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/status" || request.Header.Get("Authorization") != "Bearer "+token {
+			http.Error(w, "unexpected request", http.StatusForbidden)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(existing)
+	}))
+	defer server.Close()
+	if err := writePrivate(s.path(existing.ID, "control.json"), control{ID: existing.ID, Address: server.URL, Token: token}); err != nil {
+		t.Fatal(err)
+	}
+	called := 0
+	result, err := s.start(context.Background(), Request{
+		Action:    "start",
+		Directory: root,
+		Command:   "web",
+		RequestID: tasks.ID(),
+		BeforeStart: func(context.Context) *protocol.Error {
+			called++
+			return protocol.NewError("requirements_failed", "must not run", 3, nil)
+		},
+	}, "")
+	if err != nil || result.Item.ID != existing.ID || result.Changed || called != 0 {
+		t.Fatalf("singleton reuse drifted: result=%#v called=%d err=%v", result, called, err)
+	}
+}
+
 func TestBoundedRawLogs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "output.log")
 	if e := os.Chmod(filepath.Dir(path), 0700); e != nil {
@@ -193,5 +258,67 @@ func TestErrorExitCodes(t *testing.T) {
 		if err := failure(code); err.ExitCode != want {
 			t.Errorf("%s exit code = %d, want %d", code, err.ExitCode, want)
 		}
+	}
+}
+
+func TestRestartPreservesStopMutationWhenColdStartPreflightFails(t *testing.T) {
+	s := Store{Data: t.TempDir()}
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root = canonical
+
+	started := time.Now().UTC()
+	old := Record{ID: tasks.ID(), Profile: "app", Instance: "instance", Directory: root, Command: "web", CreatedAt: started, StartedAt: &started, State: "running"}
+	if err := writePrivate(s.path(old.ID, "record.json"), old); err != nil {
+		t.Fatal(err)
+	}
+	token := strings.Repeat("c", 64)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer "+token {
+			http.Error(w, "unexpected request", http.StatusForbidden)
+			return
+		}
+		switch request.URL.Path {
+		case "/stop":
+			ended := time.Now().UTC()
+			stopped := old
+			stopped.EndedAt = &ended
+			stopped.State = "stopped"
+			stopped.Reason = "stop_requested"
+			if err := writePrivate(s.path(old.ID, "record.json"), stopped); err != nil {
+				t.Fatal(err)
+			}
+			_ = json.NewEncoder(w).Encode(old)
+		case "/status":
+			_ = json.NewEncoder(w).Encode(old)
+		default:
+			http.Error(w, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	if err := writePrivate(s.path(old.ID, "control.json"), control{ID: old.ID, Address: server.URL, Token: token}); err != nil {
+		t.Fatal(err)
+	}
+
+	request := Request{
+		Action:    "restart",
+		ID:        old.ID,
+		RequestID: tasks.ID(),
+		BeforeStart: func(context.Context) *protocol.Error {
+			return protocol.NewError("requirements_failed", "cold start blocked", 3, nil)
+		},
+	}
+	result, failure := s.Apply(context.Background(), request)
+	if failure == nil || failure.Code != "requirements_failed" {
+		t.Fatalf("expected preflight failure, got result=%#v err=%v", result, failure)
+	}
+	if !result.Changed || result.Item.ID != old.ID || result.Item.State != "stopped" {
+		t.Fatalf("restart lost accepted stop mutation: %#v", result)
 	}
 }

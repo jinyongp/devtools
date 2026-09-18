@@ -18,7 +18,6 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/process"
-	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -145,11 +144,9 @@ func (s Store) Serve(ctx context.Context, id string, execute Execute) error {
 		}
 		now := time.Now().UTC()
 		mu.Lock()
-		if config, ok := ctx.Value(readyKey{}).(*project.ReadyProbe); ok && config != nil {
-			copy := *config
-			copy.Exec = append([]string{}, config.Exec...)
+		if config := process.ReadyProbe(ctx); config != nil {
 			preparedEnv := append([]string{}, env...)
-			probe = func(query context.Context) Readiness { return runProbe(query, copy, dir, preparedEnv) }
+			probe = func(query context.Context) Readiness { return runProbe(query, *config, dir, preparedEnv) }
 			r.ReadyConfigured = true
 		}
 		r.StartedAt = &now

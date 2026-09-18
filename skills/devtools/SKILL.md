@@ -37,6 +37,11 @@ an output-format option. Treat this link as a credential.
 
 Use `doctor COMMAND` before a configured command when setup is uncertain.
 A successful diagnosis can still have `data.ready: false`; inspect `checks[].remedies`.
+Use `diagnostics` when the question spans the user's devtools installation instead of one
+project command. It reports profile, port, process, proxy, dashboard, and public backup
+metadata without secret values, raw logs, credentials, execution contexts, or backup
+recipient material. A stopped proxy/dashboard or unconfigured backup is a readable state;
+`diagnostics.data.ready: false` means at least one subsystem could not be inspected safely.
 Each remedy has `argv`, `required_inputs`, and `message`. Supply missing inputs before
 execution; an empty argv describes a manual action. These are suggestions, not automatic
 permission to install tools or change data. Keep secrets in stdin/files, never remedy argv.
@@ -55,13 +60,18 @@ Restart applies current config and values.
 
 Use `project up COMMAND... --request-id UUID` for several named servers. Names are
 required; never assume all configured commands are servers. Readiness waits are
-per command. `project status [COMMAND...]` and `project down [COMMAND...] --request-id UUID`
-select the current project's canonical directory, not other worktrees sharing its profile.
-On partial failure inspect `error.details.items`; successful siblings stay running.
-Retry the same input/UUID to continue unfinished children. A resumed batch may return
-updated progress with `replayed: true`. Completed requests replay their saved result.
-Down retries stop only executions selected by the original request. Use a new UUID
-for a new operation and `project status` for current state.
+per command. `project status [COMMAND...]`, `project logs COMMAND`, `project restart
+COMMAND... --request-id UUID`, and `project down [COMMAND...] --request-id UUID` select
+the current project's canonical directory, not other worktrees sharing its profile.
+`project logs` reads the active captured output for that command; use execution-ID
+`process logs` for ended history. Restart freezes the active execution IDs selected by
+the first request, applies current project configuration and values, and never starts a
+missing command implicitly. Omitted env/capture options inherit the execution's prior
+selection. On partial failure inspect `error.details.items`; successful siblings stay
+running. Retry the same input/UUID to continue unfinished children. A resumed batch may
+return updated progress with `replayed: true`. Completed requests replay their saved
+result. Down/restart retries keep the original execution targets. Use a new UUID for a
+new operation and `project status` for current state.
 
 Ports belong to execution locations. Inspect `port` and `instance` before changing
 assignments. Commands declare `serve` for servers and `bind` for injected values.

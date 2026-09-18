@@ -25,8 +25,10 @@ devtools_0.1.0_linux_amd64.tar.gz.sha256
 
 `OUTPUT_DIR`로 출력 디렉터리, `COMMIT`으로 빌드의 커밋 식별자를 지정할 수 있다. 배포 버전은 명시적으로 선택한다.
 
-같은 버전의 플랫폼 독립 Agent Skill 배포물은 별도로 만든다. 이 단계에는 `uvx`와
-`skills-ref` 검증기가 필요하지 않지만, 게시 전 `just check`가 공식 검증을 수행한다.
+오프라인·수동 설치용 Agent Skill archive도 같은 버전으로 만든다. 일반 설치는
+`npx skills add jinyongp/devtools`로 저장소에서 직접 수행한다.
+archive 생성 자체에는 `uvx`와 `skills-ref`가 필요하지 않지만, 게시 전 `just check`가
+공식 Agent Skills 검증을 수행한다.
 
 ```sh
 just release-skill 0.1.0
@@ -39,7 +41,8 @@ devtools-skill_0.1.0.tar.gz
 devtools-skill_0.1.0.tar.gz.sha256
 ```
 
-Agent Skill 설치 방법은 [Agent Skill 설치](agent-skill.md)를 참고한다.
+Agent Skill의 한 줄 설치, global 설치, 업데이트와 수동 fallback은
+[Agent Skill 설치](agent-skill.md)를 참고한다.
 
 ## 처음 설치하기
 
@@ -102,8 +105,14 @@ curl을 사용합니다. 로컬 배포물은 `devtools update --version 0.2.0 --
 지정할 수 있습니다. 실행 중인 process, proxy daemon과 dashboard는 업데이트 후
 재시작하면 새 버전을 사용합니다.
 
-에이전트용 devtools Agent Skill을 사용 중이면 CLI와 함께 공개 스킬 배포물도
-업데이트해야 새 명령과 운용 지침이 반영됩니다. 자세한 절차는
+에이전트용 devtools Agent Skill도 최신 지침을 사용하려면 `skills` CLI로 업데이트합니다.
+
+```sh
+npx skills update devtools
+```
+
+global 설치는 `npx skills update devtools --global`을 사용합니다. 수동·오프라인 설치를
+사용한 경우에만 release archive를 직접 교체합니다. 자세한 내용은
 [Agent Skill 설치](agent-skill.md)를 참고하세요.
 
 `update` 명령이 추가되기 전에 설치한 버전은 아래 설치기로 한 번 업데이트하세요.

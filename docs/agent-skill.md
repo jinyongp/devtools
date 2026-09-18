@@ -1,24 +1,105 @@
 # Agent Skill 설치
 
-devtools 스킬은 에이전트가 필요한 명령만 조회하고, 작업 점유·인계와 재시도를
-올바르게 처리하도록 안내합니다. 명령별 옵션은 CLI에서 필요할 때 조회하므로
-스킬에 전체 스키마를 넣지 않습니다.
+devtools Agent Skill은 [Agent Skills 규약](https://agentskills.io/specification)을 따르는
+표준 Skill입니다. 원본은 저장소의 `skills/devtools/SKILL.md`이며,
+`skills` CLI가 저장소에서 직접 발견하고 사용하는 agent에 맞는 위치에 설치합니다.
 
-현재 스킬은 원자적 계획 편집과 미리보기, lifecycle과 current/stale의 구분,
-실행 기준 sync, task basis의 실행 컨텍스트 및 workstream basis의 관찰 리비전을
-안내합니다. 또한 worktree별 `.localhost` route를 구성할 때 instance alias와 port
-할당을 먼저 확인하고, 사용자 전역 proxy daemon 하나를 재시도 안전하게 관리하도록
-안내합니다. proxy의 자세한 설정과 진단 방법은 [로컬 reverse proxy](proxy.md)를
-참고하세요.
+## 설치
 
-Agent Skill은 CLI와 독립된 배포물입니다. 에이전트 실행 환경의 `PATH`에 `devtools`가
-있어야 하며, CLI와 스킬은 같은 릴리스 버전을 사용해야 합니다. 첫 실제 task 변경은
-task 저장 형식을 v2로 전환하므로 같은 profile을 쓰는 CLI도 함께 업데이트하세요.
-조회와 미리보기는 저장 형식을 전환하지 않습니다.
+프로젝트에서 사용할 때는 한 명령이면 됩니다.
 
-## 릴리스에서 설치하기
+```sh
+npx skills add jinyongp/devtools
+```
 
-아래 예시는 최신 안정 릴리스의 아카이브와 체크섬을 현재 디렉터리에 받습니다.
+`skills` CLI가 지원하는 agent를 감지하고 설치 대상을 선택하도록 안내합니다.
+직접 `.agents/skills`, `.codex/skills` 같은 경로를 만들거나 파일을 복사할 필요가 없습니다.
+
+모든 프로젝트에서 사용하려면 global scope로 설치합니다.
+
+```sh
+npx skills add jinyongp/devtools --global
+```
+
+자동화처럼 입력 없이 설치하거나 저장소에 Skill이 여러 개 생긴 뒤에도 이름을 고정해야 할 때만 Skill 이름과 agent·확인 옵션을 명시합니다.
+
+```sh
+npx skills add jinyongp/devtools --skill devtools --agent <agent> --yes
+```
+
+설치 상태는 `skills` CLI에서 확인합니다.
+
+```sh
+npx skills list
+npx skills list --global
+```
+
+## 업데이트
+
+CLI와 Agent Skill은 각각 사용하는 설치 도구로 업데이트합니다.
+
+Homebrew로 devtools를 설치했다면:
+
+```sh
+brew upgrade jinyongp/tap/devtools
+npx skills update devtools
+```
+
+설치 스크립트를 사용했다면:
+
+```sh
+devtools update
+npx skills update devtools
+```
+
+global Skill은 다음과 같이 업데이트합니다.
+
+```sh
+npx skills update devtools --global
+```
+
+Skill은 현재 devtools 명령을 `--help`와 `schema`로 발견하도록 작성되어 있습니다.
+CLI를 오래된 버전으로 고정해서 사용하는 환경에서는 Skill도 그 환경에서 실제 제공하는
+명령 계약을 기준으로 동작해야 합니다.
+
+## 제거
+
+프로젝트 설치:
+
+```sh
+npx skills remove devtools
+```
+
+global 설치:
+
+```sh
+npx skills remove devtools --global
+```
+
+## 형식과 검증
+
+Skill 디렉터리는 Agent Skills 규약의 기본 구조를 그대로 사용합니다.
+
+```text
+skills/
+└── devtools/
+    └── SKILL.md
+```
+
+`SKILL.md`에는 필수 `name`·`description` frontmatter와 실행 지침이 들어 있습니다.
+공식 reference validator로 원본을 확인할 수 있습니다.
+
+```sh
+uvx --from skills-ref==0.1.1 agentskills validate skills/devtools
+```
+
+Release CI는 reference validator와 함께 실제 `skills` CLI가 저장소에서
+`devtools` Skill을 발견하는지도 검증합니다.
+
+## 오프라인 또는 수동 설치
+
+GitHub 저장소를 `skills` CLI에서 직접 가져올 수 없는 환경을 위해 release에는
+Skill archive와 SHA-256 checksum도 계속 제공합니다. 일반 설치에는 필요하지 않습니다.
 
 ```sh
 version=$(curl -fsSL https://github.com/jinyongp/devtools/releases/latest/download/version.txt)
@@ -27,63 +108,8 @@ curl -fLO "${base}/devtools-skill_${version}.tar.gz"
 curl -fLO "${base}/devtools-skill_${version}.tar.gz.sha256"
 ```
 
-Linux에서는 `sha256sum`, macOS에서는 `shasum`으로 전송 무결성을 확인하세요.
+checksum을 확인한 뒤 사용하는 agent가 읽는 Skill 디렉터리에 archive의 `devtools/`
+디렉터리를 배치합니다. 이 방식에서는 설치 위치와 업데이트를 사용자가 직접 관리합니다.
 
-```sh
-sha256sum -c "devtools-skill_${version}.tar.gz.sha256"
-# macOS: shasum -a 256 -c "devtools-skill_${version}.tar.gz.sha256"
-```
-
-프로젝트에서 공유하려면 `.agents/skills/`에 압축을 풉니다.
-
-```sh
-mkdir -p .agents/skills
-tar -xzf "devtools-skill_${version}.tar.gz" -C .agents/skills
-```
-
-설치 결과는 다음 구조입니다.
-
-```text
-.agents/skills/
-└── devtools/
-    └── SKILL.md
-```
-
-모든 프로젝트에서 사용하는 사용자 스킬로 설치하려면 클라이언트가 검색하는 사용자
-스킬 디렉터리를 사용하세요. 교차 클라이언트 관례를 지원한다면 다음과 같이 설치합니다.
-
-```sh
-mkdir -p "$HOME/.agents/skills"
-tar -xzf "devtools-skill_${version}.tar.gz" -C "$HOME/.agents/skills"
-```
-
-`.agents/skills/`는 Agent Skills 파일 형식이 강제하는 경로가 아닙니다. 사용하는
-클라이언트가 이 경로를 검색하는지 확인하세요. 새 세션을 열고 devtools를 사용하는
-작업을 요청하면 클라이언트가 `name`과 `description`으로 스킬을 발견합니다.
-
-## 저장소에서 설치하기
-
-저장소의 `skills/devtools/`가 스킬의 원본입니다. 체크아웃한 버전을 프로젝트에
-설치할 때는 디렉터리 전체를 복사합니다.
-
-```sh
-mkdir -p .agents/skills/devtools
-cp -R skills/devtools/. .agents/skills/devtools/
-```
-
-공식 reference validator로 원본이나 설치본을 확인할 수 있습니다. 이 명령에는 `uvx`가
-필요합니다.
-
-```sh
-uvx --from skills-ref==0.1.1 agentskills validate .agents/skills/devtools
-```
-
-## 업데이트
-
-Homebrew 설치는 `brew upgrade jinyongp/tap/devtools`, 스크립트 설치는
-`devtools update`로 CLI를 업데이트합니다. 이어서 새 버전의 Agent Skill 아카이브를
-받아 같은 스킬 디렉터리에 다시 압축 해제하세요. 기존 `devtools/` 디렉터리를
-교체하므로 직접 수정한 내용이 있으면 먼저 보관해야 합니다.
-
-스킬 설치는 안내 파일을 저장하는 동작입니다. profile 등록이나 작업 생성은
-에이전트가 실제 요청을 수행할 때 CLI로 진행합니다.
+Agent Skill은 지침 파일을 설치하는 기능입니다. profile 등록, secret 저장, task 생성 같은
+devtools 데이터 변경은 agent가 실제 사용자 요청을 수행할 때 CLI를 통해 이루어집니다.

@@ -76,6 +76,8 @@ jobs:
           just-version: '1.58.0'
       - run: just check
       - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm test:skill-discovery
+      - run: corepack pnpm test:skill-discovery:public
       - run: corepack pnpm exec playwright install --with-deps chromium
       - run: just build
       - run: corepack pnpm test:dashboard:browser

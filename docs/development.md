@@ -21,7 +21,10 @@ built-in test runner, checks formatting, runs `go vet`, and runs Go tests with t
 race detector. `just check-dashboard` runs only the Dashboard JavaScript tests.
 `just check-skill` runs only the official format validator, while
 `just check-skill-release` also tests archive structure, checksums, source identity,
-and invalid fixtures. Tag-triggered release validation runs on macOS and Linux with
+and invalid fixtures. The repository also exact-pins `skills` 1.6.0; after `pnpm install`,
+`pnpm test:skill-discovery` verifies local repository discovery and
+`pnpm test:skill-discovery:public` verifies the public `jinyongp/devtools` source.
+Tag-triggered release validation runs on macOS and Linux with
 Go 1.27.1. WSL uses the Linux build; testing in an actual WSL environment is a
 separate check.
 `just verify-docker proxies`는 배포 아카이브를 설치한 격리 환경에서 HTTP route,
@@ -86,8 +89,8 @@ pnpm release --publish
 ```
 
 버전을 추천받고 main과 태그를 함께 올린다. 태그가 Release 워크플로를 시작하면
-태그 검증 뒤 macOS와 Linux CI를 병렬로 실행한다. Linux CI는 실제 Chromium dashboard smoke와
-Docker 설치 검증까지 통과해야 하며, 두 CI가 모두 성공한 뒤에만 CLI·Agent Skill 패키징과 GitHub Release
+태그 검증 뒤 macOS와 Linux CI를 병렬로 실행한다. Linux CI는 Agent Skill의 local/public `skills` discovery,
+실제 Chromium dashboard smoke와 Docker 설치 검증까지 통과해야 하며, 두 CI가 모두 성공한 뒤에만 CLI·Agent Skill 패키징과 GitHub Release
 게시가 진행된다. 로컬에서 스킬 배포물만 확인하려면 `just release-skill VERSION`을 실행한다.
 [배포 상세](install.md#github-releases-게시)와
 [격리된 설치 검증](../docker/README.md)을 참고한다.

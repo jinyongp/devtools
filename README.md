@@ -43,16 +43,15 @@ dvt version
 
 ### Agent Skill 설치
 
-에이전트가 devtools의 작업 점유, 재시도, proxy와 port 운용 규칙을 따르게 하려면
-CLI와 같은 릴리스의 독립 Agent Skill을 설치하세요. 프로젝트에서 함께 사용할 때는
-아카이브의 `devtools/` 디렉터리를 `.agents/skills/` 아래에 둡니다.
+devtools는 표준 [Agent Skills](https://agentskills.io/) 형식의 Skill을 제공합니다.
+프로젝트에 설치하려면 다음 한 줄을 실행하세요.
 
-```text
-.agents/skills/devtools/SKILL.md
+```sh
+npx skills add jinyongp/devtools
 ```
 
-`.agents/skills/`는 여러 호환 클라이언트가 함께 사용하는 관례이며, 실제 검색 위치는
-사용하는 클라이언트가 결정합니다. 다운로드와 체크섬 확인 방법은
+`skills` CLI가 사용하는 agent를 감지하고 적절한 위치에 설치합니다. 모든 프로젝트에서
+사용하려면 `--global`을 추가하세요. 업데이트·제거와 오프라인 설치 방법은
 [Agent Skill 설치](docs/agent-skill.md)를 참고하세요.
 
 ## 시작하기

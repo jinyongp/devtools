@@ -5,9 +5,12 @@
   "scripts": {
     "release": "node scripts/release.mjs",
     "test:dashboard": "node --test scripts/dashboard-*.test.mjs",
-    "test:dashboard:browser": "playwright test scripts/dashboard-browser.spec.mjs --workers=1 --reporter=line"
+    "test:dashboard:browser": "playwright test scripts/dashboard-browser.spec.mjs --workers=1 --reporter=line",
+    "test:skill-discovery": "skills add . --list",
+    "test:skill-discovery:public": "skills add jinyongp/devtools --list"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0"
+    "@playwright/test": "1.63.0",
+    "skills": "1.6.0"
   }
 }

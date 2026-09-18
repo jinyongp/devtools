@@ -1,12 +1,9 @@
 name: Publish Installer Page
 
 on:
-  workflow_call:
-    inputs:
-      tag:
-        description: Stable release tag to publish.
-        required: true
-        type: string
+  workflow_run:
+    workflows: ['Release']
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -25,7 +22,8 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') && !contains(github.event.workflow_run.head_branch, '-')) }}
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -35,11 +33,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ github.event.workflow_run.head_branch }}
         run: |
-          tag="$INPUT_TAG"
-          if [ -z "$tag" ]; then
-            tag=$(gh release view --json tagName --jq '.tagName')
+          if [ "$EVENT_NAME" = workflow_run ]; then
+            tag="$RELEASE_TAG"
+          else
+            tag="$DISPATCH_TAG"
+            if [ -z "$tag" ]; then
+              tag=$(gh release view --json tagName --jq '.tagName')
+            fi
           fi
           [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           published=$(gh release view "$tag" --json tagName,isDraft,isPrerelease \

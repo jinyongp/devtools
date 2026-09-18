@@ -163,17 +163,17 @@ Linux 검사는 실제 Chromium Dashboard smoke와 Docker 설치 검증을 포�
 설치기와 버전 파일을 GitHub Releases에 함께 게시한다.
 빌드에는 태그의 버전과 커밋 식별자를 기록한다.
 
-안정 릴리스의 `release` job이 성공하면 `.github/workflows/pages.yml`을 호출한다.
-이 workflow는 같은 릴리스의 `install.sh`를 내려받아 태그의
+안정 Release workflow가 성공적으로 끝나면 `.github/workflows/pages.yml`의 `workflow_run`이
+기본 브랜치에서 실행된다. 이 workflow는 해당 릴리스의 `install.sh`를 내려받아 태그의
 `scripts/install.sh`와 일치하는지 확인한 뒤 GitHub Pages에 게시한다.
 devtools 프로젝트 Pages에는 별도 custom domain을 설정하지 않고 사용자 사이트의
 `jinyongp.dev`를 상속해 `/devtools/install.sh` 경로를 사용한다.
 사전 릴리스는 Pages installer를 갱신하지 않는다.
 
-Pages를 처음 사용할 때는 저장소의 **Settings → Pages → Build and deployment → Source**를
-**GitHub Actions**로 한 번 설정한다. 이후 **Publish Installer Page** workflow를
-수동 실행하면 현재 최신 안정 릴리스를 게시할 수 있고, 다음 안정 릴리스부터는
-Release workflow가 자동으로 호출한다.
+Pages source는 저장소의 **Settings → Pages → Build and deployment → Source**에서
+**GitHub Actions**를 사용한다. `github-pages` 환경은 기본 브랜치만 배포하도록 유지하며,
+`workflow_run`도 기본 브랜치 ref에서 실행된다. **Publish Installer Page** workflow를
+수동 실행하면 최신 안정 릴리스를 다시 게시할 수 있다.
 
 `v0.2.0-rc.1`처럼 접미사가 붙은 태그는 사전 릴리스로 게시한다. 기본 설치는 GitHub가 최신으로 선택한 안정 릴리스를 사용하고, 사전 릴리스는 버전을 지정해 설치한다.
 

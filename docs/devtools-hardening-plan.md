@@ -278,3 +278,13 @@ go test ./internal/cli ./internal/lifecycle ./internal/services ./internal/profi
   - 재검토 결과: stale project config, inherited env, restart stop-result, cold-start preflight, actual readiness 경계에서 추가 actionable finding 없음. oscillation 없음.
   - scoped validation: execution/doctor/process/services/lifecycle/cli/dashboard/diagnostics/retention/cleanup/tasks race PASS; 전체 go vet PASS; Dashboard JS 11/11 PASS; browser syntax/discovery PASS; actionlint, frozen pnpm lockfile, diff-check, Agent Skill package 생성 PASS.
   - 남은 검증 제약: 실제 Chromium launch는 Playwright CDN 403, Docker는 daemon/socket 부재, 공식 Agent Skill validator는 uvx 부재. Release CI에서 모두 검증하도록 구성됨.
+
+## Release follow-up — v0.16.0 Linux CI
+
+- [x] **WI-013 — Port availability test의 플랫폼 경계 정리**
+  - 원인: macOS의 BSD socket semantics 보강용 `localProbeAddresses()`를 공통 테스트가 Linux에서도 직접 호출해, 제품 Linux 경로와 무관한 netlink 제약이 `just check`를 실패시킴.
+  - macOS 전용 interface 열거를 Darwin build 경계로 격리한다.
+  - 공통 테스트는 private helper 대신 `Available()`의 wildcard/loopback listener 계약을 검증한다.
+  - Linux에서 netlink/interface enumeration 없이 `go test -race ./internal/ports`가 통과해야 한다.
+  - macOS CI가 address-specific listener 감지 회귀를 계속 검증해야 한다.
+  - 수정 후 전체 release gate를 다음 patch tag로 재실행한다.

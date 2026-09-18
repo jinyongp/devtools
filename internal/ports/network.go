@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -13,18 +12,13 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
-// Available checks both supported address families without retaining listeners.
+// Available checks the platform's required TCP probe addresses without
+// retaining listeners. Platform-specific target discovery lives behind build
+// constraints so Linux availability checks never depend on interface netlink.
 func Available(port int) (bool, *protocol.Error) {
-	targets := []probeAddress{{"tcp4", "0.0.0.0"}, {"tcp6", "::"}}
-	if runtime.GOOS == "darwin" {
-		// BSD permits a reusable wildcard listener alongside an address-specific
-		// listener. Probe local addresses too, preserving SO_REUSEADDR so closed
-		// connections in TIME_WAIT do not prevent a development server restart.
-		local, err := localProbeAddresses()
-		if err != nil {
-			return false, storageError()
-		}
-		targets = append(targets, local...)
+	targets, err := availabilityProbeAddresses()
+	if err != nil {
+		return false, storageError()
 	}
 	checked := false
 	for _, target := range targets {
@@ -51,40 +45,6 @@ func Available(port int) (bool, *protocol.Error) {
 
 type probeAddress struct{ network, host string }
 
-func localProbeAddresses() ([]probeAddress, error) {
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return nil, err
-	}
-	var targets []probeAddress
-	seen := map[probeAddress]bool{}
-	for _, iface := range interfaces {
-		if iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-		addresses, err := iface.Addrs()
-		if err != nil {
-			return nil, err
-		}
-		for _, address := range addresses {
-			ip, _, err := net.ParseCIDR(address.String())
-			if err != nil || ip.IsUnspecified() || ip.IsMulticast() {
-				continue
-			}
-			target := probeAddress{"tcp6", ip.String()}
-			if ip.To4() != nil {
-				target.network = "tcp4"
-			} else if ip.IsLinkLocalUnicast() {
-				target.host += "%" + iface.Name
-			}
-			if !seen[target] {
-				seen[target] = true
-				targets = append(targets, target)
-			}
-		}
-	}
-	return targets, nil
-}
 func Reachable(ctx context.Context, port int) bool {
 	for _, host := range []string{"127.0.0.1", "::1"} {
 		d := net.Dialer{Timeout: 200 * time.Millisecond}

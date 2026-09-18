@@ -284,6 +284,19 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 		out["history"] = history
 		out["truncated"] = false
 		if cmd == "context" {
+			if item.Kind == "task" {
+				basis := s.taskContextBasis(item)
+				compaction, through := s.latestTaskCompaction(item)
+				delta, status := s.taskContextDelta(item, through)
+				out["context_basis"] = basis
+				if compaction == nil {
+					out["compaction"] = nil
+				} else {
+					out["compaction"] = compaction
+				}
+				out["delta"] = delta
+				out["delta_status"] = status
+			}
 			if len(history) > 20 {
 				out["history"] = history[len(history)-20:]
 			}
@@ -293,6 +306,18 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 				out["history"] = []Event{}
 				out["tasks"] = []any{}
 				out["validations"] = []any{}
+				if delta, ok := out["delta"].([]Event); ok && len(delta) > 0 {
+					basis, _ := out["context_basis"].(Object)
+					status, _ := out["delta_status"].(Object)
+					out["delta"] = []Event{}
+					out["delta_status"] = Object{
+						"truncated":                 true,
+						"omitted_count":             num(status, "omitted_count") + len(delta),
+						"omitted_through_sequence":  num(basis, "through_sequence"),
+						"returned_from_sequence":    0,
+						"returned_through_sequence": 0,
+					}
+				}
 				out["truncated"] = true
 				out["omitted_ids"] = []string{item.ID}
 			}

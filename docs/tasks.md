@@ -53,6 +53,30 @@ advances the profile revision, updates the task/run projection, and names the
 task in `affected_ids`; the task's `definition_revision` stays unchanged. Read
 the saved payload with `task checkpoint list RUN_ID` or task history.
 
+`task context TASK_ID` also returns a deterministic `context_basis` for that
+task, an optional latest `compaction`, and a bounded canonical `delta`. The
+basis covers the task, its owning workstream, task-owned validations, and the
+task/workstream prerequisite closure that can change its current readiness or
+completion. Unrelated profile work does not change it.
+
+An agent can save a compact explanatory checkpoint after reading that context:
+
+```sh
+devtools task checkpoint RUN_ID --summary 'Current implementation state' \
+  --compaction-fingerprint FINGERPRINT --compaction-through SEQUENCE \
+  --context CONTEXT --request-id UUID
+```
+
+Use `data.context_basis.fingerprint` and
+`data.context_basis.through_sequence` from the context read. Supply both
+compaction options together. If related canonical state changed after the read,
+the checkpoint fails with `revision_conflict` and appends nothing; read context
+again before retrying. The saved explanation never replaces task history,
+definitions, validation evidence, or lifecycle state. Without a compaction,
+context still returns current canonical state and bounded delta. Check
+`delta_status` and `truncated` before assuming all supporting records were
+included.
+
 ## Plan a workstream
 
 Create with `task workstream create --title TEXT --request-id UUID`. Document and

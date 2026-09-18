@@ -48,28 +48,30 @@ func taskTargetArgument(kind string) string {
 }
 func taskFieldDescription(field string) string {
 	descriptions := map[string]string{
-		"title":                 "Human-readable title.",
-		"description":           "Human-readable description; an empty value clears it.",
-		"body":                  "Markdown document body.",
-		"workstream_id":         "Owning workstream UUID.",
-		"task_id":               "Owning task UUID.",
-		"acceptance":            "Acceptance condition; repeat for multiple conditions.",
-		"acceptance_keys":       "Workstream acceptance key; repeat for multiple keys.",
-		"task_ids":              "Included task UUID; repeat for multiple tasks.",
-		"validation_ids":        "Included validation UUID; repeat for multiple validations.",
-		"depends_on":            "Prerequisite UUID; repeat for multiple prerequisites.",
-		"reason":                "Reason recorded in history.",
-		"summary":               "Progress or outcome summary.",
-		"decisions":             "Decision and rationale; repeat for multiple decisions.",
-		"validation_record_ids": "Validation record UUID; repeat for multiple records.",
-		"remaining":             "Remaining work item; repeat for multiple items.",
-		"next_action":           "Recommended next action.",
-		"blockers":              "Current blocker; repeat for multiple blockers.",
-		"method":                "How this validation is performed.",
-		"required":              "Whether this validation is required.",
-		"result":                "Validation result: pass, fail, blocked, or skipped.",
-		"basis_id":              "Validation basis UUID.",
-		"record_id":             "Validation record UUID.",
+		"title":                  "Human-readable title.",
+		"description":            "Human-readable description; an empty value clears it.",
+		"body":                   "Markdown document body.",
+		"workstream_id":          "Owning workstream UUID.",
+		"task_id":                "Owning task UUID.",
+		"acceptance":             "Acceptance condition; repeat for multiple conditions.",
+		"acceptance_keys":        "Workstream acceptance key; repeat for multiple keys.",
+		"task_ids":               "Included task UUID; repeat for multiple tasks.",
+		"validation_ids":         "Included validation UUID; repeat for multiple validations.",
+		"depends_on":             "Prerequisite UUID; repeat for multiple prerequisites.",
+		"reason":                 "Reason recorded in history.",
+		"summary":                "Progress or outcome summary.",
+		"decisions":              "Decision and rationale; repeat for multiple decisions.",
+		"validation_record_ids":  "Validation record UUID; repeat for multiple records.",
+		"remaining":              "Remaining work item; repeat for multiple items.",
+		"next_action":            "Recommended next action.",
+		"blockers":               "Current blocker; repeat for multiple blockers.",
+		"compaction_fingerprint": "Task-context basis fingerprint returned by task context.",
+		"compaction_through":     "Task-context through sequence returned by task context.",
+		"method":                 "How this validation is performed.",
+		"required":               "Whether this validation is required.",
+		"result":                 "Validation result: pass, fail, blocked, or skipped.",
+		"basis_id":               "Validation basis UUID.",
+		"record_id":              "Validation record UUID.",
 	}
 	return descriptions[field]
 }
@@ -242,6 +244,10 @@ func (a *App) registerTasks() {
 				pattern = uuidPattern
 			} else if f == "result" {
 				pattern = `^(pass|fail|blocked|skipped)$`
+			} else if f == "compaction_fingerprint" {
+				pattern = `^[0-9a-f]{64}$`
+			} else if f == "compaction_through" {
+				pattern = positiveIntegerPattern
 			}
 			opts = append(opts, Option{Name: taskField(f), Repeatable: taskArray(f), Boolean: f == "required", Pattern: pattern, Description: taskFieldDescription(f)})
 		}

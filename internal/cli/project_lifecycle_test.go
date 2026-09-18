@@ -95,6 +95,10 @@ func (f *cliLifecycleProcesses) callCount() int {
 
 func TestProjectLifecycleCLI(t *testing.T) {
 	root := t.TempDir()
+	canonicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Chdir(root)
 	config := `profile="app"
 [commands.web]
@@ -115,7 +119,7 @@ exec=["/bin/sh","-c","true"]
 	requestID := tasks.ID()
 	upArgs := []string{"project", "up", "web", "api", "--env", "dev", "--capture-logs", "--request-id", requestID}
 	up := outputData(t, app, upArgs)
-	if up["action"] != "up" || up["profile"] != "app" || up["directory"] != root || up["changed"] != true || up["replayed"] != false {
+	if up["action"] != "up" || up["profile"] != "app" || up["directory"] != canonicalRoot || up["changed"] != true || up["replayed"] != false {
 		t.Fatalf("unexpected project up result: %#v", up)
 	}
 	items := up["items"].([]any)
@@ -146,7 +150,7 @@ exec=["/bin/sh","-c","true"]
 	}
 
 	status := outputData(t, app, []string{"project", "status"})
-	if status["profile"] != "app" || status["directory"] != root || len(status["items"].([]any)) != 2 {
+	if status["profile"] != "app" || status["directory"] != canonicalRoot || len(status["items"].([]any)) != 2 {
 		t.Fatalf("unexpected project status: %#v", status)
 	}
 	selected := outputData(t, app, []string{"project", "status", "web"})
@@ -171,6 +175,45 @@ exec=["/bin/sh","-c","true"]
 	}
 	if status = outputData(t, app, []string{"project", "status"}); len(status["items"].([]any)) != 0 {
 		t.Fatalf("project status remained active after down: %#v", status)
+	}
+}
+
+func TestProjectLifecycleCanonicalDirectoryIdentity(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "project")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(base, "project-alias")
+	if err := os.Symlink(root, alias); err != nil {
+		t.Fatal(err)
+	}
+	canonicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := `profile="app"
+[commands.web]
+exec=["/bin/sh","-c","true"]
+`
+	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	app := testApp(t)
+	processes := &cliLifecycleProcesses{}
+	app.lifecycleManager = func(data string) lifecycle.Manager { return lifecycle.Manager{Data: data, Processes: processes} }
+
+	up := outputData(t, app, []string{"project", "up", "web", "--dir", alias, "--request-id", tasks.ID()})
+	if up["directory"] != canonicalRoot || up["items"].([]any)[0].(map[string]any)["item"].(map[string]any)["directory"] != canonicalRoot {
+		t.Fatalf("project up did not canonicalize alias: %#v", up)
+	}
+	status := outputData(t, app, []string{"project", "status", "--dir", root})
+	if status["directory"] != canonicalRoot || len(status["items"].([]any)) != 1 || status["items"].([]any)[0].(map[string]any)["directory"] != canonicalRoot {
+		t.Fatalf("canonical status did not find alias start: %#v", status)
+	}
+	down := outputData(t, app, []string{"project", "down", "--dir", alias, "--request-id", tasks.ID()})
+	if down["directory"] != canonicalRoot || down["changed"] != true {
+		t.Fatalf("alias down did not target canonical project: %#v", down)
 	}
 }
 

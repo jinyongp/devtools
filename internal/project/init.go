@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -21,10 +22,7 @@ func Init(dir, profile string) (InitResult, *protocol.Error) {
 	if !ValidProfile(profile) {
 		return InitResult{}, protocol.NewError("invalid_argument", "A valid profile identifier is required.", 2, map[string]any{"field": "profile"})
 	}
-	root, err := filepath.Abs(dir)
-	if err == nil {
-		root, err = filepath.EvalSymlinks(root)
-	}
+	root, err := location.ExistingDirectory(dir)
 	if err != nil {
 		return InitResult{}, initIOError(dir)
 	}

@@ -3,14 +3,16 @@ package tasks
 import (
 	"context"
 	"encoding/json"
-	"github.com/jinyongp/devtools/internal/maintenance"
-	"github.com/jinyongp/devtools/internal/protocol"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jinyongp/devtools/internal/location"
+	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 type Query struct {
@@ -19,6 +21,11 @@ type Query struct {
 	Options map[string]string
 	Body    Object
 }
+
+func currentRunInDirectory(run *Run, directory string) bool {
+	return run.State == "running" && location.Same(run.Directory, directory)
+}
+
 type Snapshot struct {
 	Projection  int       `json:"projection_version"`
 	Fingerprint string    `json:"fingerprint"`
@@ -295,12 +302,12 @@ func (store Store) Query(q Query) (Object, *protocol.Error) {
 		if dir == "" {
 			dir = "."
 		}
-		dir, err := filepath.Abs(dir)
+		dir, err := location.Canonical(dir)
 		if err != nil {
 			return nil, failure("invalid_argument", "Cannot resolve directory.")
 		}
 		for _, r := range s.Runs {
-			if r.State == "running" && r.Directory == dir {
+			if currentRunInDirectory(r, dir) {
 				items = append(items, r)
 			}
 		}

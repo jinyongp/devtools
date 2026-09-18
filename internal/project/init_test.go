@@ -39,6 +39,26 @@ func TestInit(t *testing.T) {
 	}
 }
 
+func TestInitCanonicalDirectory(t *testing.T) {
+	base := t.TempDir()
+	actual := filepath.Join(base, "actual")
+	if err := os.Mkdir(actual, 0700); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(base, "alias")
+	if err := os.Symlink(actual, alias); err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := filepath.EvalSymlinks(actual)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, initErr := Init(alias, "linked")
+	if initErr != nil || !got.Created || got.ConfigPath != filepath.Join(canonical, Filename) {
+		t.Fatalf("canonical init: %+v %v", got, initErr)
+	}
+}
+
 func TestConcurrentInit(t *testing.T) {
 	root := t.TempDir()
 	var group sync.WaitGroup

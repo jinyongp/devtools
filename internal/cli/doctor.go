@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/doctor"
+	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -31,10 +32,7 @@ func (a *App) diagnose(ctx context.Context, streams IO, r Request) (any, *protoc
 	if len(r.Args) > 0 {
 		report.Command = r.Args[0]
 	}
-	dir, e := filepath.Abs(r.Options["dir"])
-	if e == nil {
-		dir, e = filepath.EvalSymlinks(dir)
-	}
+	dir, e := location.Canonical(r.Options["dir"])
 	report.Directory = dir
 	info, statErr := os.Stat(dir)
 	if e != nil || statErr != nil || !info.IsDir() {

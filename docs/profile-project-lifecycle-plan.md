@@ -62,6 +62,19 @@ Managed process 시작은 외부 side effect를 가질 수 있다. 여러 명령
 다른 명령이 실패해도 이미 성공한 프로세스를 자동 종료하지 않는다. 결과에 성공·실패·미완료
 항목을 정확히 기록하고 같은 request ID 재시도로 미완료 작업을 이어간다.
 
+### Project/execution location identity는 canonical path를 사용한다
+
+프로젝트 디렉터리처럼 저장·비교·조회 identity로 사용하는 경로는 입력 문자열 자체를 identity로
+사용하지 않는다. 절대 경로화와 filesystem alias/symlink 해소를 공통 location 경계에서 수행한
+canonical path를 사용한다. macOS의 `/var`와 `/private/var`처럼 같은 위치를 가리키는 OS alias나
+일반 symlink가 project, process, port instance, task run을 서로 다른 위치로 분리해서는 안 된다.
+
+Canonicalization은 identity가 시스템 경계로 들어올 때 수행하고 저장된 identity는 그대로 유지한다.
+삭제된 작업 디렉터리의 기록도 조회·cleanup할 수 있어야 하므로 저장 데이터를 읽을 때 존재 여부를
+강제하지 않는다. 기존 task run처럼 과거에 non-canonical path가 저장됐을 수 있는 영역은 조회 시
+canonical identity 비교로 호환한다. 단순 실행 working directory나 사용자에게 표시하기만 하는
+filesystem path까지 무조건 canonicalize하지 않는다.
+
 ## 1. 공통 profile catalog
 
 계획 기준선의 Dashboard `/api/profiles`는 task 저장소, value 저장소, port instance를 직접 합쳐 profile
@@ -332,6 +345,7 @@ Doctor `remedy -> remedies` 변경과 `profile import` preview/apply 전환은 �
 | PP-09 | `project up/status/down` CLI | PP-08 | public schema와 command UX가 lifecycle core에 연결됨 |
 | PP-10 | protocol v3, 문서와 Agent Skill 정리 | PP-04, PP-06, PP-09 | public contract와 migration 설명이 실제 schema와 일치 |
 | PP-11 | 설치 바이너리 통합 검증 | PP-01~PP-10 | Docker와 release 수준 검증이 모든 새 흐름을 통과 |
+| PP-12 | canonical location identity hardening | PP-09 | project/doctor/task가 공통 location 규칙을 사용하고 alias 경로가 중복 identity를 만들지 않음 |
 
 구현은 가능한 한 위 단위로 검증하고 독립 commit한다. PP-01~PP-03처럼 강하게 연결된 내부 기반은
 한 commit으로 묶어도 되지만, profile transfer, doctor contract, project lifecycle은 서로 독립된
@@ -397,6 +411,16 @@ Doctor `remedy -> remedies` 변경과 `profile import` preview/apply 전환은 �
 - status 전체/선택 조회
 - down 전체/선택 종료
 - logs/secret 원문 비노출
+- symlink/OS alias 경로와 canonical 경로를 섞어 사용해도 같은 project/process identity로 조회·종료
+
+### Location identity
+
+- 기존 디렉터리의 absolute + symlink canonicalization
+- symlink 아래의 아직 존재하지 않는 suffix에 대한 canonical parent 유지
+- doctor structured remedy가 canonical project directory를 전달
+- task claim을 alias 경로에서 수행한 뒤 canonical 경로에서 `task current` 조회, 그리고 반대 방향
+- legacy non-canonical task run directory와 canonical query의 identity 일치
+- Linux symlink fixture로 macOS `/var` ↔ `/private/var`와 같은 alias 문제를 상시 재현
 
 ### 최종 gate
 
@@ -450,5 +474,6 @@ Command group은 실제 `project up COMMAND...` 사용 패턴이 쌓인 뒤 별�
 - Doctor와 task diagnostics가 같은 structured remedy contract를 사용한다.
 - 하나의 project lifecycle 요청으로 여러 managed process를 안전하게 시작·조회·종료할 수 있다.
 - Partial failure와 응답 유실 뒤 재시도가 중복 process를 만들지 않는다.
+- 저장·비교되는 project/execution location이 canonical identity를 사용해 filesystem alias가 중복 instance/run을 만들지 않는다.
 - protocol v3 schema, 문서, Agent Skill과 실제 출력이 일치한다.
 - 전체 race/vet/check/Docker 통합 검증이 통과한다.

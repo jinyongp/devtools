@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -11,7 +12,19 @@ import (
 
 func TestDoctorStructuredRemedies(t *testing.T) {
 	app := testApp(t)
-	root := t.TempDir()
+	base := t.TempDir()
+	root := filepath.Join(base, "project")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(base, "project-alias")
+	if err := os.Symlink(root, alias); err != nil {
+		t.Fatal(err)
+	}
+	canonicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Chdir(root)
 	config := `profile="app"
 [requirements]
@@ -57,7 +70,7 @@ secs=["TOKEN"]
 		t.Fatalf("unexpected secret remedy: %#v", secret)
 	}
 
-	code, out, diagnostic = invoke(t, app, "", "doctor", "missing", "--dir", root)
+	code, out, diagnostic = invoke(t, app, "", "doctor", "missing", "--dir", alias)
 	if code != 0 || diagnostic != "" {
 		t.Fatalf("undefined-command doctor failed: code=%d out=%s err=%s", code, out, diagnostic)
 	}
@@ -70,7 +83,7 @@ secs=["TOKEN"]
 		byID[check.ID] = check.Remedies
 	}
 	command := byID["command"]
-	if len(command) != 1 || !reflect.DeepEqual(command[0].Argv, []string{"devtools", "command", "list", "--dir", root}) {
+	if len(command) != 1 || !reflect.DeepEqual(command[0].Argv, []string{"devtools", "command", "list", "--dir", canonicalRoot}) {
 		t.Fatalf("undefined command remedy lost diagnosed directory: %#v", command)
 	}
 

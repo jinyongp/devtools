@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -247,6 +248,18 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 	}
 	if r.Target != "" && !validID(r.Target) {
 		return nil, failure("invalid_argument", "Invalid target UUID.")
+	}
+	if (r.Action == "run.claimed" || r.Action == "run.taken_over") && r.Options["dir"] != "" {
+		directory, err := location.Canonical(r.Options["dir"])
+		if err != nil {
+			return nil, failure("invalid_argument", "Cannot resolve directory.")
+		}
+		options := make(map[string]string, len(r.Options))
+		for key, value := range r.Options {
+			options[key] = value
+		}
+		options["dir"] = directory
+		r.Options = options
 	}
 	b, marshalErr := json.Marshal(r.Body)
 	if marshalErr != nil {

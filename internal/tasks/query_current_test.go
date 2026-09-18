@@ -1,7 +1,10 @@
 package tasks
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -58,6 +61,47 @@ func TestCurrentQueriesAgreeOnStaleAndRemoved(t *testing.T) {
 	show, e := s.Query(Query{Command: "show", Target: task})
 	if e != nil || str(objectValue(show["item"]), "scope") != "removed" {
 		t.Fatal(show, e)
+	}
+}
+
+func TestRunDirectoryIdentityCanonicalizesAliases(t *testing.T) {
+	base := t.TempDir()
+	actual := filepath.Join(base, "project")
+	if err := os.Mkdir(actual, 0700); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(base, "project-alias")
+	if err := os.Symlink(actual, alias); err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := filepath.EvalSymlinks(actual)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := fixture(t)
+	task := itemID(call(t, s, "task.add", "", Object{"title": "canonical directory"}))
+	requestID := ID()
+	first, execErr := s.Execute(context.Background(), Request{Action: "run.claimed", Target: task, Options: map[string]string{"request-id": requestID, "dir": alias}})
+	if execErr != nil || first["claimed"] != true {
+		t.Fatalf("alias claim failed: %#v %v", first, execErr)
+	}
+	state, readErr := s.Read()
+	if readErr != nil || state.Current(task) == nil || state.Current(task).Directory != canonical {
+		t.Fatalf("claim stored non-canonical directory: %+v %v", state.Current(task), readErr)
+	}
+	replay, replayErr := s.Execute(context.Background(), Request{Action: "run.claimed", Target: task, Options: map[string]string{"request-id": requestID, "dir": actual}})
+	if replayErr != nil || replay["replayed"] != true {
+		t.Fatalf("canonical retry did not replay alias request: %#v %v", replay, replayErr)
+	}
+	for _, dir := range []string{alias, actual} {
+		rows, queryErr := s.Query(Query{Command: "current", Options: map[string]string{"dir": dir}})
+		if queryErr != nil || len(rows["items"].([]any)) != 1 {
+			t.Fatalf("current did not match %q: %#v %v", dir, rows, queryErr)
+		}
+	}
+	if !currentRunInDirectory(&Run{State: "running", Directory: alias}, canonical) {
+		t.Fatal("legacy non-canonical run directory did not match canonical query")
 	}
 }
 

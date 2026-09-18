@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -59,10 +60,7 @@ func Resolve(start, explicitProfile string) (Context, *protocol.Error) {
 		}
 		return Context{Profile: explicitProfile, Source: "flag"}, nil
 	}
-	dir, err := filepath.Abs(start)
-	if err == nil {
-		dir, err = filepath.EvalSymlinks(dir)
-	}
+	dir, err := location.Canonical(start)
 	if err != nil {
 		return Context{}, ioError(start)
 	}

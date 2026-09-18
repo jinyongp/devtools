@@ -104,8 +104,9 @@ func TestSymlinkAndMissingDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := Resolve(link, "")
-	if err != nil || got.Profile != "linked" {
-		t.Fatalf("symlink: %+v %v", got, err)
+	canonical, canonicalErr := filepath.EvalSymlinks(actual)
+	if err != nil || canonicalErr != nil || got.Profile != "linked" || got.Root != canonical || got.ConfigPath != filepath.Join(canonical, Filename) {
+		t.Fatalf("symlink: %+v %v canonical=%q canonicalErr=%v", got, err, canonical, canonicalErr)
 	}
 	_, err = Resolve(filepath.Join(root, "missing"), "")
 	if err == nil || err.Code != "io_error" {

@@ -294,13 +294,6 @@ func (a *App) registerTasks() {
 			if contextCapable && r.Options["context"] == "" {
 				r.Options["context"] = os.Getenv("DEVTOOLS_TASK_CONTEXT")
 			}
-			if dir := r.Options["dir"]; dir != "" {
-				abs, err := filepath.Abs(dir)
-				if err != nil {
-					return nil, argumentError("Cannot resolve directory.", "dir")
-				}
-				r.Options["dir"] = abs
-			}
 			return store.Execute(ctx, tasks.Request{Action: def.Action, Target: target, Body: b, Options: r.Options})
 		}})
 		if def.Action == "workstream.edited" {

@@ -48,6 +48,14 @@ def install(action, version, source=release_directory, expected=0):
     return response, result
 
 
+# Omitting the action defaults to install, including when install options follow directly.
+default_bin = home / "default-install-bin"
+default_result = execute(installer + ["--version", "0.0.0-test.1", "--source", release_directory,
+                                     "--bin-dir", str(default_bin)])
+default_response = json.loads(default_result.stdout)
+assert default_response["data"]["action"] == "install"
+assert (default_bin / "devtools").is_file()
+
 response, result = install("install", "0.0.0-test.1")
 assert response["data"]["alias"] == {"name": "dvt", "status": "created"}
 assert not result.stderr

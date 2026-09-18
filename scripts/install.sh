@@ -9,12 +9,17 @@ fail() {
 }
 
 usage() {
-  printf '%s\n' 'Usage: sh install.sh install|update [--version VERSION] [--source DIRECTORY_OR_HTTPS_URL] [--bin-dir DIRECTORY]'
+  printf '%s\n' 'Usage: sh install.sh [install|update] [--version VERSION] [--source DIRECTORY_OR_HTTPS_URL] [--bin-dir DIRECTORY]'
 }
 
 if [ "${1:-}" = '--help' ]; then usage; exit 0; fi
-action=${1:-}
-case "$action" in install|update) shift ;; *) usage >&2; exit 2 ;; esac
+action=install
+case "${1:-}" in
+  '') ;;
+  install|update) action=$1; shift ;;
+  --*) ;;
+  *) usage >&2; exit 2 ;;
+esac
 version=
 source=
 bin_dir=${HOME:?HOME is required}/.local/bin

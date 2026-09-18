@@ -22,7 +22,7 @@ printf '%s\\n' '}'
     snippets = []
     for name in ("DEVTOOLS_TEST_README", "DEVTOOLS_TEST_INSTALL_DOC"):
         text = Path(os.environ[name]).read_text()
-        snippets.extend(re.findall(r'^curl .* \| sh -s -- (?:install|update)$', text, re.M))
+        snippets.extend(re.findall(r'^curl .* \| sh(?: -s -- (?:install|update))?$', text, re.M))
         assert "/tmp/devtools-install.sh" not in text
     assert len(snippets) == 3
     for index, snippet in enumerate(snippets):
@@ -42,7 +42,8 @@ printf '%s\\n' '}'
                 assert result.returncode == 0
             assert marker.exists() == (mode == "success")
             if marker.exists():
-                assert marker.read_text().strip() == ("update" if '-- update' in snippet else "install")
+                expected_args = "update" if '-- update' in snippet else ("install" if '-- install' in snippet else "")
+                assert marker.read_text().strip() == expected_args
             assert sentinel.read_text() == "fixture remains untouched\n"
             assert list(temporary.iterdir()) == [sentinel], "Temporary directory was not cleaned"
-print("Documented one-line install/update passes arguments and rejects truncated scripts")
+print("Documented one-line install/update preserves streamed-script safety and explicit arguments")

@@ -1,0 +1,72 @@
+name: Publish Installer Page
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Stable release tag to publish.
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable release tag to publish. Leave empty for the latest stable release.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Resolve stable release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="$INPUT_TAG"
+          if [ -z "$tag" ]; then
+            tag=$(gh release view --json tagName --jq '.tagName')
+          fi
+          [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          published=$(gh release view "$tag" --json tagName,isDraft,isPrerelease \
+            --jq 'select(.isDraft == false and .isPrerelease == false) | .tagName')
+          [ "$published" = "$tag" ]
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+
+      - name: Prepare installer site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          mkdir -p pages
+          gh release download "$TAG" --pattern install.sh --dir pages
+          cmp scripts/install.sh pages/install.sh
+          sh -n pages/install.sh
+          touch pages/.nojekyll
+
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: pages
+      - name: Deploy installer page
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

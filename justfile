@@ -16,13 +16,18 @@ dashboard:
 fmt:
     gofmt -w cmd internal scripts skills
 
-check: check-skill-release check-dashboard
+check: check-skill-release check-dashboard check-installer
     test -z "$(gofmt -l cmd internal scripts skills)"
     go vet ./...
     go test -race ./...
 
 check-dashboard:
     node --test scripts/dashboard-*.test.mjs
+
+check-installer:
+    sh -n scripts/install.sh
+    sh scripts/check-installer.sh
+    DEVTOOLS_TEST_README=README.md DEVTOOLS_TEST_INSTALL_DOC=docs/install.md python3 docker/scenarios/bootstrap.py
 
 check-skill:
     sh scripts/validate-skill.sh

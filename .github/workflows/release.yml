@@ -139,6 +139,17 @@ jobs:
           fi
           gh release create "$TAG" dist/* --verify-tag --generate-notes "${flags[@]}"
 
+  pages:
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
+    with:
+      tag: ${{ github.ref_name }}
+
   homebrew:
     needs: release
     if: ${{ !contains(github.ref_name, '-') }}

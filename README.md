@@ -23,7 +23,7 @@ Homebrew는 zsh·bash·fish 자동완성 파일도 함께 설치합니다. 셸 �
 버전을 `~/.local/bin/devtools`에 설치하고 짧은 명령 `dvt`도 제공합니다. curl이 필요하며 Go 설치는 필요하지 않습니다.
 
 ```sh
-curl -fsSL https://github.com/jinyongp/devtools/releases/latest/download/install.sh | sh -s -- install
+curl -fsSL https://jinyongp.dev/devtools/install.sh | sh
 ```
 
 처음 설치했다면 아래 명령으로 설치 경로를 PATH에 추가하세요. PATH는 셸이
@@ -50,7 +50,7 @@ devtools는 표준 [Agent Skills](https://agentskills.io/) 형식의 Skill을 �
 npx skills add jinyongp/devtools
 ```
 
-`skills` CLI가 사용하는 agent를 감지하고 적절한 위치에 설치합니다. 모든 프로젝트에서
+`skills` CLI가 사용하는 에이전트를 감지하고 적절한 위치에 설치합니다. 모든 프로젝트에서
 사용하려면 `--global`을 추가하세요. 업데이트·제거와 오프라인 설치 방법은
 [Agent Skill 설치](docs/agent-skill.md)를 참고하세요.
 
@@ -107,9 +107,7 @@ Homebrew로 설치했다면 Homebrew로 업데이트하세요.
 brew upgrade jinyongp/tap/devtools
 ```
 
-설치 스크립트로 설치했다면 다음 명령을 사용하세요.
-
-이미 설치한 devtools를 최신 안정 버전으로 바꾸려면 아래 명령을 실행하세요.
+설치 스크립트로 설치했다면 `devtools update`로 최신 안정 버전으로 갱신합니다.
 
 ```sh
 devtools update

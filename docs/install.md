@@ -25,9 +25,9 @@ devtools_0.1.0_linux_amd64.tar.gz.sha256
 
 `OUTPUT_DIR`로 출력 디렉터리, `COMMIT`으로 빌드의 커밋 식별자를 지정할 수 있다. 배포 버전은 명시적으로 선택한다.
 
-오프라인·수동 설치용 Agent Skill archive도 같은 버전으로 만든다. 일반 설치는
+오프라인·수동 설치용 Agent Skill 아카이브도 같은 버전으로 만든다. 일반 설치는
 `npx skills add jinyongp/devtools`로 저장소에서 직접 수행한다.
-archive 생성 자체에는 `uvx`와 `skills-ref`가 필요하지 않지만, 게시 전 `just check`가
+아카이브 생성 자체에는 `uvx`와 `skills-ref`가 필요하지 않지만, 게시 전 `just check`가
 공식 Agent Skills 검증을 수행한다.
 
 ```sh
@@ -41,7 +41,7 @@ devtools-skill_0.1.0.tar.gz
 devtools-skill_0.1.0.tar.gz.sha256
 ```
 
-Agent Skill의 한 줄 설치, global 설치, 업데이트와 수동 fallback은
+Agent Skill의 한 줄 설치, 전역 설치, 업데이트와 수동 설치 방법은
 [Agent Skill 설치](agent-skill.md)를 참고한다.
 
 ## 처음 설치하기
@@ -50,13 +50,13 @@ Homebrew에서는 `brew install jinyongp/tap/devtools`로 설치할 수 있습�
 이 경로는 태그 커밋의 소스를 내려받아 Go로 빌드하며 필요한 Go 도구는 Homebrew가 준비합니다.
 업데이트는 `brew upgrade jinyongp/tap/devtools`로 수행합니다.
 
-기본 배포 주소는 `https://github.com/jinyongp/devtools/releases`다. GitHub Releases에 게시된 설치 스크립트를 받아 실행한다.
+공개 설치 진입점은 devtools 프로젝트의 GitHub Pages에 둔다. 안정 릴리스가 성공하면 그 릴리스에 게시된 `install.sh`와 동일한 파일을 Pages에 배포한다.
 
 ```sh
-curl -fsSL https://github.com/jinyongp/devtools/releases/latest/download/install.sh | sh -s -- install
+curl -fsSL https://jinyongp.dev/devtools/install.sh | sh
 ```
 
-버전을 생략하면 최신 안정 릴리스의 `version.txt`를 조회하고, 해당 버전의 고정 주소에서 배포물과 체크섬을 받는다. `--version 0.1.0`으로 특정 버전을 선택할 수 있다. 버전 인자는 태그의 `v`를 제외한 값이다.
+설치기는 동작 인자를 생략하면 `install`로 처리한다. 배포물의 기본 주소는 `https://github.com/jinyongp/devtools/releases`이며, 버전을 생략하면 최신 안정 릴리스의 `version.txt`를 조회한 뒤 해당 버전의 고정 주소에서 배포물과 체크섬을 받는다. `--version 0.1.0`으로 특정 버전을 선택할 수 있다. 버전 인자는 태그의 `v`를 제외한 값이다.
 
 로컬 배포물을 사용할 때는 위치와 버전을 함께 전달한다.
 
@@ -111,8 +111,8 @@ curl을 사용합니다. 로컬 배포물은 `devtools update --version 0.2.0 --
 npx skills update devtools
 ```
 
-global 설치는 `npx skills update devtools --global`을 사용합니다. 수동·오프라인 설치를
-사용한 경우에만 release archive를 직접 교체합니다. 자세한 내용은
+전역 설치는 `npx skills update devtools --global`을 사용합니다. 수동·오프라인 설치를
+사용한 경우에만 릴리스 아카이브를 직접 교체합니다. 자세한 내용은
 [Agent Skill 설치](agent-skill.md)를 참고하세요.
 
 `update` 명령이 추가되기 전에 설치한 버전은 아래 설치기로 한 번 업데이트하세요.
@@ -120,7 +120,7 @@ global 설치는 `npx skills update devtools --global`을 사용합니다. 수�
 같은 설치기에 `update`를 전달하면 최신 안정 버전으로 업데이트한다.
 
 ```sh
-curl -fsSL https://github.com/jinyongp/devtools/releases/latest/download/install.sh | sh -s -- update
+curl -fsSL https://jinyongp.dev/devtools/install.sh | sh -s -- update
 devtools version
 ```
 
@@ -163,6 +163,18 @@ Linux 검사는 실제 Chromium Dashboard smoke와 Docker 설치 검증을 포�
 설치기와 버전 파일을 GitHub Releases에 함께 게시한다.
 빌드에는 태그의 버전과 커밋 식별자를 기록한다.
 
+안정 릴리스의 `release` job이 성공하면 `.github/workflows/pages.yml`을 호출한다.
+이 workflow는 같은 릴리스의 `install.sh`를 내려받아 태그의
+`scripts/install.sh`와 일치하는지 확인한 뒤 GitHub Pages에 게시한다.
+devtools 프로젝트 Pages에는 별도 custom domain을 설정하지 않고 사용자 사이트의
+`jinyongp.dev`를 상속해 `/devtools/install.sh` 경로를 사용한다.
+사전 릴리스는 Pages installer를 갱신하지 않는다.
+
+Pages를 처음 사용할 때는 저장소의 **Settings → Pages → Build and deployment → Source**를
+**GitHub Actions**로 한 번 설정한다. 이후 **Publish Installer Page** workflow를
+수동 실행하면 현재 최신 안정 릴리스를 게시할 수 있고, 다음 안정 릴리스부터는
+Release workflow가 자동으로 호출한다.
+
 `v0.2.0-rc.1`처럼 접미사가 붙은 태그는 사전 릴리스로 게시한다. 기본 설치는 GitHub가 최신으로 선택한 안정 릴리스를 사용하고, 사전 릴리스는 버전을 지정해 설치한다.
 
 ## Docker에서 설치 환경 검증하기
@@ -175,7 +187,7 @@ just verify-docker install
 
 검증은 설치 명령부터 시작해 다음 동작을 확인한다.
 
-- 기본 경로 설치와 PATH 호출, 설치된 버전 조회.
+- 동작 인자를 생략한 기본 설치, 기본 경로 설치와 PATH 호출, 설치된 버전 조회.
 - `dvt` 별칭 생성과 기존 동명 파일 충돌 시 보존.
 - 일반 변수·secret·env 등록과 조회 권한 구분.
 - 기존 justfile 명령의 독립 실행과 devtools를 통한 주입 실행.

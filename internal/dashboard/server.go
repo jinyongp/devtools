@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/ports"
+	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
@@ -452,35 +453,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		store := tasks.Store{Directory: s.data, Profile: r.URL.Query().Get("profile"), Cache: s.cache}
 		if r.URL.Path == "/api/profiles" {
-			profiles, e := store.Profiles()
-			if e != nil {
-				http.Error(w, e.Message, 500)
-				return
-			}
-			other, e := (tasks.Store{Directory: s.valueStore("").Directory}).Profiles()
+			profiles, e := (profilecatalog.Catalog{Data: filepath.Dir(s.data)}).Names()
 			if e != nil {
 				apiError(w, e)
 				return
 			}
-			portState, e := (ports.Store{Directory: filepath.Join(filepath.Dir(s.data), "ports")}).Read()
-			if e != nil {
-				apiError(w, e)
-				return
-			}
-			for _, i := range portState.Instances {
-				other = append(other, i.Profile)
-			}
-			seen := map[string]bool{}
-			for _, p := range profiles {
-				seen[p] = true
-			}
-			for _, p := range other {
-				if !seen[p] {
-					profiles = append(profiles, p)
-					seen[p] = true
-				}
-			}
-			sort.Strings(profiles)
 			reply(tasks.Object{"profiles": profiles})
 			return
 		}

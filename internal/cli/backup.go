@@ -30,6 +30,18 @@ func profileIdentifierOption(name string, required bool) Option {
 	return Option{Name: name, Required: required, Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128, Description: "Profile identifier."}
 }
 
+func publicRecipientOption() Option {
+	return Option{Name: "recipient", MinLength: 1, Description: "Public age X25519 recipient."}
+}
+
+func recipientInputOneOf() []map[string]any {
+	return []map[string]any{
+		{"not": map[string]any{"anyOf": []map[string]any{{"required": []string{"recipient"}}, {"required": []string{"recipient-file"}}}}},
+		{"required": []string{"recipient"}, "not": map[string]any{"required": []string{"recipient-file"}}},
+		{"required": []string{"recipient-file"}, "not": map[string]any{"required": []string{"recipient"}}},
+	}
+}
+
 func (a *App) registerBackup() {
 	add := func(name, description string, opts []Option, run func(context.Context, backup.Engine, Request) (any, *protocol.Error)) {
 		boolean := map[string]any{"type": "boolean"}
@@ -40,12 +52,14 @@ func (a *App) registerBackup() {
 			output = object(map[string]any{"identity_file": stringSchema(), "recipient_file": stringSchema()}, "identity_file", "recipient_file")
 		case "configure":
 			output = object(map[string]any{"directory": stringSchema(), "recipient": stringSchema()}, "directory", "recipient")
+		case "status":
+			output = object(map[string]any{"configured": boolean, "directory": stringSchema(), "recipient": stringSchema()}, "configured", "directory", "recipient")
 		case "create":
 			output = object(map[string]any{"path": stringSchema(), "created_at": stringSchema(), "profiles": profiles}, "path", "created_at", "profiles")
 		case "restore":
 			output = object(map[string]any{"digest": stringSchema(), "applied": boolean, "safety_backup": stringSchema(), "targets": map[string]any{"type": "array", "items": object(map[string]any{"source": stringSchema(), "profile": stringSchema(), "exists": boolean}, "source", "profile", "exists")}}, "digest", "applied", "targets")
 		}
-		if name == "inspect" {
+		if name == "inspect" || name == "status" {
 			output = itemOutput(output)
 		} else if name != "restore" {
 			output = changedItemOutput(output)
@@ -63,7 +77,7 @@ func (a *App) registerBackup() {
 			if failure != nil || name == "restore" {
 				return result, failure
 			}
-			if name == "inspect" {
+			if name == "inspect" || name == "status" {
 				return map[string]any{"item": result}, nil
 			}
 			return map[string]any{"item": result, "changed": true}, nil
@@ -75,9 +89,13 @@ func (a *App) registerBackup() {
 	add("configure", "Store the default backup directory and public recipient.", []Option{filePathOption("directory", true), filePathOption("recipient-file", true)}, func(_ context.Context, e backup.Engine, r Request) (any, *protocol.Error) {
 		return e.Configure(r.Options["directory"], r.Options["recipient-file"])
 	})
-	add("create", "Encrypt all profiles or one selected profile.", []Option{profileIdentifierOption("profile", false), filePathOption("output", false), filePathOption("recipient-file", false)}, func(ctx context.Context, e backup.Engine, r Request) (any, *protocol.Error) {
-		return e.Create(ctx, r.Options["profile"], r.Options["output"], r.Options["recipient-file"])
+	add("status", "Show configured backup directory and public recipient without private identity material.", []Option{}, func(_ context.Context, e backup.Engine, _ Request) (any, *protocol.Error) {
+		return e.Status()
 	})
+	add("create", "Encrypt all profiles or one selected profile.", []Option{profileIdentifierOption("profile", false), filePathOption("output", false), filePathOption("recipient-file", false), publicRecipientOption()}, func(ctx context.Context, e backup.Engine, r Request) (any, *protocol.Error) {
+		return e.CreateWithRecipient(ctx, backup.CreateOptions{Profile: r.Options["profile"], Output: r.Options["output"], RecipientPath: r.Options["recipient-file"], Recipient: r.Options["recipient"]})
+	})
+	a.commands[len(a.commands)-1].InputOneOf = recipientInputOneOf()
 	inputs := []Option{filePathOption("file", true), filePathOption("identity-file", true)}
 	add("inspect", "Authenticate and inspect backup metadata without returning values.", inputs, func(_ context.Context, _ backup.Engine, r Request) (any, *protocol.Error) {
 		return backup.Inspect(r.Options["file"], r.Options["identity-file"])

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -134,7 +135,11 @@ func TestConcurrentImportReplaysSameRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	request := ImportRequest{Path: archive, IdentityPath: identity, RequestID: tasks.ID()}
+	preview, err := destination.Import(context.Background(), ImportRequest{Path: archive, IdentityPath: identity})
+	if err != nil || preview.Plan.Digest == "" || preview.Plan.Applied || preview.Plan.Replayed {
+		t.Fatalf("import preview failed: %#v %v", preview.Plan, err)
+	}
+	request := ImportRequest{Path: archive, IdentityPath: identity, Expected: preview.Plan.Digest, RequestID: tasks.ID()}
 	start := make(chan struct{})
 	type outcome struct {
 		result ImportResult
@@ -156,6 +161,9 @@ func TestConcurrentImportReplaysSameRequest(t *testing.T) {
 	if !first.result.Plan.Applied || !second.result.Plan.Applied || first.result.Plan.Replayed == second.result.Plan.Replayed {
 		t.Fatalf("expected one apply and one replay: %#v %#v", first.result.Plan, second.result.Plan)
 	}
+	if first.result.Diff.Different != second.result.Diff.Different {
+		t.Fatalf("replay returned a different preview diff: %#v %#v", first.result.Diff, second.result.Diff)
+	}
 	restored, err := (values.Store{Directory: filepath.Join(destination.Data, "profiles"), Profile: "portable"}).Read()
 	if err != nil {
 		t.Fatal(err)
@@ -163,6 +171,142 @@ func TestConcurrentImportReplaysSameRequest(t *testing.T) {
 	env, err := restored.Environment("")
 	if err != nil || env["VALUE"] != "transferred" {
 		t.Fatalf("imported profile mismatch: %#v %v", env, err)
+	}
+}
+
+func TestImportPreviewApplyAndStaleProtection(t *testing.T) {
+	root := t.TempDir()
+	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
+	destination := Engine{Data: filepath.Join(root, "destination", "data"), Config: filepath.Join(root, "destination", "config"), Cache: filepath.Join(root, "destination", "cache")}
+	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
+	if _, err := Keygen(identity, recipient); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := destination.Configure(filepath.Join(root, "safety"), recipient); err != nil {
+		t.Fatal(err)
+	}
+	sourceStore := values.Store{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
+	if _, err := sourceStore.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+		changed, setErr := state.Set(values.Variable, "VALUE", "", "imported")
+		if setErr != nil {
+			return false, setErr
+		}
+		secretChanged, secretErr := state.Set(values.Secret, "TOKEN", "", "IMPORT_SECRET_CANARY")
+		return changed || secretChanged, secretErr
+	}); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(root, "portable.age")
+	if _, err := source.Create(context.Background(), "portable", archive, recipient); err != nil {
+		t.Fatal(err)
+	}
+	targetStore := values.Store{Directory: filepath.Join(destination.Data, "profiles"), Profile: "portable"}
+	if _, err := targetStore.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+		return state.Set(values.Variable, "VALUE", "", "before")
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	preview, err := destination.Import(context.Background(), ImportRequest{Path: archive, IdentityPath: identity})
+	if err != nil || preview.Plan.Digest == "" || preview.Plan.Applied || preview.Plan.Replayed || len(preview.Plan.Targets) != 1 || !preview.Plan.Targets[0].Exists || !preview.Diff.Different {
+		t.Fatalf("unexpected import preview: %#v %#v %v", preview.Plan, preview.Diff, err)
+	}
+	previewJSON, _ := json.Marshal(preview)
+	if strings.Contains(string(previewJSON), "IMPORT_SECRET_CANARY") {
+		t.Fatal("import preview leaked secret material")
+	}
+	before, err := targetStore.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeEnv, err := before.Environment("")
+	if err != nil || beforeEnv["VALUE"] != "before" {
+		t.Fatalf("preview changed target: %#v %v", beforeEnv, err)
+	}
+	if _, err = destination.Import(context.Background(), ImportRequest{Path: archive, IdentityPath: identity, Expected: preview.Plan.Digest, RequestID: tasks.ID()}); err == nil || err.Code != "profile_exists" {
+		t.Fatalf("existing target applied without replace: %v", err)
+	}
+
+	if _, err := targetStore.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+		return state.Set(values.Variable, "VALUE", "", "changed-after-preview")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = destination.Import(context.Background(), ImportRequest{Path: archive, IdentityPath: identity, Expected: preview.Plan.Digest, RequestID: tasks.ID(), Replace: true}); err == nil || err.Code != "revision_conflict" {
+		t.Fatalf("stale import preview applied: %v", err)
+	}
+
+	fresh, err := destination.Import(context.Background(), ImportRequest{Path: archive, IdentityPath: identity})
+	if err != nil || fresh.Plan.Digest == preview.Plan.Digest {
+		t.Fatalf("target mutation did not change preview digest: %#v %#v %v", preview.Plan, fresh.Plan, err)
+	}
+	requestID := tasks.ID()
+	apply := ImportRequest{Path: archive, IdentityPath: identity, Expected: fresh.Plan.Digest, RequestID: requestID, Replace: true}
+	applied, err := destination.Import(context.Background(), apply)
+	if err != nil || !applied.Plan.Applied || applied.Plan.Replayed || applied.Plan.SafetyBackup == "" {
+		t.Fatalf("replacement import failed: %#v %v", applied.Plan, err)
+	}
+	if _, err := Inspect(applied.Plan.SafetyBackup, identity); err != nil {
+		t.Fatalf("invalid safety backup: %v", err)
+	}
+	replayed, err := destination.Import(context.Background(), apply)
+	if err != nil || !replayed.Plan.Applied || !replayed.Plan.Replayed || replayed.Plan.Digest != applied.Plan.Digest {
+		t.Fatalf("import replay failed: %#v %v", replayed.Plan, err)
+	}
+	if !reflect.DeepEqual(replayed.Diff, applied.Diff) {
+		t.Fatalf("replay changed import diff: %#v %#v", applied.Diff, replayed.Diff)
+	}
+	conflicting := apply
+	conflicting.Target = "other"
+	if _, err = destination.Import(context.Background(), conflicting); err == nil || err.Code != "request_conflict" {
+		t.Fatalf("changed retry input did not conflict: %v", err)
+	}
+	restored, err := targetStore.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	restoredEnv, err := restored.Environment("")
+	if err != nil || restoredEnv["VALUE"] != "imported" || restoredEnv["TOKEN"] != "IMPORT_SECRET_CANARY" {
+		t.Fatalf("replacement import mismatch: %#v %v", restoredEnv, err)
+	}
+}
+
+func TestImportRejectsWrongIdentityAndTamperedArchive(t *testing.T) {
+	root := t.TempDir()
+	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
+	destination := Engine{Data: filepath.Join(root, "destination", "data"), Config: filepath.Join(root, "destination", "config"), Cache: filepath.Join(root, "destination", "cache")}
+	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
+	if _, err := Keygen(identity, recipient); err != nil {
+		t.Fatal(err)
+	}
+	store := values.Store{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
+	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+		return state.Set(values.Variable, "VALUE", "", "portable")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(root, "portable.age")
+	if _, err := source.Create(context.Background(), "portable", archive, recipient); err != nil {
+		t.Fatal(err)
+	}
+	wrongIdentity, wrongRecipient := filepath.Join(root, "wrong-identity"), filepath.Join(root, "wrong-recipient")
+	if _, err := Keygen(wrongIdentity, wrongRecipient); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := destination.Import(context.Background(), ImportRequest{Path: archive, IdentityPath: wrongIdentity}); err == nil || err.Code != "invalid_backup" {
+		t.Fatalf("wrong identity accepted: %v", err)
+	}
+	ciphertext, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ciphertext[len(ciphertext)-1] ^= 1
+	tampered := filepath.Join(root, "tampered.age")
+	if err := os.WriteFile(tampered, ciphertext, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := destination.Import(context.Background(), ImportRequest{Path: tampered, IdentityPath: identity}); err == nil || err.Code != "invalid_backup" {
+		t.Fatalf("tampered archive accepted: %v", err)
 	}
 }
 
@@ -187,6 +331,57 @@ func TestStalePreviewPreservesTarget(t *testing.T) {
 	target.Update(context.Background(), func(s *values.State) (bool, *protocol.Error) { return s.Set(values.Variable, "A", "", "new") })
 	if _, err = e.Restore(context.Background(), path, key, "source", "target", plan.Digest, tasks.ID(), false); err == nil || err.Code != "revision_conflict" {
 		t.Fatal("stale preview applied", err)
+	}
+}
+
+func TestBackupStatusAndDirectRecipient(t *testing.T) {
+	root := t.TempDir()
+	e := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
+	status, statusErr := e.Status()
+	if statusErr != nil || status.Configured || status.Directory != "" || status.Recipient != "" {
+		t.Fatalf("unexpected unconfigured status: %#v %v", status, statusErr)
+	}
+
+	identity, recipientPath := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
+	if _, err := Keygen(identity, recipientPath); err != nil {
+		t.Fatal(err)
+	}
+	recipientBytes, readErr := os.ReadFile(recipientPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	recipientValue := strings.TrimSpace(string(recipientBytes))
+	store := values.Store{Directory: filepath.Join(e.Data, "profiles"), Profile: "portable"}
+	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+		return state.Set(values.Variable, "VALUE", "", "portable")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	directArchive := filepath.Join(root, "direct.age")
+	if _, err := e.CreateWithRecipient(context.Background(), CreateOptions{Profile: "portable", Output: directArchive, Recipient: recipientValue}); err != nil {
+		t.Fatalf("direct recipient create failed: %v", err)
+	}
+	if _, err := Inspect(directArchive, identity); err != nil {
+		t.Fatalf("direct recipient archive is invalid: %v", err)
+	}
+	if _, err := e.CreateWithRecipient(context.Background(), CreateOptions{Profile: "portable", Output: filepath.Join(root, "conflict.age"), RecipientPath: recipientPath, Recipient: recipientValue}); err == nil || err.Code != "invalid_argument" {
+		t.Fatalf("recipient/file conflict was accepted: %v", err)
+	}
+
+	backupDirectory := filepath.Join(root, "backups")
+	if _, err := e.Configure(backupDirectory, recipientPath); err != nil {
+		t.Fatal(err)
+	}
+	status, statusErr = e.Status()
+	if statusErr != nil || !status.Configured || status.Directory != backupDirectory || status.Recipient != recipientValue {
+		t.Fatalf("unexpected configured status: %#v %v", status, statusErr)
+	}
+	configuredArchive, createErr := e.Create(context.Background(), "portable", "", "")
+	if createErr != nil || configuredArchive.Path == "" {
+		t.Fatalf("configured recipient fallback failed: %#v %v", configuredArchive, createErr)
+	}
+	if _, err := Inspect(configuredArchive.Path, identity); err != nil {
+		t.Fatalf("configured fallback archive is invalid: %v", err)
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 
 	"filippo.io/age"
 	"github.com/jinyongp/devtools/internal/maintenance"
+	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -32,6 +33,11 @@ type Engine struct{ Data, Config, Cache string }
 type Config struct {
 	Directory string `json:"directory"`
 	Recipient string `json:"recipient"`
+}
+type Status struct {
+	Configured bool   `json:"configured"`
+	Directory  string `json:"directory"`
+	Recipient  string `json:"recipient"`
 }
 type Snapshot struct {
 	Version  int       `json:"version"`
@@ -57,18 +63,26 @@ type CreateResult struct {
 	Profiles  []Summary `json:"profiles"`
 	CreatedAt string    `json:"created_at"`
 }
+type CreateOptions struct {
+	Profile       string
+	Output        string
+	RecipientPath string
+	Recipient     string
+}
 type Plan struct {
 	Replayed     bool     `json:"-"` // Response metadata; never stored in the restore receipt.
 	Digest       string   `json:"digest"`
 	Targets      []Target `json:"targets"`
 	Applied      bool     `json:"applied"`
 	SafetyBackup string   `json:"safety_backup,omitempty"`
+	importData   *importReceiptData
 }
 type ImportRequest struct {
 	Path         string
 	IdentityPath string
 	Source       string
 	Target       string
+	Expected     string
 	RequestID    string
 	Replace      bool
 }
@@ -76,11 +90,22 @@ type ImportResult struct {
 	Plan   Plan
 	Source Summary
 	Target string
+	Diff   profilecatalog.Diff
+}
+type importReceiptData struct {
+	Source Summary             `json:"source"`
+	Target string              `json:"target"`
+	Diff   profilecatalog.Diff `json:"diff"`
+}
+type importContext struct {
+	Source    Summary
+	Canonical profilecatalog.Canonical
 }
 type restoreReceipt struct {
-	Fingerprint          string `json:"fingerprint"`
-	OperationFingerprint string `json:"operation_fingerprint,omitempty"`
-	Plan                 Plan   `json:"plan"`
+	Fingerprint          string             `json:"fingerprint"`
+	OperationFingerprint string             `json:"operation_fingerprint,omitempty"`
+	Plan                 Plan               `json:"plan"`
+	Import               *importReceiptData `json:"import,omitempty"`
 }
 type restoreFingerprintInput struct {
 	Cipher   []byte
@@ -98,6 +123,7 @@ type restoreRequest struct {
 	RequestID            string
 	OperationFingerprint string
 	Replace              bool
+	Import               *importContext
 }
 type Target struct {
 	Source  string `json:"source"`
@@ -178,16 +204,19 @@ func Keygen(identityPath, recipientPath string) (any, *protocol.Error) {
 	}
 	return map[string]string{"identity_file": identityPath, "recipient_file": recipientPath}, nil
 }
-func recipient(path string) (string, error) {
-	b, e := maintenance.Read(path, 4096)
-	if e != nil {
-		return "", e
-	}
-	r, e := age.ParseX25519Recipient(strings.TrimSpace(string(b)))
-	if e != nil {
-		return "", e
+func canonicalRecipient(value string) (string, error) {
+	r, err := age.ParseX25519Recipient(strings.TrimSpace(value))
+	if err != nil {
+		return "", err
 	}
 	return r.String(), nil
+}
+func recipient(path string) (string, error) {
+	b, err := maintenance.Read(path, 4096)
+	if err != nil {
+		return "", err
+	}
+	return canonicalRecipient(string(b))
 }
 func (e Engine) Configure(directory, recipientPath string) (any, *protocol.Error) {
 	d, err := filepath.Abs(directory)
@@ -217,7 +246,20 @@ func (e Engine) config() (Config, error) {
 	if err == nil && !filepath.IsAbs(c.Directory) {
 		err = errors.New("invalid backup directory")
 	}
+	if err == nil {
+		c.Recipient, err = canonicalRecipient(c.Recipient)
+	}
 	return c, err
+}
+func (e Engine) Status() (Status, *protocol.Error) {
+	c, err := e.config()
+	if errors.Is(err, os.ErrNotExist) {
+		return Status{}, nil
+	}
+	if err != nil {
+		return Status{}, failure("storage_error")
+	}
+	return Status{Configured: true, Directory: c.Directory, Recipient: c.Recipient}, nil
 }
 
 func (e Engine) snapshot(selected string) (Snapshot, error) {
@@ -323,19 +365,30 @@ func summaries(s Snapshot) []Summary {
 	return out
 }
 func (e Engine) Create(ctx context.Context, profile, output, recipientPath string) (CreateResult, *protocol.Error) {
-	if profile != "" && !project.ValidProfile(profile) {
+	return e.CreateWithRecipient(ctx, CreateOptions{Profile: profile, Output: output, RecipientPath: recipientPath})
+}
+func (e Engine) CreateWithRecipient(ctx context.Context, request CreateOptions) (CreateResult, *protocol.Error) {
+	if request.Profile != "" && !project.ValidProfile(request.Profile) || request.RecipientPath != "" && request.Recipient != "" {
 		return CreateResult{}, failure("invalid_argument")
 	}
 	c, configErr := e.config()
-	if recipientPath != "" {
-		r, err := recipient(recipientPath)
+	switch {
+	case request.RecipientPath != "":
+		r, err := recipient(request.RecipientPath)
 		if err != nil {
 			return CreateResult{}, failure("invalid_recipient")
 		}
 		c.Recipient = r
-	} else if configErr != nil {
+	case request.Recipient != "":
+		r, err := canonicalRecipient(request.Recipient)
+		if err != nil {
+			return CreateResult{}, failure("invalid_recipient")
+		}
+		c.Recipient = r
+	case configErr != nil:
 		return CreateResult{}, failure("backup_not_configured")
 	}
+	output := request.Output
 	if output == "" {
 		if configErr != nil {
 			return CreateResult{}, failure("backup_not_configured")
@@ -350,7 +403,7 @@ func (e Engine) Create(ctx context.Context, profile, output, recipientPath strin
 		return CreateResult{}, failure("storage_error")
 	}
 	defer release()
-	s, err := e.snapshot(profile)
+	s, err := e.snapshot(request.Profile)
 	if err != nil {
 		return CreateResult{}, failure("backup_error")
 	}
@@ -435,9 +488,18 @@ func selectImportSummary(snapshot Snapshot, requested string) (Summary, *protoco
 }
 
 func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult, *protocol.Error) {
-	result := ImportResult{Plan: Plan{Targets: []Target{}}}
-	if !filepath.IsAbs(e.Data) || !filepath.IsAbs(e.Cache) || !restoreRequestIDPattern.MatchString(request.RequestID) {
+	result := ImportResult{Plan: Plan{Targets: []Target{}}, Diff: profilecatalog.Diff{Envs: []profilecatalog.NameChange{}, Variables: []profilecatalog.ValueChange{}, Secrets: []profilecatalog.ValueChange{}, Items: []profilecatalog.TaskChange{}, Instances: []profilecatalog.InstanceChange{}}}
+	if !filepath.IsAbs(e.Data) || !filepath.IsAbs(e.Cache) || (request.Expected == "") != (request.RequestID == "") {
 		return result, failure("invalid_argument")
+	}
+	if request.RequestID != "" && !restoreRequestIDPattern.MatchString(request.RequestID) {
+		return result, failure("invalid_argument")
+	}
+	if request.Expected != "" {
+		digestBytes, digestErr := hex.DecodeString(request.Expected)
+		if digestErr != nil || len(digestBytes) != sha256.Size {
+			return result, failure("invalid_argument")
+		}
 	}
 	if request.Source != "" && !project.ValidProfile(request.Source) || request.Target != "" && !project.ValidProfile(request.Target) {
 		return result, failure("invalid_argument")
@@ -454,36 +516,29 @@ func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult
 	if target == "" {
 		target = source.Profile
 	}
-	result.Source, result.Target = source, target
-	operationFingerprint := restoreFingerprint(restoreFingerprintInput{Cipher: cipher, Source: source.Profile, Target: target, Replace: request.Replace})
-
-	receiptPath := filepath.Join(e.Data, "backup-receipts", request.RequestID+".json")
-	b, readErr := maintenance.Read(receiptPath, 1<<20)
-	if readErr == nil {
-		var previous restoreReceipt
-		if json.Unmarshal(b, &previous) != nil {
-			return result, failure("storage_error")
+	var selected *Profile
+	for index := range snapshot.Profiles {
+		if snapshot.Profiles[index].Name == source.Profile {
+			selected = &snapshot.Profiles[index]
+			break
 		}
-		if previous.OperationFingerprint != operationFingerprint {
-			return result, failure("request_conflict")
-		}
-		previous.Plan.Replayed = true
-		result.Plan = previous.Plan
-		return result, nil
 	}
-	if !errors.Is(readErr, os.ErrNotExist) {
-		return result, failure("storage_error")
+	if selected == nil {
+		return result, failure("invalid_backup")
 	}
-	preview, previewErr := e.restore(ctx, restoreRequest{Snapshot: snapshot, Cipher: cipher, Source: source.Profile, Target: target, OperationFingerprint: operationFingerprint, Replace: request.Replace})
-	if previewErr != nil {
-		return result, previewErr
+	sourceCanonical, canonicalErr := profilecatalog.CanonicalSnapshot(source.Profile, selected.Values, selected.Tasks)
+	if canonicalErr != nil {
+		return result, failure("invalid_backup")
 	}
-	plan, restoreErr := e.restore(ctx, restoreRequest{Snapshot: snapshot, Cipher: cipher, Source: source.Profile, Target: target, Expected: preview.Digest, RequestID: request.RequestID, OperationFingerprint: operationFingerprint, Replace: request.Replace})
+	operationFingerprint := restoreFingerprint(restoreFingerprintInput{Cipher: cipher, Source: source.Profile, Target: target, Expected: request.Expected, Replace: request.Replace})
+	plan, restoreErr := e.restore(ctx, restoreRequest{Snapshot: snapshot, Cipher: cipher, Source: source.Profile, Target: target, Expected: request.Expected, RequestID: request.RequestID, OperationFingerprint: operationFingerprint, Replace: request.Replace, Import: &importContext{Source: source, Canonical: sourceCanonical}})
 	if restoreErr != nil {
 		return result, restoreErr
 	}
-	result.Plan = plan
-	return result, nil
+	if plan.importData == nil {
+		return result, failure("storage_error")
+	}
+	return ImportResult{Plan: plan, Source: plan.importData.Source, Target: plan.importData.Target, Diff: plan.importData.Diff}, nil
 }
 
 func (e Engine) Restore(ctx context.Context, path, identityPath, source, target, expected, requestID string, replace bool) (Plan, *protocol.Error) {
@@ -546,6 +601,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 				return plan, failure("request_conflict")
 			}
 			previous.Plan.Replayed = true
+			previous.Plan.importData = previous.Import
 			return previous.Plan, nil
 		}
 		if !errors.Is(err, os.ErrNotExist) {
@@ -553,6 +609,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		}
 	}
 	exists := false
+	targetData := map[string][]byte{}
 	hashInput := []byte(digest(cipher) + "\n" + source + "\n" + target)
 	for _, domain := range []string{"profiles", "tasks"} {
 		b, err := maintenance.Read(filepath.Join(e.Data, file(domain, target)), limit)
@@ -560,6 +617,9 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 			return plan, failure("storage_error")
 		}
 		exists = exists || err == nil
+		if err == nil {
+			targetData[domain] = append([]byte{}, b...)
+		}
 		hashInput = append(hashInput, []byte("\n"+domain+":"+digest(b))...)
 	}
 	keyPath := filepath.Join(e.Data, ".maintenance", "preview-key")
@@ -574,9 +634,19 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		return plan, failure("storage_error")
 	}
 	mac := hmac.New(sha256.New, key)
-	mac.Write(append(hashInput, []byte("\n"+map[bool]string{true: "replace", false: "create"}[replace])...))
+	mac.Write(hashInput)
+	if request.Import == nil {
+		mac.Write([]byte("\n" + map[bool]string{true: "replace", false: "create"}[replace]))
+	}
 	plan.Digest = hex.EncodeToString(mac.Sum(nil))
 	plan.Targets = append(plan.Targets, Target{source, target, exists})
+	if request.Import != nil {
+		targetCanonical, canonicalErr := profilecatalog.CanonicalSnapshot(target, targetData["profiles"], targetData["tasks"])
+		if canonicalErr != nil {
+			return plan, failure("storage_error")
+		}
+		plan.importData = &importReceiptData{Source: request.Import.Source, Target: target, Diff: profilecatalog.Compare(targetCanonical, request.Import.Canonical, false)}
+	}
 	if expected == "" {
 		return plan, nil
 	}
@@ -630,7 +700,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		}
 	}
 	plan.Applied = true
-	files[receiptPath], err = json.Marshal(restoreReceipt{Fingerprint: fingerprint, OperationFingerprint: request.OperationFingerprint, Plan: plan})
+	files[receiptPath], err = json.Marshal(restoreReceipt{Fingerprint: fingerprint, OperationFingerprint: request.OperationFingerprint, Plan: plan, Import: plan.importData})
 	if err != nil {
 		return plan, failure("storage_error")
 	}

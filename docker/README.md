@@ -28,6 +28,12 @@ just verify-docker proxies
 # 암호화 백업·복구·재시도·충돌·직전 백업
 just verify-docker backup
 
+# Profile 탐색·값 비노출·recipient·import preview/apply와 동시 replay
+just verify-docker profiles
+
+# 실제 서버의 다중 시작·readiness·재사용·worktree 격리·부분 재시도
+just verify-docker project_lifecycle
+
 # 프로세스 준비 확인·대기·취소·실행 기준 유지
 just verify-docker readiness
 

@@ -23,8 +23,10 @@ expose `data.replayed`, including false values. A replay preserves the original
 changed result and must not be counted as another mutation.
 Schema metadata declares `output_mode`: json, text, artifact, or passthrough.
 Only json commands have `output_schema`, describing the envelope's data.
-Use `version` for build metadata plus `protocol_version`; every JSON response exposes
-the envelope `schema_version` at the top level, and `schema` responses also report the CLI protocol version.
+Use `version` for build metadata and `protocol_version` (3 for this source).
+Every JSON response exposes envelope `schema_version: 1` at the top level;
+all `schema` responses also report the CLI protocol version. Keep `devtools.toml`
+versionless: do not add `version` or `schema_version` fields to project configuration.
 Help returns text; completion returns a raw script; `command run` forwards the
 child's output and exit code. The shorter `run` form remains a supported alias.
 Devtools errors, including help errors, use JSON stderr; child errors stay raw.
@@ -34,7 +36,10 @@ an output-format option. Treat this link as a credential.
 ## Prepare and run
 
 Use `doctor COMMAND` before a configured command when setup is uncertain.
-A successful diagnosis can still have `data.ready: false`; inspect checks and remedies.
+A successful diagnosis can still have `data.ready: false`; inspect `checks[].remedies`.
+Each remedy has `argv`, `required_inputs`, and `message`. Supply missing inputs before
+execution; an empty argv describes a manual action. These are suggestions, not automatic
+permission to install tools or change data. Keep secrets in stdin/files, never remedy argv.
 Variables are readable; secrets are metadata-only and enter processes through
 `command run` or managed commands. Import mixed dotenv files by path, marking public keys
 with `--var`; new unmarked keys become secrets. Keep secret values out of arguments,
@@ -47,6 +52,16 @@ Save the returned execution ID. `process status` reports lifetime; a configured
 `process wait EXECUTION_ID` establishes readiness before dependent work. `process check`
 can exit successfully with `readiness.ready: false`.
 Restart applies current config and values.
+
+Use `project up COMMAND... --request-id UUID` for several named servers. Names are
+required; never assume all configured commands are servers. Readiness waits are
+per command. `project status [COMMAND...]` and `project down [COMMAND...] --request-id UUID`
+select the current project's canonical directory, not other worktrees sharing its profile.
+On partial failure inspect `error.details.items`; successful siblings stay running.
+Retry the same input/UUID to continue unfinished children. A resumed batch may return
+updated progress with `replayed: true`. Completed requests replay their saved result.
+Down retries stop only executions selected by the original request. Use a new UUID
+for a new operation and `project status` for current state.
 
 Ports belong to execution locations. Inspect `port` and `instance` before changing
 assignments. Commands declare `serve` for servers and `bind` for injected values.
@@ -123,12 +138,23 @@ sharing the profile must support v2; older binaries reject it. Read, no-op and
 preview do not upgrade. Use error details and remedy argv to recover conflicts;
 never copy a context credential into shared diagnostics.
 
+Use `profile list`, `profile inspect NAME`, and `profile diff LEFT RIGHT` for metadata-only
+profile management. Diff reports key/scope and task/instance differences, not stored
+values or secret equality; no metadata difference does not prove equal values.
+
 Use `profile export` and `profile import` to move one encrypted profile between
-environments. Export defaults to the current project's profile; import infers a
-single source profile and keeps the same name unless `--as` is supplied. Import
-requires a request UUID, is retry-safe, and refuses an existing target unless
-`--replace` is explicit. Transfer only the public age recipient to the source
-environment; keep the identity private on the destination side.
+environments. Export defaults to the current project's profile. `backup status`
+reports configured public backup state. Create/export accept either `--recipient`
+or `--recipient-file`, never both; omission uses the configured public recipient.
+Transfer only the public recipient to the source and keep the identity on the destination.
+
+Import without `--apply` previews and returns `digest`, `target_exists`, and metadata-only
+`diff`. It infers a single source profile and keeps its name unless `--as` is supplied.
+Review that preview, then apply the same file/source/target with
+`--apply DIGEST --request-id UUID`. Existing targets require `--replace` at apply and
+a configured safety backup. Stale targets require a fresh preview and a new request ID.
+Identical apply retries replay the stored result; changed inputs conflict. Task claims,
+execution credentials, port assignments, and live processes are not transferred as active state.
 
 Cleanup and restore start with a preview. Apply the selected IDs or digest,
 refreshing stale previews. Keep backup identities separate from project files.

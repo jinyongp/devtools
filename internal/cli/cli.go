@@ -6,10 +6,12 @@ import (
 	"io"
 	"strings"
 
+	"github.com/jinyongp/devtools/internal/lifecycle"
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/proxy"
+	"github.com/jinyongp/devtools/internal/services"
 )
 
 const uuidPattern = `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
@@ -38,6 +40,7 @@ type Command struct {
 	Aliases     []string                                                  `json:"aliases"`
 	Arguments   []Argument                                                `json:"arguments"`
 	ChildArgs   bool                                                      `json:"accepts_child_args"`
+	UniqueArgs  bool                                                      `json:"-"`
 	OutputMode  OutputMode                                                `json:"output_mode"`
 	InputOneOf  []map[string]any                                          `json:"-"`
 	Name        string                                                    `json:"name"`
@@ -48,15 +51,17 @@ type Command struct {
 }
 
 type App struct {
-	commands      []Command
-	dataDirectory func() (string, *protocol.Error)
-	proxyManager  func(string) proxy.Manager
+	commands         []Command
+	dataDirectory    func() (string, *protocol.Error)
+	proxyManager     func(string) proxy.Manager
+	lifecycleManager func(string) lifecycle.Manager
 }
 
 type Argument struct {
-	Name     string `json:"name"`
-	Required bool   `json:"required"`
-	Pattern  string `json:"pattern,omitempty"`
+	Name       string `json:"name"`
+	Required   bool   `json:"required"`
+	Repeatable bool   `json:"repeatable,omitempty"`
+	Pattern    string `json:"pattern,omitempty"`
 }
 type Request struct {
 	Options     map[string]string
@@ -77,7 +82,13 @@ func object(properties map[string]any, required ...string) map[string]any {
 func stringSchema() map[string]any { return map[string]any{"type": "string"} }
 
 func New(version, commit string) *App {
-	a := &App{dataDirectory: userDataDirectory, proxyManager: func(data string) proxy.Manager { return proxy.Manager{Data: data} }}
+	a := &App{
+		dataDirectory: userDataDirectory,
+		proxyManager:  func(data string) proxy.Manager { return proxy.Manager{Data: data} },
+		lifecycleManager: func(data string) lifecycle.Manager {
+			return lifecycle.Manager{Data: data, Processes: services.Store{Data: data}}
+		},
+	}
 	a.commands = []Command{
 		{Name: "init", Description: "Create project configuration in the current directory without overwriting existing files.", Options: []Option{
 			{Name: "profile", Description: "Project profile identifier.", Required: true, Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128},
@@ -113,6 +124,7 @@ func New(version, commit string) *App {
 	a.registerBackup()
 	a.registerProfiles()
 	a.registerProcesses()
+	a.registerProjectLifecycle()
 	a.registerCleanup()
 	a.registerUpdate()
 	a.registerCompletion()

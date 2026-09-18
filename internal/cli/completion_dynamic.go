@@ -85,6 +85,7 @@ func (a *App) dynamicCandidates(words []string) []string {
 	selected := map[string]string{}
 	pending := ""
 	positionals := 0
+	positionalValues := map[string]bool{}
 	firstArgument := ""
 	for _, word := range past[consumed:] {
 		if pending != "" {
@@ -115,6 +116,7 @@ func (a *App) dynamicCandidates(words []string) []string {
 		if positionals == 0 {
 			firstArgument = word
 		}
+		positionalValues[word] = true
 		positionals++
 	}
 	replacement := ""
@@ -154,11 +156,17 @@ func (a *App) dynamicCandidates(words []string) []string {
 			source = "workstream"
 		}
 	case "":
-		if positionals != 0 || len(cmd.Arguments) == 0 || strings.HasPrefix(prefix, "-") {
+		if len(cmd.Arguments) == 0 || strings.HasPrefix(prefix, "-") {
 			return nil
 		}
+		if positionals != 0 {
+			last := len(cmd.Arguments) - 1
+			if !cmd.Arguments[last].Repeatable || positionals < last {
+				return nil
+			}
+		}
 		switch {
-		case cmd.Name == "command run" || cmd.Name == "command inspect" || cmd.Name == "process start":
+		case cmd.Name == "command run" || cmd.Name == "command inspect" || cmd.Name == "process start" || cmd.Name == "project up" || cmd.Name == "project status" || cmd.Name == "project down":
 			source = "command"
 		case cmd.Name == "env remove":
 			source = "env"
@@ -193,7 +201,7 @@ func (a *App) dynamicCandidates(words []string) []string {
 	sort.Strings(names)
 	out := []string{}
 	for _, name := range names {
-		if pending == "depends-on" && name == firstArgument {
+		if pending == "depends-on" && name == firstArgument || cmd.UniqueArgs && pending == "" && positionalValues[name] {
 			continue
 		}
 		// Candidates are identifiers only. This also prevents shell control text.

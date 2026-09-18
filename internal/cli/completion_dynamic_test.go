@@ -21,6 +21,11 @@ func TestDynamicCompletion(t *testing.T) {
 	if err := os.WriteFile("devtools.toml", []byte("profile = 'app'\n[commands.web]\nexec = ['echo', 'CANARY-VALUE']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	for i := range a.commands {
+		if a.commands[i].Name == "process start" {
+			a.commands[i].Arguments[0].Repeatable = true
+		}
+	}
 	call := func(input string, args ...string) map[string]any {
 		t.Helper()
 		code, out, stderr := invoke(t, a, input, args...)
@@ -87,6 +92,11 @@ func TestDynamicCompletion(t *testing.T) {
 		{[]string{"command", "run", ""}, []string{"web"}},
 		{[]string{"run", ""}, []string{"web"}},
 		{[]string{"process", "start", "--dir", projectDir, ""}, []string{"web"}},
+		{[]string{"process", "start", "--dir", projectDir, "web", ""}, []string{"web"}},
+		{[]string{"project", "up", ""}, []string{"web"}},
+		{[]string{"project", "up", "web", ""}, nil},
+		{[]string{"project", "status", "web", ""}, nil},
+		{[]string{"project", "down", "web", ""}, nil},
 		{[]string{"task", "show", taskID[:8]}, []string{taskID}},
 		{[]string{"task", "show", "--workstream", workstream, ""}, []string{taskID}},
 		{[]string{"task", "add", "--workstream", ""}, []string{workstream}},

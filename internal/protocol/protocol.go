@@ -10,10 +10,16 @@ const (
 	// EnvelopeVersion versions the common success/error response wrapper.
 	EnvelopeVersion = 1
 	// ProtocolVersion versions the public CLI machine contract, including command data shapes.
-	ProtocolVersion = 2
+	ProtocolVersion = 3
 )
 
 // Error contains a stable code suitable for programmatic branching.
+type Remedy struct {
+	Argv           []string `json:"argv"`
+	RequiredInputs []string `json:"required_inputs"`
+	Message        string   `json:"message"`
+}
+
 type Error struct {
 	Code     string         `json:"code"`
 	Message  string         `json:"message"`

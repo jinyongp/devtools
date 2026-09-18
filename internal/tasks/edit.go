@@ -449,10 +449,10 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 		}
 		patches = append(patches, Object{"id": i.ID, "kind": i.Kind, "title": i.Title, "description": i.Description, "workstream_id": i.Workstream, "depends_on": i.Depends, "props": props, "basis": s.Tracking[i.ID], "order": i.Order})
 	}
-	result := Object{"target_id": target, "dry_run": allocations == nil, "would_change": len(patches) > 0, "changes": changes, "effects": effects, "impact": Object{"affected_ids": impact}, "issues": s.EditIssues(w), "next_actions": []Object{}, "created_refs": Object{}, "created_items": []Object{}}
+	result := Object{"target_id": target, "dry_run": allocations == nil, "would_change": len(patches) > 0, "changes": changes, "effects": effects, "impact": Object{"affected_ids": impact}, "issues": s.EditIssues(w), "next_actions": []protocol.Remedy{}, "created_refs": Object{}, "created_items": []Object{}}
 	result["impact"].(Object)["causes"] = editImpactPaths(before, s, changes, impact)
 	if len(patches) > 0 {
-		next := []Object{{"argv": []string{"devtools", "task", "workstream", "check", target}, "required_inputs": []string{"profile"}, "message": "Inspect coverage and current completion before execution or closure."}}
+		next := []protocol.Remedy{{Argv: []string{"devtools", "task", "workstream", "check", target}, RequiredInputs: []string{"profile"}, Message: "Inspect coverage and current completion before execution or closure."}}
 		for _, id := range impact {
 			i := s.Items[id]
 			if i == nil || i.Kind != "task" {
@@ -460,11 +460,11 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 			}
 			a := s.Assessment(id)
 			if a.ExecutionStatus == "stale" {
-				next = append(next, Object{"argv": []string{"devtools", "task", "sync", id}, "required_inputs": []string{"profile", "context", "if-revision", "request-id", "reason"}, "message": "Review the changed definition before syncing this run."})
+				next = append(next, protocol.Remedy{Argv: []string{"devtools", "task", "sync", id}, RequiredInputs: []string{"profile", "context", "if-revision", "request-id", "reason"}, Message: "Review the changed definition before syncing this run."})
 			} else if a.ExecutionStatus == "removed" {
-				next = append(next, Object{"argv": []string{"devtools", "task", "release", s.Current(id).ID}, "required_inputs": []string{"profile", "context", "request-id"}, "message": "Checkpoint and release excluded work when its execution is finished."})
+				next = append(next, protocol.Remedy{Argv: []string{"devtools", "task", "release", s.Current(id).ID}, RequiredInputs: []string{"profile", "context", "request-id"}, Message: "Checkpoint and release excluded work when its execution is finished."})
 			} else if a.Ready {
-				next = append(next, Object{"argv": []string{"devtools", "task", "claim", id}, "required_inputs": []string{"profile", "request-id"}, "message": "Claim this task when ready to implement its current definition."})
+				next = append(next, protocol.Remedy{Argv: []string{"devtools", "task", "claim", id}, RequiredInputs: []string{"profile", "request-id"}, Message: "Claim this task when ready to implement its current definition."})
 			}
 		}
 		result["next_actions"] = next

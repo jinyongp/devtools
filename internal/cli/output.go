@@ -18,3 +18,11 @@ func itemOutput(item map[string]any) map[string]any {
 func changedItemOutput(item map[string]any) map[string]any {
 	return object(map[string]any{"item": item, "changed": map[string]any{"type": "boolean"}}, "item", "changed")
 }
+
+func remedySchema() map[string]any {
+	return object(map[string]any{
+		"argv":            map[string]any{"type": "array", "items": stringSchema()},
+		"required_inputs": map[string]any{"type": "array", "items": stringSchema()},
+		"message":         stringSchema(),
+	}, "argv", "required_inputs", "message")
+}

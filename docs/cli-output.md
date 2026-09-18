@@ -1,6 +1,6 @@
 # CLI 출력 계약
 
-이 문서는 현재 소스의 CLI 출력 규칙을 설명합니다. v0.13.0에서 변경되는 입력과 JSON 경로는 아래 마이그레이션 표에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 이 CLI 변경의 대상이 아닙니다.
+이 문서는 현재 소스의 CLI protocol v3 출력 규칙을 설명합니다. v0.15.0용 protocol v3 전환과 v0.13.0의 JSON 경로 변경은 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
 
 ## 출력 종류 확인
 
@@ -46,7 +46,7 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1을 유지합니다. 명령별 `data` 구조와 출력 모드를 포함한 CLI machine contract는 `devtools schema`의 `data.protocol_version`으로 버전하며, 이번 breaking 변경에서 2로 올라갑니다. `devtools version`의 `data.protocol_version`에서도 같은 값을 확인할 수 있고, envelope 버전은 모든 JSON 응답의 최상위 `schema_version`으로 확인합니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
+`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 3`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
 
 ## JSON 데이터 구조
 
@@ -96,11 +96,39 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `dashboard`·`dashboard start`, status, stop | 각각 `item`·`changed`, `item`, `changed` |
 | `backup keygen/configure/create`, inspect | 각각 `item`·`changed`, `item` |
 | `backup restore` | 복구 계획·적용 보고서와 `changed`·`replayed`; 미리보기는 둘 다 false |
-| `profile export`, `profile import` | 각각 `item`·`changed`, `item`·`changed`·`replayed`와 safety-backup 메타데이터 |
+| `profile list`, `profile inspect`, `profile diff` | 각각 `items`, `item`, `left`·`right`·`different`와 메타데이터 차이 보고서 |
+| `profile export` | `item`, `changed` |
+| `profile import` | `item`, `digest`, `target_exists`, `diff`, `changed`, `replayed`, `safety_backup`; 미리보기는 변경하지 않음 |
+| `backup status` | 공개 설정 상태를 담은 `item` |
+| `project status` | `profile`, `directory`, 활성 실행 `items` |
+| `project up/down` | `action`, `profile`, `directory`, 명령별 `items`, `changed`, `replayed` |
 | `cleanup archives`, apply, restore/purge | 각각 `items`, `items`·`changed`·`replayed`, `item`·`changed` |
 | `cleanup preview` | 계획 ID·만료 시각·`items` |
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## v0.15.0용 protocol v3 마이그레이션
+
+Protocol v2의 자동화는 import 입력과 doctor 응답을 함께 변경해야 합니다.
+출력 종류와 envelope 버전은 바뀌지 않습니다.
+
+| 대상 | Protocol v2 | Protocol v3 |
+| --- | --- | --- |
+| `version`, `schema` | `data.protocol_version: 2` | `data.protocol_version: 3` |
+| `profile import` 미리보기 | 별도 단계 없음 | 파일·identity만 전달하면 `digest`, `target_exists`, 메타데이터 `diff`를 반환하고 변경하지 않음 |
+| `profile import` 적용 | `--request-id UUID`로 즉시 적용 | `--apply DIGEST --request-id UUID`를 함께 전달 |
+| 기존 profile 교체 | `--replace`로 명시 | 미리보기 후 적용에 `--replace` 추가; 안전 백업과 stale 검사는 유지 |
+| doctor check | 선택적 문자열 `remedy` | 항상 배열 `remedies`; 원소는 `argv`, `required_inputs`, `message` |
+| 반복 positional | 선언한 개수로 제한 | 마지막 인자의 `repeatable`; schema의 `args.items`와 help의 `<command...>`로 표현 |
+
+`profile list/inspect/diff`, `backup status`, 직접 공개 recipient 입력과
+`project up/status/down`은 새 명령·옵션입니다. 세부 사용법은 [Profile 관리](profiles.md),
+[백업](backup.md), [프로세스 관리](processes.md), [doctor](doctor.md)를 참고하세요.
+
+Project lifecycle의 부분 실패는 stderr 오류의 `details.items`에서 확인합니다.
+이미 성공한 서버는 유지합니다. 같은 입력과 요청 ID로 재시도하면 완료 항목을 반복하지
+않고 미완료 작업을 이어가므로, `replayed: true`인 재개 응답이 항상 최초 부분 결과와
+동일한 것은 아닙니다. 완료된 작업의 재전송은 저장된 완료 결과를 반환합니다.
 
 ## v0.13.0에서의 마이그레이션
 

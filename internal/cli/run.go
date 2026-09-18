@@ -91,7 +91,7 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 		}
 	}
 	if !requirements.Empty() {
-		checks := doctor.CheckRequirements(ctx, doctor.Input{Directory: dir, Env: env, Requirements: requirements, State: state, Inject: inject, Executable: args[0], PathOverride: boundPath})
+		checks := doctor.CheckRequirements(ctx, doctor.Input{Profile: p.Profile, Directory: dir, Env: env, Requirements: requirements, State: state, Inject: inject, Executable: args[0], PathOverride: boundPath})
 		for _, check := range checks {
 			if check.Status != "pass" {
 				return nil, protocol.NewError("requirements_failed", "Command prerequisites are not satisfied. Run devtools doctor for diagnostics.", 3, map[string]any{"checks": checks})

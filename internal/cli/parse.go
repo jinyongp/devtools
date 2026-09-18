@@ -95,8 +95,30 @@ func parseRequest(command Command, tokens []string) (Request, *protocol.Error) {
 			}
 		}
 	}
-	if len(request.Args) > len(command.Arguments) {
+	repeatable := -1
+	for i, argument := range command.Arguments {
+		if !argument.Repeatable {
+			continue
+		}
+		if repeatable != -1 || i != len(command.Arguments)-1 {
+			return request, protocol.NewError("internal_error", "Command definition has an invalid repeatable argument.", 1, nil)
+		}
+		repeatable = i
+	}
+	if repeatable == -1 && len(request.Args) > len(command.Arguments) {
 		return request, argumentError("Unexpected positional arguments.", "")
+	}
+	validArgument := func(argument Argument, value string) bool {
+		return value != "" && (argument.Pattern == "" || regexp.MustCompile(argument.Pattern).MatchString(value))
+	}
+	if command.UniqueArgs {
+		seen := map[string]bool{}
+		for _, value := range request.Args {
+			if seen[value] {
+				return request, argumentError("Specify each positional argument once.", "")
+			}
+			seen[value] = true
+		}
 	}
 	for i, argument := range command.Arguments {
 		if i >= len(request.Args) {
@@ -105,7 +127,15 @@ func parseRequest(command Command, tokens []string) (Request, *protocol.Error) {
 			}
 			continue
 		}
-		if request.Args[i] == "" || (argument.Pattern != "" && !regexp.MustCompile(argument.Pattern).MatchString(request.Args[i])) {
+		if argument.Repeatable {
+			for _, value := range request.Args[i:] {
+				if !validArgument(argument, value) {
+					return request, argumentError("Argument does not match its schema.", argument.Name)
+				}
+			}
+			break
+		}
+		if !validArgument(argument, request.Args[i]) {
 			return request, argumentError("Argument does not match its schema.", argument.Name)
 		}
 	}

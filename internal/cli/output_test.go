@@ -16,7 +16,7 @@ import (
 func TestOutputModeCatalog(t *testing.T) {
 	app := New("test", "test")
 	catalog := app.catalog()
-	if catalog["protocol_version"] != protocol.ProtocolVersion || protocol.ProtocolVersion != 2 {
+	if catalog["protocol_version"] != protocol.ProtocolVersion || protocol.ProtocolVersion != 3 {
 		t.Fatalf("unexpected CLI protocol version: %v", catalog["protocol_version"])
 	}
 	responseSchema := catalog["response_schema"].(map[string]any)
@@ -55,7 +55,7 @@ func TestOutputModeCatalog(t *testing.T) {
 	}
 	for _, args := range [][]string{{"schema", "command", "run"}, {"schema", "run"}} {
 		code, out, diagnostic := invoke(t, app, "", args...)
-		if code != 0 || diagnostic != "" || !strings.Contains(out, `"protocol_version":2`) || !strings.Contains(out, `"output_mode":"passthrough"`) || strings.Contains(out, `"output_schema"`) {
+		if code != 0 || diagnostic != "" || !strings.Contains(out, `"protocol_version":3`) || !strings.Contains(out, `"output_mode":"passthrough"`) || strings.Contains(out, `"output_schema"`) {
 			t.Fatalf("%v: %d %s %s", args, code, out, diagnostic)
 		}
 	}
@@ -87,7 +87,7 @@ func TestJSONQueryEnvelopes(t *testing.T) {
 	app := testApp(t)
 	for _, args := range [][]string{
 		{"command", "list"}, {"env", "list"}, {"variable", "list"}, {"secret", "list"},
-		{"port", "list"}, {"instance", "list"}, {"process", "list"}, {"proxy", "list"},
+		{"port", "list"}, {"instance", "list"}, {"process", "list"}, {"proxy", "list"}, {"profile", "list"},
 		{"task", "list"}, {"task", "workstream", "list"}, {"task", "validation", "list"},
 		{"cleanup", "archives"},
 	} {

@@ -1,6 +1,6 @@
 # 로컬 개발환경 관리 확장 계획
 
-상태: 로컬 관리 기능과 검증 기준. 구체적인 명령은 [프로세스 관리](processes.md), [정리와 보관함](cleanup.md), [관리 API](management-api-contract.md)에 정의한다.
+상태: 로컬 관리 기능과 검증 기준. 구체적인 명령은 [프로세스 관리](processes.md), [정리와 보관함](cleanup.md), [관리 API](management-api-contract.md)에 정의한다. `v0.14.0` 이후의 profile 관리·진단·project lifecycle 후속 작업은 [Profile 관리와 프로젝트 lifecycle 개선 계획](profile-project-lifecycle-plan.md)을 구현 기준으로 삼는다.
 
 ## 목표와 사용 모델
 

@@ -43,6 +43,13 @@ type Metadata struct {
 	Overrides bool   `json:"overrides"`
 }
 
+type ScopeMetadata struct {
+	Key    string   `json:"key"`
+	Kind   Kind     `json:"kind"`
+	Common bool     `json:"common"`
+	Envs   []string `json:"envs"`
+}
+
 func newState(profile string) *State {
 	return &State{Version: 1, Profile: profile, Envs: map[string]bool{}, Keys: map[string]*entry{}}
 }
@@ -87,6 +94,21 @@ func (s *State) EnvNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// ScopeInventory exposes registration metadata without returning stored values.
+func (s *State) ScopeInventory() []ScopeMetadata {
+	items := make([]ScopeMetadata, 0, len(s.Keys))
+	for key, value := range s.Keys {
+		envs := make([]string, 0, len(value.Envs))
+		for env := range value.Envs {
+			envs = append(envs, env)
+		}
+		sort.Strings(envs)
+		items = append(items, ScopeMetadata{Key: key, Kind: value.Kind, Common: value.Common != nil, Envs: envs})
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Key < items[j].Key })
+	return items
 }
 
 func validValue(value string) bool { return utf8.ValidString(value) && !strings.ContainsRune(value, 0) }

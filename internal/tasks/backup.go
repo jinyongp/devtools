@@ -45,18 +45,33 @@ func ArchiveReady(data []byte, profile string, before time.Time) bool {
 	return true
 }
 
-// RestoreSnapshot preserves history while releasing active claims and dropping
-// credentials/retry receipts that belong to the source execution environment.
-func RestoreSnapshot(data []byte, source, target string) ([]byte, error) {
+func inspectSnapshot(data []byte, profile string) (*Journal, *State, error) {
 	var j Journal
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
-	if d.Decode(&j) != nil || d.Decode(new(any)) != io.EOF || j.Profile != source || j.Contexts == nil || j.Receipts == nil {
-		return nil, errors.New("invalid task snapshot")
+	if d.Decode(&j) != nil || d.Decode(new(any)) != io.EOF || j.Profile != profile || j.Contexts == nil || j.Receipts == nil {
+		return nil, nil, errors.New("invalid task snapshot")
 	}
 	s, replayErr := replayJournal(&j)
 	if replayErr != nil {
-		return nil, errors.New("invalid task history")
+		return nil, nil, errors.New("invalid task history")
+	}
+	return &j, s, nil
+}
+
+// InspectSnapshot validates and replays an in-memory journal without changing
+// claims, credentials, or retry receipts.
+func InspectSnapshot(data []byte, profile string) (*State, error) {
+	_, state, err := inspectSnapshot(data, profile)
+	return state, err
+}
+
+// RestoreSnapshot preserves history while releasing active claims and dropping
+// credentials/retry receipts that belong to the source execution environment.
+func RestoreSnapshot(data []byte, source, target string) ([]byte, error) {
+	j, s, err := inspectSnapshot(data, source)
+	if err != nil {
+		return nil, err
 	}
 	ids := []string{}
 	for id, r := range s.Runs {

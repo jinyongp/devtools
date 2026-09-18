@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -44,6 +46,41 @@ func TestQueryCacheInvalidatesOnMutation(t *testing.T) {
 	next := read()
 	if first["revision"] == next["revision"] || len(next["items"].([]any)) != 2 {
 		t.Fatal("stale cached projection")
+	}
+}
+
+func TestProfilesEndpointIncludesPassiveProcessProfiles(t *testing.T) {
+	root := t.TempDir()
+	id := tasks.ID()
+	processDirectory := filepath.Join(root, "processes", id)
+	if err := os.MkdirAll(processDirectory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	record := services.Record{ID: id, Profile: "process-only", Directory: filepath.Join(root, "project")}
+	body, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(processDirectory, "record.json"), body, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &Server{registry: Registry{Address: "http://127.0.0.1:1234"}, data: filepath.Join(root, "tasks"), sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)}}
+	req := httptest.NewRequest("GET", s.registry.Address+"/api/profiles", nil)
+	req.Header.Set("Authorization", "Bearer session")
+	out := httptest.NewRecorder()
+	s.ServeHTTP(out, req)
+	if out.Code != 200 {
+		t.Fatal(out.Code, out.Body)
+	}
+	var response struct {
+		Profiles []string `json:"profiles"`
+	}
+	if err := json.Unmarshal(out.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Profiles) != 1 || response.Profiles[0] != "process-only" {
+		t.Fatalf("unexpected profiles: %#v", response.Profiles)
 	}
 }
 

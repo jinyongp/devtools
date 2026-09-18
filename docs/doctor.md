@@ -13,9 +13,27 @@ devtools doctor --profile myapp
 ```
 
 진단 결과는 JSON의 `data.ready`와 `data.checks`로 제공한다. 각 check는
-`id`, `status`, `message`, 필요한 경우 `remedy`와 `expected_version`을 가진다.
+`id`, `status`, `message`, `remedies`와 필요한 경우 `expected_version`을 가진다.
 status는 `pass`, `fail`, `skipped`다. 저장소나 env 문제로 이어지는 검사를
 수행할 수 없으면 skipped로 표시하고 먼저 해결할 조건을 안내한다.
+
+Protocol v3의 `remedies`는 task 진단과 같은 구조의 배열이다. 정상 check는 빈 배열을
+반환한다. 각 remedy의 `argv`는 셸 문자열이 아닌 인자 배열이고, `required_inputs`는
+사용자가 추가로 제공할 입력 이름, `message`는 조치 설명이다. 예를 들어 secret이
+없으면 다음과 같이 반환한다.
+
+```json
+{
+  "argv": ["devtools", "sec", "set", "TOKEN", "--profile", "myapp", "--env", "local", "--stdin"],
+  "required_inputs": ["stdin"],
+  "message": "Register this key in the selected profile and env."
+}
+```
+
+stdin에 실제 값을 전달해야 하며 secret을 인자에 넣지 않는다. 일반 변수 등록은
+`required_inputs: ["value"]`로 값을 요구한다. 도구 설치나 설정 수리처럼 실행 명령을
+안전하게 결정할 수 없는 조치는 `argv: []`와 설명을 반환한다. Remedy는 자동 실행이나
+권한 승인을 의미하지 않으므로 조치 내용과 필요한 입력을 확인한 뒤 수행한다.
 
 진단을 정상적으로 수행하면 종료 코드는 0이다. 환경 준비 여부는
 `data.ready`로 판단한다. 잘못된 옵션이나 취소는 기존 CLI 오류 계약을 따른다.
@@ -86,7 +104,7 @@ var/sec를 요구하는 명령은 `inject = true` 또는 명시적인 `--env`로
 `devtools command run -- EXECUTABLE ...`은 기존 실행 계약을 따른다.
 
 doctor는 진단 보고서를 제공하고, 도구 설치나 설정 수정은 에이전트가
-보고서의 remedy와 프로젝트 요구사항을 확인한 뒤 수행한다.
+`checks[].remedies`와 프로젝트 요구사항을 확인한 뒤 수행한다.
 
 ## 검증
 

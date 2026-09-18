@@ -84,9 +84,10 @@ func taskOutput(mutation bool) map[string]any {
 	for _, key := range []string{"dry_run", "would_change", "applicable", "closable", "execution_ready"} {
 		props[key] = boolean
 	}
-	for _, key := range []string{"changes", "effects", "next_actions", "created_items", "task_order"} {
+	for _, key := range []string{"changes", "effects", "created_items", "task_order"} {
 		props[key] = map[string]any{"type": "array"}
 	}
+	props["next_actions"] = map[string]any{"type": "array", "items": remedySchema()}
 	props["created_refs"] = map[string]any{"type": "object"}
 	props["impact"] = map[string]any{"type": "object"}
 	required := []string{"profile", "revision"}

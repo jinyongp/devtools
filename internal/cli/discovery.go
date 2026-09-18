@@ -54,10 +54,14 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 		var b strings.Builder
 		fmt.Fprintf(&b, "Usage: devtools %s", exact.Name)
 		for _, arg := range exact.Arguments {
+			name := arg.Name
+			if arg.Repeatable {
+				name += "..."
+			}
 			if arg.Required {
-				fmt.Fprintf(&b, " <%s>", arg.Name)
+				fmt.Fprintf(&b, " <%s>", name)
 			} else {
-				fmt.Fprintf(&b, " [%s]", arg.Name)
+				fmt.Fprintf(&b, " [%s]", name)
 			}
 		}
 		if len(exact.Options) > 0 {

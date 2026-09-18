@@ -32,14 +32,19 @@ transfer = str(home / 'fixture-transfer.age')
 exported = api('profile','export','--profile','fixture','--output',transfer,'--recipient-file',recipient)
 assert exported['changed'] and exported['item']['profile'] == 'fixture' and exported['item']['path'] == transfer
 transfer_request = str(uuid.uuid4())
-transfer_args = ['profile','import','--file',transfer,'--identity-file',identity,'--as','portable','--request-id',transfer_request]
+transfer_base = ['profile','import','--file',transfer,'--identity-file',identity,'--as','portable']
+transfer_preview = api(*transfer_base)
+assert not transfer_preview['changed'] and not transfer_preview['target_exists']
+transfer_args = [*transfer_base,'--apply',transfer_preview['digest'],'--request-id',transfer_request]
 imported = api(*transfer_args)
 assert imported['changed'] and not imported['replayed'] and imported['item']['source_profile'] == 'fixture' and imported['item']['profile'] == 'portable'
 assert api(*transfer_args)['replayed']
 assert api('var','get','MODE','--profile','portable')['value'] == 'development'
 assert any(item['key'] == 'TOKEN' for item in api('sec','list','--profile','portable')['items'])
 assert api('task','show',task['item']['id'],'--profile','portable')['item']['id'] == task['item']['id']
-api('profile','import','--file',transfer,'--identity-file',identity,'--as','portable','--request-id',str(uuid.uuid4()),error='profile_exists')
+existing_preview = api(*transfer_base)
+assert existing_preview['target_exists'] and not existing_preview['changed']
+api(*transfer_base,'--apply',existing_preview['digest'],'--request-id',str(uuid.uuid4()),error='profile_exists')
 args = ['backup','restore','--file',archive,'--identity-file',identity,'--profile','fixture','--as','recovered']
 plan = api(*args)
 assert not plan['changed'] and not plan['replayed']

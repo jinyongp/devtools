@@ -13,15 +13,16 @@ import (
 
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
+	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
 )
 
 type Check struct {
-	ID              string `json:"id"`
-	Status          string `json:"status"`
-	Message         string `json:"message"`
-	Remedy          string `json:"remedy,omitempty"`
-	ExpectedVersion string `json:"expected_version,omitempty"`
+	ID              string            `json:"id"`
+	Status          string            `json:"status"`
+	Message         string            `json:"message"`
+	Remedies        []protocol.Remedy `json:"remedies"`
+	ExpectedVersion string            `json:"expected_version,omitempty"`
 }
 type Report struct {
 	Ready     bool    `json:"ready"`
@@ -32,15 +33,29 @@ type Report struct {
 	Checks    []Check `json:"checks"`
 }
 
+func Remedy(message string, argv []string, requiredInputs ...string) protocol.Remedy {
+	if argv == nil {
+		argv = []string{}
+	}
+	if requiredInputs == nil {
+		requiredInputs = []string{}
+	}
+	return protocol.Remedy{Argv: argv, RequiredInputs: requiredInputs, Message: message}
+}
+
 func New() Report { return Report{Ready: true, Checks: []Check{}} }
-func (r *Report) Add(id, status, message, remedy string) {
-	r.Checks = append(r.Checks, Check{ID: id, Status: status, Message: message, Remedy: remedy})
+func (r *Report) Add(id, status, message string, remedies ...protocol.Remedy) {
+	if remedies == nil {
+		remedies = []protocol.Remedy{}
+	}
+	r.Checks = append(r.Checks, Check{ID: id, Status: status, Message: message, Remedies: remedies})
 	if status == "fail" {
 		r.Ready = false
 	}
 }
 
 type Input struct {
+	Profile      string
 	Directory    string
 	Env          string
 	Requirements project.Requirements
@@ -74,11 +89,11 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 		path, e := process.LookPath(tool.Executable, in.Directory, probeEnv)
 		info, statErr := os.Stat(path)
 		if e != nil || statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
-			report.Add(id, "fail", "Required executable is unavailable.", "Install the declared tool or update the command's PATH.")
+			report.Add(id, "fail", "Required executable is unavailable.", Remedy("Install the declared tool or update the command's PATH.", nil))
 			return
 		}
 		if tool.Version == "" {
-			report.Add(id, "pass", "Required executable is available.", "")
+			report.Add(id, "pass", "Required executable is available.")
 			return
 		}
 		args := tool.VersionArgs
@@ -88,9 +103,9 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 		code, err := process.Execute(probe, append([]string{path}, args...), in.Directory, probeEnv, nil, output, output)
 		passed := err == nil && code == 0 && probe.Err() == nil && !output.truncated && matchesVersion(output.data.String(), tool.Version)
 		if passed {
-			report.Add(id, "pass", "Required exact version is available.", "")
+			report.Add(id, "pass", "Required exact version is available.")
 		} else {
-			report.Add(id, "fail", "Exact version check failed or the version probe could not finish.", "Install the declared exact version; check version_args and the selected PATH.")
+			report.Add(id, "fail", "Exact version check failed or the version probe could not finish.", Remedy("Install the declared exact version; check version_args and the selected PATH.", nil))
 		}
 		report.Checks[len(report.Checks)-1].ExpectedVersion = tool.Version
 	}
@@ -101,7 +116,7 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 	sort.Strings(names)
 	for _, name := range names {
 		if ctx.Err() != nil {
-			report.Add("canceled", "fail", "Diagnosis canceled.", "Retry diagnosis.")
+			report.Add("canceled", "fail", "Diagnosis canceled.", Remedy("Retry diagnosis.", nil))
 			return report.Checks
 		}
 		checkTool(name, in.Requirements.Tools[name])
@@ -109,6 +124,25 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 	if in.Executable != "" {
 		checkTool("command", project.Tool{Executable: in.Executable})
 		report.Checks[len(report.Checks)-1].ID = "command_executable"
+	}
+	registrationRemedy := func(label, key string) protocol.Remedy {
+		argv := []string{"devtools", label, "set", key}
+		required := []string{}
+		if in.Profile != "" {
+			argv = append(argv, "--profile", in.Profile)
+		} else {
+			required = append(required, "profile")
+		}
+		if in.Env != "" {
+			argv = append(argv, "--env", in.Env)
+		}
+		if label == "sec" {
+			argv = append(argv, "--stdin")
+			required = append(required, "stdin")
+		} else {
+			required = append(required, "value")
+		}
+		return Remedy("Register the required "+map[string]string{"var": "variable", "sec": "secret"}[label]+" in the selected profile and env.", argv, required...)
 	}
 	for _, kind := range []values.Kind{values.Variable, values.Secret} {
 		keys := in.Requirements.Vars
@@ -128,16 +162,16 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 		}
 		for _, key := range keys {
 			if !available {
-				report.Add(label+":"+key, "skipped", "Registration check needs readable storage and a valid env.", "Resolve the storage or env check first.")
+				report.Add(label+":"+key, "skipped", "Registration check needs readable storage and a valid env.", Remedy("Resolve the storage or env check first.", nil))
 			} else if known[key] {
-				report.Add(label+":"+key, "pass", "Required key is registered in the selected layer.", "")
+				report.Add(label+":"+key, "pass", "Required key is registered in the selected layer.")
 			} else {
-				report.Add(label+":"+key, "fail", "Required key is missing or registered with another kind.", "Register this key with devtools "+label+" set in the selected profile and env.")
+				report.Add(label+":"+key, "fail", "Required key is missing or registered with another kind.", registrationRemedy(label, key))
 			}
 		}
 	}
 	if in.Executable != "" && !in.Inject && len(in.Requirements.Vars)+len(in.Requirements.Secs) > 0 {
-		report.Add("injection", "fail", "This command requires registered values and injection is disabled.", "Set inject = true for this command or select --env.")
+		report.Add("injection", "fail", "This command requires registered values and injection is disabled.", Remedy("Set inject = true for this command or select --env.", nil))
 	}
 	return report.Checks
 }

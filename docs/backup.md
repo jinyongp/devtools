@@ -13,7 +13,15 @@ devtools backup configure --directory /backups/devtools --recipient-file /secure
 
 생성된 두 파일은 사용자 전용 권한을 가진다. 개인키는 비밀번호 관리자나 오프라인 저장소에 별도로 보관하고, 복구할 때 파일로 제공한다. 공개키와 절대 백업 경로는 devtools 설정 경로의 `backup.json`에 저장한다. 이 파일은 기존 `config.toml`의 port 설정과 함께 사용할 수 있다.
 
-암호화는 `filippo.io/age` 1.3.2의 X25519 recipient를 사용한다. 개인키 파일은 keygen이 생성한 한 줄짜리 age identity이며, 암호화된 파일은 age 형식의 JSON 스냅샷이다. 백업 문서 버전은 프로그램이 관리한다.
+암호화는 age X25519 recipient를 사용한다. 개인키 파일은 keygen이 생성한 한 줄짜리 age identity이며, 암호화된 파일은 age 형식의 JSON 스냅샷이다. 백업 문서 버전은 프로그램이 관리한다.
+
+기본 설정을 다시 확인하려면 `devtools backup status`를 사용한다. `data.item`에
+`configured`, `directory`, 공개 `recipient`를 반환하며 개인 identity는 읽거나 출력하지 않는다.
+설정이 없으면 `configured: false`와 빈 문자열을 반환하고, 손상된 설정은 오류로 구별한다.
+
+`backup create`와 `profile export`는 `--recipient`에 공개키를 직접 받을 수도 있다.
+`--recipient-file`과는 상호 배타적이며 둘 다 생략하면 설정된 공개키를 사용한다.
+공개키와 출력 파일 경로를 모두 지정하면 `backup configure` 없이 생성할 수 있다.
 
 ## 백업 생성과 확인
 
@@ -32,24 +40,12 @@ CLI의 keygen·configure·create는 `data.item`에 결과 메타데이터를, `d
 
 ## 다른 환경으로 profile 이동
 
-백업 보관이 아니라 다른 개발 환경으로 현재 project profile을 그대로 옮길 때는 `profile export`와 `profile import`를 사용한다. 별도 파일 형식은 만들지 않으며 위와 같은 age 암호화 백업을 한 profile로 제한해 사용한다. var·secret·env와 task/workstream 상태가 함께 이동하고, `devtools.toml`, port 할당, 실행 중 process와 dashboard 세션처럼 환경에 종속된 상태는 포함하지 않는다.
+한 profile을 다른 기기로 옮길 때는 `profile export`와 `profile import`를 사용한다.
+같은 age 백업 포맷을 사용하며 대상 환경에는 개인 identity를, 원본 환경에는 공개
+recipient만 준비한다. Protocol v3의 import는 기본적으로 미리보기만 수행하고,
+실제 적용에는 `--apply DIGEST --request-id UUID`가 필요하다.
 
-대상 환경에서 keygen으로 identity와 recipient를 만든 뒤 **recipient 파일만** 원본 환경에 전달하면 개인키를 원본 환경에 복사할 필요가 없다. 기존 backup key pair를 사용해도 된다.
-
-```sh
-# 원본 환경: 현재 devtools.toml의 profile을 암호화해서 내보낸다.
-devtools profile export --output ./myapp.age --recipient-file /secure/devtools-recipient.txt
-
-# 다른 profile을 명시적으로 선택할 수도 있다.
-devtools profile export --profile myapp --output ./myapp.age --recipient-file /secure/devtools-recipient.txt
-
-# 대상 환경: 단일-profile 파일은 source 이름을 자동 인식하고 같은 이름으로 가져온다.
-devtools profile import --file ./myapp.age --identity-file /secure/devtools-identity.txt --request-id UUID
-```
-
-`profile export`에서 `--profile`을 생략하면 `--dir`에서 프로젝트를 찾아 profile을 선택한다. `--output`이나 `--recipient-file`을 생략하면 기존 backup 설정을 사용할 수 있다. 둘 다 명시하면 `backup configure` 없이도 이동 파일을 만들 수 있다.
-
-`profile import`는 export 파일에 profile이 하나면 `--profile`을 생략할 수 있다. 여러 profile이 들어 있는 일반 backup 파일을 가져올 때는 source를 `--profile NAME`으로 지정한다. 대상 이름은 source와 같고, 다른 이름이 필요하면 `--as NAME`을 사용한다. 대상 profile이 이미 있으면 `profile_exists`로 중단하며, 명시적인 `--replace`에서만 기존 safety-backup 규칙을 적용해 교체한다. 같은 `--request-id`와 입력을 다시 보내면 최초 적용 결과를 `replayed: true`로 반환하므로 응답 유실 뒤에도 같은 요청을 안전하게 재전송할 수 있다.
+조회·비교, 원본 선택, 교체와 재시도 절차는 [Profile 관리](profiles.md)에 정리되어 있다.
 
 ## 복구 미리 보기와 적용
 
@@ -65,9 +61,9 @@ devtools backup restore --file /backups/myapp.age --identity-file /secure/devtoo
 devtools backup restore --file /backups/myapp.age --identity-file /secure/devtools-identity.txt --profile myapp --as recovered --apply DIGEST --request-id UUID
 ```
 
-적용 요청은 미리 보기와 같은 파일·profile·대상·교체 옵션을 사용한다. 대상 데이터가 변경되면 `revision_conflict`로 새 미리 보기를 요청한다. 같은 UUID와 입력을 재전송하면 저장된 적용 결과를 반환한다. 다른 입력으로 재사용하면 `request_conflict`다.
+적용 요청은 미리 보기와 같은 파일·profile·대상을 사용한다. 대상 데이터가 변경되면 `revision_conflict`로 새 미리 보기를 요청한다. 같은 UUID와 동일한 적용 입력을 재전송하면 저장된 적용 결과를 반환한다. digest나 교체 옵션을 포함해 다른 입력으로 재사용하면 `request_conflict`다.
 
-기존 profile을 교체하려면 미리 보기와 적용 모두에 `--replace`를 추가한다. 교체 직전에 설정된 공개키와 백업 디렉터리로 현재 profile을 암호화하고, 성공 응답의 `safety_backup`에 경로를 반환한다. 직전 백업 생성에 실패하면 교체를 시작하지 않는다. 새 profile로 복구할 때는 기존 대상이 있으면 `profile_exists`다.
+기존 profile도 `--replace` 없이 미리 볼 수 있다. 검토한 대상을 실제로 교체하는 적용 요청에는 `--replace`를 추가한다. 교체 직전에 설정된 공개키와 백업 디렉터리로 현재 profile을 암호화하고, 성공 응답의 `safety_backup`에 경로를 반환한다. 직전 백업 생성에 실패하면 교체를 시작하지 않는다. 새 profile로 복구할 때는 기존 대상이 있으면 `profile_exists`다.
 
 ## 복구 후 상태
 

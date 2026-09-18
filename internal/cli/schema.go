@@ -35,19 +35,32 @@ func (a *App) catalog() map[string]any {
 		}
 		argumentSchemas := []any{}
 		minimum := 0
-		for _, argument := range command.Arguments {
+		var repeated map[string]any
+		for index, argument := range command.Arguments {
 			s := map[string]any{"type": "string", "minLength": 1, "description": argument.Name}
 			if argument.Pattern != "" {
 				s["pattern"] = argument.Pattern
 			}
-			argumentSchemas = append(argumentSchemas, s)
 			if argument.Required {
-				minimum++
+				minimum = index + 1
 			}
+			if argument.Repeatable && index == len(command.Arguments)-1 {
+				repeated = s
+				continue
+			}
+			argumentSchemas = append(argumentSchemas, s)
 		}
-		argsSchema := map[string]any{"type": "array", "minItems": minimum, "maxItems": len(command.Arguments)}
+		argsSchema := map[string]any{"type": "array", "minItems": minimum}
 		if len(argumentSchemas) > 0 {
 			argsSchema["prefixItems"] = argumentSchemas
+		}
+		if repeated != nil {
+			argsSchema["items"] = repeated
+		} else {
+			argsSchema["maxItems"] = len(command.Arguments)
+		}
+		if command.UniqueArgs {
+			argsSchema["uniqueItems"] = true
 		}
 		properties["args"] = argsSchema
 		if minimum > 0 {

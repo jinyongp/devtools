@@ -52,7 +52,16 @@ tool.chmod(0o700)
 assert not api("doctor", "check")["data"]["ready"]
 api("env", "create", "dev")
 api("var", "set", "PORT", "--value", "3000")
-assert not api("doctor", "check")["data"]["ready"]
+missing = api("doctor", "check")["data"]
+assert not missing["ready"]
+for check in missing["checks"]:
+    assert 'remedy' not in check and isinstance(check['remedies'], list)
+    for remedy in check['remedies']:
+        assert set(remedy) == {'argv', 'required_inputs', 'message'}
+secret_check = next(check for check in missing['checks'] if check['id'] == 'sec:TOKEN')
+remedy = secret_check['remedies'][0]
+assert remedy['argv'] == ['devtools', 'sec', 'set', 'TOKEN', '--profile', 'fixture', '--env', 'dev', '--stdin']
+assert remedy['required_inputs'] == ['stdin']
 failure = api("run", "check", expected=3)
 assert failure["error"]["code"] == "requirements_failed"
 assert not (project / "marker").exists()

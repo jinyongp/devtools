@@ -57,13 +57,14 @@ type Record struct {
 	Previous        string     `json:"previous_id,omitempty"`
 }
 type Request struct {
-	Action    string  `json:"action"`
-	ID        string  `json:"id,omitempty"`
-	Directory string  `json:"directory,omitempty"`
-	Command   string  `json:"command,omitempty"`
-	Env       *string `json:"env,omitempty"`
-	Capture   *bool   `json:"capture_logs,omitempty"`
-	RequestID string  `json:"request_id"`
+	Action      string                                `json:"action"`
+	ID          string                                `json:"id,omitempty"`
+	Directory   string                                `json:"directory,omitempty"`
+	Command     string                                `json:"command,omitempty"`
+	Env         *string                               `json:"env,omitempty"`
+	Capture     *bool                                 `json:"capture_logs,omitempty"`
+	RequestID   string                                `json:"request_id"`
+	BeforeStart func(context.Context) *protocol.Error `json:"-"`
 }
 type Result struct {
 	Item     Record `json:"item"`
@@ -216,6 +217,50 @@ func (s Store) List(ctx context.Context, profile string) ([]Record, *protocol.Er
 	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
 	return items, nil
 }
+
+// StoredRecords reads process records without contacting live supervisors.
+func (s Store) StoredRecords() ([]Record, *protocol.Error) {
+	items := []Record{}
+	entries, e := os.ReadDir(s.root())
+	if errors.Is(e, os.ErrNotExist) {
+		return items, nil
+	}
+	if e != nil {
+		return nil, storageError()
+	}
+	for _, entry := range entries {
+		if !validID(entry.Name()) {
+			continue
+		}
+		r, readErr := s.read(entry.Name())
+		if readErr != nil {
+			return nil, readErr
+		}
+		items = append(items, r)
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
+	return items, nil
+}
+
+// ProfileNames enumerates profiles from stored process records without
+// contacting live supervisors. Catalog-style discovery must stay passive and
+// must not turn a profile listing into readiness or control RPC traffic.
+func (s Store) ProfileNames() ([]string, *protocol.Error) {
+	records, err := s.StoredRecords()
+	if err != nil {
+		return nil, err
+	}
+	names := map[string]bool{}
+	for _, record := range records {
+		names[record.Profile] = true
+	}
+	items := make([]string, 0, len(names))
+	for name := range names {
+		items = append(items, name)
+	}
+	sort.Strings(items)
+	return items, nil
+}
 func (s Store) Active(ctx context.Context, instance string) *protocol.Error {
 	items, e := s.List(ctx, "")
 	if e != nil {
@@ -248,7 +293,9 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	fingerprint := fmt.Sprintf("%x", sha256.Sum256(b))
 	receiptPath := filepath.Join(s.root(), "receipts", q.RequestID+".json")
 	var old receipt
+	receiptExists := false
 	if e = tasks.ReadPrivate(receiptPath, &old); e == nil {
+		receiptExists = true
 		if old.Fingerprint != fingerprint {
 			return out, failure("request_conflict")
 		}
@@ -259,8 +306,10 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	} else if !errors.Is(e, os.ErrNotExist) {
 		return out, storageError()
 	}
-	if writePrivate(receiptPath, receipt{Fingerprint: fingerprint}) != nil {
-		return out, storageError()
+	if !receiptExists {
+		if writePrivate(receiptPath, receipt{Fingerprint: fingerprint}) != nil {
+			return out, storageError()
+		}
 	}
 	var err *protocol.Error
 	switch q.Action {
@@ -294,12 +343,23 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	default:
 		err = failure("invalid_argument")
 	}
+	if out.Item.ID == "" && old.Result.Item.ID != "" {
+		out.Item = old.Result.Item
+	}
+	out.Changed = out.Changed || old.Result.Changed
+	stored := out
+	stored.Replayed = false
 	if err != nil {
+		if writePrivate(receiptPath, receipt{Fingerprint: fingerprint, Result: stored}) != nil {
+			return out, storageError()
+		}
+		out.Replayed = receiptExists
 		return out, err
 	}
-	if writePrivate(receiptPath, receipt{Fingerprint: fingerprint, Result: out, Done: true}) != nil {
+	if writePrivate(receiptPath, receipt{Fingerprint: fingerprint, Result: stored, Done: true}) != nil {
 		return out, storageError()
 	}
+	out.Replayed = receiptExists
 	return out, nil
 }
 func (s Store) start(ctx context.Context, q Request, previous string) (Result, *protocol.Error) {
@@ -308,6 +368,10 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 	// observes the same run instead of launching another command.
 	if r, e := s.read(q.RequestID); e == nil {
 		out.Item = r
+		out.Changed = true
+		if r.StartedAt == nil && r.EndedAt == nil {
+			return out, failure("process_pending")
+		}
 		return out, nil
 	} else if e.Code != "process_not_found" {
 		return out, e
@@ -325,6 +389,27 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		env = *q.Env
 		if env != "" && !project.ValidProfile(env) {
 			return out, failure("invalid_argument")
+		}
+	}
+	capture := q.Capture != nil && *q.Capture
+	if q.BeforeStart != nil {
+		list, listErr := s.List(ctx, p.Profile)
+		if listErr != nil {
+			return out, listErr
+		}
+		for _, r := range list {
+			if r.Directory == p.Root && r.Command == q.Command && r.EndedAt == nil && r.State != "interrupted" {
+				if r.State == "unknown" {
+					return out, failure("process_unavailable")
+				}
+				if r.Env != env || r.Capture != capture {
+					return out, failure("process_conflict")
+				}
+				return Result{Item: r}, nil
+			}
+		}
+		if err := q.BeforeStart(ctx); err != nil {
+			return out, err
 		}
 	}
 	ps := ports.Store{Directory: filepath.Join(s.Data, "ports")}
@@ -345,20 +430,21 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 	if e != nil {
 		return out, e
 	}
-	list, e := s.List(ctx, p.Profile)
-	if e != nil {
-		return out, e
-	}
-	capture := q.Capture != nil && *q.Capture
-	for _, r := range list {
-		if r.Instance == instance.ID && r.Command == q.Command && r.EndedAt == nil && r.State != "interrupted" {
-			if r.State == "unknown" {
-				return out, failure("process_unavailable")
+	if q.BeforeStart == nil {
+		list, listErr := s.List(ctx, p.Profile)
+		if listErr != nil {
+			return out, listErr
+		}
+		for _, r := range list {
+			if r.Instance == instance.ID && r.Command == q.Command && r.EndedAt == nil && r.State != "interrupted" {
+				if r.State == "unknown" {
+					return out, failure("process_unavailable")
+				}
+				if r.Env != env || r.Capture != capture {
+					return out, failure("process_conflict")
+				}
+				return Result{Item: r}, nil
 			}
-			if r.Env != env || r.Capture != capture {
-				return out, failure("process_conflict")
-			}
-			return Result{Item: r}, nil
 		}
 	}
 	r := Record{ID: q.RequestID, Profile: p.Profile, Instance: instance.ID, Directory: p.Root, Command: q.Command, Env: env, EnvOverride: q.Env, Capture: capture, CreatedAt: time.Now().UTC(), State: "starting", Previous: previous}
@@ -388,9 +474,15 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 	for {
 		select {
 		case <-ctx.Done():
-			return out, failure("process_pending")
+			if current, readErr := s.read(r.ID); readErr == nil {
+				r = current
+			}
+			return Result{Item: r, Changed: true}, failure("process_pending")
 		case <-deadline.C:
-			return out, failure("process_pending")
+			if current, readErr := s.read(r.ID); readErr == nil {
+				r = current
+			}
+			return Result{Item: r, Changed: true}, failure("process_pending")
 		case <-tick.C:
 			current, e := s.read(r.ID)
 			if e != nil {
@@ -426,7 +518,10 @@ func (s Store) stop(ctx context.Context, r Record) (Result, *protocol.Error) {
 	for {
 		select {
 		case <-wait.Done():
-			return Result{}, failure("process_pending")
+			if current, readErr := s.read(r.ID); readErr == nil {
+				r = current
+			}
+			return Result{Item: r, Changed: true}, failure("process_pending")
 		case <-tick.C:
 			current, e := s.read(r.ID)
 			if e != nil {

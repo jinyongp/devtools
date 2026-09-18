@@ -34,6 +34,53 @@ start는 `--dir` 또는 현재 디렉터리의 프로젝트 설정에서 profile
 `process list`는 모든 profile의 실행을 조회하고 `--profile NAME`으로 범위를 좁힌다.
 status·check·wait·logs·stop·restart는 실행 ID로 대상을 선택하므로 프로젝트 밖에서도 사용할 수 있다.
 
+## 프로젝트 서버를 함께 관리하기
+
+서버 여러 개를 하나의 작업으로 시작하려면 `project up`에 명령 이름을 명시한다.
+아래 예시의 `web`과 `api`는 `devtools.toml`에 등록된 이름이다. 모든 명령을 자동으로
+시작하지 않으므로 build/test 같은 일회성 명령이 의도치 않게 실행되지 않는다.
+
+```sh
+devtools project up web api --request-id UUID
+devtools project up web api --dir /projects/app --env local --timeout 30s --request-id UUID
+devtools project status
+devtools project status api
+devtools project down api --request-id UUID
+devtools project down --request-id UUID
+```
+
+세 명령은 현재 디렉터리 또는 `--dir`에서 찾은 프로젝트의 profile과 실제 루트 경로로
+범위를 정한다. 같은 profile을 사용하는 다른 worktree의 실행은 건드리지 않는다.
+`status`와 `down`에서 이름을 생략하면 현재 instance의 활성 managed process 전체를
+대상으로 하며, 별도 `process start`로 실행한 서버도 포함한다. 종료 이력은
+`process list` 또는 실행 ID에 대한 `process status`로 확인한다.
+
+`up`은 신규로 시작할 명령의 필수 조건과 port/binding을 batch 변경 전에 모두 검사한 뒤 입력 순서대로 시작한다.
+같은 프로젝트에서 이미 실행 중인 singleton은 cold-start 검사를 다시 요구하지 않고 기존 process 계층이 재사용 여부와
+env·로그 설정 충돌을 판정한다. 다만 snapshot 직후 기존 singleton이 종료되어 실제 새 start가 필요해지면 process 생성
+직전에 같은 preflight를 다시 수행한다. `ready` probe가 선언된 명령은 준비 완료까지 기다리고, probe가 없으면 프로세스
+시작으로 완료한다. `--timeout`은 명령별 readiness 대기 시간이며 기본 30초, 최대 10분이다. `--env`와
+`--capture-logs`는 선택한 모든 명령에 적용된다. 같은 설정으로 이미 실행 중이면 기존 실행을 재사용하고, env나 로그
+설정이 충돌하면 `process_conflict`로 보고한다. 명령 이름을 중복해서 입력하면 오류다.
+
+성공 응답은 `data.items`에 명령별 `status`, `changed`, 실행 정보 `item`을 반환하며,
+전체 `data.changed`·`data.replayed`도 제공한다. 명령별 status는 `ready`, `running`,
+`stopped`, `unchanged`이고, 미완료 항목은 `pending` 또는 `failed`와 `condition`을 갖는다.
+일부 명령이 실패하면 stderr의 `project_operation_failed` 오류에
+`error.details.items`로 성공·실패·미완료 항목을 함께 반환한다. 이미 시작한 서버는
+자동으로 종료하지 않는다.
+
+부분 실패나 응답 유실 뒤에는 같은 요청 ID와 같은 입력으로 재시도한다. 완료한
+항목은 반복하지 않고 미완료 항목만 이어간다. 시작된 서버의 readiness가 아직
+충족되지 않았으면 해당 실행의 준비 검사를 이어가고, 종료가 확인된 시작 실패는
+새 실행 시도로 처리한다. 변경된 입력에 같은 요청 ID를 사용하면 `request_conflict`다.
+재시도 결과의 `replayed: true`는 기존 작업을 재개하거나 재현했다는 뜻이다.
+현재 서버 상태가 필요하면 저장된 작업 결과 대신 `project status`를 조회한다.
+
+`down`은 최초 호출 시 정한 실행 ID만 종료한다. 같은 요청의 재전송은 그 뒤 새로
+시작된 서버까지 종료하지 않는다. 새로운 종료 작업에는 새 요청 ID를 사용한다.
+Profile 데이터를 다른 환경으로 가져오는 절차는 [Profile 관리](profiles.md)를 참고한다.
+
 ## 원문 로그
 
 기본 출력은 버리고 상태와 종료 원인을 보관한다. 원문이 필요한 실행에는 `--capture-logs`를 명시한다.

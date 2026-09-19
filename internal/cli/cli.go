@@ -117,7 +117,6 @@ func New(version, commit string) *App {
 	}
 	a.registerTools()
 	a.registerCommands()
-	a.registerGuidance()
 	a.registerImport()
 	a.registerTasks()
 	a.registerDashboard()

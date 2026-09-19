@@ -24,51 +24,73 @@ import (
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
-func freePort(t *testing.T) int {
+var testPortSequence atomic.Int32
+
+func testPort() int {
+	return 40000 + int(testPortSequence.Add(1))
+}
+
+type idleListener struct {
+	port   int
+	closed chan struct{}
+	once   sync.Once
+}
+
+func newIdleListener(port int) *idleListener {
+	return &idleListener{port: port, closed: make(chan struct{})}
+}
+
+func (l *idleListener) Accept() (net.Conn, error) {
+	<-l.closed
+	return nil, net.ErrClosed
+}
+
+func (l *idleListener) Close() error {
+	l.once.Do(func() { close(l.closed) })
+	return nil
+}
+
+func (l *idleListener) Addr() net.Addr {
+	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: l.port}
+}
+
+func (l *idleListener) isClosed() bool {
+	select {
+	case <-l.closed:
+		return true
+	default:
+		return false
+	}
+}
+
+func testManager(t *testing.T) Manager {
 	t.Helper()
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	return Manager{
+		Data: t.TempDir(),
+		PortProbe: func(int) (bool, *protocol.Error) {
+			return true, nil
+		},
+		Listen: func(port int) ([]net.Listener, error) {
+			return []net.Listener{newIdleListener(port)}, nil
+		},
 	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	if err := listener.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return port
 }
 
 func TestListenLoopbackRollsBackFirstBind(t *testing.T) {
 	for _, bindError := range []error{syscall.EADDRINUSE, syscall.EADDRNOTAVAIL} {
 		t.Run(bindError.Error(), func(t *testing.T) {
-			port := freePort(t)
-			listeners, err := listenLoopback(port, func(network, address string) (net.Listener, error) {
+			first := newIdleListener(testPort())
+			listeners, err := listenLoopback(first.port, func(network, _ string) (net.Listener, error) {
 				if network == "tcp6" {
 					return nil, bindError
 				}
-				return net.Listen(network, address)
+				return first, nil
 			})
-			if !errors.Is(err, bindError) || len(listeners) != 0 {
-				t.Fatalf("second bind failure = %+v %v", listeners, err)
+			if !errors.Is(err, bindError) || len(listeners) != 0 || !first.isClosed() {
+				t.Fatalf("rollback = %+v %v closed=%v", listeners, err, first.isClosed())
 			}
-			ipv4, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", stringPort(port)))
-			if err != nil {
-				t.Fatalf("first listener was not closed: %v", err)
-			}
-			defer ipv4.Close()
-			ipv6, err := net.Listen("tcp6", net.JoinHostPort("::1", stringPort(port)))
-			if errors.Is(err, syscall.EAFNOSUPPORT) || errors.Is(err, syscall.EPROTONOSUPPORT) {
-				return
-			}
-			if err != nil {
-				t.Fatalf("second address cannot be rebound: %v", err)
-			}
-			defer ipv6.Close()
 		})
 	}
-}
-
-func stringPort(port int) string {
-	return fmt.Sprint(port)
 }
 
 func TestConnectionRegistryClosesAcceptedConnectionBeforeHijackCallback(t *testing.T) {
@@ -106,13 +128,13 @@ func TestConnectionRegistryClosesAcceptedConnectionBeforeHijackCallback(t *testi
 }
 
 func TestManagerStartStopRetryAndReservationReplacement(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	serveErrors := make(chan error, 2)
 	manager.Spawn = func(_ string, attemptID string) error {
 		go func() { serveErrors <- manager.Serve(context.Background(), attemptID) }()
 		return nil
 	}
-	firstPort := freePort(t)
+	firstPort := testPort()
 	firstRequest := Request{Action: "start", Port: &firstPort, RequestID: "11111111-1111-4111-8111-111111111111"}
 	started, err := manager.Apply(context.Background(), firstRequest)
 	if err != nil || !started.Running || !started.Changed || started.Port != firstPort || started.StartedAt == nil {
@@ -122,7 +144,7 @@ func TestManagerStartStopRetryAndReservationReplacement(t *testing.T) {
 	if err != nil || !replayed.Replayed || replayed.Port != firstPort {
 		t.Fatalf("replay = %+v %v", replayed, err)
 	}
-	otherPort := freePort(t)
+	otherPort := testPort()
 	conflictRequest := firstRequest
 	conflictRequest.Port = &otherPort
 	if _, err := manager.Apply(context.Background(), conflictRequest); err == nil || err.Code != "request_conflict" {
@@ -168,11 +190,12 @@ func TestManagerStartStopRetryAndReservationReplacement(t *testing.T) {
 
 func TestManagerPreservesReservationAfterSpawnFailure(t *testing.T) {
 	var spawns atomic.Int32
-	manager := Manager{Data: t.TempDir(), Spawn: func(string, string) error {
+	manager := testManager(t)
+	manager.Spawn = func(string, string) error {
 		spawns.Add(1)
 		return errors.New("injected spawn failure")
-	}}
-	port := freePort(t)
+	}
+	port := testPort()
 	request := Request{Action: "start", Port: &port, RequestID: "55555555-5555-4555-8555-555555555555"}
 	for attempt := 0; attempt < 2; attempt++ {
 		if _, err := manager.Apply(context.Background(), request); err == nil || err.Code != "proxy_start_failed" {
@@ -197,7 +220,7 @@ func TestManagerPreservesReservationAfterSpawnFailure(t *testing.T) {
 }
 
 func TestManagerDoesNotOverwriteLateSupervisorAfterSpawnError(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	serveErrors := make(chan error, 1)
 	manager.Spawn = func(_ string, attemptID string) error {
 		go func() { serveErrors <- manager.Serve(context.Background(), attemptID) }()
@@ -211,7 +234,7 @@ func TestManagerDoesNotOverwriteLateSupervisorAfterSpawnError(t *testing.T) {
 		}
 		return errors.New("supervisor did not start")
 	}
-	port := freePort(t)
+	port := testPort()
 	started, err := manager.Apply(context.Background(), Request{Action: "start", Port: &port, RequestID: "56555555-5555-4555-8555-555555555556"})
 	if err != nil || !started.Running || started.State != "running" {
 		t.Fatalf("late supervisor = %+v %v", started, err)
@@ -234,7 +257,7 @@ func TestManagerDoesNotOverwriteLateSupervisorAfterSpawnError(t *testing.T) {
 }
 
 func TestManagerReusesStartingSupervisorAfterCanceledStart(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	var spawns atomic.Int32
 	firstContext, cancelFirst := context.WithCancel(context.Background())
 	manager.Spawn = func(_ string, attemptID string) error {
@@ -247,7 +270,7 @@ func TestManagerReusesStartingSupervisorAfterCanceledStart(t *testing.T) {
 		}()
 		return nil
 	}
-	firstPort, otherPort := freePort(t), freePort(t)
+	firstPort, otherPort := testPort(), testPort()
 	firstRequest := Request{Action: "start", Port: &firstPort, RequestID: "53535353-5353-4353-8353-535353535353"}
 	if _, err := manager.Apply(firstContext, firstRequest); err == nil || err.Code != "canceled" {
 		t.Fatalf("canceled start = %v", err)
@@ -265,7 +288,7 @@ func TestManagerReusesStartingSupervisorAfterCanceledStart(t *testing.T) {
 }
 
 func TestManagerWaitsForDelayedSupervisorLease(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	manager.Spawn = func(_ string, attemptID string) error {
 		go func() {
 			time.Sleep(2100 * time.Millisecond)
@@ -273,7 +296,7 @@ func TestManagerWaitsForDelayedSupervisorLease(t *testing.T) {
 		}()
 		return nil
 	}
-	port := freePort(t)
+	port := testPort()
 	status, err := manager.Apply(context.Background(), Request{Action: "start", Port: &port, RequestID: "51515151-5151-4151-8151-515151515151"})
 	if err != nil || !status.Running {
 		t.Fatalf("delayed supervisor = %+v %v", status, err)
@@ -284,7 +307,7 @@ func TestManagerWaitsForDelayedSupervisorLease(t *testing.T) {
 }
 
 func TestManagerStopCancelsStartingAttemptAndRejectsStaleChild(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	firstContext, cancelFirst := context.WithCancel(context.Background())
 	var staleAttempt string
 	var spawns atomic.Int32
@@ -301,7 +324,7 @@ func TestManagerStopCancelsStartingAttemptAndRejectsStaleChild(t *testing.T) {
 		go func() { _ = manager.Serve(context.Background(), attemptID) }()
 		return nil
 	}
-	port := freePort(t)
+	port := testPort()
 	if _, err := manager.Apply(firstContext, Request{Action: "start", Port: &port, RequestID: "57575757-5757-4757-8757-575757575757"}); err == nil || err.Code != "canceled" {
 		t.Fatalf("canceled start = %v", err)
 	}
@@ -322,8 +345,8 @@ func TestManagerStopCancelsStartingAttemptAndRejectsStaleChild(t *testing.T) {
 }
 
 func TestManagerRecoversRunningRecordWithoutStartedAt(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
-	port := freePort(t)
+	manager := testManager(t)
+	port := testPort()
 	if _, _, err := manager.portStore().Reserve(context.Background(), "proxy", port); err != nil {
 		t.Fatal(err)
 	}
@@ -346,7 +369,8 @@ func TestManagerRecoversRunningRecordWithoutStartedAt(t *testing.T) {
 }
 
 func TestManagerKeepsCommittedRunningAttemptPendingUntilControlReady(t *testing.T) {
-	manager := Manager{Data: t.TempDir(), readyTimeout: 50 * time.Millisecond}
+	manager := testManager(t)
+	manager.readyTimeout = 50 * time.Millisecond
 	releaseLease := make(chan struct{})
 	manager.Spawn = func(_ string, attemptID string) error {
 		ready := make(chan struct{})
@@ -372,7 +396,7 @@ func TestManagerKeepsCommittedRunningAttemptPendingUntilControlReady(t *testing.
 		<-ready
 		return nil
 	}
-	port := freePort(t)
+	port := testPort()
 	request := Request{Action: "start", Port: &port, RequestID: "70707070-7070-4070-8070-707070707070"}
 	if _, err := manager.Apply(context.Background(), request); err == nil || err.Code != "proxy_pending" {
 		t.Fatalf("unready control = %v", err)
@@ -401,7 +425,8 @@ func TestManagerKeepsCommittedRunningAttemptPendingUntilControlReady(t *testing.
 }
 
 func TestPendingStartDoesNotAdoptReplacementAttempt(t *testing.T) {
-	manager := Manager{Data: t.TempDir(), readyTimeout: 50 * time.Millisecond}
+	manager := testManager(t)
+	manager.readyTimeout = 50 * time.Millisecond
 	releaseFirst := make(chan struct{})
 	var firstAttempt string
 	var spawns atomic.Int32
@@ -431,7 +456,7 @@ func TestPendingStartDoesNotAdoptReplacementAttempt(t *testing.T) {
 		go func() { _ = manager.Serve(context.Background(), attemptID) }()
 		return nil
 	}
-	port := freePort(t)
+	port := testPort()
 	firstRequest := Request{Action: "start", Port: &port, RequestID: "75757575-7575-4575-8575-757575757575"}
 	if _, err := manager.Apply(context.Background(), firstRequest); err == nil || err.Code != "proxy_pending" {
 		t.Fatalf("first pending = %v", err)
@@ -464,7 +489,7 @@ func TestPendingStartDoesNotAdoptReplacementAttempt(t *testing.T) {
 }
 
 func TestAnchoredStartRecoversFromFinalReceiptWriteFailure(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	var spawns atomic.Int32
 	manager.Spawn = func(_ string, attemptID string) error {
 		spawns.Add(1)
@@ -478,7 +503,7 @@ func TestAnchoredStartRecoversFromFinalReceiptWriteFailure(t *testing.T) {
 		}
 		return tasks.WritePrivate(path, value)
 	}
-	port := freePort(t)
+	port := testPort()
 	request := Request{Action: "start", Port: &port, RequestID: "79797979-7979-4979-8979-797979797979"}
 	if _, err := manager.Apply(context.Background(), request); err == nil || err.Code != "io_error" {
 		t.Fatalf("final receipt failure = %v", err)
@@ -494,7 +519,7 @@ func TestAnchoredStartRecoversFromFinalReceiptWriteFailure(t *testing.T) {
 }
 
 func TestAnchoredNoOpStopDoesNotStopLaterAttemptAfterReceiptFailure(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	failFinal := true
 	manager.commit = func(path string, value any) error {
 		if stored, ok := value.(receipt); ok && stored.Done && failFinal {
@@ -511,7 +536,7 @@ func TestAnchoredNoOpStopDoesNotStopLaterAttemptAfterReceiptFailure(t *testing.T
 		go func() { _ = manager.Serve(context.Background(), attemptID) }()
 		return nil
 	}
-	port := freePort(t)
+	port := testPort()
 	started, err := manager.Apply(context.Background(), Request{Action: "start", Port: &port, RequestID: "88878787-8787-4787-8787-878787878788"})
 	if err != nil || !started.Running {
 		t.Fatalf("later start = %+v %v", started, err)
@@ -528,8 +553,8 @@ func TestAnchoredNoOpStopDoesNotStopLaterAttemptAfterReceiptFailure(t *testing.T
 }
 
 func TestStartAnchorFailureDoesNotChangeReservation(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
-	oldPort, newPort := freePort(t), freePort(t)
+	manager := testManager(t)
+	oldPort, newPort := testPort(), testPort()
 	if _, _, err := manager.portStore().Reserve(context.Background(), "proxy", oldPort); err != nil {
 		t.Fatal(err)
 	}
@@ -552,7 +577,7 @@ func TestStartAnchorFailureDoesNotChangeReservation(t *testing.T) {
 }
 
 func TestAnchoredStartResumesWhenRecordCommitAndTerminalReceiptFail(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	failWrites := true
 	manager.commit = func(path string, value any) error {
 		if failWrites {
@@ -565,7 +590,7 @@ func TestAnchoredStartResumesWhenRecordCommitAndTerminalReceiptFail(t *testing.T
 		}
 		return tasks.WritePrivate(path, value)
 	}
-	port := freePort(t)
+	port := testPort()
 	request := Request{Action: "start", Port: &port, RequestID: "91919191-9191-4191-8191-919191919191"}
 	if _, err := manager.Apply(context.Background(), request); err == nil || err.Code != "io_error" {
 		t.Fatalf("intermediate commit failure = %v", err)
@@ -587,8 +612,8 @@ func TestAnchoredStartResumesWhenRecordCommitAndTerminalReceiptFail(t *testing.T
 }
 
 func TestRecoveryAnchorResumesTimedOutAttemptAfterCrash(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
-	port := freePort(t)
+	manager := testManager(t)
+	port := testPort()
 	if _, _, err := manager.portStore().Reserve(context.Background(), "proxy", port); err != nil {
 		t.Fatal(err)
 	}
@@ -619,7 +644,7 @@ func TestRecoveryAnchorResumesTimedOutAttemptAfterCrash(t *testing.T) {
 }
 
 func TestRecoveryResumesTimedOutAttemptBeforeAnchorRewrite(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	failFinal := true
 	manager.commit = func(path string, value any) error {
 		if stored, ok := value.(receipt); ok && stored.Done && failFinal {
@@ -627,7 +652,7 @@ func TestRecoveryResumesTimedOutAttemptBeforeAnchorRewrite(t *testing.T) {
 		}
 		return tasks.WritePrivate(path, value)
 	}
-	port := freePort(t)
+	port := testPort()
 	if _, _, err := manager.portStore().Reserve(context.Background(), "proxy", port); err != nil {
 		t.Fatal(err)
 	}
@@ -662,8 +687,8 @@ func TestRecoveryResumesTimedOutAttemptBeforeAnchorRewrite(t *testing.T) {
 }
 
 func TestRecoveryKeepsTimedOutAttemptPendingWhileLeaseIsBusy(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
-	port := freePort(t)
+	manager := testManager(t)
+	port := testPort()
 	if _, _, err := manager.portStore().Reserve(context.Background(), "proxy", port); err != nil {
 		t.Fatal(err)
 	}
@@ -703,7 +728,7 @@ func TestRecoveryKeepsTimedOutAttemptPendingWhileLeaseIsBusy(t *testing.T) {
 }
 
 func TestManagerFailsWhenControlServerStopsUnexpectedly(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	controlListeners := make(chan net.Listener, 1)
 	manager.ControlListen = func() (net.Listener, error) {
 		listener, err := net.Listen("tcp4", "127.0.0.1:0")
@@ -717,7 +742,7 @@ func TestManagerFailsWhenControlServerStopsUnexpectedly(t *testing.T) {
 		go func() { serveErrors <- manager.Serve(context.Background(), attemptID) }()
 		return nil
 	}
-	port := freePort(t)
+	port := testPort()
 	started, err := manager.Apply(context.Background(), Request{Action: "start", Port: &port, RequestID: "96969696-9696-4696-8696-969696969696"})
 	if err != nil || !started.Running {
 		t.Fatalf("start = %+v %v", started, err)
@@ -755,16 +780,27 @@ func TestManagerClosesHijackedConnectionsBeforeStopReturns(t *testing.T) {
 	defer backend.Close()
 	defer close(backendRelease)
 
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	directory := t.TempDir()
 	writeConfig(t, directory, "app", "socket.localhost")
 	alias := "main"
 	register(t, manager.portStore(), "app", directory, &alias, targetPort(t, backend))
+	listener, listenErr := net.Listen("tcp4", "127.0.0.1:0")
+	if listenErr != nil {
+		t.Fatal(listenErr)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	port := listener.Addr().(*net.TCPAddr).Port
+	manager.Listen = func(requested int) ([]net.Listener, error) {
+		if requested != port {
+			return nil, fmt.Errorf("unexpected proxy test port %d", requested)
+		}
+		return []net.Listener{listener}, nil
+	}
 	manager.Spawn = func(_ string, attemptID string) error {
 		go func() { _ = manager.Serve(context.Background(), attemptID) }()
 		return nil
 	}
-	port := freePort(t)
 	if started, err := manager.Apply(context.Background(), Request{Action: "start", Port: &port, RequestID: "97979797-9797-4797-8797-979797979797"}); err != nil || !started.Running {
 		t.Fatalf("start = %+v %v", started, err)
 	}
@@ -795,7 +831,8 @@ func TestManagerClosesHijackedConnectionsBeforeStopReturns(t *testing.T) {
 }
 
 func TestManagerStartsWithFreshDeadlineAfterTransitionLockContention(t *testing.T) {
-	manager := Manager{Data: t.TempDir(), readyTimeout: 100 * time.Millisecond}
+	manager := testManager(t)
+	manager.readyTimeout = 100 * time.Millisecond
 	manager.Spawn = func(_ string, attemptID string) error {
 		go func() { _ = manager.Serve(context.Background(), attemptID) }()
 		return nil
@@ -804,7 +841,7 @@ func TestManagerStartsWithFreshDeadlineAfterTransitionLockContention(t *testing.
 	if lockErr != nil {
 		t.Fatal(lockErr)
 	}
-	port := freePort(t)
+	port := testPort()
 	result := make(chan struct {
 		status Status
 		err    *protocol.Error
@@ -828,7 +865,8 @@ func TestManagerStartsWithFreshDeadlineAfterTransitionLockContention(t *testing.
 }
 
 func TestPendingStopDoesNotStopReplacementAttempt(t *testing.T) {
-	manager := Manager{Data: t.TempDir(), stopTimeout: 50 * time.Millisecond}
+	manager := testManager(t)
+	manager.stopTimeout = 50 * time.Millisecond
 	var spawns atomic.Int32
 	var firstAttempt string
 	manager.Spawn = func(_ string, attemptID string) error {
@@ -848,7 +886,7 @@ func TestPendingStopDoesNotStopReplacementAttempt(t *testing.T) {
 		}
 		return tasks.WritePrivate(path, value)
 	}
-	port := freePort(t)
+	port := testPort()
 	if started, err := manager.Apply(context.Background(), Request{Action: "start", Port: &port, RequestID: "83838383-8383-4383-8383-838383838383"}); err != nil || !started.Running {
 		t.Fatalf("first start = %+v %v", started, err)
 	}
@@ -879,8 +917,9 @@ func TestPendingStopDoesNotStopReplacementAttempt(t *testing.T) {
 }
 
 func TestManagerReportsStorageFailureWhileExpiringAttempt(t *testing.T) {
-	manager := Manager{Data: t.TempDir(), readyTimeout: 50 * time.Millisecond}
-	port := freePort(t)
+	manager := testManager(t)
+	manager.readyTimeout = 50 * time.Millisecond
+	port := testPort()
 	if _, _, err := manager.portStore().Reserve(context.Background(), "proxy", port); err != nil {
 		t.Fatal(err)
 	}
@@ -899,8 +938,8 @@ func TestManagerReportsStorageFailureWhileExpiringAttempt(t *testing.T) {
 }
 
 func TestManagerStopDoesNotClaimUnknownSupervisorStopped(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
-	port := freePort(t)
+	manager := testManager(t)
+	port := testPort()
 	if _, _, err := manager.portStore().Reserve(context.Background(), "proxy", port); err != nil {
 		t.Fatal(err)
 	}
@@ -918,8 +957,9 @@ func TestManagerStopDoesNotClaimUnknownSupervisorStopped(t *testing.T) {
 }
 
 func TestManagerExpiresStaleStartingAttemptAndAllowsNewRequest(t *testing.T) {
-	manager := Manager{Data: t.TempDir(), readyTimeout: 500 * time.Millisecond}
-	port := freePort(t)
+	manager := testManager(t)
+	manager.readyTimeout = 500 * time.Millisecond
+	port := testPort()
 	if _, _, err := manager.portStore().Reserve(context.Background(), "proxy", port); err != nil {
 		t.Fatal(err)
 	}
@@ -944,7 +984,7 @@ func TestManagerExpiresStaleStartingAttemptAndAllowsNewRequest(t *testing.T) {
 }
 
 func TestManagerStopWaitsForStartingSupervisorLease(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	listenEntered := make(chan struct{})
 	releaseListen := make(chan struct{})
 	manager.Listen = func(int) ([]net.Listener, error) {
@@ -958,7 +998,7 @@ func TestManagerStopWaitsForStartingSupervisorLease(t *testing.T) {
 		cancelStart()
 		return nil
 	}
-	port := freePort(t)
+	port := testPort()
 	if _, err := manager.Apply(startContext, Request{Action: "start", Port: &port, RequestID: "65656565-6565-4565-8565-656565656565"}); err == nil || err.Code != "canceled" {
 		t.Fatalf("canceled start = %v", err)
 	}
@@ -985,7 +1025,8 @@ func TestManagerStopWaitsForStartingSupervisorLease(t *testing.T) {
 }
 
 func TestManagerReplaysCompletePortError(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
+	manager.PortProbe = nil
 	listener, listenErr := net.Listen("tcp4", "127.0.0.1:0")
 	if listenErr != nil {
 		t.Fatal(listenErr)
@@ -1001,7 +1042,7 @@ func TestManagerReplaysCompletePortError(t *testing.T) {
 }
 
 func TestManagerMapsOperationsLockCancellation(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	release, lockErr := tasks.Lock(context.Background(), manager.path("operations.lock"))
 	if lockErr != nil {
 		t.Fatal(lockErr)
@@ -1015,7 +1056,7 @@ func TestManagerMapsOperationsLockCancellation(t *testing.T) {
 }
 
 func TestManagerMapsStopCancellation(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := manager.stop(ctx); err == nil || err.Code != "canceled" || err.ExitCode != 130 {
@@ -1042,7 +1083,7 @@ func TestManagerMapsTransitionLockCancellation(t *testing.T) {
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			manager := Manager{Data: t.TempDir()}
+			manager := testManager(t)
 			release, lockErr := tasks.Lock(context.Background(), manager.path("transition.lock"))
 			if lockErr != nil {
 				t.Fatal(lockErr)
@@ -1061,8 +1102,8 @@ func TestManagerMapsTransitionLockCancellation(t *testing.T) {
 }
 
 func TestManagerReportsLostSupervisor(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
-	port := freePort(t)
+	manager := testManager(t)
+	port := testPort()
 	if _, _, err := manager.portStore().Reserve(context.Background(), "proxy", port); err != nil {
 		t.Fatal(err)
 	}
@@ -1076,14 +1117,14 @@ func TestManagerReportsLostSupervisor(t *testing.T) {
 }
 
 func TestManagerConcurrentStartSpawnsOneSupervisor(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	var spawns atomic.Int32
 	manager.Spawn = func(_ string, attemptID string) error {
 		spawns.Add(1)
 		go func() { _ = manager.Serve(context.Background(), attemptID) }()
 		return nil
 	}
-	port := freePort(t)
+	port := testPort()
 	requests := []Request{
 		{Action: "start", Port: &port, RequestID: "66666666-6666-4666-8666-666666666666"},
 		{Action: "start", Port: &port, RequestID: "77777777-7777-4777-8777-777777777777"},
@@ -1114,13 +1155,14 @@ func TestManagerConcurrentStartSpawnsOneSupervisor(t *testing.T) {
 }
 
 func TestManagerPersistsListenerFailureAfterReservation(t *testing.T) {
-	manager := Manager{Data: t.TempDir(), Listen: func(int) ([]net.Listener, error) { return nil, syscall.EADDRINUSE }}
+	manager := testManager(t)
+	manager.Listen = func(int) ([]net.Listener, error) { return nil, syscall.EADDRINUSE }
 	serveError := make(chan error, 1)
 	manager.Spawn = func(_ string, attemptID string) error {
 		go func() { serveError <- manager.Serve(context.Background(), attemptID) }()
 		return nil
 	}
-	port := freePort(t)
+	port := testPort()
 	if _, err := manager.Apply(context.Background(), Request{Action: "start", Port: &port, RequestID: "99999999-9999-4999-8999-999999999999"}); err == nil || err.Code != "proxy_start_failed" {
 		t.Fatalf("listener failure = %v", err)
 	}
@@ -1138,14 +1180,14 @@ func TestManagerPersistsListenerFailureAfterReservation(t *testing.T) {
 }
 
 func TestManagerPreservesReservationWhenRecordCommitFails(t *testing.T) {
-	manager := Manager{Data: t.TempDir()}
+	manager := testManager(t)
 	manager.commit = func(path string, value any) error {
 		if filepath.Base(path) == "record.json" {
 			return errors.New("injected record failure")
 		}
 		return tasks.WritePrivate(path, value)
 	}
-	port := freePort(t)
+	port := testPort()
 	if _, err := manager.Apply(context.Background(), Request{Action: "start", Port: &port, RequestID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}); err == nil || err.Code != "io_error" {
 		t.Fatalf("record failure = %v", err)
 	}

@@ -38,7 +38,12 @@ type State struct {
 	Assignments  []Assignment  `json:"assignments"`
 	Reservations []Reservation `json:"reservations"`
 }
-type Store struct{ Directory string }
+type AvailabilityProbe func(int) (bool, *protocol.Error)
+
+type Store struct {
+	Directory string
+	Probe     AvailabilityProbe
+}
 
 func fail(code string) *protocol.Error {
 	return protocol.NewError(code, "Port operation could not satisfy the requested condition.", 3, nil)

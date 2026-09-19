@@ -148,6 +148,7 @@ type Manager struct {
 	Spawn         func(string, string) error
 	Listen        func(int) ([]net.Listener, error)
 	ControlListen func() (net.Listener, error)
+	PortProbe     ports.AvailabilityProbe
 	commit        func(string, any) error
 	readyTimeout  time.Duration
 	stopTimeout   time.Duration
@@ -171,7 +172,7 @@ func proxyStorageError() *protocol.Error {
 func (m Manager) root() string            { return filepath.Join(m.Data, "proxy") }
 func (m Manager) path(name string) string { return filepath.Join(m.root(), name) }
 func (m Manager) portStore() ports.Store {
-	return ports.Store{Directory: filepath.Join(m.Data, "ports")}
+	return ports.Store{Directory: filepath.Join(m.Data, "ports"), Probe: m.PortProbe}
 }
 
 func (m Manager) readRecord() (Record, error) {

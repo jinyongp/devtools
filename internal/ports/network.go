@@ -56,7 +56,23 @@ func Reachable(ctx context.Context, port int) bool {
 	}
 	return false
 }
+
+func (s Store) Available(port int) (bool, *protocol.Error) {
+	if s.Probe != nil {
+		return s.Probe(port)
+	}
+	return Available(port)
+}
+
+func (s Store) Allocate(ctx context.Context, st *State, i Instance, name string, p project.Port, defaults []int) (Assignment, bool, *protocol.Error) {
+	return st.allocate(ctx, i, name, p, defaults, s.Available)
+}
+
 func (st *State) Allocate(ctx context.Context, i Instance, name string, p project.Port, defaults []int) (Assignment, bool, *protocol.Error) {
+	return st.allocate(ctx, i, name, p, defaults, Available)
+}
+
+func (st *State) allocate(ctx context.Context, i Instance, name string, p project.Port, defaults []int, probe AvailabilityProbe) (Assignment, bool, *protocol.Error) {
 	if a := st.Get(i.ID, name); a != nil {
 		return *a, false, nil
 	}
@@ -81,7 +97,7 @@ func (st *State) Allocate(ctx context.Context, i Instance, name string, p projec
 		if used[n] {
 			return false, nil
 		}
-		return Available(n)
+		return probe(n)
 	}
 	selected := 0
 	if p.Port != nil {
@@ -139,7 +155,7 @@ func (s Store) Reserve(ctx context.Context, name string, requested int) (int, bo
 				return false, fail("port_in_use")
 			}
 		}
-		free, err := Available(requested)
+		free, err := s.Available(requested)
 		if err != nil {
 			return false, err
 		}

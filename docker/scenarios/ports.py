@@ -95,6 +95,8 @@ finally:
     server.terminate()
     server.communicate(timeout=8)
 
+assert api("port", "check", "api")["data"]["item"]["occupancy"] == "free"
+
 # An unrelated listener causes an error, preserving the registered address.
 with socket.socket() as busy:
     busy.bind(("127.0.0.1", 23000))

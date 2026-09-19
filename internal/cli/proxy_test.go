@@ -8,26 +8,47 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/jinyongp/devtools/internal/protocol"
 	proxyapi "github.com/jinyongp/devtools/internal/proxy"
 )
 
-func cliFreePort(t *testing.T) int {
-	t.Helper()
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+type cliIdleListener struct {
+	port   int
+	closed chan struct{}
+	once   sync.Once
+}
+
+func (l *cliIdleListener) Accept() (net.Conn, error) {
+	<-l.closed
+	return nil, net.ErrClosed
+}
+func (l *cliIdleListener) Close() error {
+	l.once.Do(func() { close(l.closed) })
+	return nil
+}
+func (l *cliIdleListener) Addr() net.Addr {
+	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: l.port}
+}
+
+func cliTestManager(data string) proxyapi.Manager {
+	return proxyapi.Manager{
+		Data: data,
+		PortProbe: func(int) (bool, *protocol.Error) {
+			return true, nil
+		},
+		Listen: func(port int) ([]net.Listener, error) {
+			return []net.Listener{&cliIdleListener{port: port, closed: make(chan struct{})}}, nil
+		},
 	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	_ = listener.Close()
-	return port
 }
 
 func TestProxyCLIStartListStatusAndStop(t *testing.T) {
 	app := testApp(t)
 	dataDirectory, _ := app.dataDirectory()
-	manager := proxyapi.Manager{Data: filepath.Dir(dataDirectory)}
+	manager := cliTestManager(filepath.Dir(dataDirectory))
 	manager.Spawn = func(_ string, attemptID string) error {
 		go func() { _ = manager.Serve(context.Background(), attemptID) }()
 		return nil
@@ -36,7 +57,7 @@ func TestProxyCLIStartListStatusAndStop(t *testing.T) {
 
 	root := t.TempDir()
 	t.Chdir(root)
-	backendPort := cliFreePort(t)
+	backendPort := 45101
 	config := fmt.Sprintf("profile='app'\n[ports.web]\nport=%d\nstrict=true\n[proxies.app]\nhost='${instance.alias}.${profile}.localhost'\nport='web'\n", backendPort)
 	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {
 		t.Fatal(err)
@@ -46,7 +67,7 @@ func TestProxyCLIStartListStatusAndStop(t *testing.T) {
 			t.Fatalf("%v: %s", args, diagnostic)
 		}
 	}
-	listenerPort := cliFreePort(t)
+	listenerPort := 45102
 	startID := "10101010-1010-4010-8010-101010101010"
 	code, output, diagnostic := invoke(t, app, "", "proxy", "start", "--port", fmt.Sprint(listenerPort), "--request-id", startID)
 	if code != 0 || diagnostic != "" || !strings.Contains(output, `"running":true`) || !strings.Contains(output, fmt.Sprintf(`"port":%d`, listenerPort)) {
@@ -94,9 +115,10 @@ func TestProxyCLIContractAndFailures(t *testing.T) {
 func TestProxyCLIReportsStartFailure(t *testing.T) {
 	app := testApp(t)
 	dataDirectory, _ := app.dataDirectory()
-	manager := proxyapi.Manager{Data: filepath.Dir(dataDirectory), Spawn: func(string, string) error { return errors.New("injected") }}
+	manager := cliTestManager(filepath.Dir(dataDirectory))
+	manager.Spawn = func(string, string) error { return errors.New("injected") }
 	app.proxyManager = func(string) proxyapi.Manager { return manager }
-	port := cliFreePort(t)
+	port := 45103
 	code, output, diagnostic := invoke(t, app, "", "proxy", "start", "--port", fmt.Sprint(port), "--request-id", "40404040-4040-4040-8040-404040404040")
 	if code != 3 || output != "" || !strings.Contains(diagnostic, `"code":"proxy_start_failed"`) {
 		t.Fatalf("start failure: %d %s %s", code, output, diagnostic)

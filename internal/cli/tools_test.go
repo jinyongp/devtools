@@ -19,6 +19,7 @@ func testApp(t *testing.T) *App {
 	app := New("test", "test")
 	directory := filepath.Join(t.TempDir(), "profiles")
 	app.dataDirectory = func() (string, *protocol.Error) { return directory, nil }
+	app.portProbe = func(int) (bool, *protocol.Error) { return true, nil }
 	return app
 }
 

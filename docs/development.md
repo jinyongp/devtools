@@ -32,6 +32,12 @@ WSL uses the Linux build; testing in an actual WSL environment is a separate che
 `just verify-docker proxies`는 배포 아카이브를 설치한 격리 환경에서 HTTP route,
 WebSocket, 동적 port 변경, daemon 재시작과 listener reservation을 검증한다.
 
+Go 단위 테스트는 OS가 관리하는 비어 있는 port 번호를 미리 골라 닫은 뒤 재사용하지 않는다.
+port 가용성이나 proxy listener가 테스트의 직접 대상이 아니면 주입 가능한 probe/listener를
+사용해 상태 전이와 저장소 동작을 결정적으로 검증한다. 실제 TCP bind, occupied/free 판정,
+IPv4/IPv6 listener, 설치된 바이너리의 proxy 동작은 `verify-docker ports proxies`에서 검증한다.
+이 경계를 유지해 호스트의 포트 사용 상태나 병렬 프로세스 때문에 단위 테스트가 흔들리지 않게 한다.
+
 
 ## Dashboard 화면 개발
 

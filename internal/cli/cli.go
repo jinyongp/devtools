@@ -8,6 +8,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/lifecycle"
 	"github.com/jinyongp/devtools/internal/paths"
+	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/proxy"
@@ -54,6 +55,7 @@ type App struct {
 	commands         []Command
 	dataDirectory    func() (string, *protocol.Error)
 	proxyManager     func(string) proxy.Manager
+	portProbe        ports.AvailabilityProbe
 	lifecycleManager func(string) lifecycle.Manager
 }
 

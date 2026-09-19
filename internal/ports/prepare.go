@@ -42,11 +42,11 @@ func (s Store) Prepare(ctx context.Context, p project.Context, c project.Command
 			if e := s.Active(ctx, i.ID, name); e != nil {
 				return false, e
 			}
-			a, created, e := st.Allocate(ctx, *i, name, def, defaults)
+			a, created, e := s.Allocate(ctx, st, *i, name, def, defaults)
 			if e != nil {
 				return false, e
 			}
-			free, e := Available(a.Port)
+			free, e := s.Available(a.Port)
 			if e != nil {
 				return false, e
 			}

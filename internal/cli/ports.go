@@ -25,7 +25,7 @@ func portFailure(code string) *protocol.Error {
 }
 func (a *App) portStore() (ports.Store, *protocol.Error) {
 	d, e := a.dataDirectory()
-	return ports.Store{Directory: filepath.Join(filepath.Dir(d), "ports")}, e
+	return ports.Store{Directory: filepath.Join(filepath.Dir(d), "ports"), Probe: a.portProbe}, e
 }
 func portDefaults() ([]int, *protocol.Error) {
 	d, e := paths.Current()
@@ -189,7 +189,7 @@ func checkRelease(ctx context.Context, s ports.Store, st *ports.State, id string
 		if e := s.Active(ctx, id, a.Name); e != nil {
 			return e
 		}
-		free, e := ports.Available(a.Port)
+		free, e := s.Available(a.Port)
 		if e != nil {
 			return e
 		}
@@ -314,7 +314,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 			if e != nil {
 				return false, e
 			}
-			v, created, e := st.Allocate(ctx, *i, name, def, defaults)
+			v, created, e := s.Allocate(ctx, st, *i, name, def, defaults)
 			if e != nil {
 				return false, e
 			}
@@ -341,7 +341,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 			result = map[string]any{"item": assignmentResult(*v)}
 		case "check":
 			row := assignmentResult(*v)
-			free, e := ports.Available(v.Port)
+			free, e := s.Available(v.Port)
 			row["occupancy"] = "free"
 			row["tcp_reachable"] = nil
 			if e != nil {
@@ -357,7 +357,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 			if e := s.Active(ctx, i.ID, name); e != nil {
 				return false, e
 			}
-			free, e := ports.Available(v.Port)
+			free, e := s.Available(v.Port)
 			if e != nil {
 				return false, e
 			}

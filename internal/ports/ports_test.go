@@ -3,7 +3,6 @@ package ports
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -14,8 +13,18 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
+func testPortStore(t *testing.T) Store {
+	t.Helper()
+	return Store{
+		Directory: filepath.Join(t.TempDir(), "ports"),
+		Probe: func(int) (bool, *protocol.Error) {
+			return true, nil
+		},
+	}
+}
+
 func TestRegistryV1ReadAndFirstWriteMigration(t *testing.T) {
-	s := Store{Directory: filepath.Join(t.TempDir(), "ports")}
+	s := testPortStore(t)
 	if err := os.MkdirAll(s.Directory, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +66,7 @@ func TestRegistryV1ReadAndFirstWriteMigration(t *testing.T) {
 }
 
 func TestReservationPersistsAndExcludesAllocator(t *testing.T) {
-	s := Store{Directory: filepath.Join(t.TempDir(), "ports")}
+	s := testPortStore(t)
 	ctx := context.Background()
 	if port, changed, err := s.Reserve(ctx, "proxy", 32102); err != nil || !changed || port != 32102 {
 		t.Fatalf("reserve = %d %v %v", port, changed, err)
@@ -70,7 +79,7 @@ func TestReservationPersistsAndExcludesAllocator(t *testing.T) {
 		if err != nil {
 			return false, err
 		}
-		assignment, _, err := state.Allocate(ctx, *instance, "web", project.Port{}, []int{32102, 32103})
+		assignment, _, err := s.Allocate(ctx, state, *instance, "web", project.Port{}, []int{32102, 32103})
 		if err != nil {
 			return false, err
 		}
@@ -92,7 +101,7 @@ func TestReservationPersistsAndExcludesAllocator(t *testing.T) {
 }
 
 func TestReservationAndAssignmentRaceKeepsPortUnique(t *testing.T) {
-	s := Store{Directory: filepath.Join(t.TempDir(), "ports")}
+	s := testPortStore(t)
 	ctx := context.Background()
 	port := 32104
 	directory := t.TempDir()
@@ -110,7 +119,7 @@ func TestReservationAndAssignmentRaceKeepsPortUnique(t *testing.T) {
 			if err != nil {
 				return false, err
 			}
-			_, _, err = state.Allocate(ctx, *instance, "web", project.Port{Port: &port, Strict: true}, []int{port, port})
+			_, _, err = s.Allocate(ctx, state, *instance, "web", project.Port{Port: &port, Strict: true}, []int{port, port})
 			return err == nil, err
 		})
 	}()
@@ -147,7 +156,7 @@ func TestReservationAndAssignmentRaceKeepsPortUnique(t *testing.T) {
 }
 
 func TestPersistentAllocationAndConcurrency(t *testing.T) {
-	s := Store{Directory: filepath.Join(t.TempDir(), "ports")}
+	s := testPortStore(t)
 	ctx := context.Background()
 	const count = 8
 	var wg sync.WaitGroup
@@ -161,7 +170,7 @@ func TestPersistentAllocationAndConcurrency(t *testing.T) {
 				if e != nil {
 					return false, e
 				}
-				_, _, e = st.Allocate(ctx, *i, "web", project.Port{}, []int{20000, 20999})
+				_, _, e = s.Allocate(ctx, st, *i, "web", project.Port{}, []int{20000, 20999})
 				return true, e
 			})
 		}()
@@ -179,7 +188,7 @@ func TestPersistentAllocationAndConcurrency(t *testing.T) {
 	}
 	a := st.Assignments[0]
 	newPort := 31000
-	got, created, e := st.Allocate(ctx, a.Instance, "web", project.Port{Port: &newPort, Strict: true}, []int{31000, 31000})
+	got, created, e := s.Allocate(ctx, st, a.Instance, "web", project.Port{Port: &newPort, Strict: true}, []int{31000, 31000})
 	if e != nil || created || got.Port != a.Port {
 		t.Fatal(got, e)
 	}
@@ -197,14 +206,12 @@ func TestPersistentAllocationAndConcurrency(t *testing.T) {
 }
 func TestPrepareRollbackPreviewAndOccupied(t *testing.T) {
 	root := t.TempDir()
-	s := Store{Directory: filepath.Join(t.TempDir(), "ports")}
+	s := testPortStore(t)
 	ctx := context.Background()
-	l, e := net.Listen("tcp4", "127.0.0.1:0")
-	if e != nil {
-		t.Fatal(e)
+	busy := 21999
+	s.Probe = func(port int) (bool, *protocol.Error) {
+		return port != busy, nil
 	}
-	defer l.Close()
-	busy := l.Addr().(*net.TCPAddr).Port
 	p := project.Context{Profile: "app", Root: root, Ports: map[string]project.Port{"web": {}, "busy": {Port: &busy, Strict: true}}}
 	c := project.Command{Exec: []string{"echo"}, Serve: []string{"web", "busy"}}
 	if _, _, e := s.Prepare(ctx, p, c, "", nil, []int{22000, 22999}, false); e == nil {

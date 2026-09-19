@@ -109,6 +109,21 @@ try:
     assert mutate("start")["item"]["port"] == 24400
     running = True
     assert read(24400, "feature.shop.localhost") == "feature"
+    if socket.has_ipv6:
+        probe = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+        try:
+            probe.bind(("::1", 0))
+        except OSError:
+            pass
+        else:
+            probe.close()
+            with socket.create_connection(("::1", 24400), timeout=2) as ipv6:
+                ipv6.sendall(b"GET / HTTP/1.1\r\nHost: feature.shop.localhost\r\nConnection: close\r\n\r\n")
+                assert b"200 OK" in ipv6.recv(4096)
+            probe = None
+        finally:
+            if probe is not None:
+                probe.close()
 finally:
     if running:
         try: mutate("stop")

@@ -131,6 +131,7 @@ func (a *App) commandSummary(name string) string {
 		"run":                     "Run a command with project environment values.",
 		"schema":                  "Discover command input and output contracts.",
 		"skill":                   "Discover, inspect, and register portable Agent Skills.",
+		"guidance":                "Resolve path-scoped AGENTS.md guidance for an actual work target.",
 		"update":                  "Update the installed executable.",
 		"backup":                  "Back up and restore profile data.",
 		"cleanup":                 "Preview and clean up stored data.",

@@ -98,6 +98,7 @@ secret은 `devtools sec`로 등록하며 조회에는 메타데이터만 제공�
 | 서버를 백그라운드로 실행하고 준비 완료까지 대기 | [프로세스](docs/processes.md) · [준비 확인](docs/process-readiness.md) |
 | 계획 수립, 작업 분담, 세션 인계 | [task와 workstream](docs/tasks.md) |
 | 표준 Agent Skill 조회·등록 | [Agent Skill 설치](docs/agent-skill.md#일반-agent-skill-registry) |
+| 작업 대상별 `AGENTS.md` 지침 확인 | [AGENTS.md 작업 지침](docs/agents-md.md) |
 | 브라우저에서 프로젝트 관리 | [dashboard](docs/management-api-contract.md) |
 | Profile 목록·상세·비교, 다른 환경으로 이동 | [Profile 관리](docs/profiles.md) |
 | 여러 서버를 함께 시작하고 상태·로그를 확인하거나 재시작·종료 | [프로젝트 서버 관리](docs/processes.md#프로젝트-서버를-함께-관리하기) |

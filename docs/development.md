@@ -4,7 +4,7 @@
 사용자 설치와 실행은 [README](../README.md)를 참고한다.
 
 
-Requires Go 1.27.x, Node.js 24.x, Git (for integration tests), just, and uv with `uvx`.
+Requires Go 1.27.x, Node.js 24.x, Python 3, Git, curl, OpenSSL, tar, just, and uv with `uvx`.
 
 ```sh
 just build

@@ -45,7 +45,8 @@ just verify --list
 
 기본 실행은 현재 OS/architecture용 `0.0.0-test.1`, `0.0.0-test.2` CLI release와
 `0.0.0-test.1` Agent Skill artifact를 임시 디렉터리에 만든다. 모든 시나리오가 끝나면
-release와 사용자 데이터가 자동으로 삭제된다.
+release와 사용자 데이터가 자동으로 삭제된다. 시나리오가 실패해도 runner가 격리 HOME에서
+시작한 proxy, dashboard, managed process를 정리한 뒤 임시 데이터를 삭제한다.
 
 Go, Python 3, POSIX sh, tar, Git, curl과 OpenSSL이 필요하다. completion 시나리오는 설치된
 bash·zsh·fish를 감지해 사용할 수 있는 shell만 검증한다. Release CI의 Linux runner는

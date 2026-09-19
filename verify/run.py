@@ -1,23 +1,147 @@
 """Run installed-release scenarios with isolated user data and working directories."""
 
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import uuid
 
 
 TEST_VERSIONS = ("0.0.0-test.1", "0.0.0-test.2")
 
 
+def host_target(repository: Path):
+    result = subprocess.run(
+        ["go", "env", "GOHOSTOS", "GOHOSTARCH"],
+        cwd=repository,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    values = result.stdout.splitlines()
+    if len(values) != 2:
+        raise RuntimeError("Cannot resolve host Go target")
+    return values[0], values[1]
+
+
 def package_test_releases(repository: Path, releases: Path) -> None:
     releases.mkdir(parents=True, exist_ok=True)
+    target_os, target_arch = host_target(repository)
     for version in TEST_VERSIONS:
-        env = dict(os.environ, VERSION=version, OUTPUT_DIR=str(releases), COMMIT="verify")
+        env = dict(
+            os.environ,
+            VERSION=version,
+            OUTPUT_DIR=str(releases),
+            COMMIT="verify",
+            TARGET_OS=target_os,
+            TARGET_ARCH=target_arch,
+        )
         subprocess.run(["sh", "scripts/package.sh"], cwd=repository, env=env, check=True)
     env = dict(os.environ, VERSION=TEST_VERSIONS[0], OUTPUT_DIR=str(releases))
     subprocess.run(["sh", "scripts/package-skill.sh"], cwd=repository, env=env, check=True)
+
+
+def cleanup_managed_processes(home: Path, env) -> bool:
+    binary = home / ".local/bin/devtools"
+    if not binary.is_file():
+        return True
+
+    def run(*args):
+        try:
+            return subprocess.run(
+                [str(binary), *args],
+                cwd=home,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+
+    clean = True
+    run("proxy", "stop", "--request-id", str(uuid.uuid4()))
+    proxy_status = run("proxy", "status")
+    if proxy_status is None or proxy_status.returncode != 0:
+        clean = False
+    else:
+        try:
+            if json.loads(proxy_status.stdout)["data"]["item"]["running"]:
+                clean = False
+        except (KeyError, TypeError, json.JSONDecodeError):
+            clean = False
+
+    profiles = set()
+    listed = run("profile", "list")
+    if listed is not None and listed.returncode == 0:
+        try:
+            profiles.update(
+                item["profile"]
+                for item in json.loads(listed.stdout)["data"]["items"]
+                if isinstance(item.get("profile"), str)
+            )
+        except (KeyError, TypeError, json.JSONDecodeError):
+            pass
+
+    for config in home.rglob("devtools.toml"):
+        inspected = run("project", "inspect", "--dir", str(config.parent))
+        if inspected is None or inspected.returncode != 0:
+            continue
+        try:
+            profile = json.loads(inspected.stdout)["data"]["item"]["profile"]
+        except (KeyError, TypeError, json.JSONDecodeError):
+            continue
+        if isinstance(profile, str):
+            profiles.add(profile)
+
+    for profile in sorted(profiles):
+        run("dashboard", "stop", "--profile", profile)
+        dashboard_status = run("dashboard", "status", "--profile", profile)
+        if dashboard_status is None or dashboard_status.returncode != 0:
+            clean = False
+        else:
+            try:
+                if json.loads(dashboard_status.stdout)["data"]["item"]["running"]:
+                    clean = False
+            except (KeyError, TypeError, json.JSONDecodeError):
+                clean = False
+
+        processes = run("process", "list", "--profile", profile)
+        if processes is None or processes.returncode != 0:
+            clean = False
+            continue
+        try:
+            items = json.loads(processes.stdout)["data"]["items"]
+        except (KeyError, TypeError, json.JSONDecodeError):
+            clean = False
+            continue
+        for item in items:
+            if item.get("ended_at") is not None:
+                continue
+            run(
+                "process",
+                "stop",
+                item["id"],
+                "--request-id",
+                str(uuid.uuid4()),
+            )
+
+        remaining = run("process", "list", "--profile", profile)
+        if remaining is None or remaining.returncode != 0:
+            clean = False
+            continue
+        try:
+            if any(
+                item.get("ended_at") is None
+                for item in json.loads(remaining.stdout)["data"]["items"]
+            ):
+                clean = False
+        except (KeyError, TypeError, json.JSONDecodeError):
+            clean = False
+    return clean
 
 
 def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
@@ -50,8 +174,12 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
                 cwd=home,
                 env=env,
             )
+            cleaned = cleanup_managed_processes(home, env)
             if result.returncode:
                 return result.returncode if result.returncode > 0 else 128 - result.returncode
+            if not cleaned:
+                print(f"Scenario left managed processes running: {name}", file=sys.stderr)
+                return 1
     return 0
 
 

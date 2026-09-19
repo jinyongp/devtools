@@ -307,7 +307,7 @@ profile·instance와 관계없이 서비스 할당과 proxy listener reservation
 포트 번호를 유일하게 유지한다. proxy가 중지돼도 listener reservation은 유지되며
 자동 할당 후보에서 제외된다. 점유 검사는
 지원되는 IPv4·IPv6 수신 주소를 고려하고, 확인 불가 시 오류를 반환한다.
-다른 사용자, Docker, WSL과 호스트 사이의 별도 저장소는 각각의 할당 영역이다.
+다른 사용자나 서로 격리된 실행 환경의 별도 저장소는 각각의 할당 영역이다.
 호스트 var는 접속 문자열의 재료이며 로컬 할당 영역을 변경하지 않는다.
 
 port registry version 1은 reservation이 없는 기존 저장 형식이다. 새 reader는 이를

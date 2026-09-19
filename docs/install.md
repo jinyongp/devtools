@@ -185,7 +185,7 @@ just verify install
 
 [설치된 release 검증](../verify/README.md)의 `install` 시나리오로 검증한다.
 runner는 현재 OS와 architecture용 테스트 release 두 버전을 임시 디렉터리에 만들고,
-각 시나리오의 격리된 HOME에 실제 설치 스크립트로 실행 파일을 설치한다. Docker는 필요하지 않다.
+각 시나리오의 격리된 HOME에 실제 설치 스크립트로 실행 파일을 설치한다.
 
 검증은 설치 명령부터 시작해 다음 동작을 확인한다.
 

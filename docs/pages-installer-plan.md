@@ -32,7 +32,7 @@ The `jinyongp.github.io` repository remains untouched.
 
 ## Release follow-up — v0.17.0
 
-- v0.17.0 passed macOS/Linux/Skill discovery/Chromium/Docker/GitHub Release/Homebrew.
+- v0.17.0 passed macOS/Linux/Skill discovery/Chromium/GitHub Release/Homebrew.
 - Direct reusable Pages invocation from the tag was rejected by the `github-pages` environment because `GITHUB_REF` was `v0.17.0`.
 - Pages deployment is moved to `workflow_run`, whose `GITHUB_REF` is the default branch, while the published release tag is carried in `workflow_run.head_branch`.
 

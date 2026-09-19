@@ -122,7 +122,7 @@ task의 실행 기록과 OS 프로세스의 수명을 구분해 관리한다. �
 관리 API, 암호화 백업·복구, dashboard 편집, 프로세스 수명 관리, 저장소 정리와 통합 사용 흐름을 구현했다.
 
 - Go 1.27.1의 전체 race 테스트와 vet를 통과했다.
-- macOS/Linux의 amd64·arm64 실행 파일을 패키징했다. 실제 OS 실행 검증은 macOS 26.6.2 arm64와 Linux arm64 Docker에서 수행했다.
+- macOS/Linux의 amd64·arm64 실행 파일을 패키징했다. 실제 OS 실행 검증은 macOS 26.6.2 arm64와 Linux arm64 격리 환경에서 수행했다.
 - 설치된 실행 파일로 backup, bootstrap, cleanup, doctor, install, ports, processes, tasks, workflow의 9개 시나리오를 통과했다.
 - workflow는 격리된 Git 프로젝트와 두 worktree에서 task 인계·완료, 서로 다른 서버 port, 다른 profile의 URL 주입, dashboard 백업·복구, worktree 정리와 보관함 복구를 확인한다.
 - 브라우저에서 이름 명령 조회·시작·종료, 정리 후보 선택·보관·복구, 암호화 백업 생성과 복구 미리 보기·적용을 확인했다. 연속 확인창이 내용을 유지하는지도 검증했다.
@@ -141,7 +141,7 @@ task의 실행 기록과 OS 프로세스의 수명을 구분해 관리한다. �
 
 2026-09-06 검증 결과:
 
-- Linux Docker: readiness를 포함한 전체 10개 설치 시나리오, 전체 Go race 테스트·vet,
+- Linux: readiness를 포함한 전체 10개 설치 시나리오, 전체 Go race 테스트·vet,
   macOS/Linux amd64·arm64 배포 빌드 통과.
 - macOS arm64: readiness·processes 설치 시나리오와
   project·services·cli·dashboard 패키지 race 테스트 통과.

@@ -267,26 +267,26 @@ go test ./internal/cli ./internal/lifecycle ./internal/services ./internal/profi
   - 수정: restart stop mutation 결과 보존, restart inherited env preflight, 모든 actual cold start의 즉시 preflight, callback 시점 current project config/identity 재확인, browser CLI timeout, bootstrap credential 오류 로그 차단, public docs drift 정리.
   - unresolved finding: 없음.
   - cycle validation: execution/doctor/process/services/lifecycle/cli/dashboard/diagnostics/retention/cleanup/tasks race PASS; 전체 go vet PASS; Dashboard JS 11/11 PASS; browser spec syntax/discovery PASS; actionlint, frozen pnpm lockfile, diff-check PASS.
-  - 당시 환경 제약: 실제 Chromium launch, Docker, uvx Skill validator는 로컬에서 확인할 수 없어 Release CI 확인이 필요했다.
+  - 당시 환경 제약: 실제 Chromium launch와 uvx Skill validator는 로컬에서 확인할 수 없어 Release CI 확인이 필요했다.
 - Cycle 2: 완료. Cycle 1 수정 파일과 직접 계약을 affected-axis re-review했다.
   - 추가 수정: browser smoke 실패 시 cleanup 보장 및 primary error 보존, diagnostics profile/process active count를 동일 live snapshot으로 정합화.
   - 재검토 결과: 선택한 모든 축에서 actionable finding 없음. 동일 root cause의 oscillation 없음.
   - scoped validation: Cycle 1과 동일한 race/vet/JS/Playwright discovery/actionlint/frozen-lock/diff-check가 최신 변경 기준으로 다시 PASS.
-  - 당시 남은 검증 제약: 실제 Chromium launch는 Playwright CDN 403, Docker는 daemon/socket 부재, 공식 Agent Skill validator는 uvx 부재였다. 모두 Release CI gate로 확인했다.
+  - 당시 남은 검증 제약: 실제 Chromium launch는 Playwright CDN 403, 공식 Agent Skill validator는 uvx 부재였다. 모두 Release CI gate로 확인했다.
 - Cycle 3: 완료. Preflight/readiness affected-axis를 다시 검토했다.
   - 추가 수정: lifecycle completion이 최초 project snapshot 대신 실제 started process의 `ready_configured`를 사용하도록 변경해 operation 중 readiness 설정 변경을 반영. 모든 actual cold start에 immediate preflight를 유지하면서 의미 없는 receipt boolean을 제거.
   - 재검토 결과: stale project config, inherited env, restart stop-result, cold-start preflight, actual readiness 경계에서 추가 actionable finding 없음. oscillation 없음.
   - scoped validation: execution/doctor/process/services/lifecycle/cli/dashboard/diagnostics/retention/cleanup/tasks race PASS; 전체 go vet PASS; Dashboard JS 11/11 PASS; browser syntax/discovery PASS; actionlint, frozen pnpm lockfile, diff-check, Agent Skill package 생성 PASS.
-  - 당시 남은 검증 제약: 실제 Chromium launch는 Playwright CDN 403, Docker는 daemon/socket 부재, 공식 Agent Skill validator는 uvx 부재였다. Release CI에서 검증하도록 구성했다.
-- Cycle 4: 완료. Docker 제거 후 `just verify` 전환 범위의 Node/runtime·CI portability·Planning/contracts 축을 review-and-fix했다.
+  - 당시 남은 검증 제약: 실제 Chromium launch는 Playwright CDN 403, 공식 Agent Skill validator는 uvx 부재였다. Release CI에서 검증하도록 구성했다.
+- Cycle 4: 완료. 설치 검증을 `just verify`로 단순화한 범위의 Node/runtime·CI portability·Planning/contracts 축을 review-and-fix했다.
   - 수정: 실패한 시나리오 뒤 격리 HOME의 proxy/dashboard/managed process를 정리하고, process-only profile도 `devtools.toml`의 project inspect로 발견하도록 runner cleanup을 보강했다. 테스트 release target은 `GOHOSTOS/GOHOSTARCH`로 고정해 ambient `TARGET_OS/TARGET_ARCH` 오염을 차단했다. Python 최소 버전을 불필요하게 올리는 built-in generic annotation을 제거하고 개발 prerequisite·검증 문서를 실제 요구사항과 맞췄다.
   - 재검토 결과: current-session verification simplification 범위에서 추가 actionable finding 없음. 동일 root cause의 oscillation 없음.
-  - cycle validation: intentional detached-process failure 후 test port 재사용 PASS; cross-target env override 재현 PASS; `just verify` 전체 16개 시나리오 PASS; `processes workflow tasks` scoped scenarios PASS; 전체 `go test -race ./...`, `go vet ./...`, `just check-installer`, actionlint, actions-up, diff-check PASS; stale `docker/`·실행 가능한 `verify-docker` 참조 없음.
+  - cycle validation: intentional detached-process failure 후 test port 재사용 PASS; cross-target env override 재현 PASS; `just verify` 전체 16개 시나리오 PASS; `processes workflow tasks` scoped scenarios PASS; 전체 `go test -race ./...`, `go vet ./...`, `just check-installer`, actionlint, actions-up, diff-check PASS; stale legacy 검증 경로 참조 없음.
   - unresolved finding: 없음. 남은 user decision 없음.
 
 ## Verification follow-up — 2026-09-19
 
-- Docker sandbox와 `verify-docker` recipe를 제거하고 설치 시나리오를 `verify/`로 이동했다.
+- 설치 시나리오를 `verify/`로 모으고 단일 `just verify` recipe로 통합했다.
 - `just verify`가 현재 host용 테스트 release 두 버전과 Agent Skill artifact를 임시 생성해 격리된 HOME/XDG에서 전체 시나리오를 실행한다.
 - Release CI의 macOS와 Linux hosted runner가 모두 `just verify`를 실행해 clean OS 검증을 담당한다.
 - Go unit test는 실제 port/listener가 직접 대상이 아닌 경우 probe/listener 주입으로 결정적으로 유지한다.

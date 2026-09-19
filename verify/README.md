@@ -1,6 +1,6 @@
 # 설치된 release 검증
 
-devtools의 설치 후 공개 CLI 흐름을 실제 패키징된 실행 파일로 검증한다. Docker는 필요하지 않다.
+devtools의 설치 후 공개 CLI 흐름을 실제 패키징된 실행 파일로 검증한다.
 runner는 테스트용 release를 만들고, 각 시나리오를 독립적인 HOME·XDG 경로·작업 디렉터리에서 실행한다.
 
 GitHub Actions에서는 fresh hosted runner가 OS 환경 격리를 담당한다. 로컬 실행도 사용자 데이터와
@@ -75,9 +75,8 @@ Go unit test는 port 가용성이나 실제 listener가 테스트 목적이 아�
 패키징된 실행 파일로 검증한다.
 
 GitHub-hosted runner는 job마다 새 VM을 사용하므로 release 검증의 공식 clean OS 환경이다.
-Docker의 `--network none`, capability 제거 같은 별도 sandbox 제약은 더 이상 release
-gate에 포함하지 않는다. 외부 네트워크가 필요한 시나리오는 없으며, 설치 시나리오의 HTTPS
-검증도 로컬 테스트 서버를 사용한다.
+별도 sandbox 제약은 release gate에 포함하지 않는다. 외부 네트워크가 필요한 시나리오는 없으며,
+설치 시나리오의 HTTPS 검증도 로컬 테스트 서버를 사용한다.
 
 ## 시나리오 추가
 

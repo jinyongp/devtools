@@ -50,6 +50,9 @@ exec = ["/bin/true"]
 	if listed.Data.Profile != "app" || len(listed.Data.Commands) != 2 || listed.Data.Commands[0].Name != "dev" || listed.Data.Commands[1].Name != "zeta" {
 		t.Fatalf("unexpected list: %+v", listed.Data)
 	}
+	if aliasCode, aliasOut, aliasDiagnostic := invoke(t, app, "", "cmd", "list", "--dir", root); aliasCode != 0 || aliasOut != out || aliasDiagnostic != "" {
+		t.Fatalf("cmd list: %d %s %s", aliasCode, aliasOut, aliasDiagnostic)
+	}
 	dev := listed.Data.Commands[0]
 	if strings.Join(dev.Exec, " ") != "/bin/sh -c printf dev" || !dev.Inject || dev.Env != "local" || len(dev.Serve) != 0 {
 		t.Fatalf("unexpected command summary: %+v", dev)
@@ -81,6 +84,9 @@ exec = ["/bin/true"]
 	if strings.Contains(out, `"version_args":null`) {
 		t.Fatalf("command inspect violated its array schema: %s", out)
 	}
+	if aliasCode, aliasOut, aliasDiagnostic := invoke(t, app, "", "cmd", "inspect", "dev", "--dir", root); aliasCode != 0 || aliasOut != out || aliasDiagnostic != "" {
+		t.Fatalf("cmd inspect: %d %s %s", aliasCode, aliasOut, aliasDiagnostic)
+	}
 
 	code, out, diagnostic = invoke(t, app, "", "command", "inspect", "missing", "--dir", root)
 	if code != 3 || out != "" || !strings.Contains(diagnostic, `"code":"command_not_found"`) {
@@ -91,7 +97,7 @@ exec = ["/bin/true"]
 	if code, _, diagnostic = invoke(t, app, "", "var", "set", "ROOT_VALUE", "--value", "ready"); code != 0 {
 		t.Fatal(diagnostic)
 	}
-	for _, args := range [][]string{{"command", "run", "zeta"}, {"run", "zeta"}} {
+	for _, args := range [][]string{{"command", "run", "zeta"}, {"cmd", "run", "zeta"}, {"run", "zeta"}} {
 		code, out, diagnostic = invoke(t, app, "", args...)
 		if code != 0 || out != "zeta" || diagnostic != "" {
 			t.Fatalf("%v: %d %q %q", args, code, out, diagnostic)

@@ -181,7 +181,7 @@ func TestSchemaDescribesAliasesAndInputs(t *testing.T) {
 		}
 		if command.Name == "command run" {
 			foundCommandRun = true
-			if len(command.Aliases) != 1 || command.Aliases[0] != "run" {
+			if len(command.Aliases) != 2 || command.Aliases[0] != "cmd run" || command.Aliases[1] != "run" {
 				t.Fatalf("%+v", command)
 			}
 		}

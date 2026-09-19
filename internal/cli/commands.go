@@ -98,6 +98,7 @@ func (a *App) registerCommands() {
 	a.commands = append(a.commands,
 		Command{
 			Name:        "command list",
+			Aliases:     []string{"cmd list"},
 			Description: "List configured project commands and their execution summary.",
 			Options:     projectOptions,
 			Output: object(map[string]any{
@@ -108,6 +109,7 @@ func (a *App) registerCommands() {
 		},
 		Command{
 			Name:        "command inspect",
+			Aliases:     []string{"cmd inspect"},
 			Description: "Show the effective definition of one configured project command.",
 			Options:     projectOptions,
 			Arguments:   []Argument{{Name: "command", Required: true, Pattern: project.ProfilePattern}},
@@ -119,7 +121,7 @@ func (a *App) registerCommands() {
 		},
 		Command{
 			Name:        "command run",
-			Aliases:     []string{"run"},
+			Aliases:     []string{"cmd run", "run"},
 			Description: "Execute a configured command or a command after -- with profile values.",
 			Options:     profileOptions(true),
 			Arguments:   []Argument{{Name: "command", Pattern: project.ProfilePattern}},

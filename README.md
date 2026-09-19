@@ -54,16 +54,6 @@ npx skills add jinyongp/devtools
 사용하려면 `--global`을 추가하세요. 업데이트·제거와 오프라인 설치 방법은
 [Agent Skill 설치](docs/agent-skill.md)를 참고하세요.
 
-사용자가 직접 관리하는 표준 Skill은 project/user 공통 경로에서 조회·등록할 수 있습니다.
-
-```sh
-devtools skill list
-devtools skill inspect my-skill
-devtools skill register ./my-skill --scope project
-```
-
-자세한 registry 규칙과 user scope 등록은 [Agent Skill 설치](docs/agent-skill.md)를 참고하세요.
-
 ## 시작하기
 
 프로젝트 디렉터리로 이동한 뒤 아래 예시를 실행해 보세요. `myapp`은 프로젝트를
@@ -97,7 +87,6 @@ secret은 `devtools sec`로 등록하며 조회에는 메타데이터만 제공�
 | worktree별 `.localhost` 주소로 개발 서버 연결 | [로컬 reverse proxy](docs/proxy.md) |
 | 서버를 백그라운드로 실행하고 준비 완료까지 대기 | [프로세스](docs/processes.md) · [준비 확인](docs/process-readiness.md) |
 | 계획 수립, 작업 분담, 세션 인계 | [task와 workstream](docs/tasks.md) |
-| 표준 Agent Skill 조회·등록 | [Agent Skill 설치](docs/agent-skill.md#일반-agent-skill-registry) |
 | 작업 대상별 `AGENTS.md` 지침 확인 | [AGENTS.md 작업 지침](docs/agents-md.md) |
 | 브라우저에서 프로젝트 관리 | [dashboard](docs/management-api-contract.md) |
 | Profile 목록·상세·비교, 다른 환경으로 이동 | [Profile 관리](docs/profiles.md) |

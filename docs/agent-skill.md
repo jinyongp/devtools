@@ -4,39 +4,6 @@ devtools Agent Skill은 [Agent Skills 규약](https://agentskills.io/specificati
 표준 Skill입니다. 원본은 저장소의 `skills/devtools/SKILL.md`이며,
 `skills` CLI가 저장소에서 직접 발견하고 사용 중인 에이전트에 맞는 위치에 설치합니다.
 
-## 일반 Agent Skill registry
-
-devtools 자체도 에이전트와 무관한 표준 Skill registry를 제공합니다. 이 기능은
-특정 에이전트의 설치 디렉터리를 관리하는 대신 Agent Skills 공통 경로를 사용합니다.
-
-- 프로젝트: `<project>/.agents/skills`
-- 사용자: `~/.agents/skills`
-- 같은 이름이면 프로젝트 Skill이 사용자 Skill보다 우선합니다.
-
-현재 유효한 Skill metadata만 먼저 확인합니다.
-
-```sh
-devtools skill list --dir .
-devtools skill inspect my-skill --dir .
-```
-
-로컬의 표준 Skill 디렉터리를 등록할 수 있습니다.
-
-```sh
-devtools skill register ./my-skill --scope project --dir .
-devtools skill register ./my-skill --scope user
-```
-
-등록 대상에는 `SKILL.md`가 있어야 하고 frontmatter의 `name`이 디렉터리 이름과
-일치해야 합니다. 등록은 기존 Skill을 덮어쓰지 않으며 symlink나 특수 파일을 따라가지
-않습니다. scripts·references·assets는 일반 파일로 복사할 뿐 실행하지 않습니다.
-`skill list`는 name·description·revision 중심으로 반환하고, 전체 `SKILL.md`와
-resource 목록은 `skill inspect`에서 필요할 때 읽습니다.
-
-이 registry는 아래의 `npx skills` 흐름과 용도가 다릅니다. `npx skills`는
-devtools가 배포하는 공식 Skill을 여러 에이전트의 고유 설치 위치에 설치·업데이트하는
-도구이고, `devtools skill`은 에이전트에 종속되지 않는 공통 Skill source를 관리합니다.
-
 ## 설치
 
 프로젝트에서 사용할 때는 한 명령이면 됩니다.

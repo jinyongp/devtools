@@ -43,8 +43,7 @@ AGENTS.md는 해당 프로젝트와 디렉터리에서 따라야 할 작업 지�
 합치지 않습니다.
 
 - devtools guidance resolve TARGET: 실제 작업 대상에 적용되는 프로젝트 지침 원문
-- devtools skill list: 사용 가능한 Skill metadata
-- devtools skill inspect NAME: 선택한 Skill 원문과 resource inventory
+- Agent Skill: 사용하는 에이전트가 설치된 Skill을 자체 discovery 방식으로 로드
 
 에이전트나 호스트는 작업 Context에서 두 source를 함께 제공할 수 있습니다. 실제 권한,
 secret 접근, 명령 실행 허용 여부는 이 문서들의 내용으로 확장되지 않습니다.

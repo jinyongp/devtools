@@ -157,8 +157,8 @@ atomic push로 함께 올린다. 원격 main과 충돌하면 두 참조 모두 �
 
 자동 실행의 진입점은 `v0.1.0` 형태의 태그 푸시다. Release 워크플로는
 태그 커밋이 원격 main에 포함됐는지 확인한 뒤 macOS와 Linux 검사를 병렬로 실행한다.
-Linux 검사는 실제 Chromium Dashboard smoke와 Docker 설치 검증을 포함한다. 두 운영체제의
-검증이 모두 성공하면 네 플랫폼 배포물을 생성한다. 이후
+Linux 검사는 실제 Chromium Dashboard smoke와 설치된 release 시나리오를 포함하고,
+macOS도 같은 release 시나리오를 실행한다. 두 운영체제의 검증이 모두 성공하면 네 플랫폼 배포물을 생성한다. 이후
 플랫폼별 CLI 아카이브·체크섬, 플랫폼 독립 Agent Skill 아카이브·체크섬,
 설치기와 버전 파일을 GitHub Releases에 함께 게시한다.
 빌드에는 태그의 버전과 커밋 식별자를 기록한다.
@@ -177,13 +177,15 @@ Pages source는 저장소의 **Settings → Pages → Build and deployment → S
 
 `v0.2.0-rc.1`처럼 접미사가 붙은 태그는 사전 릴리스로 게시한다. 기본 설치는 GitHub가 최신으로 선택한 안정 릴리스를 사용하고, 사전 릴리스는 버전을 지정해 설치한다.
 
-## Docker에서 설치 환경 검증하기
+## 설치 환경 검증하기
 
 ```sh
-just verify-docker install
+just verify install
 ```
 
-[공통 Linux 샌드박스](../docker/README.md)의 `install` 시나리오로 검증한다. Docker 빌드 단계는 테스트용 두 버전의 배포물을 만든다. 별도의 Debian 실행 이미지에는 그 배포물, 설치 스크립트와 검증 도구를 넣는다. 실행 이미지는 Go 도구와 devtools 소스가 없는 일반 사용자 환경이다.
+[설치된 release 검증](../verify/README.md)의 `install` 시나리오로 검증한다.
+runner는 현재 OS와 architecture용 테스트 release 두 버전을 임시 디렉터리에 만들고,
+각 시나리오의 격리된 HOME에 실제 설치 스크립트로 실행 파일을 설치한다. Docker는 필요하지 않다.
 
 검증은 설치 명령부터 시작해 다음 동작을 확인한다.
 
@@ -195,15 +197,17 @@ just verify-docker install
 - 전역 데이터의 사용자 전용 파일 권한.
 - 손상된 배포물의 업데이트 실패와 기존 실행 파일 보존.
 - 정상 업데이트 후 버전 변경, profile 데이터·프로젝트 설정 보존.
-- 컨테이너 내부 HTTPS 서버에서 배포물 다운로드와 체크섬 확인.
+- 로컬 HTTPS 서버에서 배포물 다운로드와 체크섬 확인.
 - 최신 릴리스 조회, 버전 지정, 조회 실패 시 설치된 실행 파일 보존.
 - 같은 버전 재업데이트와 자식 프로세스 신호·종료 코드 전달.
 
-컨테이너는 자체 HOME과 테스트 데이터를 사용하며 종료 시 삭제된다. 실행 단계는 외부 네트워크를 차단하고, 호스트 디렉터리 마운트 없이 동작한다. 이미지와 빌드 캐시는 Docker에서 관리한다.
+각 시나리오는 자체 HOME, XDG 경로, 작업 디렉터리와 Git 전역 설정을 사용하며 종료 시
+자동으로 삭제된다. GitHub Actions에서는 job마다 새 hosted runner를 사용해 clean OS
+환경까지 보장한다. 로컬 실행도 사용자 devtools 데이터와 설정을 건드리지 않는다.
 
 테스트용 두 버전은 같은 소스에 서로 다른 버전 정보를 넣어 만든다. 이 검증은 설치·교체·데이터 보존을 확인한다. 향후 데이터 형식이 바뀌는 릴리스에서는 해당 이전 버전의 배포물을 함께 검증해야 한다.
 
-검증 아키텍처는 Docker 빌드 환경을 따른다. CI는 `just verify-docker`로 등록된 전체
-시나리오를 실행한다. 이때 `proxies` 시나리오는 설치된 실행 파일로 route 전달,
-WebSocket, 동적 port 변경, daemon 재시작과 listener reservation 유지를 확인한다.
-macOS·WSL 고유 동작은 각 운영 환경의 검증 범위다.
+Release CI의 macOS와 Linux job은 모두 `just verify`로 등록된 전체 시나리오를 실행한다.
+이때 `proxies` 시나리오는 설치된 실행 파일로 route 전달, WebSocket, 동적 port 변경,
+daemon 재시작과 listener reservation 유지를 확인한다. WSL 고유 동작은 실제 WSL
+환경에서 별도로 검증할 수 있다.

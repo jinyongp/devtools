@@ -274,6 +274,6 @@ official D3 7.9.0 bundle, with its license and SHA-256 in
 `internal/dashboard/assets/dependencies.json`. D3 declares no peer dependencies.
 CI actions use immutable commit references and just uses version 1.58.0.
 
-`just verify-docker` runs Go race tests and installed Linux scenarios for
+`just check` runs the Go race tests. `just verify` runs installed-release scenarios for
 concurrent claims, takeover, retries, worktree sharing, and dashboard sessions.
-The sandbox runs the compiled release with a private test home.
+Each scenario installs the compiled release into an isolated temporary home.

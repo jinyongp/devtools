@@ -130,6 +130,6 @@ doctor는 진단 보고서를 제공하고, 도구 설치나 설정 수정은 �
 
 ## 검증
 
-`just verify-docker doctor`는 설치된 Linux 바이너리로 진단·버전 일치·실행
-차단·env 선택·손상된 저장소·값 비노출을 확인한다. 공통 Docker 빌드 단계는
-Go race 테스트와 macOS/Linux의 amd64/arm64 빌드를 수행한다.
+`just verify doctor`는 설치된 release 바이너리로 진단·버전 일치·실행
+차단·env 선택·손상된 저장소·값 비노출을 확인한다. Go race 테스트는 `just check`에서,
+실제 설치 흐름은 macOS/Linux GitHub Actions와 로컬 `just verify`에서 같은 시나리오로 수행한다.

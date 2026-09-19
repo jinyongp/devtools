@@ -19,12 +19,12 @@ workstream `97b9d991-f326-49dc-b3c1-3d9b49413bfa`의 E01–E49 검토 항목을 
 | E37 | dashboard/edit_test + Browser Plugin: 실행 중·완료 후 편집, preview/저장, stale·removed-running·복원; 실행 action 권한 거절 |
 | E38 | edit_legacy_test / diagnostics.go: 대상 이름·조건·remedy argv; Dashboard는 사용자 문자열을 textContent로 표시 |
 | E39 | query_current_test / dashboard/compatibility_test: 구 cursor 및 인증·UI·task protocol 불일치 거절 |
-| E40–E41 | backup_current_test / backup·cleanup 패키지 및 Docker: v2 이력·scope 보존, context/receipt 폐기, stale/running archive 거절, excluded open 허용 |
+| E40–E41 | backup_current_test / backup·cleanup 패키지 및 설치된 release 시나리오: v2 이력·scope 보존, context/receipt 폐기, stale/running archive 거절, excluded open 허용 |
 | E42–E44 | edit_concurrency_test: edit와 edit/claim/done/record/sync/takeover/unclaim/close 경쟁, 점유 단일성·완료 유효성 |
 | E45 | edit_concurrency_test: 원자 교체 전 실패의 byte 보존, 교체 후 오류와 영수증 복구. WritePrivate의 temp-write/fsync/rename 순서 코드 대조 |
 | E46 | TestEditHonorsMaintenanceGate 및 maintenance_test: 복원·cleanup과 공유하는 gate 우선 잠금, 대기 취소·해제 후 실행, 복구 후 reader 일관성 |
 | E47 | assessment_test: 1,000 task DAG의 반복 위상 계산과 결정론적 영향 |
-| E48 | CLI 전체 및 Docker tasks/workflow/completion/discovery: 기존 독립 task, 설치된 명령·도움말·schema, 독립 Agent Skill, shell completion |
+| E48 | CLI 전체 및 설치된 release tasks/workflow/completion/discovery 시나리오: 기존 독립 task, 설치된 명령·도움말·schema, 독립 Agent Skill, shell completion |
 | E49 | execution_current_test: close 후 basis 교체·fail/blocked/skipped·unwaive, pass 회복 후에도 명시 close 필요 |
 
 구버전 호환성은 변경 전 commit `75fa433bc3c6834163c0888e6441bc8a122330b0`을 별도 임시 디렉터리에 추출해 subprocess로 컴파일·실행했다. 새 v2 fixture의 Read와 Execute가 모두 거절되고 journal 바이트가 바뀌지 않는 것을 확인했다.
@@ -36,7 +36,7 @@ Browser Plugin 검증은 `TestEditBrowserFixture`가 만드는 격리 profile을
 ```sh
 just check
 pnpm test:dashboard
-just verify-docker tasks workflow backup cleanup completion discovery
+just verify tasks workflow backup cleanup completion discovery
 ```
 
 실제 검증 결과와 코드 기준은 workstream의 task별 validation 및 통합 validation에 기록한다. syscall별 커널 장애를 모두 재현한 것으로 해석하지 않으며 저장 실패는 원자 교체 전·후 경계로 검증한다.

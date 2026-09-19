@@ -79,4 +79,4 @@ if fish:
         assert (expected in output) if expected else not output.strip(), (line, output)
     print('Installed fish completion resolves commands and respects argument boundaries')
 else:
-    print('Fish is unavailable; generated completion retained for Docker verification')
+    print('Fish is unavailable; generated completion retained for installed-release verification')

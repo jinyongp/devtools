@@ -46,6 +46,7 @@ jobs:
       - run: just check
       - run: just build
       - run: ./bin/devtools project inspect
+      - run: just verify
       - name: Package macOS Agent Skill reference
         env:
           TAG: ${{ github.ref_name }}
@@ -85,7 +86,9 @@ jobs:
       - run: corepack pnpm exec playwright install --with-deps chromium
       - run: just build
       - run: corepack pnpm test:dashboard:browser
-      - run: just verify-docker
+      - name: Install verification shells
+        run: sudo apt-get update && sudo apt-get install -y fish zsh
+      - run: just verify
 
   release:
     needs: [ci-macos, ci-linux]

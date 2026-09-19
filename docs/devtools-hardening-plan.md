@@ -9,7 +9,7 @@
 
 핵심 목표는 다음과 같다.
 
-1. 태그가 push된 뒤 실제 GitHub Release와 Homebrew 게시가 시작되기 전에 macOS/Linux/Docker/Dashboard 검증을 독립 CI 단계에서 모두 통과하도록 한다.
+1. 태그가 push된 뒤 실제 GitHub Release와 Homebrew 게시가 시작되기 전에 macOS/Linux 설치 release/Dashboard 검증을 독립 CI 단계에서 모두 통과하도록 한다.
 2. Dashboard JavaScript 회귀 테스트를 공식 `just check` gate에 포함한다.
 3. 이름 명령의 env·requirements·port/binding·실행 파일 준비 규칙을 하나의 application 계층으로 모아 `command run`, `doctor`, `process`, `project`, Dashboard의 의미 drift를 막는다.
 4. project lifecycle에서 자주 필요한 로그 조회와 재시작을 execution ID를 직접 찾지 않고 수행할 수 있게 한다.
@@ -68,7 +68,7 @@ Supervisor가 CLI `runCommand`를 다시 호출하는 현재 결합은 공통 ex
 
 ### Release workflow
 
-현재 workflow도 게시 전에 검증하지만 Linux `just check`와 `just verify-docker`가 `contents: write`를 가진 `release` job 내부에 있다. macOS 검증은 별도 job이므로 두 OS 검증 구조도 비대칭이다.
+현재 workflow도 게시 전에 검증하지만 Linux `just check`와 `just verify`가 `contents: write`를 가진 `release` job 내부에 있다. macOS 검증은 별도 job이므로 두 OS 검증 구조도 비대칭이다.
 
 따라서 게시 전 CI를 별도 job으로 분리하는 변경은 의미가 있다. 태그가 먼저 존재하는 것은 허용된 운영 모델이다.
 
@@ -98,7 +98,7 @@ Profile identity는 values/tasks만으로 끝나지 않고 port instance와 mana
 
 ### Browser/diagnostics/retention
 
-- Dashboard Docker workflow는 HTTP management API를 검증하지만 실제 browser engine은 사용하지 않는다.
+- Dashboard 설치 release workflow는 HTTP management API를 검증하지만 실제 browser engine은 사용하지 않는다.
 - `doctor`는 project prerequisite 중심이며 전체 devtools subsystem 상태를 한 번에 요약하지 않는다.
 - log expiry 7일은 `services`와 `cleanup`에 중복되어 있고, 30일 보존 기준도 cleanup 내부에 고정되어 있다. 정책 drift를 막을 중앙화 가치가 있다.
 
@@ -116,8 +116,8 @@ Profile identity는 values/tasks만으로 끝나지 않고 port instance와 mana
 - [x] **WI-002 — Release workflow CI/release 역할 분리**
   - `validate-tag` 유지.
   - `ci-macos`, `ci-linux`를 validate 이후 병렬 실행.
-  - macOS: `just check`, build, `project inspect`, Agent Skill reference package 생성.
-  - Linux: `just check`, `just verify-docker`.
+  - macOS: `just check`, build, `project inspect`, `just verify`, Agent Skill reference package 생성.
+  - Linux: `just check`, `just verify`.
   - `release`는 두 CI job 성공을 `needs`로 요구.
   - `release`에서는 재검증을 제거하고 네 플랫폼 package, cross-OS Skill 비교, GitHub Release 게시만 수행.
   - stable release 성공 뒤 Homebrew reusable workflow 실행은 유지.
@@ -182,7 +182,7 @@ Profile identity는 values/tasks만으로 끝나지 않고 port instance와 mana
   - Chromium 1종의 짧은 smoke journey만 추가.
   - dashboard login, profile 선택, navigation reload, 대표 mutation 1개를 실제 DOM/event/sessionStorage 환경에서 검증.
   - Playwright 도입 시 exact dependency pin과 browser 설치 비용을 CI와 분리해 관리.
-  - unit test와 Docker HTTP workflow를 대체하지 않고 보완한다.
+  - unit test와 설치 release HTTP workflow를 대체하지 않고 보완한다.
 
 ### Phase 5 — 문서와 Agent Skill 정합성
 
@@ -215,7 +215,7 @@ go test ./internal/cli ./internal/lifecycle ./internal/services ./internal/profi
 - missing tool/var/sec/env, bad PATH, port conflict, bind reference, env override를 모든 public start 경로에서 동일하게 검증.
 - failed cold start가 process record를 남기지 않는 회귀 테스트.
 - existing singleton 재사용과 process/project retry receipt 회귀 테스트.
-- Docker `doctor`, `processes`, `project_lifecycle`, `workflow`.
+- `just verify doctor processes project_lifecycle workflow`.
 
 ### VAL-004 — project UX
 
@@ -226,7 +226,7 @@ go test ./internal/cli ./internal/lifecycle ./internal/services ./internal/profi
 
 ### VAL-005 — Phase 4
 
-각 항목은 별도 package tests와 필요한 Docker/browser 검증을 정의한 뒤 구현한다. Profile retirement는 계약 검토가 끝나기 전 mutation 구현을 시작하지 않는다.
+각 항목은 별도 package tests와 필요한 설치 release/browser 검증을 정의한 뒤 구현한다. Profile retirement는 계약 검토가 끝나기 전 mutation 구현을 시작하지 않는다.
 
 ## 비범위
 
@@ -267,17 +267,24 @@ go test ./internal/cli ./internal/lifecycle ./internal/services ./internal/profi
   - 수정: restart stop mutation 결과 보존, restart inherited env preflight, 모든 actual cold start의 즉시 preflight, callback 시점 current project config/identity 재확인, browser CLI timeout, bootstrap credential 오류 로그 차단, public docs drift 정리.
   - unresolved finding: 없음.
   - cycle validation: execution/doctor/process/services/lifecycle/cli/dashboard/diagnostics/retention/cleanup/tasks race PASS; 전체 go vet PASS; Dashboard JS 11/11 PASS; browser spec syntax/discovery PASS; actionlint, frozen pnpm lockfile, diff-check PASS.
-  - 환경 제약: 실제 Chromium launch, Docker, uvx Skill validator는 기존 로컬 제약으로 Release CI 확인이 필요.
+  - 당시 환경 제약: 실제 Chromium launch, Docker, uvx Skill validator는 로컬에서 확인할 수 없어 Release CI 확인이 필요했다.
 - Cycle 2: 완료. Cycle 1 수정 파일과 직접 계약을 affected-axis re-review했다.
   - 추가 수정: browser smoke 실패 시 cleanup 보장 및 primary error 보존, diagnostics profile/process active count를 동일 live snapshot으로 정합화.
   - 재검토 결과: 선택한 모든 축에서 actionable finding 없음. 동일 root cause의 oscillation 없음.
   - scoped validation: Cycle 1과 동일한 race/vet/JS/Playwright discovery/actionlint/frozen-lock/diff-check가 최신 변경 기준으로 다시 PASS.
-  - 남은 검증 제약: 실제 Chromium launch는 Playwright CDN 403, Docker는 daemon/socket 부재, 공식 Agent Skill validator는 uvx 부재. 모두 Release CI에서 이미 필수 gate로 구성됨.
+  - 당시 남은 검증 제약: 실제 Chromium launch는 Playwright CDN 403, Docker는 daemon/socket 부재, 공식 Agent Skill validator는 uvx 부재였다. 모두 Release CI gate로 확인했다.
 - Cycle 3: 완료. Preflight/readiness affected-axis를 다시 검토했다.
   - 추가 수정: lifecycle completion이 최초 project snapshot 대신 실제 started process의 `ready_configured`를 사용하도록 변경해 operation 중 readiness 설정 변경을 반영. 모든 actual cold start에 immediate preflight를 유지하면서 의미 없는 receipt boolean을 제거.
   - 재검토 결과: stale project config, inherited env, restart stop-result, cold-start preflight, actual readiness 경계에서 추가 actionable finding 없음. oscillation 없음.
   - scoped validation: execution/doctor/process/services/lifecycle/cli/dashboard/diagnostics/retention/cleanup/tasks race PASS; 전체 go vet PASS; Dashboard JS 11/11 PASS; browser syntax/discovery PASS; actionlint, frozen pnpm lockfile, diff-check, Agent Skill package 생성 PASS.
-  - 남은 검증 제약: 실제 Chromium launch는 Playwright CDN 403, Docker는 daemon/socket 부재, 공식 Agent Skill validator는 uvx 부재. Release CI에서 모두 검증하도록 구성됨.
+  - 당시 남은 검증 제약: 실제 Chromium launch는 Playwright CDN 403, Docker는 daemon/socket 부재, 공식 Agent Skill validator는 uvx 부재였다. Release CI에서 검증하도록 구성했다.
+
+## Verification follow-up — 2026-09-19
+
+- Docker sandbox와 `verify-docker` recipe를 제거하고 설치 시나리오를 `verify/`로 이동했다.
+- `just verify`가 현재 host용 테스트 release 두 버전과 Agent Skill artifact를 임시 생성해 격리된 HOME/XDG에서 전체 시나리오를 실행한다.
+- Release CI의 macOS와 Linux hosted runner가 모두 `just verify`를 실행해 clean OS 검증을 담당한다.
+- Go unit test는 실제 port/listener가 직접 대상이 아닌 경우 probe/listener 주입으로 결정적으로 유지한다.
 
 ## Release follow-up — v0.16.0 Linux CI
 

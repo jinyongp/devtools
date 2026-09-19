@@ -218,7 +218,7 @@ proxy daemon은 전역 singleton이므로 profile·instance·이름 명령을 �
 
 ### 6. 설치 통합 검증
 
-- Docker 설치 시나리오에 두 실행 위치와 두 backend를 만든다.
+- 설치된 release 시나리오에 두 실행 위치와 두 backend를 만든다.
 - 서로 다른 port가 서로 다른 hostname으로 전달되는지 확인한다.
 - backend 중단, hostname 충돌, proxy 재시작과 종료를 확인한다.
 - daemon start 시각을 유지한 채 assignment를 바꾸고 새 backend로 전환되는지
@@ -244,7 +244,7 @@ proxy daemon은 전역 singleton이므로 profile·instance·이름 명령을 �
 - WebSocket 기반 개발 서버 HMR 연결이 동작한다.
 - CLI process가 끝난 뒤 daemon이 유지되고, stop은 해당 daemon만 종료한다.
 - 공개 Agent Skill이 proxy 설정 준비와 전역 daemon 운용 규칙을 안내한다.
-- 관련 package race test, `go vet ./...`, macOS/Linux build, Docker proxy 시나리오가
+- 관련 package race test, `go vet ./...`, macOS/Linux build, 설치된 release proxy 시나리오가
   통과한다.
 
 ## 검증 명령
@@ -254,7 +254,7 @@ go test -race ./internal/project ./internal/ports ./internal/proxy ./internal/cl
 go vet ./...
 GOOS=darwin GOARCH=arm64 go build ./cmd/devtools
 GOOS=linux GOARCH=amd64 go build ./cmd/devtools
-just verify-docker proxies
+just verify proxies
 ```
 
 실제 브라우저 WebSocket과 IPv6 확인은 macOS host 검증 기록으로 남긴다.

@@ -1,7 +1,5 @@
 set positional-arguments
 
-export VERIFY_IMAGE := env('VERIFY_IMAGE', 'devtools-sandbox:local')
-
 default:
     @just --list
 
@@ -27,7 +25,7 @@ check-dashboard:
 check-installer:
     sh -n scripts/install.sh
     sh scripts/check-installer.sh
-    DEVTOOLS_TEST_README=README.md DEVTOOLS_TEST_INSTALL_DOC=docs/install.md python3 docker/scenarios/bootstrap.py
+    DEVTOOLS_TEST_README=README.md DEVTOOLS_TEST_INSTALL_DOC=docs/install.md python3 verify/scenarios/bootstrap.py
 
 check-skill:
     sh scripts/validate-skill.sh
@@ -50,6 +48,5 @@ release version:
 release-skill version:
     VERSION="$1" sh scripts/package-skill.sh
 
-verify-docker +scenarios='all':
-    docker build -f docker/Dockerfile -t "$VERIFY_IMAGE" .
-    docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges "$VERIFY_IMAGE" "$@"
+verify +scenarios='all':
+    python3 verify/run.py "$@"

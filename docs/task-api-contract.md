@@ -193,4 +193,4 @@ export와 history는 컨텍스트와 점유 증명을 제거한 공개 기록 �
 | C17 | 현재 task와 다른 claim context로 task update | context_invalid와 context_reason:target_mismatch. |
 | C18 | checkpoint 성공 후 task 조회 | profile revision·run 활동·updated_at 변경, definition_revision 유지, affected_ids에 task 포함. |
 
-위 시나리오는 전이·응답의 일관성 기준이다. `internal/tasks`의 race 테스트와 `docker/scenarios/tasks.py`의 설치 검증에서 동시 점유, 인계, 이전 컨텍스트 거절, 완료 재시도, worktree 공유, 검증 근거와 마감, 조회 세션 경계를 확인한다. `just verify-docker`로 실행한다.
+위 시나리오는 전이·응답의 일관성 기준이다. `internal/tasks`의 race 테스트와 `verify/scenarios/tasks.py`의 설치된 release 검증에서 동시 점유, 인계, 이전 컨텍스트 거절, 완료 재시도, worktree 공유, 검증 근거와 마감, 조회 세션 경계를 확인한다. `just verify`로 실행한다.

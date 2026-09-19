@@ -344,7 +344,7 @@ Doctor `remedy -> remedies` 변경과 `profile import` preview/apply 전환은 �
 | PP-08 | project batch lifecycle core | PP-07 | batch receipt와 partial/retry-safe start/stop orchestration 구현 |
 | PP-09 | `project up/status/down` CLI | PP-08 | public schema와 command UX가 lifecycle core에 연결됨 |
 | PP-10 | protocol v3, 문서와 Agent Skill 정리 | PP-04, PP-06, PP-09 | public contract와 migration 설명이 실제 schema와 일치 |
-| PP-11 | 설치 바이너리 통합 검증 | PP-01~PP-10 | Docker와 release 수준 검증이 모든 새 흐름을 통과 |
+| PP-11 | 설치 바이너리 통합 검증 | PP-01~PP-10 | 설치된 release 시나리오가 모든 새 흐름을 통과 |
 | PP-12 | canonical location identity hardening | PP-09 | project/doctor/task가 공통 location 규칙을 사용하고 alias 경로가 중복 identity를 만들지 않음 |
 
 구현은 가능한 한 위 단위로 검증하고 독립 commit한다. PP-01~PP-03처럼 강하게 연결된 내부 기반은
@@ -431,10 +431,10 @@ gofmt -w cmd internal scripts skills
 go vet ./...
 go test -race ./...
 just check
-just verify-docker
+just verify
 ```
 
-Docker 시나리오는 기존 `backup`, `doctor`, `discovery`, `processes`, `workflow` 회귀를 유지하고,
+설치된 release 시나리오는 기존 `backup`, `doctor`, `discovery`, `processes`, `workflow` 회귀를 유지하고,
 profile 관리와 project lifecycle을 별도 시나리오로 추가한다. 설치된 바이너리의 help/schema/completion도
 함께 확인한다.
 
@@ -476,4 +476,4 @@ Command group은 실제 `project up COMMAND...` 사용 패턴이 쌓인 뒤 별�
 - Partial failure와 응답 유실 뒤 재시도가 중복 process를 만들지 않는다.
 - 저장·비교되는 project/execution location이 canonical identity를 사용해 filesystem alias가 중복 instance/run을 만들지 않는다.
 - protocol v3 schema, 문서, Agent Skill과 실제 출력이 일치한다.
-- 전체 race/vet/check/Docker 통합 검증이 통과한다.
+- 전체 race/vet/check/설치 release 통합 검증이 통과한다.

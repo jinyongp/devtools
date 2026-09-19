@@ -143,5 +143,5 @@ Dashboard의 Processes 화면에서 `Check readiness`로 동일 검사를 수행
 인증·profile 일치 검사를 적용하며 매 요청마다 새 관측을 반환한다.
 준비 검사에는 변경 영수증을 사용하지 않는다.
 
-설치 검증 실행법은 [검증 안내](../docker/README.md), 구현 구성과 검증 결과는
+설치 검증 실행법은 [검증 안내](../verify/README.md), 구현 구성과 검증 결과는
 [관리 로드맵](management-roadmap.md#프로세스-준비-확인-확장)을 참고한다.

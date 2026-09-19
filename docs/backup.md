@@ -79,4 +79,4 @@ devtools backup restore --file /backups/myapp.age --identity-file /secure/devtoo
 
 주요 오류는 `invalid_backup`, `invalid_recipient`, `backup_not_configured`, `profile_exists`, `revision_conflict`, `request_conflict`, `storage_error`, `backup_error`다. CLI 입력 형식 오류는 기존 `invalid_argument` 계약을 따른다. 오류에는 복호화된 값이나 키를 포함하지 않는다.
 
-관련 테스트는 암호화 왕복, 잘못된 키, 손상된 파일, stale preview, 재시도, 실행 컨텍스트 해제와 중단 복원을 검증한다. Docker의 `backup` 시나리오는 설치된 실행 파일로 키 준비부터 복구까지 확인한다.
+관련 테스트는 암호화 왕복, 잘못된 키, 손상된 파일, stale preview, 재시도, 실행 컨텍스트 해제와 중단 복원을 검증한다. `just verify backup`은 설치된 release 실행 파일로 키 준비부터 복구까지 확인한다.

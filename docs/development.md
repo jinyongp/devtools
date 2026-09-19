@@ -9,7 +9,7 @@ Requires Go 1.27.x, Node.js 24.x, Git (for integration tests), just, and uv with
 ```sh
 just build
 just check
-just verify-docker proxies
+just verify proxies
 ./bin/devtools version
 ./bin/devtools schema
 ./bin/devtools project inspect
@@ -29,13 +29,13 @@ Tag-triggered release validation runs on macOS and Ubuntu 24.04 with
 Go 1.27.1. The workflow disables setup-uv caching because uv is used only to run
 the Agent Skills validator and this repository has no Python dependency manifest.
 WSL uses the Linux build; testing in an actual WSL environment is a separate check.
-`just verify-docker proxies`는 배포 아카이브를 설치한 격리 환경에서 HTTP route,
+`just verify proxies`는 배포 아카이브를 설치한 격리 환경에서 HTTP route,
 WebSocket, 동적 port 변경, daemon 재시작과 listener reservation을 검증한다.
 
 Go 단위 테스트는 OS가 관리하는 비어 있는 port 번호를 미리 골라 닫은 뒤 재사용하지 않는다.
 port 가용성이나 proxy listener가 테스트의 직접 대상이 아니면 주입 가능한 probe/listener를
 사용해 상태 전이와 저장소 동작을 결정적으로 검증한다. 실제 TCP bind, occupied/free 판정,
-IPv4/IPv6 listener, 설치된 바이너리의 proxy 동작은 `verify-docker ports proxies`에서 검증한다.
+IPv4/IPv6 listener, 설치된 바이너리의 proxy 동작은 `just verify ports proxies`에서 검증한다.
 이 경계를 유지해 호스트의 포트 사용 상태나 병렬 프로세스 때문에 단위 테스트가 흔들리지 않게 한다.
 
 
@@ -71,7 +71,7 @@ pnpm test:dashboard:browser
 
 Smoke는 dashboard 로그인, Values 화면의 변수 수정, URL navigation과 session 유지 상태의 reload,
 CLI에서 확인한 최종 값을 한 흐름으로 검증한다. Release의 Linux CI에서는 Chromium의 OS 의존성도
-함께 설치하며 이 smoke가 통과한 뒤 Docker 설치 검증을 실행한다. Playwright는
+함께 설치하며 이 smoke가 통과한 뒤 설치된 release 시나리오를 실행한다. Playwright는
 `@playwright/test` 1.63.0으로 정확히 고정한다.
 
 ## 도구 추가
@@ -85,7 +85,7 @@ CLI에서 확인한 최종 값을 한 흐름으로 검증한다. Release의 Linu
 - Test valid input, failure behavior, and command-specific risks.
 - Update the public guide and Agent Skill when the command changes how
   users or agents should prepare, retry, or coordinate work.
-- Add an installed-binary Docker scenario when packaging, storage compatibility,
+- Add an installed-release scenario when packaging, storage compatibility,
   or detached process behavior is part of the feature.
 
 
@@ -97,15 +97,15 @@ pnpm release --publish
 ```
 
 버전을 추천받고 main과 태그를 함께 올린다. 태그가 Release 워크플로를 시작하면
-태그 검증 뒤 macOS와 Linux CI를 병렬로 실행한다. Linux CI는 Agent Skill의 local/public `skills` discovery, 실제 Chromium dashboard smoke와
-Docker 설치 검증까지 통과해야 한다. macOS와 Linux CI가 모두 성공한 뒤 CLI·Agent Skill을
+태그 검증 뒤 macOS와 Linux CI를 병렬로 실행한다. Linux CI는 Agent Skill의 local/public `skills` discovery와 실제 Chromium dashboard smoke를 확인하고,
+macOS와 Linux CI는 모두 `just verify`로 설치된 release 시나리오를 통과해야 한다. 두 CI가 성공한 뒤 CLI·Agent Skill을
 패키징하고 GitHub Release를 게시한다. 안정 릴리스 게시 후에는 `.github/workflows/pages.yml`이 릴리스의
 `install.sh`를 `jinyongp.dev/devtools/install.sh`에 배포한다. Pages source는 저장소
 설정에서 GitHub Actions로 한 번 활성화해야 하며, workflow를 수동 실행하면 최신 안정
 릴리스를 바로 게시할 수 있다. 로컬에서 스킬 배포물만 확인하려면
 `just release-skill VERSION`을 실행한다.
 [배포 상세](install.md#github-releases-게시)와
-[격리된 설치 검증](../docker/README.md)을 참고한다.
+[설치된 release 검증](../verify/README.md)을 참고한다.
 
 ### Homebrew 배포
 

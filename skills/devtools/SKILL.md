@@ -115,27 +115,6 @@ Claims coordinate records; coordinate overlapping files separately.
 Checkpoint decisions, remaining work, next action, and evidence before a handoff.
 Checkpoint and release target the run ID returned by claim or takeover; done and
 sync target the task ID.
-
-When a task has accumulated substantial history, before a handoff, or after an
-important decision shift, read `task context TASK_ID`. Treat its current item,
-documents, validations, `context_basis`, and canonical `delta` as authoritative.
-If a compact explanation will help the next session, save one through the current
-Run checkpoint using the returned basis:
-
-```sh
-devtools task checkpoint RUN_ID --summary 'Current state and rationale' \
-  --compaction-fingerprint FINGERPRINT --compaction-through SEQUENCE \
-  --context CONTEXT --request-id UUID
-```
-
-Include decisions, remaining work, next action, blockers, and validation record
-IDs when relevant. Do not compact after every tool call. A
-`revision_conflict` means related canonical state changed; reread context and
-reassess before submitting a new summary. Compaction is explanatory and never
-replaces history, current definitions, or validation evidence. Check
-`delta_status` and `truncated` before assuming the returned supporting records
-are complete.
-
 In a new session, use `task current --dir PATH` and `task context TASK_ID`,
 then inspect the actual working tree. Resume with an existing valid context,
 take over the observed active run using `--expected-run`, or claim released work.

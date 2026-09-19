@@ -212,12 +212,6 @@ func TestCLIIdentifierAndDescriptionContracts(t *testing.T) {
 			if name == "task validation record" && option["name"] == "result" && option["pattern"] != `^(pass|fail|blocked|skipped)$` {
 				t.Errorf("validation result pattern = %v", option["pattern"])
 			}
-			if name == "task checkpoint" && option["name"] == "compaction-fingerprint" && option["pattern"] != `^[0-9a-f]{64}$` {
-				t.Errorf("compaction fingerprint pattern = %v", option["pattern"])
-			}
-			if name == "task checkpoint" && option["name"] == "compaction-through" && option["pattern"] != positiveIntegerPattern {
-				t.Errorf("compaction through pattern = %v", option["pattern"])
-			}
 			if option["name"] == "if-revision" && option["pattern"] != positiveIntegerPattern {
 				t.Errorf("%s revision pattern = %v", name, option["pattern"])
 			}
@@ -256,8 +250,6 @@ func TestTaskQueryOptionsRejectValuesOutsidePublishedRanges(t *testing.T) {
 		{"task", "workstream", "plan", "show", tasks.ID(), "--at-revision", "0"},
 		{"task", "validation", "record", tasks.ID(), "--result", "unknown", "--request-id", tasks.ID()},
 		{"task", "workstream", "update", tasks.ID(), "--title", "x", "--if-revision", "0", "--request-id", tasks.ID()},
-		{"task", "checkpoint", tasks.ID(), "--summary", "x", "--compaction-fingerprint", "bad", "--compaction-through", "1", "--request-id", tasks.ID()},
-		{"task", "checkpoint", tasks.ID(), "--summary", "x", "--compaction-fingerprint", strings.Repeat("a", 64), "--compaction-through", "0", "--request-id", tasks.ID()},
 	} {
 		var out, diagnostic bytes.Buffer
 		code := a.Run(context.Background(), args, IO{In: strings.NewReader(""), Out: &out, Err: &diagnostic})

@@ -132,7 +132,7 @@ var Definitions = []Definition{
 	{Action: "run.resumed", Command: "resume", Kind: "task", OptionalTarget: true, Context: true},
 	{Action: "run.taken_over", Command: "takeover", Kind: "task", Target: true},
 	{Action: "run.revoked", Command: "unclaim", Kind: "task", Target: true, Fields: []string{"reason"}, Required: []string{"reason"}, Revision: true},
-	{Action: "run.checkpointed", Command: "checkpoint", Kind: "run", Target: true, Fields: []string{"summary", "decisions", "validation_record_ids", "remaining", "next_action", "blockers", "compaction_fingerprint", "compaction_through"}, Required: []string{"summary"}, Context: true},
+	{Action: "run.checkpointed", Command: "checkpoint", Kind: "run", Target: true, Fields: []string{"summary", "decisions", "validation_record_ids", "remaining", "next_action", "blockers"}, Required: []string{"summary"}, Context: true},
 	{Action: "run.released", Command: "release", Kind: "run", Target: true, Fields: []string{"summary", "decisions", "validation_record_ids", "remaining", "next_action", "blockers"}, Context: true},
 	{Action: "task.completed", Command: "done", Kind: "task", Target: true, Fields: []string{"summary", "validation_record_ids", "commits"}, Required: []string{"summary"}, Context: true},
 	{Action: "validation.add", Command: "validation add", Kind: "validation", Fields: []string{"title", "method", "required", "task_id", "workstream_id", "acceptance_keys"}, Required: []string{"title", "method"}},
@@ -578,11 +578,6 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 			}
 			b["previous_signature"] = run.Signature
 			b["definition_signature"] = signature
-		}
-		if r.Action == "run.checkpointed" {
-			if e := s.validateTaskCompaction(i, b); e != nil {
-				return fail(e)
-			}
 		}
 		if r.Action == "task.completed" {
 			if s.Version == JournalVersion {

@@ -151,7 +151,7 @@ jobs:
   homebrew:
     needs: release
     if: ${{ !contains(github.ref_name, '-') }}
-    uses: jinyongp/homebrew-tap/.github/workflows/publish-formula.yml@5e298c2d25af8f85e1d95b403cbe59c98b9a0b2d
+    uses: jinyongp/homebrew-tap/.github/workflows/publish-formula.yml@1f250b93ce0d9ca875356948a953b7cfd2accf82
     with:
       formula: devtools
       ref: ${{ github.sha }}

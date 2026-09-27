@@ -57,11 +57,22 @@ type Result struct {
 	Replayed bool      `json:"replayed"`
 }
 type receipt struct {
-	Plan   string   `json:"plan"`
-	IDs    []string `json:"ids"`
-	Done   bool     `json:"done"`
-	Result Result   `json:"result"`
+	Plan   string      `json:"plan"`
+	IDs    []string    `json:"ids"`
+	Items  []candidate `json:"items,omitempty"`
+	Done   bool        `json:"done"`
+	Result Result      `json:"result"`
 }
+
+type logStampOwner struct {
+	Mode       string `json:"mode"`
+	Profile    string `json:"profile"`
+	EndedAt    string `json:"ended_at,omitempty"`
+	Capture    *bool  `json:"capture_logs,omitempty"`
+	ArchiveID  string `json:"archive_id,omitempty"`
+	ArchivedAt string `json:"archived_at,omitempty"`
+}
+
 type location struct {
 	Instance    ports.Instance     `json:"instance"`
 	Assignments []ports.Assignment `json:"assignments"`
@@ -89,6 +100,82 @@ func write(path string, v any) error {
 	return maintenance.Write(path, b)
 }
 func digest(b []byte) string { return fmt.Sprintf("%x", sha256.Sum256(b)) }
+
+func recordLogOwner(record services.Record) services.ArchivedOwner {
+	capture := record.Capture
+	return services.ArchivedOwner{Profile: record.Profile, EndedAt: record.EndedAt, Capture: &capture}
+}
+
+func logOwnerStamp(owner services.ArchivedOwner, payload []byte) (string, bool) {
+	var stampOwner logStampOwner
+	if owner.Legacy {
+		if !project.ValidProfile(owner.Profile) || !validID(owner.ArchiveID) || owner.ArchivedAt.IsZero() {
+			return "", false
+		}
+		stampOwner = logStampOwner{
+			Mode:       "legacy_completed_process",
+			Profile:    owner.Profile,
+			ArchiveID:  owner.ArchiveID,
+			ArchivedAt: owner.ArchivedAt.UTC().Format(time.RFC3339Nano),
+		}
+	} else {
+		if !project.ValidProfile(owner.Profile) || owner.EndedAt == nil || owner.Capture == nil {
+			return "", false
+		}
+		capture := *owner.Capture
+		stampOwner = logStampOwner{
+			Mode:    "record",
+			Profile: owner.Profile,
+			EndedAt: owner.EndedAt.UTC().Format(time.RFC3339Nano),
+			Capture: &capture,
+		}
+	}
+	encoded, err := json.Marshal(stampOwner)
+	if err != nil {
+		return "", false
+	}
+	h := sha256.New()
+	_, _ = h.Write(encoded)
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write(payload)
+	return fmt.Sprintf("%x", h.Sum(nil)), true
+}
+
+func logOwnerExpired(owner services.ArchivedOwner, now time.Time) bool {
+	if owner.Legacy {
+		return true
+	}
+	return owner.Capture != nil && *owner.Capture && owner.EndedAt != nil && now.Sub(*owner.EndedAt) > retention.RawProcessLogAge
+}
+
+func (e Engine) executionIDFromProcessSource(path string) string {
+	dir := filepath.Dir(path)
+	if filepath.Dir(dir) != filepath.Join(e.Data, "processes") {
+		return ""
+	}
+	id := filepath.Base(dir)
+	if !validID(id) {
+		return ""
+	}
+	return id
+}
+
+func removeAndSync(path string) error {
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	syncErr := dir.Sync()
+	closeErr := dir.Close()
+	if syncErr != nil {
+		return syncErr
+	}
+	return closeErr
+}
+
 func (e Engine) archivePath(id, name string) string {
 	return filepath.Join(e.Data, "archives", id, name)
 }
@@ -137,8 +224,11 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 	items := []candidate{}
 	now := time.Now()
 	cutoff := now.Add(-retention.CleanupCandidateAge)
+	addWithStamp := func(kind, p, path string, b []byte, stamp string) {
+		items = append(items, candidate{Item: Item{ID: tasks.ID(), Kind: kind, Profile: p, Source: path, Bytes: int64(len(b))}, Stamp: stamp})
+	}
 	add := func(kind, p, path string, b []byte) {
-		items = append(items, candidate{Item: Item{ID: tasks.ID(), Kind: kind, Profile: p, Source: path, Bytes: int64(len(b))}, Stamp: digest(b)})
+		addWithStamp(kind, p, path, b, digest(b))
 	}
 	// Query snapshots are disposable and have explicit expiry timestamps.
 	for _, dir := range []string{filepath.Join(e.Cache, "task-queries"), filepath.Join(e.Cache, "dashboard", "queries")} {
@@ -207,11 +297,37 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 			path := filepath.Join(base, "output.log")
 			b, err := maintenance.Read(path, 1<<20)
 			if err == nil {
-				add("expired_log", r.Profile, path, b)
+				stamp, ok := logOwnerStamp(recordLogOwner(r), b)
+				if !ok {
+					return nil, fail("storage_error")
+				}
+				addWithStamp("expired_log", r.Profile, path, b, stamp)
 			} else if !errors.Is(err, os.ErrNotExist) {
 				return nil, fail("storage_error")
 			}
 		}
+	}
+	archived, pe := manager.ArchivedExecutions(profile)
+	if pe != nil {
+		return nil, pe
+	}
+	for _, archivedExecution := range archived {
+		if !logOwnerExpired(archivedExecution.Owner, now) {
+			continue
+		}
+		path := filepath.Join(e.Data, "processes", archivedExecution.ID, "output.log")
+		b, err := maintenance.Read(path, 1<<20)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, fail("storage_error")
+		}
+		stamp, ok := logOwnerStamp(archivedExecution.Owner, b)
+		if !ok {
+			return nil, fail("storage_error")
+		}
+		addWithStamp("expired_log", archivedExecution.Owner.Profile, path, b, stamp)
 	}
 	var config struct {
 		Directory string `json:"directory"`
@@ -310,6 +426,118 @@ func (e Engine) Preview(ctx context.Context, profile string) (Plan, *protocol.Er
 	}
 	return out, nil
 }
+
+func mergeArchive(result *Result, archive Archive) *protocol.Error {
+	for index := range result.Archives {
+		if result.Archives[index].ID != archive.ID {
+			continue
+		}
+		if result.Archives[index].Item != archive.Item {
+			return fail("storage_error")
+		}
+		result.Archives[index] = archive
+		return nil
+	}
+	result.Archives = append(result.Archives, archive)
+	return nil
+}
+
+func (e Engine) validateProgress(selected []candidate, result Result) *protocol.Error {
+	allowed := map[string]Item{}
+	for _, candidate := range selected {
+		allowed[candidate.ID] = candidate.Item
+	}
+	seen := map[string]bool{}
+	for _, archive := range result.Archives {
+		item, ok := allowed[archive.ID]
+		if !ok || item != archive.Item || seen[archive.ID] {
+			return fail("storage_error")
+		}
+		seen[archive.ID] = true
+	}
+	return nil
+}
+func sameCandidateIDs(items []candidate, ids []string) bool {
+	if len(items) != len(ids) {
+		return false
+	}
+	got := make([]string, 0, len(items))
+	for _, item := range items {
+		got = append(got, item.ID)
+	}
+	sort.Strings(got)
+	for i := range ids {
+		if got[i] != ids[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (e Engine) selectedFromSnapshot(plan snapshot, ids []string) ([]candidate, *protocol.Error) {
+	byID := map[string]candidate{}
+	for _, c := range plan.Items {
+		if _, exists := byID[c.ID]; exists {
+			return nil, fail("storage_error")
+		}
+		byID[c.ID] = c
+	}
+	selected := make([]candidate, 0, len(ids))
+	for _, id := range ids {
+		c, ok := byID[id]
+		if !ok {
+			return nil, fail("invalid_argument")
+		}
+		if !e.validItem(c.Item) || c.Stamp == "" {
+			return nil, fail("invalid_argument")
+		}
+		selected = append(selected, c)
+	}
+	sort.Slice(selected, func(i, j int) bool {
+		left, right := selected[i].Kind+":"+selected[i].Source, selected[j].Kind+":"+selected[j].Source
+		if left == right {
+			return selected[i].ID < selected[j].ID
+		}
+		return left < right
+	})
+	return selected, nil
+}
+
+func (e Engine) archivedCandidate(c candidate) (Archive, []byte, bool, *protocol.Error) {
+	var archive Archive
+	err := tasks.ReadPrivate(e.archivePath(c.ID, "entry.json"), &archive)
+	if errors.Is(err, os.ErrNotExist) {
+		return archive, nil, false, nil
+	}
+	if err != nil {
+		return archive, nil, false, fail("storage_error")
+	}
+	if archive.Item != c.Item || archive.RestoredAt != nil || archive.PurgedAt != nil {
+		return archive, nil, false, fail("revision_conflict")
+	}
+	payload, err := maintenance.Read(e.archivePath(c.ID, "payload"), 128<<20)
+	if err != nil {
+		return archive, nil, false, fail("storage_error")
+	}
+	if c.Kind == "expired_log" {
+		executionID := e.executionIDFromProcessSource(c.Source)
+		if executionID == "" {
+			return archive, nil, false, fail("storage_error")
+		}
+		owner, ownerErr := (services.Store{Data: e.Data}).LogOwner(executionID)
+		if ownerErr != nil {
+			return archive, nil, false, fail("revision_conflict")
+		}
+		stamp, ok := logOwnerStamp(owner, payload)
+		if !ok || stamp != c.Stamp {
+			return archive, nil, false, fail("revision_conflict")
+		}
+	} else if digest(payload) != c.Stamp {
+		return archive, nil, false, fail("revision_conflict")
+	}
+	return archive, payload, true, nil
+}
+
 func (e Engine) Apply(ctx context.Context, planID string, ids []string, requestID string) (Result, *protocol.Error) {
 	out := Result{Archives: []Archive{}}
 	if !validID(planID) || !validID(requestID) || len(ids) == 0 {
@@ -327,9 +555,12 @@ func (e Engine) Apply(ctx context.Context, planID string, ids []string, requestI
 		return out, err
 	}
 	defer release()
+
 	receiptPath := filepath.Join(e.Data, "cleanup-receipts", requestID+".json")
 	var previous receipt
-	if er := tasks.ReadPrivate(receiptPath, &previous); er == nil {
+	resumed := false
+	if readErr := tasks.ReadPrivate(receiptPath, &previous); readErr == nil {
+		resumed = true
 		if previous.Plan != planID || strings.Join(previous.IDs, ",") != strings.Join(ids, ",") {
 			return out, fail("request_conflict")
 		}
@@ -337,76 +568,209 @@ func (e Engine) Apply(ctx context.Context, planID string, ids []string, requestI
 			previous.Result.Replayed = true
 			return previous.Result, nil
 		}
-	} else if !errors.Is(er, os.ErrNotExist) {
+	} else if !errors.Is(readErr, os.ErrNotExist) {
 		return out, fail("storage_error")
 	}
-	var plan snapshot
-	if tasks.ReadPrivate(filepath.Join(e.Cache, "cleanup", planID+".json"), &plan) != nil || plan.ID != planID || time.Now().After(plan.Expires) {
-		return out, fail("preview_expired")
-	}
-	fresh, err := e.scan(ctx, plan.Profile)
-	if err != nil {
-		return out, err
-	}
-	current := map[string]candidate{}
-	for _, c := range fresh {
-		current[c.Kind+":"+c.Source] = c
-	}
-	selected := []candidate{}
-	for _, id := range ids {
-		found := false
-		for _, c := range plan.Items {
-			if c.ID != id {
-				continue
-			}
-			if !e.validItem(c.Item) {
-				return out, fail("invalid_argument")
-			}
-			found = true
-			var archived Archive
-			if tasks.ReadPrivate(e.archivePath(id, "entry.json"), &archived) == nil {
-				if archived.Item != c.Item {
-					return out, fail("revision_conflict")
-				}
-				if _, er := maintenance.Read(e.archivePath(id, "payload"), 128<<20); er != nil {
-					return out, fail("storage_error")
-				}
-				selected = append(selected, c)
-				break
-			}
-			f, ok := current[c.Kind+":"+c.Source]
-			if !ok || f.Stamp != c.Stamp {
+
+	var selected []candidate
+	if resumed {
+		selected = append([]candidate{}, previous.Items...)
+		if len(selected) == 0 {
+			var plan snapshot
+			if readErr := tasks.ReadPrivate(filepath.Join(e.Cache, "cleanup", planID+".json"), &plan); readErr != nil || plan.ID != planID {
 				return out, fail("revision_conflict")
 			}
-			selected = append(selected, c)
-			break
+			selected, err = e.selectedFromSnapshot(plan, ids)
+			if err != nil {
+				return out, err
+			}
+			previous.Items = append([]candidate{}, selected...)
+			if write(receiptPath, previous) != nil {
+				return out, fail("storage_error")
+			}
+		} else {
+			if !sameCandidateIDs(selected, ids) {
+				return out, fail("storage_error")
+			}
+			for _, c := range selected {
+				if !e.validItem(c.Item) {
+					return out, fail("storage_error")
+				}
+			}
+			sort.Slice(selected, func(i, j int) bool {
+				left, right := selected[i].Kind+":"+selected[i].Source, selected[j].Kind+":"+selected[j].Source
+				if left == right {
+					return selected[i].ID < selected[j].ID
+				}
+				return left < right
+			})
 		}
-		if !found {
-			return out, fail("invalid_argument")
+		out = previous.Result
+		if out.Archives == nil {
+			out.Archives = []Archive{}
 		}
-	}
-	if write(receiptPath, receipt{Plan: planID, IDs: ids}) != nil {
-		return out, fail("storage_error")
-	}
-	for _, c := range selected {
-		archive, err := e.retire(ctx, c)
+		if progressErr := e.validateProgress(selected, out); progressErr != nil {
+			return Result{Archives: []Archive{}}, progressErr
+		}
+		out.Replayed = true
+	} else {
+		var plan snapshot
+		if tasks.ReadPrivate(filepath.Join(e.Cache, "cleanup", planID+".json"), &plan) != nil || plan.ID != planID || time.Now().After(plan.Expires) {
+			return out, fail("preview_expired")
+		}
+		selected, err = e.selectedFromSnapshot(plan, ids)
 		if err != nil {
 			return out, err
 		}
-		out.Archives = append(out.Archives, archive)
+		fresh, scanErr := e.scan(ctx, plan.Profile)
+		if scanErr != nil {
+			return out, scanErr
+		}
+		current := map[string]candidate{}
+		for _, c := range fresh {
+			current[c.Kind+":"+c.Source] = c
+		}
+		for _, c := range selected {
+			if _, _, archived, archiveErr := e.archivedCandidate(c); archiveErr != nil {
+				return out, archiveErr
+			} else if archived {
+				continue
+			}
+			freshCandidate, ok := current[c.Kind+":"+c.Source]
+			if !ok || freshCandidate.Stamp != c.Stamp {
+				return out, fail("revision_conflict")
+			}
+		}
+		previous = receipt{Plan: planID, IDs: ids, Items: append([]candidate{}, selected...), Result: out}
+		if write(receiptPath, previous) != nil {
+			return out, fail("storage_error")
+		}
 	}
-	if write(receiptPath, receipt{Plan: planID, IDs: ids, Done: true, Result: out}) != nil {
+
+	for _, c := range selected {
+		archive, retireErr := e.retire(ctx, c)
+		if retireErr != nil {
+			return out, retireErr
+		}
+		if mergeErr := mergeArchive(&out, archive); mergeErr != nil {
+			return out, mergeErr
+		}
+		progress := receipt{Plan: planID, IDs: ids, Items: append([]candidate{}, selected...), Result: out}
+		if write(receiptPath, progress) != nil {
+			return out, fail("storage_error")
+		}
+	}
+	final := receipt{Plan: planID, IDs: ids, Items: append([]candidate{}, selected...), Done: true, Result: out}
+	if write(receiptPath, final) != nil {
 		return out, fail("storage_error")
 	}
 	return out, nil
 }
-func (e Engine) retire(ctx context.Context, c candidate) (Archive, *protocol.Error) {
-	var a Archive
-	already := tasks.ReadPrivate(e.archivePath(c.ID, "entry.json"), &a) == nil
-	if !already {
-		a = Archive{Item: c.Item, ArchivedAt: time.Now().UTC()}
+func cleanupProcessError(err *protocol.Error) *protocol.Error {
+	if err == nil {
+		return nil
 	}
-	if c.Kind == "missing_instance" {
+	switch err.Code {
+	case "revision_conflict", "process_not_found", "process_active":
+		return fail("revision_conflict")
+	default:
+		return fail("storage_error")
+	}
+}
+
+func (e Engine) retireCompletedProcess(c candidate, archive Archive, already bool) (Archive, *protocol.Error) {
+	manager := services.Store{Data: e.Data}
+	executionID := e.executionIDFromProcessSource(c.Source)
+	if executionID == "" {
+		return archive, fail("storage_error")
+	}
+	body, err := maintenance.Read(c.Source, 1<<20)
+	if errors.Is(err, os.ErrNotExist) {
+		if !already {
+			return archive, fail("revision_conflict")
+		}
+		owner, ownerErr := manager.ArchivedOwner(executionID)
+		if ownerErr != nil {
+			return archive, cleanupProcessError(ownerErr)
+		}
+		if owner.Profile != c.Profile {
+			return archive, fail("revision_conflict")
+		}
+		if !owner.Legacy && (owner.ArchiveID != c.ID || !owner.ArchivedAt.Equal(archive.ArchivedAt)) {
+			return archive, fail("revision_conflict")
+		}
+		return archive, nil
+	}
+	if err != nil || digest(body) != c.Stamp {
+		return archive, fail("revision_conflict")
+	}
+	var record services.Record
+	if json.Unmarshal(body, &record) != nil || record.ID != executionID || record.Profile != c.Profile || record.EndedAt == nil {
+		return archive, fail("storage_error")
+	}
+	if !already {
+		if maintenance.Write(e.archivePath(c.ID, "payload"), body) != nil || write(e.archivePath(c.ID, "entry.json"), archive) != nil {
+			return archive, fail("storage_error")
+		}
+	}
+	if markerErr := manager.WriteArchiveMarker(record, c.ID, archive.ArchivedAt); markerErr != nil {
+		return archive, cleanupProcessError(markerErr)
+	}
+	if err := removeAndSync(c.Source); err != nil {
+		return archive, fail("storage_error")
+	}
+	return archive, nil
+}
+
+func (e Engine) retireExpiredLog(c candidate, archive Archive, already bool) (Archive, *protocol.Error) {
+	executionID := e.executionIDFromProcessSource(c.Source)
+	if executionID == "" {
+		return archive, fail("storage_error")
+	}
+	body, err := maintenance.Read(c.Source, 1<<20)
+	if errors.Is(err, os.ErrNotExist) {
+		if already {
+			return archive, nil
+		}
+		return archive, fail("revision_conflict")
+	}
+	if err != nil {
+		return archive, fail("revision_conflict")
+	}
+	owner, ownerErr := (services.Store{Data: e.Data}).LogOwner(executionID)
+	if ownerErr != nil {
+		return archive, cleanupProcessError(ownerErr)
+	}
+	stamp, ok := logOwnerStamp(owner, body)
+	if !ok || stamp != c.Stamp {
+		return archive, fail("revision_conflict")
+	}
+	if !already {
+		if maintenance.Write(e.archivePath(c.ID, "payload"), body) != nil || write(e.archivePath(c.ID, "entry.json"), archive) != nil {
+			return archive, fail("storage_error")
+		}
+	}
+	if err := removeAndSync(c.Source); err != nil {
+		return archive, fail("storage_error")
+	}
+	return archive, nil
+}
+
+func (e Engine) retire(ctx context.Context, c candidate) (Archive, *protocol.Error) {
+	archive, _, already, archiveErr := e.archivedCandidate(c)
+	if archiveErr != nil {
+		return archive, archiveErr
+	}
+	if !already {
+		archive = Archive{Item: c.Item, ArchivedAt: time.Now().UTC()}
+	}
+
+	switch c.Kind {
+	case "completed_process":
+		return e.retireCompletedProcess(c, archive, already)
+	case "expired_log":
+		return e.retireExpiredLog(c, archive, already)
+	case "missing_instance":
 		ps := ports.Store{Directory: filepath.Join(e.Data, "ports")}
 		err := ps.Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
 			i := st.ByID(c.Source)
@@ -416,59 +780,65 @@ func (e Engine) retire(ctx context.Context, c candidate) (Archive, *protocol.Err
 			if i == nil || !missing(i.Directory) || (services.Store{Data: e.Data}).Active(ctx, i.ID) != nil {
 				return false, fail("revision_conflict")
 			}
-			v := location{Instance: *i, Assignments: []ports.Assignment{}}
-			for _, p := range st.Assignments {
-				if p.ID == i.ID {
-					if ps.Active(ctx, i.ID, p.Name) != nil {
+			value := location{Instance: *i, Assignments: []ports.Assignment{}}
+			for _, assignment := range st.Assignments {
+				if assignment.ID == i.ID {
+					if ps.Active(ctx, i.ID, assignment.Name) != nil {
 						return false, fail("revision_conflict")
 					}
-					free, err := ports.Available(p.Port)
+					free, err := ports.Available(assignment.Port)
 					if err != nil || !free {
 						return false, fail("revision_conflict")
 					}
-					v.Assignments = append(v.Assignments, p)
+					value.Assignments = append(value.Assignments, assignment)
 				}
 			}
-			b, _ := json.Marshal(v)
-			if digest(b) != c.Stamp {
+			body, _ := json.Marshal(value)
+			if digest(body) != c.Stamp {
 				return false, fail("revision_conflict")
 			}
-			if maintenance.Write(e.archivePath(c.ID, "payload"), b) != nil || write(e.archivePath(c.ID, "entry.json"), a) != nil {
-				return false, fail("storage_error")
+			if !already {
+				if maintenance.Write(e.archivePath(c.ID, "payload"), body) != nil || write(e.archivePath(c.ID, "entry.json"), archive) != nil {
+					return false, fail("storage_error")
+				}
 			}
 			instances := []ports.Instance{}
 			assignments := []ports.Assignment{}
-			for _, v := range st.Instances {
-				if v.ID != c.Source {
-					instances = append(instances, v)
+			for _, instance := range st.Instances {
+				if instance.ID != c.Source {
+					instances = append(instances, instance)
 				}
 			}
-			for _, v := range st.Assignments {
-				if v.ID != c.Source {
-					assignments = append(assignments, v)
+			for _, assignment := range st.Assignments {
+				if assignment.ID != c.Source {
+					assignments = append(assignments, assignment)
 				}
 			}
 			st.Instances = instances
 			st.Assignments = assignments
 			return true, nil
 		})
-		return a, err
+		return archive, err
 	}
-	b, er := maintenance.Read(c.Source, 128<<20)
-	if errors.Is(er, os.ErrNotExist) && already {
-		return a, nil
+
+	body, err := maintenance.Read(c.Source, 128<<20)
+	if errors.Is(err, os.ErrNotExist) && already {
+		return archive, nil
 	}
-	if er != nil || digest(b) != c.Stamp {
-		return a, fail("revision_conflict")
+	if err != nil || digest(body) != c.Stamp {
+		return archive, fail("revision_conflict")
 	}
-	if maintenance.Write(e.archivePath(c.ID, "payload"), b) != nil || write(e.archivePath(c.ID, "entry.json"), a) != nil {
-		return a, fail("storage_error")
+	if !already {
+		if maintenance.Write(e.archivePath(c.ID, "payload"), body) != nil || write(e.archivePath(c.ID, "entry.json"), archive) != nil {
+			return archive, fail("storage_error")
+		}
 	}
-	if os.Remove(c.Source) != nil {
-		return a, fail("storage_error")
+	if err := removeAndSync(c.Source); err != nil {
+		return archive, fail("storage_error")
 	}
-	return a, nil
+	return archive, nil
 }
+
 func (e Engine) Archives() ([]Archive, *protocol.Error) {
 	items := []Archive{}
 	entries, err := os.ReadDir(filepath.Join(e.Data, "archives"))
@@ -491,6 +861,31 @@ func (e Engine) Archives() ([]Archive, *protocol.Error) {
 	sort.Slice(items, func(i, j int) bool { return items[i].ArchivedAt.Before(items[j].ArchivedAt) })
 	return items, nil
 }
+func (e Engine) restoreCompletedProcess(archive Archive, payload []byte) *protocol.Error {
+	executionID := e.executionIDFromProcessSource(archive.Source)
+	if executionID == "" {
+		return fail("storage_error")
+	}
+	var record services.Record
+	if json.Unmarshal(payload, &record) != nil || record.ID != executionID || record.Profile != archive.Profile || record.EndedAt == nil {
+		return fail("storage_error")
+	}
+	existing, err := maintenance.Read(archive.Source, 1<<20)
+	if err == nil {
+		if digest(existing) != digest(payload) {
+			return fail("revision_conflict")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fail("storage_error")
+	} else if maintenance.Write(archive.Source, payload) != nil {
+		return fail("storage_error")
+	}
+	if markerErr := (services.Store{Data: e.Data}).RemoveArchiveMarker(executionID, archive.ID); markerErr != nil {
+		return cleanupProcessError(markerErr)
+	}
+	return nil
+}
+
 func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protocol.Error) {
 	var a Archive
 	if !validID(id) {
@@ -517,18 +912,19 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 	if er != nil {
 		return a, false, fail("storage_error")
 	}
-	if a.Kind == "missing_instance" {
-		var v location
-		if json.Unmarshal(b, &v) != nil {
+	switch a.Kind {
+	case "missing_instance":
+		var value location
+		if json.Unmarshal(b, &value) != nil {
 			return a, false, fail("storage_error")
 		}
 		ps := ports.Store{Directory: filepath.Join(e.Data, "ports")}
 		err = ps.Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
-			if i := st.ByID(v.Instance.ID); i != nil {
-				present := location{Instance: *i, Assignments: []ports.Assignment{}}
-				for _, p := range st.Assignments {
-					if p.ID == i.ID {
-						present.Assignments = append(present.Assignments, p)
+			if instance := st.ByID(value.Instance.ID); instance != nil {
+				present := location{Instance: *instance, Assignments: []ports.Assignment{}}
+				for _, assignment := range st.Assignments {
+					if assignment.ID == instance.ID {
+						present.Assignments = append(present.Assignments, assignment)
 					}
 				}
 				same, _ := json.Marshal(present)
@@ -537,31 +933,35 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 				}
 				return false, fail("revision_conflict")
 			}
-			if st.Find(v.Instance.Profile, "", v.Instance.Directory) != nil {
+			if st.Find(value.Instance.Profile, "", value.Instance.Directory) != nil {
 				return false, fail("revision_conflict")
 			}
-			for _, p := range v.Assignments {
-				free, e := ports.Available(p.Port)
+			for _, assignment := range value.Assignments {
+				free, e := ports.Available(assignment.Port)
 				if e != nil || !free {
 					return false, fail("revision_conflict")
 				}
 			}
-			st.Instances = append(st.Instances, v.Instance)
-			st.Assignments = append(st.Assignments, v.Assignments...)
+			st.Instances = append(st.Instances, value.Instance)
+			st.Assignments = append(st.Assignments, value.Assignments...)
 			return true, nil
 		})
 		if err != nil {
 			return a, false, err
 		}
-	} else {
-		existing, er := maintenance.Read(a.Source, 128<<20)
-		if er == nil && digest(existing) != digest(b) {
+	case "completed_process":
+		if restoreErr := e.restoreCompletedProcess(a, b); restoreErr != nil {
+			return a, false, restoreErr
+		}
+	default:
+		existing, readErr := maintenance.Read(a.Source, 128<<20)
+		if readErr == nil && digest(existing) != digest(b) {
 			return a, false, fail("revision_conflict")
 		}
-		if er != nil && !errors.Is(er, os.ErrNotExist) {
+		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
 			return a, false, fail("storage_error")
 		}
-		if er != nil && maintenance.Write(a.Source, b) != nil {
+		if readErr != nil && maintenance.Write(a.Source, b) != nil {
 			return a, false, fail("storage_error")
 		}
 	}

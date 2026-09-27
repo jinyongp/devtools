@@ -77,6 +77,11 @@ type ArchivedOwner struct {
 	Legacy     bool
 }
 
+type ArchivedExecution struct {
+	ID    string
+	Owner ArchivedOwner
+}
+
 type executionStorageState uint8
 
 const (
@@ -276,6 +281,97 @@ func (s Store) ArchivedOwner(id string) (ArchivedOwner, *protocol.Error) {
 	}
 }
 
+func recordOwner(record Record) ArchivedOwner {
+	capture := record.Capture
+	return ArchivedOwner{Profile: record.Profile, EndedAt: record.EndedAt, Capture: &capture}
+}
+
+// LogOwner resolves the stable owner metadata used by cleanup log candidates.
+// Active ended records and future archive markers share the same owner shape;
+// pre-marker archived executions use immutable archive proof metadata.
+func (s Store) LogOwner(id string) (ArchivedOwner, *protocol.Error) {
+	stored, err := s.inspectLocal(id)
+	if err != nil {
+		return ArchivedOwner{}, err
+	}
+	switch stored.State {
+	case executionActive:
+		return recordOwner(stored.Record), nil
+	case executionArchived:
+		return stored.Owner, nil
+	case executionHole:
+		proofs, proofErr := s.legacyProofs([]string{id})
+		if proofErr != nil {
+			return ArchivedOwner{}, proofErr
+		}
+		if proof, ok := proofs[id]; ok {
+			return legacyOwner(proof), nil
+		}
+		return ArchivedOwner{}, storageError()
+	case executionMissing:
+		return ArchivedOwner{}, failure("process_not_found")
+	default:
+		return ArchivedOwner{}, storageError()
+	}
+}
+
+// ArchivedExecutions enumerates marker-backed and pre-marker archived process
+// directories without contacting supervisors.
+func (s Store) ArchivedExecutions(profile string) ([]ArchivedExecution, *protocol.Error) {
+	items := []ArchivedExecution{}
+	if profile != "" && !project.ValidProfile(profile) {
+		return nil, failure("invalid_argument")
+	}
+	entries, err := os.ReadDir(s.root())
+	if errors.Is(err, os.ErrNotExist) {
+		return items, nil
+	}
+	if err != nil {
+		return nil, storageError()
+	}
+	holes := []string{}
+	for _, entry := range entries {
+		id := entry.Name()
+		if !validID(id) {
+			continue
+		}
+		stored, inspectErr := s.inspectLocal(id)
+		if inspectErr != nil {
+			return nil, inspectErr
+		}
+		switch stored.State {
+		case executionActive, executionMissing:
+			continue
+		case executionArchived:
+			if profile == "" || stored.Owner.Profile == profile {
+				items = append(items, ArchivedExecution{ID: id, Owner: stored.Owner})
+			}
+		case executionHole:
+			holes = append(holes, id)
+		default:
+			return nil, storageError()
+		}
+	}
+	if len(holes) > 0 {
+		proofs, proofErr := s.legacyProofs(holes)
+		if proofErr != nil {
+			return nil, proofErr
+		}
+		for _, id := range holes {
+			proof, ok := proofs[id]
+			if !ok {
+				return nil, storageError()
+			}
+			owner := legacyOwner(proof)
+			if profile == "" || owner.Profile == profile {
+				items = append(items, ArchivedExecution{ID: id, Owner: owner})
+			}
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
+	return items, nil
+}
+
 func (s Store) WriteArchiveMarker(record Record, archiveID string, archivedAt time.Time) *protocol.Error {
 	if !validID(record.ID) || !validRecord(record.ID, record) || record.EndedAt == nil || !validID(archiveID) || archivedAt.IsZero() {
 		return failure("invalid_argument")
@@ -320,6 +416,15 @@ func (s Store) RemoveArchiveMarker(id, archiveID string) *protocol.Error {
 	}
 	if marker.ArchiveID != archiveID {
 		return failure("revision_conflict")
+	}
+	var record Record
+	recordErr := tasks.ReadPrivate(s.path(id, "record.json"), &record)
+	if recordErr == nil {
+		if !validRecord(id, record) || !markerMatchesRecord(marker, record) {
+			return failure("revision_conflict")
+		}
+	} else if !errors.Is(recordErr, os.ErrNotExist) {
+		return storageError()
 	}
 	path := s.path(id, "record.archive.json")
 	if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {

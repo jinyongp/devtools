@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 
@@ -118,12 +119,17 @@ func TestCompletedProcessCleanupPreservesProfileEnumeration(t *testing.T) {
 		CreatedAt: ended.Add(-time.Hour),
 		EndedAt:   &ended,
 		State:     "stopped",
+		Capture:   true,
 	}
 	body, err := json.Marshal(record)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := maintenance.Write(filepath.Join(engine.Data, "processes", id, "record.json"), body); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(engine.Data, "processes", id, "output.log")
+	if err := maintenance.Write(logPath, []byte("legacy-log")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -157,5 +163,256 @@ func TestCompletedProcessCleanupPreservesProfileEnumeration(t *testing.T) {
 	}
 	if len(names) != 0 {
 		t.Fatalf("archived process leaked into active profile names: %#v", names)
+	}
+	if _, err := os.Stat(filepath.Join(engine.Data, "processes", id, "record.archive.json")); err != nil {
+		t.Fatalf("archive marker missing: %v", err)
+	}
+
+	residual, failure := engine.Preview(context.Background(), "archived")
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	foundLog := false
+	for _, item := range residual.Items {
+		if item.Kind == "expired_log" && item.Source == logPath {
+			foundLog = true
+		}
+	}
+	if !foundLog {
+		t.Fatalf("residual log was not rediscovered: %#v", residual.Items)
+	}
+
+	if _, changed, failure := engine.Restore(context.Background(), processItem.ID); failure != nil || !changed {
+		t.Fatalf("process restore failed: changed=%v err=%v", changed, failure)
+	}
+	if _, err := os.Stat(filepath.Join(engine.Data, "processes", id, "record.json")); err != nil {
+		t.Fatalf("record was not restored: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(engine.Data, "processes", id, "record.archive.json")); !os.IsNotExist(err) {
+		t.Fatalf("archive marker remained after restore: %v", err)
+	}
+}
+
+func TestApplyResumesDurableWorksetAfterProcessRetirement(t *testing.T) {
+	root := t.TempDir()
+	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
+	ctx := context.Background()
+	executionID := tasks.ID()
+	ended := time.Now().UTC().Add(-31 * 24 * time.Hour)
+	record := services.Record{
+		ID:        executionID,
+		Profile:   "resume",
+		Directory: filepath.Join(root, "project"),
+		Command:   "web",
+		CreatedAt: ended.Add(-time.Hour),
+		EndedAt:   &ended,
+		State:     "stopped",
+		Capture:   true,
+	}
+	body, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recordPath := filepath.Join(engine.Data, "processes", executionID, "record.json")
+	logPath := filepath.Join(engine.Data, "processes", executionID, "output.log")
+	if err := maintenance.Write(recordPath, body); err != nil {
+		t.Fatal(err)
+	}
+	if err := maintenance.Write(logPath, []byte("resume-log")); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, failure := engine.Preview(ctx, "resume")
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	var stored snapshot
+	planPath := filepath.Join(engine.Cache, "cleanup", plan.ID+".json")
+	if err := tasks.ReadPrivate(planPath, &stored); err != nil {
+		t.Fatal(err)
+	}
+	var processCandidate, logCandidate candidate
+	for _, item := range stored.Items {
+		switch item.Kind {
+		case "completed_process":
+			processCandidate = item
+		case "expired_log":
+			logCandidate = item
+		}
+	}
+	if processCandidate.ID == "" || logCandidate.ID == "" {
+		t.Fatalf("expected process+log workset: %#v", stored.Items)
+	}
+	ids := []string{processCandidate.ID, logCandidate.ID}
+	sort.Strings(ids)
+	selected := []candidate{processCandidate, logCandidate}
+	sort.Slice(selected, func(i, j int) bool {
+		return selected[i].Kind+":"+selected[i].Source < selected[j].Kind+":"+selected[j].Source
+	})
+	requestID := tasks.ID()
+	receiptPath := filepath.Join(engine.Data, "cleanup-receipts", requestID+".json")
+	if err := write(receiptPath, receipt{Plan: plan.ID, IDs: ids, Items: selected, Result: Result{Archives: []Archive{}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	processArchive, retireErr := engine.retire(ctx, processCandidate)
+	if retireErr != nil {
+		t.Fatal(retireErr)
+	}
+	if _, err := os.Stat(recordPath); !os.IsNotExist(err) {
+		t.Fatalf("process record survived simulated first mutation: %v", err)
+	}
+	if _, err := os.Stat(logPath); err != nil {
+		t.Fatalf("log disappeared before resume: %v", err)
+	}
+	if err := os.Remove(planPath); err != nil {
+		t.Fatal(err)
+	}
+
+	result, failure := engine.Apply(ctx, plan.ID, ids, requestID)
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	if !result.Replayed || len(result.Archives) != 2 {
+		t.Fatalf("resume did not converge: %#v", result)
+	}
+	foundProcess := false
+	foundLog := false
+	for _, archive := range result.Archives {
+		if archive.ID == processArchive.ID {
+			foundProcess = true
+		}
+		if archive.ID == logCandidate.ID {
+			foundLog = true
+		}
+	}
+	if !foundProcess || !foundLog {
+		t.Fatalf("resume archives mismatch: %#v", result.Archives)
+	}
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Fatalf("residual log survived resume: %v", err)
+	}
+	var completed receipt
+	if err := tasks.ReadPrivate(receiptPath, &completed); err != nil || !completed.Done || len(completed.Items) != 2 {
+		t.Fatalf("receipt did not complete: %#v %v", completed, err)
+	}
+}
+
+func TestLegacyIncompleteReceiptIgnoresExpiredPreviewTTL(t *testing.T) {
+	root := t.TempDir()
+	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
+	ctx := context.Background()
+	source := filepath.Join(engine.Cache, "task-queries", tasks.ID()+".json")
+	body, _ := json.Marshal(map[string]any{"expires": time.Now().Add(-time.Hour), "items": []any{}})
+	if err := maintenance.Write(source, body); err != nil {
+		t.Fatal(err)
+	}
+	plan, failure := engine.Preview(ctx, "")
+	if failure != nil || len(plan.Items) != 1 {
+		t.Fatalf("preview failed: %#v %v", plan, failure)
+	}
+	var stored snapshot
+	planPath := filepath.Join(engine.Cache, "cleanup", plan.ID+".json")
+	if err := tasks.ReadPrivate(planPath, &stored); err != nil {
+		t.Fatal(err)
+	}
+	stored.Expires = time.Now().Add(-time.Hour)
+	if err := tasks.WritePrivate(planPath, stored); err != nil {
+		t.Fatal(err)
+	}
+	requestID := tasks.ID()
+	ids := []string{plan.Items[0].ID}
+	if err := write(filepath.Join(engine.Data, "cleanup-receipts", requestID+".json"), receipt{Plan: plan.ID, IDs: ids}); err != nil {
+		t.Fatal(err)
+	}
+
+	result, failure := engine.Apply(ctx, plan.ID, ids, requestID)
+	if failure != nil || !result.Replayed || len(result.Archives) != 1 {
+		t.Fatalf("legacy receipt did not resume past preview TTL: %#v %v", result, failure)
+	}
+	if _, err := os.Stat(source); !os.IsNotExist(err) {
+		t.Fatalf("legacy receipt source retained: %v", err)
+	}
+}
+func TestLegacyArchivedProcessResidualLogIsCleanupCandidate(t *testing.T) {
+	root := t.TempDir()
+	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
+	executionID := tasks.ID()
+	processDir := filepath.Join(engine.Data, "processes", executionID)
+	if err := tasks.PrivateDir(processDir); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(processDir, "output.log")
+	if err := maintenance.Write(logPath, []byte("legacy-residual-log")); err != nil {
+		t.Fatal(err)
+	}
+	archiveID := tasks.ID()
+	archivedAt := time.Now().UTC().Add(-31 * 24 * time.Hour)
+	purgedAt := archivedAt.Add(30 * 24 * time.Hour)
+	legacy := Archive{
+		Item: Item{
+			ID:      archiveID,
+			Kind:    "completed_process",
+			Profile: "legacy",
+			Source:  filepath.Join(processDir, "record.json"),
+			Bytes:   128,
+		},
+		ArchivedAt: archivedAt,
+		PurgedAt:   &purgedAt,
+	}
+	if err := write(engine.archivePath(archiveID, "entry.json"), legacy); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, failure := engine.Preview(context.Background(), "legacy")
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	var logItem Item
+	for _, item := range plan.Items {
+		if item.Kind == "expired_log" && item.Source == logPath {
+			logItem = item
+			break
+		}
+	}
+	if logItem.ID == "" {
+		t.Fatalf("legacy residual log missing from preview: %#v", plan.Items)
+	}
+	result, failure := engine.Apply(context.Background(), plan.ID, []string{logItem.ID}, tasks.ID())
+	if failure != nil || len(result.Archives) != 1 {
+		t.Fatalf("legacy residual log cleanup failed: %#v %v", result, failure)
+	}
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy residual log was not removed: %v", err)
+	}
+}
+
+func TestLegacyIncompleteReceiptWithoutSnapshotConflicts(t *testing.T) {
+	root := t.TempDir()
+	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
+	ctx := context.Background()
+	source := filepath.Join(engine.Cache, "task-queries", tasks.ID()+".json")
+	body, _ := json.Marshal(map[string]any{"expires": time.Now().Add(-time.Hour), "items": []any{}})
+	if err := maintenance.Write(source, body); err != nil {
+		t.Fatal(err)
+	}
+	plan, failure := engine.Preview(ctx, "")
+	if failure != nil || len(plan.Items) != 1 {
+		t.Fatalf("preview failed: %#v %v", plan, failure)
+	}
+	requestID := tasks.ID()
+	ids := []string{plan.Items[0].ID}
+	if err := write(filepath.Join(engine.Data, "cleanup-receipts", requestID+".json"), receipt{Plan: plan.ID, IDs: ids}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(engine.Cache, "cleanup", plan.ID+".json")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, failure := engine.Apply(ctx, plan.ID, ids, requestID); failure == nil || failure.Code != "revision_conflict" {
+		t.Fatalf("missing legacy snapshot was guessed: %v", failure)
+	}
+	if _, err := os.Stat(source); err != nil {
+		t.Fatalf("source changed after blocked legacy resume: %v", err)
 	}
 }

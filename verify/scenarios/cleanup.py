@@ -48,6 +48,26 @@ api("cleanup","apply",plan["id"],"--item",item["id"],"--request-id",str(uuid.uui
 assert api("task","list")["items"]==[]
 api("cleanup","restore",item["id"])
 assert api("task","show",tid)["item"]["state"]=="canceled"
+
+process_id=str(uuid.uuid4());process_dir=data/"processes"/process_id;process_dir.mkdir(mode=0o700,parents=True)
+old="2000-01-01T00:00:00Z"
+record={"ready_configured":False,"id":process_id,"profile":"cleanup-fixture","instance_id":"","directory":str(root),"command":"legacy","env":"","capture_logs":True,"created_at":old,"started_at":old,"ended_at":old,"exit_code":0,"reason":"exit","state":"stopped"}
+record_path=process_dir/"record.json";record_path.write_text(json.dumps(record));record_path.chmod(0o600)
+log_path=process_dir/"output.log";log_path.write_text("partial-resume-log");log_path.chmod(0o600)
+plan=api("cleanup","preview","--profile","cleanup-fixture")
+process_item=next(i for i in plan["items"] if i["kind"]=="completed_process" and i["source"]==str(record_path))
+log_item=next(i for i in plan["items"] if i["kind"]=="expired_log" and i["source"]==str(log_path))
+blocked=data/"archives"/log_item["id"];blocked.mkdir(mode=0o700,parents=True);(blocked/"payload").mkdir(mode=0o700)
+request_id=str(uuid.uuid4())
+failure=api("cleanup","apply",plan["id"],"--item",process_item["id"],"--item",log_item["id"],"--request-id",request_id,expected=1)
+assert failure["code"]=="storage_error"
+assert not record_path.exists() and log_path.exists() and (process_dir/"record.archive.json").exists()
+(cache/"cleanup"/(plan["id"]+".json")).unlink()
+shutil.rmtree(blocked/"payload")
+resumed=api("cleanup","apply",plan["id"],"--item",process_item["id"],"--item",log_item["id"],"--request-id",request_id)
+assert resumed["replayed"] and len(resumed["items"])==2 and not log_path.exists()
+assert all(i["id"]!=process_id for i in api("process","list","--profile","cleanup-fixture")["items"])
+
 ghost=root/"gone";ghost.mkdir()
 (ghost/"devtools.toml").write_text('profile="gone"\n[ports.web]\nport=25100\nrange=[25100,25199]\n')
 allocated=api("port","allocate","web","--dir",str(ghost))["item"]

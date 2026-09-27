@@ -48,6 +48,25 @@ func (a *App) previewExecution(ctx context.Context, command execution.Command, s
 	return execution.Preview(ctx, command, state, dependencies)
 }
 
+func (a *App) validateProjectCommand(ctx context.Context, p project.Context, name string, envOverride *string) *protocol.Error {
+	current, err := project.Resolve(p.Root, "")
+	if err != nil {
+		return err
+	}
+	if current.Root != p.Root || current.Profile != p.Profile {
+		return protocol.NewError("instance_conflict", "Project identity changed.", 3, nil)
+	}
+	command, err := execution.ResolveConfigured(current, name, envOverride, nil)
+	if err != nil {
+		return err
+	}
+	dependencies, err := a.executionDependencies(command)
+	if err != nil {
+		return err
+	}
+	return execution.Validate(ctx, command, dependencies, os.Environ())
+}
+
 func (a *App) preflightProjectCommand(ctx context.Context, p project.Context, name string, envOverride *string) *protocol.Error {
 	current, err := project.Resolve(p.Root, "")
 	if err != nil {

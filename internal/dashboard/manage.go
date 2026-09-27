@@ -91,6 +91,33 @@ func (s *Server) valueStore(profile string) values.Store {
 	return values.Store{Directory: filepath.Join(filepath.Dir(s.data), "profiles"), Profile: profile}
 }
 
+func (s *Server) validateProjectCommand(ctx context.Context, p project.Context, name string, envOverride *string) *protocol.Error {
+	current, err := project.Resolve(p.Root, "")
+	if err != nil {
+		return err
+	}
+	if current.Root != p.Root || current.Profile != p.Profile {
+		return protocol.NewError("instance_conflict", "Project identity changed.", 3, nil)
+	}
+	command, err := execution.ResolveConfigured(current, name, envOverride, nil)
+	if err != nil {
+		return err
+	}
+	configRoot := ""
+	if len(command.Bind)+len(command.Serve) > 0 {
+		dirs, pathErr := paths.Current()
+		if pathErr != nil {
+			return protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil)
+		}
+		configRoot = dirs.Config
+	}
+	dependencies, err := execution.DependenciesFor(command, filepath.Dir(s.data), configRoot)
+	if err != nil {
+		return err
+	}
+	return execution.Validate(ctx, command, dependencies, os.Environ())
+}
+
 func (s *Server) preflightProjectCommand(ctx context.Context, p project.Context, name string, envOverride *string) *protocol.Error {
 	current, err := project.Resolve(p.Root, "")
 	if err != nil {
@@ -198,6 +225,24 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 			if record.Profile != req.Profile {
 				invalidAction(w)
 				return
+			}
+			if req.Process.Action == "restart" {
+				envOverride := req.Process.Env
+				req.Process.RestartPreflight = func(ctx context.Context, old services.Record, phase services.RestartPhase) *protocol.Error {
+					env := envOverride
+					if env == nil {
+						env = old.EnvOverride
+					}
+					snapshot := project.Context{Root: old.Directory, Profile: old.Profile}
+					switch phase {
+					case services.RestartBeforeStop:
+						return s.validateProjectCommand(ctx, snapshot, old.Command, env)
+					case services.RestartBeforeStart:
+						return s.preflightProjectCommand(ctx, snapshot, old.Command, env)
+					default:
+						return protocol.NewError("internal_error", "Invalid restart preflight phase.", 1, nil)
+					}
+				}
 			}
 		}
 		if req.Process.Action == "check" {

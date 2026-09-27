@@ -119,6 +119,24 @@ func (a *App) registerProcesses() {
 					return a.preflightProjectCommand(ctx, startProject, command, env)
 				}
 			}
+			if action == "restart" {
+				envOverride := q.Env
+				q.RestartPreflight = func(ctx context.Context, record services.Record, phase services.RestartPhase) *protocol.Error {
+					env := envOverride
+					if env == nil {
+						env = record.EnvOverride
+					}
+					snapshot := project.Context{Root: record.Directory, Profile: record.Profile}
+					switch phase {
+					case services.RestartBeforeStop:
+						return a.validateProjectCommand(ctx, snapshot, record.Command, env)
+					case services.RestartBeforeStart:
+						return a.preflightProjectCommand(ctx, snapshot, record.Command, env)
+					default:
+						return protocol.NewError("internal_error", "Invalid restart preflight phase.", 1, nil)
+					}
+				}
+			}
 			return s.Apply(ctx, q)
 		}
 		a.commands = append(a.commands, c)

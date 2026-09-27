@@ -104,6 +104,17 @@ try:
                    error='project_operation_failed')
     assert conflict['details']['items'][0]['condition']['code'] == 'process_conflict'
 
+    broken = config.replace('exec=["python3","server.py"]',
+                            'exec=["/definitely-not-an-installed-review-executable"]', 1)
+    (root / 'devtools.toml').write_text(broken)
+    blocked = api('project', 'restart', 'web', '--request-id', str(uuid.uuid4()),
+                  error='project_operation_failed')
+    assert blocked['details']['items'][0]['condition']['code'] == 'requirements_failed', blocked
+    current = {item['command']: item for item in api('project', 'status')['items']}
+    assert current['web']['id'] == ids[0] and current['api']['id'] == ids[1], current
+    assert all(item['ended_at'] is None and item['state'] == 'running' for item in current.values()), current
+    (root / 'devtools.toml').write_text(config)
+
     # Sharing a profile does not broaden status/down across worktree locations.
     other_started = api('project', 'up', 'web', '--request-id', str(uuid.uuid4()), directory=other)
     other_id = other_started['items'][0]['item']['id']

@@ -4,10 +4,12 @@ import (
 	"context"
 	"io"
 	"path/filepath"
+	"strings"
 
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
 )
@@ -136,6 +138,109 @@ func (p Prepared) Checks(ctx context.Context, parentEnvironment []string, forceE
 		Environment:  parentEnvironment,
 		PathOverride: p.PathOverride,
 	})
+}
+
+// Validate performs only checks that are safe while an existing managed
+// execution is still running. It does not claim ports or require served ports
+// to be free. Bindings backed by a new port served by this same command may be
+// deferred until the post-stop cold-start preflight.
+func Validate(ctx context.Context, command Command, dependencies Dependencies, parentEnvironment []string) *protocol.Error {
+	var state *values.State
+	if command.NeedsValues() {
+		var err *protocol.Error
+		state, err = (values.Store{Directory: dependencies.ValuesDirectory, Profile: command.Project.Profile}).Read()
+		if err != nil {
+			return err
+		}
+		if envErr := state.CheckEnv(command.Env); envErr != nil {
+			return envErr
+		}
+	}
+
+	args := command.Arguments()
+	pendingBindings := map[string]bool{}
+	executableDeferred := false
+	var pathOverride *string
+	if len(command.Bind)+len(command.Serve) > 0 {
+		portState, err := dependencies.Ports.Read()
+		if err != nil {
+			return err
+		}
+		bindings, pending, bindErr := portState.BindValidation(command.Project, command.projectCommand(), command.Env, state)
+		if bindErr != nil {
+			return bindErr
+		}
+		pendingBindings = pending
+		resolvedExec := make([]string, len(command.Exec))
+		for index, argument := range command.Exec {
+			deferred := false
+			expanded, expandErr := project.Expand(argument, func(ref string) (string, bool) {
+				if !strings.HasPrefix(ref, "bind.") {
+					return "", false
+				}
+				name := strings.TrimPrefix(ref, "bind.")
+				if pendingBindings[name] {
+					deferred = true
+					return "", true
+				}
+				value, ok := bindings[name]
+				return value, ok
+			})
+			if expandErr != nil {
+				return expandErr
+			}
+			if deferred {
+				resolvedExec[index] = argument
+				if index == 0 {
+					executableDeferred = true
+				}
+			} else {
+				resolvedExec[index] = expanded
+			}
+		}
+		args = append(resolvedExec, command.ExtraArgs...)
+		if path, ok := bindings["PATH"]; ok {
+			path := path
+			pathOverride = &path
+		}
+	}
+
+	requirements := command.Requirements
+	executable := ""
+	if len(args) > 0 && !executableDeferred {
+		executable = args[0]
+	}
+	if pendingBindings["PATH"] {
+		absoluteTools := map[string]project.Tool{}
+		for name, tool := range requirements.Tools {
+			if filepath.IsAbs(tool.WithDefaults(name).Executable) {
+				absoluteTools[name] = tool
+			}
+		}
+		requirements.Tools = absoluteTools
+		if executable != "" && !filepath.IsAbs(executable) {
+			executable = ""
+		}
+		pathOverride = nil
+	}
+	checks := doctor.CheckRequirements(ctx, doctor.Input{
+		Profile:      command.Project.Profile,
+		Directory:    command.Directory,
+		Env:          command.Env,
+		Requirements: requirements,
+		State:        state,
+		Inject:       command.Inject,
+		Executable:   executable,
+		Environment:  parentEnvironment,
+		PathOverride: pathOverride,
+	})
+	if !ChecksPassed(checks) {
+		return protocol.NewError("requirements_failed", "Command prerequisites are not satisfied.", 3, map[string]any{
+			"command": command.Name,
+			"checks":  checks,
+		})
+	}
+	return nil
 }
 
 // Preflight performs the non-mutating checks used before a managed cold start.

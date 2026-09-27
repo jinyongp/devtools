@@ -101,76 +101,124 @@ func (s Store) Prepare(ctx context.Context, p project.Context, c project.Command
 	return result, release, nil
 }
 func (st *State) Bind(p project.Context, c project.Command, env string, state *values.State) (map[string]string, *protocol.Error) {
+	out, pending, err := st.bind(p, c, env, state, false)
+	if err != nil {
+		return nil, err
+	}
+	if len(pending) != 0 {
+		return nil, fail("binding_reference_error")
+	}
+	return out, nil
+}
+
+// BindValidation resolves bindings that are already represented in the current
+// registry without checking/claiming served-port runtime ownership. A direct
+// binding to a port served by this same command may remain pending when a
+// config change introduces a new assignment that can only exist after restart.
+func (st *State) BindValidation(p project.Context, c project.Command, env string, state *values.State) (map[string]string, map[string]bool, *protocol.Error) {
+	return st.bind(p, c, env, state, true)
+}
+
+func (st *State) bind(p project.Context, c project.Command, env string, state *values.State, allowPendingServe bool) (map[string]string, map[string]bool, *protocol.Error) {
 	out := map[string]string{}
+	pending := map[string]bool{}
 	sec := map[string]bool{}
 	if state != nil {
-		list, e := state.List(values.Secret, env)
-		if e != nil {
-			return nil, e
+		list, err := state.List(values.Secret, env)
+		if err != nil {
+			return nil, nil, err
 		}
-		for _, m := range list {
-			sec[m.Key] = true
+		for _, metadata := range list {
+			sec[metadata.Key] = true
 		}
 	}
+	served := map[string]bool{}
+	for _, name := range c.Serve {
+		served[name] = true
+	}
+	pendingSelfServe := func(profile, instance, port string) bool {
+		if profile == "" {
+			profile = p.Profile
+		}
+		return allowPendingServe && profile == p.Profile && instance == "" && served[port]
+	}
+
 	keys := []string{}
 	for key := range c.Bind {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		b := c.Bind[key]
+		binding := c.Bind[key]
 		if sec[key] {
-			return nil, fail("binding_conflict")
+			return nil, nil, fail("binding_conflict")
 		}
-		if b.Template != nil {
+		if binding.Template != nil {
 			continue
 		}
-		profile := b.Profile
+		profile := binding.Profile
 		if profile == "" {
 			profile = p.Profile
 		}
-		if profile != p.Profile && b.Instance == "" {
-			return nil, fail("binding_reference_error")
+		if profile != p.Profile && binding.Instance == "" {
+			return nil, nil, fail("binding_reference_error")
 		}
-		i := st.Find(profile, b.Instance, p.Root)
-		if i == nil {
-			return nil, fail("instance_not_found")
+		instance := st.Find(profile, binding.Instance, p.Root)
+		if instance == nil {
+			if pendingSelfServe(profile, binding.Instance, binding.Port) {
+				pending[key] = true
+				continue
+			}
+			return nil, nil, fail("instance_not_found")
 		}
-		info, e := os.Stat(i.Directory)
-		if e != nil || !info.IsDir() {
-			return nil, fail("instance_not_found")
+		info, err := os.Stat(instance.Directory)
+		if err != nil || !info.IsDir() {
+			return nil, nil, fail("instance_not_found")
 		}
-		a := st.Get(i.ID, b.Port)
-		if a == nil {
-			return nil, fail("port_not_found")
+		assignment := st.Get(instance.ID, binding.Port)
+		if assignment == nil {
+			if pendingSelfServe(profile, binding.Instance, binding.Port) {
+				pending[key] = true
+				continue
+			}
+			return nil, nil, fail("port_not_found")
 		}
-		out[key] = strconv.Itoa(a.Port)
+		out[key] = strconv.Itoa(assignment.Port)
 	}
 	for _, key := range keys {
-		b := c.Bind[key]
-		if b.Template == nil {
+		binding := c.Bind[key]
+		if binding.Template == nil {
 			continue
 		}
-		v, e := project.Expand(*b.Template, func(ref string) (string, bool) {
+		deferred := false
+		value, err := project.Expand(*binding.Template, func(ref string) (string, bool) {
 			if strings.HasPrefix(ref, "bind.") {
 				name := strings.TrimPrefix(ref, "bind.")
-				binding, ok := c.Bind[name]
-				if !ok || binding.Template != nil {
+				target, ok := c.Bind[name]
+				if !ok || target.Template != nil {
 					return "", false
 				}
-				v, ok := out[name]
-				return v, ok
+				if pending[name] {
+					deferred = true
+					return "", true
+				}
+				value, ok := out[name]
+				return value, ok
 			}
 			if strings.HasPrefix(ref, "var.") && state != nil {
-				v, _, e := state.GetVariable(strings.TrimPrefix(ref, "var."), env)
-				return v, e == nil
+				value, _, err := state.GetVariable(strings.TrimPrefix(ref, "var."), env)
+				return value, err == nil
 			}
 			return "", false
 		})
-		if e != nil {
-			return nil, e
+		if err != nil {
+			return nil, nil, err
 		}
-		out[key] = v
+		if deferred {
+			pending[key] = true
+			continue
+		}
+		out[key] = value
 	}
-	return out, nil
+	return out, pending, nil
 }

@@ -407,11 +407,17 @@ func TestRestartPartialFailureRetriesOnlyIncompleteChild(t *testing.T) {
 	attempts := map[string]int{}
 	processes.apply = func(request services.Request, _ int) (services.Result, *protocol.Error) {
 		attempts[request.ID]++
-		if request.BeforeStart == nil {
-			t.Fatalf("restart lost preflight callback: %#v", request)
+		if request.RestartPreflight == nil {
+			t.Fatalf("restart lost phase preflight callback: %#v", request)
 		}
-		if err := request.BeforeStart(context.Background()); err != nil {
-			return services.Result{}, err
+		old := web
+		if request.ID == api.ID {
+			old = api
+		}
+		for _, phase := range []services.RestartPhase{services.RestartBeforeStop, services.RestartBeforeStart} {
+			if err := request.RestartPreflight(context.Background(), old, phase); err != nil {
+				return services.Result{}, err
+			}
 		}
 		if request.ID == api.ID && attempts[request.ID] == 1 {
 			return services.Result{}, protocol.NewError("execution_failed", "API restart failed.", 126, nil)
@@ -449,6 +455,63 @@ func TestRestartPartialFailureRetriesOnlyIncompleteChild(t *testing.T) {
 	}
 }
 
+func TestRestartBeforeStopFailurePreservesCompletedSibling(t *testing.T) {
+	p := testProject(t, "web", "api")
+	web := runningRecord(p, "web", tasks.ID())
+	api := runningRecord(p, "api", tasks.ID())
+	processes := &fakeProcesses{records: []services.Record{web, api}}
+	blockAPI := true
+	processes.apply = func(request services.Request, _ int) (services.Result, *protocol.Error) {
+		if request.RestartPreflight == nil {
+			t.Fatalf("restart lost phase preflight: %#v", request)
+		}
+		old := web
+		command := "web"
+		if request.ID == api.ID {
+			old = api
+			command = "api"
+		}
+		if err := request.RestartPreflight(context.Background(), old, services.RestartBeforeStop); err != nil {
+			return services.Result{}, err
+		}
+		if err := request.RestartPreflight(context.Background(), old, services.RestartBeforeStart); err != nil {
+			return services.Result{}, err
+		}
+		record := runningRecord(p, command, request.RequestID)
+		record.Previous = old.ID
+		return services.Result{Item: record, Changed: true}, nil
+	}
+	manager := Manager{
+		Data:      t.TempDir(),
+		Processes: processes,
+		Validate: func(_ context.Context, _ project.Context, command string, _ *string) *protocol.Error {
+			if command == "api" && blockAPI {
+				return protocol.NewError("requirements_failed", "api pre-stop blocked", 3, nil)
+			}
+			return nil
+		},
+	}
+	request := Request{Action: ActionRestart, Project: p, Commands: []string{"web", "api"}, Timeout: time.Second, RequestID: tasks.ID()}
+
+	first, err := manager.Apply(context.Background(), request)
+	if err == nil || err.Code != "project_operation_failed" || first.Items[0].Status != "running" || first.Items[1].Status != "failed" {
+		t.Fatalf("pre-stop child failure lost successful sibling: %#v %v", first, err)
+	}
+	if len(processes.calls) != 2 || processes.calls[0].ID != web.ID || processes.calls[1].ID != api.ID {
+		t.Fatalf("restart used a batch barrier or wrong order: %#v", processes.calls)
+	}
+	webRestartID := first.Items[0].Item.ID
+
+	blockAPI = false
+	second, err := manager.Apply(context.Background(), request)
+	if err != nil || !second.Replayed || second.Items[0].Item.ID != webRestartID || second.Items[1].Status != "running" {
+		t.Fatalf("pre-stop retry did not converge: %#v %v", second, err)
+	}
+	if len(processes.calls) != 3 || processes.calls[2].ID != api.ID {
+		t.Fatalf("completed sibling was restarted again: %#v", processes.calls)
+	}
+}
+
 func TestRestartPreflightUsesInheritedEnvOverride(t *testing.T) {
 	p := testProject(t, "web")
 	web := runningRecord(p, "web", tasks.ID())
@@ -457,11 +520,13 @@ func TestRestartPreflightUsesInheritedEnvOverride(t *testing.T) {
 	web.EnvOverride = &inherited
 	processes := &fakeProcesses{records: []services.Record{web}}
 	processes.apply = func(request services.Request, _ int) (services.Result, *protocol.Error) {
-		if request.BeforeStart == nil {
-			t.Fatal("restart lost preflight callback")
+		if request.RestartPreflight == nil {
+			t.Fatal("restart lost phase preflight callback")
 		}
-		if err := request.BeforeStart(context.Background()); err != nil {
-			return services.Result{}, err
+		for _, phase := range []services.RestartPhase{services.RestartBeforeStop, services.RestartBeforeStart} {
+			if err := request.RestartPreflight(context.Background(), web, phase); err != nil {
+				return services.Result{}, err
+			}
 		}
 		record := runningRecord(p, "web", request.RequestID)
 		record.Env = inherited
@@ -469,22 +534,28 @@ func TestRestartPreflightUsesInheritedEnvOverride(t *testing.T) {
 		record.Previous = web.ID
 		return services.Result{Item: record, Changed: true}, nil
 	}
-	var observed *string
+	observed := map[services.RestartPhase]*string{}
+	check := func(phase services.RestartPhase) Preflight {
+		return func(_ context.Context, _ project.Context, _ string, env *string) *protocol.Error {
+			observed[phase] = env
+			return nil
+		}
+	}
 	manager := Manager{
 		Data:      t.TempDir(),
 		Processes: processes,
-		Preflight: func(_ context.Context, _ project.Context, _ string, env *string) *protocol.Error {
-			observed = env
-			return nil
-		},
+		Validate:  check(services.RestartBeforeStop),
+		Preflight: check(services.RestartBeforeStart),
 	}
 	request := Request{Action: ActionRestart, Project: p, Commands: []string{"web"}, Timeout: time.Second, RequestID: tasks.ID()}
 	result, err := manager.Apply(context.Background(), request)
 	if err != nil || len(result.Items) != 1 || result.Items[0].Status != "running" {
 		t.Fatalf("restart failed: %#v %v", result, err)
 	}
-	if observed == nil || *observed != inherited {
-		t.Fatalf("preflight env = %v, want inherited %q", observed, inherited)
+	for _, phase := range []services.RestartPhase{services.RestartBeforeStop, services.RestartBeforeStart} {
+		if observed[phase] == nil || *observed[phase] != inherited {
+			t.Fatalf("%s preflight env = %v, want inherited %q", phase, observed[phase], inherited)
+		}
 	}
 }
 

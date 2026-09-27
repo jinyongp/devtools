@@ -127,3 +127,127 @@ func TestPreflightValidatesSelectedEnvBeforeRequirementChecks(t *testing.T) {
 		t.Fatalf("unexpected preflight error: %v", err)
 	}
 }
+
+func seededPortDependencies(t *testing.T, root string) (Dependencies, func()) {
+	t.Helper()
+	port := 26123
+	store := ports.Store{Directory: filepath.Join(root, "ports")}
+	var instance ports.Instance
+	if err := store.Update(context.Background(), func(state *ports.State) (bool, *protocol.Error) {
+		created, failure := state.Register("app", root)
+		if failure != nil {
+			return false, failure
+		}
+		instance = *created
+		state.Assignments = append(state.Assignments, ports.Assignment{Instance: instance, Name: "web", Port: port})
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	release, failure := store.Claim(context.Background(), instance.ID, []string{"web"})
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	return Dependencies{ValuesDirectory: filepath.Join(root, "profiles"), Ports: store, PortDefaults: []int{26000, 26999}}, release
+}
+
+func TestValidateIgnoresRunningServeOwnershipButPreflightDoesNot(t *testing.T) {
+	root := t.TempDir()
+	dependencies, release := seededPortDependencies(t, root)
+	defer release()
+	port := 26123
+	command := Command{
+		Project: project.Context{
+			Profile: "app",
+			Root:    root,
+			Ports:   map[string]project.Port{"web": {Port: &port, Strict: true}},
+		},
+		Name:      "web",
+		Exec:      []string{"/bin/true", "$" + "{" + "bind.PORT}"},
+		Directory: root,
+		Serve:     []string{"web"},
+		Bind:      map[string]project.Binding{"PORT": {Port: "web"}},
+	}
+	if failure := Validate(context.Background(), command, dependencies, nil); failure != nil {
+		t.Fatalf("non-destructive validation rejected the running command: %v", failure)
+	}
+	if failure := Preflight(context.Background(), command, dependencies, nil); failure == nil || failure.Code != "port_run_active" {
+		t.Fatalf("full preflight did not preserve runtime ownership check: %v", failure)
+	}
+}
+
+func TestValidateDetectsMissingExecutableBeforeServeAvailability(t *testing.T) {
+	root := t.TempDir()
+	dependencies, release := seededPortDependencies(t, root)
+	defer release()
+	port := 26123
+	command := Command{
+		Project: project.Context{
+			Profile: "app",
+			Root:    root,
+			Ports:   map[string]project.Port{"web": {Port: &port, Strict: true}},
+		},
+		Name:      "web",
+		Exec:      []string{"/definitely-not-an-installed-review-executable"},
+		Directory: root,
+		Serve:     []string{"web"},
+	}
+	failure := Validate(context.Background(), command, dependencies, nil)
+	if failure == nil || failure.Code != "requirements_failed" {
+		t.Fatalf("missing executable escaped pre-stop validation: %v", failure)
+	}
+}
+
+func TestValidateDefersNewSelfServedBindingUntilPostStop(t *testing.T) {
+	root := t.TempDir()
+	port := 26123
+	dependencies := Dependencies{
+		ValuesDirectory: filepath.Join(root, "profiles"),
+		Ports:           ports.Store{Directory: filepath.Join(root, "ports")},
+		PortDefaults:    []int{26000, 26999},
+	}
+	command := Command{
+		Project: project.Context{
+			Profile: "app",
+			Root:    root,
+			Ports:   map[string]project.Port{"web": {Port: &port, Strict: true}},
+		},
+		Name:      "web",
+		Exec:      []string{"/bin/true", "$" + "{" + "bind.PORT}"},
+		Directory: root,
+		Serve:     []string{"web"},
+		Bind:      map[string]project.Binding{"PORT": {Port: "web"}},
+	}
+	if failure := Validate(context.Background(), command, dependencies, nil); failure != nil {
+		t.Fatalf("new self-served binding was not deferred: %v", failure)
+	}
+}
+
+func TestValidatePendingPathStillChecksAbsoluteToolRequirements(t *testing.T) {
+	root := t.TempDir()
+	port := 26123
+	dependencies := Dependencies{
+		ValuesDirectory: filepath.Join(root, "profiles"),
+		Ports:           ports.Store{Directory: filepath.Join(root, "ports")},
+		PortDefaults:    []int{26000, 26999},
+	}
+	command := Command{
+		Project: project.Context{
+			Profile: "app",
+			Root:    root,
+			Ports:   map[string]project.Port{"web": {Port: &port, Strict: true}},
+		},
+		Name:      "web",
+		Exec:      []string{"relative-command"},
+		Directory: root,
+		Serve:     []string{"web"},
+		Bind:      map[string]project.Binding{"PATH": {Port: "web"}},
+		Requirements: project.Requirements{Tools: map[string]project.Tool{
+			"absolute": {Executable: "/definitely-not-an-installed-absolute-tool"},
+		}},
+	}
+	failure := Validate(context.Background(), command, dependencies, nil)
+	if failure == nil || failure.Code != "requirements_failed" {
+		t.Fatalf("absolute tool requirement was incorrectly deferred with PATH: %v", failure)
+	}
+}

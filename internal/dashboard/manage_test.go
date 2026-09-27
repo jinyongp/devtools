@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/project"
+	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
@@ -100,5 +104,76 @@ func TestDashboardRevokesObservedAgentRun(t *testing.T) {
 	state, e := store.Read()
 	if e != nil || state.Current(id) != nil || state.Runs[run.ID].State != "revoked" {
 		t.Fatal("agent run remains active", e)
+	}
+}
+
+func TestDashboardProcessRestartPreStopValidationPreservesRunningExecution(t *testing.T) {
+	data := t.TempDir()
+	root := t.TempDir()
+	initial := "profile='app'\n[commands.web]\nexec=['/bin/true']\n"
+	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(initial), 0600); err != nil {
+		t.Fatal(err)
+	}
+	resolved, failure := project.Resolve(root, "")
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	started := time.Now().UTC()
+	id := tasks.ID()
+	record := services.Record{
+		ID:        id,
+		Profile:   "app",
+		Instance:  "instance",
+		Directory: resolved.Root,
+		Command:   "web",
+		CreatedAt: started,
+		StartedAt: &started,
+		State:     "running",
+	}
+	body, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recordPath := filepath.Join(data, "processes", id, "record.json")
+	if err := maintenance.Write(recordPath, body); err != nil {
+		t.Fatal(err)
+	}
+	changed := "profile='app'\n[commands.web]\nexec=['/definitely-not-an-installed-review-executable']\n"
+	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(changed), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	server := &Server{
+		registry: Registry{Address: "http://127.0.0.1:1234"},
+		data:     filepath.Join(data, "tasks"),
+		sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)},
+	}
+	requestBody, err := json.Marshal(actionRequest{
+		Domain:  "process",
+		Profile: "app",
+		Process: &services.Request{Action: "restart", ID: id, RequestID: tasks.ID()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest("POST", server.registry.Address+"/api/actions", strings.NewReader(string(requestBody)))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", server.registry.Address)
+	request.Header.Set("Authorization", "Bearer session")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != 400 || !strings.Contains(response.Body.String(), "\"code\":\"requirements_failed\"") {
+		t.Fatalf("restart response: %d %s", response.Code, response.Body.String())
+	}
+	storedBytes, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored services.Record
+	if err := json.Unmarshal(storedBytes, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored.ID != id || stored.EndedAt != nil || stored.State != "running" {
+		t.Fatalf("dashboard pre-stop validation stopped the old process: %#v", stored)
 	}
 }

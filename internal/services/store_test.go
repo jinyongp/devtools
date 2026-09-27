@@ -261,6 +261,39 @@ func TestErrorExitCodes(t *testing.T) {
 	}
 }
 
+func TestRestartBeforeStopFailurePreservesRunningExecution(t *testing.T) {
+	s := Store{Data: t.TempDir()}
+	started := time.Now().UTC()
+	old := Record{ID: tasks.ID(), Profile: "app", Instance: "instance", Directory: t.TempDir(), Command: "web", CreatedAt: started, StartedAt: &started, State: "running"}
+	if err := writePrivate(s.path(old.ID, "record.json"), old); err != nil {
+		t.Fatal(err)
+	}
+	phases := []RestartPhase{}
+	request := Request{
+		Action:    "restart",
+		ID:        old.ID,
+		RequestID: tasks.ID(),
+		RestartPreflight: func(_ context.Context, record Record, phase RestartPhase) *protocol.Error {
+			phases = append(phases, phase)
+			if record.ID != old.ID || record.Directory != old.Directory || record.Command != old.Command {
+				t.Fatalf("restart preflight received stale record: %#v", record)
+			}
+			return protocol.NewError("requirements_failed", "pre-stop blocked", 3, nil)
+		},
+	}
+	result, failure := s.Apply(context.Background(), request)
+	if failure == nil || failure.Code != "requirements_failed" || result.Changed || result.Item.ID != "" {
+		t.Fatalf("pre-stop failure mutated restart: %#v %v", result, failure)
+	}
+	if len(phases) != 1 || phases[0] != RestartBeforeStop {
+		t.Fatalf("unexpected restart phases: %#v", phases)
+	}
+	stored, readErr := s.read(old.ID)
+	if readErr != nil || stored.EndedAt != nil || stored.State != "running" {
+		t.Fatalf("old execution changed after pre-stop failure: %#v %v", stored, readErr)
+	}
+}
+
 func TestRestartPreservesStopMutationWhenColdStartPreflightFails(t *testing.T) {
 	s := Store{Data: t.TempDir()}
 	root := t.TempDir()
@@ -306,12 +339,20 @@ func TestRestartPreservesStopMutationWhenColdStartPreflightFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	phases := []RestartPhase{}
 	request := Request{
 		Action:    "restart",
 		ID:        old.ID,
 		RequestID: tasks.ID(),
-		BeforeStart: func(context.Context) *protocol.Error {
-			return protocol.NewError("requirements_failed", "cold start blocked", 3, nil)
+		RestartPreflight: func(_ context.Context, record Record, phase RestartPhase) *protocol.Error {
+			phases = append(phases, phase)
+			if record.ID != old.ID {
+				t.Fatalf("restart phase received wrong execution: %#v", record)
+			}
+			if phase == RestartBeforeStart {
+				return protocol.NewError("requirements_failed", "cold start blocked", 3, nil)
+			}
+			return nil
 		},
 	}
 	result, failure := s.Apply(context.Background(), request)
@@ -320,6 +361,9 @@ func TestRestartPreservesStopMutationWhenColdStartPreflightFails(t *testing.T) {
 	}
 	if !result.Changed || result.Item.ID != old.ID || result.Item.State != "stopped" {
 		t.Fatalf("restart lost accepted stop mutation: %#v", result)
+	}
+	if len(phases) != 2 || phases[0] != RestartBeforeStop || phases[1] != RestartBeforeStart {
+		t.Fatalf("unexpected restart phase order: %#v", phases)
 	}
 }
 

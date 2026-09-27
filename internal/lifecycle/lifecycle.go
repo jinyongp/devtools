@@ -35,6 +35,7 @@ type Preflight func(context.Context, project.Context, string, *string) *protocol
 type Manager struct {
 	Data      string
 	Processes ProcessStore
+	Validate  Preflight
 	Preflight Preflight
 }
 
@@ -485,10 +486,6 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 			continue
 		}
 		child.Result.Condition = nil
-		preflightEnv := request.Env
-		if preflightEnv == nil && child.Result.Item != nil {
-			preflightEnv = child.Result.Item.EnvOverride
-		}
 		processRequest := services.Request{
 			Action:    "restart",
 			ID:        child.ExecutionID,
@@ -496,9 +493,26 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 			Capture:   request.Capture,
 			RequestID: child.RequestID,
 		}
-		if m.Preflight != nil {
-			processRequest.BeforeStart = func(ctx context.Context) *protocol.Error {
-				return m.Preflight(ctx, request.Project, child.Command, preflightEnv)
+		if m.Validate != nil || m.Preflight != nil {
+			processRequest.RestartPreflight = func(ctx context.Context, record services.Record, phase services.RestartPhase) *protocol.Error {
+				env := request.Env
+				if env == nil {
+					env = record.EnvOverride
+				}
+				snapshot := project.Context{Root: record.Directory, Profile: record.Profile}
+				switch phase {
+				case services.RestartBeforeStop:
+					if m.Validate != nil {
+						return m.Validate(ctx, snapshot, record.Command, env)
+					}
+				case services.RestartBeforeStart:
+					if m.Preflight != nil {
+						return m.Preflight(ctx, snapshot, record.Command, env)
+					}
+				default:
+					return protocol.NewError("internal_error", "Invalid restart preflight phase.", 1, nil)
+				}
+				return nil
 			}
 		}
 		result, err := m.Processes.Apply(ctx, processRequest)

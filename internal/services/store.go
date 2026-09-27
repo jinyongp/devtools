@@ -96,15 +96,23 @@ type storedExecution struct {
 	Record Record
 	Owner  ArchivedOwner
 }
+type RestartPhase string
+
+const (
+	RestartBeforeStop  RestartPhase = "before-stop"
+	RestartBeforeStart RestartPhase = "before-start"
+)
+
 type Request struct {
-	Action      string                                `json:"action"`
-	ID          string                                `json:"id,omitempty"`
-	Directory   string                                `json:"directory,omitempty"`
-	Command     string                                `json:"command,omitempty"`
-	Env         *string                               `json:"env,omitempty"`
-	Capture     *bool                                 `json:"capture_logs,omitempty"`
-	RequestID   string                                `json:"request_id"`
-	BeforeStart func(context.Context) *protocol.Error `json:"-"`
+	Action           string                                                      `json:"action"`
+	ID               string                                                      `json:"id,omitempty"`
+	Directory        string                                                      `json:"directory,omitempty"`
+	Command          string                                                      `json:"command,omitempty"`
+	Env              *string                                                     `json:"env,omitempty"`
+	Capture          *bool                                                       `json:"capture_logs,omitempty"`
+	RequestID        string                                                      `json:"request_id"`
+	BeforeStart      func(context.Context) *protocol.Error                       `json:"-"`
+	RestartPreflight func(context.Context, Record, RestartPhase) *protocol.Error `json:"-"`
 }
 type Result struct {
 	Item     Record `json:"item"`
@@ -680,6 +688,12 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 			err = failure("invalid_argument")
 			break
 		}
+		if q.Action == "restart" && r.EndedAt == nil && q.RestartPreflight != nil {
+			err = q.RestartPreflight(ctx, r, RestartBeforeStop)
+			if err != nil {
+				break
+			}
+		}
 		out, err = s.stop(ctx, r)
 		if err != nil {
 			break
@@ -692,6 +706,18 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 			}
 			if q.Capture == nil {
 				q.Capture = &r.Capture
+			}
+			if q.RestartPreflight != nil {
+				legacyBeforeStart := q.BeforeStart
+				q.BeforeStart = func(ctx context.Context) *protocol.Error {
+					if preflightErr := q.RestartPreflight(ctx, r, RestartBeforeStart); preflightErr != nil {
+						return preflightErr
+					}
+					if legacyBeforeStart != nil {
+						return legacyBeforeStart(ctx)
+					}
+					return nil
+				}
 			}
 			started, startErr := s.start(ctx, q, r.ID)
 			if started.Item.ID != "" {

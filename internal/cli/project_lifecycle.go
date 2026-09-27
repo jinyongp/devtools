@@ -86,6 +86,7 @@ func (a *App) projectLifecycleManager() (lifecycle.Manager, *protocol.Error) {
 		return lifecycle.Manager{}, protocol.NewError("internal_error", "Project lifecycle manager is unavailable.", 1, nil)
 	}
 	manager := a.lifecycleManager(data)
+	manager.Validate = a.validateProjectCommand
 	manager.Preflight = a.preflightProjectCommand
 	return manager, nil
 }

@@ -17,6 +17,14 @@ import (
 
 func run(ctx context.Context) error {
 	// Managed commands launch their supervisor using this executable.
+	if len(os.Args) == 5 && os.Args[1] == "__process-serve" && os.Args[4] == "3" {
+		lease := os.NewFile(3, "process-lease")
+		if lease == nil {
+			return fmt.Errorf("invalid process lease")
+		}
+		defer lease.Close()
+		return cli.ServeProcessWithLease(ctx, os.Args[2], os.Args[3], lease)
+	}
 	if len(os.Args) == 4 && os.Args[1] == "__process-serve" {
 		return cli.ServeProcess(ctx, os.Args[2], os.Args[3])
 	}

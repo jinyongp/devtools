@@ -19,14 +19,23 @@ import (
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/protocol"
-	"github.com/jinyongp/devtools/internal/tasks"
 )
 
 type Execute func(context.Context, Record, process.Runner, io.Writer) *protocol.Error
 
-// Serve owns a session/process group. Only this live group leader signals its
-// own group; clients never signal a PID read from disk.
+// Serve supports markerless legacy/internal invocations by acquiring the lease
+// itself. New launch protocol records must use ServeWithLease.
 func (s Store) Serve(ctx context.Context, id string, execute Execute) error {
+	return s.serve(ctx, id, nil, execute)
+}
+
+func (s Store) ServeWithLease(ctx context.Context, id string, leaseFile *os.File, execute Execute) error {
+	return s.serve(ctx, id, leaseFile, execute)
+}
+
+// serve owns a session/process group. Only this live group leader signals its
+// own group; clients never signal a PID read from disk.
+func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute Execute) error {
 	if !validID(id) {
 		return errors.New("invalid ID")
 	}
@@ -35,11 +44,35 @@ func (s Store) Serve(ctx context.Context, id string, execute Execute) error {
 	if e != nil || group != pid {
 		return errors.New("dedicated session required")
 	}
-	release, e := tasks.Lock(ctx, s.path(id, "lease.lock"))
-	if e != nil {
-		return e
+	_, hasMarker, markerErr := s.readLaunchMarker(id)
+	if markerErr != nil {
+		return errors.New("invalid launch marker")
 	}
-	defer release()
+	var lease *lockedLease
+	if hasMarker {
+		if inherited == nil {
+			return errors.New("inherited lease required")
+		}
+		var err error
+		lease, err = adoptInheritedLease(inherited, s.path(id, "lease.lock"))
+		if err != nil {
+			return err
+		}
+	} else {
+		if inherited != nil {
+			return errors.New("unexpected inherited lease")
+		}
+		var acquired bool
+		var err error
+		lease, acquired, err = tryLease(s.path(id, "lease.lock"), true)
+		if err != nil {
+			return err
+		}
+		if !acquired {
+			return errors.New("lease unavailable")
+		}
+	}
+	defer func() { _ = lease.unlockClose() }()
 	r, err := s.read(id)
 	if err != nil || r.EndedAt != nil {
 		return errors.New("invalid execution")

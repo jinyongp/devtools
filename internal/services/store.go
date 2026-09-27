@@ -487,12 +487,22 @@ func (s Store) statusRecord(ctx context.Context, r Record) (Record, *protocol.Er
 	if live, err := s.rpc(ctx, r.ID, "status"); err == nil {
 		return live, nil
 	}
-	r.State = "unknown"
-	r.Reason = "supervisor_unavailable"
-	if s.leaseFree(ctx, r.ID) {
+	lost, err := s.supervisorLost(ctx, r, true)
+	if err != nil {
+		return r, err
+	}
+	if lost {
 		r.State = "interrupted"
 		r.Reason = "supervisor_lost"
+		return r, nil
 	}
+	if r.StartedAt == nil {
+		r.State = "starting"
+		r.Reason = ""
+		return r, nil
+	}
+	r.State = "unknown"
+	r.Reason = "supervisor_unavailable"
 	return r, nil
 }
 
@@ -503,15 +513,14 @@ func (s Store) Status(ctx context.Context, id string) (Record, *protocol.Error) 
 	}
 	return s.statusRecord(ctx, r)
 }
+
 func (s Store) leaseFree(ctx context.Context, id string) bool {
-	wait, cancel := context.WithTimeout(ctx, 5*time.Millisecond)
-	defer cancel()
-	release, e := tasks.Lock(wait, s.path(id, "lease.lock"))
-	if e != nil {
+	_, hasMarker, markerErr := s.readLaunchMarker(id)
+	if markerErr != nil {
 		return false
 	}
-	release()
-	return true
+	available, err := s.leaseAvailable(ctx, id, !hasMarker)
+	return err == nil && available
 }
 
 func (s Store) storedRecords() ([]Record, *protocol.Error) {
@@ -649,6 +658,9 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	} else if !errors.Is(e, os.ErrNotExist) {
 		return out, storageError()
 	}
+	if cleanupErr := s.cleanupLaunchStaging(); cleanupErr != nil {
+		return out, cleanupErr
+	}
 	if !receiptExists {
 		if writePrivate(receiptPath, receipt{Fingerprint: fingerprint}) != nil {
 			return out, storageError()
@@ -718,6 +730,14 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		out.Item = r
 		out.Changed = true
 		if r.StartedAt == nil && r.EndedAt == nil {
+			current, _, reconcileErr := s.terminalizeLost(ctx, r, true)
+			out.Item = current
+			if reconcileErr != nil {
+				return out, reconcileErr
+			}
+			if current.EndedAt != nil {
+				return out, nil
+			}
 			return out, failure("process_pending")
 		}
 		return out, nil
@@ -796,26 +816,33 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		}
 	}
 	r := Record{ID: q.RequestID, Profile: p.Profile, Instance: instance.ID, Directory: p.Root, Command: q.Command, Env: env, EnvOverride: q.Env, Capture: capture, CreatedAt: time.Now().UTC(), State: "starting", Previous: previous}
-	if writePrivate(s.path(r.ID, "record.json"), r) != nil {
-		return out, storageError()
-	}
 	exe, err := os.Executable()
 	if err != nil {
 		return out, storageError()
 	}
-	cmd := exec.Command(exe, "__process-serve", s.Data, r.ID)
+	lease, launchErr := s.prepareLaunch(r)
+	if launchErr != nil {
+		return out, launchErr
+	}
+	cmd := exec.Command(exe, "__process-serve", s.Data, r.ID, "3")
 	cmd.Dir = p.Root
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.ExtraFiles = []*os.File{lease.file}
 	if err = cmd.Start(); err != nil {
 		now := time.Now().UTC()
 		r.EndedAt = &now
 		r.State = "failed"
 		r.Reason = "supervisor_start_failed"
-		_ = writePrivate(s.path(r.ID, "record.json"), r)
+		writeErr := writePrivate(s.path(r.ID, "record.json"), r)
+		leaseErr := lease.unlockClose()
+		if writeErr != nil || leaseErr != nil {
+			return Result{Item: r, Changed: true}, storageError()
+		}
 		return Result{Item: r, Changed: true}, nil
 	}
+	_ = lease.closeReference()
 	go func() { _ = cmd.Wait() }()
-	deadline := time.NewTimer(10 * time.Second)
+	deadline := time.NewTimer(legacyStartupGrace)
 	defer deadline.Stop()
 	tick := time.NewTicker(25 * time.Millisecond)
 	defer tick.Stop()
@@ -847,15 +874,12 @@ func (s Store) stop(ctx context.Context, r Record) (Result, *protocol.Error) {
 		return Result{Item: r}, nil
 	}
 	if _, e := s.rpc(ctx, r.ID, "stop"); e != nil {
-		if s.leaseFree(ctx, r.ID) {
-			now := time.Now().UTC()
-			r.EndedAt = &now
-			r.State = "interrupted"
-			r.Reason = "supervisor_lost"
-			if writePrivate(s.path(r.ID, "record.json"), r) != nil {
-				return Result{}, storageError()
-			}
-			return Result{Item: r, Changed: true}, nil
+		current, changed, reconcileErr := s.terminalizeLost(ctx, r, false)
+		if reconcileErr != nil {
+			return Result{}, reconcileErr
+		}
+		if changed || current.EndedAt != nil {
+			return Result{Item: current, Changed: changed}, nil
 		}
 		return Result{}, failure("process_unavailable")
 	}

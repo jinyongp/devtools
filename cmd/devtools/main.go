@@ -24,6 +24,19 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) == 5 && os.Args[1] == "__process-serve" && os.Args[4] == "3" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		defer stop()
+		lease := os.NewFile(3, "process-lease")
+		if lease == nil {
+			os.Exit(1)
+		}
+		defer lease.Close()
+		if cli.ServeProcessWithLease(ctx, os.Args[2], os.Args[3], lease) != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 4 && os.Args[1] == "__process-serve" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()

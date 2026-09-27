@@ -126,8 +126,16 @@ func (a *App) registerProcesses() {
 }
 
 func ServeProcess(ctx context.Context, data, id string) error {
+	return serveProcess(ctx, data, id, nil)
+}
+
+func ServeProcessWithLease(ctx context.Context, data, id string, lease *os.File) error {
+	return serveProcess(ctx, data, id, lease)
+}
+
+func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 	s := services.Store{Data: data}
-	return s.Serve(ctx, id, func(ctx context.Context, r services.Record, runner process.Runner, output io.Writer) *protocol.Error {
+	execute := func(ctx context.Context, r services.Record, runner process.Runner, output io.Writer) *protocol.Error {
 		p, err := project.Resolve(r.Directory, "")
 		if err != nil {
 			return err
@@ -162,5 +170,9 @@ func ServeProcess(ctx context.Context, data, id string) error {
 		}
 		_, err = prepared.Execute(ctx, os.Environ(), runner, nil, output, output)
 		return err
-	})
+	}
+	if lease != nil {
+		return s.ServeWithLease(ctx, id, lease, execute)
+	}
+	return s.Serve(ctx, id, execute)
 }

@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/archiveproof"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
@@ -56,6 +57,39 @@ type Record struct {
 	Reason          string     `json:"reason"`
 	State           string     `json:"state"`
 	Previous        string     `json:"previous_id,omitempty"`
+}
+
+type archiveMarker struct {
+	Version    int       `json:"version"`
+	ArchiveID  string    `json:"archive_id"`
+	ArchivedAt time.Time `json:"archived_at"`
+	Profile    string    `json:"profile"`
+	EndedAt    time.Time `json:"ended_at"`
+	Capture    bool      `json:"capture_logs"`
+}
+
+type ArchivedOwner struct {
+	Profile    string
+	ArchiveID  string
+	ArchivedAt time.Time
+	EndedAt    *time.Time
+	Capture    *bool
+	Legacy     bool
+}
+
+type executionStorageState uint8
+
+const (
+	executionMissing executionStorageState = iota
+	executionActive
+	executionArchived
+	executionHole
+)
+
+type storedExecution struct {
+	State  executionStorageState
+	Record Record
+	Owner  ArchivedOwner
 }
 type Request struct {
 	Action      string                                `json:"action"`
@@ -104,21 +138,203 @@ func validID(s string) bool {
 }
 func (s Store) root() string                { return filepath.Join(s.Data, "processes") }
 func (s Store) path(id, name string) string { return filepath.Join(s.root(), id, name) }
-func (s Store) read(id string) (Record, *protocol.Error) {
-	var r Record
+
+func validRecord(id string, r Record) bool {
+	return r.ID == id && project.ValidProfile(r.Profile) && filepath.IsAbs(r.Directory)
+}
+
+func markerOwner(m archiveMarker) ArchivedOwner {
+	ended := m.EndedAt
+	capture := m.Capture
+	return ArchivedOwner{Profile: m.Profile, ArchiveID: m.ArchiveID, ArchivedAt: m.ArchivedAt, EndedAt: &ended, Capture: &capture}
+}
+
+func legacyOwner(p archiveproof.Proof) ArchivedOwner {
+	return ArchivedOwner{Profile: p.Profile, ArchiveID: p.ArchiveID, ArchivedAt: p.ArchivedAt, Legacy: true}
+}
+
+func validMarker(m archiveMarker) bool {
+	return m.Version == 1 && validID(m.ArchiveID) && !m.ArchivedAt.IsZero() && project.ValidProfile(m.Profile) && !m.EndedAt.IsZero()
+}
+
+func markerMatchesRecord(m archiveMarker, r Record) bool {
+	return r.EndedAt != nil && m.Profile == r.Profile && m.EndedAt.Equal(*r.EndedAt) && m.Capture == r.Capture
+}
+
+func (s Store) readMarker(id string) (archiveMarker, bool, *protocol.Error) {
+	var marker archiveMarker
+	err := tasks.ReadPrivate(s.path(id, "record.archive.json"), &marker)
+	if errors.Is(err, os.ErrNotExist) {
+		return marker, false, nil
+	}
+	if err != nil || !validMarker(marker) {
+		return marker, false, storageError()
+	}
+	return marker, true, nil
+}
+
+func (s Store) inspectLocal(id string) (storedExecution, *protocol.Error) {
+	var stored storedExecution
 	if !validID(id) {
-		return r, failure("invalid_argument")
+		return stored, failure("invalid_argument")
 	}
-	if e := tasks.ReadPrivate(s.path(id, "record.json"), &r); e != nil {
-		if errors.Is(e, os.ErrNotExist) {
-			return r, failure("process_not_found")
+	dir := filepath.Join(s.root(), id)
+	info, err := os.Lstat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		stored.State = executionMissing
+		return stored, nil
+	}
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+		return stored, storageError()
+	}
+
+	var record Record
+	recordErr := tasks.ReadPrivate(s.path(id, "record.json"), &record)
+	if recordErr != nil && !errors.Is(recordErr, os.ErrNotExist) {
+		return stored, storageError()
+	}
+	marker, hasMarker, markerErr := s.readMarker(id)
+	if markerErr != nil {
+		return stored, markerErr
+	}
+	if recordErr == nil {
+		if !validRecord(id, record) || hasMarker && !markerMatchesRecord(marker, record) {
+			return stored, storageError()
 		}
-		return r, storageError()
+		stored.State = executionActive
+		stored.Record = record
+		if hasMarker {
+			stored.Owner = markerOwner(marker)
+		}
+		return stored, nil
 	}
-	if r.ID != id || !project.ValidProfile(r.Profile) || !filepath.IsAbs(r.Directory) {
-		return r, storageError()
+	if hasMarker {
+		stored.State = executionArchived
+		stored.Owner = markerOwner(marker)
+		return stored, nil
 	}
-	return r, nil
+	stored.State = executionHole
+	return stored, nil
+}
+
+func (s Store) legacyProofs(ids []string) (map[string]archiveproof.Proof, *protocol.Error) {
+	proofs, err := archiveproof.CompletedProcesses(s.Data, ids)
+	if err != nil {
+		return nil, storageError()
+	}
+	return proofs, nil
+}
+
+func (s Store) read(id string) (Record, *protocol.Error) {
+	stored, err := s.inspectLocal(id)
+	if err != nil {
+		return Record{}, err
+	}
+	switch stored.State {
+	case executionActive:
+		return stored.Record, nil
+	case executionMissing, executionArchived:
+		return Record{}, failure("process_not_found")
+	case executionHole:
+		proofs, proofErr := s.legacyProofs([]string{id})
+		if proofErr != nil {
+			return Record{}, proofErr
+		}
+		if _, ok := proofs[id]; ok {
+			return Record{}, failure("process_not_found")
+		}
+		return Record{}, storageError()
+	default:
+		return Record{}, storageError()
+	}
+}
+
+// ArchivedOwner returns durable owner metadata for an archived execution.
+// Future cleanup markers preserve ended/capture metadata; legacy proofs only
+// preserve the fields that old cleanup archives stored durably.
+func (s Store) ArchivedOwner(id string) (ArchivedOwner, *protocol.Error) {
+	stored, err := s.inspectLocal(id)
+	if err != nil {
+		return ArchivedOwner{}, err
+	}
+	switch stored.State {
+	case executionArchived:
+		return stored.Owner, nil
+	case executionHole:
+		proofs, proofErr := s.legacyProofs([]string{id})
+		if proofErr != nil {
+			return ArchivedOwner{}, proofErr
+		}
+		if proof, ok := proofs[id]; ok {
+			return legacyOwner(proof), nil
+		}
+		return ArchivedOwner{}, storageError()
+	case executionMissing:
+		return ArchivedOwner{}, failure("process_not_found")
+	default:
+		return ArchivedOwner{}, failure("process_active")
+	}
+}
+
+func (s Store) WriteArchiveMarker(record Record, archiveID string, archivedAt time.Time) *protocol.Error {
+	if !validID(record.ID) || !validRecord(record.ID, record) || record.EndedAt == nil || !validID(archiveID) || archivedAt.IsZero() {
+		return failure("invalid_argument")
+	}
+	marker := archiveMarker{
+		Version:    1,
+		ArchiveID:  archiveID,
+		ArchivedAt: archivedAt.UTC(),
+		Profile:    record.Profile,
+		EndedAt:    record.EndedAt.UTC(),
+		Capture:    record.Capture,
+	}
+	current, err := s.inspectLocal(record.ID)
+	if err != nil {
+		return err
+	}
+	if current.State != executionActive || !markerMatchesRecord(marker, current.Record) {
+		return failure("revision_conflict")
+	}
+	if current.Owner.ArchiveID != "" {
+		if current.Owner.ArchiveID != archiveID || !current.Owner.ArchivedAt.Equal(marker.ArchivedAt) {
+			return failure("revision_conflict")
+		}
+		return nil
+	}
+	if err := writePrivate(s.path(record.ID, "record.archive.json"), marker); err != nil {
+		return storageError()
+	}
+	return nil
+}
+
+func (s Store) RemoveArchiveMarker(id, archiveID string) *protocol.Error {
+	if !validID(id) || !validID(archiveID) {
+		return failure("invalid_argument")
+	}
+	marker, exists, err := s.readMarker(id)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	if marker.ArchiveID != archiveID {
+		return failure("revision_conflict")
+	}
+	path := s.path(id, "record.archive.json")
+	if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+		return storageError()
+	}
+	dir, openErr := os.Open(filepath.Dir(path))
+	if openErr != nil {
+		return storageError()
+	}
+	syncErr := dir.Sync()
+	closeErr := dir.Close()
+	if syncErr != nil || closeErr != nil {
+		return storageError()
+	}
+	return nil
 }
 func (s Store) rpc(ctx context.Context, id, action string) (Record, error) {
 	var c control
@@ -159,24 +375,28 @@ func (s Store) rpc(ctx context.Context, id, action string) (Record, error) {
 	}
 	return out, e
 }
-func (s Store) Status(ctx context.Context, id string) (Record, *protocol.Error) {
-	r, e := s.read(id)
-	if e != nil {
-		return r, e
-	}
+func (s Store) statusRecord(ctx context.Context, r Record) (Record, *protocol.Error) {
 	if r.EndedAt != nil {
 		return r, nil
 	}
-	if live, e := s.rpc(ctx, id, "status"); e == nil {
+	if live, err := s.rpc(ctx, r.ID, "status"); err == nil {
 		return live, nil
 	}
 	r.State = "unknown"
 	r.Reason = "supervisor_unavailable"
-	if s.leaseFree(ctx, id) {
+	if s.leaseFree(ctx, r.ID) {
 		r.State = "interrupted"
 		r.Reason = "supervisor_lost"
 	}
 	return r, nil
+}
+
+func (s Store) Status(ctx context.Context, id string) (Record, *protocol.Error) {
+	r, err := s.read(id)
+	if err != nil {
+		return r, err
+	}
+	return s.statusRecord(ctx, r)
 }
 func (s Store) leaseFree(ctx context.Context, id string) bool {
 	wait, cancel := context.WithTimeout(ctx, 5*time.Millisecond)
@@ -188,59 +408,76 @@ func (s Store) leaseFree(ctx context.Context, id string) bool {
 	release()
 	return true
 }
-func (s Store) List(ctx context.Context, profile string) ([]Record, *protocol.Error) {
+
+func (s Store) storedRecords() ([]Record, *protocol.Error) {
 	items := []Record{}
-	if profile != "" && !project.ValidProfile(profile) {
-		return nil, failure("invalid_argument")
-	}
-	entries, e := os.ReadDir(s.root())
-	if errors.Is(e, os.ErrNotExist) {
+	entries, err := os.ReadDir(s.root())
+	if errors.Is(err, os.ErrNotExist) {
 		return items, nil
 	}
-	if e != nil {
+	if err != nil {
 		return nil, storageError()
 	}
+	holes := []string{}
 	for _, entry := range entries {
-		if !validID(entry.Name()) {
+		id := entry.Name()
+		if !validID(id) {
 			continue
 		}
-		r, e := s.Status(ctx, entry.Name())
-		if e != nil {
-			if e.Code == "process_not_found" {
-				continue
-			}
-			return nil, e
+		stored, inspectErr := s.inspectLocal(id)
+		if inspectErr != nil {
+			return nil, inspectErr
 		}
-		if profile == "" || r.Profile == profile {
-			items = append(items, r)
+		switch stored.State {
+		case executionActive:
+			items = append(items, stored.Record)
+		case executionMissing, executionArchived:
+			continue
+		case executionHole:
+			holes = append(holes, id)
+		default:
+			return nil, storageError()
+		}
+	}
+	if len(holes) > 0 {
+		proofs, proofErr := s.legacyProofs(holes)
+		if proofErr != nil {
+			return nil, proofErr
+		}
+		for _, id := range holes {
+			if _, ok := proofs[id]; !ok {
+				return nil, storageError()
+			}
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
 	return items, nil
 }
 
+func (s Store) List(ctx context.Context, profile string) ([]Record, *protocol.Error) {
+	if profile != "" && !project.ValidProfile(profile) {
+		return nil, failure("invalid_argument")
+	}
+	stored, err := s.storedRecords()
+	if err != nil {
+		return nil, err
+	}
+	items := []Record{}
+	for _, r := range stored {
+		live, statusErr := s.statusRecord(ctx, r)
+		if statusErr != nil {
+			return nil, statusErr
+		}
+		if profile == "" || live.Profile == profile {
+			items = append(items, live)
+		}
+	}
+	return items, nil
+}
+
 // StoredRecords reads process records without contacting live supervisors.
 func (s Store) StoredRecords() ([]Record, *protocol.Error) {
-	items := []Record{}
-	entries, e := os.ReadDir(s.root())
-	if errors.Is(e, os.ErrNotExist) {
-		return items, nil
-	}
-	if e != nil {
-		return nil, storageError()
-	}
-	for _, entry := range entries {
-		if !validID(entry.Name()) {
-			continue
-		}
-		r, readErr := s.read(entry.Name())
-		if readErr != nil {
-			return nil, readErr
-		}
-		items = append(items, r)
-	}
-	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
-	return items, nil
+	return s.storedRecords()
 }
 
 // ProfileNames enumerates profiles from stored process records without

@@ -322,3 +322,159 @@ func TestRestartPreservesStopMutationWhenColdStartPreflightFails(t *testing.T) {
 		t.Fatalf("restart lost accepted stop mutation: %#v", result)
 	}
 }
+
+func writeLegacyProcessProof(t *testing.T, s Store, executionID, profile string, archivedAt time.Time, restored bool) string {
+	t.Helper()
+	archiveID := tasks.ID()
+	dir := filepath.Join(s.Data, "archives", archiveID)
+	if err := tasks.PrivateDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	var restoredAt *time.Time
+	if restored {
+		at := archivedAt.Add(time.Hour)
+		restoredAt = &at
+	}
+	entry := map[string]any{
+		"id":          archiveID,
+		"kind":        "completed_process",
+		"profile":     profile,
+		"source":      s.path(executionID, "record.json"),
+		"bytes":       int64(128),
+		"archived_at": archivedAt,
+		"restored_at": restoredAt,
+		"purged_at":   nil,
+	}
+	if err := tasks.WritePrivate(filepath.Join(dir, "entry.json"), entry); err != nil {
+		t.Fatal(err)
+	}
+	return archiveID
+}
+
+func TestArchivedMarkerExcludesExecutionWithoutHidingCorruption(t *testing.T) {
+	s := Store{Data: t.TempDir()}
+	id := tasks.ID()
+	ended := time.Now().UTC().Add(-time.Hour)
+	record := Record{
+		ID:        id,
+		Profile:   "app",
+		Directory: t.TempDir(),
+		Command:   "web",
+		CreatedAt: ended.Add(-time.Hour),
+		EndedAt:   &ended,
+		State:     "stopped",
+		Capture:   true,
+	}
+	if err := writePrivate(s.path(id, "record.json"), record); err != nil {
+		t.Fatal(err)
+	}
+	archiveID := tasks.ID()
+	archivedAt := time.Now().UTC()
+	if err := s.WriteArchiveMarker(record, archiveID, archivedAt); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(s.path(id, "record.json")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Status(context.Background(), id); err == nil || err.Code != "process_not_found" {
+		t.Fatalf("archived status = %v", err)
+	}
+	if records, err := s.StoredRecords(); err != nil || len(records) != 0 {
+		t.Fatalf("stored records = %#v %v", records, err)
+	}
+	if records, err := s.List(context.Background(), ""); err != nil || len(records) != 0 {
+		t.Fatalf("listed records = %#v %v", records, err)
+	}
+	owner, err := s.ArchivedOwner(id)
+	if err != nil || owner.Legacy || owner.Profile != "app" || owner.ArchiveID != archiveID || owner.EndedAt == nil || !owner.EndedAt.Equal(ended) || owner.Capture == nil || !*owner.Capture {
+		t.Fatalf("archived owner = %#v %v", owner, err)
+	}
+
+	if err := s.RemoveArchiveMarker(id, archiveID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StoredRecords(); err == nil || err.Code != "io_error" {
+		t.Fatalf("unmarked hole was accepted: %v", err)
+	}
+}
+
+func TestLegacyArchiveProofExcludesPreMarkerExecutionHole(t *testing.T) {
+	s := Store{Data: t.TempDir()}
+	id := tasks.ID()
+	if err := tasks.PrivateDir(filepath.Join(s.root(), id)); err != nil {
+		t.Fatal(err)
+	}
+	archivedAt := time.Now().UTC().Add(-48 * time.Hour)
+	first := writeLegacyProcessProof(t, s, id, "app", archivedAt, false)
+	_ = writeLegacyProcessProof(t, s, id, "app", archivedAt.Add(time.Hour), false)
+
+	if _, err := s.Status(context.Background(), id); err == nil || err.Code != "process_not_found" {
+		t.Fatalf("legacy archived status = %v", err)
+	}
+	if records, err := s.StoredRecords(); err != nil || len(records) != 0 {
+		t.Fatalf("legacy proof did not exclude hole: %#v %v", records, err)
+	}
+	owner, err := s.ArchivedOwner(id)
+	if err != nil || !owner.Legacy || owner.Profile != "app" || owner.ArchiveID != first || !owner.ArchivedAt.Equal(archivedAt) || owner.EndedAt != nil || owner.Capture != nil {
+		t.Fatalf("legacy owner = %#v %v", owner, err)
+	}
+}
+
+func TestRestoredOrConflictingLegacyProofDoesNotHideExecutionHole(t *testing.T) {
+	for name, setup := range map[string]func(*testing.T, Store, string){
+		"restored": func(t *testing.T, s Store, id string) {
+			writeLegacyProcessProof(t, s, id, "app", time.Now().UTC().Add(-time.Hour), true)
+		},
+		"conflicting_profiles": func(t *testing.T, s Store, id string) {
+			at := time.Now().UTC().Add(-2 * time.Hour)
+			writeLegacyProcessProof(t, s, id, "app", at, false)
+			writeLegacyProcessProof(t, s, id, "other", at.Add(time.Minute), false)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := Store{Data: t.TempDir()}
+			id := tasks.ID()
+			if err := tasks.PrivateDir(filepath.Join(s.root(), id)); err != nil {
+				t.Fatal(err)
+			}
+			setup(t, s, id)
+			if _, err := s.StoredRecords(); err == nil || err.Code != "io_error" {
+				t.Fatalf("invalid legacy proof hid execution hole: %v", err)
+			}
+		})
+	}
+}
+
+func TestArchiveMarkerMustMatchCoexistingRecord(t *testing.T) {
+	s := Store{Data: t.TempDir()}
+	id := tasks.ID()
+	ended := time.Now().UTC()
+	record := Record{ID: id, Profile: "app", Directory: t.TempDir(), CreatedAt: ended.Add(-time.Hour), EndedAt: &ended, State: "stopped"}
+	if err := writePrivate(s.path(id, "record.json"), record); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.WriteArchiveMarker(record, tasks.ID(), time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	record.Capture = true
+	if err := writePrivate(s.path(id, "record.json"), record); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Status(context.Background(), id); err == nil || err.Code != "io_error" {
+		t.Fatalf("mismatched marker was accepted: %v", err)
+	}
+}
+
+func TestWriteArchiveMarkerRequiresCurrentExecution(t *testing.T) {
+	s := Store{Data: t.TempDir()}
+	id := tasks.ID()
+	ended := time.Now().UTC()
+	record := Record{ID: id, Profile: "app", Directory: t.TempDir(), CreatedAt: ended.Add(-time.Hour), EndedAt: &ended, State: "stopped"}
+	if err := s.WriteArchiveMarker(record, tasks.ID(), time.Now().UTC()); err == nil || err.Code != "revision_conflict" {
+		t.Fatalf("marker was created without a current record: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(s.root(), id)); !os.IsNotExist(err) {
+		t.Fatalf("marker write created an execution directory: %v", err)
+	}
+}

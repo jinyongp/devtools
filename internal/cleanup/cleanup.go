@@ -263,12 +263,12 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 		if profile != "" && profile != p {
 			continue
 		}
-		path, b, err := e.taskSnapshot(p)
+		snapshot, err := e.taskSnapshot(p)
 		if err != nil {
 			return nil, fail("storage_error")
 		}
-		if tasks.ArchiveReady(b, p, cutoff) {
-			add("completed_tasks", p, path, b)
+		if snapshot.Data != nil && tasks.ArchiveReady(snapshot.Data, p, cutoff) {
+			addWithStamp("completed_tasks", p, snapshot.Source, snapshot.Data, snapshot.Digest)
 		}
 	}
 	manager := services.Store{Data: e.Data}

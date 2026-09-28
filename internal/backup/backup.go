@@ -293,24 +293,25 @@ func (e Engine) snapshot(selected string) (Snapshot, error) {
 	sort.Strings(ordered)
 	for _, name := range ordered {
 		p := Profile{Name: name}
-		for _, domain := range []string{"profiles", "tasks"} {
-			b, err := profilekey.Snapshot(filepath.Join(e.Data, domain), name, logicalDomain(domain), limit)
-			if err != nil {
+		valuesData, err := profilekey.Snapshot(filepath.Join(e.Data, "profiles"), name, "values", limit)
+		if err != nil {
+			return s, err
+		}
+		if valuesData != nil {
+			if _, err := values.RestoreSnapshot(valuesData, name, name); err != nil {
 				return s, err
 			}
-			if b == nil {
-				continue
-			}
-			if domain == "profiles" {
-				_, err = values.RestoreSnapshot(b, name, name)
-				p.Values = b
-			} else {
-				_, err = tasks.RestoreSnapshot(b, name, name)
-				p.Tasks = b
-			}
-			if err != nil {
+			p.Values = valuesData
+		}
+		taskSnapshot, err := (tasks.Store{Directory: filepath.Join(e.Data, "tasks"), Profile: name}).ExportSnapshotHeld(limit)
+		if err != nil {
+			return s, err
+		}
+		if taskSnapshot.Data != nil {
+			if _, err := tasks.InspectSnapshot(taskSnapshot.Data, name); err != nil {
 				return s, err
 			}
+			p.Tasks = taskSnapshot.Data
 		}
 		if p.Values == nil && p.Tasks == nil {
 			return s, os.ErrNotExist
@@ -565,6 +566,10 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		return plan, failure("storage_error")
 	}
 	defer release()
+	targetTasks := tasks.Store{Directory: filepath.Join(e.Data, "tasks"), Profile: target}
+	if err := targetTasks.CollectOrphanGenerationsHeld(); err != nil {
+		return plan, failure("storage_error")
+	}
 	fingerprint := restoreFingerprint(restoreFingerprintInput{Cipher: cipher, Source: source, Target: target, Expected: expected, Replace: replace})
 	receiptPath := "backup-receipts/" + requestID + ".json"
 	if expected != "" {
@@ -595,17 +600,24 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	exists := false
 	targetData := map[string][]byte{}
 	hashInput := []byte(digest(cipher) + "\n" + source + "\n" + target)
-	for _, domain := range []string{"profiles", "tasks"} {
-		b, err := profilekey.Snapshot(filepath.Join(e.Data, domain), target, logicalDomain(domain), limit)
-		if err != nil {
-			return plan, failure("storage_error")
-		}
-		exists = exists || b != nil
-		if b != nil {
-			targetData[domain] = append([]byte{}, b...)
-		}
-		hashInput = append(hashInput, []byte("\n"+domain+":"+digest(b))...)
+	valuesData, snapshotErr := profilekey.Snapshot(filepath.Join(e.Data, "profiles"), target, "values", limit)
+	if snapshotErr != nil {
+		return plan, failure("storage_error")
 	}
+	if valuesData != nil {
+		exists = true
+		targetData["profiles"] = append([]byte{}, valuesData...)
+	}
+	hashInput = append(hashInput, []byte("\nprofiles:"+digest(valuesData))...)
+	taskSnapshot, snapshotErr := targetTasks.ExportSnapshotHeld(limit)
+	if snapshotErr != nil {
+		return plan, failure("storage_error")
+	}
+	if taskSnapshot.Data != nil {
+		exists = true
+		targetData["tasks"] = append([]byte{}, taskSnapshot.Data...)
+	}
+	hashInput = append(hashInput, []byte("\ntasks:"+digest(taskSnapshot.Data))...)
 	keyPath := filepath.Join(e.Data, ".maintenance", "preview-key")
 	key, keyErr := maintenance.Read(keyPath, 32)
 	if errors.Is(keyErr, os.ErrNotExist) {
@@ -662,21 +674,39 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		}
 	}
 	files := map[string][]byte{}
-	for _, domain := range []string{"profiles", "tasks"} {
-		var payload []byte
-		if domain == "profiles" && selected.Values != nil {
-			payload, err = values.RestoreSnapshot(selected.Values, source, target)
-		} else if domain == "tasks" && selected.Tasks != nil {
-			payload, err = tasks.RestoreSnapshot(selected.Tasks, source, target)
-		}
+	var valuesPayload []byte
+	if selected.Values != nil {
+		valuesPayload, err = values.RestoreSnapshot(selected.Values, source, target)
 		if err != nil {
 			return plan, failure("invalid_backup")
 		}
-		replacement, replacementErr := profilekey.Replacement(filepath.Join(e.Data, domain), target, logicalDomain(domain), payload)
-		if replacementErr != nil {
+	}
+	valueFiles, replacementErr := profilekey.Replacement(filepath.Join(e.Data, "profiles"), target, "values", valuesPayload)
+	if replacementErr != nil {
+		return plan, failure("storage_error")
+	}
+	for path, body := range valueFiles {
+		files[path] = body
+	}
+
+	if selected.Tasks != nil {
+		taskPayload, restoreErr := tasks.RestoreSnapshot(selected.Tasks, source, target)
+		if restoreErr != nil {
+			return plan, failure("invalid_backup")
+		}
+		staged, stageErr := targetTasks.StageExactSnapshotHeld(taskPayload)
+		if stageErr != nil {
 			return plan, failure("storage_error")
 		}
-		for path, body := range replacement {
+		for path, body := range staged.Files {
+			files[path] = body
+		}
+	} else {
+		taskFiles, deleteErr := targetTasks.DeletionFilesHeld()
+		if deleteErr != nil {
+			return plan, failure("storage_error")
+		}
+		for path, body := range taskFiles {
 			files[path] = body
 		}
 	}
@@ -698,5 +728,9 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		plan.Applied = false
 		return plan, failure("storage_error")
 	}
+	// The restore and its receipt are committed together above. Generation
+	// reclamation is post-commit housekeeping; a later exclusive task/backup
+	// entry retries it before accepting a new mutation.
+	_ = targetTasks.CollectOrphanGenerationsHeld()
 	return plan, nil
 }

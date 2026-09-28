@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
@@ -394,5 +395,68 @@ func TestErrorExitCodes(t *testing.T) {
 		if err := failure(code); err.ExitCode != want {
 			t.Errorf("%s exit code = %d, want %d", code, err.ExitCode, want)
 		}
+	}
+}
+
+func TestRestoreDeletesTaskDomainAbsentFromBackup(t *testing.T) {
+	root := t.TempDir()
+	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
+	destination := Engine{Data: filepath.Join(root, "destination", "data"), Config: filepath.Join(root, "destination", "config"), Cache: filepath.Join(root, "destination", "cache")}
+	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
+	if _, err := Keygen(identity, recipient); err != nil {
+		t.Fatal(err)
+	}
+	sourceValues := values.Store{Directory: filepath.Join(source.Data, "profiles"), Profile: "source"}
+	if _, err := sourceValues.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+		return state.Set(values.Variable, "VALUE", "", "from-backup")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(root, "values-only.age")
+	if _, err := source.Create(context.Background(), "source", archive, recipient); err != nil {
+		t.Fatal(err)
+	}
+
+	targetTasks := tasks.Store{Directory: filepath.Join(destination.Data, "tasks"), Profile: "target"}
+	if _, err := targetTasks.Execute(context.Background(), tasks.Request{
+		Action:  "task.add",
+		Body:    tasks.Object{"title": "must be removed"},
+		Options: map[string]string{"request-id": tasks.ID()},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := destination.Configure(filepath.Join(root, "safety"), recipient); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := destination.Restore(context.Background(), archive, identity, "source", "target", "", "", true)
+	if err != nil || !preview.Targets[0].Exists {
+		t.Fatalf("replace preview failed: %#v %v", preview, err)
+	}
+	requestID := tasks.ID()
+	applied, err := destination.Restore(context.Background(), archive, identity, "source", "target", preview.Digest, requestID, true)
+	if err != nil || !applied.Applied {
+		t.Fatalf("replace apply failed: %#v %v", applied, err)
+	}
+
+	targetValues := values.Store{Directory: filepath.Join(destination.Data, "profiles"), Profile: "target"}
+	valueState, valueErr := targetValues.Read(context.Background())
+	if valueErr != nil {
+		t.Fatal(valueErr)
+	}
+	env, valueErr := valueState.Environment("")
+	if valueErr != nil || env["VALUE"] != "from-backup" {
+		t.Fatalf("values were not restored: %#v %v", env, valueErr)
+	}
+	taskState, taskErr := targetTasks.Read(context.Background())
+	if taskErr != nil || len(taskState.Items) != 0 || taskState.Revision != 0 {
+		t.Fatalf("absent task domain survived restore: %#v %v", taskState, taskErr)
+	}
+	resolved, resolveErr := profilekey.Resolve(targetTasks.Directory, targetTasks.Profile, "tasks")
+	if resolveErr != nil || resolved.Mode != profilekey.ModeNone {
+		t.Fatalf("task storage was not logically deleted: %#v %v", resolved, resolveErr)
+	}
+	replayed, err := destination.Restore(context.Background(), archive, identity, "source", "target", preview.Digest, requestID, true)
+	if err != nil || !replayed.Replayed {
+		t.Fatalf("committed absent-domain restore did not replay: %#v %v", replayed, err)
 	}
 }

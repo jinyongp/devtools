@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -490,5 +491,79 @@ func TestExpiredLogCleanupUsesLogicalTailAcrossCompactionAndRestore(t *testing.T
 	restored, exists, logErr := (services.Store{Data: engine.Data}).LogSnapshot(ctx, executionID)
 	if logErr != nil || !exists || !bytes.Equal(restored, logical) {
 		t.Fatalf("restored logical log mismatch: exists=%v len=%d err=%v", exists, len(restored), logErr)
+	}
+}
+
+func TestLegacyCompletedTaskArchiveRestoresIntoV3Storage(t *testing.T) {
+	root := t.TempDir()
+	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
+	store := tasks.Store{Directory: filepath.Join(engine.Data, "tasks"), Profile: "legacy-task"}
+	created, err := store.Execute(context.Background(), tasks.Request{
+		Action:  "task.add",
+		Body:    tasks.Object{"title": "Legacy archived task"},
+		Options: map[string]string{"request-id": tasks.ID()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := created["item"].(tasks.Object)["id"].(string)
+
+	release, lockErr := maintenance.AcquireExclusive(context.Background(), engine.Data)
+	if lockErr != nil {
+		t.Fatal(lockErr)
+	}
+	snapshot, snapshotErr := store.ExportSnapshotHeld(128 << 20)
+	if snapshotErr != nil {
+		release()
+		t.Fatal(snapshotErr)
+	}
+	files, deleteErr := store.DeletionFilesHeld()
+	if deleteErr != nil {
+		release()
+		t.Fatal(deleteErr)
+	}
+	if err := maintenance.Replace(engine.Data, files); err != nil {
+		release()
+		t.Fatal(err)
+	}
+	_ = store.CollectOrphanGenerationsHeld()
+	release()
+
+	archiveID := tasks.ID()
+	archive := Archive{
+		Item: Item{
+			ID:      archiveID,
+			Kind:    "completed_tasks",
+			Profile: "legacy-task",
+			Source:  profilekey.LegacyPath(filepath.Join(engine.Data, "tasks"), "legacy-task"),
+			Bytes:   int64(len(snapshot.Data)),
+		},
+		ArchivedAt: time.Now().UTC().Add(-time.Hour),
+	}
+	if err := maintenance.Write(engine.archivePath(archiveID, "payload"), snapshot.Data); err != nil {
+		t.Fatal(err)
+	}
+	if err := write(engine.archivePath(archiveID, "entry.json"), archive); err != nil {
+		t.Fatal(err)
+	}
+
+	restored, changed, restoreErr := engine.Restore(context.Background(), archiveID)
+	if restoreErr != nil || !changed {
+		t.Fatalf("legacy task restore: changed=%v archive=%#v err=%v", changed, restored, restoreErr)
+	}
+	if restored.Source != archive.Source {
+		t.Fatalf("archive audit source changed: got %q want %q", restored.Source, archive.Source)
+	}
+	state, readErr := store.Read(context.Background())
+	if readErr != nil || state.Items[taskID] == nil {
+		t.Fatalf("restored task state missing: %#v %v", state, readErr)
+	}
+	resolved, resolveErr := profilekey.Resolve(store.Directory, store.Profile, "tasks")
+	if resolveErr != nil || resolved.Mode != profilekey.ModeCanonical {
+		t.Fatalf("legacy archive did not publish canonical task storage: %#v %v", resolved, resolveErr)
+	}
+	marker, markerErr := maintenance.Read(profilekey.CanonicalPath(store.Directory, store.Profile), 4096)
+	if markerErr != nil || !bytes.Contains(marker, []byte("\"storage_marker\":\"task-v3\"")) {
+		t.Fatalf("legacy archive did not publish v3 task marker: %q %v", marker, markerErr)
 	}
 }

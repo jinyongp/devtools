@@ -32,12 +32,6 @@ type Store struct {
 	Directory string
 	Profile   string
 	Cache     string
-	// storageV3 stages the new physical format behind an internal opt-in so the
-	// core can be validated independently before backup/cleanup integration.
-	// Once a profile is already v3, reads and mutations always continue in v3.
-	storageV3 bool
-	// Legacy test seam retained for pre-v3 fixtures.
-	commit func(string, any) error
 	// Test seam around the active-v3 WAL fsync commit point.
 	commitV3 func(func() error) error
 }
@@ -358,6 +352,9 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 			releaseProfile()
 		}
 	}()
+	if orphanErr := s.CollectOrphanGenerationsHeld(); orphanErr != nil {
+		return nil, storageError()
+	}
 	probed, probeErr := s.resolveStorage()
 	if probeErr != nil {
 		return nil, probeErr
@@ -371,7 +368,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	if err != nil {
 		return nil, err
 	}
-	if !exclusive && (storage.Profile.Mode != profilekey.ModeCanonical || s.storageV3 && storage.V3 == nil) {
+	if !exclusive && storage.V3 == nil {
 		releaseProfile()
 		releaseProfile = nil
 		releaseGate()
@@ -516,42 +513,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		}
 		return result, nil
 	}
-	if s.storageV3 {
-		if err := s.migrateToV3(j, state, storage, previousRevision, r.Options["request-id"], triggerContextHash); err != nil {
-			return nil, storageError()
-		}
-		return result, nil
-	}
-	if storage.Profile.Mode != profilekey.ModeCanonical {
-		data, marshalErr := json.Marshal(j)
-		if marshalErr != nil {
-			return nil, storageError()
-		}
-		identity, identityErr := profilekey.IdentityBytes(s.Profile, "tasks")
-		if identityErr != nil {
-			return nil, storageError()
-		}
-		files := map[string][]byte{
-			profilekey.StateRelative("tasks", s.Profile):    data,
-			profilekey.IdentityRelative("tasks", s.Profile): identity,
-		}
-		if storage.Profile.LegacyStatus != profilekey.LegacyUnaddressable {
-			marker, markerErr := profilekey.MarkerBytes(s.Profile)
-			if markerErr != nil {
-				return nil, storageError()
-			}
-			files[profilekey.LegacyRelative("tasks", s.Profile)] = marker
-		}
-		if err := maintenance.Replace(maintenance.Root(s.Directory), files); err != nil {
-			return nil, storageError()
-		}
-		return result, nil
-	}
-	commit := s.commit
-	if commit == nil {
-		commit = WritePrivate
-	}
-	if err := commit(s.path(), j); err != nil {
+	if err := s.migrateToV3(j, state, storage, previousRevision, r.Options["request-id"], triggerContextHash); err != nil {
 		return nil, storageError()
 	}
 	return result, nil

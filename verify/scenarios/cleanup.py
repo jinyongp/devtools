@@ -1,6 +1,5 @@
 """Installed storage preview, conflict protection, archival and restoration."""
 import json
-import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -39,16 +38,29 @@ assert api("cleanup","purge",item["id"],expected=3)["code"]=="retention_active"
 created=api("task","add","--title","Completed fixture","--request-id",str(uuid.uuid4()))
 tid=created["item"]["id"]
 api("task","cancel",tid,"--reason","Fixture complete","--if-revision",str(created["revision"]),"--request-id",str(uuid.uuid4()))
-journal=data/"tasks"/("p1-"+hashlib.sha256(b"cleanup-fixture").hexdigest()+".json")
-body=json.loads(journal.read_text())
-for event in body["events"]:event["occurred_at"]="2000-01-01T00:00:00Z"
-journal.write_text(json.dumps(body))
+exported=api("task","export",tid)
+history=exported["history"]
+for sequence,event in enumerate(history,start=1):
+    event["sequence"]=sequence
+    event["occurred_at"]="2000-01-01T00:00:00Z"
+# Replace the production v3 task store with a marker-era legacy v1 journal.
+# This verifies old cleanup Source metadata and restore-to-v3 compatibility
+# without editing v3 WAL/generation internals.
+task_root=data/"tasks"
+shutil.rmtree(task_root)
+task_root.mkdir(mode=0o700)
+legacy=task_root/("cleanup-fixture".encode().hex()+".json")
+legacy.write_text(json.dumps({"version":1,"profile":"cleanup-fixture","events":history,"receipts":{},"contexts":{}}))
+legacy.chmod(0o600)
 plan=api("cleanup","preview","--profile","cleanup-fixture")
 item=next(i for i in plan["items"] if i["kind"]=="completed_tasks")
+assert item["source"]==str(legacy)
 api("cleanup","apply",plan["id"],"--item",item["id"],"--request-id",str(uuid.uuid4()))
 assert api("task","list")["items"]==[]
 api("cleanup","restore",item["id"])
 assert api("task","show",tid)["item"]["state"]=="canceled"
+canonical=list((data/"tasks").glob("p1-*.json"))
+assert canonical and json.loads(canonical[0].read_text())["storage_marker"]=="task-v3"
 
 process_id=str(uuid.uuid4());process_dir=data/"processes"/process_id;process_dir.mkdir(mode=0o700,parents=True)
 old="2000-01-01T00:00:00Z"

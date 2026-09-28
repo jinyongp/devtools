@@ -59,8 +59,12 @@ api("cleanup","apply",plan["id"],"--item",item["id"],"--request-id",str(uuid.uui
 assert api("task","list")["items"]==[]
 api("cleanup","restore",item["id"])
 assert api("task","show",tid)["item"]["state"]=="canceled"
-canonical=list((data/"tasks").glob("p1-*.json"))
-assert canonical and json.loads(canonical[0].read_text())["storage_marker"]=="task-v3"
+canonical=[
+    path
+    for path in (data/"tasks").glob("p1-*.json")
+    if json.loads(path.read_text()).get("storage_marker")=="task-v3"
+]
+assert len(canonical)==1
 
 process_id=str(uuid.uuid4());process_dir=data/"processes"/process_id;process_dir.mkdir(mode=0o700,parents=True)
 old="2000-01-01T00:00:00Z"

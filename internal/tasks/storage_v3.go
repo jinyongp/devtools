@@ -1,6 +1,8 @@
 package tasks
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -44,6 +46,7 @@ type materializedState struct {
 	Runs          map[string]*Run             `json:"runs"`
 	Tracking      map[string]*DefinitionBasis `json:"tracking"`
 	LastEventAt   string                      `json:"last_event_at,omitempty"`
+	Checksum      string                      `json:"checksum"`
 }
 
 type v3Resolution struct {
@@ -284,7 +287,7 @@ func snapshotFromState(profile string, state *State, walOffset int64, lastEventA
 	tracking := map[string]*DefinitionBasis{}
 	raw, _ := json.Marshal(state.Tracking)
 	_ = json.Unmarshal(raw, &tracking)
-	return materializedState{
+	snapshot := materializedState{
 		FormatVersion: taskStorageVersion,
 		Profile:       profile,
 		Version:       state.Version,
@@ -295,10 +298,19 @@ func snapshotFromState(profile string, state *State, walOffset int64, lastEventA
 		Tracking:      tracking,
 		LastEventAt:   lastEventAt,
 	}
+	snapshot.Checksum = materializedStateChecksum(snapshot)
+	return snapshot
+}
+
+func materializedStateChecksum(snapshot materializedState) string {
+	snapshot.Checksum = ""
+	raw, _ := json.Marshal(snapshot)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }
 
 func (m materializedState) state(profile string) (*State, error) {
-	if m.FormatVersion != taskStorageVersion || m.Profile != profile || m.Version != 1 && m.Version != JournalVersion || m.Revision < 0 || m.WALOffset < 0 || m.Items == nil || m.Runs == nil || m.Tracking == nil {
+	if m.FormatVersion != taskStorageVersion || m.Profile != profile || m.Version != 1 && m.Version != JournalVersion || m.Revision < 0 || m.WALOffset < 0 || m.Items == nil || m.Runs == nil || m.Tracking == nil || !validDigest(m.Checksum) || m.Checksum != materializedStateChecksum(m) {
 		return nil, errors.New("invalid materialized snapshot")
 	}
 	state := &State{

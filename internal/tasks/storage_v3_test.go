@@ -474,6 +474,11 @@ func TestActiveV3MutationRepairsInvalidSnapshotOffset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	beforeInfo, err := os.Stat(resolution.WAL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeOffset := beforeInfo.Size()
 	snapshot.WALOffset = 1 << 40
 	if err := writeMaterializedSnapshot(resolution.Snapshot, snapshot); err != nil {
 		t.Fatal(err)
@@ -488,12 +493,12 @@ func TestActiveV3MutationRepairsInvalidSnapshotOffset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(resolution.WAL)
-	if err != nil {
-		t.Fatal(err)
+	if repaired.WALOffset != beforeOffset {
+		t.Fatalf("snapshot was not repaired before the new mutation: offset=%d want=%d", repaired.WALOffset, beforeOffset)
 	}
-	if repaired.WALOffset != info.Size() {
-		t.Fatalf("snapshot was not repaired to committed WAL boundary: offset=%d size=%d", repaired.WALOffset, info.Size())
+	current, currentErr := loadCurrentV3(resolution)
+	if currentErr != nil || len(current.Items) != 2 {
+		t.Fatalf("repaired snapshot plus bounded tail lost current state: items=%d err=%v", len(current.Items), currentErr)
 	}
 }
 
@@ -578,6 +583,84 @@ func TestCurrentV3LoaderFallsBackWithoutRepairingCorruptSnapshot(t *testing.T) {
 	var snapshot materializedState
 	if err := ReadPrivate(resolution.Snapshot, &snapshot); err == nil {
 		t.Fatal("read-only current loader repaired corrupt snapshot")
+	}
+}
+
+func TestCurrentV3LoaderFallsBackWhenSnapshotContentChanges(t *testing.T) {
+	s := fixture(t)
+	if _, err := s.Execute(context.Background(), Request{
+		Action:  "task.add",
+		Body:    Object{"title": "seed"},
+		Options: map[string]string{"request-id": ID()},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	resolution, ok, err := resolveV3(s.Directory, s.Profile)
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	snapshot, _, err := readMaterializedSnapshot(resolution.Snapshot, s.Profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range snapshot.Items {
+		item.Title = "tampered"
+		break
+	}
+	if err := writeMaterializedSnapshot(resolution.Snapshot, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	state, currentErr := loadCurrentV3(resolution)
+	if currentErr != nil {
+		t.Fatal(currentErr)
+	}
+	for _, item := range state.Items {
+		if item.Title != "seed" {
+			t.Fatalf("current loader trusted modified snapshot content: %q", item.Title)
+		}
+	}
+}
+
+func TestV3RetryRepairsInvalidMaterializedSnapshot(t *testing.T) {
+	s := fixture(t)
+	request := Request{
+		Action:  "task.add",
+		Body:    Object{"title": "seed"},
+		Options: map[string]string{"request-id": ID()},
+	}
+	if _, err := s.Execute(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	resolution, ok, err := resolveV3(s.Directory, s.Profile)
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	snapshot, _, err := readMaterializedSnapshot(resolution.Snapshot, s.Profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range snapshot.Items {
+		item.Title = "tampered"
+		break
+	}
+	if err := writeMaterializedSnapshot(resolution.Snapshot, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	replayed, retryErr := s.Execute(context.Background(), request)
+	if retryErr != nil || replayed["replayed"] != true {
+		t.Fatalf("retry did not replay from WAL state: %#v %v", replayed, retryErr)
+	}
+	repaired, state, repairErr := readMaterializedSnapshot(resolution.Snapshot, s.Profile)
+	if repairErr != nil {
+		t.Fatalf("retry did not repair invalid snapshot: %#v %v", repaired, repairErr)
+	}
+	if state.Revision == 0 {
+		t.Fatal("repaired snapshot lost current revision")
+	}
+	for _, item := range state.Items {
+		if item.Title != "seed" {
+			t.Fatalf("repaired snapshot retained tampered state: %q", item.Title)
+		}
 	}
 }
 

@@ -386,6 +386,9 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		return nil, probeErr
 	}
 	if probed.V3 != nil {
+		if prepareErr := prepareWALForMutation(*probed.V3); prepareErr != nil {
+			return nil, storageError()
+		}
 		if recoverErr := recoverPendingV3(*probed.V3); recoverErr != nil {
 			return nil, storageError()
 		}
@@ -398,9 +401,14 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	)
 	if probed.V3 != nil {
 		storage = probed
-		current, currentErr := loadCurrentV3(*probed.V3)
+		current, needsCheckpoint, currentErr := loadCurrentV3ForMutation(*probed.V3)
 		if currentErr != nil {
 			return nil, storageError()
+		}
+		if needsCheckpoint {
+			if checkpointErr := checkpointV3(*probed.V3, current); checkpointErr != nil {
+				return nil, storageError()
+			}
 		}
 		state = current
 	} else {

@@ -45,26 +45,37 @@ func loadCurrentFromWAL(resolution v3Resolution) (*State, error) {
 	return current, nil
 }
 
-func loadCurrentV3(resolution v3Resolution) (*State, error) {
+func loadCurrentV3ForMutation(resolution v3Resolution) (*State, bool, error) {
 	snapshot, state, snapshotErr := readMaterializedSnapshot(resolution.Snapshot, resolution.Marker.Profile)
 	if snapshotErr == nil {
 		scan, scanErr := scanWAL(resolution.WAL, snapshot.WALOffset, true)
 		if scanErr == nil {
 			current, revision, applyErr := applyCurrentFrames(state, scan.Frames, snapshot.Revision)
 			if applyErr == nil && current.Revision == revision {
+				needsCheckpoint := scan.IncompleteTail ||
+					len(scan.Frames) >= CheckpointMaxFrames ||
+					scan.ValidOffset-snapshot.WALOffset >= CheckpointMaxTailBytes
 				// Version 1 assessments derive their upgrade baseline from full
 				// history. Keep the rare restored-v1 path correct by replaying
 				// the WAL from zero until the first real upgrade mutation.
 				if current.Version == 1 && current.Revision > 0 {
-					return loadCurrentFromWAL(resolution)
+					full, err := loadCurrentFromWAL(resolution)
+					return full, needsCheckpoint, err
 				}
-				return current, nil
+				return current, needsCheckpoint, nil
 			}
 		}
 	}
 	// The snapshot is an accelerator. A missing/corrupt/stale snapshot does not
-	// make a valid WAL unreadable, and shared/read-only paths never repair it.
-	return loadCurrentFromWAL(resolution)
+	// make a valid WAL unreadable. Mutation/retry callers repair it after the
+	// source-of-truth WAL replay; shared/read-only callers ignore that signal.
+	current, err := loadCurrentFromWAL(resolution)
+	return current, true, err
+}
+
+func loadCurrentV3(resolution v3Resolution) (*State, error) {
+	current, _, err := loadCurrentV3ForMutation(resolution)
+	return current, err
 }
 
 func (s Store) loadCurrentResolved() (*State, taskStorageInfo, *protocol.Error) {

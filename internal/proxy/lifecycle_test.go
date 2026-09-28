@@ -461,6 +461,7 @@ func TestPendingStartDoesNotAdoptReplacementAttempt(t *testing.T) {
 	if _, err := manager.Apply(context.Background(), firstRequest); err == nil || err.Code != "proxy_pending" {
 		t.Fatalf("first pending = %v", err)
 	}
+	manager.readyTimeout = time.Second
 	close(releaseFirst)
 	if err := manager.waitLeaseRelease(context.Background()); err != nil {
 		t.Fatal(err)
@@ -894,6 +895,7 @@ func TestPendingStopDoesNotStopReplacementAttempt(t *testing.T) {
 	if _, err := manager.Apply(context.Background(), stopRequest); err == nil || err.Code != "proxy_pending" {
 		t.Fatalf("pending stop = %v", err)
 	}
+	manager.stopTimeout = time.Second
 	<-blockEntered
 	close(releaseCommit)
 	if err := manager.waitLeaseRelease(context.Background()); err != nil {

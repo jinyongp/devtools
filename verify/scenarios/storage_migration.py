@@ -35,6 +35,8 @@ def private_json(path, body):
 execute("sh", os.environ["DEVTOOLS_TEST_INSTALLER"], "install", "--version", "0.0.0-test.1", "--source", os.environ["DEVTOOLS_TEST_RELEASES"])
 api("init", "--profile", "migration-probe")
 data = Path(api("project", "inspect")["paths"]["data"])
+data.mkdir(mode=0o700, parents=True, exist_ok=True)
+data.chmod(0o700)
 
 legacy_profile = "LegacyProfile"
 legacy_values = data / "profiles" / (legacy_profile.encode().hex() + ".json")

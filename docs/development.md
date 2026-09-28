@@ -99,7 +99,9 @@ pnpm release --publish
 버전을 추천받고 main과 태그를 함께 올린다. 태그가 Release 워크플로를 시작하면
 태그 검증 뒤 macOS와 Linux CI를 병렬로 실행한다. Linux CI는 Agent Skill의 local/public `skills` discovery와 실제 Chromium dashboard smoke를 확인하고,
 macOS와 Linux CI는 모두 `just verify`로 설치된 release 시나리오를 통과해야 한다. 두 CI가 성공한 뒤 CLI·Agent Skill을
-패키징하고 GitHub Release를 게시한다. 안정 릴리스 게시 후에는 `.github/workflows/pages.yml`이 릴리스의
+패키징하고, 고정 SHA의 `releaseway/actions`가 태그와 커밋·전체 `dist/*` 자산을 검증해
+immutable GitHub Release를 게시한다. 이 경로를 사용하려면 저장소에서 immutable releases를 활성화해야 한다.
+안정 릴리스 게시 후에는 `.github/workflows/pages.yml`이 릴리스의
 `install.sh`를 `jinyongp.dev/devtools/install.sh`에 배포한다. Pages source는 저장소
 설정에서 GitHub Actions로 한 번 활성화해야 하며, workflow를 수동 실행하면 최신 안정
 릴리스를 바로 게시할 수 있다. 로컬에서 스킬 배포물만 확인하려면
@@ -109,21 +111,19 @@ macOS와 Linux CI는 모두 `just verify`로 설치된 release 시나리오를 �
 
 ### Homebrew 배포
 
-안정 릴리스 게시가 성공하면 같은 Release 실행의 Homebrew job이
-`.github/homebrew/formula.yml`을 tap의 고정된 재사용 워크플로에 전달합니다.
-공통 워크플로가 고정 SHA의 자동화 코드와 최신 main의 Formula 데이터를
-각각 체크아웃합니다. 호출자는 명세와 릴리스 정보, 배포 키를 전달합니다.
-Dependabot이 두 Homebrew 워크플로를 전용 그룹으로 묶어 매주 고정 SHA 업데이트를
-제안합니다. tap이 제공하는 권한 검사 워크플로는 검증된 Dependabot 커밋이 두 SHA만
-같은 최신 main 커밋으로 변경했는지 확인한 뒤 squash auto-merge를 예약합니다.
-저장소 설정에서 auto-merge와 squash merge를 허용하고, main 규칙에서 `auto-merge`
-검사를 필수 상태 검사로 지정해야 자동 병합이 활성화됩니다.
-태그 커밋의 소스로 Formula를 생성하고 audit·소스 설치·테스트를 통과하면
-`jinyongp/homebrew-tap`의 `Formula/devtools.rb`를 갱신합니다.
-사전 릴리스는 GitHub Releases에 게시하고, Homebrew에는 안정 버전을 제공합니다.
+Pull Request에서는 `.github/workflows/homebrew.yml`이 고정 SHA의
+`releaseway/homebrew-actions` 검사 워크플로를 호출해
+`.github/homebrew/formula.yml`을 렌더링하고 Formula 계약을 검증한다.
 
-배포에는 devtools 저장소의 `HOMEBREW_TAP_DEPLOY_KEY` Actions secret을 사용합니다.
-Homebrew 단계가 실패하면 GitHub 릴리스는 유지되며 해당 실패 job을 재실행할 수 있습니다.
-Formula 빌드는 `updateManager=homebrew`를 기록해 업데이트를 Homebrew로 안내합니다.
-빌드 도구는 `go.mod`에 선언한 정확한 Go 버전을 사용합니다. Homebrew의 Go 패치
-버전이 다르면 Go의 toolchain 다운로드 기능으로 필요한 버전을 준비합니다.
+안정 릴리스 게시가 성공하면 같은 Release 실행의 Homebrew job이 배포된
+`releaseway/homebrew-actions` publish 워크플로에 태그 커밋, 버전, 목적지 tap과
+배포 키를 전달한다. 워크플로는 태그 커밋의 소스로 Formula를 생성하고 native Homebrew
+검증을 통과한 뒤 `jinyongp/homebrew-tap`의 `Formula/devtools.rb`를 직접 갱신한다.
+사전 릴리스는 GitHub Releases에만 게시하고 Homebrew는 건너뛴다.
+
+배포에는 devtools 저장소의 `HOMEBREW_TAP_DEPLOY_KEY` Actions secret을 사용한다.
+Homebrew 단계가 실패해도 이미 게시된 GitHub Release는 유지되며 해당 job을 다시 실행할 수 있다.
+Dependabot은 GitHub Actions 의존성을 매주 그룹으로 갱신하므로 Releaseway full-SHA pin도
+일반 Actions 업데이트와 함께 검토한다. Formula 빌드는 `updateManager=homebrew`를 기록해
+업데이트를 Homebrew로 안내한다. 빌드 도구는 `go.mod`에 선언한 정확한 Go 버전을 사용하며,
+Homebrew의 Go 패치 버전이 다르면 Go toolchain 다운로드 기능으로 필요한 버전을 준비한다.

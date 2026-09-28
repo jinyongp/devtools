@@ -76,24 +76,42 @@ func (t *ttySession) restoreAfterStartFailure() error {
 	return ttySetForegroundPgrp(t.fd, t.parentPgrp)
 }
 
+func (t *ttySession) settleResumeForeground(foreground int) (int, error) {
+	if t.shellPgrp == t.parentPgrp {
+		return foreground, nil
+	}
+	if foreground != t.parentPgrp && foreground != t.shellPgrp {
+		return foreground, nil
+	}
+
+	// Shell job-control handoff ordering differs by platform and shell. A bg
+	// resume can briefly leave the wrapper pgrp in front before returning the
+	// terminal to the shell, while macOS bash can resume the wrapper while the
+	// shell pgrp is still foreground and transfer it to the wrapper shortly
+	// afterward for fg. Observe the entire handoff window before deciding.
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+		next, err := ttyForegroundPgrp(t.fd)
+		if err != nil {
+			return 0, err
+		}
+		foreground = next
+		if foreground != t.parentPgrp && foreground != t.shellPgrp {
+			break
+		}
+	}
+	return foreground, nil
+}
+
 func (t *ttySession) continueChild(childPgrp int) error {
 	foreground, err := ttyForegroundPgrp(t.fd)
 	if err != nil {
 		return err
 	}
-	if foreground == t.parentPgrp && t.shellPgrp != t.parentPgrp {
-		// Some shells briefly leave the resumed job pgrp foreground while the
-		// bg builtin is still restoring terminal ownership to the shell. Wait
-		// for that handoff to settle: fg keeps the job pgrp foreground, while
-		// bg converges to the shell pgrp.
-		deadline := time.Now().Add(100 * time.Millisecond)
-		for foreground == t.parentPgrp && time.Now().Before(deadline) {
-			time.Sleep(time.Millisecond)
-			foreground, err = ttyForegroundPgrp(t.fd)
-			if err != nil {
-				return err
-			}
-		}
+	foreground, err = t.settleResumeForeground(foreground)
+	if err != nil {
+		return err
 	}
 	if foreground == t.parentPgrp {
 		if err := ttySetForegroundPgrp(t.fd, childPgrp); err != nil {

@@ -3,7 +3,6 @@ package tasks
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 	"time"
 )
@@ -14,9 +13,13 @@ func TestArchiveCurrentScopeAndProof(t *testing.T) {
 	claim := call(t, s, "run.claimed", id, Object{})
 	call(t, s, "task.completed", id, Object{"summary": "done"}, "context", str(claim, "context"))
 	ready := func() bool {
-		b, e := os.ReadFile(s.path())
+		journal, _, e := s.load()
 		if e != nil {
 			t.Fatal(e)
+		}
+		b, marshalErr := json.Marshal(journal)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
 		}
 		return ArchiveReady(b, s.Profile, time.Now().Add(time.Hour))
 	}
@@ -52,7 +55,11 @@ func TestRestorePreservesV2AndDropsExecutionAuthority(t *testing.T) {
 	s, w, task, _ := currentFixture(t)
 	claim := call(t, s, "run.claimed", task, Object{})
 	call(t, s, "workstream.edited", w, editBody(Object{"op": "task.remove", "id": task}))
-	data, e := os.ReadFile(s.path())
+	journal, _, loadErr := s.load()
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	data, e := json.Marshal(journal)
 	if e != nil {
 		t.Fatal(e)
 	}

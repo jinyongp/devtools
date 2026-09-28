@@ -13,7 +13,6 @@ import (
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/profilekey"
-	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -33,8 +32,14 @@ type Store struct {
 	Directory string
 	Profile   string
 	Cache     string
-	// Test seam for failures before the atomic journal replacement.
+	// storageV3 stages the new physical format behind an internal opt-in so the
+	// core can be validated independently before backup/cleanup integration.
+	// Once a profile is already v3, reads and mutations always continue in v3.
+	storageV3 bool
+	// Legacy test seam retained for pre-v3 fixtures.
 	commit func(string, any) error
+	// Test seam around the active-v3 WAL fsync commit point.
+	commitV3 func(func() error) error
 }
 
 func (s Store) path() string {
@@ -148,43 +153,34 @@ func (s Store) loadPath(path string) (*Journal, *State, *protocol.Error) {
 	return j, state, err
 }
 
-func (s Store) loadResolved() (*Journal, *State, profilekey.Resolution, *protocol.Error) {
-	var resolution profilekey.Resolution
-	if !project.ValidProfile(s.Profile) {
-		return nil, nil, resolution, failure("invalid_argument", "Invalid profile.")
+func (s Store) loadResolved() (*Journal, *State, taskStorageInfo, *protocol.Error) {
+	info, resolveErr := s.resolveStorage()
+	if resolveErr != nil {
+		return nil, nil, info, resolveErr
 	}
-	info, e := os.Lstat(s.Directory)
-	if errors.Is(e, os.ErrNotExist) {
-		j := s.emptyJournal()
-		state, err := replayJournal(j)
-		return j, state, resolution, err
+	if info.V3 != nil {
+		journal, state, err := s.loadV3(*info.V3)
+		return journal, state, info, err
 	}
-	if e != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-		return nil, nil, resolution, storageError()
-	}
-	resolution, e = profilekey.Resolve(s.Directory, s.Profile, "tasks")
-	if e != nil {
-		return nil, nil, resolution, storageError()
-	}
-	switch resolution.Mode {
+	switch info.Profile.Mode {
 	case profilekey.ModeNone:
-		j := s.emptyJournal()
-		state, err := replayJournal(j)
-		return j, state, resolution, err
+		journal := s.emptyJournal()
+		state, err := replayJournal(journal)
+		return journal, state, info, err
 	case profilekey.ModeLegacy:
-		j, state, err := s.loadPath(resolution.LegacyPath)
-		return j, state, resolution, err
+		journal, state, err := s.loadPath(info.Profile.LegacyPath)
+		return journal, state, info, err
 	case profilekey.ModeCanonical:
-		j, state, err := s.loadPath(resolution.CanonicalPath)
-		return j, state, resolution, err
+		journal, state, err := s.loadPath(info.Profile.CanonicalPath)
+		return journal, state, info, err
 	default:
-		return nil, nil, resolution, storageError()
+		return nil, nil, info, storageError()
 	}
 }
 
 func (s Store) load() (*Journal, *State, *protocol.Error) {
-	j, state, _, err := s.loadResolved()
-	return j, state, err
+	journal, state, _, err := s.loadResolved()
+	return journal, state, err
 }
 func safeApply(s *State, e Event) (err error) {
 	defer func() {
@@ -362,11 +358,20 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 			releaseProfile()
 		}
 	}()
-	j, state, resolution, err := s.loadResolved()
+	probed, probeErr := s.resolveStorage()
+	if probeErr != nil {
+		return nil, probeErr
+	}
+	if probed.V3 != nil {
+		if recoverErr := recoverPendingV3(*probed.V3); recoverErr != nil {
+			return nil, storageError()
+		}
+	}
+	j, state, storage, err := s.loadResolved()
 	if err != nil {
 		return nil, err
 	}
-	if !exclusive && resolution.Mode != profilekey.ModeCanonical {
+	if !exclusive && (storage.Profile.Mode != profilekey.ModeCanonical || s.storageV3 && storage.V3 == nil) {
 		releaseProfile()
 		releaseProfile = nil
 		releaseGate()
@@ -423,7 +428,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		prepared = state.clone()
 		prepared.applyUpgrade(state.upgradeEvent())
 	}
-	events, result, credential, err := prepared.prepare(r, j.Contexts)
+	events, result, credential, err := prepared.prepare(r, mapContextLookup(j.Contexts))
 	if err != nil {
 		return nil, prepared.explain(r, err, s.Profile)
 	}
@@ -436,6 +441,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	previousRevision := state.Revision
 	before := state.clone()
 	ids := []string{}
+	committedEvents := make([]Event, 0, len(events)+1)
 	if len(events) > 0 && state.Version == 1 {
 		events = append([]Event{state.upgradeEvent()}, events...)
 		j.Version = JournalVersion
@@ -449,6 +455,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		_ = json.Unmarshal(b, &e)
 		state.Apply(e)
 		j.Events = append(j.Events, e)
+		committedEvents = append(committedEvents, e)
 		ids = append(ids, e.ID)
 		for _, key := range []string{"basis_id", "record_id"} {
 			if id := str(e.Data, key); id != "" {
@@ -497,7 +504,25 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		contextHash = hash(token)
 	}
 	j.Receipts[r.Options["request-id"]] = Receipt{Fingerprint: fingerprint, ContextHash: contextHash, Result: result}
-	if resolution.Mode != profilekey.ModeCanonical {
+	newContexts := map[string]string{}
+	triggerContextHash := ""
+	if credential != "" {
+		triggerContextHash = hash(credential)
+		newContexts[triggerContextHash] = j.Contexts[triggerContextHash]
+	}
+	if storage.V3 != nil {
+		if err := commitActiveV3(*storage.V3, state, committedEvents, previousRevision, r.Options["request-id"], fingerprint, contextHash, result, newContexts, s.commitV3); err != nil {
+			return nil, storageError()
+		}
+		return result, nil
+	}
+	if s.storageV3 {
+		if err := s.migrateToV3(j, state, storage, previousRevision, r.Options["request-id"], triggerContextHash); err != nil {
+			return nil, storageError()
+		}
+		return result, nil
+	}
+	if storage.Profile.Mode != profilekey.ModeCanonical {
 		data, marshalErr := json.Marshal(j)
 		if marshalErr != nil {
 			return nil, storageError()
@@ -510,14 +535,14 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 			profilekey.StateRelative("tasks", s.Profile):    data,
 			profilekey.IdentityRelative("tasks", s.Profile): identity,
 		}
-		if resolution.LegacyStatus != profilekey.LegacyUnaddressable {
+		if storage.Profile.LegacyStatus != profilekey.LegacyUnaddressable {
 			marker, markerErr := profilekey.MarkerBytes(s.Profile)
 			if markerErr != nil {
 				return nil, storageError()
 			}
 			files[profilekey.LegacyRelative("tasks", s.Profile)] = marker
 		}
-		if e := maintenance.Replace(maintenance.Root(s.Directory), files); e != nil {
+		if err := maintenance.Replace(maintenance.Root(s.Directory), files); err != nil {
 			return nil, storageError()
 		}
 		return result, nil
@@ -526,7 +551,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	if commit == nil {
 		commit = WritePrivate
 	}
-	if e := commit(s.path(), j); e != nil {
+	if err := commit(s.path(), j); err != nil {
 		return nil, storageError()
 	}
 	return result, nil

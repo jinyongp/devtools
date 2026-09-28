@@ -23,7 +23,7 @@ func legacyFixture(t *testing.T) (Store, *State, string, string, string) {
 		// Public JSON input normalizes maps and arrays before preparation.
 		raw, _ := json.Marshal(body)
 		r.Body, _ = Decode(string(raw))
-		events, result, credential, e := s.prepare(r, contexts)
+		events, result, credential, e := s.prepare(r, mapContextLookup(contexts))
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -129,10 +129,7 @@ func TestNoOpDoesNotUpgrade(t *testing.T) {
 func TestReplayRejectsUnknownEventsAndVersions(t *testing.T) {
 	store := fixture(t)
 	call(t, store, "task.add", "", Object{"title": "safe"})
-	var original Journal
-	if e := ReadPrivate(store.path(), &original); e != nil {
-		t.Fatal(e)
-	}
+	original := forceV2Storage(t, store)
 	for _, name := range []string{"version", "action", "sequence", "missing upgrade"} {
 		t.Run(name, func(t *testing.T) {
 			raw, _ := json.Marshal(original)

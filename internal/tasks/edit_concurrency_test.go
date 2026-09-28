@@ -19,7 +19,7 @@ func TestEditWriteFailureAndReceiptRecovery(t *testing.T) {
 	before, _ := os.ReadFile(s.path())
 	state, _ := s.Read(context.Background())
 	r := Request{Action: "workstream.edited", Target: w, Body: editBody(Object{"op": "task.update", "id": task, "value": Object{"description": "Changed"}}), Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision)}}
-	s.commit = func(string, any) error { return errors.New("injected atomic replacement failure") }
+	s.commitV3 = func(func() error) error { return errors.New("injected WAL commit failure") }
 	if _, e := s.Execute(context.Background(), r); e == nil {
 		t.Fatal("write failure accepted")
 	}
@@ -27,7 +27,7 @@ func TestEditWriteFailureAndReceiptRecovery(t *testing.T) {
 	if string(before) != string(after) {
 		t.Fatal("failed write changed journal")
 	}
-	s.commit = nil
+	s.commitV3 = nil
 	first, e := s.Execute(context.Background(), r)
 	if e != nil {
 		t.Fatal(e)
@@ -42,16 +42,16 @@ func TestCommittedEditErrorRecoversReceipt(t *testing.T) {
 	s, w, task, _ := currentFixture(t)
 	state, _ := s.Read(context.Background())
 	r := Request{Action: "workstream.edited", Target: w, Body: editBody(Object{"op": "task.update", "id": task, "value": Object{"description": "Committed"}}), Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision)}}
-	s.commit = func(path string, v any) error {
-		if e := WritePrivate(path, v); e != nil {
+	s.commitV3 = func(commit func() error) error {
+		if e := commit(); e != nil {
 			return e
 		}
-		return errors.New("injected post-rename error")
+		return errors.New("injected post-WAL error")
 	}
 	if _, e := s.Execute(context.Background(), r); e == nil {
 		t.Fatal("expected uncertain response")
 	}
-	s.commit = nil
+	s.commitV3 = nil
 	out, e := s.Execute(context.Background(), r)
 	if e != nil || out["replayed"] != true {
 		t.Fatal("committed receipt lost", e)
@@ -242,8 +242,8 @@ func TestMaintenanceGateCancellationAcrossTaskAPIs(t *testing.T) {
 func TestCanonicalMutationsRunConcurrentlyAcrossProfiles(t *testing.T) {
 	root := t.TempDir()
 	directory := filepath.Join(root, "tasks")
-	left := Store{Directory: directory, Profile: "left"}
-	right := Store{Directory: directory, Profile: "right"}
+	left := Store{Directory: directory, Profile: "left", storageV3: true}
+	right := Store{Directory: directory, Profile: "right", storageV3: true}
 	for _, store := range []Store{left, right} {
 		if _, err := store.Execute(context.Background(), Request{
 			Action:  "task.add",
@@ -256,15 +256,15 @@ func TestCanonicalMutationsRunConcurrentlyAcrossProfiles(t *testing.T) {
 
 	entered := make(chan string, 2)
 	releaseCommit := make(chan struct{})
-	left.commit = func(path string, value any) error {
+	left.commitV3 = func(commit func() error) error {
 		entered <- "left"
 		<-releaseCommit
-		return WritePrivate(path, value)
+		return commit()
 	}
-	right.commit = func(path string, value any) error {
+	right.commitV3 = func(commit func() error) error {
 		entered <- "right"
 		<-releaseCommit
-		return WritePrivate(path, value)
+		return commit()
 	}
 	results := make(chan *protocol.Error, 2)
 	for _, store := range []Store{left, right} {

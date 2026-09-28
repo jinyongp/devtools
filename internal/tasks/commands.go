@@ -168,11 +168,23 @@ func (s *State) usesContext(r Request) bool {
 	return v != nil && v.Kind == "validation" && s.owner(v) != nil && s.owner(v).Kind == "task"
 }
 
-func (s *State) resolveContext(contexts map[string]string, token string) (*Run, *protocol.Error) {
+type ContextLookup func(hash string) (string, bool)
+
+func mapContextLookup(contexts map[string]string) ContextLookup {
+	return func(value string) (string, bool) {
+		runID, ok := contexts[value]
+		return runID, ok
+	}
+}
+
+func (s *State) resolveContext(lookup ContextLookup, token string) (*Run, *protocol.Error) {
 	if token == "" {
 		return nil, contextFailure("missing")
 	}
-	runID, known := contexts[hash(token)]
+	if lookup == nil {
+		return nil, contextFailure("unknown")
+	}
+	runID, known := lookup(hash(token))
 	run := s.Runs[runID]
 	if !known || run == nil {
 		return nil, contextFailure("unknown")
@@ -353,7 +365,7 @@ func stringArray(v any, ids bool) *protocol.Error {
 	}
 	return nil
 }
-func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object, string, *protocol.Error) {
+func (s *State) prepare(r Request, contexts ContextLookup) ([]Event, Object, string, *protocol.Error) {
 	def := Find(r.Action)
 	if def == nil {
 		return nil, nil, "", failure("invalid_argument", "Unknown task action.")
@@ -418,8 +430,10 @@ func (s *State) prepare(r Request, contexts map[string]string) ([]Event, Object,
 			}
 			run = contextRun
 		}
-	} else if def.ContextOwner && contextToken != "" {
-		contextRun = s.Runs[contexts[hash(contextToken)]]
+	} else if def.ContextOwner && contextToken != "" && contexts != nil {
+		if runID, ok := contexts(hash(contextToken)); ok {
+			contextRun = s.Runs[runID]
+		}
 	}
 	if evaluation, handled, e := s.legacyEdit(r); handled {
 		if e != nil {

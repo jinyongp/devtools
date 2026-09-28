@@ -12,7 +12,7 @@ import (
 
 func fixture(t *testing.T) Store {
 	t.Helper()
-	return Store{Directory: filepath.Join(t.TempDir(), "tasks"), Profile: "test"}
+	return Store{Directory: filepath.Join(t.TempDir(), "tasks"), Profile: "test", storageV3: true}
 }
 func call(t *testing.T, s Store, action, id string, b Object, opts ...string) Object {
 	t.Helper()

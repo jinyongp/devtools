@@ -385,6 +385,13 @@ func Enumerate(directory, domain string) ([]string, error) {
 			continue
 		}
 		name := entry.Name()
+		if domain == "tasks" && strings.HasSuffix(name, ".head.json") {
+			key := strings.TrimSuffix(name, ".head.json")
+			if !ValidKey(key) || !seenKeys[key] {
+				return nil, errors.New("task head missing identity")
+			}
+			continue
+		}
 		if filepath.Ext(name) != ".json" {
 			continue
 		}

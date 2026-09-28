@@ -211,10 +211,7 @@ func TestLegacyReceiptNormalizationAndIrrelevantContext(t *testing.T) {
 	}
 	createdID := itemID(created)
 
-	var journal Journal
-	if e := ReadPrivate(s.path(), &journal); e != nil {
-		t.Fatal(e)
-	}
+	journal := forceV2Storage(t, s)
 	receipt := journal.Receipts[requestID]
 	delete(receipt.Result, "previous_revision")
 	delete(receipt.Result, "affected_ids")

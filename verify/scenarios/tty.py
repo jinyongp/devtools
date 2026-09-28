@@ -99,19 +99,6 @@ def wait_foreground(pgrp, timeout=3):
     raise AssertionError(("foreground_pgrp", pgrp, foreground, bytes(pending)))
 
 
-def wait_not_foreground(pgrp, timeout=3):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            foreground = os.tcgetpgrp(master)
-        except OSError:
-            foreground = pgrp
-        if foreground != pgrp:
-            return
-        time.sleep(0.01)
-    raise AssertionError(("foreground_pgrp_still", pgrp, foreground, bytes(pending)))
-
-
 def send(data):
     if isinstance(data, str):
         data = data.encode()
@@ -185,11 +172,13 @@ try:
     # restores the child as foreground before continuing it.
     send("devtools run read\n")
     read_until(b"READ_READY")
+    stopped_child_pgrp = os.tcgetpgrp(master)
+    assert stopped_child_pgrp != shell_pgrp, stopped_child_pgrp
     send(b"\x1a")
     stopped = read_until(prompt)
     assert b"Stopped" in stopped or b"stopped" in stopped, stopped
     send("fg\n")
-    wait_not_foreground(shell_pgrp)
+    wait_foreground(stopped_child_pgrp)
     send("resumed\n")
     assert b"RESULT:resumed" in read_until(b"RESULT:resumed")
     read_until(prompt)

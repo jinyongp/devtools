@@ -25,7 +25,7 @@ func (a *App) importCommand(ctx context.Context, streams IO, request Request) (a
 		return nil, err
 	}
 	env := request.Options["env"]
-	state, err := store.Read()
+	state, err := store.Read(ctx)
 	if err != nil {
 		return nil, err
 	}

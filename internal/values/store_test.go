@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -73,7 +74,7 @@ func TestStoreConcurrentUpdates(t *testing.T) {
 		})
 	}
 	group.Wait()
-	state, err := store.Read()
+	state, err := store.Read(context.Background())
 	if err != nil || len(state.Keys) != 20 {
 		t.Fatalf("lost updates: %+v %v", state, err)
 	}
@@ -91,7 +92,7 @@ func TestStoreConcurrentUpdates(t *testing.T) {
 		}
 	}
 	other := Store{Directory: store.Directory, Profile: "app"}
-	otherState, err := other.Read()
+	otherState, err := other.Read(context.Background())
 	if err != nil || len(otherState.Keys) != 0 {
 		t.Fatal("case-sensitive profiles collided")
 	}
@@ -123,7 +124,7 @@ func TestStorageCorruptionAndPermissions(t *testing.T) {
 	if err := os.Chmod(store.file(), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Read(); err == nil || err.Code != "storage_error" {
+	if _, err := store.Read(context.Background()); err == nil || err.Code != "storage_error" {
 		t.Fatal(err)
 	}
 	if err := os.Remove(store.file()); err != nil {
@@ -136,7 +137,7 @@ func TestStorageCorruptionAndPermissions(t *testing.T) {
 	if err := os.Symlink(target, store.file()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Read(); err == nil {
+	if _, err := store.Read(context.Background()); err == nil {
 		t.Fatal("followed storage symlink")
 	}
 }
@@ -162,4 +163,42 @@ func TestLockCancellation(t *testing.T) {
 	if apiErr == nil || apiErr.Code != "canceled" || called {
 		t.Fatalf("%v called=%v", apiErr, called)
 	}
+}
+
+func TestMaintenanceGateCancellation(t *testing.T) {
+	root := t.TempDir()
+	store := Store{Directory: filepath.Join(root, "profiles"), Profile: "app"}
+	unlock, err := maintenance.Acquire(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+
+	check := func(name string, call func(context.Context) *protocol.Error) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+		defer cancel()
+		started := time.Now()
+		apiErr := call(ctx)
+		if apiErr == nil || apiErr.Code != "canceled" || apiErr.ExitCode != 130 {
+			t.Fatalf("%s: expected canceled, got %v", name, apiErr)
+		}
+		if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+			t.Fatalf("%s: cancellation waited too long: %v", name, elapsed)
+		}
+	}
+	check("read", func(ctx context.Context) *protocol.Error {
+		_, apiErr := store.Read(ctx)
+		return apiErr
+	})
+	check("update", func(ctx context.Context) *protocol.Error {
+		_, apiErr := store.Update(ctx, func(state *State) (bool, *protocol.Error) {
+			return state.CreateEnv("local")
+		})
+		return apiErr
+	})
+	check("inspect", func(ctx context.Context) *protocol.Error {
+		_, apiErr := store.Inspect(ctx, "")
+		return apiErr
+	})
 }

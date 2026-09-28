@@ -26,6 +26,17 @@ func storageError() *protocol.Error {
 	return protocol.NewError("storage_error", "Cannot access private profile storage.", 1, nil)
 }
 
+func canceledError() *protocol.Error {
+	return protocol.NewError("canceled", "Execution canceled.", 130, nil)
+}
+
+func gateError(ctx context.Context) *protocol.Error {
+	if ctx.Err() != nil {
+		return canceledError()
+	}
+	return storageError()
+}
+
 func (s Store) file() string {
 	// Hex names preserve case-sensitive profile identity on case-insensitive disks.
 	return filepath.Join(s.Directory, hex.EncodeToString([]byte(s.Profile))+".json")
@@ -74,10 +85,10 @@ func (s Store) read() (*State, *protocol.Error) {
 	return &state, nil
 }
 
-func (s Store) Read() (*State, *protocol.Error) {
-	release, gateErr := maintenance.Acquire(context.Background(), maintenance.Root(s.Directory))
+func (s Store) Read(ctx context.Context) (*State, *protocol.Error) {
+	release, gateErr := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
 	if gateErr != nil {
-		return nil, storageError()
+		return nil, gateError(ctx)
 	}
 	defer release()
 	if !project.ValidProfile(s.Profile) {
@@ -128,14 +139,14 @@ func (s Store) CompletionNames(kind Kind, env string) ([]string, *protocol.Error
 func (s Store) Update(ctx context.Context, change func(*State) (bool, *protocol.Error)) (bool, *protocol.Error) {
 	release, gateErr := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
 	if gateErr != nil {
-		return false, storageError()
+		return false, gateError(ctx)
 	}
 	defer release()
 	if !project.ValidProfile(s.Profile) {
 		return false, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
 	if ctx.Err() != nil {
-		return false, protocol.NewError("canceled", "Execution canceled.", 130, nil)
+		return false, canceledError()
 	}
 	if err := privateDirectory(s.Directory); err != nil {
 		return false, storageError()
@@ -158,13 +169,13 @@ func (s Store) Update(ctx context.Context, change func(*State) (bool, *protocol.
 		}
 		select {
 		case <-ctx.Done():
-			return false, protocol.NewError("canceled", "Execution canceled.", 130, nil)
+			return false, canceledError()
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 	if ctx.Err() != nil {
-		return false, protocol.NewError("canceled", "Execution canceled.", 130, nil)
+		return false, canceledError()
 	}
 	state, readErr := s.read()
 	if readErr != nil {

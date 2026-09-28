@@ -63,7 +63,7 @@ func legacyFixture(t *testing.T) (Store, *State, string, string, string) {
 func TestUpgradePreservesLegacyEvidenceAndRuns(t *testing.T) {
 	store, before, done, val, token := legacyFixture(t)
 	rawBefore, _ := os.ReadFile(store.path())
-	read, e := store.Read()
+	read, e := store.Read(context.Background())
 	if e != nil || read.Version != 1 {
 		t.Fatal(read, e)
 	}
@@ -78,7 +78,7 @@ func TestUpgradePreservesLegacyEvidenceAndRuns(t *testing.T) {
 		}
 	}
 	result := call(t, store, "run.checkpointed", run.ID, Object{"summary": "continue"}, "context", token)
-	after, e := store.Read()
+	after, e := store.Read(context.Background())
 	if e != nil || after.Version != 2 {
 		t.Fatal(e)
 	}
@@ -114,7 +114,7 @@ func TestNoOpDoesNotUpgrade(t *testing.T) {
 	if o["changed"] != false || o["claimed"] != false {
 		t.Fatal(o)
 	}
-	s, e := store.Read()
+	s, e := store.Read(context.Background())
 	if e != nil || s.Version != 1 {
 		t.Fatal("no-op upgraded", e)
 	}
@@ -175,7 +175,7 @@ func TestUpgradeDoesNotAdoptStaleLegacyBasis(t *testing.T) {
 		t.Fatal(e)
 	}
 	call(t, store, "task.add", "", Object{"title": "unrelated"})
-	after, e := store.Read()
+	after, e := store.Read(context.Background())
 	if e != nil || len(after.definition(val).LegacyBases) != 0 {
 		t.Fatal("stale basis adopted", e)
 	}
@@ -187,7 +187,7 @@ func TestUpgradeDoesNotAdoptStaleLegacyBasis(t *testing.T) {
 func TestCloneDoesNotShareProjection(t *testing.T) {
 	store := fixture(t)
 	id := itemID(call(t, store, "task.add", "", Object{"title": "original"}))
-	s, _ := store.Read()
+	s, _ := store.Read(context.Background())
 	clone := s.clone()
 	clone.Items[id].Props["title"] = "changed"
 	clone.definition(id).Removed = true

@@ -1,6 +1,7 @@
 package profiles
 
 import (
+	"context"
 	"path/filepath"
 	"sort"
 
@@ -70,12 +71,12 @@ type Diff struct {
 	Instances []InstanceChange `json:"instances"`
 }
 
-func (c Catalog) Canonical(profile string) (Canonical, *protocol.Error) {
+func (c Catalog) Canonical(ctx context.Context, profile string) (Canonical, *protocol.Error) {
 	result := Canonical{Profile: profile, Envs: []string{}, Variables: []ValueScope{}, Secrets: []ValueScope{}, Items: []TaskMetadata{}, Instances: []InstanceIdentity{}}
 	if !project.ValidProfile(profile) {
 		return result, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, map[string]any{"field": "profile"})
 	}
-	summaries, err := c.List()
+	summaries, err := c.List(ctx)
 	if err != nil {
 		return result, err
 	}
@@ -90,7 +91,7 @@ func (c Catalog) Canonical(profile string) (Canonical, *protocol.Error) {
 		return result, protocol.NewError("profile_not_found", "The selected profile does not exist in devtools storage.", 3, map[string]any{"profile": profile})
 	}
 	if summary.Values {
-		state, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: profile}).Read()
+		state, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: profile}).Read(ctx)
 		if readErr != nil {
 			return result, readErr
 		}
@@ -105,7 +106,7 @@ func (c Catalog) Canonical(profile string) (Canonical, *protocol.Error) {
 		}
 	}
 	if summary.Tasks {
-		state, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: profile}).Read()
+		state, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: profile}).Read(ctx)
 		if readErr != nil {
 			return result, readErr
 		}
@@ -348,13 +349,13 @@ func Compare(left, right Canonical, includeInstances bool) Diff {
 	return result
 }
 
-func (c Catalog) Diff(leftProfile, rightProfile string) (Diff, *protocol.Error) {
+func (c Catalog) Diff(ctx context.Context, leftProfile, rightProfile string) (Diff, *protocol.Error) {
 	result := Diff{Left: leftProfile, Right: rightProfile, Envs: []NameChange{}, Variables: []ValueChange{}, Secrets: []ValueChange{}, Items: []TaskChange{}, Instances: []InstanceChange{}}
-	left, err := c.Canonical(leftProfile)
+	left, err := c.Canonical(ctx, leftProfile)
 	if err != nil {
 		return result, err
 	}
-	right, err := c.Canonical(rightProfile)
+	right, err := c.Canonical(ctx, rightProfile)
 	if err != nil {
 		return result, err
 	}

@@ -70,7 +70,7 @@ func TestEncryptedRestoreAndReplay(t *testing.T) {
 	if err != nil || again.Digest != result.Digest || !again.Replayed {
 		t.Fatal("retry failed", err)
 	}
-	restored, err := (values.Store{Directory: store.Directory, Profile: "copy"}).Read()
+	restored, err := (values.Store{Directory: store.Directory, Profile: "copy"}).Read(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestEncryptedRestoreAndReplay(t *testing.T) {
 		t.Fatal("secret not restored")
 	}
 	taskCopy := tasks.Store{Directory: ts.Directory, Profile: "copy"}
-	state, err := taskCopy.Read()
+	state, err := taskCopy.Read(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestConcurrentImportReplaysSameRequest(t *testing.T) {
 	if first.result.Diff.Different != second.result.Diff.Different {
 		t.Fatalf("replay returned a different preview diff: %#v %#v", first.result.Diff, second.result.Diff)
 	}
-	restored, err := (values.Store{Directory: filepath.Join(destination.Data, "profiles"), Profile: "portable"}).Read()
+	restored, err := (values.Store{Directory: filepath.Join(destination.Data, "profiles"), Profile: "portable"}).Read(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestImportPreviewApplyAndStaleProtection(t *testing.T) {
 	if strings.Contains(string(previewJSON), "IMPORT_SECRET_CANARY") {
 		t.Fatal("import preview leaked secret material")
 	}
-	before, err := targetStore.Read()
+	before, err := targetStore.Read(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestImportPreviewApplyAndStaleProtection(t *testing.T) {
 	if _, err = destination.Import(context.Background(), conflicting); err == nil || err.Code != "request_conflict" {
 		t.Fatalf("changed retry input did not conflict: %v", err)
 	}
-	restored, err := targetStore.Read()
+	restored, err := targetStore.Read(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

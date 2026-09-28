@@ -100,7 +100,7 @@ func TestDiffIsStableMetadataOnlyAndIgnoresSecretValueEquality(t *testing.T) {
 	writeDiffInstance(t, data, "left", filepath.Join(data, "left-project"), "main")
 	writeDiffInstance(t, data, "right", filepath.Join(data, "right-project"), "feature")
 
-	diff, err := (Catalog{Data: data}).Diff("left", "right")
+	diff, err := (Catalog{Data: data}).Diff(context.Background(), "left", "right")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestDiffIsStableMetadataOnlyAndIgnoresSecretValueEquality(t *testing.T) {
 func TestDiffMissingProfileFailsExplicitly(t *testing.T) {
 	data := t.TempDir()
 	writeDiffValues(t, data, "left", false)
-	if _, err := (Catalog{Data: data}).Diff("left", "missing"); err == nil || err.Code != "profile_not_found" {
+	if _, err := (Catalog{Data: data}).Diff(context.Background(), "left", "missing"); err == nil || err.Code != "profile_not_found" {
 		t.Fatalf("expected profile_not_found, got %#v", err)
 	}
 }

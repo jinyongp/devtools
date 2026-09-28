@@ -92,7 +92,7 @@ func (a *App) diagnose(ctx context.Context, streams IO, r Request) (any, *protoc
 	if err != nil {
 		return nil, err
 	}
-	state, err := (values.Store{Directory: directory, Profile: p.Profile}).Read()
+	state, err := (values.Store{Directory: directory, Profile: p.Profile}).Read(ctx)
 	if err != nil {
 		report.Add("value_storage", "fail", "Profile value storage could not be read.", doctor.Remedy("Check the data directory and its private file permissions.", nil))
 		state = nil
@@ -105,7 +105,7 @@ func (a *App) diagnose(ctx context.Context, streams IO, r Request) (any, *protoc
 			report.Add("env", "pass", "The selected common/env layer is available.")
 		}
 	}
-	if _, err := (tasks.Store{Directory: filepath.Join(filepath.Dir(directory), "tasks"), Profile: p.Profile}).Read(); err != nil {
+	if _, err := (tasks.Store{Directory: filepath.Join(filepath.Dir(directory), "tasks"), Profile: p.Profile}).Read(ctx); err != nil {
 		report.Add("task_storage", "fail", "Profile task storage could not be read.", doctor.Remedy("Check task data and its private file permissions.", nil))
 	} else {
 		report.Add("task_storage", "pass", "Profile task storage is readable.")

@@ -157,7 +157,7 @@ func TestCompletedProcessCleanupPreservesProfileEnumeration(t *testing.T) {
 	if items, failure := (services.Store{Data: engine.Data}).List(context.Background(), "archived"); failure != nil || len(items) != 0 {
 		t.Fatalf("process list failed after legacy-style cleanup: %#v %v", items, failure)
 	}
-	names, failure := (profilecatalog.Catalog{Data: engine.Data}).Names()
+	names, failure := (profilecatalog.Catalog{Data: engine.Data}).Names(context.Background())
 	if failure != nil {
 		t.Fatalf("profile enumeration failed after process cleanup: %v", failure)
 	}

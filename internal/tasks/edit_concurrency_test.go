@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 func TestEditWriteFailureAndReceiptRecovery(t *testing.T) {
 	s, w, task, _ := currentFixture(t)
 	before, _ := os.ReadFile(s.path())
-	state, _ := s.Read()
+	state, _ := s.Read(context.Background())
 	r := Request{Action: "workstream.edited", Target: w, Body: editBody(Object{"op": "task.update", "id": task, "value": Object{"description": "Changed"}}), Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision)}}
 	s.commit = func(string, any) error { return errors.New("injected atomic replacement failure") }
 	if _, e := s.Execute(context.Background(), r); e == nil {
@@ -38,7 +39,7 @@ func TestEditWriteFailureAndReceiptRecovery(t *testing.T) {
 
 func TestCommittedEditErrorRecoversReceipt(t *testing.T) {
 	s, w, task, _ := currentFixture(t)
-	state, _ := s.Read()
+	state, _ := s.Read(context.Background())
 	r := Request{Action: "workstream.edited", Target: w, Body: editBody(Object{"op": "task.update", "id": task, "value": Object{"description": "Committed"}}), Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision)}}
 	s.commit = func(path string, v any) error {
 		if e := WritePrivate(path, v); e != nil {
@@ -58,7 +59,7 @@ func TestCommittedEditErrorRecoversReceipt(t *testing.T) {
 
 func TestEditHonorsMaintenanceGate(t *testing.T) {
 	s, w, task, _ := currentFixture(t)
-	state, _ := s.Read()
+	state, _ := s.Read(context.Background())
 	unlock, e := maintenance.Acquire(context.Background(), maintenance.Root(s.Directory))
 	if e != nil {
 		t.Fatal(e)
@@ -97,7 +98,7 @@ func TestEditRacesWithExecution(t *testing.T) {
 					call(t, s, "task.completed", task, Object{"summary": "complete"}, "context", token)
 				}
 			}
-			state, _ := s.Read()
+			state, _ := s.Read(context.Background())
 			edit := Request{Action: "workstream.edited", Target: w, Body: editBody(Object{"op": "task.update", "id": task, "value": Object{"description": "Concurrent definition"}}), Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision)}}
 			other := Request{Action: action, Target: task, Body: Object{}, Options: map[string]string{"request-id": ID(), "context": token}}
 			switch action {
@@ -142,7 +143,7 @@ func TestEditRacesWithExecution(t *testing.T) {
 			for e := range errs {
 				t.Fatal(e)
 			}
-			after, e := s.Read()
+			after, e := s.Read(context.Background())
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -175,12 +176,12 @@ func TestABAAndExplicitEvidenceReuse(t *testing.T) {
 	basis := call(t, s, "validation.basis", v, Object{"code": []any{}}, "context", token)
 	call(t, s, "validation.accept", v, Object{"basis_id": basis["basis_id"], "record_id": pass, "reason": "Same code and definition"}, "context", token)
 	call(t, s, "validation.waive", v, Object{"reason": "Fixture waiver"}, "context", token)
-	before, _ := s.Read()
+	before, _ := s.Read(context.Background())
 	signature := before.Assessment(task).Signature
 	for _, description := range []string{"Changed", ""} {
 		call(t, s, "workstream.edited", w, editBody(Object{"op": "task.update", "id": task, "value": Object{"description": description}}))
 	}
-	after, _ := s.Read()
+	after, _ := s.Read(context.Background())
 	if after.Assessment(task).Signature == signature || after.evidenceCurrent(after.Items[v], after.Assessment(task).Signature, runID(takeover)) {
 		t.Fatal("ABA revived proof or waiver")
 	}
@@ -190,4 +191,49 @@ func TestABAAndExplicitEvidenceReuse(t *testing.T) {
 	if e == nil {
 		t.Fatal("old epoch accepted")
 	}
+}
+
+func TestMaintenanceGateCancellationAcrossTaskAPIs(t *testing.T) {
+	s := fixture(t)
+	unlock, err := maintenance.Acquire(context.Background(), maintenance.Root(s.Directory))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+
+	check := func(name string, call func(context.Context) *protocol.Error) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+		defer cancel()
+		started := time.Now()
+		apiErr := call(ctx)
+		if apiErr == nil || apiErr.Code != "canceled" || apiErr.ExitCode != 130 {
+			t.Fatalf("%s: expected canceled, got %v", name, apiErr)
+		}
+		if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+			t.Fatalf("%s: cancellation waited too long: %v", name, elapsed)
+		}
+	}
+	check("read", func(ctx context.Context) *protocol.Error {
+		_, apiErr := s.Read(ctx)
+		return apiErr
+	})
+	check("profiles", func(ctx context.Context) *protocol.Error {
+		_, apiErr := s.Profiles(ctx)
+		return apiErr
+	})
+	check("query", func(ctx context.Context) *protocol.Error {
+		_, apiErr := s.Query(ctx, Query{Command: "list"})
+		return apiErr
+	})
+	check("execute", func(ctx context.Context) *protocol.Error {
+		_, apiErr := s.Execute(ctx, Request{
+			Action: "task.add",
+			Body:   Object{"title": "blocked"},
+			Options: map[string]string{
+				"request-id": ID(),
+			},
+		})
+		return apiErr
+	})
 }

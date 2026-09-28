@@ -10,7 +10,7 @@ func TestAdministrativeUnclaim(t *testing.T) {
 	s := fixture(t)
 	id := itemID(call(t, s, "task.add", "", Object{"title": "Recover work"}))
 	claimed := call(t, s, "run.claimed", id, Object{})
-	state, _ := s.Read()
+	state, _ := s.Read(context.Background())
 	req := Request{Action: "run.revoked", Target: id, Body: Object{"reason": "Agent session ended"}, Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision), "expected-run": ID()}}
 	if _, e := s.Execute(context.Background(), req); e == nil || e.Code != "claim_conflict" {
 		t.Fatalf("unexpected run accepted: %v", e)
@@ -20,7 +20,7 @@ func TestAdministrativeUnclaim(t *testing.T) {
 	if e != nil || result["context"] != nil {
 		t.Fatalf("revoke: %v %v", result, e)
 	}
-	state, _ = s.Read()
+	state, _ = s.Read(context.Background())
 	if state.Current(id) != nil || state.Items[id].State != "open" || state.Runs[runID(claimed)].State != "revoked" {
 		t.Fatal("revocation must end only the observed run")
 	}
@@ -45,7 +45,7 @@ func TestAdministrativeUnclaim(t *testing.T) {
 	if replay, e := s.Execute(context.Background(), req); e != nil || replay["replayed"] != true {
 		t.Fatalf("retry: %v %v", replay, e)
 	}
-	state, _ = s.Read()
+	state, _ = s.Read(context.Background())
 	if state.Current(id).ID != runID(next) {
 		t.Fatal("retry revoked the new run")
 	}

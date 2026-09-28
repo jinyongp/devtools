@@ -60,10 +60,10 @@ func positive(o map[string]string, k string, def, max int) (int, *protocol.Error
 	}
 	return n, nil
 }
-func (store Store) Query(q Query) (Object, *protocol.Error) {
-	release, gateErr := maintenance.Acquire(context.Background(), maintenance.Root(store.Directory))
+func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error) {
+	release, gateErr := maintenance.Acquire(ctx, maintenance.Root(store.Directory))
 	if gateErr != nil {
-		return nil, storageError()
+		return nil, gateError(ctx)
 	}
 	defer release()
 	pruneQueries(store.cacheDirectory())

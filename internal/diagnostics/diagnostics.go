@@ -134,7 +134,7 @@ func Inspect(ctx context.Context, input Input) (Report, *protocol.Error) {
 		return Report{}, err
 	}
 
-	profiles, err := (profilecatalog.Catalog{Data: input.Data}).List()
+	profiles, err := (profilecatalog.Catalog{Data: input.Data}).List(ctx)
 	if err != nil {
 		report.Profiles.Section = Section{Status: "fail", ErrorCode: err.Code}
 		report.issue("profiles", err)

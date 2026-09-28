@@ -19,7 +19,7 @@ func editableFixture(t *testing.T) (tasks.Store, string) {
 	s := tasks.Store{Directory: filepath.Join(t.TempDir(), "tasks"), Profile: "edit-fixture"}
 	apply := func(action, target string, body tasks.Object, token string) tasks.Object {
 		t.Helper()
-		state, e := s.Read()
+		state, e := s.Read(context.Background())
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -52,7 +52,7 @@ func editableFixture(t *testing.T) (tasks.Store, string) {
 func TestManagementEditPreviewAndExecutionBoundary(t *testing.T) {
 	store, w := editableFixture(t)
 	s := &Server{registry: Registry{Address: "http://127.0.0.1:1234"}, data: store.Directory, sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)}}
-	state, _ := store.Read()
+	state, _ := store.Read(context.Background())
 	req := actionRequest{Domain: "task", Profile: store.Profile, Action: "workstream.edited", Target: w, Body: tasks.Object{"reason": "Edit while running", "operations": []tasks.Object{{"op": "plan.update", "value": tasks.Object{"body": "Changed plan"}}}}, Options: map[string]string{"if-revision": fmt.Sprint(state.Revision), "dry-run": "true"}}
 	call := func() *httptest.ResponseRecorder {
 		b, _ := json.Marshal(req)
@@ -67,7 +67,7 @@ func TestManagementEditPreviewAndExecutionBoundary(t *testing.T) {
 	if out := call(); out.Code != 200 {
 		t.Fatal(out.Code, out.Body)
 	}
-	after, _ := store.Read()
+	after, _ := store.Read(context.Background())
 	if after.Revision != state.Revision {
 		t.Fatal("preview wrote")
 	}
@@ -76,12 +76,12 @@ func TestManagementEditPreviewAndExecutionBoundary(t *testing.T) {
 	if out := call(); out.Code != 200 {
 		t.Fatal(out.Code, out.Body)
 	}
-	state, _ = store.Read()
+	state, _ = store.Read(context.Background())
 	req = actionRequest{Domain: "task", Profile: store.Profile, Action: "workstream.update", Target: w, Body: tasks.Object{"title": "Updated metadata"}, Options: map[string]string{"if-revision": fmt.Sprint(state.Revision), "request-id": tasks.ID()}}
 	if out := call(); out.Code != 200 {
 		t.Fatal("management metadata update", out.Code, out.Body)
 	}
-	state, _ = store.Read()
+	state, _ = store.Read(context.Background())
 	if state.Items[w].Title != "Updated metadata" {
 		t.Fatal("management metadata was not saved")
 	}

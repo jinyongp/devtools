@@ -202,12 +202,12 @@ func (a *App) registerProfiles() {
 	)
 }
 
-func (a *App) listProfiles(_ context.Context, _ IO, _ Request) (any, *protocol.Error) {
+func (a *App) listProfiles(ctx context.Context, _ IO, _ Request) (any, *protocol.Error) {
 	catalog, err := a.profileCatalog()
 	if err != nil {
 		return nil, err
 	}
-	items, listErr := catalog.List()
+	items, listErr := catalog.List(ctx)
 	if listErr != nil {
 		return nil, listErr
 	}
@@ -226,12 +226,12 @@ func (a *App) inspectProfile(ctx context.Context, _ IO, request Request) (any, *
 	return map[string]any{"item": item}, nil
 }
 
-func (a *App) diffProfiles(_ context.Context, _ IO, request Request) (any, *protocol.Error) {
+func (a *App) diffProfiles(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
 	catalog, err := a.profileCatalog()
 	if err != nil {
 		return nil, err
 	}
-	return catalog.Diff(request.Args[0], request.Args[1])
+	return catalog.Diff(ctx, request.Args[0], request.Args[1])
 }
 
 func (a *App) exportProfile(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {

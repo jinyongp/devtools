@@ -23,7 +23,7 @@ func TestAtomicEditAddsForwardReferences(t *testing.T) {
 		Object{"op": "task.add", "ref": "first", "value": Object{"title": "First"}},
 		Object{"op": "task.add", "ref": "second", "value": Object{"title": "Second"}},
 	)
-	s, _ := store.Read()
+	s, _ := store.Read(context.Background())
 	request := Request{Action: "workstream.edited", Target: w, Body: body, Options: map[string]string{"if-revision": fmt.Sprint(s.Revision), "dry-run": "true"}}
 	before, _ := os.ReadFile(store.path())
 	preview, e := store.Execute(context.Background(), request)
@@ -45,7 +45,7 @@ func TestAtomicEditAddsForwardReferences(t *testing.T) {
 	if !validID(first) || !validID(second) {
 		t.Fatal(refs)
 	}
-	s, e = store.Read()
+	s, e = store.Read(context.Background())
 	if e != nil || !contains(s.Items[second].Depends, first) {
 		t.Fatal("forward dependency lost", e)
 	}
@@ -233,13 +233,13 @@ func TestValidationRestoreRetainsDefinitionAndAuditsObligation(t *testing.T) {
 		t.Fatal("required validation removal not visible")
 	}
 	call(t, s, "workstream.edited", w, editBody(Object{"op": "validation.restore", "id": v}))
-	state, _ := s.Read()
+	state, _ := s.Read(context.Background())
 	if !state.Included(state.Items[v]) || !contains(arr(state.Items[v].Props, "acceptance_keys"), "A") {
 		t.Fatal("validation definition lost")
 	}
 	call(t, s, "workstream.edited", w, editBody(Object{"op": "task.remove", "id": task}))
 	call(t, s, "workstream.edited", w, editBody(Object{"op": "task.update", "id": task, "value": Object{"description": "Edited outside scope", "acceptance_keys": []string{"A"}}}))
-	state, _ = s.Read()
+	state, _ = s.Read(context.Background())
 	if state.Included(state.Items[task]) {
 		t.Fatal("excluded update restored task")
 	}

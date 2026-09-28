@@ -49,7 +49,7 @@ func TestStaleRunSyncAndLateRecord(t *testing.T) {
 	}
 	recordPass(t, s, v, token)
 	call(t, s, "task.completed", task, Object{"summary": "current"}, "context", token)
-	state, _ := s.Read()
+	state, _ := s.Read(context.Background())
 	if state.Assessment(task).CompletionStatus != "current" {
 		t.Fatal("new completion invalid")
 	}
@@ -63,7 +63,7 @@ func TestDoneStaleClaimIsAtomicAndRemovedRunCanRelease(t *testing.T) {
 	call(t, s, "task.completed", task, Object{"summary": "first"}, "context", token)
 	call(t, s, "workstream.edited", w, editBody(Object{"op": "task.update", "id": task, "value": Object{"description": "second"}}))
 	next := call(t, s, "run.claimed", task, Object{})
-	state, _ := s.Read()
+	state, _ := s.Read(context.Background())
 	if state.Items[task].State != "open" || state.Current(task) == nil || len(state.definition(task).Completions) != 1 {
 		t.Fatal("invalid reopen/claim")
 	}
@@ -82,23 +82,23 @@ func TestWorkstreamEvidenceLossRequiresExplicitReclose(t *testing.T) {
 	recordPass(t, s, v, token)
 	call(t, s, "task.completed", task, Object{"summary": "done"}, "context", token)
 	pass := func() {
-		state, _ := s.Read()
+		state, _ := s.Read(context.Background())
 		basis := call(t, s, "validation.basis", integration, Object{"code": []any{}}, "if-revision", fmt.Sprint(state.Revision))
 		call(t, s, "validation.record", integration, Object{"basis_id": basis["basis_id"], "result": "pass", "summary": "integration passed", "evidence": []any{}})
 	}
 	pass()
 	call(t, s, "workstream.close", w, Object{})
-	state, _ := s.Read()
+	state, _ := s.Read(context.Background())
 	if state.Assessment(w).CompletionStatus != "current" {
 		t.Fatal("close invalidated its proof")
 	}
 	pass()
-	state, _ = s.Read()
+	state, _ = s.Read(context.Background())
 	if state.Assessment(w).CompletionStatus != "stale" {
 		t.Fatal("new evidence automatically reclosed")
 	}
 	call(t, s, "workstream.close", w, Object{})
-	state, _ = s.Read()
+	state, _ = s.Read(context.Background())
 	if state.Assessment(w).CompletionStatus != "current" {
 		t.Fatal("explicit reclose failed")
 	}
@@ -113,7 +113,7 @@ func TestClosedWorkstreamEvidenceRevocation(t *testing.T) {
 			token := str(claim, "context")
 			recordPass(t, s, v, token)
 			call(t, s, "task.completed", task, Object{"summary": "done"}, "context", token)
-			state, _ := s.Read()
+			state, _ := s.Read(context.Background())
 			basis := call(t, s, "validation.basis", integration, Object{"code": []any{}}, "if-revision", fmt.Sprint(state.Revision))
 			record := func(result string) {
 				call(t, s, "validation.record", integration, Object{"basis_id": basis["basis_id"], "result": result, "summary": result, "evidence": []any{}})
@@ -130,12 +130,12 @@ func TestClosedWorkstreamEvidenceRevocation(t *testing.T) {
 				record(change)
 			}
 			record("pass")
-			state, _ = s.Read()
+			state, _ = s.Read(context.Background())
 			if state.Assessment(w).CompletionStatus != "stale" {
 				t.Fatal("proof restoration automatically reclosed")
 			}
 			call(t, s, "workstream.close", w, Object{})
-			state, _ = s.Read()
+			state, _ = s.Read(context.Background())
 			if state.Assessment(w).CompletionStatus != "current" {
 				t.Fatal("explicit close failed")
 			}

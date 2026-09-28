@@ -21,7 +21,7 @@ func call(t *testing.T, s Store, action, id string, b Object, opts ...string) Ob
 		options[opts[n]] = opts[n+1]
 	}
 	if Find(action).Revision {
-		state, e := s.Read()
+		state, e := s.Read(context.Background())
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -74,7 +74,7 @@ func TestClaimRaceAndRecovery(t *testing.T) {
 	if e != nil || again["replayed"] != true || again["context_valid"] != false || num(first, "revision") != num(again, "revision") {
 		t.Fatalf("replay: %v %+v", again, e)
 	}
-	history, e := s.Query(Query{Command: "export", Target: id})
+	history, e := s.Query(context.Background(), Query{Command: "export", Target: id})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -115,7 +115,7 @@ func TestWorkstreamValidationAndReopen(t *testing.T) {
 	call(t, s, "task.completed", id, Object{"summary": "Done"}, "context", str(claim, "context"))
 	call(t, s, "workstream.close", w, Object{})
 	call(t, s, "workstream.reopen", w, Object{"reason": "Next iteration"})
-	state, e := s.Read()
+	state, e := s.Read(context.Background())
 	if e != nil || state.Items[w].State != "draft" || state.Items[id].State != "done" {
 		t.Fatal("reopen changed internal results", e)
 	}
@@ -125,17 +125,17 @@ func TestDAGAndSnapshot(t *testing.T) {
 	w := itemID(call(t, s, "workstream.create", "", Object{"title": "One"}))
 	v := itemID(call(t, s, "workstream.create", "", Object{"title": "Two"}))
 	call(t, s, "workstream.depends", v, Object{"depends_on": []string{w}})
-	state, _ := s.Read()
+	state, _ := s.Read(context.Background())
 	_, e := s.Execute(context.Background(), Request{Action: "workstream.depends", Target: w, Body: Object{"depends_on": []string{v}}, Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision)}})
 	if e == nil || e.Code != "dependency_conflict" {
 		t.Fatal("cycle accepted", e)
 	}
-	first, e := s.Query(Query{Command: "workstream list", Options: map[string]string{"limit": "1"}})
+	first, e := s.Query(context.Background(), Query{Command: "workstream list", Options: map[string]string{"limit": "1"}})
 	if e != nil {
 		t.Fatal(e)
 	}
 	call(t, s, "workstream.create", "", Object{"title": "Three"})
-	next, e := s.Query(Query{Command: "workstream list", Options: map[string]string{"limit": "1", "cursor": str(first, "next_cursor")}})
+	next, e := s.Query(context.Background(), Query{Command: "workstream list", Options: map[string]string{"limit": "1", "cursor": str(first, "next_cursor")}})
 	if e != nil || num(first, "revision") != num(next, "revision") || next["next_cursor"] != nil {
 		t.Fatal("snapshot drift", next, e)
 	}
@@ -160,12 +160,12 @@ func TestGraphContinuationKeepsRevision(t *testing.T) {
 	c := itemID(call(t, s, "workstream.create", "", Object{"title": "C"}))
 	call(t, s, "workstream.depends", b, Object{"depends_on": []string{a}})
 	call(t, s, "workstream.depends", c, Object{"depends_on": []string{b}})
-	first, e := s.Query(Query{Command: "workstream tree", Target: c, Options: map[string]string{"depth": "1"}})
+	first, e := s.Query(context.Background(), Query{Command: "workstream tree", Target: c, Options: map[string]string{"depth": "1"}})
 	if e != nil || first["truncated"] != true {
 		t.Fatal(first, e)
 	}
 	call(t, s, "workstream.create", "", Object{"title": "Later"})
-	next, e := s.Query(Query{Command: "workstream tree", Target: b, Options: map[string]string{"cursor": str(first, "cursor")}})
+	next, e := s.Query(context.Background(), Query{Command: "workstream tree", Target: b, Options: map[string]string{"cursor": str(first, "cursor")}})
 	if e != nil || num(next, "revision") != num(first, "revision") {
 		t.Fatal("graph drift", next, e)
 	}
@@ -187,7 +187,7 @@ func TestAttachMaintainsReferences(t *testing.T) {
 	if str(o["item"].(Object), "workstream_id") != b {
 		t.Fatal("stale displayed owner")
 	}
-	state, _ := s.Read()
+	state, _ := s.Read(context.Background())
 	old := state.Items[a].Props["plan"].(map[string]any)
 	next := state.Items[b].Props["plan"].(map[string]any)
 	if len(arr(old, "task_ids"))+len(arr(old, "validation_ids")) != 0 || !contains(arr(next, "task_ids"), id) || !contains(arr(next, "validation_ids"), v) {
@@ -202,12 +202,12 @@ func TestImpactPreviewIsReadOnly(t *testing.T) {
 	s := fixture(t)
 	a := itemID(call(t, s, "workstream.create", "", Object{"title": "A"}))
 	b := itemID(call(t, s, "workstream.create", "", Object{"title": "B"}))
-	before, _ := s.Read()
-	out, e := s.Query(Query{Command: "workstream impact", Target: b, Body: Object{"depends_on": []string{a}}})
+	before, _ := s.Read(context.Background())
+	out, e := s.Query(context.Background(), Query{Command: "workstream impact", Target: b, Body: Object{"depends_on": []string{a}}})
 	if e != nil || out["proposed_changes"] == nil {
 		t.Fatal(out, e)
 	}
-	after, _ := s.Read()
+	after, _ := s.Read(context.Background())
 	if before.Revision != after.Revision || len(after.Items[b].Depends) > 0 {
 		t.Fatal("preview changed journal")
 	}

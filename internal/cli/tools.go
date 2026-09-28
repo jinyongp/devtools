@@ -104,7 +104,7 @@ func (a *App) registerTools() {
 				return nil, err
 			}
 			if action == "list" {
-				state, err := store.Read()
+				state, err := store.Read(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -129,7 +129,7 @@ func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kin
 	}
 	env := request.Options["env"]
 	if action == "list" || action == "get" {
-		state, err := store.Read()
+		state, err := store.Read(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -143,7 +143,7 @@ func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kin
 	value := request.Options["value"]
 	if action == "set" && kind == values.Secret {
 		// Check scope before consuming a potentially blocking input stream.
-		state, err := store.Read()
+		state, err := store.Read(ctx)
 		if err != nil {
 			return nil, err
 		}

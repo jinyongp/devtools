@@ -44,6 +44,17 @@ func (s Store) path() string {
 func storageError() *protocol.Error {
 	return protocol.NewError("storage_error", "Cannot access private task storage.", 1, nil)
 }
+
+func canceledError() *protocol.Error {
+	return protocol.NewError("canceled", "Request canceled.", 130, nil)
+}
+
+func gateError(ctx context.Context) *protocol.Error {
+	if ctx.Err() != nil {
+		return canceledError()
+	}
+	return storageError()
+}
 func PrivateDir(path string) error {
 	if e := os.MkdirAll(path, 0700); e != nil {
 		return e
@@ -170,10 +181,10 @@ func safeApply(s *State, e Event) (err error) {
 	s.Apply(e)
 	return nil
 }
-func (s Store) Read() (*State, *protocol.Error) {
-	release, e := maintenance.Acquire(context.Background(), maintenance.Root(s.Directory))
+func (s Store) Read(ctx context.Context) (*State, *protocol.Error) {
+	release, e := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
 	if e != nil {
-		return nil, storageError()
+		return nil, gateError(ctx)
 	}
 	defer release()
 	_, state, err := s.load()
@@ -200,10 +211,10 @@ func (s Store) CompletionIDs(kind, workstream string) ([]string, *protocol.Error
 	}
 	return ids, nil
 }
-func (s Store) Profiles() ([]string, *protocol.Error) {
-	release, gateErr := maintenance.Acquire(context.Background(), maintenance.Root(s.Directory))
+func (s Store) Profiles(ctx context.Context) ([]string, *protocol.Error) {
+	release, gateErr := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
 	if gateErr != nil {
-		return nil, storageError()
+		return nil, gateError(ctx)
 	}
 	defer release()
 	entries, e := os.ReadDir(s.Directory)
@@ -236,7 +247,7 @@ type Request struct {
 func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error) {
 	releaseGate, gateErr := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
 	if gateErr != nil {
-		return nil, storageError()
+		return nil, gateError(ctx)
 	}
 	defer releaseGate()
 	def := Find(r.Action)
@@ -308,7 +319,7 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 	release, e := Lock(ctx, s.path()+".lock")
 	if e != nil {
 		if ctx.Err() != nil {
-			return nil, protocol.NewError("canceled", "Request canceled.", 130, nil)
+			return nil, canceledError()
 		}
 		return nil, storageError()
 	}
@@ -375,7 +386,7 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 		return nil, prepared.noChangeFailure(r, s.Profile)
 	}
 	if ctx.Err() != nil {
-		return nil, protocol.NewError("canceled", "Request canceled.", 130, nil)
+		return nil, canceledError()
 	}
 	previousRevision := state.Revision
 	before := state.clone()

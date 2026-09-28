@@ -69,8 +69,8 @@ func nameSet(items []string) map[string]bool {
 	return set
 }
 
-func (c Catalog) List() ([]Summary, *protocol.Error) {
-	names, err := c.Names()
+func (c Catalog) List(ctx context.Context) ([]Summary, *protocol.Error) {
+	names, err := c.Names(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (c Catalog) Inspect(ctx context.Context, profile string) (Detail, *protocol
 	if !project.ValidProfile(profile) {
 		return detail, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, map[string]any{"field": "profile"})
 	}
-	summaries, err := c.List()
+	summaries, err := c.List(ctx)
 	if err != nil {
 		return detail, err
 	}
@@ -152,7 +152,7 @@ func (c Catalog) Inspect(ctx context.Context, profile string) (Detail, *protocol
 	detail.Processes = []Process{}
 
 	if detail.Values {
-		state, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: profile}).Read()
+		state, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: profile}).Read(ctx)
 		if readErr != nil {
 			return Detail{}, readErr
 		}
@@ -167,7 +167,7 @@ func (c Catalog) Inspect(ctx context.Context, profile string) (Detail, *protocol
 		}
 	}
 	if detail.Tasks {
-		state, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: profile}).Read()
+		state, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: profile}).Read(ctx)
 		if readErr != nil {
 			return Detail{}, readErr
 		}

@@ -16,14 +16,14 @@ func TestMutationOutcomeAndNoChangeFailure(t *testing.T) {
 	if num(created, "previous_revision") != 0 || num(created, "affected_count") != 1 || !contains(arr(created, "affected_ids"), id) {
 		t.Fatal("creation outcome is not verifiable", created)
 	}
-	state, _ := s.Read()
+	state, _ := s.Read(context.Background())
 	revision := state.Revision
 	requestID := ID()
 	request := Request{Action: "task.update", Target: id, Body: Object{"title": "Work"}, Options: map[string]string{"request-id": requestID, "if-revision": fmt.Sprint(revision)}}
 	if _, e := s.Execute(context.Background(), request); e == nil || e.Code != "no_change" || num(Object(e.Details), "affected_count") != 0 || len(arr(Object(e.Details), "affected_ids")) != 0 {
 		t.Fatal("identical update did not fail as no_change", e)
 	}
-	after, _ := s.Read()
+	after, _ := s.Read(context.Background())
 	if after.Revision != revision || len(after.Events) != len(state.Events) {
 		t.Fatal("no_change mutated the journal")
 	}
@@ -36,17 +36,17 @@ func TestMutationOutcomeAndNoChangeFailure(t *testing.T) {
 		t.Fatal("changed update outcome is incomplete", changed)
 	}
 	call(t, s, "task.add", "", Object{"title": "Advance profile"})
-	latest, _ := s.Read()
+	latest, _ := s.Read(context.Background())
 	replayed, e := s.Execute(context.Background(), request)
 	if e != nil || replayed["replayed"] != true || num(replayed, "previous_revision") != num(changed, "previous_revision") || num(replayed, "revision") != num(changed, "revision") || num(replayed, "current_revision") != latest.Revision {
 		t.Fatal("replayed mutation lost revision boundaries", replayed, e)
 	}
 
 	claim := call(t, s, "run.claimed", id, Object{})
-	beforeCheckpoint, _ := s.Read()
+	beforeCheckpoint, _ := s.Read(context.Background())
 	definitionRevision := beforeCheckpoint.Items[id].Revision
 	checkpoint := call(t, s, "run.checkpointed", runID(claim), Object{"summary": "Saved"}, "context", str(claim, "context"))
-	afterCheckpoint, _ := s.Read()
+	afterCheckpoint, _ := s.Read(context.Background())
 	if num(checkpoint, "previous_revision") != beforeCheckpoint.Revision || num(checkpoint, "revision") != afterCheckpoint.Revision || num(checkpoint, "affected_count") != 1 || !contains(arr(checkpoint, "affected_ids"), id) {
 		t.Fatal("checkpoint outcome is incomplete", checkpoint)
 	}
@@ -62,7 +62,7 @@ func TestTaskUpdateContextGuardAndContextReasons(t *testing.T) {
 	second := call(t, s, "run.claimed", other, Object{})
 
 	update := func(token, title, requestID string) (Object, *protocol.Error) {
-		state, _ := s.Read()
+		state, _ := s.Read(context.Background())
 		return s.Execute(context.Background(), Request{Action: "task.update", Target: task, Body: Object{"title": title}, Options: map[string]string{"request-id": requestID, "if-revision": fmt.Sprint(state.Revision), "context": token}})
 	}
 	assertReason := func(token, reason string) {
@@ -103,7 +103,7 @@ func TestTaskUpdateContextGuardAndContextReasons(t *testing.T) {
 func TestSemanticNoChangeMatrixAndAuditException(t *testing.T) {
 	assertNoChange := func(t *testing.T, s Store, action, target string, body Object, options map[string]string) {
 		t.Helper()
-		before, _ := s.Read()
+		before, _ := s.Read(context.Background())
 		if options == nil {
 			options = map[string]string{}
 		}
@@ -115,7 +115,7 @@ func TestSemanticNoChangeMatrixAndAuditException(t *testing.T) {
 		if e == nil || e.Code != "no_change" {
 			t.Fatalf("%s did not reject a semantic no-op: %+v", action, e)
 		}
-		after, _ := s.Read()
+		after, _ := s.Read(context.Background())
 		if after.Revision != before.Revision || len(after.Events) != len(before.Events) {
 			t.Fatalf("%s recorded a semantic no-op", action)
 		}
@@ -138,10 +138,10 @@ func TestSemanticNoChangeMatrixAndAuditException(t *testing.T) {
 	call(t, validationStore, "validation.unwaive", validation, Object{"reason": "Withdrawn"}, "context", token)
 	assertNoChange(t, validationStore, "validation.unwaive", validation, Object{"reason": "Withdrawn"}, map[string]string{"context": token})
 
-	checkpointBefore, _ := validationStore.Read()
+	checkpointBefore, _ := validationStore.Read(context.Background())
 	call(t, validationStore, "run.checkpointed", runID(claim), Object{"summary": "append-only"}, "context", token)
 	call(t, validationStore, "run.checkpointed", runID(claim), Object{"summary": "append-only"}, "context", token)
-	checkpointAfter, _ := validationStore.Read()
+	checkpointAfter, _ := validationStore.Read(context.Background())
 	if checkpointAfter.Revision != checkpointBefore.Revision+2 {
 		t.Fatal("checkpoint stopped behaving as append-only audit history")
 	}
@@ -194,7 +194,7 @@ func TestValidationContextReasonsAndConditionalUse(t *testing.T) {
 	}
 
 	integration := itemID(call(t, s, "validation.add", "", Object{"title": "Integration", "method": "test", "workstream_id": workstream}))
-	state, _ := s.Read()
+	state, _ := s.Read(context.Background())
 	result, e := s.Execute(context.Background(), Request{Action: "validation.basis", Target: integration, Body: Object{"code": []any{}}, Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision), "context": "irrelevant"}})
 	if e != nil || result["context_valid"] != nil {
 		t.Fatal("workstream validation consumed irrelevant context", result, e)

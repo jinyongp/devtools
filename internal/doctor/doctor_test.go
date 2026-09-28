@@ -33,7 +33,7 @@ func TestMetadataAndVersionChecks(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	state, e := store.Read()
+	state, e := store.Read(context.Background())
 	if e != nil {
 		t.Fatal(e)
 	}

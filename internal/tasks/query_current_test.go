@@ -10,7 +10,7 @@ import (
 
 func TestCurrentQueriesAgreeOnStaleAndRemoved(t *testing.T) {
 	s, w, task, v := currentFixture(t)
-	validations, e := s.Query(Query{Command: "validation list", Options: map[string]string{"workstream": w}})
+	validations, e := s.Query(context.Background(), Query{Command: "validation list", Options: map[string]string{"workstream": w}})
 	if e != nil || len(validations["items"].([]any)) != 1 || str(objectValue(validations["items"].([]any)[0]), "id") != v {
 		t.Fatal("workstream filter omitted task-owned validation", validations, e)
 	}
@@ -18,25 +18,25 @@ func TestCurrentQueriesAgreeOnStaleAndRemoved(t *testing.T) {
 	token := str(claim, "context")
 	recordPass(t, s, v, token)
 	call(t, s, "task.completed", task, Object{"summary": "complete"}, "context", token)
-	rows, e := s.Query(Query{Command: "list", Options: map[string]string{"completion": "current"}})
+	rows, e := s.Query(context.Background(), Query{Command: "list", Options: map[string]string{"completion": "current"}})
 	if e != nil || len(rows["items"].([]any)) != 1 {
 		t.Fatal(rows, e)
 	}
-	before, _ := s.Read()
+	before, _ := s.Read(context.Background())
 	call(t, s, "workstream.edited", w, editBody(Object{"op": "task.update", "id": task, "value": Object{"description": "changed"}}))
-	rows, e = s.Query(Query{Command: "list"})
+	rows, e = s.Query(context.Background(), Query{Command: "list"})
 	if e != nil || len(rows["items"].([]any)) != 1 {
 		t.Fatal("stale hidden", rows, e)
 	}
-	next, e := s.Query(Query{Command: "next"})
+	next, e := s.Query(context.Background(), Query{Command: "next"})
 	if e != nil || str(objectValue(next["item"]), "id") != task {
 		t.Fatal("next disagrees", next, e)
 	}
-	past, e := s.Query(Query{Command: "workstream plan show", Target: w, Options: map[string]string{"at-revision": fmt.Sprint(before.Revision)}})
+	past, e := s.Query(context.Background(), Query{Command: "workstream plan show", Target: w, Options: map[string]string{"at-revision": fmt.Sprint(before.Revision)}})
 	if e != nil || str(past["tasks"].([]Object)[0], "completion_status") != "current" {
 		t.Fatal("historical definition lost", e)
 	}
-	history, e := s.Query(Query{Command: "history", Target: task})
+	history, e := s.Query(context.Background(), Query{Command: "history", Target: task})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -50,15 +50,15 @@ func TestCurrentQueriesAgreeOnStaleAndRemoved(t *testing.T) {
 		t.Fatal("edit missing from task history")
 	}
 	call(t, s, "workstream.edited", w, editBody(Object{"op": "task.remove", "id": task}))
-	rows, e = s.Query(Query{Command: "list"})
+	rows, e = s.Query(context.Background(), Query{Command: "list"})
 	if e != nil || len(rows["items"].([]any)) != 0 {
 		t.Fatal("removed task in queue", rows, e)
 	}
-	rows, e = s.Query(Query{Command: "list", Options: map[string]string{"scope": "removed"}})
+	rows, e = s.Query(context.Background(), Query{Command: "list", Options: map[string]string{"scope": "removed"}})
 	if e != nil || len(rows["items"].([]any)) != 1 {
 		t.Fatal("removed done hidden", rows, e)
 	}
-	show, e := s.Query(Query{Command: "show", Target: task})
+	show, e := s.Query(context.Background(), Query{Command: "show", Target: task})
 	if e != nil || str(objectValue(show["item"]), "scope") != "removed" {
 		t.Fatal(show, e)
 	}
@@ -86,7 +86,7 @@ func TestRunDirectoryIdentityCanonicalizesAliases(t *testing.T) {
 	if execErr != nil || first["claimed"] != true {
 		t.Fatalf("alias claim failed: %#v %v", first, execErr)
 	}
-	state, readErr := s.Read()
+	state, readErr := s.Read(context.Background())
 	if readErr != nil || state.Current(task) == nil || state.Current(task).Directory != canonical {
 		t.Fatalf("claim stored non-canonical directory: %+v %v", state.Current(task), readErr)
 	}
@@ -95,7 +95,7 @@ func TestRunDirectoryIdentityCanonicalizesAliases(t *testing.T) {
 		t.Fatalf("canonical retry did not replay alias request: %#v %v", replay, replayErr)
 	}
 	for _, dir := range []string{alias, actual} {
-		rows, queryErr := s.Query(Query{Command: "current", Options: map[string]string{"dir": dir}})
+		rows, queryErr := s.Query(context.Background(), Query{Command: "current", Options: map[string]string{"dir": dir}})
 		if queryErr != nil || len(rows["items"].([]any)) != 1 {
 			t.Fatalf("current did not match %q: %#v %v", dir, rows, queryErr)
 		}
@@ -109,7 +109,7 @@ func TestOldProjectionCursorRejected(t *testing.T) {
 	s := fixture(t)
 	call(t, s, "task.add", "", Object{"title": "one"})
 	call(t, s, "task.add", "", Object{"title": "two"})
-	page, e := s.Query(Query{Command: "list", Options: map[string]string{"limit": "1"}})
+	page, e := s.Query(context.Background(), Query{Command: "list", Options: map[string]string{"limit": "1"}})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -124,7 +124,7 @@ func TestOldProjectionCursorRejected(t *testing.T) {
 	if err := WritePrivate(path, snapshot); err != nil {
 		t.Fatal(err)
 	}
-	_, e = s.Query(Query{Command: "list", Options: map[string]string{"limit": "1", "cursor": token}})
+	_, e = s.Query(context.Background(), Query{Command: "list", Options: map[string]string{"limit": "1", "cursor": token}})
 	if e == nil || e.Code != "cursor_invalid" {
 		t.Fatal("old projection accepted", e)
 	}
@@ -137,7 +137,7 @@ func TestCommonEditAppearsInAffectedItemHistory(t *testing.T) {
 		t.Fatal("missing bounded cause paths")
 	}
 	for _, id := range []string{task, v} {
-		state, _ := s.Read()
+		state, _ := s.Read(context.Background())
 		last := state.Events[len(state.Events)-1]
 		if !eventTouches(last, map[string]bool{id: true}) {
 			t.Fatal("indirect edit missing from history", id)

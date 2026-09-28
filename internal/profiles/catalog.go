@@ -1,6 +1,7 @@
 package profiles
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"os"
@@ -62,7 +63,7 @@ func storedProfileNames(directory string) ([]string, *protocol.Error) {
 	return items, nil
 }
 
-func (c Catalog) Names() ([]string, *protocol.Error) {
+func (c Catalog) Names(ctx context.Context) ([]string, *protocol.Error) {
 	if !filepath.IsAbs(c.Data) {
 		return nil, catalogError("storage_error")
 	}

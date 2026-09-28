@@ -78,7 +78,7 @@ func (s Store) Inspect(ctx context.Context, env string) (ManagedView, *protocol.
 	}
 	release, e := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
 	if e != nil {
-		return out, storageError()
+		return out, gateError(ctx)
 	}
 	defer release()
 	if e = privateDirectory(s.Directory); e != nil {
@@ -120,7 +120,7 @@ func (s Store) Apply(ctx context.Context, c Change) (ChangeResult, *protocol.Err
 	}
 	release, e := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
 	if e != nil {
-		return out, storageError()
+		return out, gateError(ctx)
 	}
 	defer release()
 	if e = privateDirectory(s.Directory); e != nil {
@@ -226,7 +226,7 @@ func (s Store) Apply(ctx context.Context, c Change) (ChangeResult, *protocol.Err
 		return out, storageError()
 	}
 	if ctx.Err() != nil {
-		return out, protocol.NewError("canceled", "Request canceled.", 130, nil)
+		return out, canceledError()
 	}
 	if e = maintenance.Replace(maintenance.Root(s.Directory), map[string][]byte{"profiles/" + hex.EncodeToString([]byte(s.Profile)) + ".json": data, receiptPath: receipt}); e != nil {
 		return out, storageError()

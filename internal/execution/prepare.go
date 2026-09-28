@@ -62,7 +62,7 @@ func Prepare(ctx context.Context, command Command, dependencies Dependencies, pr
 	var state *values.State
 	if command.NeedsValues() {
 		var err *protocol.Error
-		state, err = (values.Store{Directory: dependencies.ValuesDirectory, Profile: command.Project.Profile}).Read()
+		state, err = (values.Store{Directory: dependencies.ValuesDirectory, Profile: command.Project.Profile}).Read(ctx)
 		if err != nil {
 			return Prepared{}, err
 		}
@@ -148,7 +148,7 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 	var state *values.State
 	if command.NeedsValues() {
 		var err *protocol.Error
-		state, err = (values.Store{Directory: dependencies.ValuesDirectory, Profile: command.Project.Profile}).Read()
+		state, err = (values.Store{Directory: dependencies.ValuesDirectory, Profile: command.Project.Profile}).Read(ctx)
 		if err != nil {
 			return err
 		}

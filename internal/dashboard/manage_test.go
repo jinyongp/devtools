@@ -101,7 +101,7 @@ func TestDashboardRevokesObservedAgentRun(t *testing.T) {
 	if w.Code != 200 || strings.Contains(w.Body.String(), claimed["context"].(string)) {
 		t.Fatalf("revoke: %d %s", w.Code, w.Body)
 	}
-	state, e := store.Read()
+	state, e := store.Read(context.Background())
 	if e != nil || state.Current(id) != nil || state.Runs[run.ID].State != "revoked" {
 		t.Fatal("agent run remains active", e)
 	}
@@ -175,5 +175,44 @@ func TestDashboardProcessRestartPreStopValidationPreservesRunningExecution(t *te
 	}
 	if stored.ID != id || stored.EndedAt != nil || stored.State != "running" {
 		t.Fatalf("dashboard pre-stop validation stopped the old process: %#v", stored)
+	}
+}
+
+func TestDashboardValuesRequestCancelsWhileMaintenanceLocked(t *testing.T) {
+	root := t.TempDir()
+	server := &Server{
+		registry: Registry{Address: "http://127.0.0.1:1234"},
+		data:     filepath.Join(root, "tasks"),
+		sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)},
+	}
+	unlock, err := maintenance.Acquire(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	request := httptest.NewRequest("GET", server.registry.Address+"/api/values?profile=app", nil).WithContext(ctx)
+	request.Header.Set("Authorization", "Bearer session")
+	response := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		server.ServeHTTP(response, request)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("dashboard values request crossed maintenance lock before cancellation")
+	case <-time.After(30 * time.Millisecond):
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("dashboard values request did not observe canceled context")
+	}
+	if response.Code != 400 || !strings.Contains(response.Body.String(), "\"code\":\"canceled\"") {
+		t.Fatalf("canceled values response: %d %s", response.Code, response.Body.String())
 	}
 }

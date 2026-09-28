@@ -370,7 +370,7 @@ func (a *App) registerTasks() {
 					return nil, e
 				}
 			}
-			return store.Query(tasks.Query{Command: name, Target: target, Options: r.Options, Body: body})
+			return store.Query(ctx, tasks.Query{Command: name, Target: target, Options: r.Options, Body: body})
 		}})
 	}
 }

@@ -67,7 +67,7 @@ func TestCatalogListsAllProfileSourcesOnceInOrder(t *testing.T) {
 	writeProcessRecord(t, data, "process-only")
 	writeProcessRecord(t, data, "shared")
 
-	items, err := (Catalog{Data: data}).Names()
+	items, err := (Catalog{Data: data}).Names(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestCatalogListDoesNotCreateMaintenanceState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	items, err := (Catalog{Data: data}).List()
+	items, err := (Catalog{Data: data}).List(context.Background())
 	if err != nil || len(items) != 1 || items[0].Profile != "passive" || items[0].EnvCount != 1 {
 		t.Fatalf("unexpected passive catalog result: %#v %v", items, err)
 	}
@@ -137,7 +137,7 @@ func TestCatalogRejectsMalformedProfileStorage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(directory, "not-hex.json"), []byte("{}"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := (Catalog{Data: data}).Names(); err == nil || err.Code != "invalid_storage" {
+	if _, err := (Catalog{Data: data}).Names(context.Background()); err == nil || err.Code != "invalid_storage" {
 		t.Fatalf("expected invalid_storage, got %#v", err)
 	}
 }
@@ -152,7 +152,7 @@ func TestCatalogListRejectsCorruptTaskStorage(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := (Catalog{Data: data}).List(); err == nil {
+	if _, err := (Catalog{Data: data}).List(context.Background()); err == nil {
 		t.Fatal("corrupt task storage was accepted by profile list")
 	}
 }
@@ -166,7 +166,7 @@ func TestCatalogRejectsNonPrivateProfileStorage(t *testing.T) {
 	if err := os.Chmod(directory, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := (Catalog{Data: data}).Names(); err == nil || err.Code != "storage_error" {
+	if _, err := (Catalog{Data: data}).Names(context.Background()); err == nil || err.Code != "storage_error" {
 		t.Fatalf("expected storage_error, got %#v", err)
 	}
 }

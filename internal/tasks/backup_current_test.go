@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"testing"
@@ -76,7 +77,7 @@ func TestRestorePreservesV2AndDropsExecutionAuthority(t *testing.T) {
 	if state.Runs[runID(claim)].State != "released" {
 		t.Fatal("source run not released")
 	}
-	before, _ := s.Read()
+	before, _ := s.Read(context.Background())
 	if hash(before.Tracking) != hash(state.Tracking) {
 		t.Fatal("restoration changed definition history")
 	}

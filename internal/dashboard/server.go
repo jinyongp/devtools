@@ -471,7 +471,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		store := tasks.Store{Directory: s.data, Profile: r.URL.Query().Get("profile"), Cache: s.cache}
 		if r.URL.Path == "/api/profiles" {
-			profiles, e := (profilecatalog.Catalog{Data: filepath.Dir(s.data)}).Names()
+			profiles, e := (profilecatalog.Catalog{Data: filepath.Dir(s.data)}).Names(r.Context())
 			if e != nil {
 				apiError(w, e)
 				return
@@ -507,7 +507,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.mu.Unlock()
-		result, err := store.Query(tasks.Query{Command: command, Target: r.URL.Query().Get("id"), Options: opts})
+		result, err := store.Query(r.Context(), tasks.Query{Command: command, Target: r.URL.Query().Get("id"), Options: opts})
 		if err != nil {
 			w.WriteHeader(400)
 			reply(tasks.Object{"error": err})

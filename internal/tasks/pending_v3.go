@@ -334,6 +334,18 @@ func cleanupPendingOrphans(resolution v3Resolution, active string) error {
 	return syncPrivateDirectory(root)
 }
 
+func snapshotTailOffset(resolution v3Resolution) int64 {
+	snapshot, _, err := readMaterializedSnapshot(resolution.Snapshot, resolution.Marker.Profile)
+	if err != nil {
+		return 0
+	}
+	info, err := os.Stat(resolution.WAL)
+	if err != nil || snapshot.WALOffset < 0 || snapshot.WALOffset > info.Size() {
+		return 0
+	}
+	return snapshot.WALOffset
+}
+
 func recoverPendingV3(resolution v3Resolution) error {
 	manifest, exists, err := readPendingManifest(resolution)
 	if err != nil {
@@ -348,9 +360,21 @@ func recoverPendingV3(resolution v3Resolution) error {
 		if _, err := readPendingContexts(resolution, manifest); err != nil {
 			return err
 		}
-		scan, err := scanWAL(resolution.WAL, 0, true)
+		startOffset := snapshotTailOffset(resolution)
+		scan, err := scanWAL(resolution.WAL, startOffset, true)
 		if err != nil {
-			return err
+			if startOffset == 0 {
+				return err
+			}
+			scan, err = scanWAL(resolution.WAL, 0, true)
+			if err != nil {
+				return err
+			}
+		}
+		if scan.IncompleteTail {
+			if err := truncateWAL(resolution.WAL, scan.ValidOffset); err != nil {
+				return err
+			}
 		}
 		found := false
 		for _, frame := range scan.Frames {
@@ -381,12 +405,7 @@ func recoverPendingV3(resolution v3Resolution) error {
 }
 
 func prepareWALForMutation(resolution v3Resolution) error {
-	startOffset := int64(0)
-	if snapshot, _, err := readMaterializedSnapshot(resolution.Snapshot, resolution.Marker.Profile); err == nil {
-		if info, statErr := os.Stat(resolution.WAL); statErr == nil && snapshot.WALOffset >= 0 && snapshot.WALOffset <= info.Size() {
-			startOffset = snapshot.WALOffset
-		}
-	}
+	startOffset := snapshotTailOffset(resolution)
 	scan, err := scanWAL(resolution.WAL, startOffset, false)
 	if err != nil {
 		if startOffset == 0 {

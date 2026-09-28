@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,6 +127,72 @@ func TestWALRejectsReceiptRequestIdentityMismatch(t *testing.T) {
 	}
 	if err := validateFrame(frame); err == nil {
 		t.Fatal("WAL frame accepted receipt from a different request")
+	}
+}
+
+func TestPendingRecoveryDoesNotRescanCheckpointedPrefix(t *testing.T) {
+	s := fixture(t)
+	if _, err := s.Execute(testContext(), Request{
+		Action: "task.add", Body: Object{"title": "first"},
+		Options: map[string]string{"request-id": ID()},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Execute(testContext(), Request{
+		Action: "task.add", Body: Object{"title": "second"},
+		Options: map[string]string{"request-id": ID()},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	resolution, ok, resolveErr := resolveV3(s.Directory, s.Profile)
+	if resolveErr != nil || !ok {
+		t.Fatal(resolveErr)
+	}
+	snapshot, _, snapshotErr := readMaterializedSnapshot(resolution.Snapshot, s.Profile)
+	if snapshotErr != nil || snapshot.WALOffset <= 0 {
+		t.Fatalf("missing checkpointed prefix: %#v %v", snapshot, snapshotErr)
+	}
+	file, openErr := os.OpenFile(resolution.WAL, os.O_RDWR, 0)
+	if openErr != nil {
+		t.Fatal(openErr)
+	}
+	if _, seekErr := file.Seek(0, 0); seekErr != nil {
+		_ = file.Close()
+		t.Fatal(seekErr)
+	}
+	if _, writeErr := file.Write([]byte("XXXX")); writeErr != nil {
+		_ = file.Close()
+		t.Fatal(writeErr)
+	}
+	if syncErr := file.Sync(); syncErr != nil {
+		_ = file.Close()
+		t.Fatal(syncErr)
+	}
+	if closeErr := file.Close(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+
+	request := Request{
+		Action: "task.add", Body: Object{"title": "committed"},
+		Options: map[string]string{"request-id": ID()},
+	}
+	s.commitV3 = func(commit func() error) error {
+		if err := commit(); err != nil {
+			return err
+		}
+		return errors.New("injected post-WAL error")
+	}
+	if _, err := s.Execute(testContext(), request); err == nil {
+		t.Fatal("expected uncertain mutation response")
+	}
+	s.commitV3 = nil
+
+	out, retryErr := s.Execute(testContext(), request)
+	if retryErr != nil {
+		t.Fatalf("pending recovery rescanned checkpointed WAL prefix: %v", retryErr)
+	}
+	if out["replayed"] != true {
+		t.Fatalf("pending mutation did not replay: %#v", out)
 	}
 }
 

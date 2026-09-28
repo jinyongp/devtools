@@ -137,16 +137,15 @@ jobs:
           cp LICENSE dist/LICENSE
           printf '%s\n' "$VERSION" > dist/version.txt
       - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          flags=()
-          if [[ "$VERSION" == *-* ]]; then
-            flags+=(--prerelease --latest=false)
-          fi
-          gh release create "$TAG" dist/* --verify-tag --generate-notes "${flags[@]}"
+        uses: releaseway/actions@49c543357d96884d0e5a683c45d45ebd50a8b612 # v0.1.4
+        with:
+          tag: ${{ github.ref_name }}
+          commit: ${{ github.sha }}
+          assets: |
+            dist/*
+          generate-notes: "true"
+          prerelease: ${{ contains(github.ref_name, '-') && 'true' || 'false' }}
+          latest: ${{ contains(github.ref_name, '-') && 'false' || 'automatic' }}
 
   homebrew:
     needs: release

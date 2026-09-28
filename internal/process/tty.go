@@ -198,6 +198,9 @@ func waitInteractive(ctxDone <-chan struct{}, cause func() error, command *exec.
 			exitCode = 128 + int(status.Signal())
 			waitErr = nil
 			goto finished
+		case ttyWaitStatusContinued(status):
+			ttyTrace("wait continued child=%d", pid)
+			continue
 		case status.Stopped():
 			ttyTrace("wait stopped child=%d signal=%d", pid, status.StopSignal())
 			if ctxDone != nil {
@@ -212,9 +215,6 @@ func waitInteractive(ctxDone <-chan struct{}, cause func() error, command *exec.
 				waitErr = err
 				goto finished
 			}
-		case status.Continued():
-			ttyTrace("wait continued child=%d", pid)
-			continue
 		}
 	}
 

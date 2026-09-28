@@ -14,6 +14,10 @@ func ttyForegroundPgrp(fd int) (int, error) {
 	return unix.IoctlGetInt(fd, unix.TIOCGPGRP)
 }
 
+func ttyWaitStatusContinued(status syscall.WaitStatus) bool {
+	return status.Continued() || (status.Stopped() && status.StopSignal() == syscall.SIGCONT)
+}
+
 func ttyResumeForegroundPgrp(fd, parentPgrp, _ int) (int, error) {
 	foreground, err := ttyForegroundPgrp(fd)
 	if err != nil {

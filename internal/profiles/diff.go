@@ -72,11 +72,20 @@ type Diff struct {
 }
 
 func (c Catalog) Canonical(ctx context.Context, profile string) (Canonical, *protocol.Error) {
+	release, err := c.acquire(ctx)
+	if err != nil {
+		return Canonical{}, err
+	}
+	defer release()
+	return c.canonicalHeld(ctx, profile)
+}
+
+func (c Catalog) canonicalHeld(ctx context.Context, profile string) (Canonical, *protocol.Error) {
 	result := Canonical{Profile: profile, Envs: []string{}, Variables: []ValueScope{}, Secrets: []ValueScope{}, Items: []TaskMetadata{}, Instances: []InstanceIdentity{}}
 	if !project.ValidProfile(profile) {
 		return result, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, map[string]any{"field": "profile"})
 	}
-	summaries, err := c.List(ctx)
+	summaries, err := c.listHeld(ctx)
 	if err != nil {
 		return result, err
 	}
@@ -91,7 +100,7 @@ func (c Catalog) Canonical(ctx context.Context, profile string) (Canonical, *pro
 		return result, protocol.NewError("profile_not_found", "The selected profile does not exist in devtools storage.", 3, map[string]any{"profile": profile})
 	}
 	if summary.Values {
-		state, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: profile}).Read(ctx)
+		state, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: profile}).ReadHeld(ctx)
 		if readErr != nil {
 			return result, readErr
 		}
@@ -106,7 +115,7 @@ func (c Catalog) Canonical(ctx context.Context, profile string) (Canonical, *pro
 		}
 	}
 	if summary.Tasks {
-		state, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: profile}).Read(ctx)
+		state, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: profile}).ReadHeld(ctx)
 		if readErr != nil {
 			return result, readErr
 		}
@@ -351,11 +360,16 @@ func Compare(left, right Canonical, includeInstances bool) Diff {
 
 func (c Catalog) Diff(ctx context.Context, leftProfile, rightProfile string) (Diff, *protocol.Error) {
 	result := Diff{Left: leftProfile, Right: rightProfile, Envs: []NameChange{}, Variables: []ValueChange{}, Secrets: []ValueChange{}, Items: []TaskChange{}, Instances: []InstanceChange{}}
-	left, err := c.Canonical(ctx, leftProfile)
+	release, err := c.acquire(ctx)
 	if err != nil {
 		return result, err
 	}
-	right, err := c.Canonical(ctx, rightProfile)
+	defer release()
+	left, err := c.canonicalHeld(ctx, leftProfile)
+	if err != nil {
+		return result, err
+	}
+	right, err := c.canonicalHeld(ctx, rightProfile)
 	if err != nil {
 		return result, err
 	}

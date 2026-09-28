@@ -86,7 +86,7 @@ api("run", "check", expected=3)
 assert not (project / "marker").exists()
 tool.unlink()
 assert not api("doctor")["data"]["ready"]
-profile_file = next((Path(paths["data"]) / "profiles").glob("*.json"))
+profile_file = next((Path(paths["data"]) / "profiles").glob("p1-*.json"))
 profile_file.write_text(canary)
 report = api("doctor")["data"]
 assert not report["ready"]

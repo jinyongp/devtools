@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/jinyongp/devtools/internal/profilekey"
 )
 
 // Build genuine v1 events through the legacy reducer, without using the v2
@@ -54,7 +56,7 @@ func legacyFixture(t *testing.T) (Store, *State, string, string, string) {
 		t.Fatal(err)
 	}
 	j := Journal{Version: 1, Profile: store.Profile, Events: s.Events, Contexts: contexts, Receipts: map[string]Receipt{}}
-	if err := WritePrivate(store.path(), j); err != nil {
+	if err := WritePrivate(profilekey.LegacyPath(store.Directory, store.Profile), j); err != nil {
 		t.Fatal(err)
 	}
 	return store, s, id, val, str(running, "context")
@@ -62,12 +64,16 @@ func legacyFixture(t *testing.T) (Store, *State, string, string, string) {
 
 func TestUpgradePreservesLegacyEvidenceAndRuns(t *testing.T) {
 	store, before, done, val, token := legacyFixture(t)
-	rawBefore, _ := os.ReadFile(store.path())
+	legacyPath := profilekey.LegacyPath(store.Directory, store.Profile)
+	rawBefore, beforeErr := os.ReadFile(legacyPath)
+	if beforeErr != nil {
+		t.Fatal(beforeErr)
+	}
 	read, e := store.Read(context.Background())
 	if e != nil || read.Version != 1 {
 		t.Fatal(read, e)
 	}
-	rawAfter, _ := os.ReadFile(store.path())
+	rawAfter, _ := os.ReadFile(legacyPath)
 	if string(rawBefore) != string(rawAfter) {
 		t.Fatal("read rewrote legacy journal")
 	}
@@ -161,7 +167,7 @@ func TestReplayRejectsUnknownEventsAndVersions(t *testing.T) {
 func TestUpgradeDoesNotAdoptStaleLegacyBasis(t *testing.T) {
 	store, s, _, val, _ := legacyFixture(t)
 	j := Journal{}
-	if e := ReadPrivate(store.path(), &j); e != nil {
+	if e := ReadPrivate(profilekey.LegacyPath(store.Directory, store.Profile), &j); e != nil {
 		t.Fatal(e)
 	}
 	// A stale fingerprint can exist in archived evidence; migration must not
@@ -171,7 +177,7 @@ func TestUpgradeDoesNotAdoptStaleLegacyBasis(t *testing.T) {
 			j.Events[n].Data["fingerprint"] = "old-definition"
 		}
 	}
-	if e := WritePrivate(store.path(), j); e != nil {
+	if e := WritePrivate(profilekey.LegacyPath(store.Directory, store.Profile), j); e != nil {
 		t.Fatal(e)
 	}
 	call(t, store, "task.add", "", Object{"title": "unrelated"})

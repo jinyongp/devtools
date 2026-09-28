@@ -169,10 +169,13 @@ verify_project(worktree)
 
 profile_dir = Path(api("project", "inspect")["data"]["paths"]["data"]) / "profiles"
 assert profile_dir.stat().st_mode & 0o777 == 0o700
-for file in profile_dir.iterdir():
-    assert file.stat().st_mode & 0o777 == 0o600
+for entry in profile_dir.rglob("*"):
+    assert not entry.is_symlink()
+    expected_mode = 0o700 if entry.is_dir() else 0o600
+    assert entry.stat().st_mode & 0o777 == expected_mode
+profile_files = [p for p in profile_dir.rglob("*") if p.is_file()]
 before = {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
-          for p in [*profile_dir.iterdir(), project / "devtools.toml"]}
+          for p in [*profile_files, project / "devtools.toml"]}
 binary = home / ".local/bin/devtools"
 original_binary = hashlib.sha256(binary.read_bytes()).hexdigest()
 

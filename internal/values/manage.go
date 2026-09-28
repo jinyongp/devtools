@@ -13,6 +13,7 @@ import (
 	"regexp"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -131,21 +132,17 @@ func (s Store) Apply(ctx context.Context, c Change) (ChangeResult, *protocol.Err
 		return out, storageError()
 	}
 	fingerprint := signed(key, c)
-	receiptPath := "backup-receipts/values-" + hex.EncodeToString([]byte(s.Profile)) + "-" + c.RequestID + ".json"
-	b, e := maintenance.Read(filepath.Join(maintenance.Root(s.Directory), receiptPath), 1<<20)
-	if e == nil {
-		var receipt changeReceipt
-		if json.Unmarshal(b, &receipt) != nil {
-			return out, storageError()
-		}
-		if receipt.Fingerprint != fingerprint {
+	receiptPath := s.receiptRelative(c.RequestID)
+	previous, found, receiptErr := s.readReceipt(c.RequestID)
+	if receiptErr != nil {
+		return out, storageError()
+	}
+	if found {
+		if previous.Fingerprint != fingerprint {
 			return out, failure("request_conflict", "Request ID was used with different input.")
 		}
-		receipt.Result.Replayed = true
-		return receipt.Result, nil
-	}
-	if !errors.Is(e, os.ErrNotExist) {
-		return out, storageError()
+		previous.Result.Replayed = true
+		return previous.Result, nil
 	}
 	state, err := s.read()
 	if err != nil {
@@ -228,7 +225,12 @@ func (s Store) Apply(ctx context.Context, c Change) (ChangeResult, *protocol.Err
 	if ctx.Err() != nil {
 		return out, canceledError()
 	}
-	if e = maintenance.Replace(maintenance.Root(s.Directory), map[string][]byte{"profiles/" + hex.EncodeToString([]byte(s.Profile)) + ".json": data, receiptPath: receipt}); e != nil {
+	files, e := profilekey.Replacement(s.Directory, s.Profile, "values", data)
+	if e != nil {
+		return out, storageError()
+	}
+	files[receiptPath] = receipt
+	if e = maintenance.Replace(maintenance.Root(s.Directory), files); e != nil {
 		return out, storageError()
 	}
 	return out, nil

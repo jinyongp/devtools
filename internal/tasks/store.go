@@ -2,7 +2,6 @@ package tasks
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -39,7 +39,7 @@ type Store struct {
 }
 
 func (s Store) path() string {
-	return filepath.Join(s.Directory, hex.EncodeToString([]byte(s.Profile))+".json")
+	return profilekey.CanonicalPath(s.Directory, s.Profile)
 }
 func storageError() *protocol.Error {
 	return protocol.NewError("storage_error", "Cannot access private task storage.", 1, nil)
@@ -151,25 +151,58 @@ func Lock(ctx context.Context, path string) (func(), error) {
 		}
 	}
 }
-func (s Store) load() (*Journal, *State, *protocol.Error) {
-	if !project.ValidProfile(s.Profile) {
-		return nil, nil, failure("invalid_argument", "Invalid profile.")
-	}
-	j := &Journal{Version: 1, Profile: s.Profile, Events: []Event{}, Receipts: map[string]Receipt{}, Contexts: map[string]string{}}
-	if info, e := os.Lstat(s.Directory); e == nil {
-		if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-			return nil, nil, storageError()
-		}
-	} else if !errors.Is(e, os.ErrNotExist) {
-		return nil, nil, storageError()
-	}
-	if e := ReadPrivate(s.path(), j); e != nil && !errors.Is(e, os.ErrNotExist) {
+func (s Store) emptyJournal() *Journal {
+	return &Journal{Version: 1, Profile: s.Profile, Events: []Event{}, Receipts: map[string]Receipt{}, Contexts: map[string]string{}}
+}
+
+func (s Store) loadPath(path string) (*Journal, *State, *protocol.Error) {
+	j := s.emptyJournal()
+	if e := ReadPrivate(path, j); e != nil {
 		return nil, nil, storageError()
 	}
 	if j.Profile != s.Profile || j.Receipts == nil || j.Contexts == nil {
 		return nil, nil, storageError()
 	}
 	state, err := replayJournal(j)
+	return j, state, err
+}
+
+func (s Store) loadResolved() (*Journal, *State, profilekey.Resolution, *protocol.Error) {
+	var resolution profilekey.Resolution
+	if !project.ValidProfile(s.Profile) {
+		return nil, nil, resolution, failure("invalid_argument", "Invalid profile.")
+	}
+	info, e := os.Lstat(s.Directory)
+	if errors.Is(e, os.ErrNotExist) {
+		j := s.emptyJournal()
+		state, err := replayJournal(j)
+		return j, state, resolution, err
+	}
+	if e != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+		return nil, nil, resolution, storageError()
+	}
+	resolution, e = profilekey.Resolve(s.Directory, s.Profile, "tasks")
+	if e != nil {
+		return nil, nil, resolution, storageError()
+	}
+	switch resolution.Mode {
+	case profilekey.ModeNone:
+		j := s.emptyJournal()
+		state, err := replayJournal(j)
+		return j, state, resolution, err
+	case profilekey.ModeLegacy:
+		j, state, err := s.loadPath(resolution.LegacyPath)
+		return j, state, resolution, err
+	case profilekey.ModeCanonical:
+		j, state, err := s.loadPath(resolution.CanonicalPath)
+		return j, state, resolution, err
+	default:
+		return nil, nil, resolution, storageError()
+	}
+}
+
+func (s Store) load() (*Journal, *State, *protocol.Error) {
+	j, state, _, err := s.loadResolved()
 	return j, state, err
 }
 func safeApply(s *State, e Event) (err error) {
@@ -187,6 +220,14 @@ func (s Store) Read(ctx context.Context) (*State, *protocol.Error) {
 		return nil, gateError(ctx)
 	}
 	defer release()
+	return s.ReadHeld(ctx)
+}
+
+// ReadHeld requires the caller to hold the data-root maintenance gate.
+func (s Store) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
+	if ctx.Err() != nil {
+		return nil, canceledError()
+	}
 	_, state, err := s.load()
 	return state, err
 }
@@ -217,24 +258,11 @@ func (s Store) Profiles(ctx context.Context) ([]string, *protocol.Error) {
 		return nil, gateError(ctx)
 	}
 	defer release()
-	entries, e := os.ReadDir(s.Directory)
-	if errors.Is(e, os.ErrNotExist) {
-		return []string{}, nil
-	}
-	if e != nil {
+	items, err := profilekey.Enumerate(s.Directory, "tasks")
+	if err != nil {
 		return nil, storageError()
 	}
-	r := []string{}
-	for _, f := range entries {
-		if filepath.Ext(f.Name()) != ".json" {
-			continue
-		}
-		b, e := hex.DecodeString(f.Name()[:len(f.Name())-5])
-		if e == nil && project.ValidProfile(string(b)) {
-			r = append(r, string(b))
-		}
-	}
-	return r, nil
+	return items, nil
 }
 
 type Request struct {
@@ -324,7 +352,7 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 		return nil, storageError()
 	}
 	defer release()
-	j, state, err := s.load()
+	j, state, resolution, err := s.loadResolved()
 	if err != nil {
 		return nil, err
 	}
@@ -452,6 +480,31 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 		contextHash = hash(token)
 	}
 	j.Receipts[r.Options["request-id"]] = Receipt{Fingerprint: fingerprint, ContextHash: contextHash, Result: result}
+	if resolution.Mode != profilekey.ModeCanonical {
+		data, marshalErr := json.Marshal(j)
+		if marshalErr != nil {
+			return nil, storageError()
+		}
+		identity, identityErr := profilekey.IdentityBytes(s.Profile, "tasks")
+		if identityErr != nil {
+			return nil, storageError()
+		}
+		files := map[string][]byte{
+			profilekey.StateRelative("tasks", s.Profile):    data,
+			profilekey.IdentityRelative("tasks", s.Profile): identity,
+		}
+		if resolution.LegacyStatus != profilekey.LegacyUnaddressable {
+			marker, markerErr := profilekey.MarkerBytes(s.Profile)
+			if markerErr != nil {
+				return nil, storageError()
+			}
+			files[profilekey.LegacyRelative("tasks", s.Profile)] = marker
+		}
+		if e := maintenance.Replace(maintenance.Root(s.Directory), files); e != nil {
+			return nil, storageError()
+		}
+		return result, nil
+	}
 	commit := s.commit
 	if commit == nil {
 		commit = WritePrivate

@@ -2,22 +2,20 @@ package profiles
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/ports"
-	"github.com/jinyongp/devtools/internal/project"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
 )
 
-// Catalog discovers profile identities across the user-global devtools data
-// root. It is intentionally passive: listing profiles does not contact live
-// process supervisors or perform readiness checks.
+// Catalog discovers logical identities without contacting supervisors. Each
+// public entry point holds one maintenance gate across its domain reads.
 type Catalog struct {
 	Data string
 }
@@ -30,6 +28,21 @@ func catalogError(code string) *protocol.Error {
 	return protocol.NewError(code, "Cannot enumerate profile storage.", exit, nil)
 }
 
+func (c Catalog) acquire(ctx context.Context) (func(), *protocol.Error) {
+	if !filepath.IsAbs(c.Data) {
+		return nil, catalogError("storage_error")
+	}
+	release, err := maintenance.Acquire(ctx, c.Data)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, protocol.NewError("canceled", "Request canceled.", 130, nil)
+		}
+		return nil, catalogError("storage_error")
+	}
+	return release, nil
+}
+
+// storedProfileNames requires the data-root maintenance gate.
 func storedProfileNames(directory string) ([]string, *protocol.Error) {
 	info, err := os.Lstat(directory)
 	if errors.Is(err, os.ErrNotExist) {
@@ -38,35 +51,27 @@ func storedProfileNames(directory string) ([]string, *protocol.Error) {
 	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
 		return nil, catalogError("storage_error")
 	}
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		return nil, catalogError("storage_error")
+	domain := "tasks"
+	if filepath.Base(directory) == "profiles" {
+		domain = "values"
 	}
-	items := []string{}
-	for _, entry := range entries {
-		name := entry.Name()
-		if filepath.Ext(name) != ".json" {
-			continue
-		}
-		encoded := strings.TrimSuffix(name, ".json")
-		decoded, decodeErr := hex.DecodeString(encoded)
-		profile := string(decoded)
-		if decodeErr != nil || !project.ValidProfile(profile) {
-			return nil, catalogError("invalid_storage")
-		}
-		fileInfo, statErr := os.Lstat(filepath.Join(directory, name))
-		if statErr != nil || !fileInfo.Mode().IsRegular() || fileInfo.Mode().Perm()&0077 != 0 {
-			return nil, catalogError("storage_error")
-		}
-		items = append(items, profile)
+	items, err := profilekey.Enumerate(directory, domain)
+	if err != nil {
+		return nil, catalogError("invalid_storage")
 	}
 	return items, nil
 }
 
 func (c Catalog) Names(ctx context.Context) ([]string, *protocol.Error) {
-	if !filepath.IsAbs(c.Data) {
-		return nil, catalogError("storage_error")
+	release, err := c.acquire(ctx)
+	if err != nil {
+		return nil, err
 	}
+	defer release()
+	return c.namesHeld(ctx)
+}
+
+func (c Catalog) namesHeld(ctx context.Context) ([]string, *protocol.Error) {
 	seen := map[string]bool{}
 	add := func(items []string) {
 		for _, item := range items {
@@ -74,6 +79,9 @@ func (c Catalog) Names(ctx context.Context) ([]string, *protocol.Error) {
 		}
 	}
 	for _, domain := range []string{"profiles", "tasks"} {
+		if ctx.Err() != nil {
+			return nil, protocol.NewError("canceled", "Request canceled.", 130, nil)
+		}
 		items, err := storedProfileNames(filepath.Join(c.Data, domain))
 		if err != nil {
 			return nil, err
@@ -92,7 +100,6 @@ func (c Catalog) Names(ctx context.Context) ([]string, *protocol.Error) {
 		return nil, processErr
 	}
 	add(processProfiles)
-
 	items := make([]string, 0, len(seen))
 	for profile := range seen {
 		items = append(items, profile)

@@ -1,5 +1,6 @@
 """Installed storage preview, conflict protection, archival and restoration."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -38,7 +39,7 @@ assert api("cleanup","purge",item["id"],expected=3)["code"]=="retention_active"
 created=api("task","add","--title","Completed fixture","--request-id",str(uuid.uuid4()))
 tid=created["item"]["id"]
 api("task","cancel",tid,"--reason","Fixture complete","--if-revision",str(created["revision"]),"--request-id",str(uuid.uuid4()))
-journal=data/"tasks"/("cleanup-fixture".encode().hex()+".json")
+journal=data/"tasks"/("p1-"+hashlib.sha256(b"cleanup-fixture").hexdigest()+".json")
 body=json.loads(journal.read_text())
 for event in body["events"]:event["occurred_at"]="2000-01-01T00:00:00Z"
 journal.write_text(json.dumps(body))

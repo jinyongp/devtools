@@ -70,7 +70,16 @@ func nameSet(items []string) map[string]bool {
 }
 
 func (c Catalog) List(ctx context.Context) ([]Summary, *protocol.Error) {
-	names, err := c.Names(ctx)
+	release, err := c.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	return c.listHeld(ctx)
+}
+
+func (c Catalog) listHeld(ctx context.Context) ([]Summary, *protocol.Error) {
+	names, err := c.namesHeld(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -108,14 +117,14 @@ func (c Catalog) List(ctx context.Context) ([]Summary, *protocol.Error) {
 	for _, name := range names {
 		summary := Summary{Profile: name, Values: valuesPresent[name], Tasks: tasksPresent[name], InstanceCount: instanceCounts[name], ProcessCount: processCounts[name], ActiveProcessCount: activeCounts[name]}
 		if summary.Values {
-			envs, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: name}).CompletionNames("", "")
+			state, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: name}).ReadHeld(ctx)
 			if readErr != nil {
 				return nil, readErr
 			}
-			summary.EnvCount = len(envs)
+			summary.EnvCount = len(state.EnvNames())
 		}
 		if summary.Tasks {
-			if _, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: name}).CompletionIDs("", ""); readErr != nil {
+			if _, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: name}).ReadHeld(ctx); readErr != nil {
 				return nil, readErr
 			}
 		}
@@ -125,11 +134,20 @@ func (c Catalog) List(ctx context.Context) ([]Summary, *protocol.Error) {
 }
 
 func (c Catalog) Inspect(ctx context.Context, profile string) (Detail, *protocol.Error) {
+	release, err := c.acquire(ctx)
+	if err != nil {
+		return Detail{}, err
+	}
+	defer release()
+	return c.inspectHeld(ctx, profile)
+}
+
+func (c Catalog) inspectHeld(ctx context.Context, profile string) (Detail, *protocol.Error) {
 	var detail Detail
 	if !project.ValidProfile(profile) {
 		return detail, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, map[string]any{"field": "profile"})
 	}
-	summaries, err := c.List(ctx)
+	summaries, err := c.listHeld(ctx)
 	if err != nil {
 		return detail, err
 	}
@@ -152,7 +170,7 @@ func (c Catalog) Inspect(ctx context.Context, profile string) (Detail, *protocol
 	detail.Processes = []Process{}
 
 	if detail.Values {
-		state, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: profile}).Read(ctx)
+		state, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: profile}).ReadHeld(ctx)
 		if readErr != nil {
 			return Detail{}, readErr
 		}
@@ -167,7 +185,7 @@ func (c Catalog) Inspect(ctx context.Context, profile string) (Detail, *protocol
 		}
 	}
 	if detail.Tasks {
-		state, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: profile}).Read(ctx)
+		state, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: profile}).ReadHeld(ctx)
 		if readErr != nil {
 			return Detail{}, readErr
 		}

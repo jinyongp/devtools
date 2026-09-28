@@ -20,6 +20,7 @@ import (
 
 	"filippo.io/age"
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -155,7 +156,7 @@ func failure(code string) *protocol.Error {
 }
 func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 func file(domain, profile string) string {
-	return domain + "/" + hex.EncodeToString([]byte(profile)) + ".json"
+	return profilekey.StateRelative(domain, profile)
 }
 
 func exclusive(path string, b []byte) error {
@@ -262,6 +263,13 @@ func (e Engine) Status() (Status, *protocol.Error) {
 	return Status{Configured: true, Directory: c.Directory, Recipient: c.Recipient}, nil
 }
 
+func logicalDomain(directory string) string {
+	if directory == "profiles" {
+		return "values"
+	}
+	return "tasks"
+}
+
 func (e Engine) snapshot(selected string) (Snapshot, error) {
 	s := Snapshot{Version: 1, Created: time.Now().UTC().Format(time.RFC3339Nano), Profiles: []Profile{}}
 	names := map[string]bool{}
@@ -269,29 +277,12 @@ func (e Engine) snapshot(selected string) (Snapshot, error) {
 		names[selected] = true
 	} else {
 		for _, domain := range []string{"profiles", "tasks"} {
-			if info, err := os.Lstat(filepath.Join(e.Data, domain)); err == nil {
-				if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-					return s, errors.New("private domain required")
-				}
-			} else if !errors.Is(err, os.ErrNotExist) {
-				return s, err
-			}
-			entries, err := os.ReadDir(filepath.Join(e.Data, domain))
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
+			items, err := profilekey.Enumerate(filepath.Join(e.Data, domain), logicalDomain(domain))
 			if err != nil {
 				return s, err
 			}
-			for _, entry := range entries {
-				if !strings.HasSuffix(entry.Name(), ".json") {
-					continue
-				}
-				b, err := hex.DecodeString(strings.TrimSuffix(entry.Name(), ".json"))
-				if err != nil || !project.ValidProfile(string(b)) {
-					return s, errors.New("invalid profile filename")
-				}
-				names[string(b)] = true
+			for _, name := range items {
+				names[name] = true
 			}
 		}
 	}
@@ -303,19 +294,12 @@ func (e Engine) snapshot(selected string) (Snapshot, error) {
 	for _, name := range ordered {
 		p := Profile{Name: name}
 		for _, domain := range []string{"profiles", "tasks"} {
-			if info, err := os.Lstat(filepath.Join(e.Data, domain)); err == nil {
-				if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-					return s, errors.New("private domain required")
-				}
-			} else if !errors.Is(err, os.ErrNotExist) {
-				return s, err
-			}
-			b, err := maintenance.Read(filepath.Join(e.Data, file(domain, name)), limit)
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
+			b, err := profilekey.Snapshot(filepath.Join(e.Data, domain), name, logicalDomain(domain), limit)
 			if err != nil {
 				return s, err
+			}
+			if b == nil {
+				continue
 			}
 			if domain == "profiles" {
 				_, err = values.RestoreSnapshot(b, name, name)
@@ -612,12 +596,12 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	targetData := map[string][]byte{}
 	hashInput := []byte(digest(cipher) + "\n" + source + "\n" + target)
 	for _, domain := range []string{"profiles", "tasks"} {
-		b, err := maintenance.Read(filepath.Join(e.Data, file(domain, target)), limit)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
+		b, err := profilekey.Snapshot(filepath.Join(e.Data, domain), target, logicalDomain(domain), limit)
+		if err != nil {
 			return plan, failure("storage_error")
 		}
-		exists = exists || err == nil
-		if err == nil {
+		exists = exists || b != nil
+		if b != nil {
 			targetData[domain] = append([]byte{}, b...)
 		}
 		hashInput = append(hashInput, []byte("\n"+domain+":"+digest(b))...)
@@ -677,17 +661,23 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 			return plan, failure("backup_error")
 		}
 	}
-	files := map[string][]byte{file("profiles", target): nil, file("tasks", target): nil}
-	if selected.Values != nil {
-		files[file("profiles", target)], err = values.RestoreSnapshot(selected.Values, source, target)
+	files := map[string][]byte{}
+	for _, domain := range []string{"profiles", "tasks"} {
+		var payload []byte
+		if domain == "profiles" && selected.Values != nil {
+			payload, err = values.RestoreSnapshot(selected.Values, source, target)
+		} else if domain == "tasks" && selected.Tasks != nil {
+			payload, err = tasks.RestoreSnapshot(selected.Tasks, source, target)
+		}
 		if err != nil {
 			return plan, failure("invalid_backup")
 		}
-	}
-	if selected.Tasks != nil {
-		files[file("tasks", target)], err = tasks.RestoreSnapshot(selected.Tasks, source, target)
-		if err != nil {
-			return plan, failure("invalid_backup")
+		replacement, replacementErr := profilekey.Replacement(filepath.Join(e.Data, domain), target, logicalDomain(domain), payload)
+		if replacementErr != nil {
+			return plan, failure("storage_error")
+		}
+		for path, body := range replacement {
+			files[path] = body
 		}
 	}
 	if ctx.Err() != nil {

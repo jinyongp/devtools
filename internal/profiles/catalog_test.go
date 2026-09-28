@@ -77,7 +77,7 @@ func TestCatalogListsAllProfileSourcesOnceInOrder(t *testing.T) {
 	}
 }
 
-func TestCatalogListDoesNotCreateMaintenanceState(t *testing.T) {
+func TestCatalogListDoesNotMigrateLegacyState(t *testing.T) {
 	data := t.TempDir()
 	directory := filepath.Join(data, "profiles")
 	if err := os.MkdirAll(directory, 0700); err != nil {
@@ -92,8 +92,12 @@ func TestCatalogListDoesNotCreateMaintenanceState(t *testing.T) {
 	if err != nil || len(items) != 1 || items[0].Profile != "passive" || items[0].EnvCount != 1 {
 		t.Fatalf("unexpected passive catalog result: %#v %v", items, err)
 	}
-	if _, err := os.Lstat(filepath.Join(data, ".maintenance")); !os.IsNotExist(err) {
-		t.Fatalf("profile list created maintenance state: %v", err)
+	if _, err := os.Lstat(filepath.Join(directory, ".identity")); !os.IsNotExist(err) {
+		t.Fatalf("profile list migrated legacy storage: %v", err)
+	}
+	body, readErr := os.ReadFile(path)
+	if readErr != nil || string(body) != `{"version":1,"profile":"passive","envs":{"local":true},"keys":{}}` {
+		t.Fatalf("profile list rewrote legacy data: %v", readErr)
 	}
 }
 

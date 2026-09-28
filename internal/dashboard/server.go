@@ -494,9 +494,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			opts[k] = r.URL.Query().Get(k)
 		}
 		key := r.URL.Query().Encode()
-		signature := ""
-		if info, e := os.Stat(filepath.Join(s.data, hex.EncodeToString([]byte(store.Profile))+".json")); e == nil {
-			signature = fmt.Sprintf("%d:%d", info.ModTime().UnixNano(), info.Size())
+		signature, stampErr := store.CacheStamp(r.Context())
+		if stampErr != nil {
+			apiError(w, stampErr)
+			return
 		}
 		s.mu.Lock()
 		cached, found := s.results[key]

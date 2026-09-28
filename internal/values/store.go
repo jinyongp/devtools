@@ -3,16 +3,15 @@ package values
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -38,8 +37,7 @@ func gateError(ctx context.Context) *protocol.Error {
 }
 
 func (s Store) file() string {
-	// Hex names preserve case-sensitive profile identity on case-insensitive disks.
-	return filepath.Join(s.Directory, hex.EncodeToString([]byte(s.Profile))+".json")
+	return profilekey.CanonicalPath(s.Directory, s.Profile)
 }
 
 func privateDirectory(path string) error {
@@ -61,11 +59,8 @@ func privateFile(file *os.File) bool {
 	return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0077 == 0
 }
 
-func (s Store) read() (*State, *protocol.Error) {
-	file, err := os.OpenFile(s.file(), os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
-	if errors.Is(err, os.ErrNotExist) {
-		return newState(s.Profile), nil
-	}
+func (s Store) readPath(path string) (*State, *protocol.Error) {
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, storageError()
 	}
@@ -85,12 +80,44 @@ func (s Store) read() (*State, *protocol.Error) {
 	return &state, nil
 }
 
+func (s Store) readResolved() (*State, profilekey.Resolution, *protocol.Error) {
+	resolution, err := profilekey.Resolve(s.Directory, s.Profile, "values")
+	if err != nil {
+		return nil, resolution, storageError()
+	}
+	switch resolution.Mode {
+	case profilekey.ModeNone:
+		return newState(s.Profile), resolution, nil
+	case profilekey.ModeLegacy:
+		state, readErr := s.readPath(resolution.LegacyPath)
+		return state, resolution, readErr
+	case profilekey.ModeCanonical:
+		state, readErr := s.readPath(resolution.CanonicalPath)
+		return state, resolution, readErr
+	default:
+		return nil, resolution, storageError()
+	}
+}
+
+func (s Store) read() (*State, *protocol.Error) {
+	state, _, err := s.readResolved()
+	return state, err
+}
+
 func (s Store) Read(ctx context.Context) (*State, *protocol.Error) {
 	release, gateErr := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
 	if gateErr != nil {
 		return nil, gateError(ctx)
 	}
 	defer release()
+	return s.ReadHeld(ctx)
+}
+
+// ReadHeld requires the caller to hold the data-root maintenance gate.
+func (s Store) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
+	if ctx.Err() != nil {
+		return nil, canceledError()
+	}
 	if !project.ValidProfile(s.Profile) {
 		return nil, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
@@ -177,7 +204,7 @@ func (s Store) Update(ctx context.Context, change func(*State) (bool, *protocol.
 	if ctx.Err() != nil {
 		return false, canceledError()
 	}
-	state, readErr := s.read()
+	state, resolution, readErr := s.readResolved()
 	if readErr != nil {
 		return false, readErr
 	}
@@ -191,6 +218,27 @@ func (s Store) Update(ctx context.Context, change func(*State) (bool, *protocol.
 	data, err := json.Marshal(state)
 	if err != nil {
 		return false, storageError()
+	}
+	if resolution.Mode != profilekey.ModeCanonical {
+		identity, identityErr := profilekey.IdentityBytes(s.Profile, "values")
+		if identityErr != nil {
+			return false, storageError()
+		}
+		files := map[string][]byte{
+			profilekey.StateRelative("profiles", s.Profile):    data,
+			profilekey.IdentityRelative("profiles", s.Profile): identity,
+		}
+		if resolution.LegacyStatus != profilekey.LegacyUnaddressable {
+			migrationMarker, markerErr := profilekey.MarkerBytes(s.Profile)
+			if markerErr != nil {
+				return false, storageError()
+			}
+			files[profilekey.LegacyRelative("profiles", s.Profile)] = migrationMarker
+		}
+		if err := maintenance.Replace(maintenance.Root(s.Directory), files); err != nil {
+			return false, storageError()
+		}
+		return true, nil
 	}
 	file, err := os.CreateTemp(s.Directory, ".update-*")
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/retention"
@@ -188,7 +189,7 @@ func (e Engine) validItem(i Item) bool {
 		b, err := hex.DecodeString(i.Source)
 		return err == nil && len(b) == 16
 	case "completed_tasks":
-		return i.Source == filepath.Join(e.Data, "tasks", hex.EncodeToString([]byte(i.Profile))+".json")
+		return i.Source == profilekey.LegacyPath(filepath.Join(e.Data, "tasks"), i.Profile) || i.Source == profilekey.CanonicalPath(filepath.Join(e.Data, "tasks"), i.Profile)
 	case "completed_process", "expired_log":
 		name := "record.json"
 		if i.Kind == "expired_log" {
@@ -253,25 +254,21 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 			}
 		}
 	}
-	entries, err := os.ReadDir(filepath.Join(e.Data, "tasks"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	taskDirectory := filepath.Join(e.Data, "tasks")
+	profiles, err := profilekey.Enumerate(taskDirectory, "tasks")
+	if err != nil {
 		return nil, fail("storage_error")
 	}
-	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), ".json") {
+	for _, p := range profiles {
+		if profile != "" && profile != p {
 			continue
 		}
-		p, err := hex.DecodeString(strings.TrimSuffix(entry.Name(), ".json"))
-		if err != nil || !project.ValidProfile(string(p)) || profile != "" && profile != string(p) {
-			continue
-		}
-		path := filepath.Join(e.Data, "tasks", entry.Name())
-		b, err := maintenance.Read(path, 128<<20)
+		path, b, err := e.taskSnapshot(p)
 		if err != nil {
 			return nil, fail("storage_error")
 		}
-		if tasks.ArchiveReady(b, string(p), cutoff) {
-			add("completed_tasks", string(p), path, b)
+		if tasks.ArchiveReady(b, p, cutoff) {
+			add("completed_tasks", p, path, b)
 		}
 	}
 	manager := services.Store{Data: e.Data}
@@ -766,6 +763,8 @@ func (e Engine) retire(ctx context.Context, c candidate) (Archive, *protocol.Err
 	}
 
 	switch c.Kind {
+	case "completed_tasks":
+		return e.retireCompletedTasks(c, archive, already)
 	case "completed_process":
 		return e.retireCompletedProcess(c, archive, already)
 	case "expired_log":
@@ -948,6 +947,10 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 		})
 		if err != nil {
 			return a, false, err
+		}
+	case "completed_tasks":
+		if restoreErr := e.restoreCompletedTasks(a, b); restoreErr != nil {
+			return a, false, restoreErr
 		}
 	case "completed_process":
 		if restoreErr := e.restoreCompletedProcess(a, b); restoreErr != nil {

@@ -5,12 +5,35 @@ package process
 import (
 	"runtime"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
 
 func ttyForegroundPgrp(fd int) (int, error) {
 	return unix.IoctlGetInt(fd, unix.TIOCGPGRP)
+}
+
+func ttyResumeForegroundPgrp(fd, parentPgrp, shellPgrp int) (int, error) {
+	foreground, err := ttyForegroundPgrp(fd)
+	if err != nil {
+		return 0, err
+	}
+	if shellPgrp == parentPgrp || foreground != parentPgrp {
+		return foreground, nil
+	}
+
+	// On Linux, bg can resume the wrapper while its pgrp is still foreground
+	// briefly before the shell reclaims the terminal. Let that transition settle.
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for foreground == parentPgrp && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+		foreground, err = ttyForegroundPgrp(fd)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return foreground, nil
 }
 
 func ttySetForegroundPgrp(fd, pgrp int) error {

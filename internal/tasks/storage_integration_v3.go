@@ -60,6 +60,14 @@ func (s Store) ExportSnapshotHeld(limit int64) (LogicalSnapshot, error) {
 	if info.Profile.Mode == profilekey.ModeNone {
 		return out, nil
 	}
+	if info.V3 != nil {
+		if err := prepareWALForMutation(*info.V3); err != nil {
+			return out, err
+		}
+		if err := recoverPendingV3(*info.V3); err != nil {
+			return out, err
+		}
+	}
 	journal, state, _, loadErr := s.loadResolved()
 	if loadErr != nil {
 		return out, errors.New(loadErr.Message)

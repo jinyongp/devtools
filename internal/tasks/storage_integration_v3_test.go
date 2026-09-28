@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -79,6 +80,51 @@ func TestPublishStagedKeepsCommittedSuccessWhenOrphanCleanupFails(t *testing.T) 
 		Options: map[string]string{"request-id": ID()},
 	}); err != nil {
 		t.Fatalf("mutation did not recover after orphan cleanup: %v", err)
+	}
+}
+
+func TestExportSnapshotHeldRecoversCommittedPendingMutation(t *testing.T) {
+	root := t.TempDir()
+	store := Store{Directory: filepath.Join(root, "tasks"), Profile: "app"}
+	if _, err := store.Execute(context.Background(), Request{
+		Action:  "task.add",
+		Body:    Object{"title": "before"},
+		Options: map[string]string{"request-id": ID()},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	request := Request{
+		Action:  "task.add",
+		Body:    Object{"title": "committed"},
+		Options: map[string]string{"request-id": ID()},
+	}
+	store.commitV3 = func(commit func() error) error {
+		if err := commit(); err != nil {
+			return err
+		}
+		return errors.New("injected post-WAL error")
+	}
+	if _, err := store.Execute(context.Background(), request); err == nil {
+		t.Fatal("expected uncertain mutation response")
+	}
+	store.commitV3 = nil
+
+	release, err := maintenance.AcquireExclusive(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, exportErr := store.ExportSnapshotHeld(128 << 20)
+	release()
+	if exportErr != nil {
+		t.Fatalf("export did not recover committed pending mutation: %v", exportErr)
+	}
+	_, state, inspectErr := inspectSnapshot(snapshot.Data, store.Profile)
+	if inspectErr != nil {
+		t.Fatal(inspectErr)
+	}
+	if len(state.Items) != 2 {
+		t.Fatalf("export lost committed mutation: items=%d", len(state.Items))
 	}
 }
 

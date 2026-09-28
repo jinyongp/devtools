@@ -32,7 +32,7 @@ func (c Catalog) acquire(ctx context.Context) (func(), *protocol.Error) {
 	if !filepath.IsAbs(c.Data) {
 		return nil, catalogError("storage_error")
 	}
-	release, err := maintenance.Acquire(ctx, c.Data)
+	release, err := maintenance.AcquireShared(ctx, c.Data)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, protocol.NewError("canceled", "Request canceled.", 130, nil)

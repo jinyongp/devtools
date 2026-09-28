@@ -14,7 +14,7 @@ import (
 // CacheStamp identifies the active physical journal under the maintenance gate.
 // A format/path switch invalidates cached projections even if size/time match.
 func (s Store) CacheStamp(ctx context.Context) (string, *protocol.Error) {
-	release, err := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
+	release, err := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	if err != nil {
 		return "", gateError(ctx)
 	}

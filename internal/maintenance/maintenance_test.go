@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -441,4 +442,114 @@ func TestReplacePostCommitCleanupFailureStaysCommitted(t *testing.T) {
 	if _, err := os.Stat(pendingPath(root)); !os.IsNotExist(err) {
 		t.Fatalf("committed pointer survived recovery cleanup: %v", err)
 	}
+}
+
+func TestWriterIntentBlocksNewReaders(t *testing.T) {
+	gate := filepath.Join(t.TempDir(), "profile.lock")
+	first, err := LockShared(context.Background(), gate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if first != nil {
+			first()
+		}
+	}()
+
+	writerReady := make(chan func(), 1)
+	writerErr := make(chan error, 1)
+	go func() {
+		release, err := LockExclusive(context.Background(), gate)
+		if err != nil {
+			writerErr <- err
+			return
+		}
+		writerReady <- release
+	}()
+
+	turnstile, err := os.OpenFile(gate+".turnstile", os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer turnstile.Close()
+	deadline := time.Now().Add(time.Second)
+	for {
+		err = syscall.Flock(int(turnstile.Fd()), syscall.LOCK_SH|syscall.LOCK_NB)
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = syscall.Flock(int(turnstile.Fd()), syscall.LOCK_UN)
+		if time.Now().After(deadline) {
+			t.Fatal("writer never acquired turnstile")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	readerReady := make(chan func(), 1)
+	readerErr := make(chan error, 1)
+	go func() {
+		release, err := LockShared(context.Background(), gate)
+		if err != nil {
+			readerErr <- err
+			return
+		}
+		readerReady <- release
+	}()
+	select {
+	case release := <-readerReady:
+		release()
+		t.Fatal("new reader bypassed waiting writer")
+	case err := <-readerErr:
+		t.Fatal(err)
+	case <-time.After(40 * time.Millisecond):
+	}
+
+	first()
+	first = nil
+	var writerRelease func()
+	select {
+	case writerRelease = <-writerReady:
+	case err := <-writerErr:
+		t.Fatal(err)
+	case <-time.After(time.Second):
+		t.Fatal("writer did not acquire gate")
+	}
+	select {
+	case release := <-readerReady:
+		release()
+		writerRelease()
+		t.Fatal("reader entered while writer held gate")
+	case err := <-readerErr:
+		writerRelease()
+		t.Fatal(err)
+	case <-time.After(40 * time.Millisecond):
+	}
+	writerRelease()
+	select {
+	case release := <-readerReady:
+		release()
+	case err := <-readerErr:
+		t.Fatal(err)
+	case <-time.After(time.Second):
+		t.Fatal("reader did not resume after writer")
+	}
+}
+
+func TestSharedMaintenanceGateAllowsConcurrentReaders(t *testing.T) {
+	root := t.TempDir()
+	first, err := AcquireShared(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	second, err := AcquireShared(ctx, root)
+	if err != nil {
+		t.Fatalf("second shared reader blocked: %v", err)
+	}
+	second()
 }

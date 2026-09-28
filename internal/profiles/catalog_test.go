@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
@@ -172,5 +174,24 @@ func TestCatalogRejectsNonPrivateProfileStorage(t *testing.T) {
 	}
 	if _, err := (Catalog{Data: data}).Names(context.Background()); err == nil || err.Code != "storage_error" {
 		t.Fatalf("expected storage_error, got %#v", err)
+	}
+}
+
+func TestCatalogUsesSharedMaintenanceGate(t *testing.T) {
+	data := t.TempDir()
+	writeStoredProfile(t, data, "profiles", "shared-read")
+	release, err := maintenance.AcquireShared(context.Background(), data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	items, apiErr := (Catalog{Data: data}).Names(ctx)
+	if apiErr != nil {
+		t.Fatalf("catalog blocked behind another shared reader: %v", apiErr)
+	}
+	if !reflect.DeepEqual(items, []string{"shared-read"}) {
+		t.Fatalf("unexpected profiles: %#v", items)
 	}
 }

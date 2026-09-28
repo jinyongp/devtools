@@ -3,6 +3,7 @@ package values
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,5 +100,40 @@ func TestLegacyReceiptReplaysAfterNewerMutation(t *testing.T) {
 	}
 	if _, err := s.Apply(ctx, change); err == nil || err.Code != "storage_error" {
 		t.Fatalf("conflicting receipts accepted: %v", err)
+	}
+}
+
+func TestLegacyUpdateRestartsBeforeInvokingChange(t *testing.T) {
+	ctx := context.Background()
+	store := Store{Directory: filepath.Join(t.TempDir(), "profiles"), Profile: "legacy-once"}
+	if err := os.MkdirAll(store.Directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	state := newState(store.Profile)
+	if _, err := state.Set(Variable, "READY", "", "before"); err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := maintenance.Write(profilekey.LegacyPath(store.Directory, store.Profile), body); err != nil {
+		t.Fatal(err)
+	}
+
+	calls := 0
+	changed, apiErr := store.Update(ctx, func(state *State) (bool, *protocol.Error) {
+		calls++
+		return state.Set(Variable, "READY", "", "after")
+	})
+	if apiErr != nil || !changed {
+		t.Fatalf("legacy update failed: changed=%v err=%v", changed, apiErr)
+	}
+	if calls != 1 {
+		t.Fatalf("change callback ran %d times during shared-to-exclusive restart", calls)
+	}
+	resolved, err := profilekey.Resolve(store.Directory, store.Profile, "values")
+	if err != nil || resolved.Mode != profilekey.ModeCanonical {
+		t.Fatalf("legacy update did not migrate: %#v %v", resolved, err)
 	}
 }

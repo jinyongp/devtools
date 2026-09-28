@@ -1,14 +1,12 @@
 package values
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"os"
 	"syscall"
-	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/profilekey"
@@ -105,7 +103,7 @@ func (s Store) read() (*State, *protocol.Error) {
 }
 
 func (s Store) Read(ctx context.Context) (*State, *protocol.Error) {
-	release, gateErr := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
+	release, gateErr := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	if gateErr != nil {
 		return nil, gateError(ctx)
 	}
@@ -162,55 +160,72 @@ func (s Store) CompletionNames(kind Kind, env string) ([]string, *protocol.Error
 	return names, nil
 }
 
-// Update serializes read/modify/write and publishes a complete snapshot atomically.
+// Update serializes read/modify/write per profile. Canonical single-file
+// updates use the shared global maintenance gate; first-create/legacy migration
+// restarts under the exclusive gate before invoking change.
 func (s Store) Update(ctx context.Context, change func(*State) (bool, *protocol.Error)) (bool, *protocol.Error) {
-	release, gateErr := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
-	if gateErr != nil {
-		return false, gateError(ctx)
-	}
-	defer release()
+	return s.update(ctx, change, false)
+}
+
+func (s Store) update(ctx context.Context, change func(*State) (bool, *protocol.Error), exclusive bool) (bool, *protocol.Error) {
 	if !project.ValidProfile(s.Profile) {
 		return false, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
+	var releaseGate func()
+	var gateErr error
+	if exclusive {
+		releaseGate, gateErr = maintenance.AcquireExclusive(ctx, maintenance.Root(s.Directory))
+	} else {
+		releaseGate, gateErr = maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
+	}
+	if gateErr != nil {
+		return false, gateError(ctx)
+	}
 	if ctx.Err() != nil {
+		releaseGate()
 		return false, canceledError()
 	}
-	if err := privateDirectory(s.Directory); err != nil {
-		return false, storageError()
-	}
-	lock, err := os.OpenFile(s.file()+".lock", os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
-	if err != nil {
-		return false, storageError()
-	}
-	defer lock.Close()
-	if !privateFile(lock) {
-		return false, storageError()
-	}
-	for {
-		err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
-		if err == nil {
-			break
+
+	info, dirErr := os.Lstat(s.Directory)
+	if errors.Is(dirErr, os.ErrNotExist) {
+		if !exclusive {
+			releaseGate()
+			return s.update(ctx, change, true)
 		}
-		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EINTR) {
+		if err := privateDirectory(s.Directory); err != nil {
+			releaseGate()
 			return false, storageError()
 		}
-		select {
-		case <-ctx.Done():
-			return false, canceledError()
-		case <-time.After(10 * time.Millisecond):
-		}
+	} else if dirErr != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+		releaseGate()
+		return false, storageError()
 	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	if ctx.Err() != nil {
-		return false, canceledError()
+
+	releaseProfile, lockErr := maintenance.LockExclusive(ctx, s.file()+".lock")
+	if lockErr != nil {
+		releaseGate()
+		return false, gateError(ctx)
 	}
 	state, resolution, readErr := s.readResolved()
 	if readErr != nil {
+		releaseProfile()
+		releaseGate()
 		return false, readErr
 	}
+	if !exclusive && resolution.Mode != profilekey.ModeCanonical {
+		releaseProfile()
+		releaseGate()
+		return s.update(ctx, change, true)
+	}
+	defer releaseGate()
+	defer releaseProfile()
+
 	changed, changeErr := change(state)
 	if changeErr != nil || !changed {
 		return changed, changeErr
+	}
+	if ctx.Err() != nil {
+		return false, canceledError()
 	}
 	if !state.valid(s.Profile) {
 		return false, failure("invalid_storage", "Profile update is invalid.")
@@ -240,28 +255,7 @@ func (s Store) Update(ctx context.Context, change func(*State) (bool, *protocol.
 		}
 		return true, nil
 	}
-	file, err := os.CreateTemp(s.Directory, ".update-*")
-	if err != nil {
-		return false, storageError()
-	}
-	defer os.Remove(file.Name())
-	_, writeErr := io.Copy(file, bytes.NewReader(data))
-	if writeErr == nil {
-		writeErr = file.Sync()
-	}
-	closeErr := file.Close()
-	if writeErr != nil || closeErr != nil {
-		return false, storageError()
-	}
-	if err := os.Rename(file.Name(), s.file()); err != nil {
-		return false, storageError()
-	}
-	dir, err := os.Open(s.Directory)
-	if err != nil {
-		return false, storageError()
-	}
-	defer dir.Close()
-	if err := dir.Sync(); err != nil {
+	if err := maintenance.Write(resolution.CanonicalPath, data); err != nil {
 		return false, storageError()
 	}
 	return true, nil

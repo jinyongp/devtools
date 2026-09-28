@@ -202,3 +202,74 @@ func TestMaintenanceGateCancellation(t *testing.T) {
 		return apiErr
 	})
 }
+
+func TestCanonicalUpdatesRunConcurrentlyAcrossProfiles(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "profiles")
+	left := Store{Directory: directory, Profile: "left"}
+	right := Store{Directory: directory, Profile: "right"}
+	for _, store := range []Store{left, right} {
+		if _, err := store.Update(context.Background(), func(state *State) (bool, *protocol.Error) {
+			return state.Set(Variable, "SEED", "", "ready")
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entered := make(chan string, 2)
+	releaseChange := make(chan struct{})
+	type result struct {
+		changed bool
+		err     *protocol.Error
+	}
+	results := make(chan result, 2)
+	run := func(name string, store Store) {
+		go func() {
+			changed, err := store.Update(context.Background(), func(state *State) (bool, *protocol.Error) {
+				entered <- name
+				<-releaseChange
+				return state.Set(Variable, "NEXT", "", name)
+			})
+			results <- result{changed: changed, err: err}
+		}()
+	}
+	run("left", left)
+	run("right", right)
+
+	seen := map[string]bool{}
+	for range 2 {
+		select {
+		case profile := <-entered:
+			seen[profile] = true
+		case <-time.After(time.Second):
+			close(releaseChange)
+			t.Fatalf("different-profile values updates were globally serialized: %#v", seen)
+		}
+	}
+	close(releaseChange)
+	for range 2 {
+		result := <-results
+		if result.err != nil || !result.changed {
+			t.Fatalf("concurrent update failed: changed=%v err=%v", result.changed, result.err)
+		}
+	}
+}
+
+func TestInspectUsesSharedGateAfterInitialization(t *testing.T) {
+	root := t.TempDir()
+	store := Store{Directory: filepath.Join(root, "profiles"), Profile: "inspect"}
+	if _, err := store.Inspect(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	release, err := maintenance.AcquireShared(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	if _, apiErr := store.Inspect(ctx, ""); apiErr != nil {
+		t.Fatalf("inspect blocked behind another shared reader: %v", apiErr)
+	}
+}

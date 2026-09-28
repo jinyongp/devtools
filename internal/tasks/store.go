@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/maintenance"
@@ -122,35 +121,17 @@ func WritePrivate(path string, v any) error {
 	return dir.Sync()
 }
 func Lock(ctx context.Context, path string) (func(), error) {
-	if e := PrivateDir(filepath.Dir(path)); e != nil {
-		return nil, e
-	}
-	f, e := os.OpenFile(path, os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
-	if e != nil {
-		return nil, e
-	}
-	info, e := f.Stat()
-	if e != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-		f.Close()
-		return nil, errors.New("private lock required")
-	}
-	for {
-		e = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
-		if e == nil {
-			return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); _ = f.Close() }, nil
-		}
-		if !errors.Is(e, syscall.EWOULDBLOCK) && !errors.Is(e, syscall.EINTR) {
-			f.Close()
-			return nil, e
-		}
-		select {
-		case <-ctx.Done():
-			f.Close()
-			return nil, ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
+	return maintenance.LockExclusive(ctx, path)
 }
+
+func LockShared(ctx context.Context, path string) (func(), error) {
+	return maintenance.LockShared(ctx, path)
+}
+
+func LockExclusive(ctx context.Context, path string) (func(), error) {
+	return maintenance.LockExclusive(ctx, path)
+}
+
 func (s Store) emptyJournal() *Journal {
 	return &Journal{Version: 1, Profile: s.Profile, Events: []Event{}, Receipts: map[string]Receipt{}, Contexts: map[string]string{}}
 }
@@ -215,7 +196,7 @@ func safeApply(s *State, e Event) (err error) {
 	return nil
 }
 func (s Store) Read(ctx context.Context) (*State, *protocol.Error) {
-	release, e := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
+	release, e := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	if e != nil {
 		return nil, gateError(ctx)
 	}
@@ -223,11 +204,17 @@ func (s Store) Read(ctx context.Context) (*State, *protocol.Error) {
 	return s.ReadHeld(ctx)
 }
 
-// ReadHeld requires the caller to hold the data-root maintenance gate.
+// ReadHeld requires the caller to hold the data-root maintenance gate and adds
+// the profile shared lock needed by correctness-bearing task reads.
 func (s Store) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
 	if ctx.Err() != nil {
 		return nil, canceledError()
 	}
+	release, e := LockShared(ctx, s.path()+".lock")
+	if e != nil {
+		return nil, gateError(ctx)
+	}
+	defer release()
 	_, state, err := s.load()
 	return state, err
 }
@@ -253,7 +240,7 @@ func (s Store) CompletionIDs(kind, workstream string) ([]string, *protocol.Error
 	return ids, nil
 }
 func (s Store) Profiles(ctx context.Context) ([]string, *protocol.Error) {
-	release, gateErr := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
+	release, gateErr := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	if gateErr != nil {
 		return nil, gateError(ctx)
 	}
@@ -273,11 +260,25 @@ type Request struct {
 }
 
 func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error) {
-	releaseGate, gateErr := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
+	return s.execute(ctx, r, false)
+}
+
+func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, *protocol.Error) {
+	var releaseGate func()
+	var gateErr error
+	if exclusive {
+		releaseGate, gateErr = maintenance.AcquireExclusive(ctx, maintenance.Root(s.Directory))
+	} else {
+		releaseGate, gateErr = maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
+	}
 	if gateErr != nil {
 		return nil, gateError(ctx)
 	}
-	defer releaseGate()
+	defer func() {
+		if releaseGate != nil {
+			releaseGate()
+		}
+	}()
 	def := Find(r.Action)
 	if def == nil {
 		return nil, failure("invalid_argument", "Unknown task action.")
@@ -316,6 +317,11 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 		return nil, e
 	}
 	if r.Action == "workstream.edited" && r.Options["dry-run"] == "true" {
+		profileRelease, lockErr := LockShared(ctx, s.path()+".lock")
+		if lockErr != nil {
+			return nil, gateError(ctx)
+		}
+		defer profileRelease()
 		_, state, e := s.load()
 		if e != nil {
 			return nil, e
@@ -344,17 +350,28 @@ func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error)
 	if !validID(r.Options["request-id"]) {
 		return nil, failure("invalid_argument", "Provide a UUID request-id.")
 	}
-	release, e := Lock(ctx, s.path()+".lock")
+	releaseProfile, e := LockExclusive(ctx, s.path()+".lock")
 	if e != nil {
 		if ctx.Err() != nil {
 			return nil, canceledError()
 		}
 		return nil, storageError()
 	}
-	defer release()
+	defer func() {
+		if releaseProfile != nil {
+			releaseProfile()
+		}
+	}()
 	j, state, resolution, err := s.loadResolved()
 	if err != nil {
 		return nil, err
+	}
+	if !exclusive && resolution.Mode != profilekey.ModeCanonical {
+		releaseProfile()
+		releaseProfile = nil
+		releaseGate()
+		releaseGate = nil
+		return s.execute(ctx, r, true)
 	}
 	contextUsed := state.usesContext(r)
 	if !contextUsed {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -236,4 +237,65 @@ func TestMaintenanceGateCancellationAcrossTaskAPIs(t *testing.T) {
 		})
 		return apiErr
 	})
+}
+
+func TestCanonicalMutationsRunConcurrentlyAcrossProfiles(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "tasks")
+	left := Store{Directory: directory, Profile: "left"}
+	right := Store{Directory: directory, Profile: "right"}
+	for _, store := range []Store{left, right} {
+		if _, err := store.Execute(context.Background(), Request{
+			Action:  "task.add",
+			Body:    Object{"title": "seed"},
+			Options: map[string]string{"request-id": ID()},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entered := make(chan string, 2)
+	releaseCommit := make(chan struct{})
+	left.commit = func(path string, value any) error {
+		entered <- "left"
+		<-releaseCommit
+		return WritePrivate(path, value)
+	}
+	right.commit = func(path string, value any) error {
+		entered <- "right"
+		<-releaseCommit
+		return WritePrivate(path, value)
+	}
+	results := make(chan *protocol.Error, 2)
+	for _, store := range []Store{left, right} {
+		store := store
+		go func() {
+			_, err := store.Execute(context.Background(), Request{
+				Action:  "task.add",
+				Body:    Object{"title": "concurrent"},
+				Options: map[string]string{"request-id": ID()},
+			})
+			results <- err
+		}()
+	}
+
+	seen := map[string]bool{}
+	for range 2 {
+		select {
+		case profile := <-entered:
+			seen[profile] = true
+		case <-time.After(time.Second):
+			close(releaseCommit)
+			t.Fatalf("different-profile mutation was globally serialized: %#v", seen)
+		}
+	}
+	close(releaseCommit)
+	for range 2 {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !seen["left"] || !seen["right"] {
+		t.Fatalf("missing concurrent profiles: %#v", seen)
+	}
 }

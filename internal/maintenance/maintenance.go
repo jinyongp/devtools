@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 )
 
 // Root supports domain stores as well as standalone stores used by callers.
@@ -22,49 +21,7 @@ func Root(directory string) string {
 }
 
 func Acquire(ctx context.Context, root string) (func(), error) {
-	lockDir := filepath.Join(root, ".maintenance")
-	if err := os.MkdirAll(lockDir, 0700); err != nil {
-		return nil, err
-	}
-	info, err := os.Lstat(lockDir)
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-		return nil, errors.New("private storage required")
-	}
-	f, err := os.OpenFile(filepath.Join(lockDir, "lock"), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
-	if err != nil {
-		return nil, err
-	}
-	info, err = f.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-		f.Close()
-		return nil, errors.New("private lock required")
-	}
-	for {
-		if ctx.Err() != nil {
-			f.Close()
-			return nil, ctx.Err()
-		}
-		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
-		if err == nil {
-			break
-		}
-		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EINTR) {
-			f.Close()
-			return nil, err
-		}
-		select {
-		case <-ctx.Done():
-			f.Close()
-			return nil, ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-	release := func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); _ = f.Close() }
-	if err = recoverPending(root); err != nil {
-		release()
-		return nil, err
-	}
-	return release, nil
+	return AcquireExclusive(ctx, root)
 }
 
 // Read accepts only private regular files and bounds allocation.

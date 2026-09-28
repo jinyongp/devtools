@@ -51,10 +51,10 @@ type changeReceipt struct {
 	Result      ChangeResult `json:"result"`
 }
 
-func (s Store) managementKey() ([]byte, error) {
+func (s Store) managementKey(create bool) ([]byte, error) {
 	path := filepath.Join(maintenance.Root(s.Directory), ".maintenance", "values-key")
 	b, e := maintenance.Read(path, 32)
-	if errors.Is(e, os.ErrNotExist) {
+	if errors.Is(e, os.ErrNotExist) && create {
 		b = make([]byte, 32)
 		if _, e = rand.Read(b); e == nil {
 			e = maintenance.Write(path, b)
@@ -73,25 +73,58 @@ func signed(key []byte, v any) string {
 }
 
 func (s Store) Inspect(ctx context.Context, env string) (ManagedView, *protocol.Error) {
+	return s.inspect(ctx, env, false)
+}
+
+func (s Store) inspect(ctx context.Context, env string, exclusive bool) (ManagedView, *protocol.Error) {
 	out := ManagedView{Profile: s.Profile, Env: env, Items: []ManagedItem{}}
 	if !project.ValidProfile(s.Profile) {
 		return out, protocol.NewError("invalid_argument", "Invalid profile.", 2, nil)
 	}
-	release, e := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
-	if e != nil {
+	var release func()
+	var gateErr error
+	if exclusive {
+		release, gateErr = maintenance.AcquireExclusive(ctx, maintenance.Root(s.Directory))
+	} else {
+		release, gateErr = maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
+	}
+	if gateErr != nil {
 		return out, gateError(ctx)
 	}
-	defer release()
-	if e = privateDirectory(s.Directory); e != nil {
+	if ctx.Err() != nil {
+		release()
+		return out, canceledError()
+	}
+
+	info, statErr := os.Lstat(s.Directory)
+	if errors.Is(statErr, os.ErrNotExist) {
+		if !exclusive {
+			release()
+			return s.inspect(ctx, env, true)
+		}
+		if err := privateDirectory(s.Directory); err != nil {
+			release()
+			return out, storageError()
+		}
+	} else if statErr != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+		release()
 		return out, storageError()
 	}
+
+	key, keyErr := s.managementKey(exclusive)
+	if errors.Is(keyErr, os.ErrNotExist) && !exclusive {
+		release()
+		return s.inspect(ctx, env, true)
+	}
+	if keyErr != nil {
+		release()
+		return out, storageError()
+	}
+	defer release()
+
 	state, err := s.read()
 	if err != nil {
 		return out, err
-	}
-	key, e := s.managementKey()
-	if e != nil {
-		return out, storageError()
 	}
 	out.Revision = signed(key, state)
 	out.Envs = state.EnvNames()
@@ -127,7 +160,7 @@ func (s Store) Apply(ctx context.Context, c Change) (ChangeResult, *protocol.Err
 	if e = privateDirectory(s.Directory); e != nil {
 		return out, storageError()
 	}
-	key, e := s.managementKey()
+	key, e := s.managementKey(true)
 	if e != nil {
 		return out, storageError()
 	}

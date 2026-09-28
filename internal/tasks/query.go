@@ -61,11 +61,16 @@ func positive(o map[string]string, k string, def, max int) (int, *protocol.Error
 	return n, nil
 }
 func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error) {
-	release, gateErr := maintenance.Acquire(ctx, maintenance.Root(store.Directory))
+	release, gateErr := maintenance.AcquireShared(ctx, maintenance.Root(store.Directory))
 	if gateErr != nil {
 		return nil, gateError(ctx)
 	}
 	defer release()
+	profileRelease, profileErr := LockShared(ctx, store.path()+".lock")
+	if profileErr != nil {
+		return nil, gateError(ctx)
+	}
+	defer profileRelease()
 	pruneQueries(store.cacheDirectory())
 	_, s, e := store.load()
 	if e != nil {

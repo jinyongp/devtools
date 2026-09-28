@@ -31,6 +31,8 @@ execute("sh", os.environ["DEVTOOLS_TEST_INSTALLER"], "install",
         "--version", "0.0.0-test.1", "--source", os.environ["DEVTOOLS_TEST_RELEASES"])
 api("init", "--profile", "task-storage")
 data = Path(api("project", "inspect")["paths"]["data"])
+data.mkdir(mode=0o700, parents=True, exist_ok=True)
+data.chmod(0o700)
 
 # Legacy task storage is passive on read and migrates only on the first committed mutation.
 legacy_profile = "legacy-task-storage"

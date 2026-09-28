@@ -124,7 +124,7 @@ func (c Catalog) listHeld(ctx context.Context) ([]Summary, *protocol.Error) {
 			summary.EnvCount = len(state.EnvNames())
 		}
 		if summary.Tasks {
-			if _, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: name}).ReadHeld(ctx); readErr != nil {
+			if _, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: name}).ReadCurrentHeld(ctx); readErr != nil {
 				return nil, readErr
 			}
 		}
@@ -185,7 +185,7 @@ func (c Catalog) inspectHeld(ctx context.Context, profile string) (Detail, *prot
 		}
 	}
 	if detail.Tasks {
-		state, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: profile}).ReadHeld(ctx)
+		state, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: profile}).ReadCurrentHeld(ctx)
 		if readErr != nil {
 			return Detail{}, readErr
 		}

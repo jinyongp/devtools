@@ -34,6 +34,8 @@ type Store struct {
 	Cache     string
 	// Test seam around the active-v3 WAL fsync commit point.
 	commitV3 func(func() error) error
+	// Test seam between a lockless completion read and its stability recheck.
+	completionHook func()
 }
 
 func (s Store) path() string {
@@ -205,13 +207,37 @@ func (s Store) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
 		return nil, gateError(ctx)
 	}
 	defer release()
-	_, state, err := s.load()
-	return state, err
+	return s.loadHistory()
 }
 
-// CompletionIDs reads an atomic journal snapshot, without query caches or locks.
+func (s Store) ReadCurrent(ctx context.Context) (*State, *protocol.Error) {
+	release, e := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
+	if e != nil {
+		return nil, gateError(ctx)
+	}
+	defer release()
+	return s.ReadCurrentHeld(ctx)
+}
+
+// ReadCurrentHeld requires the caller to hold the data-root maintenance gate.
+// It validates the active physical storage under the profile shared lock but
+// materializes only compact current state plus the bounded WAL tail.
+func (s Store) ReadCurrentHeld(ctx context.Context) (*State, *protocol.Error) {
+	if ctx.Err() != nil {
+		return nil, canceledError()
+	}
+	release, e := LockShared(ctx, s.path()+".lock")
+	if e != nil {
+		return nil, gateError(ctx)
+	}
+	defer release()
+	return s.loadCurrent()
+}
+
+// CompletionIDs reads a stable best-effort snapshot without maintenance or
+// profile locks. V3 head changes retry once instead of exposing a torn view.
 func (s Store) CompletionIDs(kind, workstream string) ([]string, *protocol.Error) {
-	_, state, e := s.load()
+	state, e := s.completionState()
 	if e != nil {
 		return nil, e
 	}
@@ -364,16 +390,31 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 			return nil, storageError()
 		}
 	}
-	j, state, storage, err := s.loadResolved()
-	if err != nil {
-		return nil, err
-	}
-	if !exclusive && storage.V3 == nil {
-		releaseProfile()
-		releaseProfile = nil
-		releaseGate()
-		releaseGate = nil
-		return s.execute(ctx, r, true)
+	var (
+		j       *Journal
+		state   *State
+		storage taskStorageInfo
+		err     *protocol.Error
+	)
+	if probed.V3 != nil {
+		storage = probed
+		current, currentErr := loadCurrentV3(*probed.V3)
+		if currentErr != nil {
+			return nil, storageError()
+		}
+		state = current
+	} else {
+		j, state, storage, err = s.loadResolved()
+		if err != nil {
+			return nil, err
+		}
+		if !exclusive {
+			releaseProfile()
+			releaseProfile = nil
+			releaseGate()
+			releaseGate = nil
+			return s.execute(ctx, r, true)
+		}
 	}
 	contextUsed := state.usesContext(r)
 	if !contextUsed {
@@ -387,45 +428,100 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	}
 	fingerprint := hash(Object{"action": r.Action, "target": r.Target, "body": r.Body, "options": fingerprintOptions(r.Options)})
 	token := r.Options["context"]
-	if old, ok := j.Receipts[r.Options["request-id"]]; ok {
-		if old.Fingerprint != fingerprint || contextUsed && old.ContextHash != hash(token) {
-			return nil, failure("request_conflict", "This request ID was used with different input.")
+	var contextLookup ContextLookup
+	contextRunID := ""
+	if storage.V3 != nil {
+		if contextUsed && token != "" {
+			contextHash := hash(token)
+			payload, exists, readErr := readCommittedContext(*storage.V3, contextHash)
+			if readErr != nil {
+				return nil, storageError()
+			}
+			if exists {
+				contextRunID = payload.RunID
+				contextLookup = func(value string) (string, bool) {
+					if value != contextHash {
+						return "", false
+					}
+					return payload.RunID, true
+				}
+			}
 		}
-		result := copyObject(old.Result)
-		if result["changed"] == false && result["claimed"] != false {
-			return nil, state.noChangeFailure(r, s.Profile)
+		old, exists, readErr := readCommittedReceipt(*storage.V3, r.Options["request-id"])
+		if readErr != nil {
+			return nil, storageError()
 		}
-		result, err = normalizeReceipt(result, state)
-		if err != nil {
-			return nil, err
-		}
-		result["replayed"] = true
-		result["current_revision"] = state.Revision
-		if contextUsed {
-			current := state.Runs[j.Contexts[hash(token)]]
-			valid := current != nil && current.State == "running"
-			result["context_valid"] = valid
-			if !valid {
-				if _, exists := result["context"]; exists {
+		if exists {
+			if old.Fingerprint != fingerprint || contextUsed && old.ContextHash != hash(token) {
+				return nil, failure("request_conflict", "This request ID was used with different input.")
+			}
+			result := copyObject(old.Result)
+			if result["changed"] == false && result["claimed"] != false {
+				return nil, state.noChangeFailure(r, s.Profile)
+			}
+			result["replayed"] = true
+			result["current_revision"] = state.Revision
+			if contextUsed {
+				current := state.Runs[contextRunID]
+				valid := current != nil && current.State == "running"
+				result["context_valid"] = valid
+				if !valid {
+					if _, exists := result["context"]; exists {
+						result["context"] = nil
+					}
+				}
+			} else if run, ok := result["run"].(map[string]any); ok {
+				current := state.Runs[str(run, "id")]
+				valid := current != nil && current.State == "running"
+				result["context_valid"] = valid
+				if !valid {
 					result["context"] = nil
 				}
 			}
-		} else if run, ok := result["run"].(map[string]any); ok {
-			current := state.Runs[str(run, "id")]
-			valid := current != nil && current.State == "running"
-			result["context_valid"] = valid
-			if !valid {
-				result["context"] = nil
-			}
+			return result, nil
 		}
-		return result, nil
+	} else {
+		contextLookup = mapContextLookup(j.Contexts)
+		if old, ok := j.Receipts[r.Options["request-id"]]; ok {
+			if old.Fingerprint != fingerprint || contextUsed && old.ContextHash != hash(token) {
+				return nil, failure("request_conflict", "This request ID was used with different input.")
+			}
+			result := copyObject(old.Result)
+			if result["changed"] == false && result["claimed"] != false {
+				return nil, state.noChangeFailure(r, s.Profile)
+			}
+			result, err = normalizeReceipt(result, state)
+			if err != nil {
+				return nil, err
+			}
+			result["replayed"] = true
+			result["current_revision"] = state.Revision
+			if contextUsed {
+				current := state.Runs[j.Contexts[hash(token)]]
+				valid := current != nil && current.State == "running"
+				result["context_valid"] = valid
+				if !valid {
+					if _, exists := result["context"]; exists {
+						result["context"] = nil
+					}
+				}
+			} else if run, ok := result["run"].(map[string]any); ok {
+				current := state.Runs[str(run, "id")]
+				valid := current != nil && current.State == "running"
+				result["context_valid"] = valid
+				if !valid {
+					result["context"] = nil
+				}
+			}
+			return result, nil
+		}
 	}
 	prepared := state
 	if state.Version == 1 {
 		prepared = state.clone()
 		prepared.applyUpgrade(state.upgradeEvent())
 	}
-	events, result, credential, err := prepared.prepare(r, mapContextLookup(j.Contexts))
+	events, result, credential, err := prepared.prepare(r, contextLookup)
 	if err != nil {
 		return nil, prepared.explain(r, err, s.Profile)
 	}
@@ -441,7 +537,9 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	committedEvents := make([]Event, 0, len(events)+1)
 	if len(events) > 0 && state.Version == 1 {
 		events = append([]Event{state.upgradeEvent()}, events...)
-		j.Version = JournalVersion
+		if j != nil {
+			j.Version = JournalVersion
+		}
 	}
 	for _, e := range events {
 		e.ID = ID()
@@ -451,7 +549,9 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		b, _ := json.Marshal(e)
 		_ = json.Unmarshal(b, &e)
 		state.Apply(e)
-		j.Events = append(j.Events, e)
+		if j != nil {
+			j.Events = append(j.Events, e)
+		}
 		committedEvents = append(committedEvents, e)
 		ids = append(ids, e.ID)
 		for _, key := range []string{"basis_id", "record_id"} {
@@ -460,9 +560,15 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 			}
 		}
 	}
+	newContexts := map[string]string{}
+	triggerContextHash := ""
 	if credential != "" {
 		run := state.Current(str(result, "target_id"))
-		j.Contexts[hash(credential)] = run.ID
+		triggerContextHash = hash(credential)
+		if j != nil {
+			j.Contexts[triggerContextHash] = run.ID
+		}
+		newContexts[triggerContextHash] = run.ID
 		result["run"] = run
 		result["context"] = credential
 		result["context_valid"] = true
@@ -500,12 +606,8 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	if contextUsed {
 		contextHash = hash(token)
 	}
-	j.Receipts[r.Options["request-id"]] = Receipt{Fingerprint: fingerprint, ContextHash: contextHash, Result: result}
-	newContexts := map[string]string{}
-	triggerContextHash := ""
-	if credential != "" {
-		triggerContextHash = hash(credential)
-		newContexts[triggerContextHash] = j.Contexts[triggerContextHash]
+	if j != nil {
+		j.Receipts[r.Options["request-id"]] = Receipt{Fingerprint: fingerprint, ContextHash: contextHash, Result: result}
 	}
 	if storage.V3 != nil {
 		if err := commitActiveV3(*storage.V3, state, committedEvents, previousRevision, r.Options["request-id"], fingerprint, contextHash, result, newContexts, s.commitV3); err != nil {

@@ -115,7 +115,7 @@ func (c Catalog) canonicalHeld(ctx context.Context, profile string) (Canonical, 
 		}
 	}
 	if summary.Tasks {
-		state, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: profile}).ReadHeld(ctx)
+		state, readErr := (tasks.Store{Directory: filepath.Join(c.Data, "tasks"), Profile: profile}).ReadCurrentHeld(ctx)
 		if readErr != nil {
 			return result, readErr
 		}

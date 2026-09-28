@@ -17,6 +17,8 @@ import (
 type Store struct {
 	Directory string
 	Profile   string
+	// Test seam between a lockless completion read and its stability recheck.
+	completionHook func()
 }
 
 func storageError() *protocol.Error {
@@ -102,6 +104,47 @@ func (s Store) read() (*State, *protocol.Error) {
 	return state, err
 }
 
+func sameResolution(left, right profilekey.Resolution) bool {
+	return left.Mode == right.Mode &&
+		left.CanonicalPath == right.CanonicalPath &&
+		left.IdentityPath == right.IdentityPath &&
+		left.LegacyPath == right.LegacyPath &&
+		left.LegacyStatus == right.LegacyStatus &&
+		left.Marker == right.Marker
+}
+
+func (s Store) completionState() (*State, *protocol.Error) {
+	for attempt := 0; attempt < 2; attempt++ {
+		before, err := profilekey.Resolve(s.Directory, s.Profile, "values")
+		if err != nil {
+			continue
+		}
+		var state *State
+		var readErr *protocol.Error
+		switch before.Mode {
+		case profilekey.ModeNone:
+			state = newState(s.Profile)
+		case profilekey.ModeLegacy:
+			state, readErr = s.readPath(before.LegacyPath)
+		case profilekey.ModeCanonical:
+			state, readErr = s.readPath(before.CanonicalPath)
+		default:
+			readErr = storageError()
+		}
+		if readErr != nil {
+			continue
+		}
+		if s.completionHook != nil {
+			s.completionHook()
+		}
+		after, err := profilekey.Resolve(s.Directory, s.Profile, "values")
+		if err == nil && sameResolution(before, after) {
+			return state, nil
+		}
+	}
+	return nil, storageError()
+}
+
 func (s Store) Read(ctx context.Context) (*State, *protocol.Error) {
 	release, gateErr := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	if gateErr != nil {
@@ -142,7 +185,7 @@ func (s Store) CompletionNames(kind Kind, env string) ([]string, *protocol.Error
 	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
 		return nil, storageError()
 	}
-	state, e := s.read()
+	state, e := s.completionState()
 	if e != nil {
 		return nil, e
 	}

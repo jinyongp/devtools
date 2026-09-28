@@ -2,6 +2,7 @@ package values
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -271,5 +273,66 @@ func TestInspectUsesSharedGateAfterInitialization(t *testing.T) {
 	defer cancel()
 	if _, apiErr := store.Inspect(ctx, ""); apiErr != nil {
 		t.Fatalf("inspect blocked behind another shared reader: %v", apiErr)
+	}
+}
+
+func TestCompletionRetriesAcrossLegacyMigration(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "profiles")
+	if err := os.Mkdir(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	store := Store{Directory: directory, Profile: "app"}
+
+	legacyState := newState(store.Profile)
+	if _, err := legacyState.Set(Variable, "OLD", "", "legacy"); err != nil {
+		t.Fatal(err)
+	}
+	legacyBody, err := json.Marshal(legacyState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(profilekey.LegacyPath(directory, store.Profile), legacyBody, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	canonicalState := newState(store.Profile)
+	if _, err := canonicalState.Set(Variable, "NEW", "", "canonical"); err != nil {
+		t.Fatal(err)
+	}
+	canonicalBody, err := json.Marshal(canonicalState)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	switched := false
+	store.completionHook = func() {
+		if switched {
+			return
+		}
+		switched = true
+		release, lockErr := maintenance.AcquireExclusive(context.Background(), root)
+		if lockErr != nil {
+			t.Fatal(lockErr)
+		}
+		defer release()
+		files, replacementErr := profilekey.Replacement(directory, store.Profile, "values", canonicalBody)
+		if replacementErr != nil {
+			t.Fatal(replacementErr)
+		}
+		if replaceErr := maintenance.Replace(root, files); replaceErr != nil {
+			t.Fatal(replaceErr)
+		}
+	}
+
+	names, completionErr := store.CompletionNames(Variable, "")
+	if completionErr != nil {
+		t.Fatal(completionErr)
+	}
+	if !switched {
+		t.Fatal("completion stability hook did not run")
+	}
+	if len(names) != 1 || names[0] != "NEW" {
+		t.Fatalf("completion returned legacy snapshot after migration: %#v", names)
 	}
 }

@@ -81,3 +81,58 @@ func TestPublishStagedKeepsCommittedSuccessWhenOrphanCleanupFails(t *testing.T) 
 		t.Fatalf("mutation did not recover after orphan cleanup: %v", err)
 	}
 }
+
+func TestCompletionRetriesAfterHeadSwitch(t *testing.T) {
+	root := t.TempDir()
+	target := Store{Directory: filepath.Join(root, "target", "tasks"), Profile: "app"}
+	old := call(t, target, "task.add", "", Object{"title": "old"})
+	oldID := itemID(old)
+
+	source := Store{Directory: filepath.Join(root, "source", "tasks"), Profile: "source"}
+	newItem := call(t, source, "task.add", "", Object{"title": "new"})
+	newID := itemID(newItem)
+	release, err := maintenance.AcquireExclusive(context.Background(), maintenance.Root(source.Directory))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := source.ExportSnapshotHeld(128 << 20)
+	release()
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement, restoreErr := RestoreSnapshot(snapshot.Data, source.Profile, target.Profile)
+	if restoreErr != nil {
+		t.Fatal(restoreErr)
+	}
+
+	switched := false
+	target.completionHook = func() {
+		if switched {
+			return
+		}
+		switched = true
+		release, lockErr := maintenance.AcquireExclusive(context.Background(), maintenance.Root(target.Directory))
+		if lockErr != nil {
+			t.Fatal(lockErr)
+		}
+		defer release()
+		staged, stageErr := target.StageExactSnapshotHeld(replacement)
+		if stageErr != nil {
+			t.Fatal(stageErr)
+		}
+		if publishErr := target.PublishStagedHeld(staged); publishErr != nil {
+			t.Fatal(publishErr)
+		}
+	}
+
+	ids, completionErr := target.CompletionIDs("task", "")
+	if completionErr != nil {
+		t.Fatal(completionErr)
+	}
+	if !switched {
+		t.Fatal("completion stability hook did not run")
+	}
+	if contains(ids, oldID) || !contains(ids, newID) || len(ids) != 1 {
+		t.Fatalf("completion returned torn old head: %#v", ids)
+	}
+}

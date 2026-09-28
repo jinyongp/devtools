@@ -61,6 +61,23 @@ func positive(o map[string]string, k string, def, max int) (int, *protocol.Error
 	return n, nil
 }
 func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error) {
+	if ctx.Err() != nil {
+		return nil, canceledError()
+	}
+	kind, cmd := queryKindCommand(q.Command)
+	limit, limitErr := positive(q.Options, "limit", 50, 200)
+	if limitErr != nil {
+		return nil, limitErr
+	}
+	if cursor := q.Options["cursor"]; cursor != "" {
+		if cmd == "tree" {
+			return store.graphCursorFast(q, kind, limit)
+		}
+		if pagedQueryCommand(cmd) {
+			return store.pageCursorFast(q, limit)
+		}
+	}
+
 	release, gateErr := maintenance.AcquireShared(ctx, maintenance.Root(store.Directory))
 	if gateErr != nil {
 		return nil, gateError(ctx)
@@ -72,7 +89,15 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 	}
 	defer profileRelease()
 	pruneQueries(store.cacheDirectory())
-	_, s, e := store.load()
+
+	historyRequired := q.Options["at-revision"] != "" || cmd == "context" || cmd == "export" || cmd == "history" || cmd == "checkpoint list"
+	var s *State
+	var e *protocol.Error
+	if historyRequired {
+		s, e = store.loadHistory()
+	} else {
+		s, e = store.loadCurrent()
+	}
 	if e != nil {
 		return nil, e
 	}
@@ -91,33 +116,6 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		}
 		out["revision"] = s.Revision
 	}
-	kind := "task"
-	cmd := q.Command
-	if strings.HasPrefix(cmd, "workstream ") {
-		kind = "workstream"
-		cmd = strings.TrimPrefix(cmd, "workstream ")
-	}
-	if strings.HasPrefix(cmd, "validation ") {
-		kind = "validation"
-		cmd = strings.TrimPrefix(cmd, "validation ")
-	}
-	if cmd == "tree" && q.Options["cursor"] != "" {
-		id := q.Options["cursor"]
-		if !validID(id) {
-			return nil, failure("cursor_invalid", "Start a new graph query.")
-		}
-		var snapshot GraphSnapshot
-		if e := ReadPrivate(filepath.Join(store.cacheDirectory(), id+".json"), &snapshot); e != nil || snapshot.Projection != ProjectionVersion || snapshot.Profile != store.Profile || snapshot.Kind != kind || time.Now().After(snapshot.Expires) {
-			return nil, failure("cursor_invalid", "Start a new graph query.")
-		}
-		s = NewState()
-		for _, event := range snapshot.Events {
-			if e := safeApply(s, event); e != nil {
-				return nil, storageError()
-			}
-		}
-		out["revision"] = s.Revision
-	}
 	var item *Item
 	if q.Target != "" && q.Command != "checkpoint list" {
 		item, e = s.Get(q.Target, kind)
@@ -127,10 +125,6 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 	}
 	if item == nil && contains([]string{"show", "spec show", "plan show", "check", "impact", "context", "export"}, cmd) {
 		return nil, failure("invalid_argument", "Provide a target UUID.")
-	}
-	limit, e := positive(q.Options, "limit", 50, 200)
-	if e != nil {
-		return nil, e
 	}
 	items := []any{}
 	switch cmd {
@@ -229,7 +223,15 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 					return nil, storageError()
 				}
 				token = ID()
-				snapshot := GraphSnapshot{Projection: ProjectionVersion, Profile: store.Profile, Kind: kind, Expires: time.Now().Add(retention.QuerySnapshotTTL), Events: s.Events}
+				historyState := s
+				if len(historyState.Events) != historyState.Revision {
+					fullState, loadErr := store.loadHistory()
+					if loadErr != nil || fullState.Revision != s.Revision {
+						return nil, storageError()
+					}
+					historyState = fullState
+				}
+				snapshot := GraphSnapshot{Projection: ProjectionVersion, Profile: store.Profile, Kind: kind, Expires: time.Now().Add(retention.QuerySnapshotTTL), Events: historyState.Events}
 				if e := WritePrivate(filepath.Join(dir, token+".json"), snapshot); e != nil {
 					return nil, storageError()
 				}
@@ -411,57 +413,33 @@ func pruneQueries(dir string) {
 	}
 }
 func (s Store) page(q Query, out Object, items []any, limit int) (Object, *protocol.Error) {
-	opts := Object{}
-	for k, v := range q.Options {
-		if k != "cursor" && k != "limit" {
-			opts[k] = v
-		}
+	if q.Options["cursor"] != "" {
+		return nil, failure("cursor_invalid", "Start a new query.")
 	}
-	fp := hash(Object{"command": q.Command, "target": q.Target, "options": opts, "profile": s.Profile})
+	fp := queryFingerprint(s.Profile, q)
 	dir := s.Cache
 	if dir == "" {
 		dir = filepath.Join(s.Directory, "cache")
 	}
-	offset := 0
-	token := ""
 	snapshot := Snapshot{Projection: ProjectionVersion, Fingerprint: fp, Expires: time.Now().Add(retention.QuerySnapshotTTL), Revision: num(out, "revision"), Items: items}
-	if c := q.Options["cursor"]; c != "" {
-		parts := strings.Split(c, ":")
-		if len(parts) != 2 || !validID(parts[0]) {
-			return nil, failure("cursor_invalid", "Start a new query.")
-		}
-		token = parts[0]
-		n, e := strconv.Atoi(parts[1])
-		if e != nil || n < 0 {
-			return nil, failure("cursor_invalid", "Start a new query.")
-		}
-		offset = n
-		if e = ReadPrivate(filepath.Join(dir, token+".json"), &snapshot); e != nil || snapshot.Projection != ProjectionVersion || snapshot.Fingerprint != fp || time.Now().After(snapshot.Expires) || offset > len(snapshot.Items) {
-			return nil, failure("cursor_invalid", "Start a new query.")
-		}
-		items = snapshot.Items
-		out["revision"] = snapshot.Revision
-	}
-	end := offset + limit
+	end := limit
 	if end > len(items) {
 		end = len(items)
 	}
-	out["items"] = items[offset:end]
+	out["items"] = items[:end]
 	out["next_cursor"] = nil
 	if end < len(items) {
-		if token == "" {
-			if e := PrivateDir(dir); e != nil {
-				return nil, storageError()
-			}
-			token = ID()
-			if e := WritePrivate(filepath.Join(dir, token+".json"), snapshot); e != nil {
-				return nil, storageError()
-			}
-			entries, _ := os.ReadDir(dir)
-			for _, entry := range entries {
-				if info, e := entry.Info(); e == nil && time.Since(info.ModTime()) > retention.QuerySnapshotTTL && strings.HasSuffix(entry.Name(), ".json") {
-					_ = os.Remove(filepath.Join(dir, entry.Name()))
-				}
+		if e := PrivateDir(dir); e != nil {
+			return nil, storageError()
+		}
+		token := ID()
+		if e := WritePrivate(filepath.Join(dir, token+".json"), snapshot); e != nil {
+			return nil, storageError()
+		}
+		entries, _ := os.ReadDir(dir)
+		for _, entry := range entries {
+			if info, e := entry.Info(); e == nil && time.Since(info.ModTime()) > retention.QuerySnapshotTTL && strings.HasSuffix(entry.Name(), ".json") {
+				_ = os.Remove(filepath.Join(dir, entry.Name()))
 			}
 		}
 		out["next_cursor"] = token + ":" + strconv.Itoa(end)

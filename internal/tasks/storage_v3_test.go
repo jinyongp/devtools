@@ -496,3 +496,144 @@ func TestActiveV3MutationRepairsInvalidSnapshotOffset(t *testing.T) {
 		t.Fatalf("snapshot was not repaired to committed WAL boundary: offset=%d size=%d", repaired.WALOffset, info.Size())
 	}
 }
+
+func TestCurrentV3LoaderUsesMaterializedSnapshotAndTail(t *testing.T) {
+	s := fixture(t)
+	if _, err := s.Execute(context.Background(), Request{
+		Action:  "task.add",
+		Body:    Object{"title": "seed"},
+		Options: map[string]string{"request-id": ID()},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	resolution, ok, err := resolveV3(s.Directory, s.Profile)
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	_, fullState, _, loadErr := s.loadResolved()
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	for index := 0; index < 5; index++ {
+		requestID := ID()
+		event := Event{
+			ID:        ID(),
+			Sequence:  fullState.Revision + 1,
+			At:        stamp(),
+			RequestID: requestID,
+			Action:    "task.add",
+			Target:    ID(),
+			Data:      Object{"title": fmt.Sprintf("tail-%d", index)},
+		}
+		before := fullState.Revision
+		fullState.Apply(event)
+		result := Object{
+			"changed":           true,
+			"request_id":        requestID,
+			"revision":          fullState.Revision,
+			"current_revision":  fullState.Revision,
+			"previous_revision": before,
+		}
+		if err := commitActiveV3(resolution, fullState, []Event{event}, before, requestID, "fingerprint-"+requestID, "", result, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	current, currentErr := loadCurrentV3(resolution)
+	if currentErr != nil {
+		t.Fatal(currentErr)
+	}
+	_, expected, loadErr := s.loadV3(resolution)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if current.Revision != expected.Revision || len(current.Items) != len(expected.Items) || hash(current.Tracking) != hash(expected.Tracking) {
+		t.Fatalf("current projection mismatch: current=%d/%d expected=%d/%d", current.Revision, len(current.Items), expected.Revision, len(expected.Items))
+	}
+	if len(current.Events) == current.Revision || len(current.Events) != 5 {
+		t.Fatalf("current loader replayed full history: events=%d revision=%d", len(current.Events), current.Revision)
+	}
+}
+
+func TestCurrentV3LoaderFallsBackWithoutRepairingCorruptSnapshot(t *testing.T) {
+	s := fixture(t)
+	if _, err := s.Execute(context.Background(), Request{
+		Action:  "task.add",
+		Body:    Object{"title": "seed"},
+		Options: map[string]string{"request-id": ID()},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	resolution, ok, err := resolveV3(s.Directory, s.Profile)
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(resolution.Snapshot, []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	state, currentErr := loadCurrentV3(resolution)
+	if currentErr != nil || state.Revision == 0 || len(state.Items) != 1 {
+		t.Fatalf("WAL fallback failed: %#v %v", state, currentErr)
+	}
+	var snapshot materializedState
+	if err := ReadPrivate(resolution.Snapshot, &snapshot); err == nil {
+		t.Fatal("read-only current loader repaired corrupt snapshot")
+	}
+}
+
+func TestActiveV3MutationDoesNotReplayUnrelatedReceiptHistory(t *testing.T) {
+	s := fixture(t)
+	oldRequestID := ID()
+	oldResult, err := s.Execute(context.Background(), Request{
+		Action:  "task.add",
+		Body:    Object{"title": "old"},
+		Options: map[string]string{"request-id": oldRequestID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldID := str(objectValue(oldResult["item"]), "id")
+	resolution, ok, resolveErr := resolveV3(s.Directory, s.Profile)
+	if resolveErr != nil || !ok {
+		t.Fatal(resolveErr)
+	}
+	path, pathErr := receiptPath(resolution, oldRequestID)
+	if pathErr != nil {
+		t.Fatal(pathErr)
+	}
+	if err := os.WriteFile(path, []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, fullErr := s.loadResolved(); fullErr == nil {
+		t.Fatal("corrupt historical receipt did not break full coordination load")
+	}
+	historyState, historyErr := s.Read(context.Background())
+	if historyErr != nil || historyState.Revision == 0 || historyState.Items[oldID] == nil {
+		t.Fatalf("event-history read depended on receipt sidecar: %#v %v", historyState, historyErr)
+	}
+	history, historyQueryErr := s.Query(context.Background(), Query{Command: "history", Target: oldID})
+	if historyQueryErr != nil || len(history["items"].([]any)) == 0 {
+		t.Fatalf("history query depended on receipt sidecar: %#v %v", history, historyQueryErr)
+	}
+
+	newResult, mutationErr := s.Execute(context.Background(), Request{
+		Action:  "task.add",
+		Body:    Object{"title": "new"},
+		Options: map[string]string{"request-id": ID()},
+	})
+	if mutationErr != nil {
+		t.Fatalf("routine v3 mutation replayed unrelated receipt history: %v", mutationErr)
+	}
+	newID := str(objectValue(newResult["item"]), "id")
+	if newID == "" || newID == oldID {
+		t.Fatalf("unexpected new mutation result: %#v", newResult)
+	}
+	current, currentErr := s.Query(context.Background(), Query{Command: "list", Options: map[string]string{"scope": "all"}})
+	if currentErr != nil {
+		t.Fatalf("current query replayed unrelated receipt history: %v", currentErr)
+	}
+	items := current["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("current state lost data: %#v", items)
+	}
+}

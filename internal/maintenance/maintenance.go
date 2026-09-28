@@ -140,93 +140,88 @@ func validPath(p string) bool {
 	parts := strings.Split(p, "/")
 	return len(parts) == 2 && (parts[0] == "profiles" || parts[0] == "tasks" || parts[0] == "backup-receipts") && strings.HasSuffix(parts[1], ".json") && parts[1] != ".json" && !strings.Contains(parts[1], "..") && !strings.Contains(parts[1], "\\")
 }
-func recoverPending(root string) error {
-	path := filepath.Join(root, ".maintenance", "restore-pending.json")
-	b, e := Read(path, 512<<20)
-	if errors.Is(e, os.ErrNotExist) {
-		return nil
-	}
-	if e != nil {
-		return e
-	}
+
+func recoverLegacy(root string, body []byte) error {
 	var entries []before
-	if json.Unmarshal(b, &entries) != nil {
+	if json.Unmarshal(body, &entries) != nil {
 		return errors.New("invalid recovery journal")
 	}
-	for _, v := range entries {
-		if !validPath(v.Path) {
+	for _, entry := range entries {
+		if !validPath(entry.Path) {
 			return errors.New("invalid recovery path")
 		}
 	}
-	for _, v := range entries {
-		target := filepath.Join(root, v.Path)
-		if v.Exists {
-			e = Write(target, v.Data)
-		} else {
-			e = os.Remove(target)
-			if errors.Is(e, os.ErrNotExist) {
-				e = nil
-			}
-			if e == nil {
-				e = syncDir(filepath.Dir(target))
-			}
+	for _, entry := range entries {
+		target, err := targetPath(root, entry.Path, true)
+		if err != nil {
+			return err
 		}
-		if e != nil {
-			return e
+		if entry.Exists {
+			if err := Write(target, entry.Data); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := removeTarget(target); err != nil {
+			return err
 		}
 	}
-	if e = os.Remove(path); e != nil {
-		return e
+	path := pendingPath(root)
+	if err := os.Remove(path); err != nil {
+		return err
 	}
 	return syncDir(filepath.Dir(path))
 }
 
-// Replace requires Acquire's lock. A durable before-image restores all files
-// after an error or process interruption, before another cooperating reader proceeds.
+func recoverPending(root string) error {
+	pointer, legacy, body, err := readPointer(root)
+	if err != nil {
+		return err
+	}
+	if body == nil {
+		return cleanupOrphanTransactions(root, "")
+	}
+	if legacy {
+		if err := recoverLegacy(root, body); err != nil {
+			return err
+		}
+		return cleanupOrphanTransactions(root, "")
+	}
+	if err := recoverTransaction(root, pointer); err != nil {
+		return err
+	}
+	return cleanupOrphanTransactions(root, "")
+}
+
+var postCommitCleanup = cleanupTransaction
+
+// Replace requires Acquire's lock. A durable on-disk before-image restores all
+// files after an error or process interruption, before another cooperating
+// reader proceeds.
 func Replace(root string, files map[string][]byte) error {
-	entries := []before{}
-	for path := range files {
-		if !validPath(path) {
-			return errors.New("invalid replacement path")
-		}
-		b, e := Read(filepath.Join(root, path), 128<<20)
-		if e != nil && !errors.Is(e, os.ErrNotExist) {
-			return e
-		}
-		entries = append(entries, before{path, b, e == nil})
-		if e = os.MkdirAll(filepath.Dir(filepath.Join(root, path)), 0700); e != nil {
-			return e
-		}
+	if len(files) == 0 {
+		return nil
 	}
-	b, e := json.Marshal(entries)
-	if e != nil {
-		return e
+	pointer, err := prepareTransaction(root, files)
+	if err != nil {
+		return err
 	}
-	pending := filepath.Join(root, ".maintenance", "restore-pending.json")
-	if e = Write(pending, b); e != nil {
-		return e
-	}
-	for path, data := range files {
-		if data == nil {
-			e = os.Remove(filepath.Join(root, path))
-			if errors.Is(e, os.ErrNotExist) {
-				e = nil
-			}
-			if e == nil {
-				e = syncDir(filepath.Dir(filepath.Join(root, path)))
-			}
-		} else {
-			e = Write(filepath.Join(root, path), data)
+	if err := applyReplacement(root, files); err != nil {
+		if rollbackErr := recoverTransaction(root, pointer); rollbackErr != nil {
+			return errors.New("restore recovery pending")
 		}
-		if e != nil {
-			if rollback := recoverPending(root); rollback != nil {
-				return errors.New("restore recovery pending")
-			}
-			return e
-		}
+		return err
 	}
-	if e = os.Remove(pending); e != nil {
-		return e
+	committed, err := markCommitted(root, pointer)
+	if err != nil {
+		return err
 	}
-	return syncDir(filepath.Dir(pending))
+	if !committed {
+		return errors.New("restore recovery pending")
+	}
+	// The durable committed pointer is the logical success boundary. Scratch
+	// cleanup is best-effort here; a later Acquire will finish it before allowing
+	// another operation to proceed.
+	_ = postCommitCleanup(root, transactionPointer{Version: transactionVersion, TransactionID: pointer.TransactionID, Phase: "committed"})
+	return nil
 }

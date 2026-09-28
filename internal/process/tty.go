@@ -141,7 +141,7 @@ func (t *ttySession) handleStop(childPgrp int) error {
 	if t.parentPgrp == target {
 		target = -t.parentPgrp
 	}
-	if err := syscall.Kill(target, syscall.SIGTSTP); err != nil {
+	if err := syscall.Kill(target, syscall.SIGSTOP); err != nil {
 		return err
 	}
 	// Execution resumes here after the shell sends SIGCONT. If the wrapper was

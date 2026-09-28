@@ -65,7 +65,7 @@ func TestLayeringAndKinds(t *testing.T) {
 }
 
 func TestStoreConcurrentUpdates(t *testing.T) {
-	store := Store{Directory: filepath.Join(t.TempDir(), "profiles"), Profile: "App"}
+	store := Store{Directory: filepath.Join(privateTempDir(t), "profiles"), Profile: "App"}
 	var group sync.WaitGroup
 	for i := range 20 {
 		group.Go(func() {
@@ -107,7 +107,7 @@ func TestStoreConcurrentUpdates(t *testing.T) {
 }
 
 func TestStorageCorruptionAndPermissions(t *testing.T) {
-	store := Store{Directory: filepath.Join(t.TempDir(), "profiles"), Profile: "app"}
+	store := Store{Directory: filepath.Join(privateTempDir(t), "profiles"), Profile: "app"}
 	_, err := store.Update(context.Background(), func(s *State) (bool, *protocol.Error) { return s.Set(Secret, "TOKEN", "", "CANARY") })
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestStorageCorruptionAndPermissions(t *testing.T) {
 	if err := os.Remove(store.file()); err != nil {
 		t.Fatal(err)
 	}
-	target := filepath.Join(t.TempDir(), "target")
+	target := filepath.Join(privateTempDir(t), "target")
 	if err := os.WriteFile(target, []byte("original"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestStorageCorruptionAndPermissions(t *testing.T) {
 }
 
 func TestLockCancellation(t *testing.T) {
-	store := Store{Directory: filepath.Join(t.TempDir(), "profiles"), Profile: "app"}
+	store := Store{Directory: filepath.Join(privateTempDir(t), "profiles"), Profile: "app"}
 	if err := os.Mkdir(store.Directory, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestLockCancellation(t *testing.T) {
 }
 
 func TestMaintenanceGateCancellation(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	store := Store{Directory: filepath.Join(root, "profiles"), Profile: "app"}
 	unlock, err := maintenance.Acquire(context.Background(), root)
 	if err != nil {
@@ -206,7 +206,7 @@ func TestMaintenanceGateCancellation(t *testing.T) {
 }
 
 func TestCanonicalUpdatesRunConcurrentlyAcrossProfiles(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	directory := filepath.Join(root, "profiles")
 	left := Store{Directory: directory, Profile: "left"}
 	right := Store{Directory: directory, Profile: "right"}
@@ -258,7 +258,7 @@ func TestCanonicalUpdatesRunConcurrentlyAcrossProfiles(t *testing.T) {
 }
 
 func TestInspectUsesSharedGateAfterInitialization(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	store := Store{Directory: filepath.Join(root, "profiles"), Profile: "inspect"}
 	if _, err := store.Inspect(context.Background(), ""); err != nil {
 		t.Fatal(err)
@@ -277,7 +277,7 @@ func TestInspectUsesSharedGateAfterInitialization(t *testing.T) {
 }
 
 func TestCompletionRetriesAcrossLegacyMigration(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	directory := filepath.Join(root, "profiles")
 	if err := os.Mkdir(directory, 0700); err != nil {
 		t.Fatal(err)

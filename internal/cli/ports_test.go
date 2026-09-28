@@ -10,7 +10,7 @@ import (
 
 func TestPortBindingsAndInstanceCLI(t *testing.T) {
 	a := testApp(t)
-	root := t.TempDir()
+	root := privateTempDir(t)
 	t.Chdir(root)
 	config := `profile="app"
 [ports.web]

@@ -29,7 +29,7 @@ func holdTaskQueryLocks(t *testing.T, s Store) func() {
 }
 
 func TestPageCursorBypassesTaskStorageLocks(t *testing.T) {
-	s := Store{Directory: filepath.Join(t.TempDir(), "tasks"), Profile: "cursor"}
+	s := Store{Directory: filepath.Join(privateTempDir(t), "tasks"), Profile: "cursor"}
 	call(t, s, "task.add", "", Object{"title": "one"})
 	call(t, s, "task.add", "", Object{"title": "two"})
 	first, err := s.Query(context.Background(), Query{Command: "list", Options: map[string]string{"limit": "1"}})
@@ -55,7 +55,7 @@ func TestPageCursorBypassesTaskStorageLocks(t *testing.T) {
 }
 
 func TestGraphCursorBypassesTaskStorageLocks(t *testing.T) {
-	s := Store{Directory: filepath.Join(t.TempDir(), "tasks"), Profile: "graph-cursor"}
+	s := Store{Directory: filepath.Join(privateTempDir(t), "tasks"), Profile: "graph-cursor"}
 	a := itemID(call(t, s, "workstream.create", "", Object{"title": "A"}))
 	b := itemID(call(t, s, "workstream.create", "", Object{"title": "B"}))
 	c := itemID(call(t, s, "workstream.create", "", Object{"title": "C"}))
@@ -96,7 +96,7 @@ func TestGraphCursorBypassesTaskStorageLocks(t *testing.T) {
 }
 
 func TestCursorFastPathHonorsCanceledContext(t *testing.T) {
-	s := Store{Directory: filepath.Join(t.TempDir(), "tasks"), Profile: "canceled-cursor"}
+	s := Store{Directory: filepath.Join(privateTempDir(t), "tasks"), Profile: "canceled-cursor"}
 	call(t, s, "task.add", "", Object{"title": "one"})
 	call(t, s, "task.add", "", Object{"title": "two"})
 	first, err := s.Query(context.Background(), Query{Command: "list", Options: map[string]string{"limit": "1"}})
@@ -112,7 +112,7 @@ func TestCursorFastPathHonorsCanceledContext(t *testing.T) {
 }
 
 func TestPageCursorDoesNotReadActiveTaskStorage(t *testing.T) {
-	s := Store{Directory: filepath.Join(t.TempDir(), "tasks"), Profile: "cursor-storage"}
+	s := Store{Directory: filepath.Join(privateTempDir(t), "tasks"), Profile: "cursor-storage"}
 	call(t, s, "task.add", "", Object{"title": "one"})
 	call(t, s, "task.add", "", Object{"title": "two"})
 	first, err := s.Query(context.Background(), Query{Command: "list", Options: map[string]string{"limit": "1"}})

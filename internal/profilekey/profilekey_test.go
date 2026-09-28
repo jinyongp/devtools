@@ -13,7 +13,7 @@ func TestCanonicalKeyAndIdentity(t *testing.T) {
 	if len(key) != 67 || !ValidKey(key) || key != strings.ToLower(key) {
 		t.Fatalf("key=%q", key)
 	}
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	identityDir := filepath.Join(dir, ".identity")
 	if err := os.Mkdir(identityDir, 0700); err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestCanonicalKeyAndIdentity(t *testing.T) {
 }
 
 func TestLegacyPathStatusUsesFilesystemAddressability(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	addressable := strings.Repeat("a", 125)
 	status, err := LegacyPathStatus(dir, addressable)
 	if err != nil || status != LegacyMissing {
@@ -58,7 +58,7 @@ func TestLegacyPathStatusUsesFilesystemAddressability(t *testing.T) {
 }
 
 func TestMarkerRecognitionIsFailClosed(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	profile := "app"
 	path := LegacyPath(dir, profile)
 	body, err := MarkerBytes(profile)
@@ -84,7 +84,7 @@ func TestMarkerRecognitionIsFailClosed(t *testing.T) {
 }
 
 func TestResolveLegacyCanonicalAndSplitBrain(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	profile := "app"
 	legacy := LegacyPath(dir, profile)
 	if err := os.WriteFile(legacy, []byte(`{"profile":"app"}`), 0600); err != nil {

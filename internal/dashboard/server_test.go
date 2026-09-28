@@ -17,7 +17,7 @@ import (
 )
 
 func TestQueryCacheInvalidatesOnMutation(t *testing.T) {
-	store := tasks.Store{Directory: filepath.Join(t.TempDir(), "tasks"), Profile: "test"}
+	store := tasks.Store{Directory: filepath.Join(privateTempDir(t), "tasks"), Profile: "test"}
 	add := func(title string) {
 		_, e := store.Execute(context.Background(), tasks.Request{Action: "task.add", Body: tasks.Object{"title": title}, Options: map[string]string{"request-id": tasks.ID()}})
 		if e != nil {
@@ -50,7 +50,7 @@ func TestQueryCacheInvalidatesOnMutation(t *testing.T) {
 }
 
 func TestProfilesEndpointIncludesPassiveProcessProfiles(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	id := tasks.ID()
 	processDirectory := filepath.Join(root, "processes", id)
 	if err := os.MkdirAll(processDirectory, 0700); err != nil {
@@ -108,7 +108,7 @@ func TestPinnedBundle(t *testing.T) {
 }
 
 func TestSessionAndReadBoundary(t *testing.T) {
-	s := &Server{registry: Registry{ID: "test", Address: "http://127.0.0.1:1234", Token: token()}, data: t.TempDir(), boot: map[string]time.Time{}, sessions: map[string]time.Time{}, stop: func() {}}
+	s := &Server{registry: Registry{ID: "test", Address: "http://127.0.0.1:1234", Token: token()}, data: privateTempDir(t), boot: map[string]time.Time{}, sessions: map[string]time.Time{}, stop: func() {}}
 	invoke := func(method, path, body, origin, host string, credential string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, s.registry.Address+path, strings.NewReader(body))
 		if origin != "" {

@@ -9,7 +9,7 @@ import (
 )
 
 func TestDevelopmentAssetsReadOnEachRequest(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	root, err := os.OpenRoot(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -37,7 +37,7 @@ func TestDevelopmentAssetsReadOnEachRequest(t *testing.T) {
 	if out := get("/new.js"); out.Code != 200 || out.Body.String() != "new file" {
 		t.Fatal(out.Code, out.Body)
 	}
-	outside := filepath.Join(t.TempDir(), "private.js")
+	outside := filepath.Join(privateTempDir(t), "private.js")
 	if err := os.WriteFile(outside, []byte("private"), 0600); err != nil {
 		t.Fatal(err)
 	}

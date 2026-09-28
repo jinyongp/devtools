@@ -240,7 +240,7 @@ func TestMaintenanceGateCancellationAcrossTaskAPIs(t *testing.T) {
 }
 
 func TestCanonicalMutationsRunConcurrentlyAcrossProfiles(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	directory := filepath.Join(root, "tasks")
 	left := Store{Directory: directory, Profile: "left"}
 	right := Store{Directory: directory, Profile: "right"}

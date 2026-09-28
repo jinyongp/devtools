@@ -12,7 +12,7 @@ import (
 
 func TestDoctorStructuredRemedies(t *testing.T) {
 	app := testApp(t)
-	base := t.TempDir()
+	base := privateTempDir(t)
 	root := filepath.Join(base, "project")
 	if err := os.Mkdir(root, 0700); err != nil {
 		t.Fatal(err)

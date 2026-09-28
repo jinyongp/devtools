@@ -15,7 +15,7 @@ import (
 )
 
 func TestMetadataAndVersionChecks(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	tool := filepath.Join(dir, "tool")
 	if e := os.WriteFile(tool, []byte("#!/bin/sh\necho 'tool 1.2.3 fixture-secret'\n"), 0700); e != nil {
 		t.Fatal(e)
@@ -60,7 +60,7 @@ func TestMetadataAndVersionChecks(t *testing.T) {
 	}
 }
 func TestProbeFailureAndCancellation(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	tool := filepath.Join(dir, "tool")
 	if e := os.WriteFile(tool, []byte("#!/bin/sh\necho fixture-secret >&2\nexit 1\n"), 0700); e != nil {
 		t.Fatal(e)

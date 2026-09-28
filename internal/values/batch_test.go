@@ -11,7 +11,7 @@ import (
 )
 
 func TestManagedBatchImport(t *testing.T) {
-	s := Store{Directory: filepath.Join(t.TempDir(), "profiles"), Profile: "test"}
+	s := Store{Directory: filepath.Join(privateTempDir(t), "profiles"), Profile: "test"}
 	ctx := context.Background()
 	view, e := s.Inspect(ctx, "")
 	if e != nil {

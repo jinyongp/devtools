@@ -10,7 +10,7 @@ import (
 
 func TestProjectCommandListInspectAndRunAlias(t *testing.T) {
 	app := testApp(t)
-	root := t.TempDir()
+	root := privateTempDir(t)
 	config := `profile = "app"
 [requirements]
 vars = ["ROOT_VALUE"]

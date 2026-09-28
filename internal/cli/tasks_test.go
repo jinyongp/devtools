@@ -13,7 +13,7 @@ import (
 
 func TestTaskCLIAndSchema(t *testing.T) {
 	a := New("test", "test")
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	a.dataDirectory = func() (string, *protocol.Error) { return filepath.Join(dir, "profiles"), nil }
 	run := func(input string, args ...string) map[string]any {
 		t.Helper()

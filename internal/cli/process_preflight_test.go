@@ -18,12 +18,12 @@ import (
 )
 
 func TestProcessStartPreflightRejectsBeforeExecutionRecord(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	app := New("test", "test")
 	app.dataDirectory = func() (string, *protocol.Error) {
 		return filepath.Join(data, "profiles"), nil
 	}
-	root := t.TempDir()
+	root := privateTempDir(t)
 	config := "profile='app'\n[requirements]\nvars=['REQUIRED']\n[commands.web]\nexec=['/bin/true']\ninject=true\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
@@ -43,12 +43,12 @@ func TestProcessStartPreflightRejectsBeforeExecutionRecord(t *testing.T) {
 }
 
 func TestProjectPreflightReloadsCurrentConfiguration(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	app := New("test", "test")
 	app.dataDirectory = func() (string, *protocol.Error) {
 		return filepath.Join(data, "profiles"), nil
 	}
-	root := t.TempDir()
+	root := privateTempDir(t)
 	initial := "profile='app'\n[commands.web]\nexec=['/bin/true']\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(initial), 0600); err != nil {
 		t.Fatal(err)
@@ -68,12 +68,12 @@ func TestProjectPreflightReloadsCurrentConfiguration(t *testing.T) {
 }
 
 func TestProcessRestartPreStopValidationPreservesRunningExecution(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	app := New("test", "test")
 	app.dataDirectory = func() (string, *protocol.Error) {
 		return filepath.Join(data, "profiles"), nil
 	}
-	root := t.TempDir()
+	root := privateTempDir(t)
 	initial := "profile='app'\n[commands.web]\nexec=['/bin/true']\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(initial), 0600); err != nil {
 		t.Fatal(err)

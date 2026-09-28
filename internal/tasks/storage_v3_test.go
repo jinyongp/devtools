@@ -254,7 +254,7 @@ func TestResolveV3RejectsSymlinkedGenerationParent(t *testing.T) {
 		t.Fatal(err)
 	}
 	generations := taskGenerationRoot(s.Directory, s.Profile)
-	quarantine := filepath.Join(t.TempDir(), "generations")
+	quarantine := filepath.Join(privateTempDir(t), "generations")
 	if err := os.Rename(generations, quarantine); err != nil {
 		t.Fatal(err)
 	}

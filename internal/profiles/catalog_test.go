@@ -51,7 +51,7 @@ func writeProcessRecord(t *testing.T, data, profile string) {
 }
 
 func TestCatalogListsAllProfileSourcesOnceInOrder(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	writeStoredProfile(t, data, "profiles", "zeta")
 	writeStoredProfile(t, data, "profiles", "shared")
 	writeStoredProfile(t, data, "tasks", "alpha")
@@ -80,7 +80,7 @@ func TestCatalogListsAllProfileSourcesOnceInOrder(t *testing.T) {
 }
 
 func TestCatalogListDoesNotMigrateLegacyState(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	directory := filepath.Join(data, "profiles")
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		t.Fatal(err)
@@ -104,7 +104,7 @@ func TestCatalogListDoesNotMigrateLegacyState(t *testing.T) {
 }
 
 func TestInspectRuntimeMetadataForPartialProfile(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	portStore := ports.Store{Directory: filepath.Join(data, "ports")}
 	if err := portStore.Update(context.Background(), func(state *ports.State) (bool, *protocol.Error) {
 		if _, registerErr := state.Register("runtime", filepath.Join(data, "runtime-project")); registerErr != nil {
@@ -135,7 +135,7 @@ func TestInspectRuntimeMetadataForPartialProfile(t *testing.T) {
 }
 
 func TestCatalogRejectsMalformedProfileStorage(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	directory := filepath.Join(data, "profiles")
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		t.Fatal(err)
@@ -149,7 +149,7 @@ func TestCatalogRejectsMalformedProfileStorage(t *testing.T) {
 }
 
 func TestCatalogListRejectsCorruptTaskStorage(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	directory := filepath.Join(data, "tasks")
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		t.Fatal(err)
@@ -164,7 +164,7 @@ func TestCatalogListRejectsCorruptTaskStorage(t *testing.T) {
 }
 
 func TestCatalogRejectsNonPrivateProfileStorage(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	directory := filepath.Join(data, "tasks")
 	if err := os.MkdirAll(directory, 0755); err != nil {
 		t.Fatal(err)
@@ -178,7 +178,7 @@ func TestCatalogRejectsNonPrivateProfileStorage(t *testing.T) {
 }
 
 func TestCatalogUsesSharedMaintenanceGate(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	writeStoredProfile(t, data, "profiles", "shared-read")
 	release, err := maintenance.AcquireShared(context.Background(), data)
 	if err != nil {

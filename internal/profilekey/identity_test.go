@@ -8,8 +8,8 @@ import (
 )
 
 func TestDirectIdentityReadRejectsSymlinkedDirectory(t *testing.T) {
-	directory := t.TempDir()
-	outside := t.TempDir()
+	directory := privateTempDir(t)
+	outside := privateTempDir(t)
 	profile := "identity-probe"
 	body, err := IdentityBytes(profile, "values")
 	if err != nil {
@@ -27,7 +27,7 @@ func TestDirectIdentityReadRejectsSymlinkedDirectory(t *testing.T) {
 }
 
 func TestIdentityEnumerationIgnoresUnpublishedTemporaryFile(t *testing.T) {
-	directory := t.TempDir()
+	directory := privateTempDir(t)
 	identityDirectory := filepath.Join(directory, ".identity")
 	if err := os.Mkdir(identityDirectory, 0700); err != nil {
 		t.Fatal(err)

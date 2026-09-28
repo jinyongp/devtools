@@ -8,7 +8,7 @@ import (
 )
 
 func TestInitCommand(t *testing.T) {
-	t.Chdir(t.TempDir())
+	t.Chdir(privateTempDir(t))
 	app := New("test", "abc")
 	for _, expected := range []bool{true, false} {
 		var out, diagnostic bytes.Buffer

@@ -12,7 +12,7 @@ import (
 
 func TestManagedValuesRevisionReplayAndRedaction(t *testing.T) {
 	ctx := context.Background()
-	s := Store{Directory: filepath.Join(t.TempDir(), "profiles"), Profile: "app"}
+	s := Store{Directory: filepath.Join(privateTempDir(t), "profiles"), Profile: "app"}
 	view, e := s.Inspect(ctx, "")
 	if e != nil {
 		t.Fatal(e)

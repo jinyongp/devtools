@@ -11,7 +11,7 @@ import (
 )
 
 func TestProfileExportImportAcrossStores(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
@@ -263,7 +263,7 @@ func TestProfileDiffIsMetadataOnly(t *testing.T) {
 }
 
 func TestProfileImportRequiresSelectionForMultiProfileArchive(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))

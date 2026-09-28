@@ -65,7 +65,7 @@ func TestCurrentQueriesAgreeOnStaleAndRemoved(t *testing.T) {
 }
 
 func TestRunDirectoryIdentityCanonicalizesAliases(t *testing.T) {
-	base := t.TempDir()
+	base := privateTempDir(t)
 	actual := filepath.Join(base, "project")
 	if err := os.Mkdir(actual, 0700); err != nil {
 		t.Fatal(err)

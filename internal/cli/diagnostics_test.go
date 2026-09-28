@@ -8,7 +8,7 @@ import (
 )
 
 func TestDiagnosticsReportIsReadOnlyMetadata(t *testing.T) {
-	home := t.TempDir()
+	home := privateTempDir(t)
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))

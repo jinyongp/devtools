@@ -10,7 +10,7 @@ import (
 
 func TestDoctorAndRunPreflight(t *testing.T) {
 	app := testApp(t)
-	root := t.TempDir()
+	root := privateTempDir(t)
 	t.Chdir(root)
 	config := `profile="app"
 [requirements]
@@ -82,7 +82,7 @@ secs=["TOKEN"]
 }
 func TestDoctorProfileOnlyAndFailures(t *testing.T) {
 	app := testApp(t)
-	root := t.TempDir()
+	root := privateTempDir(t)
 	t.Chdir(root)
 	code, out, err := invoke(t, app, "", "doctor", "--profile", "app")
 	if code != 0 || !strings.Contains(out, `"ready":true`) {

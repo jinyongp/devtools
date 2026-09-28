@@ -75,7 +75,7 @@ func TestVersionReportsMachineContractVersions(t *testing.T) {
 }
 
 func TestJSONQueryEnvelopes(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
@@ -146,7 +146,7 @@ func outputData(t *testing.T, app *App, args []string) map[string]any {
 }
 
 func TestNonJSONOutputBoundaries(t *testing.T) {
-	t.Chdir(t.TempDir())
+	t.Chdir(privateTempDir(t))
 	config := "profile='app'\n[commands.fail]\nexec=['/bin/sh','-c','printf output; printf diagnostic >&2; exit 17']\n"
 	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {
 		t.Fatal(err)

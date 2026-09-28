@@ -16,7 +16,7 @@ import (
 
 func TestDynamicCompletion(t *testing.T) {
 	a := testApp(t)
-	projectDir := t.TempDir()
+	projectDir := privateTempDir(t)
 	t.Chdir(projectDir)
 	if err := os.WriteFile("devtools.toml", []byte("profile = 'app'\n[commands.web]\nexec = ['echo', 'CANARY-VALUE']\n"), 0600); err != nil {
 		t.Fatal(err)

@@ -22,7 +22,7 @@ func appendLogical(history, payload []byte) []byte {
 }
 
 func TestBoundedLogCompactionStructural(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "output.log")
+	path := filepath.Join(privateTempDir(t), "output.log")
 	stats := &logIOStats{}
 	writer := &boundedLog{path: path, stats: stats}
 
@@ -68,7 +68,7 @@ func TestBoundedLogCompactionStructural(t *testing.T) {
 }
 
 func TestBoundedLogLargeWriteReturnsOriginalLength(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "output.log")
+	path := filepath.Join(privateTempDir(t), "output.log")
 	writer := &boundedLog{path: path}
 	payload := append(bytes.Repeat([]byte{'x'}, 2<<20), []byte("tail")...)
 	n, err := writer.Write(payload)
@@ -82,7 +82,7 @@ func TestBoundedLogLargeWriteReturnsOriginalLength(t *testing.T) {
 }
 
 func TestBoundedLogRejectsOversizePhysicalFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "output.log")
+	path := filepath.Join(privateTempDir(t), "output.log")
 	if err := maintenance.Write(path, make([]byte, logPhysicalMax+1)); err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestBoundedLogRejectsOversizePhysicalFile(t *testing.T) {
 }
 
 func TestBoundedLogLockHonorsCancellation(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "output.log")
+	path := filepath.Join(privateTempDir(t), "output.log")
 	store := boundedLogStore{path: path}
 	if _, err := store.write([]byte("payload")); err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestBoundedLogLockHonorsCancellation(t *testing.T) {
 }
 
 func TestRetireAndRestoreLogicalLog(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	id := tasks.ID()
 	store := Store{Data: data}
 	if err := tasks.PrivateDir(filepath.Join(data, "processes", id)); err != nil {

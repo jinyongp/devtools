@@ -85,7 +85,7 @@ func TestCommandContract(t *testing.T) {
 }
 
 func TestInspectAndCancellation(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='test-project'\n"), 0600); err != nil {
 		t.Fatal(err)
 	}

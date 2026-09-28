@@ -43,7 +43,7 @@ func TestProtocolV3DiscoveryContracts(t *testing.T) {
 }
 
 func TestGeneratedConfigRemainsVersionless(t *testing.T) {
-	t.Chdir(t.TempDir())
+	t.Chdir(privateTempDir(t))
 	app := testApp(t)
 	outputData(t, app, []string{"init", "--profile", "app"})
 	body, err := os.ReadFile("devtools.toml")

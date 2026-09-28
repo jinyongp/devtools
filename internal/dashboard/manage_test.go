@@ -18,7 +18,7 @@ import (
 )
 
 func TestManagementAuthenticationAndConcurrency(t *testing.T) {
-	s := &Server{registry: Registry{Address: "http://127.0.0.1:1234"}, data: filepath.Join(t.TempDir(), "tasks"), sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)}}
+	s := &Server{registry: Registry{Address: "http://127.0.0.1:1234"}, data: filepath.Join(privateTempDir(t), "tasks"), sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)}}
 	call := func(body, origin, credential string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("POST", s.registry.Address+"/api/actions", strings.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
@@ -68,7 +68,7 @@ func TestManagementAuthenticationAndConcurrency(t *testing.T) {
 }
 
 func TestDashboardRevokesObservedAgentRun(t *testing.T) {
-	s := &Server{registry: Registry{Address: "http://127.0.0.1:1234"}, data: filepath.Join(t.TempDir(), "tasks"), sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)}}
+	s := &Server{registry: Registry{Address: "http://127.0.0.1:1234"}, data: filepath.Join(privateTempDir(t), "tasks"), sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)}}
 	store := tasks.Store{Directory: s.data, Profile: "app"}
 	added, e := store.Execute(context.Background(), tasks.Request{Action: "task.add", Body: tasks.Object{"title": "Agent task"}, Options: map[string]string{"request-id": tasks.ID()}})
 	if e != nil {
@@ -108,8 +108,8 @@ func TestDashboardRevokesObservedAgentRun(t *testing.T) {
 }
 
 func TestDashboardProcessRestartPreStopValidationPreservesRunningExecution(t *testing.T) {
-	data := t.TempDir()
-	root := t.TempDir()
+	data := privateTempDir(t)
+	root := privateTempDir(t)
 	initial := "profile='app'\n[commands.web]\nexec=['/bin/true']\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(initial), 0600); err != nil {
 		t.Fatal(err)
@@ -179,7 +179,7 @@ func TestDashboardProcessRestartPreStopValidationPreservesRunningExecution(t *te
 }
 
 func TestDashboardValuesRequestCancelsWhileMaintenanceLocked(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	server := &Server{
 		registry: Registry{Address: "http://127.0.0.1:1234"},
 		data:     filepath.Join(root, "tasks"),

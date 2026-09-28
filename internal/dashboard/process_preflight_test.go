@@ -15,13 +15,13 @@ import (
 )
 
 func TestDashboardProcessStartPreflightRejectsBeforeExecutionRecord(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	s := &Server{
 		registry: Registry{Address: "http://127.0.0.1:1234"},
 		data:     filepath.Join(data, "tasks"),
 		sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)},
 	}
-	root := t.TempDir()
+	root := privateTempDir(t)
 	config := "profile='app'\n[requirements]\nvars=['REQUIRED']\n[commands.web]\nexec=['/bin/true']\ninject=true\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)

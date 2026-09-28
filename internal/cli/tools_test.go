@@ -17,7 +17,7 @@ import (
 func testApp(t *testing.T) *App {
 	t.Helper()
 	app := New("test", "test")
-	directory := filepath.Join(t.TempDir(), "profiles")
+	directory := filepath.Join(privateTempDir(t), "profiles")
 	app.dataDirectory = func() (string, *protocol.Error) { return directory, nil }
 	app.portProbe = func(int) (bool, *protocol.Error) { return true, nil }
 	return app
@@ -75,7 +75,7 @@ func TestValueCommands(t *testing.T) {
 
 func TestNamedAndDirectRun(t *testing.T) {
 	app := testApp(t)
-	root := t.TempDir()
+	root := privateTempDir(t)
 	t.Chdir(root)
 	t.Setenv("LEVEL", "parent")
 	config := `profile = "app"
@@ -143,7 +143,7 @@ exec = ["/bin/sh", "-c", "printf raw; printf diagnostic >&2; exit 23"]
 
 func TestSecretFileAndRawOutput(t *testing.T) {
 	app := testApp(t)
-	root := t.TempDir()
+	root := privateTempDir(t)
 	file := filepath.Join(root, "secret")
 	if err := os.WriteFile(file, []byte("true\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestSecretInputCancellation(t *testing.T) {
 
 func TestNamedProfileOverrideAndNoInjection(t *testing.T) {
 	app := testApp(t)
-	root := t.TempDir()
+	root := privateTempDir(t)
 	t.Chdir(root)
 	config := "profile='base'\n[commands.show]\nexec=['/bin/sh','-c','printf %s \"$MARKER\"']\ninject=true\n[commands.plain]\nexec=['/bin/sh','-c','printf plain']\ninject=false\n"
 	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {

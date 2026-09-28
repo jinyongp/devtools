@@ -29,7 +29,7 @@ func rawWALFrame(t *testing.T, meta walFrameMeta, trailing []byte) []byte {
 }
 
 func TestWALRejectsTrailingBodyData(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "wal")
+	path := filepath.Join(privateTempDir(t), "wal")
 	body := rawWALFrame(t, walFrameMeta{
 		Kind:             "metadata",
 		PreviousRevision: 0,
@@ -44,7 +44,7 @@ func TestWALRejectsTrailingBodyData(t *testing.T) {
 }
 
 func TestWALAbsurdCountFailsWithoutPreallocation(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "wal")
+	path := filepath.Join(privateTempDir(t), "wal")
 	body := rawWALFrame(t, walFrameMeta{
 		Kind:             "historical",
 		PreviousRevision: 0,

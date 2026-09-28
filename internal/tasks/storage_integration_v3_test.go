@@ -11,7 +11,7 @@ import (
 )
 
 func TestPublishStagedKeepsCommittedSuccessWhenOrphanCleanupFails(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	source := Store{Directory: filepath.Join(root, "source", "tasks"), Profile: "source"}
 	if _, err := source.Execute(context.Background(), Request{
 		Action:  "task.add",
@@ -84,7 +84,7 @@ func TestPublishStagedKeepsCommittedSuccessWhenOrphanCleanupFails(t *testing.T) 
 }
 
 func TestExportSnapshotHeldRecoversCommittedPendingMutation(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	store := Store{Directory: filepath.Join(root, "tasks"), Profile: "app"}
 	if _, err := store.Execute(context.Background(), Request{
 		Action:  "task.add",
@@ -129,7 +129,7 @@ func TestExportSnapshotHeldRecoversCommittedPendingMutation(t *testing.T) {
 }
 
 func TestCompletionRetriesAfterHeadSwitch(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	target := Store{Directory: filepath.Join(root, "target", "tasks"), Profile: "app"}
 	old := call(t, target, "task.add", "", Object{"title": "old"})
 	oldID := itemID(old)

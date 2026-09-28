@@ -15,7 +15,7 @@ import (
 
 func TestTaskEditCLI(t *testing.T) {
 	a := New("test", "test")
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	a.dataDirectory = func() (string, *protocol.Error) { return filepath.Join(dir, "profiles"), nil }
 	run := func(input string, args ...string) map[string]any {
 		t.Helper()
@@ -96,7 +96,7 @@ func TestTaskEditCLI(t *testing.T) {
 
 func TestTaskUpdateUsesEnvironmentContextAsGuard(t *testing.T) {
 	a := New("test", "test")
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	a.dataDirectory = func() (string, *protocol.Error) { return filepath.Join(dir, "profiles"), nil }
 	var out, diagnostic bytes.Buffer
 	requestID := tasks.ID()
@@ -123,7 +123,7 @@ func TestTaskUpdateUsesEnvironmentContextAsGuard(t *testing.T) {
 
 func TestContextFreeTaskCommandIgnoresEnvironmentContext(t *testing.T) {
 	a := New("test", "test")
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	a.dataDirectory = func() (string, *protocol.Error) { return filepath.Join(dir, "profiles"), nil }
 	run := func(args ...string) map[string]any {
 		t.Helper()

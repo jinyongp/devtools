@@ -18,7 +18,7 @@ func TestLongProfileStateAndManagementReceipts(t *testing.T) {
 	for _, n := range []int{122, 123, 125, 126, 128} {
 		t.Run(strings.Repeat("n", n), func(t *testing.T) {
 			ctx := context.Background()
-			s := Store{Directory: filepath.Join(t.TempDir(), "profiles"), Profile: strings.Repeat("A", n)}
+			s := Store{Directory: filepath.Join(privateTempDir(t), "profiles"), Profile: strings.Repeat("A", n)}
 			if _, err := s.Update(ctx, func(state *State) (bool, *protocol.Error) {
 				return state.Set(Variable, "READY", "", "before")
 			}); err != nil {
@@ -54,7 +54,7 @@ func TestLongProfileStateAndManagementReceipts(t *testing.T) {
 
 func TestLegacyReceiptReplaysAfterNewerMutation(t *testing.T) {
 	ctx := context.Background()
-	s := Store{Directory: filepath.Join(t.TempDir(), "profiles"), Profile: "legacy-receipt"}
+	s := Store{Directory: filepath.Join(privateTempDir(t), "profiles"), Profile: "legacy-receipt"}
 	view, err := s.Inspect(ctx, "")
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +105,7 @@ func TestLegacyReceiptReplaysAfterNewerMutation(t *testing.T) {
 
 func TestLegacyUpdateRestartsBeforeInvokingChange(t *testing.T) {
 	ctx := context.Background()
-	store := Store{Directory: filepath.Join(t.TempDir(), "profiles"), Profile: "legacy-once"}
+	store := Store{Directory: filepath.Join(privateTempDir(t), "profiles"), Profile: "legacy-once"}
 	if err := os.MkdirAll(store.Directory, 0700); err != nil {
 		t.Fatal(err)
 	}

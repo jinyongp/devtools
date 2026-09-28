@@ -138,7 +138,7 @@ func (f *cliLifecycleProcesses) callCount() int {
 }
 
 func TestProjectLifecycleCLI(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	canonicalRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		t.Fatal(err)
@@ -249,7 +249,7 @@ exec=["/bin/sh","-c","true"]
 }
 
 func TestProjectLifecycleCanonicalDirectoryIdentity(t *testing.T) {
-	base := t.TempDir()
+	base := privateTempDir(t)
 	root := filepath.Join(base, "project")
 	if err := os.Mkdir(root, 0700); err != nil {
 		t.Fatal(err)
@@ -288,7 +288,7 @@ exec=["/bin/sh","-c","true"]
 }
 
 func TestProjectUpPreflightDoesNotMutateOnMissingSecret(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	t.Chdir(root)
 	config := `profile="app"
 [commands.api]
@@ -319,7 +319,7 @@ secs=["TOKEN"]
 }
 
 func TestProjectUpServeOnlyCommandDoesNotRequireUnusedEnvStorage(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	t.Chdir(root)
 	config := `profile="app"
 [ports.web]
@@ -355,7 +355,7 @@ func mustJSON(t *testing.T, value any) string {
 }
 
 func TestProjectLogsSelectsCurrentCanonicalProjectExecution(t *testing.T) {
-	base := t.TempDir()
+	base := privateTempDir(t)
 	root := filepath.Join(base, "project")
 	other := filepath.Join(base, "other")
 	if err := os.Mkdir(root, 0700); err != nil {
@@ -385,7 +385,7 @@ func TestProjectLogsSelectsCurrentCanonicalProjectExecution(t *testing.T) {
 	current := services.Record{ID: currentID, Profile: "app", Instance: "current", Directory: canonicalRoot, Command: "web", Capture: true, CreatedAt: now, StartedAt: &now, State: "running"}
 	otherRecord := services.Record{ID: otherID, Profile: "app", Instance: "other", Directory: canonicalOther, Command: "web", Capture: true, CreatedAt: now, StartedAt: &now, State: "running"}
 
-	dataRoot := t.TempDir()
+	dataRoot := privateTempDir(t)
 	app := New("test", "test")
 	app.dataDirectory = func() (string, *protocol.Error) { return filepath.Join(dataRoot, "profiles"), nil }
 	processes := &cliLifecycleProcesses{records: []services.Record{otherRecord, current}}
@@ -413,7 +413,7 @@ func TestProjectLogsSelectsCurrentCanonicalProjectExecution(t *testing.T) {
 }
 
 func TestProjectLogsRequiresOneActiveCapturedExecution(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	canonicalRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		t.Fatal(err)
@@ -421,7 +421,7 @@ func TestProjectLogsRequiresOneActiveCapturedExecution(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	dataRoot := t.TempDir()
+	dataRoot := privateTempDir(t)
 	newApp := func(records []services.Record) *App {
 		app := New("test", "test")
 		app.dataDirectory = func() (string, *protocol.Error) { return filepath.Join(dataRoot, "profiles"), nil }

@@ -16,7 +16,7 @@ import (
 var largeStorageTest = flag.Bool("large-storage-test", false, "run large maintenance replacement test")
 
 func TestRecoveryBeforeNextReader(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	release, e := Acquire(context.Background(), root)
 	if e != nil {
 		t.Fatal(e)
@@ -51,7 +51,7 @@ func TestRecoveryBeforeNextReader(t *testing.T) {
 	}
 }
 func TestLockCancellationAndReplace(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	release, e := Acquire(context.Background(), root)
 	if e != nil {
 		t.Fatal(e)
@@ -89,7 +89,7 @@ func mustRead(t *testing.T, path string) string {
 }
 
 func TestV2ApplyingRecoveryRestoresAllTargets(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	release, err := Acquire(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +137,7 @@ func TestV2ApplyingRecoveryRestoresAllTargets(t *testing.T) {
 }
 
 func TestV2RecoveryCanRepeatAfterPartialRollback(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	release, err := Acquire(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -195,7 +195,7 @@ func TestV2RecoveryCanRepeatAfterPartialRollback(t *testing.T) {
 }
 
 func TestCommittedRecoveryNeverRollsBack(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	release, err := Acquire(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -242,7 +242,7 @@ func TestCommittedRecoveryNeverRollsBack(t *testing.T) {
 }
 
 func TestAcquireRemovesUnreferencedTransactionScratch(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	release, err := Acquire(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -271,7 +271,7 @@ func TestAcquireRemovesUnreferencedTransactionScratch(t *testing.T) {
 }
 
 func TestReplaceRejectsNestedIdentitySymlink(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	release, err := Acquire(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -281,7 +281,7 @@ func TestReplaceRejectsNestedIdentitySymlink(t *testing.T) {
 	if err := os.Mkdir(profiles, 0700); err != nil {
 		t.Fatal(err)
 	}
-	outside := t.TempDir()
+	outside := privateTempDir(t)
 	if err := os.Symlink(outside, filepath.Join(profiles, ".identity")); err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +295,7 @@ func TestReplaceLargeBeforeImage(t *testing.T) {
 	if !*largeStorageTest && os.Getenv("DEVTOOLS_LARGE_STORAGE_TEST") != "1" {
 		t.Skip("use -large-storage-test for >128 MiB streaming replacement")
 	}
-	root := t.TempDir()
+	root := privateTempDir(t)
 	release, err := Acquire(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -332,7 +332,7 @@ func TestReplaceLargeBeforeImage(t *testing.T) {
 }
 
 func TestApplyingRecoveryValidatesAllBeforeImagesBeforeMutation(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	release, err := Acquire(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -402,7 +402,7 @@ func TestLegacyDecoderFailsClosedOnV2Pointer(t *testing.T) {
 }
 
 func TestReplacePostCommitCleanupFailureStaysCommitted(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	release, err := Acquire(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -445,7 +445,7 @@ func TestReplacePostCommitCleanupFailureStaysCommitted(t *testing.T) {
 }
 
 func TestWriterIntentBlocksNewReaders(t *testing.T) {
-	gate := filepath.Join(t.TempDir(), "profile.lock")
+	gate := filepath.Join(privateTempDir(t), "profile.lock")
 	first, err := LockShared(context.Background(), gate)
 	if err != nil {
 		t.Fatal(err)
@@ -539,7 +539,7 @@ func TestWriterIntentBlocksNewReaders(t *testing.T) {
 }
 
 func TestSharedMaintenanceGateAllowsConcurrentReaders(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	first, err := AcquireShared(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)

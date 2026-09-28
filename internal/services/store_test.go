@@ -19,9 +19,9 @@ import (
 )
 
 func TestStaleSupervisorAndRetryConflict(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()
-	r := Record{ID: id, Profile: "test", Directory: t.TempDir(), State: "running", CreatedAt: time.Now()}
+	r := Record{ID: id, Profile: "test", Directory: privateTempDir(t), State: "running", CreatedAt: time.Now()}
 	if e := writePrivate(s.path(id, "record.json"), r); e != nil {
 		t.Fatal(e)
 	}
@@ -50,9 +50,9 @@ func TestStaleSupervisorAndRetryConflict(t *testing.T) {
 	}
 }
 func TestIncompleteReceiptRetryPreservesChangedAndReportsReplay(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	requestID := tasks.ID()
-	directory := t.TempDir()
+	directory := privateTempDir(t)
 	started := time.Now().UTC()
 	record := Record{ID: requestID, Profile: "app", Instance: "instance", Directory: directory, Command: "web", CreatedAt: started, StartedAt: &started, State: "running"}
 	if err := writePrivate(s.path(requestID, "record.json"), record); err != nil {
@@ -77,9 +77,9 @@ func TestIncompleteReceiptRetryPreservesChangedAndReportsReplay(t *testing.T) {
 }
 
 func TestIncompleteStartReceiptStaysPendingUntilExecutionStarts(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	requestID := tasks.ID()
-	directory := t.TempDir()
+	directory := privateTempDir(t)
 	record := Record{ID: requestID, Profile: "app", Instance: "instance", Directory: directory, Command: "web", CreatedAt: time.Now().UTC(), State: "starting"}
 	if err := writePrivate(s.path(requestID, "record.json"), record); err != nil {
 		t.Fatal(err)
@@ -114,10 +114,10 @@ func TestIncompleteStartReceiptStaysPendingUntilExecutionStarts(t *testing.T) {
 }
 
 func TestStopPendingReturnsAcceptedMutation(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()
 	started := time.Now().UTC()
-	record := Record{ID: id, Profile: "app", Instance: "instance", Directory: t.TempDir(), Command: "web", CreatedAt: started, StartedAt: &started, State: "running"}
+	record := Record{ID: id, Profile: "app", Instance: "instance", Directory: privateTempDir(t), Command: "web", CreatedAt: started, StartedAt: &started, State: "running"}
 	if err := writePrivate(s.path(id, "record.json"), record); err != nil {
 		t.Fatal(err)
 	}
@@ -143,8 +143,8 @@ func TestStopPendingReturnsAcceptedMutation(t *testing.T) {
 }
 
 func TestStartRunsFallbackPreflightBeforeCreatingExecution(t *testing.T) {
-	s := Store{Data: t.TempDir()}
-	root := t.TempDir()
+	s := Store{Data: privateTempDir(t)}
+	root := privateTempDir(t)
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -168,8 +168,8 @@ func TestStartRunsFallbackPreflightBeforeCreatingExecution(t *testing.T) {
 }
 
 func TestStartReusesSingletonWithoutColdStartPreflight(t *testing.T) {
-	s := Store{Data: t.TempDir()}
-	root := t.TempDir()
+	s := Store{Data: privateTempDir(t)}
+	root := privateTempDir(t)
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +233,7 @@ func TestStartReusesSingletonWithoutColdStartPreflight(t *testing.T) {
 }
 
 func TestBoundedRawLogs(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "output.log")
+	path := filepath.Join(privateTempDir(t), "output.log")
 	if e := os.Chmod(filepath.Dir(path), 0700); e != nil {
 		t.Fatal(e)
 	}
@@ -263,9 +263,9 @@ func TestErrorExitCodes(t *testing.T) {
 }
 
 func TestRestartBeforeStopFailurePreservesRunningExecution(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	started := time.Now().UTC()
-	old := Record{ID: tasks.ID(), Profile: "app", Instance: "instance", Directory: t.TempDir(), Command: "web", CreatedAt: started, StartedAt: &started, State: "running"}
+	old := Record{ID: tasks.ID(), Profile: "app", Instance: "instance", Directory: privateTempDir(t), Command: "web", CreatedAt: started, StartedAt: &started, State: "running"}
 	if err := writePrivate(s.path(old.ID, "record.json"), old); err != nil {
 		t.Fatal(err)
 	}
@@ -296,8 +296,8 @@ func TestRestartBeforeStopFailurePreservesRunningExecution(t *testing.T) {
 }
 
 func TestRestartPreservesStopMutationWhenColdStartPreflightFails(t *testing.T) {
-	s := Store{Data: t.TempDir()}
-	root := t.TempDir()
+	s := Store{Data: privateTempDir(t)}
+	root := privateTempDir(t)
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -397,13 +397,13 @@ func writeLegacyProcessProof(t *testing.T, s Store, executionID, profile string,
 }
 
 func TestArchivedMarkerExcludesExecutionWithoutHidingCorruption(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()
 	ended := time.Now().UTC().Add(-time.Hour)
 	record := Record{
 		ID:        id,
 		Profile:   "app",
-		Directory: t.TempDir(),
+		Directory: privateTempDir(t),
 		Command:   "web",
 		CreatedAt: ended.Add(-time.Hour),
 		EndedAt:   &ended,
@@ -445,7 +445,7 @@ func TestArchivedMarkerExcludesExecutionWithoutHidingCorruption(t *testing.T) {
 }
 
 func TestLegacyArchiveProofExcludesPreMarkerExecutionHole(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()
 	if err := tasks.PrivateDir(filepath.Join(s.root(), id)); err != nil {
 		t.Fatal(err)
@@ -478,7 +478,7 @@ func TestRestoredOrConflictingLegacyProofDoesNotHideExecutionHole(t *testing.T) 
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			s := Store{Data: t.TempDir()}
+			s := Store{Data: privateTempDir(t)}
 			id := tasks.ID()
 			if err := tasks.PrivateDir(filepath.Join(s.root(), id)); err != nil {
 				t.Fatal(err)
@@ -492,10 +492,10 @@ func TestRestoredOrConflictingLegacyProofDoesNotHideExecutionHole(t *testing.T) 
 }
 
 func TestArchiveMarkerMustMatchCoexistingRecord(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()
 	ended := time.Now().UTC()
-	record := Record{ID: id, Profile: "app", Directory: t.TempDir(), CreatedAt: ended.Add(-time.Hour), EndedAt: &ended, State: "stopped"}
+	record := Record{ID: id, Profile: "app", Directory: privateTempDir(t), CreatedAt: ended.Add(-time.Hour), EndedAt: &ended, State: "stopped"}
 	if err := writePrivate(s.path(id, "record.json"), record); err != nil {
 		t.Fatal(err)
 	}
@@ -512,10 +512,10 @@ func TestArchiveMarkerMustMatchCoexistingRecord(t *testing.T) {
 }
 
 func TestWriteArchiveMarkerRequiresCurrentExecution(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()
 	ended := time.Now().UTC()
-	record := Record{ID: id, Profile: "app", Directory: t.TempDir(), CreatedAt: ended.Add(-time.Hour), EndedAt: &ended, State: "stopped"}
+	record := Record{ID: id, Profile: "app", Directory: privateTempDir(t), CreatedAt: ended.Add(-time.Hour), EndedAt: &ended, State: "stopped"}
 	if err := s.WriteArchiveMarker(record, tasks.ID(), time.Now().UTC()); err == nil || err.Code != "revision_conflict" {
 		t.Fatalf("marker was created without a current record: %v", err)
 	}

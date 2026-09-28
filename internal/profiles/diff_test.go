@@ -92,7 +92,7 @@ func writeDiffInstance(t *testing.T, data, profile, directory, alias string) {
 }
 
 func TestDiffIsStableMetadataOnlyAndIgnoresSecretValueEquality(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	writeDiffValues(t, data, "left", false)
 	writeDiffValues(t, data, "right", true)
 	writeDiffTask(t, data, "left", "Left task")
@@ -138,7 +138,7 @@ func TestDiffIsStableMetadataOnlyAndIgnoresSecretValueEquality(t *testing.T) {
 }
 
 func TestDiffMissingProfileFailsExplicitly(t *testing.T) {
-	data := t.TempDir()
+	data := privateTempDir(t)
 	writeDiffValues(t, data, "left", false)
 	if _, err := (Catalog{Data: data}).Diff(context.Background(), "left", "missing"); err == nil || err.Code != "profile_not_found" {
 		t.Fatalf("expected profile_not_found, got %#v", err)

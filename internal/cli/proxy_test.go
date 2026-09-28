@@ -55,7 +55,7 @@ func TestProxyCLIStartListStatusAndStop(t *testing.T) {
 	}
 	app.proxyManager = func(string) proxyapi.Manager { return manager }
 
-	root := t.TempDir()
+	root := privateTempDir(t)
 	t.Chdir(root)
 	backendPort := 45101
 	config := fmt.Sprintf("profile='app'\n[ports.web]\nport=%d\nstrict=true\n[proxies.app]\nhost='${instance.alias}.${profile}.localhost'\nport='web'\n", backendPort)

@@ -20,7 +20,7 @@ func startingRecord(t *testing.T, s Store, id string, created time.Time) Record 
 	record := Record{
 		ID:        id,
 		Profile:   "app",
-		Directory: t.TempDir(),
+		Directory: privateTempDir(t),
 		Command:   "web",
 		CreatedAt: created.UTC(),
 		State:     "starting",
@@ -32,7 +32,7 @@ func startingRecord(t *testing.T, s Store, id string, created time.Time) Record 
 }
 
 func TestLegacyStartingGraceThenConvergesToInterrupted(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	freshID := tasks.ID()
 	_ = startingRecord(t, s, freshID, time.Now().UTC())
 	status, err := s.Status(context.Background(), freshID)
@@ -57,12 +57,12 @@ func TestLegacyStartingGraceThenConvergesToInterrupted(t *testing.T) {
 }
 
 func TestLaunchMarkerUsesLeaseInsteadOfStartupGrace(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()
 	record := Record{
 		ID:        id,
 		Profile:   "app",
-		Directory: t.TempDir(),
+		Directory: privateTempDir(t),
 		Command:   "web",
 		CreatedAt: time.Now().UTC(),
 		State:     "starting",
@@ -89,9 +89,9 @@ func TestLaunchMarkerUsesLeaseInsteadOfStartupGrace(t *testing.T) {
 }
 
 func TestLaunchMarkerMissingLeaseIsStorageError(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()
-	record := Record{ID: id, Profile: "app", Directory: t.TempDir(), Command: "web", CreatedAt: time.Now().UTC(), State: "starting"}
+	record := Record{ID: id, Profile: "app", Directory: privateTempDir(t), Command: "web", CreatedAt: time.Now().UTC(), State: "starting"}
 	lease, err := s.prepareLaunch(record)
 	if err != nil {
 		t.Fatal(err)
@@ -108,9 +108,9 @@ func TestLaunchMarkerMissingLeaseIsStorageError(t *testing.T) {
 }
 
 func TestLeaseReferenceSurvivesParentClose(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()
-	record := Record{ID: id, Profile: "app", Directory: t.TempDir(), Command: "web", CreatedAt: time.Now().UTC(), State: "starting"}
+	record := Record{ID: id, Profile: "app", Directory: privateTempDir(t), Command: "web", CreatedAt: time.Now().UTC(), State: "starting"}
 	lease, err := s.prepareLaunch(record)
 	if err != nil {
 		t.Fatal(err)
@@ -144,9 +144,9 @@ func TestLeaseReferenceSurvivesParentClose(t *testing.T) {
 }
 
 func TestAdoptInheritedLeaseValidatesIdentityAndSetsCloseOnExec(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()
-	record := Record{ID: id, Profile: "app", Directory: t.TempDir(), Command: "web", CreatedAt: time.Now().UTC(), State: "starting"}
+	record := Record{ID: id, Profile: "app", Directory: privateTempDir(t), Command: "web", CreatedAt: time.Now().UTC(), State: "starting"}
 	parent, launchErr := s.prepareLaunch(record)
 	if launchErr != nil {
 		t.Fatal(launchErr)
@@ -186,7 +186,7 @@ func TestAdoptInheritedLeaseValidatesIdentityAndSetsCloseOnExec(t *testing.T) {
 		t.Fatalf("adopted lease did not retain lock: available=%v err=%v", available, availabilityErr)
 	}
 
-	wrongPath := filepath.Join(t.TempDir(), "lease.lock")
+	wrongPath := filepath.Join(privateTempDir(t), "lease.lock")
 	if err := os.WriteFile(wrongPath, []byte{}, 0600); err != nil {
 		_ = adopted.unlockClose()
 		t.Fatal(err)
@@ -213,7 +213,7 @@ func TestAdoptInheritedLeaseValidatesIdentityAndSetsCloseOnExec(t *testing.T) {
 }
 
 func TestCompletedReceiptReplaySkipsStagingCleanup(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	request := Request{Action: "start", RequestID: tasks.ID()}
 	body, err := json.Marshal(request)
 	if err != nil {
@@ -242,7 +242,7 @@ func TestCompletedReceiptReplaySkipsStagingCleanup(t *testing.T) {
 }
 
 func TestExplicitStopBypassesLegacyStartupGrace(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()
 	record := startingRecord(t, s, id, time.Now().UTC())
 	result, err := s.stop(context.Background(), record)
@@ -252,7 +252,7 @@ func TestExplicitStopBypassesLegacyStartupGrace(t *testing.T) {
 }
 
 func TestCleanupLaunchStagingUsesFixedPattern(t *testing.T) {
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	if err := tasks.PrivateDir(s.root()); err != nil {
 		t.Fatal(err)
 	}

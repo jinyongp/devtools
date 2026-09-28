@@ -13,7 +13,7 @@ import (
 )
 
 func TestPrepareInjectsSelectedEnvironment(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	valuesDir := filepath.Join(root, "profiles")
 	store := values.Store{Directory: valuesDir, Profile: "app"}
 	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
@@ -52,7 +52,7 @@ func TestPrepareInjectsSelectedEnvironment(t *testing.T) {
 }
 
 func TestPrepareExpandsConfiguredExecButNotExtraArgs(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	port := 26123
 	ref := "$" + "{" + "bind.PORT}"
 	p := project.Context{
@@ -95,7 +95,7 @@ func TestPrepareExpandsConfiguredExecButNotExtraArgs(t *testing.T) {
 func TestChecksSkipExecutableWithoutRequirementsUnlessForced(t *testing.T) {
 	command := Command{
 		Project:   project.Context{Profile: "app"},
-		Directory: t.TempDir(),
+		Directory: privateTempDir(t),
 		Exec:      []string{"definitely-missing-devtools-test-executable"},
 	}
 	prepared := Prepared{Command: command, Args: command.Arguments()}
@@ -116,12 +116,12 @@ func TestPreflightValidatesSelectedEnvBeforeRequirementChecks(t *testing.T) {
 		Project:      project.Context{Profile: "app"},
 		Name:         "web",
 		Exec:         []string{"/bin/true"},
-		Directory:    t.TempDir(),
+		Directory:    privateTempDir(t),
 		Env:          "missing",
 		Requirements: project.Requirements{Vars: []string{"REQUIRED"}},
 	}
 	err := Preflight(context.Background(), command, Dependencies{
-		ValuesDirectory: filepath.Join(t.TempDir(), "profiles"),
+		ValuesDirectory: filepath.Join(privateTempDir(t), "profiles"),
 	}, nil)
 	if err == nil || err.Code != "env_not_found" {
 		t.Fatalf("unexpected preflight error: %v", err)
@@ -152,7 +152,7 @@ func seededPortDependencies(t *testing.T, root string) (Dependencies, func()) {
 }
 
 func TestValidateIgnoresRunningServeOwnershipButPreflightDoesNot(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	dependencies, release := seededPortDependencies(t, root)
 	defer release()
 	port := 26123
@@ -177,7 +177,7 @@ func TestValidateIgnoresRunningServeOwnershipButPreflightDoesNot(t *testing.T) {
 }
 
 func TestValidateDetectsMissingExecutableBeforeServeAvailability(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	dependencies, release := seededPortDependencies(t, root)
 	defer release()
 	port := 26123
@@ -199,7 +199,7 @@ func TestValidateDetectsMissingExecutableBeforeServeAvailability(t *testing.T) {
 }
 
 func TestValidateDefersNewSelfServedBindingUntilPostStop(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	port := 26123
 	dependencies := Dependencies{
 		ValuesDirectory: filepath.Join(root, "profiles"),
@@ -224,7 +224,7 @@ func TestValidateDefersNewSelfServedBindingUntilPostStop(t *testing.T) {
 }
 
 func TestValidatePendingPathStillChecksAbsoluteToolRequirements(t *testing.T) {
-	root := t.TempDir()
+	root := privateTempDir(t)
 	port := 26123
 	dependencies := Dependencies{
 		ValuesDirectory: filepath.Join(root, "profiles"),

@@ -12,7 +12,7 @@ import (
 )
 
 func TestProbeUsesPreparedContext(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "marker"), []byte("ok"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -35,14 +35,14 @@ func TestProbeUsesPreparedContext(t *testing.T) {
 func TestProbeDeadlineAndEndedExecution(t *testing.T) {
 	p := project.ReadyProbe{Exec: []string{"/bin/sh", "-c", "sleep 20"}, Timeout: "20ms"}
 	start := time.Now()
-	r := runProbe(context.Background(), p, t.TempDir(), []string{"PATH=/usr/bin:/bin"})
+	r := runProbe(context.Background(), p, privateTempDir(t), []string{"PATH=/usr/bin:/bin"})
 	if r.Ready || r.Reason != "probe_timeout" || time.Since(start) > 4*time.Second {
 		t.Fatal(r)
 	}
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()
 	now := time.Now()
-	if err := writePrivate(s.path(id, "record.json"), Record{ID: id, Profile: "test", Directory: t.TempDir(), EndedAt: &now}); err != nil {
+	if err := writePrivate(s.path(id, "record.json"), Record{ID: id, Profile: "test", Directory: privateTempDir(t), EndedAt: &now}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Check(context.Background(), id); err == nil || err.Code != "process_not_running" {

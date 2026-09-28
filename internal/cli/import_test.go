@@ -10,7 +10,7 @@ import (
 
 func TestImportCLI(t *testing.T) {
 	a := testApp(t)
-	file := filepath.Join(t.TempDir(), ".env")
+	file := filepath.Join(privateTempDir(t), ".env")
 	write := func(content string) {
 		t.Helper()
 		if err := os.WriteFile(file, []byte(content), 0600); err != nil {

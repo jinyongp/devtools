@@ -16,7 +16,7 @@ import (
 
 func editableFixture(t *testing.T) (tasks.Store, string) {
 	t.Helper()
-	s := tasks.Store{Directory: filepath.Join(t.TempDir(), "tasks"), Profile: "edit-fixture"}
+	s := tasks.Store{Directory: filepath.Join(privateTempDir(t), "tasks"), Profile: "edit-fixture"}
 	apply := func(action, target string, body tasks.Object, token string) tasks.Object {
 		t.Helper()
 		state, e := s.Read(context.Background())

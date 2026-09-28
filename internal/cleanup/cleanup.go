@@ -292,15 +292,16 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 		}
 		if r.Capture && now.Sub(*r.EndedAt) > retention.RawProcessLogAge {
 			path := filepath.Join(base, "output.log")
-			b, err := maintenance.Read(path, 1<<20)
-			if err == nil {
+			b, exists, logErr := manager.LogSnapshot(ctx, r.ID)
+			if logErr != nil {
+				return nil, logErr
+			}
+			if exists {
 				stamp, ok := logOwnerStamp(recordLogOwner(r), b)
 				if !ok {
 					return nil, fail("storage_error")
 				}
 				addWithStamp("expired_log", r.Profile, path, b, stamp)
-			} else if !errors.Is(err, os.ErrNotExist) {
-				return nil, fail("storage_error")
 			}
 		}
 	}
@@ -313,12 +314,12 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 			continue
 		}
 		path := filepath.Join(e.Data, "processes", archivedExecution.ID, "output.log")
-		b, err := maintenance.Read(path, 1<<20)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
+		b, exists, logErr := manager.LogSnapshot(ctx, archivedExecution.ID)
+		if logErr != nil {
+			return nil, logErr
 		}
-		if err != nil {
-			return nil, fail("storage_error")
+		if !exists {
+			continue
 		}
 		stamp, ok := logOwnerStamp(archivedExecution.Owner, b)
 		if !ok {
@@ -670,6 +671,8 @@ func cleanupProcessError(err *protocol.Error) *protocol.Error {
 	switch err.Code {
 	case "revision_conflict", "process_not_found", "process_active":
 		return fail("revision_conflict")
+	case "canceled":
+		return err
 	default:
 		return fail("storage_error")
 	}
@@ -719,36 +722,33 @@ func (e Engine) retireCompletedProcess(c candidate, archive Archive, already boo
 	return archive, nil
 }
 
-func (e Engine) retireExpiredLog(c candidate, archive Archive, already bool) (Archive, *protocol.Error) {
+func (e Engine) retireExpiredLog(ctx context.Context, c candidate, archive Archive, already bool) (Archive, *protocol.Error) {
 	executionID := e.executionIDFromProcessSource(c.Source)
 	if executionID == "" {
 		return archive, fail("storage_error")
 	}
-	body, err := maintenance.Read(c.Source, 1<<20)
-	if errors.Is(err, os.ErrNotExist) {
-		if already {
-			return archive, nil
+	manager := services.Store{Data: e.Data}
+	exists, retireErr := manager.RetireLog(ctx, executionID, func(body []byte) *protocol.Error {
+		owner, ownerErr := manager.LogOwner(executionID)
+		if ownerErr != nil {
+			return cleanupProcessError(ownerErr)
 		}
-		return archive, fail("revision_conflict")
-	}
-	if err != nil {
-		return archive, fail("revision_conflict")
-	}
-	owner, ownerErr := (services.Store{Data: e.Data}).LogOwner(executionID)
-	if ownerErr != nil {
-		return archive, cleanupProcessError(ownerErr)
-	}
-	stamp, ok := logOwnerStamp(owner, body)
-	if !ok || stamp != c.Stamp {
-		return archive, fail("revision_conflict")
-	}
-	if !already {
-		if maintenance.Write(e.archivePath(c.ID, "payload"), body) != nil || write(e.archivePath(c.ID, "entry.json"), archive) != nil {
-			return archive, fail("storage_error")
+		stamp, ok := logOwnerStamp(owner, body)
+		if !ok || stamp != c.Stamp {
+			return fail("revision_conflict")
 		}
+		if !already {
+			if maintenance.Write(e.archivePath(c.ID, "payload"), body) != nil || write(e.archivePath(c.ID, "entry.json"), archive) != nil {
+				return fail("storage_error")
+			}
+		}
+		return nil
+	})
+	if retireErr != nil {
+		return archive, retireErr
 	}
-	if err := removeAndSync(c.Source); err != nil {
-		return archive, fail("storage_error")
+	if !exists && !already {
+		return archive, fail("revision_conflict")
 	}
 	return archive, nil
 }
@@ -768,7 +768,7 @@ func (e Engine) retire(ctx context.Context, c candidate) (Archive, *protocol.Err
 	case "completed_process":
 		return e.retireCompletedProcess(c, archive, already)
 	case "expired_log":
-		return e.retireExpiredLog(c, archive, already)
+		return e.retireExpiredLog(ctx, c, archive, already)
 	case "missing_instance":
 		ps := ports.Store{Directory: filepath.Join(e.Data, "ports")}
 		err := ps.Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
@@ -955,6 +955,14 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 	case "completed_process":
 		if restoreErr := e.restoreCompletedProcess(a, b); restoreErr != nil {
 			return a, false, restoreErr
+		}
+	case "expired_log":
+		executionID := e.executionIDFromProcessSource(a.Source)
+		if executionID == "" {
+			return a, false, fail("storage_error")
+		}
+		if restoreErr := (services.Store{Data: e.Data}).RestoreLog(ctx, executionID, b); restoreErr != nil {
+			return a, false, cleanupProcessError(restoreErr)
 		}
 	default:
 		existing, readErr := maintenance.Read(a.Source, 128<<20)

@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -239,17 +238,19 @@ func TestBoundedRawLogs(t *testing.T) {
 		t.Fatal(e)
 	}
 	w := &boundedLog{path: path}
-	if _, e := w.Write([]byte(strings.Repeat("a", 2<<20))); e != nil {
-		t.Fatal(e)
+	if n, e := w.Write([]byte(strings.Repeat("a", 2<<20))); e != nil || n != 2<<20 {
+		t.Fatalf("large write: n=%d err=%v", n, e)
 	}
-	w.Write([]byte("end"))
-	b, e := maintenance.Read(path, 1<<20)
-	if e != nil || len(b) != 1<<20 || !strings.HasSuffix(string(b), "end") {
-		t.Fatal(len(b), e)
+	if n, e := w.Write([]byte("end")); e != nil || n != 3 {
+		t.Fatalf("suffix write: n=%d err=%v", n, e)
+	}
+	b, exists, e := (boundedLogStore{path: path}).snapshot(context.Background())
+	if e != nil || !exists || len(b) != 1<<20 || !strings.HasSuffix(string(b), "end") {
+		t.Fatal(len(b), exists, e)
 	}
 	i, _ := os.Stat(path)
-	if i.Mode().Perm() != 0600 {
-		t.Fatal(i.Mode())
+	if i.Mode().Perm() != 0600 || i.Size() > logPhysicalMax {
+		t.Fatal(i.Mode(), i.Size())
 	}
 }
 

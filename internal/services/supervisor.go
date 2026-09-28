@@ -16,7 +16,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -237,28 +236,17 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 	return e
 }
 
-// Each write retains at most the last MiB. stdout and stderr share a lock and
-// private atomic replacement, so readers see a complete bounded snapshot.
+// stdout and stderr share the in-process mutex so each child Write is kept as
+// one logical record. Cross-process readers and cleanup synchronize through the
+// bounded log store's advisory lock.
 type boundedLog struct {
-	mu   sync.Mutex
-	path string
-	data []byte
+	mu    sync.Mutex
+	path  string
+	stats *logIOStats
 }
 
 func (l *boundedLog) Write(p []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	n := len(p)
-	if n >= 1<<20 {
-		l.data = append(l.data[:0], p[n-(1<<20):]...)
-	} else {
-		l.data = append(l.data, p...)
-		if len(l.data) > 1<<20 {
-			l.data = append([]byte{}, l.data[len(l.data)-(1<<20):]...)
-		}
-	}
-	if e := maintenance.Write(l.path, l.data); e != nil {
-		return 0, e
-	}
-	return n, nil
+	return (boundedLogStore{path: l.path, stats: l.stats}).write(p)
 }

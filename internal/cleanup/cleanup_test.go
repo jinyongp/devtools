@@ -1,6 +1,7 @@
 package cleanup
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -414,5 +415,80 @@ func TestLegacyIncompleteReceiptWithoutSnapshotConflicts(t *testing.T) {
 	}
 	if _, err := os.Stat(source); err != nil {
 		t.Fatalf("source changed after blocked legacy resume: %v", err)
+	}
+}
+
+func TestExpiredLogCleanupUsesLogicalTailAcrossCompactionAndRestore(t *testing.T) {
+	root := t.TempDir()
+	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
+	ctx := context.Background()
+	executionID := tasks.ID()
+	ended := time.Now().UTC().Add(-8 * 24 * time.Hour)
+	record := services.Record{
+		ID:        executionID,
+		Profile:   "logs",
+		Instance:  "instance",
+		Directory: filepath.Join(root, "project"),
+		Command:   "web",
+		CreatedAt: ended.Add(-time.Hour),
+		EndedAt:   &ended,
+		State:     "stopped",
+		Capture:   true,
+	}
+	recordBody, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recordPath := filepath.Join(engine.Data, "processes", executionID, "record.json")
+	logPath := filepath.Join(engine.Data, "processes", executionID, "output.log")
+	if err := maintenance.Write(recordPath, recordBody); err != nil {
+		t.Fatal(err)
+	}
+	logical := bytes.Repeat([]byte("l"), 1<<20)
+	physical := append(bytes.Repeat([]byte("p"), 200<<10), logical...)
+	if len(physical) >= 1280<<10 {
+		t.Fatalf("invalid physical fixture size: %d", len(physical))
+	}
+	if err := maintenance.Write(logPath, physical); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, failure := engine.Preview(ctx, "logs")
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	var logItem Item
+	for _, item := range plan.Items {
+		if item.Kind == "expired_log" {
+			logItem = item
+			break
+		}
+	}
+	if logItem.ID == "" || logItem.Bytes != int64(len(logical)) {
+		t.Fatalf("logical log candidate mismatch: %#v", plan.Items)
+	}
+
+	// Simulate background compaction changing only the physical representation.
+	if err := maintenance.Write(logPath, logical); err != nil {
+		t.Fatal(err)
+	}
+	result, failure := engine.Apply(ctx, plan.ID, []string{logItem.ID}, tasks.ID())
+	if failure != nil || len(result.Archives) != 1 {
+		t.Fatalf("logical-tail apply failed: %#v %v", result, failure)
+	}
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Fatalf("retired log survived apply: %v", err)
+	}
+	payload, err := maintenance.Read(engine.archivePath(logItem.ID, "payload"), 2<<20)
+	if err != nil || !bytes.Equal(payload, logical) {
+		t.Fatalf("archive payload drifted: len=%d err=%v", len(payload), err)
+	}
+
+	if _, changed, failure := engine.Restore(ctx, logItem.ID); failure != nil || !changed {
+		t.Fatalf("log restore failed: changed=%v err=%v", changed, failure)
+	}
+	restored, exists, logErr := (services.Store{Data: engine.Data}).LogSnapshot(ctx, executionID)
+	if logErr != nil || !exists || !bytes.Equal(restored, logical) {
+		t.Fatalf("restored logical log mismatch: exists=%v len=%d err=%v", exists, len(restored), logErr)
 	}
 }

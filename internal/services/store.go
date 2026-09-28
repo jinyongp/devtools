@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/archiveproof"
-	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -942,12 +941,12 @@ func (s Store) Logs(ctx context.Context, id string) (string, *protocol.Error) {
 	if r.EndedAt != nil && time.Since(*r.EndedAt) > retention.RawProcessLogAge {
 		return "", failure("logs_expired")
 	}
-	b, err := maintenance.Read(s.path(id, "output.log"), 1<<20)
-	if errors.Is(err, os.ErrNotExist) {
-		return "", nil
+	b, exists, logErr := s.LogSnapshot(ctx, id)
+	if logErr != nil {
+		return "", logErr
 	}
-	if err != nil {
-		return "", storageError()
+	if !exists {
+		return "", nil
 	}
 	return string(bytes.ToValidUTF8(b, []byte("�"))), nil
 }

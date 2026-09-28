@@ -83,7 +83,7 @@ if pid == 0:
     os.execvpe("bash", ["bash", "--noprofile", "--norc", "-i"], child_env)
 
 pending = bytearray()
-shell_pgrp = os.getpgid(pid)
+shell_pgrp = -1
 
 
 def wait_foreground(pgrp, timeout=3):
@@ -144,6 +144,8 @@ try:
     pending.clear()
     send("PS1='__DT_TTY_PROMPT__> '\n")
     read_until(prompt)
+    shell_pgrp = os.tcgetpgrp(master)
+    assert shell_pgrp > 0
 
     # Interactive stdin reaches the foreground child and terminal ownership is
     # restored when it exits.

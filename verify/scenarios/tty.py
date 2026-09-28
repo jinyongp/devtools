@@ -60,9 +60,14 @@ while :; do sleep 1; done
 """
 )
 (root / "bg.py").write_text(
-    """import time
+    """from pathlib import Path
+import time
+
+release = Path("bg.release")
+release.unlink(missing_ok=True)
 print("BG_READY", flush=True)
-time.sleep(1)
+while not release.exists():
+    time.sleep(0.02)
 print("BG_DONE", flush=True)
 """
 )
@@ -78,6 +83,20 @@ if pid == 0:
     os.execvpe("bash", ["bash", "--noprofile", "--norc", "-i"], child_env)
 
 pending = bytearray()
+shell_pgrp = os.getpgid(pid)
+
+
+def wait_foreground(pgrp, timeout=3):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            foreground = os.tcgetpgrp(master)
+        except OSError:
+            foreground = -1
+        if foreground == pgrp:
+            return
+        time.sleep(0.01)
+    raise AssertionError(("foreground_pgrp", pgrp, foreground, bytes(pending)))
 
 
 def send(data):
@@ -170,13 +189,22 @@ try:
     assert b"Stopped" in stopped or b"stopped" in stopped, stopped
     send("bg\n")
     read_until(prompt)
+    wait_foreground(shell_pgrp)
     send("printf 'SHELL_OK\\n'\n")
     shell = read_until(prompt)
     assert b"SHELL_OK" in shell, shell
+
+    # Keep the background child alive until the shell has proved it still owns
+    # the terminal. Release it explicitly instead of relying on a fixed sleep,
+    # which can expire before this synchronization under full-suite load.
+    send("touch bg.release\n")
+    read_until(prompt)
     read_until(b"BG_DONE")
+    send("wait\n")
+    read_until(prompt)
 
     # A final shell command proves terminal ownership is still usable after the
-    # background child exits.
+    # background child exits and Bash has reaped the completed job.
     send("printf 'FINAL_OK\\n'\n")
     final = read_until(prompt)
     assert b"FINAL_OK" in final, final

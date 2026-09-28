@@ -16,6 +16,7 @@ import (
 type ttySession struct {
 	fd         int
 	parentPgrp int
+	shellPgrp  int
 }
 
 func directWriter(writer io.Writer) bool {
@@ -40,7 +41,13 @@ func detectTTY(in io.Reader, out, diagnostic io.Writer) (*ttySession, bool) {
 	if parent <= 0 || foreground != parent {
 		return nil, false
 	}
-	return &ttySession{fd: fd, parentPgrp: parent}, true
+	shellPgrp := parent
+	if ppid := os.Getppid(); ppid > 0 {
+		if pgrp, err := syscall.Getpgid(ppid); err == nil && pgrp > 0 {
+			shellPgrp = pgrp
+		}
+	}
+	return &ttySession{fd: fd, parentPgrp: parent, shellPgrp: shellPgrp}, true
 }
 
 func (t *ttySession) childAttrs() *syscall.SysProcAttr {
@@ -73,6 +80,20 @@ func (t *ttySession) continueChild(childPgrp int) error {
 	foreground, err := ttyForegroundPgrp(t.fd)
 	if err != nil {
 		return err
+	}
+	if foreground == t.parentPgrp && t.shellPgrp != t.parentPgrp {
+		// Some shells briefly leave the resumed job pgrp foreground while the
+		// bg builtin is still restoring terminal ownership to the shell. Wait
+		// for that handoff to settle: fg keeps the job pgrp foreground, while
+		// bg converges to the shell pgrp.
+		deadline := time.Now().Add(100 * time.Millisecond)
+		for foreground == t.parentPgrp && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+			foreground, err = ttyForegroundPgrp(t.fd)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	if foreground == t.parentPgrp {
 		if err := ttySetForegroundPgrp(t.fd, childPgrp); err != nil {

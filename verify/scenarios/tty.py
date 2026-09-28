@@ -99,6 +99,19 @@ def wait_foreground(pgrp, timeout=3):
     raise AssertionError(("foreground_pgrp", pgrp, foreground, bytes(pending)))
 
 
+def wait_not_foreground(pgrp, timeout=3):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            foreground = os.tcgetpgrp(master)
+        except OSError:
+            foreground = pgrp
+        if foreground != pgrp:
+            return
+        time.sleep(0.01)
+    raise AssertionError(("foreground_pgrp_still", pgrp, foreground, bytes(pending)))
+
+
 def send(data):
     if isinstance(data, str):
         data = data.encode()
@@ -176,7 +189,7 @@ try:
     stopped = read_until(prompt)
     assert b"Stopped" in stopped or b"stopped" in stopped, stopped
     send("fg\n")
-    time.sleep(0.2)
+    wait_not_foreground(shell_pgrp)
     send("resumed\n")
     assert b"RESULT:resumed" in read_until(b"RESULT:resumed")
     read_until(prompt)

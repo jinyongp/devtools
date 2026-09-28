@@ -1,0 +1,13 @@
+name: Homebrew
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  homebrew:
+    uses: releaseway/homebrew-actions/.github/workflows/check.yml@c035d14050bca1e2028a6368823797d36c9cdbc5 # v0.1.0
+    with:
+      tap-repository: jinyongp/homebrew-tap

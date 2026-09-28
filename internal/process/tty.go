@@ -199,6 +199,7 @@ func waitInteractive(ctxDone <-chan struct{}, cause func() error, command *exec.
 			waitErr = nil
 			goto finished
 		case status.Stopped():
+			ttyTrace("wait stopped child=%d signal=%d", pid, status.StopSignal())
 			if ctxDone != nil {
 				select {
 				case <-ctxDone:
@@ -212,6 +213,7 @@ func waitInteractive(ctxDone <-chan struct{}, cause func() error, command *exec.
 				goto finished
 			}
 		case status.Continued():
+			ttyTrace("wait continued child=%d", pid)
 			continue
 		}
 	}

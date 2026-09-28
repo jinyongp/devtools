@@ -19,7 +19,9 @@ func ttyResumeForegroundPgrp(fd, parentPgrp, _ int) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	ttyTrace("darwin resume initial parent=%d foreground=%d", parentPgrp, foreground)
 	if foreground == parentPgrp {
+		ttyTrace("darwin resume parent already foreground=%d", foreground)
 		return foreground, nil
 	}
 
@@ -36,9 +38,11 @@ func ttyResumeForegroundPgrp(fd, parentPgrp, _ int) (int, error) {
 			return 0, err
 		}
 		if foreground == parentPgrp {
+			ttyTrace("darwin resume observed parent foreground=%d", foreground)
 			return foreground, nil
 		}
 	}
+	ttyTrace("darwin resume timeout foreground=%d", foreground)
 	return foreground, nil
 }
 

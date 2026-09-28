@@ -4,6 +4,7 @@ package process
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -17,6 +18,19 @@ type ttySession struct {
 	fd         int
 	parentPgrp int
 	shellPgrp  int
+}
+
+func ttyTrace(format string, args ...any) {
+	path := os.Getenv("DEVTOOLS_TTY_TRACE")
+	if path == "" {
+		return
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	_, _ = fmt.Fprintf(file, format+"\n", args...)
 }
 
 func directWriter(writer io.Writer) bool {
@@ -47,6 +61,7 @@ func detectTTY(in io.Reader, out, diagnostic io.Writer) (*ttySession, bool) {
 			shellPgrp = pgrp
 		}
 	}
+	ttyTrace("detect pid=%d ppid=%d parent=%d shell=%d foreground=%d", os.Getpid(), os.Getppid(), parent, shellPgrp, foreground)
 	return &ttySession{fd: fd, parentPgrp: parent, shellPgrp: shellPgrp}, true
 }
 
@@ -81,14 +96,19 @@ func (t *ttySession) continueChild(childPgrp int) error {
 	if err != nil {
 		return err
 	}
+	ttyTrace("continue pid=%d parent=%d shell=%d child=%d observed=%d", os.Getpid(), t.parentPgrp, t.shellPgrp, childPgrp, foreground)
 	if foreground == t.parentPgrp {
 		if err := ttySetForegroundPgrp(t.fd, childPgrp); err != nil {
 			return err
+		}
+		if next, nextErr := ttyForegroundPgrp(t.fd); nextErr == nil {
+			ttyTrace("continue transfer child=%d foreground=%d", childPgrp, next)
 		}
 	}
 	if err := syscall.Kill(-childPgrp, syscall.SIGCONT); err != nil && !errors.Is(err, syscall.ESRCH) {
 		return err
 	}
+	ttyTrace("continue sigcont child=%d", childPgrp)
 	return nil
 }
 
@@ -97,9 +117,13 @@ func (t *ttySession) handleStop(childPgrp int) error {
 	if err != nil {
 		return err
 	}
+	ttyTrace("stop pid=%d parent=%d shell=%d child=%d foreground=%d", os.Getpid(), t.parentPgrp, t.shellPgrp, childPgrp, foreground)
 	if foreground == childPgrp {
 		if err := ttySetForegroundPgrp(t.fd, t.parentPgrp); err != nil {
 			return err
+		}
+		if next, nextErr := ttyForegroundPgrp(t.fd); nextErr == nil {
+			ttyTrace("stop restore parent=%d foreground=%d", t.parentPgrp, next)
 		}
 	}
 	// Stop the wrapper job group when this process is its leader so pipeline
@@ -109,8 +133,12 @@ func (t *ttySession) handleStop(childPgrp int) error {
 	if t.parentPgrp == target {
 		target = -t.parentPgrp
 	}
+	ttyTrace("stop sigstop target=%d", target)
 	if err := syscall.Kill(target, syscall.SIGSTOP); err != nil {
 		return err
+	}
+	if next, nextErr := ttyForegroundPgrp(t.fd); nextErr == nil {
+		ttyTrace("stop resumed pid=%d foreground=%d", os.Getpid(), next)
 	}
 	// Execution resumes here after the shell sends SIGCONT. If the wrapper was
 	// foregrounded (fg), hand the terminal back to the child. If it was resumed

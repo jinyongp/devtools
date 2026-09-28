@@ -10,6 +10,8 @@ permissions:
 jobs:
   tty:
     runs-on: macos-latest
+    env:
+      DEVTOOLS_TTY_TRACE: /tmp/devtools-tty-trace.log
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -21,3 +23,6 @@ jobs:
           just-version: '1.58.0'
       - run: go test -count=1 -race ./internal/process
       - run: just verify tty
+      - name: Dump TTY trace
+        if: always()
+        run: cat "$DEVTOOLS_TTY_TRACE" || true

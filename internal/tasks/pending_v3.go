@@ -381,9 +381,23 @@ func recoverPendingV3(resolution v3Resolution) error {
 }
 
 func prepareWALForMutation(resolution v3Resolution) error {
-	scan, err := scanWAL(resolution.WAL, 0, false)
+	startOffset := int64(0)
+	if snapshot, _, err := readMaterializedSnapshot(resolution.Snapshot, resolution.Marker.Profile); err == nil {
+		if info, statErr := os.Stat(resolution.WAL); statErr == nil && snapshot.WALOffset >= 0 && snapshot.WALOffset <= info.Size() {
+			startOffset = snapshot.WALOffset
+		}
+	}
+	scan, err := scanWAL(resolution.WAL, startOffset, false)
 	if err != nil {
-		return err
+		if startOffset == 0 {
+			return err
+		}
+		// A stale/corrupt accelerator offset must not hide active-tail damage.
+		// Fall back to the source-of-truth scan only on the recovery path.
+		scan, err = scanWAL(resolution.WAL, 0, false)
+		if err != nil {
+			return err
+		}
 	}
 	if scan.IncompleteTail {
 		return truncateWAL(resolution.WAL, scan.ValidOffset)

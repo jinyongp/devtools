@@ -96,6 +96,18 @@ devtools profile import --file ./myapp.age --identity-file /secure/identity.txt 
 진행 중 claim은 반납하고 원본 환경의 인증 컨텍스트와 재시도 기록은 복원하지 않습니다.
 복구와 중단 후 재시도 규칙은 [백업과 복구](backup.md#복구-후-상태)를 따릅니다.
 
+## 저장 형식 업그레이드와 구버전 실행
+
+profile values와 task 저장소는 읽기만 할 때 기존 형식을 그대로 사용할 수 있지만, 새 버전에서
+처음 변경하면 현재 저장 형식으로 자동 전환될 수 있습니다. 전환은 중간 상태가 노출되지 않도록
+복구 가능한 transaction으로 게시되며, 같은 profile의 이전 파일 경로에는 구버전이 별도 상태를
+새로 만들지 못하도록 차단 정보가 남습니다.
+
+이 전환이 한 번 발생한 데이터 디렉터리를 **구버전 devtools binary가 다시 쓰는 in-place downgrade는
+지원하지 않습니다.** 구버전으로 돌아가야 한다면 전환 전에 별도로 보관한 구버전 호환 backup을
+새 데이터 디렉터리에 복원하세요. 현재 버전의 `profile export`와 `backup create`는 이동·복구용
+논리 데이터를 계속 제공하지만, 새 저장 형식을 구버전 binary가 직접 수정할 수 있다는 의미는 아닙니다.
+
 ## 이동 후 프로젝트 실행
 
 프로젝트의 profile 이름을 맞춘 뒤 `doctor`로 도구·env·필수 키를 확인하세요.

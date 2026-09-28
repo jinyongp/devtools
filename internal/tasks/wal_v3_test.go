@@ -128,3 +128,62 @@ func TestWALRejectsReceiptRequestIdentityMismatch(t *testing.T) {
 		t.Fatal("WAL frame accepted receipt from a different request")
 	}
 }
+
+func TestActiveV3MutationDoesNotRescanCheckpointedPrefix(t *testing.T) {
+	s := fixture(t)
+	first, err := s.Execute(testContext(), Request{
+		Action: "task.add", Body: Object{"title": "first"},
+		Options: map[string]string{"request-id": ID()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Execute(testContext(), Request{
+		Action: "task.add", Body: Object{"title": "second"},
+		Options: map[string]string{"request-id": ID()},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	resolution, ok, resolveErr := resolveV3(s.Directory, s.Profile)
+	if resolveErr != nil || !ok {
+		t.Fatal(resolveErr)
+	}
+	snapshot, _, snapshotErr := readMaterializedSnapshot(resolution.Snapshot, s.Profile)
+	if snapshotErr != nil || snapshot.WALOffset <= 0 {
+		t.Fatalf("missing checkpointed prefix: %#v %v", snapshot, snapshotErr)
+	}
+	file, openErr := os.OpenFile(resolution.WAL, os.O_RDWR, 0)
+	if openErr != nil {
+		t.Fatal(openErr)
+	}
+	if _, seekErr := file.Seek(0, 0); seekErr != nil {
+		_ = file.Close()
+		t.Fatal(seekErr)
+	}
+	if _, writeErr := file.Write([]byte("XXXX")); writeErr != nil {
+		_ = file.Close()
+		t.Fatal(writeErr)
+	}
+	if syncErr := file.Sync(); syncErr != nil {
+		_ = file.Close()
+		t.Fatal(syncErr)
+	}
+	if closeErr := file.Close(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	if _, scanErr := scanWAL(resolution.WAL, 0, false); scanErr == nil {
+		t.Fatal("corrupt checkpointed prefix remained full-history readable")
+	}
+
+	revision := num(first, "revision") + 1
+	out, mutationErr := s.Execute(testContext(), Request{
+		Action: "task.add", Body: Object{"title": "after-prefix-corruption"},
+		Options: map[string]string{"request-id": ID()},
+	})
+	if mutationErr != nil {
+		t.Fatalf("mutation rescanned checkpointed WAL prefix: %v", mutationErr)
+	}
+	if num(out, "previous_revision") != revision {
+		t.Fatalf("mutation current revision drifted: %#v", out)
+	}
+}

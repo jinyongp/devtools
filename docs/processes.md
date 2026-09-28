@@ -17,7 +17,7 @@ list는 `data.items`, status는 `data.item`에 실행 정보를 반환한다. st
 
 같은 `profile + instance + 명령`이 실행 중이면 같은 실행을 반환한다. env나 로그 설정이 다르면 `process_conflict`다. restart는 이전 실행을 종료하고 최신 프로젝트 설정과 값을 적용한 새 실행 ID를 반환하며 `previous_id`로 이전 실행을 연결한다. env를 지정했던 실행은 그 선택을 유지하고, 명령의 기본 env를 따랐던 실행은 현재 기본값을 적용한다. 이전 실행 ID에 대한 stop은 새 실행에 영향을 주지 않는다.
 
-모든 변경은 UUID `--request-id`를 받는다. 같은 UUID와 입력은 기존 결과를 반환하며 다른 입력은 `request_conflict`다. 응답이 불확실하면 같은 요청을 재전송하고 실행 ID로 현재 상태를 확인한다. 작업 준비가 10초를 넘으면 `process_pending`과 함께 같은 요청으로 확인하도록 한다.
+모든 변경은 UUID `--request-id`를 받는다. 같은 UUID와 입력은 기존 결과를 반환하며 다른 입력은 `request_conflict`다. 응답이 불확실하면 같은 요청을 재전송하고 실행 ID로 현재 상태를 확인한다. 작업 준비가 10초를 넘으면 `process_pending`과 함께 같은 요청으로 확인하도록 한다. 시작 기록은 남았지만 supervisor가 실제로 사라진 실행은 같은 start 요청의 재시도에서 `interrupted` / `supervisor_lost`로 종결된다. 이 경우 같은 요청 ID로 새 프로세스를 자동 재실행하지 않으며, 새 실행이 필요하면 새 request ID로 start 또는 restart를 실행한다.
 
 일반 종료는 `exited`, 명시적 종료는 `stopped`, 시작 준비 실패는 `failed`다. 종료 코드와 원인 코드를 메타데이터에 기록한다. 재부팅이나 supervisor 손실은 `interrupted`, 살아 있는 supervisor에 접근할 수 없는 상황은 `unknown`으로 조회한다. 다시 시작하려면 명시적으로 start 또는 restart를 실행한다.
 
@@ -87,10 +87,13 @@ env·로그 설정 충돌을 판정한다. 실제 새 process를 만드는 경�
 고정한다. 선택한 command가 실행 중이 아니면 새 process를 시작하지 않고 해당 항목을
 `process_not_found` 조건으로 보고한다. 같은 요청을 재전송해도 그 뒤 새로 실행된 process를
 대상으로 바꾸지 않는다. 각 restart는 기존 `process restart`와 같이 최신 project 설정과 값을
-사용한다. `--env`와 `--capture-logs`를 생략하면 기존 execution의 선택을 유지하고, 명시하면
-새 execution에 적용한다. 일부 command만 실패하면 성공한 restart는 유지하며 같은 요청 ID의
-재시도는 미완료 command만 이어간다. readiness가 선언된 command는 `--timeout` 범위에서
-다시 준비 완료까지 확인한다.
+사용한다. 기존 실행을 종료하기 전에 설정, env/필수 값, 실행 파일처럼 현재 실행을 건드리지 않고
+검증할 수 있는 조건을 먼저 확인한다. 이 단계에서 실패하면 기존 실행은 계속 유지된다. 실제 port
+availability처럼 stop 이후에만 확정할 수 있는 조건은 종료 뒤 새 실행 직전에 다시 검사하며, 이
+두 번째 검사에서 실패하면 이미 완료된 stop을 되돌리지 않는다. `--env`와 `--capture-logs`를
+생략하면 기존 execution의 선택을 유지하고, 명시하면 새 execution에 적용한다. 일부 command만
+실패하면 성공한 restart는 유지하며 같은 요청 ID의 재시도는 미완료 command만 이어간다.
+readiness가 선언된 command는 `--timeout` 범위에서 다시 준비 완료까지 확인한다.
 
 `down`은 최초 호출 시 정한 실행 ID만 종료한다. 같은 요청의 재전송은 그 뒤 새로
 시작된 서버까지 종료하지 않는다. 새로운 종료 작업에는 새 요청 ID를 사용한다.

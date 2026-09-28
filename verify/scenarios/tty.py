@@ -182,12 +182,6 @@ try:
     send(b"\x1a")
     stopped = read_until(prompt)
     assert b"Stopped" in stopped or b"stopped" in stopped, stopped
-    send("printf 'WRAPPER:%s\\n' \"$(jobs -p)\"\n")
-    jobs = read_until(prompt)
-    marker = b"WRAPPER:"
-    start = jobs.index(marker) + len(marker)
-    wrapper_pgrp = int(jobs[start:].splitlines()[0].strip())
-    print(f"TTY_PGRP shell={shell_pgrp} wrapper={wrapper_pgrp} child={stopped_child_pgrp}", flush=True)
     send("fg\n")
     wait_foreground(stopped_child_pgrp)
     send("resumed\n")

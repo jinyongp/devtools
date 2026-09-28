@@ -14,28 +14,29 @@ func ttyForegroundPgrp(fd int) (int, error) {
 	return unix.IoctlGetInt(fd, unix.TIOCGPGRP)
 }
 
-func ttyResumeForegroundPgrp(fd, parentPgrp, shellPgrp int) (int, error) {
+func ttyResumeForegroundPgrp(fd, parentPgrp, _ int) (int, error) {
 	foreground, err := ttyForegroundPgrp(fd)
 	if err != nil {
 		return 0, err
 	}
-	if shellPgrp == parentPgrp || foreground != shellPgrp {
+	if foreground == parentPgrp {
 		return foreground, nil
 	}
 
-	// Darwin bash can deliver SIGCONT while the shell still owns the terminal,
-	// then foreground the wrapper moments later for fg. Wait only until that
-	// wrapper handoff appears and return immediately; continuing to wait lets
-	// bash reclaim the terminal and makes fg indistinguishable from bg.
+	// Darwin bash can deliver SIGCONT while some other pgrp still owns the
+	// terminal, then foreground the wrapper moments later for fg. The wrapper's
+	// immediate parent is not a reliable proxy for the interactive shell pgrp,
+	// so detect fg only by observing our own pgrp become foreground. If that
+	// never happens within the handoff window, this is a background resume.
 	deadline := time.Now().Add(100 * time.Millisecond)
-	for foreground == shellPgrp && time.Now().Before(deadline) {
+	for time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 		foreground, err = ttyForegroundPgrp(fd)
 		if err != nil {
 			return 0, err
 		}
 		if foreground == parentPgrp {
-			break
+			return foreground, nil
 		}
 	}
 	return foreground, nil

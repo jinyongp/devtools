@@ -22,7 +22,7 @@ execute("sh", os.environ["DEVTOOLS_TEST_INSTALLER"], "install",
 execute("devtools", "init", "--profile", "probe")
 execute("devtools", "var", "set", "READY", "--value", "yes")
 
-data_root = Path(os.environ["XDG_DATA_HOME"]) / "devtools"
+data_root = Path(execute("devtools", "project", "inspect")["paths"]["data"])
 lock_dir = data_root / ".maintenance"
 lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
 lock_path = lock_dir / "lock"

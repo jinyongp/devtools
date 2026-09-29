@@ -10,9 +10,9 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
-func TestProtocolV4DiscoveryContracts(t *testing.T) {
+func TestProtocolV5DiscoveryContracts(t *testing.T) {
 	app := testApp(t)
-	if protocol.ProtocolVersion != 4 || protocol.EnvelopeVersion != 1 {
+	if protocol.ProtocolVersion != 5 || protocol.EnvelopeVersion != 1 {
 		t.Fatal("unexpected machine/envelope version")
 	}
 	for _, args := range [][]string{
@@ -26,8 +26,8 @@ func TestProtocolV4DiscoveryContracts(t *testing.T) {
 		{"schema", "project", "down"}, {"schema", "run"},
 	} {
 		data := outputData(t, app, args)
-		if data["protocol_version"] != float64(4) {
-			t.Fatalf("%v: missing protocol v4", args)
+		if data["protocol_version"] != float64(5) {
+			t.Fatalf("%v: missing protocol v5", args)
 		}
 	}
 	doctor := outputData(t, app, []string{"schema", "doctor"})
@@ -75,8 +75,8 @@ func TestProfileImportSchemaPreviewApplyPair(t *testing.T) {
 			command = c
 		}
 	}
-	if command.Name == "" || len(command.InputOneOf) != 2 {
-		t.Fatal("missing preview/apply variants")
+	if command.Name == "" || len(command.InputOneOf) != 8 {
+		t.Fatal("missing preview/apply and encryption variants")
 	}
 	for _, option := range command.Options {
 		if slices.Contains([]string{"apply", "request-id"}, option.Name) && option.Required {
@@ -92,20 +92,31 @@ func TestProfileImportSchemaPreviewApplyPair(t *testing.T) {
 	}
 }
 
-func TestProtocolV4ProfileTransferContracts(t *testing.T) {
+func TestProtocolV5ProfileTransferContracts(t *testing.T) {
 	app := testApp(t)
 	exportSchema := outputData(t, app, []string{"schema", "profile", "export"})
 	exportInput := exportSchema["input_schema"].(map[string]any)
 	oneOf, ok := exportInput["oneOf"].([]any)
-	if !ok || len(oneOf) != 2 {
-		t.Fatalf("profile export recipient contract: %#v", exportInput["oneOf"])
+	if !ok || len(oneOf) != 5 {
+		t.Fatalf("profile export source-first encryption contract: %#v", exportInput["oneOf"])
+	}
+	exportProperties := exportInput["properties"].(map[string]any)
+	for _, option := range []string{"recipient", "recipient-file", "passphrase-file", "passphrase-stdin"} {
+		if _, ok := exportProperties[option]; !ok {
+			t.Fatalf("profile export missing encryption option %s", option)
+		}
 	}
 
 	importSchema := outputData(t, app, []string{"schema", "profile", "import"})
 	importInput := importSchema["input_schema"].(map[string]any)
-	for _, field := range importInput["required"].([]any) {
-		if field == "identity-file" {
-			t.Fatalf("profile import still requires identity-file: %#v", importInput["required"])
+	importOneOf, ok := importInput["oneOf"].([]any)
+	if !ok || len(importOneOf) != 8 {
+		t.Fatalf("profile import encryption/apply contract: %#v", importInput["oneOf"])
+	}
+	importProperties := importInput["properties"].(map[string]any)
+	for _, option := range []string{"identity-file", "passphrase-file", "passphrase-stdin"} {
+		if _, ok := importProperties[option]; !ok {
+			t.Fatalf("profile import missing encryption option %s", option)
 		}
 	}
 
@@ -118,11 +129,11 @@ func TestProtocolV4ProfileTransferContracts(t *testing.T) {
 	}
 
 	code, help, diagnostic := invoke(t, app, "", "profile", "export", "--help")
-	if code != 0 || diagnostic != "" || !strings.Contains(help, "existing directory") || !strings.Contains(help, "defaults to ./<profile>.age") || !strings.Contains(help, "Destination public age X25519 recipient") || !strings.Contains(help, "choose exactly one") {
+	if code != 0 || diagnostic != "" || !strings.Contains(help, "prompts for a passphrase by default") || !strings.Contains(help, "existing directory") || !strings.Contains(help, "--passphrase-file") || !strings.Contains(help, "Advanced mode") {
 		t.Fatalf("profile export help drift: code=%d help=%q err=%q", code, help, diagnostic)
 	}
 	code, help, diagnostic = invoke(t, app, "", "profile", "import", "--help")
-	if code != 0 || diagnostic != "" || !strings.Contains(help, "prepared local transfer identity") {
+	if code != 0 || diagnostic != "" || !strings.Contains(help, "passphrase archives prompt by default") || !strings.Contains(help, "--passphrase-stdin") || !strings.Contains(help, "Advanced mode") {
 		t.Fatalf("profile import help drift: code=%d help=%q err=%q", code, help, diagnostic)
 	}
 }

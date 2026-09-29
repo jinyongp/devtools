@@ -14,6 +14,8 @@ subprocess.run(['sh', os.environ['DEVTOOLS_TEST_INSTALLER'], 'install',
                 '--version', '0.0.0-test.1', '--source', os.environ['DEVTOOLS_TEST_RELEASES']],
                check=True, capture_output=True, timeout=30)
 canary = 'PROFILE_SCENARIO_PRIVATE_VALUE'
+transfer_passphrase = 'PROFILE_TRANSFER_PASSPHRASE_CANARY'
+passphrase_input = transfer_passphrase + '\n'
 
 
 def environment(name):
@@ -30,6 +32,7 @@ def api(env, *args, input=None, error=None):
     result = subprocess.run([str(binary), *args], cwd=env['HOME'], env=env,
                             input=input, text=True, capture_output=True, timeout=30)
     assert canary not in result.stdout + result.stderr, 'profile response disclosed a value'
+    assert transfer_passphrase not in result.stdout + result.stderr, 'profile response disclosed the transfer passphrase'
     assert 'AGE-SECRET-KEY-' not in result.stdout + result.stderr, 'identity disclosure'
     assert 'identity.txt' not in result.stdout + result.stderr, 'internal identity path disclosure'
     assert (result.returncode != 0) == bool(error), (args, result.returncode, result.stderr)
@@ -55,7 +58,7 @@ def mutate(command, target_id=None, body=None, guarded=False):
     return api(source, *args, input=json.dumps(body) if body is not None else None)
 
 
-assert api(source, 'version')['protocol_version'] == 4
+assert api(source, 'version')['protocol_version'] == 5
 assert api(source, 'profile', 'list')['items'] == []
 assert api(source, 'backup', 'status')['item']['configured'] is False
 assert api(target, 'backup', 'status')['item']['configured'] is False
@@ -89,29 +92,23 @@ detail = api(source, 'profile', 'inspect', 'portable')['item']
 assert detail['envs'] == ['local'] and detail['secrets'][0]['key'] == 'TOKEN'
 api(target, 'profile', 'inspect', 'portable', error='profile_not_found')
 
-# Destination creates its identity internally; only public text is handed to source.
-with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-    prepared = list(pool.map(lambda _: api(target, 'profile', 'transfer', 'prepare'), range(2)))
-assert sorted(item['changed'] for item in prepared) == [False, True]
-public = prepared[0]['item']['recipient']
-assert public.startswith('age1') and prepared[1]['item']['recipient'] == public
-assert api(target, 'profile', 'transfer', 'prepare') == {'item': {'recipient': public}, 'changed': False}
-error = api(source, 'profile', 'export', error='recipient_required')
-assert error['details']['remedies'][0]['argv'] == ['devtools', 'profile', 'transfer', 'prepare']
+# Source-first default: no destination preparation. The passphrase stays out of argv/env
+# and only the encrypted archive crosses the device boundary.
 outbox = Path(source['HOME']) / 'outbox'
 outbox.mkdir(mode=0o700)
-exported = api(source, 'profile', 'export', '--recipient', public, '--output', str(outbox))
+passphrase_file = Path(source['HOME']) / 'transfer-passphrase.txt'
+passphrase_file.write_text(transfer_passphrase + '\n')
+passphrase_file.chmod(0o600)
+exported = api(source, 'profile', 'export', '--passphrase-file', str(passphrase_file), '--output', str(outbox))
 source_archive = outbox / 'portable.age'
 assert exported['item']['path'] == str(source_archive) and exported['changed']
 archive_bytes = source_archive.read_bytes()
-assert canary.encode() not in archive_bytes
+assert canary.encode() not in archive_bytes and transfer_passphrase.encode() not in archive_bytes
 assert stat.S_IMODE(source_archive.stat().st_mode) == 0o600
-collision = api(source, 'profile', 'export', '--recipient', public, '--output', str(outbox), error='output_exists')
+collision = api(source, 'profile', 'export', '--passphrase-file', str(passphrase_file),
+                '--output', str(outbox), error='output_exists')
 assert collision['details']['path'] == str(source_archive)
 assert source_archive.read_bytes() == archive_bytes
-api(source, 'profile', 'export', '--output', './unused.age', '--recipient', public,
-    '--recipient-file', './unused-recipient.txt', error='invalid_argument')
-assert not (Path(source['HOME']) / 'unused.age').exists()
 
 # Exactly one filesystem payload crosses the device boundary. Never copy a key or config.
 inbox = Path(target['HOME']) / 'inbox'
@@ -124,17 +121,17 @@ assert after_copy - before_copy == {Path('inbox/portable.age')}
 assert list(inbox.iterdir()) == [archive] and archive.read_bytes() == archive_bytes
 assert not (Path(target['HOME']) / 'devtools.toml').exists()
 
-base = ['profile', 'import', '--file', str(archive)]
-preview = api(target, *base)
+base = ['profile', 'import', '--file', str(archive), '--passphrase-stdin']
+preview = api(target, *base, input=passphrase_input)
 assert not preview['changed'] and not preview['replayed'] and not preview['target_exists']
 assert preview['diff']['different'] and api(target, 'profile', 'list')['items'] == []
 apply = [*base, '--apply', preview['digest'], '--request-id', str(uuid.uuid4())]
 with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-    results = list(pool.map(lambda _: api(target, *apply), range(2)))
+    results = list(pool.map(lambda _: api(target, *apply, input=passphrase_input), range(2)))
 assert sorted(item['replayed'] for item in results) == [False, True]
 assert all(item['changed'] and item['diff'] == preview['diff'] for item in results)
-assert api(target, *apply)['replayed']
-api(target, *apply, '--as', 'changed-target', error='request_conflict')
+assert api(target, *apply, input=passphrase_input)['replayed']
+api(target, *apply, '--as', 'changed-target', input=passphrase_input, error='request_conflict')
 assert api(target, 'task', 'show', task, '--profile', 'portable')['item']['id'] == task
 assert api(target, 'task', 'workstream', 'export', workstream, '--profile', 'portable') == expected_workstream
 assert api(target, 'var', 'get', 'MODE', '--profile', 'portable', '--env', 'local')['value'] == 'override'
@@ -149,36 +146,50 @@ assert secret_check.returncode == 0 and secret_check.stdout == '' and secret_che
 assert not (Path(target['HOME']) / 'devtools.toml').exists()
 
 # Whole-profile replacement remains explicit, stale-guarded and safety-backed.
-preview = api(target, *base)
-api(target, *base, '--apply', preview['digest'], '--request-id', str(uuid.uuid4()), error='profile_exists')
+preview = api(target, *base, input=passphrase_input)
+api(target, *base, '--apply', preview['digest'], '--request-id', str(uuid.uuid4()), input=passphrase_input, error='profile_exists')
 api(target, 'var', 'set', 'MODE', '--profile', 'portable', '--value', 'changed')
-api(target, *base, '--replace', '--apply', preview['digest'], '--request-id', str(uuid.uuid4()), error='revision_conflict')
-preview = api(target, *base)
+api(target, *base, '--replace', '--apply', preview['digest'], '--request-id', str(uuid.uuid4()), input=passphrase_input, error='revision_conflict')
+preview = api(target, *base, input=passphrase_input)
 assert not preview['diff']['different'], 'value-only difference must not be exposed'
 replace = [*base, '--replace', '--apply', preview['digest'], '--request-id', str(uuid.uuid4())]
-replaced = api(target, *replace)
+replaced = api(target, *replace, input=passphrase_input)
 assert replaced['changed'] and replaced['safety_backup']
 safety = Path(replaced['safety_backup'])
 assert safety.is_relative_to(Path(target['HOME'])) and safety.name.startswith('before-import-')
 assert stat.S_IMODE(safety.stat().st_mode) == 0o600
-assert api(target, *replace)['safety_backup'] == str(safety), 'retry created a different recovery archive'
+assert api(target, *replace, input=passphrase_input)['safety_backup'] == str(safety), 'retry created a different recovery archive'
 assert api(target, 'var', 'get', 'MODE', '--profile', 'portable')['value'] == 'development'
-recovery = ['profile', 'import', '--file', str(safety), '--as', 'recovered']
-recovery_preview = api(target, *recovery)
-api(target, *recovery, '--apply', recovery_preview['digest'], '--request-id', str(uuid.uuid4()))
+recovery = ['profile', 'import', '--file', str(safety), '--as', 'recovered', '--passphrase-stdin']
+recovery_preview = api(target, *recovery, input=passphrase_input)
+api(target, *recovery, '--apply', recovery_preview['digest'], '--request-id', str(uuid.uuid4()), input=passphrase_input)
 assert api(target, 'var', 'get', 'MODE', '--profile', 'recovered')['value'] == 'changed'
 
 copy_base = [*base, '--as', 'copy']
-copy_preview = api(target, *copy_base)
-api(target, *copy_base, '--apply', copy_preview['digest'], '--request-id', str(uuid.uuid4()))
+copy_preview = api(target, *copy_base, input=passphrase_input)
+api(target, *copy_base, '--apply', copy_preview['digest'], '--request-id', str(uuid.uuid4()), input=passphrase_input)
 api(target, 'sec', 'set', 'TOKEN', '--profile', 'copy', '--stdin', input=canary + '-different')
 difference = api(target, 'profile', 'diff', 'portable', 'copy')
 assert not difference['different'] and not difference['secrets']
 api(target, 'env', 'create', 'staging', '--profile', 'copy')
 difference = api(target, 'profile', 'diff', 'portable', 'copy')
 assert difference['envs'] == [{'name': 'staging', 'action': 'added'}]
+# Advanced recipient compatibility remains available and is no longer the default flow.
+with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+    prepared = list(pool.map(lambda _: api(target, 'profile', 'transfer', 'prepare'), range(2)))
+assert sorted(item['changed'] for item in prepared) == [False, True]
+public = prepared[0]['item']['recipient']
+assert public.startswith('age1') and prepared[1]['item']['recipient'] == public
+recipient_archive = outbox / 'recipient-portable.age'
+api(source, 'profile', 'export', '--profile', 'portable', '--recipient', public, '--output', str(recipient_archive))
+recipient_preview = api(target, 'profile', 'import', '--file', str(recipient_archive), '--as', 'recipient-copy')
+api(target, 'profile', 'import', '--file', str(recipient_archive), '--as', 'recipient-copy',
+    '--apply', recipient_preview['digest'], '--request-id', str(uuid.uuid4()))
+assert api(target, 'var', 'get', 'MODE', '--profile', 'recipient-copy')['value'] == 'development'
+api(source, 'profile', 'export', '--profile', 'portable', '--recipient', public,
+    '--passphrase-file', str(passphrase_file), '--output', str(outbox / 'invalid.age'), error='invalid_argument')
+
 for env in (source, target):
     assert api(env, 'backup', 'status')['item']['configured'] is False
     assert not list(Path(env['HOME']).rglob('backup.json'))
-assert api(target, 'profile', 'transfer', 'prepare')['item']['recipient'] == public
-print('Installed one-archive transfer, workstream/secret round trip, local-identity recovery, privacy and concurrent replay passed')
+print('Installed source-first one-archive passphrase transfer, recovery, advanced recipient compatibility, privacy and concurrent replay passed')

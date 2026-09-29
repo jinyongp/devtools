@@ -23,7 +23,7 @@ expose `data.replayed`, including false values. A replay preserves the original
 changed result and must not be counted as another mutation.
 Schema metadata declares `output_mode`: json, text, artifact, or passthrough.
 Only json commands have `output_schema`, describing the envelope's data.
-Use `version` for build metadata and `protocol_version` (4 for this source).
+Use `version` for build metadata and `protocol_version` (5 for this source).
 Every JSON response exposes envelope `schema_version: 1` at the top level;
 all `schema` responses also report the CLI protocol version. Keep `devtools.toml`
 versionless: do not add `version` or `schema_version` fields to project configuration.
@@ -152,28 +152,33 @@ Use `profile list`, `profile inspect NAME`, and `profile diff LEFT RIGHT` for me
 profile management. Diff reports key/scope and task/instance differences, not stored
 values or secret equality; no metadata difference does not prove equal values.
 
-Use `profile transfer prepare`, `profile export`, and `profile import` to move one
-encrypted profile between environments. Run `profile transfer prepare` on the destination;
-it keeps the private age identity in devtools private storage and returns only a public
-recipient. Pass that public recipient to `profile export --recipient ...` on the source.
+Use `profile export` and `profile import` for the default cross-device transfer.
+The default is source-first: run export on the source without preparing the destination,
+copy the resulting `.age` file, then import it on the destination. Interactive export
+prompts twice for a passphrase with terminal echo disabled; interactive import prompts once.
+Devtools does not persist the passphrase. For non-interactive use, select exactly one of
+`--passphrase-file` or `--passphrase-stdin`; never place a passphrase in argv or env.
+
 Export defaults to the current project's profile and to `./<profile>.age`. If `--output`
 points to an existing directory, export writes `<profile>.age` inside it. Existing final
-outputs fail before snapshot construction and are never overwritten. Export requires exactly
-one of `--recipient` or `--recipient-file` and never falls back to backup configuration.
-Copy only the resulting `.age` archive from source to destination.
+outputs fail before snapshot construction and are never overwritten. Copy only the resulting
+encrypted archive from source to destination.
 
-Import without `--identity-file` uses the destination's prepared local identity.
-`--identity-file` remains an explicit override for existing archives and external key
-management. Import without `--apply` previews and returns `digest`, `target_exists`,
-and metadata-only `diff`. It infers a single source profile and keeps its name unless
-`--as` is supplied. Review that preview, then apply the same file/source/target with
+Recipient-based transfer remains an advanced compatibility path. Run
+`profile transfer prepare` on the destination, then use `--recipient` or
+`--recipient-file` on export. Recipient archives can use the prepared local identity or an
+explicit `--identity-file` on import. Recipient and passphrase inputs are mutually exclusive.
+
+Import without `--apply` previews and returns `digest`, `target_exists`, and metadata-only
+`diff`. It infers a single source profile and keeps its name unless `--as` is supplied.
+Review that preview, then apply the same file/source/target with
 `--apply DIGEST --request-id UUID`. Existing targets require `--replace` at apply.
-Before replacement, devtools creates a private safety archive encrypted to the identity
-used for the import; no backup configuration is required. The returned safety archive can
-be imported with that same identity. Stale targets require a fresh preview and a new
-request ID. Identical apply retries replay the stored result; changed inputs conflict.
-Task claims, execution credentials, port assignments, and live processes are not transferred
-as active state.
+Before replacement, devtools creates a private safety archive using the same encryption mode
+as the active import: the same passphrase for passphrase archives, or the same recipient for
+recipient archives. No backup configuration is required. Stale targets require a fresh
+preview and a new request ID. Identical apply retries replay the stored result; changed inputs
+conflict. Task claims, execution credentials, port assignments, and live processes are not
+transferred as active state.
 
 Cleanup and restore start with a preview. Apply the selected IDs or digest,
 refreshing stale previews. Keep backup identities separate from project files.

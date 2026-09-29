@@ -83,7 +83,11 @@ func TestProfileTransferUnsafeParentReturnsIdentityError(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
 	app := testApp(t)
-	outputData(t, app, []string{"profile", "transfer", "prepare"})
+	prepared := outputData(t, app, []string{"profile", "transfer", "prepare"})
+	recipient := prepared["item"].(map[string]any)["recipient"].(string)
+	outputData(t, app, []string{"var", "set", "MODE", "--profile", "portable", "--value", "source"})
+	archive := filepath.Join(root, "recipient.age")
+	outputData(t, app, []string{"profile", "export", "--profile", "portable", "--output", archive, "--recipient", recipient})
 	profiles, profileErr := app.dataDirectory()
 	if profileErr != nil {
 		t.Fatal(profileErr)
@@ -100,7 +104,7 @@ func TestProfileTransferUnsafeParentReturnsIdentityError(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(directory, 0700) })
 	for _, args := range [][]string{
 		{"profile", "transfer", "prepare"},
-		{"profile", "import", "--file", filepath.Join(root, "unused.age")},
+		{"profile", "import", "--file", archive},
 	} {
 		exit, out, diagnostic := invoke(t, app, "", args...)
 		if exit != 3 || out != "" || !strings.Contains(diagnostic, `"code":"transfer_identity_invalid"`) {

@@ -1,6 +1,6 @@
 # 암호화 백업, 복구와 profile 이동
 
-`devtools backup`은 전역 var/sec/env와 task/workstream을 age로 암호화해 보관한다. `devtools profile export/import`는 같은 암호화 포맷으로 한 profile을 다른 기기로 옮기지만, protocol v4의 기본 transfer 흐름에서는 대상 기기의 private identity를 devtools가 내부 보관한다. 모든 명령은 JSON을 반환하며 개인 identity와 백업에 담긴 값 원문은 출력하지 않는다.
+`devtools backup`은 전역 var/sec/env와 task/workstream을 age X25519 recipient로 암호화해 보관한다. `devtools profile export/import`는 같은 snapshot payload를 다른 기기로 옮기며, protocol v5의 기본 transfer는 source-first age scrypt passphrase archive를 사용한다. 모든 명령은 JSON을 반환하며 passphrase·개인 identity·백업 값 원문은 출력하지 않는다.
 
 ## 키와 기본 위치 준비
 
@@ -21,7 +21,7 @@ devtools backup configure --directory /backups/devtools --recipient-file /secure
 
 `backup create`는 `--recipient` 또는 `--recipient-file`을 명시할 수 있고, 둘 다 생략하면 `backup configure`의 공개 recipient를 사용한다. output을 생략하면 설정된 backup directory를 사용한다.
 
-`profile export`도 `--recipient` 또는 `--recipient-file` 중 하나를 받지만 **recipient 생략은 허용하지 않는다**. 대상 기기에서 `devtools profile transfer prepare`로 얻은 공개 recipient를 전달하며, output을 생략하면 `./<profile>.age`를 사용한다. Profile transfer는 `backup configure`를 사용하지 않는다.
+`profile export`는 기본적으로 recipient 없이 실행하며 터미널에서 passphrase를 두 번 입력받아 age scrypt archive를 만든다. non-interactive 환경에서는 `--passphrase-file` 또는 `--passphrase-stdin`을 사용한다. 기존 X25519 자동화는 `--recipient`/`--recipient-file` advanced mode로 유지한다. output을 생략하면 `./<profile>.age`를 사용하며 `backup configure`를 사용하지 않는다.
 
 ## 백업 생성과 확인
 
@@ -40,29 +40,42 @@ CLI의 keygen·configure·create는 `data.item`에 결과 메타데이터를, `d
 
 ## 다른 환경으로 profile 이동
 
-한 profile을 다른 기기로 옮길 때는 대상 기기에서 먼저 transfer identity를 준비합니다.
+기본 profile transfer는 대상 기기를 먼저 준비하지 않습니다.
+
+```sh
+# 원본 기기
+devtools profile export
+# passphrase를 두 번 입력
+
+# <profile>.age 파일 하나만 대상 기기로 복사
+
+# 대상 기기
+devtools profile import --file ./<profile>.age
+# 같은 passphrase 입력
+```
+
+자동화에서는 passphrase를 argv나 환경변수에 넣지 않고
+`--passphrase-file` 또는 `--passphrase-stdin`을 사용합니다. passphrase는 devtools가
+지속 저장하지 않습니다.
+
+X25519 recipient transfer가 필요한 기존 자동화는 계속 지원합니다.
 
 ```sh
 # 대상 기기
 devtools profile transfer prepare
-# 반환된 data.item.recipient만 원본 기기로 전달
 
 # 원본 기기
 devtools profile export --recipient age1...
-# 생성된 <profile>.age 파일 하나만 대상 기기로 복사
-
-# 대상 기기
-devtools profile import --file ./<profile>.age
 ```
 
-Private identity는 대상 기기의 devtools data root 아래에 보관되며 정상 transfer에서는
-identity 파일을 직접 다루지 않습니다. 기존 archive나 외부 키 관리를 위해
-`--recipient-file`과 `--identity-file`은 계속 지원합니다.
+`--recipient-file`·`--identity-file`도 advanced compatibility 입력으로 유지됩니다.
+recipient mode와 passphrase mode는 한 요청에서 섞을 수 없습니다.
 
-Protocol v4의 import는 기본적으로 미리보기만 수행하고 실제 적용에는
+Protocol v5의 import는 기본적으로 미리보기만 수행하고 실제 적용에는
 `--apply DIGEST --request-id UUID`가 필요합니다. 기존 profile을 `--replace`할 때의
-safety backup도 transfer identity로 암호화되므로 `backup configure`가 필요하지 않습니다.
-해당 safety archive는 같은 identity로 다시 `profile import`할 수 있습니다.
+safety archive는 현재 import와 같은 방식으로 암호화됩니다. passphrase import면 같은
+passphrase, recipient import면 같은 X25519 recipient를 사용하므로 `backup configure`는
+필요하지 않습니다.
 
 조회·비교, 원본 선택, 교체와 재시도 절차는 [Profile 관리](profiles.md)에 정리되어 있습니다.
 

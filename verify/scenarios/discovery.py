@@ -27,7 +27,7 @@ assert 'options' not in json.loads(specific)['data']
 for output in (index, specific, full, call('schema', 'command')):
     envelope = json.loads(output)
     assert envelope['schema_version'] == 1 and envelope['ok'] is True
-    assert envelope['data']['protocol_version'] == 4
+    assert envelope['data']['protocol_version'] == 5
 for command in json.loads(full)['data']['commands']:
     assert command['output_mode'] in ('json', 'text', 'artifact', 'passthrough')
     assert 'stream_output' not in command

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jinyongp/devtools/internal/backup"
+	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
@@ -167,15 +169,18 @@ func TestProfileExportExistingOutputFailsBeforeSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := testApp(t)
-	prepared := outputData(t, app, []string{"profile", "transfer", "prepare"})
-	recipient := prepared["item"].(map[string]any)["recipient"].(string)
+	prompted := false
+	app.passphrasePrompt = func(_ context.Context, _ IO, _ string) (string, *protocol.Error) {
+		prompted = true
+		return "SHOULD-NOT-BE-READ", nil
+	}
 	output := filepath.Join(root, "missing-profile-data.age")
 	if err := os.WriteFile(output, []byte("keep"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
-	code, out, diagnostic := invoke(t, app, "", "profile", "export", "--recipient", recipient, "--output", output)
-	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"output_exists\"") || !strings.Contains(diagnostic, output) {
+	code, out, diagnostic := invoke(t, app, "", "profile", "export", "--output", output)
+	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"output_exists\"") || !strings.Contains(diagnostic, output) || prompted {
 		t.Fatalf("existing output did not fail before missing-profile snapshot: code=%d out=%s err=%s", code, out, diagnostic)
 	}
 	body, err := os.ReadFile(output)
@@ -184,7 +189,7 @@ func TestProfileExportExistingOutputFailsBeforeSnapshot(t *testing.T) {
 	}
 }
 
-func TestProfileExportRequiresDestinationRecipient(t *testing.T) {
+func TestProfileExportRequiresPassphraseInputWithoutTTY(t *testing.T) {
 	root := privateTempDir(t)
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
@@ -196,11 +201,14 @@ func TestProfileExportRequiresDestinationRecipient(t *testing.T) {
 	}
 	app := testApp(t)
 	code, out, diagnostic := invoke(t, app, "", "profile", "export")
-	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"recipient_required\"") {
-		t.Fatalf("missing recipient error: code=%d out=%s err=%s", code, out, diagnostic)
+	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"passphrase_required\"") {
+		t.Fatalf("missing passphrase input error: code=%d out=%s err=%s", code, out, diagnostic)
 	}
-	if !strings.Contains(diagnostic, "\"remedies\"") || !strings.Contains(diagnostic, "\"required_inputs\":[]") || !strings.Contains(diagnostic, "profile") || !strings.Contains(diagnostic, "transfer") || !strings.Contains(diagnostic, "prepare") {
-		t.Fatalf("missing destination prepare remedy: %s", diagnostic)
+	if !strings.Contains(diagnostic, "--passphrase-file") || !strings.Contains(diagnostic, "--passphrase-stdin") || strings.Contains(diagnostic, "transfer prepare") {
+		t.Fatalf("unexpected source-first remedy: %s", diagnostic)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "app.age")); !os.IsNotExist(err) {
+		t.Fatalf("missing passphrase created archive: %v", err)
 	}
 }
 
@@ -215,8 +223,8 @@ func TestProfileExportAndBackupCreatePublishDifferentRecipientSchemas(t *testing
 			backupCreate = command
 		}
 	}
-	if len(profileExport.InputOneOf) != 2 {
-		t.Fatalf("profile export should require exactly one recipient source: %#v", profileExport.InputOneOf)
+	if len(profileExport.InputOneOf) != 5 {
+		t.Fatalf("profile export should expose default, recipient and passphrase modes: %#v", profileExport.InputOneOf)
 	}
 	if len(backupCreate.InputOneOf) != 3 {
 		t.Fatalf("backup create should retain configured-recipient fallback: %#v", backupCreate.InputOneOf)
@@ -247,6 +255,61 @@ func TestProfileExportCancellationLeavesNoArchive(t *testing.T) {
 	}
 	if _, err := os.Lstat(output); !os.IsNotExist(err) {
 		t.Fatalf("canceled export published an archive: %v", err)
+	}
+}
+
+func TestProfileSourceFirstInteractiveRoundTrip(t *testing.T) {
+	root := privateTempDir(t)
+	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+
+	const passphrase = "SOURCE-FIRST-PASSPHRASE-CANARY"
+	source := testApp(t)
+	target := testApp(t)
+	sourcePrompts := 0
+	source.passphrasePrompt = func(_ context.Context, _ IO, _ string) (string, *protocol.Error) {
+		sourcePrompts++
+		return passphrase, nil
+	}
+	targetPrompts := 0
+	target.passphrasePrompt = func(_ context.Context, _ IO, _ string) (string, *protocol.Error) {
+		targetPrompts++
+		return passphrase, nil
+	}
+
+	outputData(t, source, []string{"var", "set", "MODE", "--profile", "portable", "--value", "source-first"})
+	archive := filepath.Join(root, "portable.age")
+	code, out, diagnostic := invoke(t, source, "", "profile", "export", "--profile", "portable", "--output", archive)
+	if code != 0 || diagnostic != "" || strings.Contains(out+diagnostic, passphrase) {
+		t.Fatalf("interactive export failed or leaked passphrase: code=%d out=%s err=%s", code, out, diagnostic)
+	}
+	if sourcePrompts != 2 {
+		t.Fatalf("export prompt count = %d", sourcePrompts)
+	}
+	mode, err := backup.ArchiveEncryptionMode(archive)
+	if err != nil || mode != backup.ArchiveEncryptionPassphrase {
+		t.Fatalf("interactive archive mode = %q, %v", mode, err)
+	}
+
+	base := []string{"profile", "import", "--file", archive}
+	preview := outputData(t, target, base)
+	apply := append(append([]string{}, base...), "--apply", preview["digest"].(string), "--request-id", tasks.ID())
+	imported := outputData(t, target, apply)
+	if imported["changed"] != true || targetPrompts != 2 {
+		t.Fatalf("interactive import failed/prompts=%d: %#v", targetPrompts, imported)
+	}
+	value := outputData(t, target, []string{"var", "get", "MODE", "--profile", "portable"})
+	if value["value"] != "source-first" {
+		t.Fatalf("source-first round trip mismatch: %#v", value)
+	}
+	profiles, pathErr := target.dataDirectory()
+	if pathErr != nil {
+		t.Fatal(pathErr)
+	}
+	if _, err := os.Lstat(filepath.Join(filepath.Dir(profiles), "profile-transfer", "identity.txt")); !os.IsNotExist(err) {
+		t.Fatalf("source-first import created prepared identity: %v", err)
 	}
 }
 
@@ -309,24 +372,38 @@ func TestProfileImportUsesLocalTransferIdentityAndRecoveryArchive(t *testing.T) 
 	}
 }
 
-func TestProfileImportWithoutPreparedIdentityFailsWithoutCreatingOne(t *testing.T) {
+func TestProfileImportRecipientArchiveWithoutPreparedIdentityFailsWithoutCreatingOne(t *testing.T) {
 	root := privateTempDir(t)
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
-	app := testApp(t)
 
-	code, out, diagnostic := invoke(t, app, "", "profile", "import", "--file", filepath.Join(root, "missing.age"))
-	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"transfer_identity_missing\"") || !strings.Contains(diagnostic, "\"remedies\"") || !strings.Contains(diagnostic, "re-export") {
-		t.Fatalf("missing local identity error/remedy: code=%d out=%s err=%s", code, out, diagnostic)
+	source := testApp(t)
+	target := testApp(t)
+	outputData(t, source, []string{"var", "set", "MODE", "--profile", "portable", "--value", "source"})
+	identity := filepath.Join(root, "external-identity.txt")
+	recipientPath := filepath.Join(root, "external-recipient.txt")
+	if code, _, diagnostic := invoke(t, source, "", "backup", "keygen", "--identity-file", identity, "--recipient-file", recipientPath); code != 0 {
+		t.Fatal(diagnostic)
 	}
-	profiles, err := app.dataDirectory()
+	recipientBytes, err := os.ReadFile(recipientPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity := filepath.Join(filepath.Dir(profiles), "profile-transfer", "identity.txt")
-	if _, err := os.Lstat(identity); !os.IsNotExist(err) {
+	archive := filepath.Join(root, "recipient.age")
+	outputData(t, source, []string{"profile", "export", "--profile", "portable", "--output", archive, "--recipient", strings.TrimSpace(string(recipientBytes))})
+
+	code, out, diagnostic := invoke(t, target, "", "profile", "import", "--file", archive)
+	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"transfer_identity_missing\"") || !strings.Contains(diagnostic, "\"remedies\"") {
+		t.Fatalf("missing prepared identity error/remedy: code=%d out=%s err=%s", code, out, diagnostic)
+	}
+	profiles, pathErr := target.dataDirectory()
+	if pathErr != nil {
+		t.Fatal(pathErr)
+	}
+	localIdentity := filepath.Join(filepath.Dir(profiles), "profile-transfer", "identity.txt")
+	if _, err := os.Lstat(localIdentity); !os.IsNotExist(err) {
 		t.Fatalf("import created identity implicitly: %v", err)
 	}
 }

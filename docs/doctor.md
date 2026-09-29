@@ -17,7 +17,7 @@ devtools doctor --profile myapp
 status는 `pass`, `fail`, `skipped`다. 저장소나 env 문제로 이어지는 검사를
 수행할 수 없으면 skipped로 표시하고 먼저 해결할 조건을 안내한다.
 
-Protocol v4의 `remedies`는 task 진단과 같은 구조의 배열이다. 정상 check는 빈 배열을
+Protocol v5의 `remedies`는 task 진단과 같은 구조의 배열이다. 정상 check는 빈 배열을
 반환한다. 각 remedy의 `argv`는 셸 문자열이 아닌 인자 배열이고, `required_inputs`는
 사용자가 추가로 제공할 입력 이름, `message`는 조치 설명이다. 예를 들어 secret이
 없으면 다음과 같이 반환한다.

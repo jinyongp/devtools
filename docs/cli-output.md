@@ -1,6 +1,6 @@
 # CLI 출력 계약
 
-이 문서는 현재 소스의 CLI protocol v4 출력 규칙을 설명합니다. protocol v4 전환, v0.15.0용 protocol v3 전환과 v0.13.0의 JSON 경로 변경은 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
+이 문서는 현재 소스의 CLI protocol v5 출력 규칙을 설명합니다. protocol v5 전환, protocol v4 전환, v0.15.0용 protocol v3 전환과 v0.13.0의 JSON 경로 변경은 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
 
 ## 출력 종류 확인
 
@@ -46,7 +46,7 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 4`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
+`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 5`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
 
 ## JSON 데이터 구조
 
@@ -109,6 +109,28 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v5 마이그레이션
+
+Protocol v4 자동화 중 profile transfer 입력·discovery를 사용하는 코드는 다음 계약을
+함께 변경해야 합니다. 공통 envelope `schema_version`은 1로 유지되고 generic
+`backup` command 계약은 바뀌지 않습니다.
+
+| 대상 | Protocol v4 | Protocol v5 |
+| --- | --- | --- |
+| `version`, `schema` | `data.protocol_version: 4` | `data.protocol_version: 5` |
+| 기본 transfer 시작점 | 대상에서 `profile transfer prepare` 후 recipient를 원본으로 전달 | 원본에서 바로 `profile export`; 터미널은 passphrase prompt |
+| non-interactive export | recipient 기반 | `--passphrase-file` 또는 `--passphrase-stdin`; recipient 방식은 advanced mode |
+| `profile import` 기본 | prepared local identity | passphrase archive는 prompt; recipient archive는 prepared identity |
+| explicit import key | `--identity-file` | 기존 recipient archive용 `--identity-file`; passphrase는 `--passphrase-file`/stdin |
+| safety archive | import identity recipient로 암호화 | 현재 import와 같은 방식(passphrase 또는 recipient)으로 암호화 |
+| transfer 파일 이동 | encrypted archive 하나 | encrypted archive 하나; destination preflight 불필요 |
+| transfer 오류 | identity/recipient 중심 | `passphrase_required`, `passphrase_mismatch`, identity 오류, `output_exists` 등을 구분 |
+
+passphrase는 argv나 환경변수 입력으로 제공하지 않습니다. interactive export는 두 번,
+interactive import는 한 번 echo 없이 입력합니다. 자동화에서는 regular file 또는 piped
+stdin을 사용합니다. `profile transfer prepare`, `--recipient`, `--recipient-file`,
+`--identity-file`은 기존 X25519 자동화를 위한 advanced compatibility 경로로 유지됩니다.
 
 ## protocol v4 마이그레이션
 

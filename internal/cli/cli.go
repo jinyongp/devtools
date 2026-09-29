@@ -86,8 +86,9 @@ func stringSchema() map[string]any { return map[string]any{"type": "string"} }
 
 func New(version, commit string) *App {
 	a := &App{
-		dataDirectory: userDataDirectory,
-		proxyManager:  func(data string) proxy.Manager { return proxy.Manager{Data: data} },
+		passphrasePrompt: readTerminalPassphrase,
+		dataDirectory:    userDataDirectory,
+		proxyManager:     func(data string) proxy.Manager { return proxy.Manager{Data: data} },
 		lifecycleManager: func(data string) lifecycle.Manager {
 			return lifecycle.Manager{Data: data, Processes: services.Store{Data: data}}
 		},

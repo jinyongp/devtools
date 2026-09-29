@@ -3,7 +3,7 @@
 Profile은 변수·secret·env와 task/workstream을 함께 관리하는 이름입니다. 프로젝트는
 `devtools.toml`의 `profile`로 이 데이터를 선택합니다. 같은 기기의 여러 worktree는 같은
 profile을 공유하지만, 다른 기기로 옮길 때는 암호화한 파일을 내보내고 가져와야 합니다.
-이 문서는 CLI protocol v4를 기준으로 설명합니다.
+이 문서는 CLI protocol v5를 기준으로 설명합니다.
 
 ## 저장된 profile 찾기
 
@@ -34,79 +34,106 @@ managed process만 남아 있는 profile도 목록에 포함됩니다.
 
 ## 다른 기기로 내보내기
 
-먼저 **대상 기기**에서 profile transfer identity를 준비합니다. devtools가 개인 identity를
-사용자 전용 data directory 안에 보관하고 공개 age recipient만 반환합니다. 개인키 파일을
-직접 만들거나 원본 기기로 복사할 필요가 없습니다.
+기본 profile 이동은 **원본 기기에서 먼저** 시작합니다. 대상 기기를 미리 준비할 필요가
+없고, 이동해야 하는 filesystem artifact는 암호화된 `.age` 파일 하나뿐입니다.
+
+```sh
+# 원본 기기: 현재 프로젝트의 profile
+devtools profile export
+# Profile transfer passphrase:
+# Confirm profile transfer passphrase:
+
+# 프로젝트 밖에서는 profile을 직접 지정
+devtools profile export --profile myapp
+```
+
+기본 export는 age scrypt로 암호화하며 passphrase를 저장하지 않습니다. 터미널에서는
+passphrase를 echo 없이 두 번 입력해 확인합니다. 자동화나 pipe 환경에서는 passphrase를
+argv나 환경변수에 넣지 말고 다음 중 하나를 명시합니다.
+
+```sh
+devtools profile export --passphrase-file /secure/transfer-passphrase.txt
+cat /secure/transfer-passphrase.txt | devtools profile export --passphrase-stdin
+```
+
+`--profile`을 생략하면 현재 디렉터리 또는 `--dir PATH`에서 프로젝트를 찾습니다.
+`--output`을 생략하면 현재 디렉터리에 `./<profile>.age`를 만듭니다. 기존 디렉터리를
+지정하면 그 아래 `<profile>.age`를 자동으로 사용합니다. 최종 출력 파일이 이미 있으면
+snapshot을 만들기 전에 즉시 `output_exists`로 실패하고 기존 파일은 덮어쓰지 않습니다.
+
+생성된 `.age` 파일 하나만 대상 기기로 복사합니다. archive에는 변수·secret·env와
+task/workstream/validation 데이터가 들어갑니다. `devtools.toml`, port 할당, instance 연결,
+실행 중 process, dashboard 세션은 이동하지 않습니다. 프로젝트 파일은 Git 등 기존 방식으로
+별도 준비하세요.
+
+### 고급 recipient 방식
+
+자동화에서 public-key 방식을 유지해야 하면 기존 X25519 transfer도 계속 사용할 수 있습니다.
+이 경우에만 대상 기기에서 recipient를 먼저 준비합니다.
 
 ```sh
 # 대상 기기
 devtools profile transfer prepare
-# data.item.recipient의 age1... 값을 원본 기기에 전달
-```
 
-그 공개 recipient 문자열을 **원본 기기**의 export에 전달합니다.
-
-```sh
-# 원본 기기: 현재 프로젝트의 profile
+# 원본 기기
 devtools profile export --recipient age1...
-
-# 프로젝트 밖에서는 profile을 직접 지정
-devtools profile export --profile myapp --recipient age1...
+# 또는 --recipient-file /secure/recipient.txt
 ```
 
-`--profile`을 생략하면 현재 디렉터리 또는 `--dir PATH`에서 프로젝트를 찾습니다.
-`--output`을 생략하면 현재 디렉터리에 `./<profile>.age`를 만듭니다. `--output`에 기존
-디렉터리를 지정하면 그 아래 `<profile>.age`를 자동으로 사용합니다. 최종 출력 파일이 이미
-있으면 profile snapshot을 만들기 전에 즉시 `output_exists`로 실패하며 기존 파일은 덮어쓰지
-않습니다. `--recipient-file`은 외부 키 관리나 자동화를 위한 고급 입력으로
-계속 지원하지만 `--recipient`와 동시에 사용할 수 없습니다. profile export는
-`backup configure`의 recipient나 output directory를 사용하지 않습니다.
-
-원본에서 대상 기기로 복사해야 하는 filesystem artifact는 생성된 `.age` 파일 하나입니다.
-공개 recipient는 대상에서 원본으로 전달하는 비밀이 아닌 문자열입니다. archive에는
-변수·secret·env와 task/workstream/validation 데이터가 들어갑니다. `devtools.toml`, port
-할당, instance 연결, 실행 중 process, dashboard 세션은 이동하지 않습니다. 프로젝트 파일은
-Git 등 기존 방식으로 별도 준비하세요.
+recipient mode와 passphrase mode는 한 export에서 섞을 수 없습니다. `backup configure`는
+profile transfer의 기본값으로 사용하지 않습니다.
 
 ## 미리보기 후 가져오기
 
-대상 기기에서 archive 하나를 가져온 뒤 import합니다. `--identity-file`을 생략하면
-`profile transfer prepare`가 준비한 로컬 identity를 자동 사용합니다. import가 identity를
-자동 생성하거나 교체하지는 않습니다.
+기본 passphrase archive는 대상 기기에서 파일 하나만 가지고 import합니다.
 
 ```sh
-# 대상 기기
 devtools profile import --file ./myapp.age
+# Profile transfer passphrase:
 ```
 
-단일-profile 파일은 원본 이름을 자동 선택하며 대상도 같은 이름을 사용합니다.
-여러 profile이 있는 일반 backup 파일에서는 `--profile NAME`으로 원본을 선택합니다.
-다른 이름으로 가져오려면 `--as NAME`을 추가하세요. 기존 archive나 외부 key manager를
-사용하는 경우에는 `--identity-file PATH`로 identity를 명시할 수 있습니다.
+터미널에서는 archive passphrase를 echo 없이 한 번 입력합니다. non-interactive 환경은
+export와 마찬가지로 `--passphrase-file` 또는 `--passphrase-stdin`을 명시합니다.
 
-결과의 `data.digest`는 파일과 대상 상태에 묶인 적용 토큰입니다. `data.target_exists`와
-`data.diff`를 검토한 뒤 같은 파일·원본·대상에 digest와 요청 ID를 전달합니다.
+```sh
+devtools profile import --file ./myapp.age --passphrase-file /secure/transfer-passphrase.txt
+cat /secure/transfer-passphrase.txt | devtools profile import --file ./myapp.age --passphrase-stdin
+```
+
+단일-profile 파일은 원본 이름을 자동 선택하며 대상도 같은 이름을 사용합니다. 여러 profile이
+있는 일반 backup 파일에서는 `--profile NAME`으로 원본을 선택하고, 다른 이름으로 가져오려면
+`--as NAME`을 추가합니다.
+
+recipient로 암호화한 기존/고급 archive는 `profile transfer prepare`의 로컬 identity를
+자동 사용할 수 있고, 외부 키를 쓰는 경우 `--identity-file PATH`를 명시합니다.
+`--identity-file`과 passphrase 입력 옵션은 함께 사용할 수 없습니다.
+
+import 기본 동작은 미리보기입니다. `data.digest`, `data.target_exists`, `data.diff`를
+검토한 뒤 같은 파일·원본·대상에 digest와 새 요청 ID를 전달합니다.
 
 ```sh
 devtools profile import --file ./myapp.age \
   --apply DIGEST --request-id UUID
 ```
 
+interactive passphrase archive라면 apply 호출에서도 같은 passphrase를 다시 입력합니다.
+non-interactive에서는 preview/apply 모두 같은 `--passphrase-file` 또는
+`--passphrase-stdin`을 사용합니다.
+
 `--apply`와 `--request-id`는 반드시 함께 사용합니다. 기존 대상도 미리보기는 가능하지만
-실제 교체에는 `--replace`가 필요합니다. 교체 전 기존 profile은 현재 import에 사용한
-identity의 공개 recipient로 암호화되어 devtools의 private transfer recovery directory에
-저장됩니다. `backup configure`는 필요하지 않습니다. 경로는 `data.safety_backup`에
-반환되며, 같은 identity로 그 파일을 다시 `profile import --file`하여 복구할 수 있습니다.
+실제 교체에는 `--replace`가 필요합니다. 교체 전 safety archive는 현재 import와 같은
+암호화 방식으로 생성됩니다. passphrase import라면 같은 passphrase, recipient import라면
+같은 identity의 public recipient를 사용합니다. `backup configure`는 필요하지 않습니다.
+경로는 `data.safety_backup`에 반환되며 같은 passphrase/identity로 다시 import할 수 있습니다.
 안전 백업을 만들지 못하면 대상 교체를 시작하지 않습니다.
 
-Transfer 관련 오류는 다음 복구 방향을 구분합니다. `recipient_required`는 대상 기기에서
-`profile transfer prepare`를 실행한 뒤 반환된 recipient로 다시 export해야 한다는 뜻입니다.
-`transfer_identity_missing`은 현재 archive의 private identity가 없다는 뜻이므로 새 identity를
-준비한 뒤 **원본 기기에서 새 recipient로 다시 export**해야 합니다. 잃어버린 identity로 암호화된
-기존 archive는 matching explicit identity가 없으면 복구할 수 없습니다.
-`transfer_identity_invalid`는 내부 identity의 형식·권한·symlink 경계가 안전하지 않다는 뜻이며
-devtools가 자동 교체하지 않습니다. `output_exists`는 기존 파일을 보존하므로 다른 `--output`
-경로를 선택해야 합니다.
+주요 transfer 오류는 다음과 같습니다. `passphrase_required`는 non-interactive 실행에서
+`--passphrase-file` 또는 `--passphrase-stdin`을 명시해야 한다는 뜻이고,
+`passphrase_mismatch`는 interactive export의 두 입력이 다르다는 뜻입니다.
+`invalid_backup`은 archive 손상 또는 passphrase/identity 불일치를 포함합니다.
+`transfer_identity_missing`·`transfer_identity_invalid`는 advanced recipient archive에
+사용할 로컬 X25519 identity가 없거나 안전하지 않은 경우입니다. `output_exists`는 기존
+파일을 보존하므로 다른 `--output`을 선택해야 합니다.
 
 미리보기는 `changed: false`, `replayed: false`입니다. 적용은 `changed: true`를 반환합니다.
 같은 요청 ID와 동일한 적용 입력을 재전송하면 저장된 결과와 `replayed: true`를 반환합니다.

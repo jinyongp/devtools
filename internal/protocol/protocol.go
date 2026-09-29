@@ -10,7 +10,7 @@ const (
 	// EnvelopeVersion versions the common success/error response wrapper.
 	EnvelopeVersion = 1
 	// ProtocolVersion versions the public CLI machine contract, including command data shapes.
-	ProtocolVersion = 4
+	ProtocolVersion = 5
 )
 
 // Error contains a stable code suitable for programmatic branching.

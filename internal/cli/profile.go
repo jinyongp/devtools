@@ -136,6 +136,45 @@ func (a *App) profileCatalog() (profilecatalog.Catalog, *protocol.Error) {
 	return profilecatalog.Catalog{Data: filepath.Dir(directory)}, nil
 }
 
+func exclusiveInputAlternatives(names ...string) []map[string]any {
+	required := make([]map[string]any, 0, len(names))
+	for _, name := range names {
+		required = append(required, map[string]any{"required": []string{name}})
+	}
+	out := []map[string]any{{"not": map[string]any{"anyOf": required}}}
+	for _, name := range names {
+		others := []map[string]any{}
+		for _, other := range names {
+			if other != name {
+				others = append(others, map[string]any{"required": []string{other}})
+			}
+		}
+		out = append(out, map[string]any{
+			"required": []string{name},
+			"not":      map[string]any{"anyOf": others},
+		})
+	}
+	return out
+}
+
+func profileImportInputOneOf() []map[string]any {
+	encryption := exclusiveInputAlternatives("identity-file", "passphrase-file", "passphrase-stdin")
+	out := []map[string]any{}
+	for _, mode := range encryption {
+		out = append(out,
+			map[string]any{"allOf": []map[string]any{
+				mode,
+				{"not": map[string]any{"anyOf": []map[string]any{{"required": []string{"apply"}}, {"required": []string{"request-id"}}}}},
+			}},
+			map[string]any{"allOf": []map[string]any{
+				mode,
+				{"required": []string{"apply", "request-id"}},
+			}},
+		)
+	}
+	return out
+}
+
 func (a *App) registerProfiles() {
 	a.commands = append(a.commands,
 		Command{
@@ -163,7 +202,7 @@ func (a *App) registerProfiles() {
 		},
 		Command{
 			Name:        "profile transfer prepare",
-			Description: "Prepare this user installation to receive encrypted profile transfers.",
+			Description: "Prepare a local X25519 identity for advanced recipient-based profile transfers.",
 			Output: changedItemOutput(object(map[string]any{
 				"recipient": stringSchema(),
 			}, "recipient")),
@@ -171,34 +210,35 @@ func (a *App) registerProfiles() {
 		},
 		Command{
 			Name:        "profile export",
-			Description: "Encrypt one profile for transfer to another device using its public recipient.",
+			Description: "Encrypt one profile into a single portable archive; prompts for a passphrase by default.",
 			Options: []Option{
 				profileIdentifierOption("profile", false),
 				{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory used when profile is omitted."},
 				{Name: "output", MinLength: 1, Description: "Output file or existing directory; directories use <profile>.age and omission defaults to ./<profile>.age."},
-				{Name: "recipient-file", MinLength: 1, Description: "Destination public age X25519 recipient file; choose exactly one of this or --recipient."},
-				{Name: "recipient", MinLength: 1, Description: "Destination public age X25519 recipient; choose exactly one of this or --recipient-file."},
+				{Name: "recipient-file", MinLength: 1, Description: "Advanced mode: destination public age X25519 recipient file; mutually exclusive with passphrase input."},
+				{Name: "recipient", MinLength: 1, Description: "Advanced mode: destination public age X25519 recipient; mutually exclusive with passphrase input."},
+				{Name: "passphrase-file", MinLength: 1, Description: "Read the transfer passphrase from a regular file instead of prompting."},
+				{Name: "passphrase-stdin", Boolean: true, Description: "Read the transfer passphrase from piped stdin instead of prompting."},
 			},
-			InputOneOf: requiredRecipientInputOneOf(),
+			InputOneOf: exclusiveInputAlternatives("recipient", "recipient-file", "passphrase-file", "passphrase-stdin"),
 			Output:     changedItemOutput(profileExportItemSchema()),
 			Run:        a.exportProfile,
 		},
 		Command{
 			Name:        "profile import",
-			Description: "Preview an encrypted profile import using the prepared local identity unless an identity file is supplied.",
+			Description: "Preview an encrypted profile import; passphrase archives prompt by default and recipient archives use an identity.",
 			Options: []Option{
 				filePathOption("file", true),
-				{Name: "identity-file", MinLength: 1, Description: "Private age X25519 identity file; omission uses the prepared local transfer identity."},
+				{Name: "identity-file", MinLength: 1, Description: "Advanced mode: private age X25519 identity file for recipient-encrypted archives."},
+				{Name: "passphrase-file", MinLength: 1, Description: "Read the archive passphrase from a regular file instead of prompting."},
+				{Name: "passphrase-stdin", Boolean: true, Description: "Read the archive passphrase from piped stdin instead of prompting."},
 				profileIdentifierOption("profile", false),
 				profileIdentifierOption("as", false),
 				{Name: "replace", Boolean: true, Description: "Permit replacement of an existing target profile after creating a safety backup."},
 				{Name: "apply", MinLength: 64, MaxLength: 64, Pattern: `^[0-9a-f]+$`, Description: "Apply the exact digest returned by preview."},
 				{Name: "request-id", Pattern: uuidPattern, Description: "UUID required when applying; reuse it for retries."},
 			},
-			InputOneOf: []map[string]any{
-				{"not": map[string]any{"anyOf": []map[string]any{{"required": []string{"apply"}}, {"required": []string{"request-id"}}}}},
-				{"required": []string{"apply", "request-id"}},
-			},
+			InputOneOf: profileImportInputOneOf(),
 			Output: object(map[string]any{
 				"item":          profileImportItemSchema(),
 				"digest":        stringSchema(),
@@ -254,10 +294,10 @@ func transferArchiveError(err *protocol.Error) *protocol.Error {
 		remedy.Argv = []string{"devtools", "profile", "transfer", "prepare"}
 		remedy.Message = "Run this on the destination device, then copy its public recipient into --recipient or --recipient-file on the source device."
 	case "invalid_backup":
-		message = "Cannot read or authenticate the profile archive with the selected identity."
+		message = "Cannot read or authenticate the profile archive with the selected passphrase or identity."
 		remedy.Argv = []string{"devtools", "profile", "import"}
 		remedy.RequiredInputs = []string{"file"}
-		remedy.Message = "Check that the archive is complete and addressed to this identity. Use a matching --identity-file for an external-key archive, or re-export to this destination's prepared recipient."
+		remedy.Message = "Check that the archive is complete. For the default transfer use the matching passphrase; for an advanced recipient archive use the matching --identity-file or prepared local identity."
 	case "profile_exists":
 		message = "The target profile already exists; replacement requires explicit authorization."
 		remedy.Argv = []string{"devtools", "profile", "import"}
@@ -357,19 +397,13 @@ func resolveProfileExportOutput(profile, requested string) (string, *protocol.Er
 	return output, nil
 }
 
-func (a *App) exportProfile(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
+func (a *App) exportProfile(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
 	recipient, recipientFile := request.Options["recipient"], request.Options["recipient-file"]
-	if recipient == "" && recipientFile == "" {
-		return nil, protocol.NewError("recipient_required", "Profile export requires the destination device's public recipient.", 3, map[string]any{
-			"remedies": []protocol.Remedy{{
-				Argv:           []string{"devtools", "profile", "transfer", "prepare"},
-				RequiredInputs: []string{},
-				Message:        "Run this command on the destination device, then pass its public recipient to profile export with --recipient.",
-			}},
-		})
-	}
 	if recipient != "" && recipientFile != "" {
 		return nil, argumentError("Choose recipient or recipient-file.", "recipient")
+	}
+	if err := passphraseOptionConflict(request.Options, "recipient", "recipient-file"); err != nil {
+		return nil, err
 	}
 	profile := request.Options["profile"]
 	if profile == "" {
@@ -387,7 +421,20 @@ func (a *App) exportProfile(ctx context.Context, _ IO, request Request) (any, *p
 	if err != nil {
 		return nil, err
 	}
-	result, failure := engine.CreateWithRecipient(ctx, backup.CreateOptions{Profile: profile, Output: output, RecipientPath: recipientFile, Recipient: recipient})
+
+	var (
+		result  backup.CreateResult
+		failure *protocol.Error
+	)
+	if recipient != "" || recipientFile != "" {
+		result, failure = engine.CreateWithRecipient(ctx, backup.CreateOptions{Profile: profile, Output: output, RecipientPath: recipientFile, Recipient: recipient})
+	} else {
+		passphrase, passphraseErr := acquireTransferPassphrase(ctx, streams, request.Options, "export", true, a.passphrasePrompt)
+		if passphraseErr != nil {
+			return nil, passphraseErr
+		}
+		result, failure = engine.CreateWithPassphrase(ctx, backup.CreateOptions{Profile: profile, Output: output, Passphrase: passphrase})
+	}
 	if failure != nil {
 		if ctx.Err() != nil {
 			return nil, protocol.NewError("canceled", "Execution canceled.", 130, nil)
@@ -404,22 +451,50 @@ func (a *App) exportProfile(ctx context.Context, _ IO, request Request) (any, *p
 	return map[string]any{"item": item, "changed": true}, nil
 }
 
-func (a *App) importProfile(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
+func (a *App) importProfile(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
 	if (request.Options["apply"] != "") != (request.Options["request-id"] != "") {
 		return nil, argumentError("Apply and request-id must be supplied together.", "")
+	}
+	if err := passphraseOptionConflict(request.Options, "identity-file"); err != nil {
+		return nil, err
 	}
 	transferStore, storeErr := a.profileTransferStore()
 	if storeErr != nil {
 		return nil, storeErr
 	}
+
 	identityPath := request.Options["identity-file"]
-	if identityPath == "" {
-		var identityErr error
-		identityPath, identityErr = transferStore.ExistingIdentityPath()
-		if identityErr != nil {
-			return nil, transferIdentityError(identityErr)
+	passphrase := ""
+	explicitPassphrase := request.Options["passphrase-file"] != "" || request.Options["passphrase-stdin"] == "true"
+	switch {
+	case identityPath != "":
+		// Explicit advanced identity mode.
+	case explicitPassphrase:
+		var passphraseErr *protocol.Error
+		passphrase, passphraseErr = acquireTransferPassphrase(ctx, streams, request.Options, "import", false, a.passphrasePrompt)
+		if passphraseErr != nil {
+			return nil, passphraseErr
+		}
+	default:
+		mode, modeErr := backup.ArchiveEncryptionMode(request.Options["file"])
+		if modeErr != nil {
+			return nil, transferArchiveError(protocol.NewError("invalid_backup", "Cannot inspect the profile archive encryption mode.", 3, nil))
+		}
+		if mode == backup.ArchiveEncryptionPassphrase {
+			var passphraseErr *protocol.Error
+			passphrase, passphraseErr = acquireTransferPassphrase(ctx, streams, request.Options, "import", false, a.passphrasePrompt)
+			if passphraseErr != nil {
+				return nil, passphraseErr
+			}
+		} else {
+			var identityErr error
+			identityPath, identityErr = transferStore.ExistingIdentityPath()
+			if identityErr != nil {
+				return nil, transferIdentityError(identityErr)
+			}
 		}
 	}
+
 	engine, engineErr := a.backupEngine()
 	if engineErr != nil {
 		return nil, engineErr
@@ -427,6 +502,7 @@ func (a *App) importProfile(ctx context.Context, _ IO, request Request) (any, *p
 	result, importErr := engine.Import(ctx, backup.ImportRequest{
 		Path:              request.Options["file"],
 		IdentityPath:      identityPath,
+		Passphrase:        passphrase,
 		RecoveryDirectory: transferStore.RecoveryDirectory(),
 		Source:            request.Options["profile"],
 		Target:            request.Options["as"],

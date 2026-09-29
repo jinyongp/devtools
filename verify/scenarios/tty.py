@@ -1,4 +1,5 @@
 import errno
+import json
 import os
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ import select
 import subprocess
 import termios
 import time
+import uuid
 
 root = Path.home() / "project"
 root.mkdir()
@@ -215,6 +217,51 @@ try:
     send("printf 'FINAL_OK\\n'\n")
     final = read_until(prompt)
     assert b"FINAL_OK" in final, final
+
+    # Source-first profile transfer prompts securely on a real terminal. Turn
+    # shell echo on deliberately so ReadPassword must suppress only the secret.
+    transfer_passphrase = "TTY_TRANSFER_PASSPHRASE_CANARY"
+    send("stty echo\n")
+    read_until(prompt)
+    send("devtools var set MODE --value tty-source\n")
+    read_until(prompt)
+
+    send("devtools profile export --output .\n")
+    export_prompt = read_until(b"Profile transfer passphrase: ")
+    assert transfer_passphrase.encode() not in export_prompt
+    send(transfer_passphrase + "\n")
+    confirm_prompt = read_until(b"Confirm profile transfer passphrase: ")
+    assert transfer_passphrase.encode() not in confirm_prompt
+    send(transfer_passphrase + "\n")
+    exported = read_until(prompt)
+    assert transfer_passphrase.encode() not in exported, exported
+    assert b'"changed":true' in exported and (root / "tty.age").exists(), exported
+
+    send("devtools profile import --file ./tty.age --as tty-copy\n")
+    import_prompt = read_until(b"Profile transfer passphrase: ")
+    assert transfer_passphrase.encode() not in import_prompt
+    send(transfer_passphrase + "\n")
+    preview_output = read_until(prompt)
+    assert transfer_passphrase.encode() not in preview_output, preview_output
+    preview_lines = [line for line in preview_output.splitlines() if line.startswith(b'{"schema_version"')]
+    assert preview_lines, preview_output
+    preview = json.loads(preview_lines[-1])
+    digest = preview["data"]["digest"]
+    request_id = str(uuid.uuid4())
+
+    send(f"devtools profile import --file ./tty.age --as tty-copy --apply {digest} --request-id {request_id}\n")
+    apply_prompt = read_until(b"Profile transfer passphrase: ")
+    assert transfer_passphrase.encode() not in apply_prompt
+    send(transfer_passphrase + "\n")
+    applied = read_until(prompt)
+    assert transfer_passphrase.encode() not in applied, applied
+    assert b'"changed":true' in applied, applied
+
+    send("devtools var get MODE --profile tty-copy\n")
+    copied = read_until(prompt)
+    assert b'"value":"tty-source"' in copied, copied
+    send("stty -echo\n")
+    read_until(prompt)
 finally:
     active_error = sys.exc_info()[0] is not None
     try:
@@ -224,4 +271,4 @@ finally:
     os.close(master)
     os.waitpid(pid, 0)
 
-print("Installed foreground TTY input, signals, stop/fg/bg and terminal restoration verified")
+print("Installed foreground TTY input/signals/job control plus source-first profile passphrase prompts verified")

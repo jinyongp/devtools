@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"filippo.io/age"
@@ -615,11 +616,18 @@ func (archiveProbeIdentity) Unwrap([]*age.Stanza) ([]byte, error) {
 }
 
 func ArchiveEncryptionMode(path string) (string, error) {
-	cipher, err := maintenance.Read(path, limit+1<<20)
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return "", err
 	}
-	_, err = age.Decrypt(bytes.NewReader(cipher), archiveProbeIdentity{})
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > limit+1<<20 {
+		return "", errors.New("invalid private archive")
+	}
+	// age.Decrypt parses the header and asks the probe identity to unwrap the
+	// file key. The probe always rejects, so payload bytes are never consumed.
+	_, err = age.Decrypt(file, archiveProbeIdentity{})
 	var noMatch *age.NoIdentityMatchError
 	if !errors.As(err, &noMatch) || len(noMatch.StanzaTypes) == 0 {
 		return "", errors.New("invalid age archive")

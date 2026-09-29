@@ -54,6 +54,8 @@ func TestBoundedLogCompactionStructural(t *testing.T) {
 	stats.mu.Lock()
 	appendBytes := stats.AppendBytes
 	rewriteBytes := stats.RewriteBytes
+	physicalReads := stats.PhysicalReads
+	readBytes := stats.ReadBytes
 	compactions := stats.Compactions
 	stats.mu.Unlock()
 	if compactions < 6 || compactions > 9 {
@@ -61,6 +63,9 @@ func TestBoundedLogCompactionStructural(t *testing.T) {
 	}
 	if appendBytes == 0 {
 		t.Fatal("small writes never used append path")
+	}
+	if physicalReads != compactions || readBytes <= 0 || readBytes > compactions*logPhysicalMax {
+		t.Fatalf("physical reads were not limited to compaction: reads=%d compactions=%d bytes=%d", physicalReads, compactions, readBytes)
 	}
 	if rewriteBytes >= int64(512*logLogicalCap) {
 		t.Fatalf("rewrite amplification remained per-write: %d", rewriteBytes)

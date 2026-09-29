@@ -15,7 +15,7 @@ func BenchmarkBoundedLog4KiBAtCapacity(b *testing.B) {
 	root := b.TempDir()
 	initial := bytes.Repeat([]byte{'a'}, logLogicalCap)
 	payload := bytes.Repeat([]byte{'b'}, chunkSize)
-	var totalRewrite, totalCompactions, totalFsync int64
+	var totalRewrite, totalRead, totalPhysicalReads, totalCompactions, totalFsync int64
 
 	b.ReportAllocs()
 	b.SetBytes(writes * chunkSize)
@@ -29,7 +29,7 @@ func BenchmarkBoundedLog4KiBAtCapacity(b *testing.B) {
 			b.Fatal(err)
 		}
 		stats.mu.Lock()
-		stats.AppendBytes, stats.RewriteBytes, stats.Fsyncs, stats.Compactions = 0, 0, 0, 0
+		stats.AppendBytes, stats.RewriteBytes, stats.ReadBytes, stats.PhysicalReads, stats.Fsyncs, stats.Compactions = 0, 0, 0, 0, 0, 0
 		stats.mu.Unlock()
 		b.StartTimer()
 
@@ -40,12 +40,14 @@ func BenchmarkBoundedLog4KiBAtCapacity(b *testing.B) {
 		}
 
 		b.StopTimer()
-		body, exists, err := store.snapshot(context.Background())
+		body, exists, err := (boundedLogStore{path: path}).snapshot(context.Background())
 		if err != nil || !exists || len(body) != logLogicalCap {
 			b.Fatalf("snapshot: len=%d exists=%v err=%v", len(body), exists, err)
 		}
 		stats.mu.Lock()
 		totalRewrite += stats.RewriteBytes
+		totalRead += stats.ReadBytes
+		totalPhysicalReads += stats.PhysicalReads
 		totalCompactions += stats.Compactions
 		totalFsync += stats.Fsyncs
 		stats.mu.Unlock()
@@ -56,8 +58,10 @@ func BenchmarkBoundedLog4KiBAtCapacity(b *testing.B) {
 	logical := float64(b.N * writes * chunkSize)
 	if logical > 0 {
 		b.ReportMetric(float64(totalRewrite)/logical, "rewrite/input")
+		b.ReportMetric(float64(totalRead)/logical, "read/input")
 	}
 	if b.N > 0 {
+		b.ReportMetric(float64(totalPhysicalReads)/float64(b.N), "physical-reads/op")
 		b.ReportMetric(float64(totalCompactions)/float64(b.N), "compactions/op")
 		b.ReportMetric(float64(totalFsync)/float64(b.N), "fsyncs/op")
 	}

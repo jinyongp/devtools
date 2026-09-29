@@ -21,11 +21,13 @@ const (
 )
 
 type logIOStats struct {
-	mu           sync.Mutex
-	AppendBytes  int64
-	RewriteBytes int64
-	Fsyncs       int64
-	Compactions  int64
+	mu            sync.Mutex
+	AppendBytes   int64
+	RewriteBytes  int64
+	PhysicalReads int64
+	ReadBytes     int64
+	Fsyncs        int64
+	Compactions   int64
 }
 
 func (s *logIOStats) appendBytes(n int) {
@@ -35,6 +37,16 @@ func (s *logIOStats) appendBytes(n int) {
 	s.mu.Lock()
 	s.AppendBytes += int64(n)
 	s.Fsyncs++
+	s.mu.Unlock()
+}
+
+func (s *logIOStats) readBytes(n int) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.PhysicalReads++
+	s.ReadBytes += int64(n)
 	s.mu.Unlock()
 }
 
@@ -122,7 +134,7 @@ func acquireLogLock(ctx context.Context, logPath string, exclusive bool) (func()
 	}, nil
 }
 
-func readPhysicalLog(path string) ([]byte, bool, error) {
+func readPhysicalLog(path string, stats *logIOStats) ([]byte, bool, error) {
 	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, false, nil
@@ -145,7 +157,27 @@ func readPhysicalLog(path string) ([]byte, bool, error) {
 		}
 		return nil, false, err
 	}
+	stats.readBytes(len(body))
 	return body, true, nil
+}
+
+func physicalLogSize(path string) (int64, bool, error) {
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	defer file.Close()
+	info, err := privateLogFile(file)
+	if err != nil {
+		return 0, false, err
+	}
+	if info.Size() > logPhysicalMax {
+		return 0, false, errors.New("bounded log exceeds physical maximum")
+	}
+	return info.Size(), true, nil
 }
 
 func logicalTail(body []byte) []byte {
@@ -200,7 +232,7 @@ func (s boundedLogStore) write(p []byte) (int, error) {
 	}
 	defer release()
 
-	current, exists, err := readPhysicalLog(s.path)
+	physicalSize, exists, err := physicalLogSize(s.path)
 	if err != nil {
 		return 0, err
 	}
@@ -220,12 +252,19 @@ func (s boundedLogStore) write(p []byte) (int, error) {
 		s.stats.rewriteBytes(len(tail), false)
 		return n, nil
 	}
-	if len(current)+len(p) <= logPhysicalMax {
+	if physicalSize+int64(len(p)) <= logPhysicalMax {
 		if err := syncAppend(s.path, p); err != nil {
 			return 0, err
 		}
 		s.stats.appendBytes(len(p))
 		return n, nil
+	}
+	current, exists, err := readPhysicalLog(s.path, s.stats)
+	if err != nil || !exists {
+		if err == nil {
+			err = errors.New("bounded log disappeared during compaction")
+		}
+		return 0, err
 	}
 	needed := logLogicalCap - len(p)
 	if needed < 0 {
@@ -253,7 +292,7 @@ func (s boundedLogStore) snapshot(ctx context.Context) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	defer release()
-	body, exists, err := readPhysicalLog(s.path)
+	body, exists, err := readPhysicalLog(s.path, s.stats)
 	if err != nil || !exists {
 		return nil, exists, err
 	}
@@ -269,7 +308,7 @@ func (s boundedLogStore) retire(ctx context.Context, beforeRemove func([]byte) *
 		return false, storageError()
 	}
 	defer release()
-	body, exists, err := readPhysicalLog(s.path)
+	body, exists, err := readPhysicalLog(s.path, s.stats)
 	if err != nil {
 		return false, storageError()
 	}
@@ -309,7 +348,7 @@ func (s boundedLogStore) restore(ctx context.Context, payload []byte) *protocol.
 		return storageError()
 	}
 	defer release()
-	body, exists, err := readPhysicalLog(s.path)
+	body, exists, err := readPhysicalLog(s.path, s.stats)
 	if err != nil {
 		return storageError()
 	}

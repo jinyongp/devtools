@@ -80,6 +80,93 @@ func positive(o map[string]string, k string, def, max int) (int, *protocol.Error
 	}
 	return n, nil
 }
+
+func proposedEditImpact(s *State, item *Item, kind string, body Object) (Object, bool, *protocol.Error) {
+	operations := []any{}
+	target := item.ID
+	switch kind {
+	case "workstream":
+		value := Object{}
+		for _, field := range []string{"title", "description"} {
+			if v, ok := body[field]; ok {
+				value[field] = v
+			}
+		}
+		if len(value) > 0 {
+			operations = append(operations, Object{"op": "workstream.update", "value": value})
+		}
+		if v, ok := body["depends_on"]; ok {
+			operations = append(operations, Object{"op": "workstream.depends.set", "depends_on": v})
+		}
+	case "task":
+		if item.Workstream == "" {
+			return nil, false, nil
+		}
+		if proposed, ok := body["workstream_id"]; ok && proposed != item.Workstream {
+			return nil, false, nil
+		}
+		target = item.Workstream
+		value := Object{}
+		for _, field := range []string{"title", "description", "acceptance", "acceptance_keys"} {
+			if v, ok := body[field]; ok {
+				value[field] = v
+			}
+		}
+		if len(value) > 0 {
+			operations = append(operations, Object{"op": "task.update", "id": item.ID, "value": value})
+		}
+		if v, ok := body["depends_on"]; ok {
+			operations = append(operations, Object{"op": "task.depends.set", "id": item.ID, "depends_on": v})
+		}
+	default:
+		return nil, false, nil
+	}
+	if len(operations) == 0 {
+		return nil, false, nil
+	}
+	evaluation, e := EvaluateEdit(s, target, Object{
+		"reason":     "Preview proposed impact.",
+		"operations": operations,
+	}, nil)
+	if e != nil {
+		return nil, true, e
+	}
+	affected := []string{item.ID}
+	if impact := objectValue(evaluation.Result["impact"]); impact != nil {
+		affected = append(affected, arr(impact, "affected_ids")...)
+	}
+	affected = unique(affected)
+	running, completed := []string{}, []string{}
+	tasks, workstreams := []string{}, []string{}
+	for _, id := range affected {
+		i := s.Items[id]
+		if i == nil {
+			continue
+		}
+		if i.Kind == "task" {
+			tasks = append(tasks, id)
+		} else if i.Kind == "workstream" {
+			workstreams = append(workstreams, id)
+		}
+		if run := s.Current(id); run != nil {
+			running = append(running, run.ID)
+		}
+		if i.State == "done" {
+			completed = append(completed, id)
+		}
+	}
+	return Object{
+		"target_ids":              []string{item.ID},
+		"affected_ids":            affected,
+		"affected_task_ids":       tasks,
+		"affected_workstream_ids": workstreams,
+		"blockers":                []Object{},
+		"running_ids":             unique(running),
+		"completed_ids":           unique(completed),
+		"allowed":                 true,
+	}, true, nil
+}
+
 func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error) {
 	if ctx.Err() != nil {
 		return nil, canceledError()
@@ -194,6 +281,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		}
 		return out, nil
 	case "impact":
+		impact := s.Impact(item.ID)
 		if q.Body != nil {
 			fields := []string{"title", "description", "depends_on"}
 			if kind == "task" {
@@ -202,20 +290,42 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 			if e := validateBody(&Definition{Action: "preview", Fields: fields}, q.Body); e != nil {
 				return nil, e
 			}
-			if _, ok := q.Body["depends_on"]; ok {
-				if e := s.checkEdges(item, arr(q.Body, "depends_on")); e != nil {
-					return nil, e
-				}
-				item.Depends = arr(q.Body, "depends_on")
-			}
 			if id := str(q.Body, "workstream_id"); id != "" {
 				if _, e := s.Get(id, "workstream"); e != nil {
 					return nil, e
 				}
 			}
+			if kind == "task" && item.Workstream == "" && len(arr(q.Body, "acceptance_keys")) > 0 {
+				return nil, failure("invalid_argument", "Independent task cannot reference workstream acceptance.")
+			}
+			if evaluated, handled, e := proposedEditImpact(s, item, kind, q.Body); e != nil {
+				return nil, e
+			} else if handled {
+				impact = evaluated
+			} else if _, ok := q.Body["depends_on"]; ok {
+				preview := s.clone()
+				candidate := preview.Items[item.ID]
+				if e := preview.checkEdges(candidate, arr(q.Body, "depends_on")); e != nil {
+					return nil, e
+				}
+				candidate.Depends = arr(q.Body, "depends_on")
+				impact = preview.Impact(candidate.ID)
+			}
+			if kind == "task" && item.Workstream == "" && item.State != "open" {
+				blockers, _ := impact["blockers"].([]Object)
+				code := "canceled"
+				message := "Reopen the canceled task before changing its definition."
+				if item.State == "done" {
+					code = "completed"
+					message = "Reopen the completed task before changing its definition."
+					impact["completed_ids"] = unique(append(arr(impact, "completed_ids"), item.ID))
+				}
+				impact["blockers"] = append(blockers, Object{"code": code, "target_id": item.ID, "message": message})
+				impact["allowed"] = false
+			}
 			out["proposed_changes"] = q.Body
 		}
-		for k, v := range s.Impact(item.ID) {
+		for k, v := range impact {
 			out[k] = v
 		}
 		return out, nil

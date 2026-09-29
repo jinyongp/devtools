@@ -147,3 +147,107 @@ func TestCommonEditAppearsInAffectedItemHistory(t *testing.T) {
 		}
 	}
 }
+
+func TestImpactPreviewMatchesRunningWorkstreamTaskUpdate(t *testing.T) {
+	s, _, task, _ := currentFixture(t)
+	claim := call(t, s, "run.claimed", task, Object{})
+	preview, err := s.Query(context.Background(), Query{
+		Command: "impact",
+		Target:  task,
+		Body:    Object{"title": "after"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview["allowed"] != true || len(preview["blockers"].([]Object)) != 0 || len(arr(preview, "running_ids")) != 1 {
+		t.Fatalf("preview disagrees with editable running task: %#v", preview)
+	}
+	updated := call(t, s, "task.update", task, Object{"title": "after"})
+	item := objectValue(updated["item"])
+	if str(item, "title") != "after" || item["running"] != true {
+		t.Fatalf("running task update changed execution unexpectedly: %#v", updated)
+	}
+	state, readErr := s.Read(context.Background())
+	if readErr != nil || state.Current(task) == nil || state.Current(task).ID != runID(claim) {
+		t.Fatalf("run was not preserved: %#v %v", state.Current(task), readErr)
+	}
+}
+
+func TestImpactPreviewPreservesIndependentTaskGuard(t *testing.T) {
+	s := fixture(t)
+	task := itemID(call(t, s, "task.add", "", Object{"title": "before"}))
+	call(t, s, "run.claimed", task, Object{})
+	preview, err := s.Query(context.Background(), Query{
+		Command: "impact",
+		Target:  task,
+		Body:    Object{"title": "after"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview["allowed"] != false || len(preview["blockers"].([]Object)) != 1 {
+		t.Fatalf("independent running task unexpectedly editable: %#v", preview)
+	}
+	state, readErr := s.Read(context.Background())
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	_, execErr := s.Execute(context.Background(), Request{
+		Action: "task.update",
+		Target: task,
+		Body:   Object{"title": "after"},
+		Options: map[string]string{
+			"request-id":  ID(),
+			"if-revision": fmt.Sprint(state.Revision),
+		},
+	})
+	if execErr == nil || execErr.Code != "transition_conflict" {
+		t.Fatalf("independent task guard drifted: %+v", execErr)
+	}
+}
+
+func TestImpactPreviewPreservesIndependentLifecycleGuard(t *testing.T) {
+	s := fixture(t)
+	task := itemID(call(t, s, "task.add", "", Object{"title": "before"}))
+	call(t, s, "task.cancel", task, Object{"reason": "stop"})
+	preview, err := s.Query(context.Background(), Query{
+		Command: "impact",
+		Target:  task,
+		Body:    Object{"title": "after"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview["allowed"] != false || len(preview["blockers"].([]Object)) == 0 {
+		t.Fatalf("canceled independent task unexpectedly editable: %#v", preview)
+	}
+	state, readErr := s.Read(context.Background())
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	_, execErr := s.Execute(context.Background(), Request{
+		Action: "task.update",
+		Target: task,
+		Body:   Object{"title": "after"},
+		Options: map[string]string{
+			"request-id":  ID(),
+			"if-revision": fmt.Sprint(state.Revision),
+		},
+	})
+	if execErr == nil || execErr.Code != "transition_conflict" {
+		t.Fatalf("canceled independent task guard drifted: %+v", execErr)
+	}
+}
+
+func TestImpactPreviewRejectsIndependentWorkstreamAcceptance(t *testing.T) {
+	s := fixture(t)
+	task := itemID(call(t, s, "task.add", "", Object{"title": "independent"}))
+	_, err := s.Query(context.Background(), Query{
+		Command: "impact",
+		Target:  task,
+		Body:    Object{"acceptance_keys": []any{"A"}},
+	})
+	if err == nil || err.Code != "invalid_argument" {
+		t.Fatalf("independent workstream acceptance preview was accepted: %+v", err)
+	}
+}

@@ -585,6 +585,9 @@ func (s Store) List(ctx context.Context, profile string) ([]Record, *protocol.Er
 	}
 	items := []Record{}
 	for _, r := range stored {
+		if profile != "" && r.Profile != profile {
+			continue
+		}
 		live, statusErr := s.statusRecord(ctx, r)
 		if statusErr != nil {
 			return nil, statusErr

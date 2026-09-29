@@ -49,6 +49,38 @@ func TestStaleSupervisorAndRetryConflict(t *testing.T) {
 		t.Fatal("missing execution contract", e)
 	}
 }
+func TestFilteredListSkipsUnrelatedSupervisorRPC(t *testing.T) {
+	s := Store{Data: privateTempDir(t)}
+	id := tasks.ID()
+	started := time.Now().UTC()
+	record := Record{ID: id, Profile: "other", Instance: "instance", Directory: privateTempDir(t), Command: "web", CreatedAt: started, StartedAt: &started, State: "running"}
+	if err := writePrivate(s.path(id, "record.json"), record); err != nil {
+		t.Fatal(err)
+	}
+	token := strings.Repeat("f", 64)
+	hit := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		select {
+		case hit <- struct{}{}:
+		default:
+		}
+		_ = json.NewEncoder(w).Encode(record)
+	}))
+	defer server.Close()
+	if err := writePrivate(s.path(id, "control.json"), control{ID: id, Address: server.URL, Token: token}); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.List(context.Background(), "wanted")
+	if err != nil || len(items) != 0 {
+		t.Fatalf("filtered list = %#v %v", items, err)
+	}
+	select {
+	case <-hit:
+		t.Fatal("filtered list contacted unrelated supervisor")
+	default:
+	}
+}
+
 func TestIncompleteReceiptRetryPreservesChangedAndReportsReplay(t *testing.T) {
 	s := Store{Data: privateTempDir(t)}
 	requestID := tasks.ID()

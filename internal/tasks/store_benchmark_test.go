@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
@@ -182,4 +183,145 @@ func BenchmarkTaskStorageCursorSecondPage(b *testing.B) {
 		}
 	}
 	b.ReportMetric(float64(historyBytes)/(1<<20), "history-MiB")
+}
+
+func benchmarkActiveWorkstreamState(bodyBytes int) (*State, string) {
+	state := NewState()
+	state.Version = JournalVersion
+	body := strings.Repeat("x", bodyBytes)
+	counts := []int{13, 38, 7, 10, 6, 9, 54, 21, 27}
+	order := 1
+	firstTask := ""
+	for workstreamIndex, count := range counts {
+		workstreamID := fmt.Sprintf("workstream-%02d", workstreamIndex)
+		requirements := []Object{}
+		acceptance := []Object{}
+		for taskIndex := 0; taskIndex < count; taskIndex++ {
+			requirementKey := fmt.Sprintf("R-%02d-%03d", workstreamIndex, taskIndex)
+			acceptanceKey := fmt.Sprintf("A-%02d-%03d", workstreamIndex, taskIndex)
+			requirements = append(requirements, Object{"key": requirementKey, "text": "requirement"})
+			acceptance = append(acceptance, Object{"key": acceptanceKey, "text": "acceptance", "requirement_keys": []string{requirementKey}})
+		}
+		workstream := &Item{
+			ID: workstreamID, Kind: "workstream", State: "active", Title: workstreamID, Description: "benchmark",
+			Props: Object{
+				"spec": Object{"body": body, "requirements": requirements, "acceptance": acceptance},
+				"plan": Object{"body": body},
+			},
+			Revision: order, Created: stamp(), Updated: stamp(), Order: order,
+		}
+		state.Items[workstreamID] = workstream
+		workstreamBasis := newDefinitionBasis(order)
+		order++
+		for taskIndex := 0; taskIndex < count; taskIndex++ {
+			taskID := fmt.Sprintf("task-%02d-%03d", workstreamIndex, taskIndex)
+			if firstTask == "" {
+				firstTask = taskID
+			}
+			requirementKey := fmt.Sprintf("R-%02d-%03d", workstreamIndex, taskIndex)
+			acceptanceKey := fmt.Sprintf("A-%02d-%03d", workstreamIndex, taskIndex)
+			task := &Item{
+				ID: taskID, Kind: "task", State: "open", Title: taskID, Description: "benchmark",
+				Workstream: workstreamID, Props: Object{"acceptance_keys": []string{acceptanceKey}},
+				Revision: order, Created: stamp(), Updated: stamp(), Order: order,
+			}
+			state.Items[taskID] = task
+			state.Tracking[taskID] = newDefinitionBasis(order)
+			workstreamBasis.Order = append(workstreamBasis.Order, taskID)
+			workstreamBasis.KeyEpochs["acceptance:"+acceptanceKey] = workstream.Revision
+			workstreamBasis.KeyEpochs["requirement:"+requirementKey] = workstream.Revision
+			order++
+		}
+		state.Tracking[workstreamID] = workstreamBasis
+	}
+	state.Revision = order
+	return state, firstTask
+}
+
+func benchmarkV3WorkstreamTailStore(tb testing.TB, bodyBytes, tailFrames int) Store {
+	tb.Helper()
+	root := filepath.Join(tb.TempDir(), "data")
+	if err := PrivateDir(root); err != nil {
+		tb.Fatal(err)
+	}
+	store := Store{Directory: filepath.Join(root, "tasks"), Profile: "bench-workstreams"}
+	if err := PrivateDir(store.Directory); err != nil {
+		tb.Fatal(err)
+	}
+	resolution, err := createGeneration(store.Directory, store.Profile, ID())
+	if err != nil {
+		tb.Fatal(err)
+	}
+	state, target := benchmarkActiveWorkstreamState(bodyBytes)
+	if err := writeMaterializedSnapshot(resolution.Snapshot, snapshotFromState(store.Profile, state, 0, stamp())); err != nil {
+		tb.Fatal(err)
+	}
+	previousRevision := state.Revision
+	for index := 0; index < tailFrames; index++ {
+		event := Event{
+			ID:       fmt.Sprintf("tail-%03d", index),
+			Sequence: previousRevision + 1,
+			At:       stamp(),
+			Action:   "task.update",
+			Target:   target,
+			Data:     Object{"description": fmt.Sprintf("tail-%03d", index)},
+		}
+		frame := walFrame{
+			Meta: walFrameMeta{
+				Kind:             "historical",
+				PreviousRevision: previousRevision,
+				FinalRevision:    previousRevision + 1,
+				EventCount:       1,
+			},
+			Events: []Event{event},
+		}
+		temp := frameTempPath(resolution)
+		if _, _, err := writeFrameFile(temp, frame); err != nil {
+			tb.Fatal(err)
+		}
+		if _, err := appendFrameFile(resolution.WAL, temp); err != nil {
+			_ = os.Remove(temp)
+			tb.Fatal(err)
+		}
+		_ = os.Remove(temp)
+		previousRevision++
+	}
+	if err := generationDurable(resolution); err != nil {
+		tb.Fatal(err)
+	}
+	storage, resolveErr := store.resolveStorage()
+	if resolveErr != nil {
+		tb.Fatal(resolveErr)
+	}
+	release, err := maintenance.AcquireExclusive(context.Background(), root)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	if err := store.publishV3(storage, resolution); err != nil {
+		release()
+		tb.Fatal(err)
+	}
+	release()
+	return store
+}
+
+func BenchmarkTaskStorageWorkstreamListTail(b *testing.B) {
+	for _, tailFrames := range []int{128, 255} {
+		b.Run(fmt.Sprintf("tail_%d", tailFrames), func(b *testing.B) {
+			store := benchmarkV3WorkstreamTailStore(b, 256<<10, tailFrames)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for index := 0; index < b.N; index++ {
+				result, err := store.Query(context.Background(), Query{Command: "workstream list", Options: map[string]string{"state": "all", "limit": "200"}})
+				if err != nil {
+					b.Fatal(err)
+				}
+				if len(result["items"].([]any)) != 9 {
+					b.Fatal("unexpected workstream count")
+				}
+			}
+			b.ReportMetric(float64(tailFrames), "tail-frames")
+			b.ReportMetric(256, "body-KiB")
+		})
+	}
 }

@@ -102,6 +102,75 @@ func entryNames(entries []os.DirEntry) []string {
 	return names
 }
 
+func TestMaterializedSnapshotPreservesInternalTaskOrder(t *testing.T) {
+	firstID := "ffffffff-ffff-4fff-8fff-ffffffffffff"
+	secondID := "00000000-0000-4000-8000-000000000001"
+	state := NewState()
+	state.Revision = 2
+	state.Items[firstID] = &Item{ID: firstID, Kind: "task", State: "open", Title: "first", Props: Object{}, Revision: 1, Order: 1}
+	state.Items[secondID] = &Item{ID: secondID, Kind: "task", State: "open", Title: "second", Props: Object{}, Revision: 2, Order: 2}
+
+	root := privateTempDir(t)
+	path := filepath.Join(root, "snapshot.json")
+	if err := writeMaterializedSnapshot(path, snapshotFromState("test", state, 0, "")); err != nil {
+		t.Fatal(err)
+	}
+	_, loaded, err := readMaterializedSnapshot(path, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := loaded.List("task")
+	if len(items) != 2 || items[0].ID != firstID || items[0].Order != 1 || items[1].ID != secondID || items[1].Order != 2 {
+		t.Fatalf("materialized task order changed: %#v", items)
+	}
+}
+
+func TestCurrentV3LoaderFallsBackWhenSnapshotLacksItemOrders(t *testing.T) {
+	s := fixture(t)
+	for _, title := range []string{"first", "second"} {
+		if _, err := s.Execute(context.Background(), Request{
+			Action: "task.add", Body: Object{"title": title},
+			Options: map[string]string{"request-id": ID()},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before, readErr := s.Read(context.Background())
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	resolution, ok, resolveErr := resolveV3(s.Directory, s.Profile)
+	if resolveErr != nil || !ok {
+		t.Fatal(resolveErr)
+	}
+	info, statErr := os.Stat(resolution.WAL)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	legacy := snapshotFromState(s.Profile, before, info.Size(), "")
+	legacy.ItemOrders = nil
+	legacy.Checksum = materializedStateChecksum(legacy)
+	if err := writeMaterializedSnapshot(resolution.Snapshot, legacy); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readMaterializedSnapshot(resolution.Snapshot, s.Profile); err == nil {
+		t.Fatal("snapshot without item order metadata was accepted")
+	}
+	after, err := loadCurrentV3(resolution)
+	if err != nil {
+		t.Fatalf("WAL fallback failed: %v", err)
+	}
+	beforeItems, afterItems := before.List("task"), after.List("task")
+	if len(beforeItems) != len(afterItems) {
+		t.Fatalf("item count changed after WAL fallback: %d != %d", len(beforeItems), len(afterItems))
+	}
+	for index := range beforeItems {
+		if beforeItems[index].ID != afterItems[index].ID || beforeItems[index].Order != afterItems[index].Order {
+			t.Fatalf("task order changed after WAL fallback: before=%#v after=%#v", beforeItems, afterItems)
+		}
+	}
+}
+
 func TestPendingCoordinationRoundTrip(t *testing.T) {
 	s := fixture(t)
 	if err := PrivateDir(s.Directory); err != nil {

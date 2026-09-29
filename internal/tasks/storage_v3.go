@@ -43,6 +43,7 @@ type materializedState struct {
 	Revision      int                         `json:"revision"`
 	WALOffset     int64                       `json:"wal_offset"`
 	Items         map[string]*Item            `json:"items"`
+	ItemOrders    map[string]int              `json:"item_orders"`
 	Runs          map[string]*Run             `json:"runs"`
 	Tracking      map[string]*DefinitionBasis `json:"tracking"`
 	LastEventAt   string                      `json:"last_event_at,omitempty"`
@@ -272,12 +273,14 @@ func createGeneration(directory, profile, generation string) (v3Resolution, erro
 
 func snapshotFromState(profile string, state *State, walOffset int64, lastEventAt string) materializedState {
 	items := map[string]*Item{}
+	itemOrders := map[string]int{}
 	for id, item := range state.Items {
 		raw, _ := json.Marshal(item)
 		var copied Item
 		_ = json.Unmarshal(raw, &copied)
 		copied.Order = item.Order
 		items[id] = &copied
+		itemOrders[id] = item.Order
 	}
 	runs := map[string]*Run{}
 	for id, run := range state.Runs {
@@ -294,6 +297,7 @@ func snapshotFromState(profile string, state *State, walOffset int64, lastEventA
 		Revision:      state.Revision,
 		WALOffset:     walOffset,
 		Items:         items,
+		ItemOrders:    itemOrders,
 		Runs:          runs,
 		Tracking:      tracking,
 		LastEventAt:   lastEventAt,
@@ -310,7 +314,7 @@ func materializedStateChecksum(snapshot materializedState) string {
 }
 
 func (m materializedState) state(profile string) (*State, error) {
-	if m.FormatVersion != taskStorageVersion || m.Profile != profile || m.Version != 1 && m.Version != JournalVersion || m.Revision < 0 || m.WALOffset < 0 || m.Items == nil || m.Runs == nil || m.Tracking == nil || !validDigest(m.Checksum) || m.Checksum != materializedStateChecksum(m) {
+	if m.FormatVersion != taskStorageVersion || m.Profile != profile || m.Version != 1 && m.Version != JournalVersion || m.Revision < 0 || m.WALOffset < 0 || m.Items == nil || m.ItemOrders == nil || len(m.ItemOrders) != len(m.Items) || m.Runs == nil || m.Tracking == nil || !validDigest(m.Checksum) || m.Checksum != materializedStateChecksum(m) {
 		return nil, errors.New("invalid materialized snapshot")
 	}
 	state := &State{
@@ -322,9 +326,11 @@ func (m materializedState) state(profile string) (*State, error) {
 		Tracking: m.Tracking,
 	}
 	for id, item := range state.Items {
-		if item == nil || item.ID != id {
+		order, ok := m.ItemOrders[id]
+		if item == nil || item.ID != id || !ok || order <= 0 || order > m.Revision {
 			return nil, errors.New("invalid materialized item")
 		}
+		item.Order = order
 	}
 	for id, run := range state.Runs {
 		if run == nil || run.ID != id {

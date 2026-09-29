@@ -23,6 +23,48 @@ func cloneJournal(journal *Journal) (*Journal, error) {
 	return &clone, nil
 }
 
+func canonicalizeJournalReceiptsFast(journal *Journal) (bool, error) {
+	for requestID, receipt := range journal.Receipts {
+		if !validID(requestID) || receipt.Fingerprint == "" || receipt.Result == nil {
+			return false, errors.New("invalid legacy receipt")
+		}
+		result := copyObject(receipt.Result)
+		applied := num(result, "revision")
+		if _, ok := result["previous_revision"]; !ok {
+			result["previous_revision"] = applied - len(arr(result, "action_ids"))
+		}
+		if _, ok := result["affected_ids"]; !ok {
+			return false, nil
+		}
+		if _, ok := result["affected_count"]; !ok {
+			result["affected_count"] = len(arr(result, "affected_ids"))
+		}
+		receipt.Result = result
+		journal.Receipts[requestID] = receipt
+	}
+	for contextHash, runID := range journal.Contexts {
+		if !validDigest(contextHash) || !validID(runID) {
+			return false, errors.New("invalid legacy context")
+		}
+	}
+	return true, nil
+}
+
+func canonicalizeExportJournal(journal *Journal) error {
+	fast, err := canonicalizeJournalReceiptsFast(journal)
+	if err != nil {
+		return err
+	}
+	if fast {
+		return nil
+	}
+	state, replayErr := replayJournal(journal)
+	if replayErr != nil {
+		return errors.New("cannot replay task journal for receipt canonicalization")
+	}
+	return canonicalizeJournalReceipts(journal, state)
+}
+
 func canonicalizeJournalReceipts(journal *Journal, state *State) error {
 	for requestID, receipt := range journal.Receipts {
 		if !validID(requestID) || receipt.Fingerprint == "" || receipt.Result == nil {

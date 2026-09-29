@@ -478,3 +478,82 @@ func BenchmarkTaskStorageLifecycleReplay(b *testing.B) {
 		})
 	}
 }
+
+func benchmarkV3LargeExportHistoryStore(tb testing.TB, frames, payloadBytes int) Store {
+	tb.Helper()
+	store, resolution := benchmarkV3LifecycleTailStore(tb, 4<<10, 0)
+	state, err := store.ReadCurrent(context.Background())
+	if err != nil {
+		tb.Fatal(err)
+	}
+	padding := strings.Repeat("x", payloadBytes)
+	previousRevision := state.Revision
+	for index := 0; index < frames; index++ {
+		requestID := ID()
+		fingerprint := fmt.Sprintf("large-export-%06d", index)
+		event := Event{
+			ID: ID(), Sequence: previousRevision + 1, At: stamp(), RequestID: requestID,
+			Action: "workstream.edited", Target: "workstream-00",
+			Data: Object{"patches": []Object{}, "reason": padding},
+		}
+		receipt := newReceiptCoordination(requestID, fingerprint, "", Object{
+			"changed":           true,
+			"revision":          previousRevision + 1,
+			"previous_revision": previousRevision,
+			"action_ids":        []string{event.ID},
+			"affected_ids":      []string{},
+			"affected_count":    0,
+		}, "")
+		ref := receiptReference(receipt)
+		frame := walFrame{
+			Meta: walFrameMeta{
+				Kind: "mutation", PreviousRevision: previousRevision, FinalRevision: previousRevision + 1,
+				RequestID: requestID, Fingerprint: fingerprint, EventCount: 1, HasReceipt: true,
+			},
+			Events: []Event{event}, Receipt: &ref,
+		}
+		if _, err := appendPreparedFrame(resolution, frame, &receipt, nil); err != nil {
+			tb.Fatal(err)
+		}
+		previousRevision++
+	}
+	if err := generationDurable(resolution); err != nil {
+		tb.Fatal(err)
+	}
+	current, replayErr := loadCurrentFromWAL(resolution)
+	if replayErr != nil {
+		tb.Fatal(replayErr)
+	}
+	walInfo, statErr := os.Stat(resolution.WAL)
+	if statErr != nil {
+		tb.Fatal(statErr)
+	}
+	if err := writeMaterializedSnapshot(resolution.Snapshot, snapshotFromState(store.Profile, current, walInfo.Size(), stamp())); err != nil {
+		tb.Fatal(err)
+	}
+	return store
+}
+
+func BenchmarkTaskStorageLargeHistoryExport(b *testing.B) {
+	for _, test := range []struct {
+		frames       int
+		payloadBytes int
+	}{
+		{frames: 256, payloadBytes: 64 << 10},
+		{frames: 1024, payloadBytes: 64 << 10},
+		{frames: 1500, payloadBytes: 64 << 10},
+	} {
+		b.Run(fmt.Sprintf("frames_%d_payload_%dKiB", test.frames, test.payloadBytes>>10), func(b *testing.B) {
+			store := benchmarkV3LargeExportHistoryStore(b, test.frames, test.payloadBytes)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for index := 0; index < b.N; index++ {
+				snapshot, err := store.ExportSnapshotHeld(128 << 20)
+				if err != nil {
+					b.Fatal(err)
+				}
+				b.ReportMetric(float64(len(snapshot.Data))/(1024*1024), "snapshot-MiB")
+			}
+		})
+	}
+}

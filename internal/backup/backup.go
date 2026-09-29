@@ -381,9 +381,8 @@ func (e Engine) snapshot(selected string) (Snapshot, error) {
 			return s, err
 		}
 		if taskSnapshot.Data != nil {
-			if _, err := tasks.InspectSnapshot(taskSnapshot.Data, name); err != nil {
-				return s, err
-			}
+			// ExportSnapshotHeld already validates and canonicalizes the logical
+			// journal, so replaying the same history here would duplicate export work.
 			p.Tasks = taskSnapshot.Data
 		}
 		if p.Values == nil && p.Tasks == nil {

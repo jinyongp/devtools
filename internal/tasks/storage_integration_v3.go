@@ -10,6 +10,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/profilekey"
+	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 type LogicalSnapshot struct {
@@ -68,12 +69,26 @@ func (s Store) ExportSnapshotHeld(limit int64) (LogicalSnapshot, error) {
 			return out, err
 		}
 	}
-	journal, state, _, loadErr := s.loadResolved()
-	if loadErr != nil {
-		return out, errors.New(loadErr.Message)
-	}
-	if err := canonicalizeJournalReceipts(journal, state); err != nil {
-		return out, err
+	var journal *Journal
+	if info.V3 != nil {
+		var loadErr *protocol.Error
+		journal, loadErr = s.loadJournalV3ForExport(*info.V3)
+		if loadErr != nil {
+			return out, errors.New(loadErr.Message)
+		}
+		if err := canonicalizeExportJournal(journal); err != nil {
+			return out, err
+		}
+	} else {
+		var state *State
+		var loadErr *protocol.Error
+		journal, state, _, loadErr = s.loadResolved()
+		if loadErr != nil {
+			return out, errors.New(loadErr.Message)
+		}
+		if err := canonicalizeJournalReceipts(journal, state); err != nil {
+			return out, err
+		}
 	}
 	body, err := json.Marshal(journal)
 	if err != nil {

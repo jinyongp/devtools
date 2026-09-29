@@ -52,51 +52,102 @@ func frameNeedsDefinitionSignature(frame walFrame) bool {
 	return false
 }
 
-func (s Store) loadV3(resolution v3Resolution) (*Journal, *State, *protocol.Error) {
-	scan, err := scanWAL(resolution.WAL, 0, true)
-	if err != nil {
-		return nil, nil, storageError()
-	}
+func (s Store) journalFromV3Scan(resolution v3Resolution, scan walScan) (*Journal, *protocol.Error) {
 	journal := s.emptyJournal()
 	expectedRevision := 0
 	for _, frame := range scan.Frames {
 		if frame.Meta.PreviousRevision != expectedRevision {
-			return nil, nil, storageError()
+			return nil, storageError()
 		}
 		receipt, hasReceipt, receiptErr := readFrameReceipt(resolution, frame)
 		if receiptErr != nil {
-			return nil, nil, storageError()
+			return nil, storageError()
 		}
 		for _, event := range frame.Events {
 			if safeApplyEventSequence(journal.Events, event) != nil {
-				return nil, nil, storageError()
+				return nil, storageError()
 			}
 			journal.Events = append(journal.Events, event)
 		}
 		if hasReceipt {
 			if _, duplicate := journal.Receipts[receipt.RequestID]; duplicate {
-				return nil, nil, storageError()
+				return nil, storageError()
 			}
 			journal.Receipts[receipt.RequestID] = Receipt{Fingerprint: receipt.Fingerprint, ContextHash: receipt.ContextHash, Result: copyObject(receipt.Result)}
 		}
 		for _, ref := range frame.Contexts {
 			payload, exists, err := readCommittedContext(resolution, ref.Key)
 			if err != nil || !exists || payload.PayloadDigest != ref.PayloadDigest || payload.FrameDigest != frame.Digest {
-				return nil, nil, storageError()
+				return nil, storageError()
 			}
 			if existing, duplicate := journal.Contexts[payload.ContextHash]; duplicate && existing != payload.RunID {
-				return nil, nil, storageError()
+				return nil, storageError()
 			}
 			journal.Contexts[payload.ContextHash] = payload.RunID
 		}
 		expectedRevision = frame.Meta.FinalRevision
 	}
+	if len(journal.Events) != expectedRevision {
+		return nil, storageError()
+	}
 	journal.Version = logicalVersionFromEvents(journal.Events)
+	return journal, nil
+}
+
+func (s Store) loadJournalV3(resolution v3Resolution) (*Journal, *protocol.Error) {
+	scan, err := scanWAL(resolution.WAL, 0, true)
+	if err != nil {
+		return nil, storageError()
+	}
+	return s.journalFromV3Scan(resolution, scan)
+}
+
+func (s Store) loadJournalV3ForExport(resolution v3Resolution) (*Journal, *protocol.Error) {
+	scan, err := scanWAL(resolution.WAL, 0, true)
+	if err != nil {
+		return nil, storageError()
+	}
+	journal, journalErr := s.journalFromV3Scan(resolution, scan)
+	if journalErr != nil {
+		return nil, journalErr
+	}
+	snapshot, state, snapshotErr := readMaterializedSnapshot(resolution.Snapshot, resolution.Marker.Profile)
+	if snapshotErr == nil {
+		tail := make([]walFrame, 0, len(scan.Frames))
+		validOffset := true
+		for _, frame := range scan.Frames {
+			switch {
+			case frame.EndOffset <= snapshot.WALOffset:
+			case frame.StartOffset >= snapshot.WALOffset:
+				tail = append(tail, frame)
+			default:
+				validOffset = false
+			}
+		}
+		if validOffset {
+			current, revision, applyErr := applyCurrentFrames(resolution, state, tail, snapshot.Revision)
+			if applyErr == nil && current.Revision == revision && revision == len(journal.Events) && !(current.Version == 1 && current.Revision > 0) {
+				return journal, nil
+			}
+		}
+	}
+	state, replayErr := replayJournal(journal)
+	if replayErr != nil || state.Revision != len(journal.Events) {
+		return nil, storageError()
+	}
+	return journal, nil
+}
+
+func (s Store) loadV3(resolution v3Resolution) (*Journal, *State, *protocol.Error) {
+	journal, err := s.loadJournalV3(resolution)
+	if err != nil {
+		return nil, nil, err
+	}
 	state, replayErr := replayJournal(journal)
 	if replayErr != nil {
 		return nil, nil, replayErr
 	}
-	if state.Revision != expectedRevision {
+	if state.Revision != len(journal.Events) {
 		return nil, nil, storageError()
 	}
 	return journal, state, nil

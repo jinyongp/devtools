@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -151,7 +152,16 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	d := json.NewDecoder(r.Body)
+	raw, readErr := io.ReadAll(r.Body)
+	if readErr != nil {
+		invalidAction(w)
+		return
+	}
+	if _, decodeErr := tasks.Decode(string(raw)); decodeErr != nil {
+		invalidAction(w)
+		return
+	}
+	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
 	var req actionRequest
 	if d.Decode(&req) != nil || d.Decode(new(any)) != io.EOF || (!project.ValidProfile(req.Profile) && !(req.Domain == "cleanup" && req.Profile == "")) {

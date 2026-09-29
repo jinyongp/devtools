@@ -37,7 +37,7 @@ func TestManagementAuthenticationAndConcurrency(t *testing.T) {
 			t.Fatal(r.Code, r.Body)
 		}
 	}
-	for _, bad := range []string{body + " {}", strings.Replace(body, `"task.add"`, `"shell.run"`, 1), strings.Replace(body, `"if-revision":"0"`, `"unknown":"0"`, 1)} {
+	for _, bad := range []string{body + " {}", strings.Replace(body, `"task.add"`, `"shell.run"`, 1), strings.Replace(body, `"if-revision":"0"`, `"unknown":"0"`, 1), strings.Replace(body, `"title":"One"`, `"title":"One","title":"Two"`, 1), strings.Replace(body, `"domain":"task"`, `"domain":"task","domain":"task"`, 1)} {
 		if r := call(bad, s.registry.Address, "session"); r.Code != 400 {
 			t.Fatal(r.Code, r.Body)
 		}

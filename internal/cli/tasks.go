@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func (a *App) taskStore(r Request) (tasks.Store, *protocol.Error) {
@@ -262,7 +263,7 @@ func (a *App) registerTasks() {
 						return nil, argumentError("Choose JSON input or field options.", f)
 					}
 				}
-				data, e := taskInput(streams, r)
+				data, e := taskInput(ctx, streams, r)
 				if e != nil {
 					return nil, e
 				}
@@ -361,7 +362,7 @@ func (a *App) registerTasks() {
 			}
 			var body tasks.Object
 			if r.Options["file"] != "" || r.Options["stdin"] == "true" {
-				raw, e := taskInput(streams, r)
+				raw, e := taskInput(ctx, streams, r)
 				if e != nil {
 					return nil, e
 				}
@@ -374,12 +375,13 @@ func (a *App) registerTasks() {
 		}})
 	}
 }
-func taskInput(streams IO, r Request) (string, *protocol.Error) {
+func taskInput(ctx context.Context, streams IO, r Request) (string, *protocol.Error) {
 	if r.Options["file"] != "" && r.Options["stdin"] == "true" {
 		return "", argumentError("Choose file or stdin.", "")
 	}
 	reader := streams.In
 	var f *os.File
+	var cancelablePipe *os.File
 	if path := r.Options["file"]; path != "" {
 		var e error
 		f, e = os.Open(path)
@@ -397,10 +399,32 @@ func taskInput(streams IO, r Request) (string, *protocol.Error) {
 		if e != nil || info.Mode()&os.ModeCharDevice != 0 {
 			return "", argumentError("Provide JSON through a pipe or redirected file.", "stdin")
 		}
+		if info.Mode()&os.ModeNamedPipe != 0 {
+			cancelablePipe = input
+		}
 	}
-	b, e := io.ReadAll(io.LimitReader(reader, (2<<20)+1))
-	if e != nil {
-		return "", argumentError("Cannot read JSON input.", "")
+	type readResult struct {
+		body []byte
+		err  error
 	}
-	return string(b), nil
+	done := make(chan readResult, 1)
+	go func() {
+		body, err := io.ReadAll(io.LimitReader(reader, (2<<20)+1))
+		done <- readResult{body: body, err: err}
+	}()
+	select {
+	case <-ctx.Done():
+		if cancelablePipe != nil {
+			if err := cancelablePipe.SetReadDeadline(time.Now()); err == nil {
+				<-done
+				_ = cancelablePipe.SetReadDeadline(time.Time{})
+			}
+		}
+		return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
+	case result := <-done:
+		if result.err != nil {
+			return "", argumentError("Cannot read JSON input.", "")
+		}
+		return string(result.body), nil
+	}
 }

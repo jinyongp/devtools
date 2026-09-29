@@ -55,6 +55,33 @@ finally:
     fcntl.flock(lock, fcntl.LOCK_UN)
     lock.close()
 
+stdin_process = subprocess.Popen(
+    [
+        "devtools", "task", "add", "--stdin",
+        "--request-id", "11111111-1111-4111-8111-111111111111",
+    ],
+    cwd=root,
+    env=env,
+    text=True,
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+)
+try:
+    time.sleep(0.12)
+    assert stdin_process.poll() is None, "task stdin unexpectedly completed before input"
+    stdin_process.send_signal(signal.SIGINT)
+    stdin_process.wait(timeout=2)
+    assert stdin_process.returncode == 130, stdin_process.returncode
+    error = json.loads(stdin_process.stderr.read())["error"]
+    assert error["code"] == "canceled", error
+finally:
+    if stdin_process.stdin is not None:
+        stdin_process.stdin.close()
+    if stdin_process.poll() is None:
+        stdin_process.kill()
+        stdin_process.wait(timeout=2)
+
 assert execute("devtools", "var", "list")["profile"] == "probe"
 assert execute("devtools", "task", "list")["profile"] == "probe"
-print("Installed maintenance-lock cancellation for values and task reads verified")
+print("Installed maintenance-lock and open-stdin cancellation verified")

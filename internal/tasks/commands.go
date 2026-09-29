@@ -16,6 +16,10 @@ var key = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
 
 func validID(id string) bool { return uuid.MatchString(id) }
 
+func textTooLong(value string, max int) bool {
+	return len([]rune(value)) > max
+}
+
 // Decode rejects duplicate keys as well as trailing JSON and oversized public inputs.
 func Decode(data string) (Object, *protocol.Error) {
 	return decodeObject(data, 2<<20)
@@ -253,7 +257,7 @@ func validateBody(def *Definition, b Object) *protocol.Error {
 			if k == "body" {
 				max = 1 << 20
 			}
-			if len([]rune(s)) > max {
+			if textTooLong(s, max) {
 				return failure("invalid_argument", "Input string exceeds its size limit.")
 			}
 			if k == "body" && len(s) > 1<<20 {
@@ -332,7 +336,10 @@ func nestedBody(def *Definition, b Object) *protocol.Error {
 					continue
 				}
 				if k == "evidence" {
-					if _, ok := v.(string); ok {
+					if s, ok := v.(string); ok {
+						if strings.TrimSpace(s) == "" || textTooLong(s, 16384) || strings.ContainsRune(s, 0) {
+							return failure("invalid_argument", "Invalid nested string.")
+						}
 						continue
 					}
 					if e := stringArray(v, false); e != nil {
@@ -341,7 +348,7 @@ func nestedBody(def *Definition, b Object) *protocol.Error {
 					continue
 				}
 				s, ok := v.(string)
-				if !ok || strings.TrimSpace(s) == "" || len(s) > 16384 || strings.ContainsRune(s, 0) {
+				if !ok || strings.TrimSpace(s) == "" || textTooLong(s, 16384) || strings.ContainsRune(s, 0) {
 					return failure("invalid_argument", "Invalid nested string.")
 				}
 				if k == "kind" && !contains([]string{"command", "file", "commit", "url", "note"}, s) {
@@ -366,7 +373,7 @@ func stringArray(v any, ids bool) *protocol.Error {
 	}
 	for _, x := range a {
 		s, ok := x.(string)
-		if !ok || strings.TrimSpace(s) == "" || len(s) > 16384 || (ids && !validID(s)) {
+		if !ok || strings.TrimSpace(s) == "" || textTooLong(s, 16384) || (ids && !validID(s)) {
 			return failure("invalid_argument", "Invalid array entry.")
 		}
 	}

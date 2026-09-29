@@ -20,7 +20,7 @@ func editError(index int, message string) *protocol.Error {
 }
 
 func parseEdit(body Object) ([]editOperation, *protocol.Error) {
-	if len(body) != 2 || strings.TrimSpace(str(body, "reason")) == "" || len([]rune(str(body, "reason"))) > 16384 {
+	if len(body) != 2 || strings.TrimSpace(str(body, "reason")) == "" || textTooLong(str(body, "reason"), 16384) {
 		return nil, failure("invalid_argument", "Provide reason and 1–200 operations.")
 	}
 	if _, ok := body["operations"]; !ok {

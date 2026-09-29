@@ -180,3 +180,37 @@ func TestWorkstreamCompletionCandidateUsesCheapNecessaryConditions(t *testing.T)
 		t.Fatal("completion older than close epoch remained a candidate")
 	}
 }
+
+func TestLifecyclePreparationPersistsDefinitionSignatures(t *testing.T) {
+	s, w, first, second := assessmentFixture(t)
+	expectedClaim := s.Assessment(first).Signature
+	claimEvents, _, _, err := s.prepare(Request{
+		Action: "run.claimed", Target: first, Body: Object{}, Options: map[string]string{"dir": "/tmp"},
+	}, nil)
+	if err != nil || len(claimEvents) != 1 || str(claimEvents[0].Data, "definition_signature") != expectedClaim {
+		t.Fatalf("claim signature not persisted: events=%#v err=%v", claimEvents, err)
+	}
+
+	activeRun := ID()
+	applyTestEvent(s, "run.claimed", first, Object{
+		"run_id": activeRun, "directory": "/tmp", "definition_signature": expectedClaim,
+	})
+	expectedTakeover := s.Assessment(first).Signature
+	takeoverEvents, _, _, err := s.prepare(Request{
+		Action: "run.taken_over", Target: first, Body: Object{}, Options: map[string]string{"expected-run": activeRun, "dir": "/tmp"},
+	}, nil)
+	if err != nil || len(takeoverEvents) != 1 || str(takeoverEvents[0].Data, "definition_signature") != expectedTakeover {
+		t.Fatalf("takeover signature not persisted: events=%#v err=%v", takeoverEvents, err)
+	}
+	applyTestEvent(s, "run.released", first, Object{"run_id": activeRun})
+
+	finishTestTask(s, first)
+	finishTestTask(s, second)
+	expectedClose := s.Assessment(w).Signature
+	closeEvents, _, _, err := s.prepare(Request{
+		Action: "workstream.close", Target: w, Body: Object{}, Options: map[string]string{"if-revision": fmt.Sprint(s.Revision)},
+	}, nil)
+	if err != nil || len(closeEvents) != 1 || str(closeEvents[0].Data, "definition_signature") != expectedClose {
+		t.Fatalf("close signature not persisted: events=%#v err=%v", closeEvents, err)
+	}
+}

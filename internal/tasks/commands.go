@@ -580,6 +580,7 @@ func (s *State) prepare(r Request, contexts ContextLookup) ([]Event, Object, str
 		if i.State == "done" {
 			prefixEvents = append(prefixEvents, Event{Action: "task.reopen", Target: target, Data: Object{"reason": "Execute against the changed definition.", "cause": "definition_changed"}})
 		}
+		b["definition_signature"] = s.Assessment(i.ID).Signature
 		b["run_id"] = ID()
 		b["directory"] = r.Options["dir"]
 		credential = secret()
@@ -613,6 +614,7 @@ func (s *State) prepare(r Request, contexts ContextLookup) ([]Event, Object, str
 					return fail(e)
 				}
 			}
+			b["definition_signature"] = s.Assessment(i.ID).Signature
 			if len(s.Blockers(i)) > 0 {
 				return fail(conflict("dependency_conflict", []string{i.ID}))
 			}
@@ -719,6 +721,7 @@ func (s *State) prepare(r Request, contexts ContextLookup) ([]Event, Object, str
 				if e := s.CanClose(i); e != nil {
 					return fail(e)
 				}
+				b["definition_signature"] = s.Assessment(i.ID).Signature
 				break
 			}
 			if i.State != "active" || len(s.Blockers(i)) > 0 {

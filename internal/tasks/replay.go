@@ -186,7 +186,7 @@ func (s *State) trackEvent(e Event, before string, beforeSpec, beforePlan Object
 		}
 	}
 	if e.Action == "run.claimed" || e.Action == "run.taken_over" {
-		if run := s.Current(i.ID); run != nil {
+		if run := s.Current(i.ID); run != nil && run.Signature == "" {
 			run.Signature = s.Assessment(i.ID).Signature
 		}
 	}

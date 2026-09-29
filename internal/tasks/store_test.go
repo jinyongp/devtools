@@ -290,3 +290,47 @@ func TestImpactPreviewIsReadOnly(t *testing.T) {
 		t.Fatal("preview changed journal")
 	}
 }
+
+func TestLifecycleEventsPersistDefinitionSignatures(t *testing.T) {
+	store := fixture(t)
+	taskID := itemID(call(t, store, "task.add", "", Object{"title": "signed lifecycle"}))
+	claim := call(t, store, "run.claimed", taskID, Object{})
+	call(t, store, "task.completed", taskID, Object{"summary": "done"}, "context", str(claim, "context"))
+
+	state, err := store.Read(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]string{}
+	for _, event := range state.Events {
+		switch event.Action {
+		case "run.claimed", "task.completed", "workstream.close":
+			signature := str(event.Data, "definition_signature")
+			if signature == "" {
+				t.Fatalf("%s event omitted definition signature", event.Action)
+			}
+			seen[event.Action+"\x00"+event.Target] = signature
+		}
+	}
+	taskClaimSignature := seen["run.claimed\x00"+taskID]
+	taskCompletionSignature := seen["task.completed\x00"+taskID]
+	for name, signature := range map[string]string{
+		"task claim":      taskClaimSignature,
+		"task completion": taskCompletionSignature,
+	} {
+		if signature == "" {
+			actions := []string{}
+			for _, event := range state.Events {
+				actions = append(actions, event.Action+"@"+event.Target)
+			}
+			t.Fatalf("missing %s event signature: %v", name, actions)
+		}
+	}
+	if state.Runs[runID(claim)].Signature != taskClaimSignature {
+		t.Fatal("run signature was not restored from event payload")
+	}
+	completion := state.lastCompletion(taskID)
+	if completion.Signature != taskCompletionSignature {
+		t.Fatal("task completion signature was not restored from event payload")
+	}
+}

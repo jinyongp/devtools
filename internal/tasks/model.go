@@ -373,7 +373,7 @@ func (s *State) Apply(e Event) {
 			previous.Ended = e.At
 			previous.Activity = e.At
 		}
-		r := &Run{ID: str(d, "run_id"), TaskID: e.Target, State: "running", Previous: prev, Directory: str(d, "directory"), Started: e.At, Activity: e.At, Definition: i.Revision}
+		r := &Run{ID: str(d, "run_id"), TaskID: e.Target, State: "running", Previous: prev, Directory: str(d, "directory"), Started: e.At, Activity: e.At, Definition: i.Revision, Signature: str(d, "definition_signature")}
 		if w := s.Items[i.Workstream]; w != nil {
 			r.Spec = num(w.Props, "spec_revision")
 			r.Plan = num(w.Props, "plan_revision")

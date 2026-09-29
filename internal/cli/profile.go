@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/backup"
@@ -174,7 +175,7 @@ func (a *App) registerProfiles() {
 			Options: []Option{
 				profileIdentifierOption("profile", false),
 				{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory used when profile is omitted."},
-				{Name: "output", MinLength: 1, Description: "Output path; defaults to ./<profile>.age."},
+				{Name: "output", MinLength: 1, Description: "Output file or existing directory; directories use <profile>.age and omission defaults to ./<profile>.age."},
 				{Name: "recipient-file", MinLength: 1, Description: "Destination public age X25519 recipient file; choose exactly one of this or --recipient."},
 				{Name: "recipient", MinLength: 1, Description: "Destination public age X25519 recipient; choose exactly one of this or --recipient-file."},
 			},
@@ -321,6 +322,41 @@ func (a *App) diffProfiles(ctx context.Context, _ IO, request Request) (any, *pr
 	return catalog.Diff(ctx, request.Args[0], request.Args[1])
 }
 
+func profileExportOutputExists(path string) *protocol.Error {
+	return protocol.NewError("output_exists", "Profile export output already exists; choose another --output path.", 3, map[string]any{
+		"field": "output",
+		"path":  path,
+		"remedies": []protocol.Remedy{{
+			Argv:           []string{},
+			RequiredInputs: []string{"output"},
+			Message:        "Retry profile export with a different --output path and the same destination recipient.",
+		}},
+	})
+}
+
+func resolveProfileExportOutput(profile, requested string) (string, *protocol.Error) {
+	output := requested
+	if output == "" {
+		output = "./" + profile + ".age"
+	} else {
+		info, err := os.Stat(output)
+		switch {
+		case err == nil && info.IsDir():
+			output = filepath.Join(output, profile+".age")
+		case err == nil:
+			return "", profileExportOutputExists(output)
+		case !errors.Is(err, os.ErrNotExist):
+			return "", protocol.NewError("backup_error", "Profile export output path could not be inspected.", 3, map[string]any{"field": "output", "path": output})
+		}
+	}
+	if _, err := os.Lstat(output); err == nil {
+		return "", profileExportOutputExists(output)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", protocol.NewError("backup_error", "Profile export output path could not be inspected.", 3, map[string]any{"field": "output", "path": output})
+	}
+	return output, nil
+}
+
 func (a *App) exportProfile(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
 	recipient, recipientFile := request.Options["recipient"], request.Options["recipient-file"]
 	if recipient == "" && recipientFile == "" {
@@ -343,9 +379,9 @@ func (a *App) exportProfile(ctx context.Context, _ IO, request Request) (any, *p
 		}
 		profile = p.Profile
 	}
-	output := request.Options["output"]
-	if output == "" {
-		output = "./" + profile + ".age"
+	output, outputErr := resolveProfileExportOutput(profile, request.Options["output"])
+	if outputErr != nil {
+		return nil, outputErr
 	}
 	engine, err := a.backupEngine()
 	if err != nil {
@@ -357,14 +393,7 @@ func (a *App) exportProfile(ctx context.Context, _ IO, request Request) (any, *p
 			return nil, protocol.NewError("canceled", "Execution canceled.", 130, nil)
 		}
 		if failure.Code == "backup_error" && failure.Details != nil && failure.Details["cause"] == "output_exists" {
-			return nil, protocol.NewError("output_exists", "Profile export output already exists; choose another --output path.", 3, map[string]any{
-				"field": "output",
-				"remedies": []protocol.Remedy{{
-					Argv:           []string{},
-					RequiredInputs: []string{"output"},
-					Message:        "Retry profile export with a different --output path and the same destination recipient.",
-				}},
-			})
+			return nil, profileExportOutputExists(output)
 		}
 		return nil, transferArchiveError(failure)
 	}

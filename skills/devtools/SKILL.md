@@ -156,9 +156,11 @@ Use `profile transfer prepare`, `profile export`, and `profile import` to move o
 encrypted profile between environments. Run `profile transfer prepare` on the destination;
 it keeps the private age identity in devtools private storage and returns only a public
 recipient. Pass that public recipient to `profile export --recipient ...` on the source.
-Export defaults to the current project's profile and to `./<profile>.age`; it requires
-exactly one of `--recipient` or `--recipient-file` and never falls back to backup
-configuration. Copy only the resulting `.age` archive from source to destination.
+Export defaults to the current project's profile and to `./<profile>.age`. If `--output`
+points to an existing directory, export writes `<profile>.age` inside it. Existing final
+outputs fail before snapshot construction and are never overwritten. Export requires exactly
+one of `--recipient` or `--recipient-file` and never falls back to backup configuration.
+Copy only the resulting `.age` archive from source to destination.
 
 Import without `--identity-file` uses the destination's prepared local identity.
 `--identity-file` remains an explicit override for existing archives and external key

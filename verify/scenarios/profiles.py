@@ -98,13 +98,16 @@ assert public.startswith('age1') and prepared[1]['item']['recipient'] == public
 assert api(target, 'profile', 'transfer', 'prepare') == {'item': {'recipient': public}, 'changed': False}
 error = api(source, 'profile', 'export', error='recipient_required')
 assert error['details']['remedies'][0]['argv'] == ['devtools', 'profile', 'transfer', 'prepare']
-exported = api(source, 'profile', 'export', '--recipient', public)
-assert exported['item']['path'] == './portable.age' and exported['changed']
-source_archive = Path(source['HOME']) / 'portable.age'
+outbox = Path(source['HOME']) / 'outbox'
+outbox.mkdir(mode=0o700)
+exported = api(source, 'profile', 'export', '--recipient', public, '--output', str(outbox))
+source_archive = outbox / 'portable.age'
+assert exported['item']['path'] == str(source_archive) and exported['changed']
 archive_bytes = source_archive.read_bytes()
 assert canary.encode() not in archive_bytes
 assert stat.S_IMODE(source_archive.stat().st_mode) == 0o600
-api(source, 'profile', 'export', '--recipient', public, error='output_exists')
+collision = api(source, 'profile', 'export', '--recipient', public, '--output', str(outbox), error='output_exists')
+assert collision['details']['path'] == str(source_archive)
 assert source_archive.read_bytes() == archive_bytes
 api(source, 'profile', 'export', '--output', './unused.age', '--recipient', public,
     '--recipient-file', './unused-recipient.txt', error='invalid_argument')

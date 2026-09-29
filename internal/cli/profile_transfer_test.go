@@ -122,6 +122,68 @@ func TestProfileExportUsesExplicitRecipientWithoutBackupConfiguration(t *testing
 	}
 }
 
+func TestProfileExportDirectoryOutputUsesProfileFilename(t *testing.T) {
+	root := privateTempDir(t)
+	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	t.Chdir(root)
+	if err := os.WriteFile("devtools.toml", []byte("profile='app'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	app := testApp(t)
+	outputData(t, app, []string{"var", "set", "MODE", "--profile", "app", "--value", "portable"})
+	prepared := outputData(t, app, []string{"profile", "transfer", "prepare"})
+	recipient := prepared["item"].(map[string]any)["recipient"].(string)
+	directory := filepath.Join(root, "exports")
+	if err := os.Mkdir(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	exported := outputData(t, app, []string{"profile", "export", "--recipient", recipient, "--output", directory})
+	want := filepath.Join(directory, "app.age")
+	if exported["item"].(map[string]any)["path"] != want {
+		t.Fatalf("directory output did not resolve profile filename: %#v", exported)
+	}
+	if info, err := os.Lstat(want); err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("directory export missing/private mode: %#v %v", info, err)
+	}
+
+	code, out, diagnostic := invoke(t, app, "", "profile", "export", "--recipient", recipient, "--output", directory)
+	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"output_exists\"") || !strings.Contains(diagnostic, want) {
+		t.Fatalf("directory collision did not fail fast with resolved path: code=%d out=%s err=%s", code, out, diagnostic)
+	}
+}
+
+func TestProfileExportExistingOutputFailsBeforeSnapshot(t *testing.T) {
+	root := privateTempDir(t)
+	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	t.Chdir(root)
+	if err := os.WriteFile("devtools.toml", []byte("profile='missing-profile-data'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	app := testApp(t)
+	prepared := outputData(t, app, []string{"profile", "transfer", "prepare"})
+	recipient := prepared["item"].(map[string]any)["recipient"].(string)
+	output := filepath.Join(root, "missing-profile-data.age")
+	if err := os.WriteFile(output, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, out, diagnostic := invoke(t, app, "", "profile", "export", "--recipient", recipient, "--output", output)
+	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"output_exists\"") || !strings.Contains(diagnostic, output) {
+		t.Fatalf("existing output did not fail before missing-profile snapshot: code=%d out=%s err=%s", code, out, diagnostic)
+	}
+	body, err := os.ReadFile(output)
+	if err != nil || string(body) != "keep" {
+		t.Fatalf("existing output changed: %q %v", body, err)
+	}
+}
+
 func TestProfileExportRequiresDestinationRecipient(t *testing.T) {
 	root := privateTempDir(t)
 	t.Setenv("HOME", root)

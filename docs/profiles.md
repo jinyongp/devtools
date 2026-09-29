@@ -55,8 +55,10 @@ devtools profile export --profile myapp --recipient age1...
 ```
 
 `--profile`을 생략하면 현재 디렉터리 또는 `--dir PATH`에서 프로젝트를 찾습니다.
-`--output`을 생략하면 현재 디렉터리에 `./<profile>.age`를 만들며 기존 파일은
-덮어쓰지 않습니다. `--recipient-file`은 외부 키 관리나 자동화를 위한 고급 입력으로
+`--output`을 생략하면 현재 디렉터리에 `./<profile>.age`를 만듭니다. `--output`에 기존
+디렉터리를 지정하면 그 아래 `<profile>.age`를 자동으로 사용합니다. 최종 출력 파일이 이미
+있으면 profile snapshot을 만들기 전에 즉시 `output_exists`로 실패하며 기존 파일은 덮어쓰지
+않습니다. `--recipient-file`은 외부 키 관리나 자동화를 위한 고급 입력으로
 계속 지원하지만 `--recipient`와 동시에 사용할 수 없습니다. profile export는
 `backup configure`의 recipient나 output directory를 사용하지 않습니다.
 

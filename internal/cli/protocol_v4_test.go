@@ -118,7 +118,7 @@ func TestProtocolV4ProfileTransferContracts(t *testing.T) {
 	}
 
 	code, help, diagnostic := invoke(t, app, "", "profile", "export", "--help")
-	if code != 0 || diagnostic != "" || !strings.Contains(help, "defaults to ./<profile>.age") || !strings.Contains(help, "Destination public age X25519 recipient") || !strings.Contains(help, "choose exactly one") {
+	if code != 0 || diagnostic != "" || !strings.Contains(help, "existing directory") || !strings.Contains(help, "defaults to ./<profile>.age") || !strings.Contains(help, "Destination public age X25519 recipient") || !strings.Contains(help, "choose exactly one") {
 		t.Fatalf("profile export help drift: code=%d help=%q err=%q", code, help, diagnostic)
 	}
 	code, help, diagnostic = invoke(t, app, "", "profile", "import", "--help")

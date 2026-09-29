@@ -59,7 +59,9 @@ template을 사용해 계산한 최종 hostname도 같은 규칙을 만족해야
 ## instance와 route 해석
 
 route 탐색 대상은 port store에 등록된 instance다. resolver는 각 instance의 현재
-디렉터리에서 `devtools.toml`을 다시 읽고 다음 identity를 확인한다.
+디렉터리와 `devtools.toml` 변경 여부를 확인하고, 변경된 설정만 다시 읽어 다음
+identity를 확인한다. 변경되지 않은 설정과 전역 route 계산 결과는 daemon 내부에서
+재사용한다.
 
 - 설정의 canonical root가 등록된 directory와 같다.
 - 설정의 profile이 등록된 profile과 같다.

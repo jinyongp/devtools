@@ -929,7 +929,7 @@ func (m Manager) Serve(ctx context.Context, attemptID string) error {
 	defer cancel()
 	connections := &connectionRegistry{}
 	proxyServer := &http.Server{
-		Handler:           NewHandler(Resolver{Ports: m.portStore()}),
+		Handler:           NewHandler(NewResolver(m.portStore())),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       time.Minute,
 	}

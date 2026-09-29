@@ -325,3 +325,156 @@ func BenchmarkTaskStorageWorkstreamListTail(b *testing.B) {
 		})
 	}
 }
+
+func benchmarkItemPatch(item *Item, basis *DefinitionBasis) Object {
+	return Object{
+		"id": item.ID, "kind": item.Kind, "title": item.Title, "description": item.Description,
+		"workstream_id": item.Workstream, "depends_on": item.Depends, "props": copyObject(item.Props),
+		"basis": basis, "order": item.Order,
+	}
+}
+
+func benchmarkV3LifecycleTailStore(tb testing.TB, bodyBytes, tailFrames int) (Store, v3Resolution) {
+	tb.Helper()
+	root := filepath.Join(tb.TempDir(), "data")
+	if err := PrivateDir(root); err != nil {
+		tb.Fatal(err)
+	}
+	store := Store{Directory: filepath.Join(root, "tasks"), Profile: "bench-lifecycle"}
+	if err := PrivateDir(store.Directory); err != nil {
+		tb.Fatal(err)
+	}
+	resolution, err := createGeneration(store.Directory, store.Profile, ID())
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	blueprint, target := benchmarkActiveWorkstreamState(bodyBytes)
+	state := NewState()
+	upgrade := Event{
+		ID: ID(), Sequence: 1, At: stamp(), Action: "profile.upgraded",
+		Data: Object{"version": JournalVersion, "baseline": map[string]*DefinitionBasis{}},
+	}
+	if err := applyReplayEvent(state, upgrade, ""); err != nil {
+		tb.Fatal(err)
+	}
+	if _, err := appendPreparedFrame(resolution, walFrame{
+		Meta:   walFrameMeta{Kind: "historical", PreviousRevision: 0, FinalRevision: 1, EventCount: 1},
+		Events: []Event{upgrade},
+	}, nil, nil); err != nil {
+		tb.Fatal(err)
+	}
+
+	for _, workstream := range blueprint.List("workstream") {
+		patches := []Object{benchmarkItemPatch(workstream, blueprint.Tracking[workstream.ID])}
+		for _, task := range blueprint.List("task") {
+			if task.Workstream == workstream.ID {
+				patches = append(patches, benchmarkItemPatch(task, blueprint.Tracking[task.ID]))
+			}
+		}
+		event := Event{
+			ID: ID(), Sequence: state.Revision + 1, At: stamp(), Action: "workstream.edited", Target: workstream.ID,
+			Data: Object{"patches": patches, "affected_ids": []string{}},
+		}
+		if err := applyReplayEvent(state, event, ""); err != nil {
+			tb.Fatal(err)
+		}
+		if _, err := appendPreparedFrame(resolution, walFrame{
+			Meta: walFrameMeta{
+				Kind: "historical", PreviousRevision: event.Sequence - 1,
+				FinalRevision: event.Sequence, EventCount: 1,
+			},
+			Events: []Event{event},
+		}, nil, nil); err != nil {
+			tb.Fatal(err)
+		}
+	}
+
+	info, err := os.Stat(resolution.WAL)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	if err := writeMaterializedSnapshot(resolution.Snapshot, snapshotFromState(store.Profile, state, info.Size(), stamp())); err != nil {
+		tb.Fatal(err)
+	}
+	signature := state.Assessment(target).Signature
+	previousRevision := state.Revision
+	for index := 0; index < tailFrames; index++ {
+		requestID := ID()
+		fingerprint := fmt.Sprintf("lifecycle-%03d", index)
+		runID := ID()
+		event := Event{
+			ID: ID(), Sequence: previousRevision + 1, At: stamp(), RequestID: requestID,
+			Action: "run.claimed", Target: target,
+			Data: Object{"run_id": runID, "directory": "/tmp"},
+		}
+		receipt := newReceiptCoordination(requestID, fingerprint, "", Object{
+			"item": Object{"definition_signature": signature},
+			"run":  Object{"definition_signature": signature},
+		}, "")
+		ref := receiptReference(receipt)
+		frame := walFrame{
+			Meta: walFrameMeta{
+				Kind: "mutation", PreviousRevision: previousRevision, FinalRevision: previousRevision + 1,
+				RequestID: requestID, Fingerprint: fingerprint, EventCount: 1, HasReceipt: true,
+			},
+			Events: []Event{event}, Receipt: &ref,
+		}
+		if _, err := appendPreparedFrame(resolution, frame, &receipt, nil); err != nil {
+			tb.Fatal(err)
+		}
+		previousRevision++
+	}
+	if err := generationDurable(resolution); err != nil {
+		tb.Fatal(err)
+	}
+	storage, resolveErr := store.resolveStorage()
+	if resolveErr != nil {
+		tb.Fatal(resolveErr)
+	}
+	release, err := maintenance.AcquireExclusive(context.Background(), root)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	if err := store.publishV3(storage, resolution); err != nil {
+		release()
+		tb.Fatal(err)
+	}
+	release()
+	return store, resolution
+}
+
+func BenchmarkTaskStorageLifecycleReplay(b *testing.B) {
+	for _, tailFrames := range []int{32, 128, 255} {
+		b.Run(fmt.Sprintf("current_tail_%d", tailFrames), func(b *testing.B) {
+			store, _ := benchmarkV3LifecycleTailStore(b, 100<<10, tailFrames)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for index := 0; index < b.N; index++ {
+				if _, err := store.Query(context.Background(), Query{
+					Command: "workstream list", Options: map[string]string{"state": "all", "limit": "200"},
+				}); err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.ReportMetric(float64(tailFrames), "tail-frames")
+			b.ReportMetric(100, "body-KiB")
+		})
+		b.Run(fmt.Sprintf("history_tail_%d", tailFrames), func(b *testing.B) {
+			_, resolution := benchmarkV3LifecycleTailStore(b, 100<<10, tailFrames)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for index := 0; index < b.N; index++ {
+				state, err := loadHistoryV3(resolution)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if state.Revision == 0 {
+					b.Fatal("history replay returned empty state")
+				}
+			}
+			b.ReportMetric(float64(tailFrames), "tail-frames")
+			b.ReportMetric(100, "body-KiB")
+		})
+	}
+}

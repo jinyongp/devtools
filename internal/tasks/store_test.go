@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 func fixture(t *testing.T) Store {
@@ -136,6 +139,13 @@ func TestContextResponseStaysWithinTwoMiBWithOversizedItem(t *testing.T) {
 	responseSize, err := contextResponseSize(result)
 	if err != nil {
 		t.Fatal(err)
+	}
+	var encoded bytes.Buffer
+	if err := protocol.Success(&encoded, result); err != nil {
+		t.Fatal(err)
+	}
+	if responseSize != encoded.Len() {
+		t.Fatalf("context size accounting drifted from protocol envelope: helper=%d actual=%d", responseSize, encoded.Len())
 	}
 	if responseSize > contextResponseMax || result["truncated"] != true {
 		t.Fatalf("context ceiling not enforced: bytes=%d truncated=%v", responseSize, result["truncated"])

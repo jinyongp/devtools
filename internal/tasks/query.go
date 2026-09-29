@@ -1,8 +1,8 @@
 package tasks
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -26,16 +26,11 @@ type Query struct {
 const contextResponseMax = 2 << 20
 
 func contextResponseSize(data Object) (int, error) {
-	body, err := json.Marshal(struct {
-		SchemaVersion int    `json:"schema_version"`
-		OK            bool   `json:"ok"`
-		Data          Object `json:"data"`
-	}{SchemaVersion: protocol.EnvelopeVersion, OK: true, Data: data})
-	if err != nil {
+	var body bytes.Buffer
+	if err := protocol.Success(&body, data); err != nil {
 		return 0, err
 	}
-	// protocol.Success uses json.Encoder, which appends one trailing newline.
-	return len(body) + 1, nil
+	return body.Len(), nil
 }
 
 func compactContextItem(item Object) Object {

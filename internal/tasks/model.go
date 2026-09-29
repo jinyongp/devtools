@@ -227,8 +227,19 @@ func (s *State) Apply(e Event) {
 	i := s.Items[e.Target]
 	previousCompletions := map[string]bool{}
 	if s.Version == JournalVersion {
+		candidates := []string{}
 		for _, w := range s.List("workstream") {
-			previousCompletions[w.ID] = s.Assessment(w.ID).CompletionStatus == "current"
+			if s.mayHaveCurrentWorkstreamCompletion(w) {
+				candidates = append(candidates, w.ID)
+			}
+		}
+		if len(candidates) > 0 {
+			assessments := s.Assessments()
+			for _, id := range candidates {
+				if assessments[id].CompletionStatus == "current" {
+					previousCompletions[id] = true
+				}
+			}
 		}
 	}
 	beforeDefinition := hash(s.ownDefinition(i))
@@ -423,9 +434,12 @@ func (s *State) Apply(e Event) {
 		s.trackEvent(e, beforeDefinition, beforeSpec, beforePlan)
 	}
 	if s.Version == JournalVersion {
-		for id, wasCurrent := range previousCompletions {
-			if wasCurrent && s.Assessment(id).CompletionStatus != "current" {
-				s.definition(id).CloseEpoch = e.Sequence
+		if len(previousCompletions) > 0 {
+			assessments := s.Assessments()
+			for id := range previousCompletions {
+				if assessments[id].CompletionStatus != "current" {
+					s.definition(id).CloseEpoch = e.Sequence
+				}
 			}
 		}
 		s.assessments = nil

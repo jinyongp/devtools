@@ -34,6 +34,14 @@ func (s *State) lastCompletion(id string) CompletionBasis {
 	return all[len(all)-1]
 }
 
+func (s *State) mayHaveCurrentWorkstreamCompletion(i *Item) bool {
+	if i == nil || i.Kind != "workstream" || i.State != "done" || s.Current(i.ID) != nil || !s.Included(i) {
+		return false
+	}
+	last := s.lastCompletion(i.ID)
+	return last.Revision > 0 && last.Revision >= s.definition(i.ID).CloseEpoch
+}
+
 func (s *State) ownDefinition(i *Item) Object {
 	if i == nil {
 		return Object{}

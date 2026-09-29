@@ -163,3 +163,20 @@ func TestAssessmentLargeDAGIsIterative(t *testing.T) {
 		t.Fatal("DAG readiness incorrect")
 	}
 }
+
+func TestWorkstreamCompletionCandidateUsesCheapNecessaryConditions(t *testing.T) {
+	s, w, a, b := assessmentFixture(t)
+	if s.mayHaveCurrentWorkstreamCompletion(s.Items[w]) {
+		t.Fatal("active workstream cannot have a current completion")
+	}
+	finishTestTask(s, a)
+	finishTestTask(s, b)
+	applyTestEvent(s, "workstream.close", w, Object{})
+	if s.Assessment(w).CompletionStatus != "current" || !s.mayHaveCurrentWorkstreamCompletion(s.Items[w]) {
+		t.Fatal("current completed workstream was excluded")
+	}
+	s.definition(w).CloseEpoch = s.lastCompletion(w).Revision + 1
+	if s.mayHaveCurrentWorkstreamCompletion(s.Items[w]) {
+		t.Fatal("completion older than close epoch remained a candidate")
+	}
+}

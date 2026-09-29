@@ -16,9 +16,16 @@ var key = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
 
 func validID(id string) bool { return uuid.MatchString(id) }
 
-// Decode rejects duplicate keys as well as trailing JSON and oversized inputs.
+// Decode rejects duplicate keys as well as trailing JSON and oversized public inputs.
 func Decode(data string) (Object, *protocol.Error) {
-	if len(data) > 2<<20 || !utf8.ValidString(data) {
+	return decodeObject(data, 2<<20)
+}
+
+func decodeObject(data string, maxBytes int) (Object, *protocol.Error) {
+	if !utf8.ValidString(data) {
+		return nil, failure("invalid_argument", "Use a UTF-8 JSON object.")
+	}
+	if maxBytes > 0 && len(data) > maxBytes {
 		return nil, failure("invalid_argument", "Use a UTF-8 JSON object of at most 2 MiB.")
 	}
 	d := json.NewDecoder(strings.NewReader(data))

@@ -84,28 +84,34 @@ func TestClaimRaceAndRecovery(t *testing.T) {
 	}
 	call(t, s, "task.reopen", id, Object{"reason": "follow-up"})
 }
-func TestStructuredBodyNormalizationDoesNotInflateHTMLEscapes(t *testing.T) {
-	s := fixture(t)
-	workstream := itemID(call(t, s, "workstream.create", "", Object{"title": "HTML-heavy spec"}))
-	body := strings.Repeat("<", 400000)
-	result := call(t, s, "spec.set", workstream, Object{
-		"body":         body,
-		"requirements": []any{},
-		"acceptance":   []any{},
-	})
-	if result["changed"] != true {
-		t.Fatalf("HTML-heavy document was not stored: %#v", result)
-	}
-	shown, err := s.Query(context.Background(), Query{Command: "workstream spec show", Target: workstream})
-	if err != nil {
-		t.Fatal(err)
-	}
-	item, _ := shown["item"].(map[string]any)
-	if item == nil {
-		item = map[string]any(shown["item"].(Object))
-	}
-	if got, _ := item["body"].(string); got != body {
-		t.Fatalf("HTML-heavy body changed during normalization: got=%d want=%d", len(got), len(body))
+func TestStructuredBodyNormalizationDoesNotApplyRawJSONLimitToReencoding(t *testing.T) {
+	for name, body := range map[string]string{
+		"html":     strings.Repeat("<", 400000),
+		"newlines": strings.Repeat("\n", 1<<20),
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := fixture(t)
+			workstream := itemID(call(t, s, "workstream.create", "", Object{"title": name + " spec"}))
+			result := call(t, s, "spec.set", workstream, Object{
+				"body":         body,
+				"requirements": []any{},
+				"acceptance":   []any{},
+			})
+			if result["changed"] != true {
+				t.Fatalf("escape-heavy document was not stored: %#v", result)
+			}
+			shown, err := s.Query(context.Background(), Query{Command: "workstream spec show", Target: workstream})
+			if err != nil {
+				t.Fatal(err)
+			}
+			item, _ := shown["item"].(map[string]any)
+			if item == nil {
+				item = map[string]any(shown["item"].(Object))
+			}
+			if got, _ := item["body"].(string); got != body {
+				t.Fatalf("escape-heavy body changed during normalization: got=%d want=%d", len(got), len(body))
+			}
+		})
 	}
 }
 
@@ -166,7 +172,7 @@ func TestDAGAndSnapshot(t *testing.T) {
 	}
 }
 func TestStrictJSON(t *testing.T) {
-	for _, input := range []string{`{"a":1,"a":2}`, `{} {}`, `[]`, strings.Repeat("[", 70) + strings.Repeat("]", 70)} {
+	for _, input := range []string{`{"a":1,"a":2}`, `{} {}`, `[]`, strings.Repeat("[", 70) + strings.Repeat("]", 70), `{"a":"` + strings.Repeat("x", 2<<20) + `"}`} {
 		if _, e := Decode(input); e == nil {
 			t.Fatal("accepted", input)
 		}

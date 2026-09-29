@@ -328,7 +328,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	if r.Body == nil {
 		b = []byte("{}")
 	}
-	body, bodyErr := Decode(string(b))
+	body, bodyErr := decodeObject(string(b), 0)
 	if bodyErr != nil {
 		return nil, bodyErr
 	}

@@ -254,3 +254,22 @@ func TestActiveV3MutationDoesNotRescanCheckpointedPrefix(t *testing.T) {
 		t.Fatalf("mutation current revision drifted: %#v", out)
 	}
 }
+
+func TestWALJSONLineSeparatorCompactionPreservesStringMeaning(t *testing.T) {
+	actual := string(rune(0x2028)) + string(rune(0x2029))
+	literal := `\u2028\u2029`
+	body, err := marshalWALSubrecord(Object{"actual": actual, "literal": literal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(body, []byte{0xe2, 0x80, 0xa8}) || !bytes.Contains(body, []byte{0xe2, 0x80, 0xa9}) {
+		t.Fatalf("line separators were not compacted: %q", body)
+	}
+	decoded, decodeErr := decodeObject(string(body), 0)
+	if decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	if str(decoded, "actual") != actual || str(decoded, "literal") != literal {
+		t.Fatalf("WAL JSON meaning changed: %#v", decoded)
+	}
+}

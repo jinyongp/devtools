@@ -136,8 +136,48 @@ func validateFrame(frame walFrame) error {
 	return nil
 }
 
+func compactJSONLineSeparators(body []byte) []byte {
+	out := make([]byte, 0, len(body))
+	precedingBackslashes := 0
+	for index := 0; index < len(body); {
+		if body[index] == '\\' && precedingBackslashes%2 == 0 && index+5 < len(body) &&
+			body[index+1] == 'u' && body[index+2] == '2' && body[index+3] == '0' &&
+			body[index+4] == '2' && (body[index+5] == '8' || body[index+5] == '9') {
+			out = append(out, 0xe2, 0x80)
+			if body[index+5] == '8' {
+				out = append(out, 0xa8)
+			} else {
+				out = append(out, 0xa9)
+			}
+			index += 6
+			precedingBackslashes = 0
+			continue
+		}
+		value := body[index]
+		out = append(out, value)
+		if value == '\\' {
+			precedingBackslashes++
+		} else {
+			precedingBackslashes = 0
+		}
+		index++
+	}
+	return out
+}
+
+func marshalWALSubrecord(value any) ([]byte, error) {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	body := bytes.TrimSuffix(buffer.Bytes(), []byte("\n"))
+	return compactJSONLineSeparators(body), nil
+}
+
 func writeSubrecord(writer io.Writer, value any, max int) error {
-	body, err := json.Marshal(value)
+	body, err := marshalWALSubrecord(value)
 	if err != nil {
 		return err
 	}

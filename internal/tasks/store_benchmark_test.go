@@ -16,7 +16,10 @@ func benchmarkV3HistoryStore(tb testing.TB, historyEvents int) (Store, string, i
 	if historyEvents < 2 {
 		historyEvents = 2
 	}
-	root := tb.TempDir()
+	root := filepath.Join(tb.TempDir(), "data")
+	if err := PrivateDir(root); err != nil {
+		tb.Fatal(err)
+	}
 	store := Store{Directory: filepath.Join(root, "tasks"), Profile: "bench"}
 	if err := PrivateDir(store.Directory); err != nil {
 		tb.Fatal(err)

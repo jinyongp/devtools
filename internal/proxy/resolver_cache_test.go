@@ -11,7 +11,7 @@ import (
 )
 
 func TestResolverProfileFilterPreservesGlobalHostConflict(t *testing.T) {
-	store := ports.Store{Directory: t.TempDir()}
+	store := ports.Store{Directory: filepath.Join(t.TempDir(), "ports")}
 	firstDir, secondDir := t.TempDir(), t.TempDir()
 	writeConfig(t, firstDir, "first", "shared.localhost")
 	writeConfig(t, secondDir, "second", "shared.localhost")
@@ -33,7 +33,7 @@ func TestResolverProfileFilterPreservesGlobalHostConflict(t *testing.T) {
 }
 
 func TestResolverCacheObservesConfigAndAssignmentChanges(t *testing.T) {
-	store := ports.Store{Directory: t.TempDir()}
+	store := ports.Store{Directory: filepath.Join(t.TempDir(), "ports")}
 	directory := t.TempDir()
 	writeConfig(t, directory, "app", "one.localhost")
 	alias := "main"
@@ -66,7 +66,7 @@ func TestResolverCacheObservesConfigAndAssignmentChanges(t *testing.T) {
 }
 
 func TestResolverCacheStillEnforcesPrivatePortDirectory(t *testing.T) {
-	store := ports.Store{Directory: t.TempDir()}
+	store := ports.Store{Directory: filepath.Join(t.TempDir(), "ports")}
 	directory := t.TempDir()
 	writeConfig(t, directory, "app", "private.localhost")
 	alias := "main"
@@ -86,7 +86,7 @@ func TestResolverCacheStillEnforcesPrivatePortDirectory(t *testing.T) {
 }
 
 func TestResolverCacheStillRejectsSymlinkedRegistry(t *testing.T) {
-	store := ports.Store{Directory: t.TempDir()}
+	store := ports.Store{Directory: filepath.Join(t.TempDir(), "ports")}
 	directory := t.TempDir()
 	writeConfig(t, directory, "app", "private.localhost")
 	alias := "main"
@@ -110,7 +110,7 @@ func TestResolverCacheStillRejectsSymlinkedRegistry(t *testing.T) {
 }
 
 func TestResolverCacheRecoversAfterLocationReturns(t *testing.T) {
-	store := ports.Store{Directory: t.TempDir()}
+	store := ports.Store{Directory: filepath.Join(t.TempDir(), "ports")}
 	parent := t.TempDir()
 	directory := filepath.Join(parent, "project")
 	if err := os.Mkdir(directory, 0700); err != nil {

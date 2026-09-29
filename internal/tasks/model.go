@@ -53,14 +53,18 @@ type Run struct {
 	Signature  string `json:"definition_signature,omitempty"`
 }
 type State struct {
-	Items       map[string]*Item
-	Runs        map[string]*Run
-	Events      []Event
-	Revision    int
-	Version     int
-	Tracking    map[string]*DefinitionBasis
-	assessments map[string]Assessment
-	migrating   bool
+	Items            map[string]*Item
+	Runs             map[string]*Run
+	Events           []Event
+	Revision         int
+	Version          int
+	Tracking         map[string]*DefinitionBasis
+	HistoryEvents    map[int]Event
+	HistoryRefs      map[string][]int
+	historyRefCounts map[int]int
+	historyComplete  bool
+	assessments      map[string]Assessment
+	migrating        bool
 }
 
 func (r Run) MarshalJSON() ([]byte, error) {
@@ -83,7 +87,17 @@ func (r Run) MarshalJSON() ([]byte, error) {
 }
 
 func NewState() *State {
-	return &State{Items: map[string]*Item{}, Runs: map[string]*Run{}, Events: []Event{}, Version: 1, Tracking: map[string]*DefinitionBasis{}}
+	return &State{
+		Items:            map[string]*Item{},
+		Runs:             map[string]*Run{},
+		Events:           []Event{},
+		Version:          1,
+		Tracking:         map[string]*DefinitionBasis{},
+		HistoryEvents:    map[int]Event{},
+		HistoryRefs:      map[string][]int{},
+		historyRefCounts: map[int]int{},
+		historyComplete:  true,
+	}
 }
 func ID() string {
 	var b [16]byte
@@ -404,6 +418,7 @@ func (s *State) Apply(e Event) {
 	}
 	s.Revision = e.Sequence
 	s.Events = append(s.Events, e)
+	s.trackRecentHistory(e)
 	if s.Version == JournalVersion && e.Action != "profile.upgraded" && e.Action != "workstream.edited" {
 		s.trackEvent(e, beforeDefinition, beforeSpec, beforePlan)
 	}

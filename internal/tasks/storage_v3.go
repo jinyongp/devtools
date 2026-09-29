@@ -46,6 +46,8 @@ type materializedState struct {
 	ItemOrders    map[string]int              `json:"item_orders"`
 	Runs          map[string]*Run             `json:"runs"`
 	Tracking      map[string]*DefinitionBasis `json:"tracking"`
+	HistoryEvents map[int]Event               `json:"history_events"`
+	HistoryRefs   map[string][]int            `json:"history_refs"`
 	LastEventAt   string                      `json:"last_event_at,omitempty"`
 	Checksum      string                      `json:"checksum"`
 }
@@ -290,6 +292,16 @@ func snapshotFromState(profile string, state *State, walOffset int64, lastEventA
 	tracking := map[string]*DefinitionBasis{}
 	raw, _ := json.Marshal(state.Tracking)
 	_ = json.Unmarshal(raw, &tracking)
+	var historyEvents map[int]Event
+	var historyRefs map[string][]int
+	if state.historyComplete {
+		historyEvents = map[int]Event{}
+		raw, _ = json.Marshal(state.HistoryEvents)
+		_ = json.Unmarshal(raw, &historyEvents)
+		historyRefs = map[string][]int{}
+		raw, _ = json.Marshal(state.HistoryRefs)
+		_ = json.Unmarshal(raw, &historyRefs)
+	}
 	snapshot := materializedState{
 		FormatVersion: taskStorageVersion,
 		Profile:       profile,
@@ -300,6 +312,8 @@ func snapshotFromState(profile string, state *State, walOffset int64, lastEventA
 		ItemOrders:    itemOrders,
 		Runs:          runs,
 		Tracking:      tracking,
+		HistoryEvents: historyEvents,
+		HistoryRefs:   historyRefs,
 		LastEventAt:   lastEventAt,
 	}
 	snapshot.Checksum = materializedStateChecksum(snapshot)
@@ -307,6 +321,35 @@ func snapshotFromState(profile string, state *State, walOffset int64, lastEventA
 }
 
 func materializedStateChecksum(snapshot materializedState) string {
+	if snapshot.HistoryEvents == nil && snapshot.HistoryRefs == nil {
+		legacy := struct {
+			FormatVersion int                         `json:"format_version"`
+			Profile       string                      `json:"profile"`
+			Version       int                         `json:"version"`
+			Revision      int                         `json:"revision"`
+			WALOffset     int64                       `json:"wal_offset"`
+			Items         map[string]*Item            `json:"items"`
+			ItemOrders    map[string]int              `json:"item_orders"`
+			Runs          map[string]*Run             `json:"runs"`
+			Tracking      map[string]*DefinitionBasis `json:"tracking"`
+			LastEventAt   string                      `json:"last_event_at,omitempty"`
+			Checksum      string                      `json:"checksum"`
+		}{
+			FormatVersion: snapshot.FormatVersion,
+			Profile:       snapshot.Profile,
+			Version:       snapshot.Version,
+			Revision:      snapshot.Revision,
+			WALOffset:     snapshot.WALOffset,
+			Items:         snapshot.Items,
+			ItemOrders:    snapshot.ItemOrders,
+			Runs:          snapshot.Runs,
+			Tracking:      snapshot.Tracking,
+			LastEventAt:   snapshot.LastEventAt,
+		}
+		raw, _ := json.Marshal(legacy)
+		sum := sha256.Sum256(raw)
+		return hex.EncodeToString(sum[:])
+	}
 	snapshot.Checksum = ""
 	raw, _ := json.Marshal(snapshot)
 	sum := sha256.Sum256(raw)
@@ -314,16 +357,28 @@ func materializedStateChecksum(snapshot materializedState) string {
 }
 
 func (m materializedState) state(profile string) (*State, error) {
-	if m.FormatVersion != taskStorageVersion || m.Profile != profile || m.Version != 1 && m.Version != JournalVersion || m.Revision < 0 || m.WALOffset < 0 || m.Items == nil || m.ItemOrders == nil || len(m.ItemOrders) != len(m.Items) || m.Runs == nil || m.Tracking == nil || !validDigest(m.Checksum) || m.Checksum != materializedStateChecksum(m) {
+	historyMissing := m.HistoryEvents == nil && m.HistoryRefs == nil
+	historyPartial := (m.HistoryEvents == nil) != (m.HistoryRefs == nil)
+	if m.FormatVersion != taskStorageVersion || m.Profile != profile || m.Version != 1 && m.Version != JournalVersion || m.Revision < 0 || m.WALOffset < 0 || m.Items == nil || m.ItemOrders == nil || len(m.ItemOrders) != len(m.Items) || m.Runs == nil || m.Tracking == nil || historyPartial || !validDigest(m.Checksum) || m.Checksum != materializedStateChecksum(m) {
 		return nil, errors.New("invalid materialized snapshot")
 	}
+	historyEvents := m.HistoryEvents
+	historyRefs := m.HistoryRefs
+	if historyMissing {
+		historyEvents = map[int]Event{}
+		historyRefs = map[string][]int{}
+	}
 	state := &State{
-		Items:    m.Items,
-		Runs:     m.Runs,
-		Events:   []Event{},
-		Revision: m.Revision,
-		Version:  m.Version,
-		Tracking: m.Tracking,
+		Items:            m.Items,
+		Runs:             m.Runs,
+		Events:           []Event{},
+		Revision:         m.Revision,
+		Version:          m.Version,
+		Tracking:         m.Tracking,
+		HistoryEvents:    historyEvents,
+		HistoryRefs:      historyRefs,
+		historyRefCounts: map[int]int{},
+		historyComplete:  !historyMissing,
 	}
 	for id, item := range state.Items {
 		order, ok := m.ItemOrders[id]
@@ -335,6 +390,11 @@ func (m materializedState) state(profile string) (*State, error) {
 	for id, run := range state.Runs {
 		if run == nil || run.ID != id {
 			return nil, errors.New("invalid materialized run")
+		}
+	}
+	if state.historyComplete {
+		if err := state.rebuildHistoryCounts(); err != nil {
+			return nil, err
 		}
 	}
 	if m.LastEventAt != "" {

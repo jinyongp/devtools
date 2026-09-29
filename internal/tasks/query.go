@@ -197,7 +197,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 	defer profileRelease()
 	pruneQueries(store.cacheDirectory())
 
-	historyRequired := q.Options["at-revision"] != "" || cmd == "context" || cmd == "export" || cmd == "history" || cmd == "checkpoint list"
+	historyRequired := q.Options["at-revision"] != "" || cmd == "export" || cmd == "history" || cmd == "checkpoint list"
 	var s *State
 	var e *protocol.Error
 	if historyRequired {
@@ -207,6 +207,12 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 	}
 	if e != nil {
 		return nil, e
+	}
+	if cmd == "context" && !s.historyComplete {
+		s, e = store.loadHistory()
+		if e != nil {
+			return nil, e
+		}
 	}
 	out := Object{"profile": store.Profile, "revision": s.Revision}
 	if value := q.Options["at-revision"]; value != "" {
@@ -412,9 +418,13 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 				ids[v.ID] = true
 			}
 		}
-		for _, ev := range s.Events {
-			if eventTouches(ev, ids) {
-				history = append(history, ev)
+		if cmd == "context" {
+			history = s.recentHistory(ids)
+		} else {
+			for _, ev := range s.Events {
+				if eventTouches(ev, ids) {
+					history = append(history, ev)
+				}
 			}
 		}
 		out["tasks"] = ts
@@ -422,9 +432,6 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		out["history"] = history
 		out["truncated"] = false
 		if cmd == "context" {
-			if len(history) > 20 {
-				out["history"] = history[len(history)-20:]
-			}
 			responseSize, marshalErr := contextResponseSize(out)
 			if marshalErr != nil {
 				return nil, storageError()

@@ -35,8 +35,11 @@ func checkpointV3(resolution v3Resolution, state *State) error {
 	walSize := info.Size()
 	needsCheckpoint := false
 	var snapshot materializedState
-	if existing, _, err := readMaterializedSnapshot(resolution.Snapshot, resolution.Marker.Profile); err == nil {
+	if existing, existingState, err := readMaterializedSnapshot(resolution.Snapshot, resolution.Marker.Profile); err == nil {
 		snapshot = existing
+		if !existingState.historyComplete {
+			needsCheckpoint = true
+		}
 		if snapshot.WALOffset < 0 || snapshot.WALOffset > walSize {
 			// Snapshot is an accelerator. The mutation path has already loaded
 			// and validated the active WAL, so replace an impossible offset.

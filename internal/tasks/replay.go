@@ -244,6 +244,14 @@ func (s *State) clone() *State {
 	if json.Unmarshal(raw, out) != nil {
 		panic(errors.New("cannot clone task state"))
 	}
+	out.historyComplete = s.historyComplete
+	if out.historyComplete {
+		if out.rebuildHistoryCounts() != nil {
+			panic(errors.New("cannot clone task history"))
+		}
+	} else {
+		out.historyRefCounts = map[int]int{}
+	}
 	for id, i := range s.Items {
 		out.Items[id].Order = i.Order
 	}

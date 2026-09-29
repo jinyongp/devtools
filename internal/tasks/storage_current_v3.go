@@ -45,7 +45,7 @@ func loadCurrentFromWAL(resolution v3Resolution) (*State, error) {
 	return current, nil
 }
 
-func loadCurrentV3ForMutation(resolution v3Resolution) (*State, bool, error) {
+func loadCurrentV3Cached(resolution v3Resolution) (*State, bool, error) {
 	snapshot, state, snapshotErr := readMaterializedSnapshot(resolution.Snapshot, resolution.Marker.Profile)
 	if snapshotErr == nil {
 		scan, scanErr := scanWAL(resolution.WAL, snapshot.WALOffset, true)
@@ -67,14 +67,22 @@ func loadCurrentV3ForMutation(resolution v3Resolution) (*State, bool, error) {
 		}
 	}
 	// The snapshot is an accelerator. A missing/corrupt/stale snapshot does not
-	// make a valid WAL unreadable. Mutation/retry callers repair it after the
-	// source-of-truth WAL replay; shared/read-only callers ignore that signal.
+	// make a valid WAL unreadable.
 	current, err := loadCurrentFromWAL(resolution)
 	return current, true, err
 }
 
+func loadCurrentV3ForMutation(resolution v3Resolution) (*State, bool, error) {
+	current, needsCheckpoint, err := loadCurrentV3Cached(resolution)
+	if err != nil || current == nil || current.historyComplete {
+		return current, needsCheckpoint, err
+	}
+	full, replayErr := loadCurrentFromWAL(resolution)
+	return full, true, replayErr
+}
+
 func loadCurrentV3(resolution v3Resolution) (*State, error) {
-	current, _, err := loadCurrentV3ForMutation(resolution)
+	current, _, err := loadCurrentV3Cached(resolution)
 	return current, err
 }
 

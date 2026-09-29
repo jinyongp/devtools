@@ -50,9 +50,6 @@ func (r Resolver) List(ctx context.Context, profile string) ([]Item, *protocol.E
 	}
 	items := []Item{}
 	for _, instance := range state.Instances {
-		if profile != "" && instance.Profile != profile {
-			continue
-		}
 		if status := locationStatus(instance.Directory); status != "" {
 			items = append(items, diagnostic(instance, status))
 			continue
@@ -95,6 +92,15 @@ func (r Resolver) List(ctx context.Context, profile string) ([]Item, *protocol.E
 		a, b := items[left], items[right]
 		return itemKey(a) < itemKey(b)
 	})
+	if profile != "" {
+		filtered := make([]Item, 0)
+		for _, item := range items {
+			if item.Profile == profile {
+				filtered = append(filtered, item)
+			}
+		}
+		items = filtered
+	}
 	return items, nil
 }
 

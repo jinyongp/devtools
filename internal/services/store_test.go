@@ -51,31 +51,46 @@ func TestStaleSupervisorAndRetryConflict(t *testing.T) {
 }
 func TestFilteredListSkipsUnrelatedSupervisorRPC(t *testing.T) {
 	s := Store{Data: privateTempDir(t)}
-	id := tasks.ID()
 	started := time.Now().UTC()
-	record := Record{ID: id, Profile: "other", Instance: "instance", Directory: privateTempDir(t), Command: "web", CreatedAt: started, StartedAt: &started, State: "running"}
-	if err := writePrivate(s.path(id, "record.json"), record); err != nil {
-		t.Fatal(err)
-	}
 	token := strings.Repeat("f", 64)
-	hit := make(chan struct{}, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		select {
-		case hit <- struct{}{}:
-		default:
+
+	addRunning := func(profile string, hit chan<- struct{}) Record {
+		t.Helper()
+		id := tasks.ID()
+		record := Record{ID: id, Profile: profile, Instance: "instance", Directory: privateTempDir(t), Command: "web", CreatedAt: started, StartedAt: &started, State: "running"}
+		if err := writePrivate(s.path(id, "record.json"), record); err != nil {
+			t.Fatal(err)
 		}
-		_ = json.NewEncoder(w).Encode(record)
-	}))
-	defer server.Close()
-	if err := writePrivate(s.path(id, "control.json"), control{ID: id, Address: server.URL, Token: token}); err != nil {
-		t.Fatal(err)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+			select {
+			case hit <- struct{}{}:
+			default:
+			}
+			_ = json.NewEncoder(w).Encode(record)
+		}))
+		t.Cleanup(server.Close)
+		if err := writePrivate(s.path(id, "control.json"), control{ID: id, Address: server.URL, Token: token}); err != nil {
+			t.Fatal(err)
+		}
+		return record
 	}
+
+	unrelatedHit := make(chan struct{}, 1)
+	wantedHit := make(chan struct{}, 1)
+	_ = addRunning("other", unrelatedHit)
+	wanted := addRunning("wanted", wantedHit)
+
 	items, err := s.List(context.Background(), "wanted")
-	if err != nil || len(items) != 0 {
+	if err != nil || len(items) != 1 || items[0].ID != wanted.ID {
 		t.Fatalf("filtered list = %#v %v", items, err)
 	}
 	select {
-	case <-hit:
+	case <-wantedHit:
+	default:
+		t.Fatal("filtered list skipped matching supervisor")
+	}
+	select {
+	case <-unrelatedHit:
 		t.Fatal("filtered list contacted unrelated supervisor")
 	default:
 	}

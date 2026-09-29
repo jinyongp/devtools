@@ -631,9 +631,6 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	}
 	mac := hmac.New(sha256.New, key)
 	mac.Write(hashInput)
-	if request.Import == nil {
-		mac.Write([]byte("\n" + map[bool]string{true: "replace", false: "create"}[replace]))
-	}
 	plan.Digest = hex.EncodeToString(mac.Sum(nil))
 	plan.Targets = append(plan.Targets, Target{source, target, exists})
 	if request.Import != nil {

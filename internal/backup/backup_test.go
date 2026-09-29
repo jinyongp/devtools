@@ -428,9 +428,9 @@ func TestRestoreDeletesTaskDomainAbsentFromBackup(t *testing.T) {
 	if _, err := destination.Configure(filepath.Join(root, "safety"), recipient); err != nil {
 		t.Fatal(err)
 	}
-	preview, err := destination.Restore(context.Background(), archive, identity, "source", "target", "", "", true)
+	preview, err := destination.Restore(context.Background(), archive, identity, "source", "target", "", "", false)
 	if err != nil || !preview.Targets[0].Exists {
-		t.Fatalf("replace preview failed: %#v %v", preview, err)
+		t.Fatalf("replacement preview without --replace failed: %#v %v", preview, err)
 	}
 	requestID := tasks.ID()
 	applied, err := destination.Restore(context.Background(), archive, identity, "source", "target", preview.Digest, requestID, true)

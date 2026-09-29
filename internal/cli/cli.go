@@ -53,6 +53,7 @@ type Command struct {
 
 type App struct {
 	commands         []Command
+	passphrasePrompt func(context.Context, IO, string) (string, *protocol.Error)
 	dataDirectory    func() (string, *protocol.Error)
 	proxyManager     func(string) proxy.Manager
 	portProbe        ports.AvailabilityProbe

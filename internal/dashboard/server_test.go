@@ -49,6 +49,27 @@ func TestQueryCacheInvalidatesOnMutation(t *testing.T) {
 	}
 }
 
+func TestQueryErrorUsesJSONContentType(t *testing.T) {
+	s := &Server{registry: Registry{Address: "http://127.0.0.1:1234"}, data: filepath.Join(privateTempDir(t), "tasks"), sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)}}
+	id := tasks.ID()
+	req := httptest.NewRequest("GET", s.registry.Address+"/api/query?profile=test&command=context&id="+id, nil)
+	req.Header.Set("Authorization", "Bearer session")
+	out := httptest.NewRecorder()
+	s.ServeHTTP(out, req)
+	if out.Code != 400 {
+		t.Fatalf("query status = %d body=%s", out.Code, out.Body.String())
+	}
+	if got := out.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("query error content type = %q", got)
+	}
+	var body struct {
+		Error *tasks.Object `json:"error"`
+	}
+	if err := json.Unmarshal(out.Body.Bytes(), &body); err != nil || body.Error == nil || (*body.Error)["code"] != "not_found" {
+		t.Fatalf("query error body = %s err=%v", out.Body.String(), err)
+	}
+}
+
 func TestProfilesEndpointIncludesPassiveProcessProfiles(t *testing.T) {
 	root := privateTempDir(t)
 	id := tasks.ID()

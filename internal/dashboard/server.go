@@ -510,6 +510,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.mu.Unlock()
 		result, err := store.Query(r.Context(), tasks.Query{Command: command, Target: r.URL.Query().Get("id"), Options: opts})
 		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(400)
 			reply(tasks.Object{"error": err})
 			return

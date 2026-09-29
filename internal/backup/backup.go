@@ -69,6 +69,7 @@ type CreateOptions struct {
 	Output        string
 	RecipientPath string
 	Recipient     string
+	Passphrase    string
 }
 type Plan struct {
 	Replayed     bool     `json:"-"` // Response metadata; never stored in the restore receipt.
@@ -81,6 +82,7 @@ type Plan struct {
 type ImportRequest struct {
 	Path              string
 	IdentityPath      string
+	Passphrase        string
 	RecoveryDirectory string
 	Source            string
 	Target            string
@@ -117,9 +119,10 @@ type restoreFingerprintInput struct {
 	Replace  bool
 }
 type recoveryOptions struct {
-	Directory string
-	Recipient string
-	Prefix    string
+	Directory  string
+	Recipient  string
+	Passphrase string
+	Prefix     string
 }
 
 type restoreRequest struct {
@@ -392,17 +395,13 @@ func (e Engine) snapshot(selected string) (Snapshot, error) {
 	}
 	return s, nil
 }
-func encode(s Snapshot, r string) ([]byte, error) {
-	rec, err := age.ParseX25519Recipient(r)
-	if err != nil {
-		return nil, err
-	}
+func encodeTo(s Snapshot, recipient age.Recipient) ([]byte, error) {
 	b, err := json.Marshal(s)
 	if err != nil || int64(len(b)) > limit {
 		return nil, errors.New("backup too large")
 	}
 	var out bytes.Buffer
-	w, err := age.Encrypt(&out, rec)
+	w, err := age.Encrypt(&out, recipient)
 	if err != nil {
 		return nil, err
 	}
@@ -413,6 +412,25 @@ func encode(s Snapshot, r string) ([]byte, error) {
 		return nil, err
 	}
 	return out.Bytes(), nil
+}
+
+func encode(s Snapshot, r string) ([]byte, error) {
+	rec, err := age.ParseX25519Recipient(r)
+	if err != nil {
+		return nil, err
+	}
+	return encodeTo(s, rec)
+}
+
+func encodePassphrase(s Snapshot, passphrase string) ([]byte, error) {
+	if passphrase == "" {
+		return nil, errors.New("empty passphrase")
+	}
+	recipient, err := age.NewScryptRecipient(passphrase)
+	if err != nil {
+		return nil, err
+	}
+	return encodeTo(s, recipient)
 }
 func summaries(s Snapshot) []Summary {
 	out := []Summary{}
@@ -473,19 +491,34 @@ func (e Engine) CreateWithRecipient(ctx context.Context, request CreateOptions) 
 		}
 		output = filepath.Join(c.Directory, "devtools-"+tasks.ID()+".age")
 	}
+	return e.createArchive(ctx, request.Profile, output, func(snapshot Snapshot) ([]byte, error) {
+		return encode(snapshot, c.Recipient)
+	})
+}
+
+func (e Engine) CreateWithPassphrase(ctx context.Context, request CreateOptions) (CreateResult, *protocol.Error) {
+	if request.Profile != "" && !project.ValidProfile(request.Profile) || request.Output == "" || request.Passphrase == "" || request.Recipient != "" || request.RecipientPath != "" {
+		return CreateResult{}, failure("invalid_argument")
+	}
+	return e.createArchive(ctx, request.Profile, request.Output, func(snapshot Snapshot) ([]byte, error) {
+		return encodePassphrase(snapshot, request.Passphrase)
+	})
+}
+
+func (e Engine) createArchive(ctx context.Context, profile, output string, encoder func(Snapshot) ([]byte, error)) (CreateResult, *protocol.Error) {
 	release, err := maintenance.Acquire(ctx, e.Data)
 	if err != nil {
 		return CreateResult{}, failure("storage_error")
 	}
 	defer release()
-	s, err := e.snapshot(request.Profile)
+	s, err := e.snapshot(profile)
 	if err != nil {
 		return CreateResult{}, failure("backup_error")
 	}
 	if ctx.Err() != nil {
 		return CreateResult{}, failure("canceled")
 	}
-	b, err := encode(s, c.Recipient)
+	b, err := encoder(s)
 	if err != nil {
 		return CreateResult{}, failure("backup_error")
 	}
@@ -500,59 +533,121 @@ func (e Engine) CreateWithRecipient(ctx context.Context, request CreateOptions) 
 	}
 	return CreateResult{Path: output, Profiles: summaries(s), CreatedAt: s.Created}, nil
 }
-func decode(path, identityPath string) (Snapshot, []byte, string, error) {
-	var s Snapshot
-	b, e := maintenance.Read(path, limit+1<<20)
-	if e != nil {
-		return s, nil, "", e
+
+func decodeWithIdentity(path string, identity age.Identity) (Snapshot, []byte, error) {
+	var snapshot Snapshot
+	cipher, err := maintenance.Read(path, limit+1<<20)
+	if err != nil {
+		return snapshot, nil, err
 	}
-	key, e := maintenance.Read(identityPath, 4096)
-	if e != nil {
-		return s, nil, "", e
-	}
-	id, e := age.ParseX25519Identity(strings.TrimSpace(string(key)))
-	if e != nil {
-		return s, nil, "", e
-	}
-	reader, e := age.Decrypt(bytes.NewReader(b), id)
-	if e != nil {
-		return s, nil, "", e
+	reader, err := age.Decrypt(bytes.NewReader(cipher), identity)
+	if err != nil {
+		return snapshot, nil, err
 	}
 	// Read to authenticated EOF before any parsing or mutation.
-	plain, e := io.ReadAll(io.LimitReader(reader, limit+1))
-	if e != nil || int64(len(plain)) > limit {
-		return s, nil, "", errors.New("invalid encrypted backup")
+	plain, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	if err != nil || int64(len(plain)) > limit {
+		return snapshot, nil, errors.New("invalid encrypted backup")
 	}
 	d := json.NewDecoder(bytes.NewReader(plain))
 	d.DisallowUnknownFields()
-	if d.Decode(&s) != nil || d.Decode(new(any)) != io.EOF || s.Version != 1 {
-		return s, nil, "", errors.New("invalid backup")
+	if d.Decode(&snapshot) != nil || d.Decode(new(any)) != io.EOF || snapshot.Version != 1 {
+		return snapshot, nil, errors.New("invalid backup")
 	}
 	seen := map[string]bool{}
-	for _, p := range s.Profiles {
+	for _, p := range snapshot.Profiles {
 		if !project.ValidProfile(p.Name) || seen[p.Name] || p.Values == nil && p.Tasks == nil {
-			return s, nil, "", errors.New("invalid profile")
+			return snapshot, nil, errors.New("invalid profile")
 		}
 		seen[p.Name] = true
 		if p.Values != nil {
-			if _, e = values.RestoreSnapshot(p.Values, p.Name, p.Name); e != nil {
-				return s, nil, "", e
+			if _, err = values.RestoreSnapshot(p.Values, p.Name, p.Name); err != nil {
+				return snapshot, nil, err
 			}
 		}
 		if p.Tasks != nil {
-			if _, e = tasks.RestoreSnapshot(p.Tasks, p.Name, p.Name); e != nil {
-				return s, nil, "", e
+			if _, err = tasks.RestoreSnapshot(p.Tasks, p.Name, p.Name); err != nil {
+				return snapshot, nil, err
 			}
 		}
 	}
-	return s, b, id.Recipient().String(), nil
+	return snapshot, cipher, nil
 }
+
+func decode(path, identityPath string) (Snapshot, []byte, string, error) {
+	var snapshot Snapshot
+	key, err := maintenance.Read(identityPath, 4096)
+	if err != nil {
+		return snapshot, nil, "", err
+	}
+	identity, err := age.ParseX25519Identity(strings.TrimSpace(string(key)))
+	if err != nil {
+		return snapshot, nil, "", err
+	}
+	snapshot, cipher, err := decodeWithIdentity(path, identity)
+	if err != nil {
+		return snapshot, nil, "", err
+	}
+	return snapshot, cipher, identity.Recipient().String(), nil
+}
+
+func decodePassphrase(path, passphrase string) (Snapshot, []byte, error) {
+	var snapshot Snapshot
+	if passphrase == "" {
+		return snapshot, nil, errors.New("empty passphrase")
+	}
+	identity, err := age.NewScryptIdentity(passphrase)
+	if err != nil {
+		return snapshot, nil, err
+	}
+	return decodeWithIdentity(path, identity)
+}
+
+const (
+	ArchiveEncryptionPassphrase = "passphrase"
+	ArchiveEncryptionRecipient  = "recipient"
+)
+
+type archiveProbeIdentity struct{}
+
+func (archiveProbeIdentity) Unwrap([]*age.Stanza) ([]byte, error) {
+	return nil, age.ErrIncorrectIdentity
+}
+
+func ArchiveEncryptionMode(path string) (string, error) {
+	cipher, err := maintenance.Read(path, limit+1<<20)
+	if err != nil {
+		return "", err
+	}
+	_, err = age.Decrypt(bytes.NewReader(cipher), archiveProbeIdentity{})
+	var noMatch *age.NoIdentityMatchError
+	if !errors.As(err, &noMatch) || len(noMatch.StanzaTypes) == 0 {
+		return "", errors.New("invalid age archive")
+	}
+	all := func(expected string) bool {
+		for _, stanzaType := range noMatch.StanzaTypes {
+			if stanzaType != expected {
+				return false
+			}
+		}
+		return true
+	}
+	switch {
+	case all("scrypt"):
+		return ArchiveEncryptionPassphrase, nil
+	case all("X25519"):
+		return ArchiveEncryptionRecipient, nil
+	default:
+		return "", errors.New("unsupported age recipient")
+	}
+}
+
 func Inspect(path, identityPath string) (Metadata, *protocol.Error) {
-	s, _, _, e := decode(path, identityPath)
-	if e != nil {
+	snapshot, _, _, err := decode(path, identityPath)
+	if err != nil {
 		return Metadata{}, failure("invalid_backup")
 	}
-	return Metadata{CreatedAt: s.Created, Profiles: summaries(s)}, nil
+	return Metadata{CreatedAt: snapshot.Created, Profiles: summaries(snapshot)}, nil
 }
 
 func selectImportSummary(snapshot Snapshot, requested string) (Summary, *protocol.Error) {
@@ -573,7 +668,7 @@ func selectImportSummary(snapshot Snapshot, requested string) (Summary, *protoco
 
 func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult, *protocol.Error) {
 	result := ImportResult{Plan: Plan{Targets: []Target{}}, Diff: profilecatalog.Diff{Envs: []profilecatalog.NameChange{}, Variables: []profilecatalog.ValueChange{}, Secrets: []profilecatalog.ValueChange{}, Items: []profilecatalog.TaskChange{}, Instances: []profilecatalog.InstanceChange{}}}
-	if !filepath.IsAbs(e.Data) || !filepath.IsAbs(e.Cache) || (request.Expected == "") != (request.RequestID == "") {
+	if !filepath.IsAbs(e.Data) || !filepath.IsAbs(e.Cache) || (request.Expected == "") != (request.RequestID == "") || (request.IdentityPath == "") == (request.Passphrase == "") {
 		return result, failure("invalid_argument")
 	}
 	if request.RequestID != "" && !restoreRequestIDPattern.MatchString(request.RequestID) {
@@ -588,7 +683,18 @@ func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult
 	if request.Source != "" && !project.ValidProfile(request.Source) || request.Target != "" && !project.ValidProfile(request.Target) {
 		return result, failure("invalid_argument")
 	}
-	snapshot, cipher, identityRecipient, err := decode(request.Path, request.IdentityPath)
+
+	var (
+		snapshot          Snapshot
+		cipher            []byte
+		identityRecipient string
+		err               error
+	)
+	if request.Passphrase != "" {
+		snapshot, cipher, err = decodePassphrase(request.Path, request.Passphrase)
+	} else {
+		snapshot, cipher, identityRecipient, err = decode(request.Path, request.IdentityPath)
+	}
 	if err != nil {
 		return result, failure("invalid_backup")
 	}
@@ -620,7 +726,7 @@ func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult
 		if !filepath.IsAbs(request.RecoveryDirectory) {
 			return result, failure("invalid_argument")
 		}
-		recovery = &recoveryOptions{Directory: request.RecoveryDirectory, Recipient: identityRecipient, Prefix: "before-import-"}
+		recovery = &recoveryOptions{Directory: request.RecoveryDirectory, Recipient: identityRecipient, Passphrase: request.Passphrase, Prefix: "before-import-"}
 	}
 	plan, restoreErr := e.restore(ctx, restoreRequest{Snapshot: snapshot, Cipher: cipher, Source: source.Profile, Target: target, Expected: request.Expected, RequestID: request.RequestID, OperationFingerprint: operationFingerprint, Replace: request.Replace, Import: &importContext{Source: source, Canonical: sourceCanonical}, Recovery: recovery})
 	if restoreErr != nil {
@@ -756,19 +862,25 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		return plan, failure("profile_exists")
 	}
 	if exists {
-		directory, recoveryRecipient, prefix := "", "", "before-restore-"
+		directory, recoveryRecipient, recoveryPassphrase, prefix := "", "", "", "before-restore-"
 		if request.Recovery != nil {
 			directory = request.Recovery.Directory
 			recoveryRecipient = request.Recovery.Recipient
+			recoveryPassphrase = request.Recovery.Passphrase
 			if request.Recovery.Prefix != "" {
 				prefix = request.Recovery.Prefix
 			}
 			if err := ensurePrivateDirectoryChain(e.Data, directory); err != nil {
 				return plan, failure("backup_error")
 			}
-			canonical, err := canonicalRecipient(recoveryRecipient)
-			if err != nil || canonical != recoveryRecipient {
+			if (recoveryRecipient == "") == (recoveryPassphrase == "") {
 				return plan, failure("backup_error")
+			}
+			if recoveryRecipient != "" {
+				canonical, err := canonicalRecipient(recoveryRecipient)
+				if err != nil || canonical != recoveryRecipient {
+					return plan, failure("backup_error")
+				}
 			}
 		} else {
 			c, err := e.config()
@@ -784,7 +896,12 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		if err != nil {
 			return plan, failure("backup_error")
 		}
-		b, err := encode(before, recoveryRecipient)
+		var b []byte
+		if recoveryPassphrase != "" {
+			b, err = encodePassphrase(before, recoveryPassphrase)
+		} else {
+			b, err = encode(before, recoveryRecipient)
+		}
 		if err != nil {
 			return plan, failure("backup_error")
 		}

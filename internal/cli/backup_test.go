@@ -45,6 +45,9 @@ func TestBackupStatusAndDirectRecipientCLI(t *testing.T) {
 	if created["changed"] != true || created["item"].(map[string]any)["path"] != directArchive {
 		t.Fatalf("direct recipient backup failed: %#v", created)
 	}
+	if code, out, diagnostic := invoke(t, app, "", "backup", "create", "--profile", "app", "--output", directArchive, "--recipient", recipientValue); code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"backup_error\"") {
+		t.Fatalf("backup output collision contract changed: code=%d out=%s err=%s", code, out, diagnostic)
+	}
 	if code, out, diagnostic := invoke(t, app, "", "backup", "create", "--profile", "app", "--output", filepath.Join(root, "conflict.age"), "--recipient", recipientValue, "--recipient-file", recipientPath); code != 2 || out != "" || !strings.Contains(diagnostic, `"code":"invalid_argument"`) {
 		t.Fatalf("recipient conflict should fail: code=%d out=%s err=%s", code, out, diagnostic)
 	}
@@ -66,5 +69,27 @@ func TestBackupStatusAndDirectRecipientCLI(t *testing.T) {
 	fallbackPath, _ := fallback["item"].(map[string]any)["path"].(string)
 	if fallback["changed"] != true || filepath.Dir(fallbackPath) != backupDirectory {
 		t.Fatalf("configured recipient fallback failed: %#v", fallback)
+	}
+
+	externalIdentity := filepath.Join(root, "external-identity.txt")
+	externalRecipientPath := filepath.Join(root, "external-recipient.txt")
+	if code, _, diagnostic := invoke(t, app, "", "backup", "keygen", "--identity-file", externalIdentity, "--recipient-file", externalRecipientPath); code != 0 {
+		t.Fatal(diagnostic)
+	}
+	externalRecipientBytes, err := os.ReadFile(externalRecipientPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	externalRecipient := strings.TrimSpace(string(externalRecipientBytes))
+	explicit := outputData(t, app, []string{"backup", "create", "--profile", "app", "--recipient", externalRecipient})
+	explicitPath := explicit["item"].(map[string]any)["path"].(string)
+	if filepath.Dir(explicitPath) != backupDirectory {
+		t.Fatalf("explicit recipient did not reuse configured output directory: %#v", explicit)
+	}
+	if code, _, diagnostic := invoke(t, app, "", "backup", "inspect", "--file", explicitPath, "--identity-file", externalIdentity); code != 0 {
+		t.Fatalf("explicit recipient was overwritten by configured recipient: %s", diagnostic)
+	}
+	if code, out, diagnostic := invoke(t, app, "", "backup", "inspect", "--file", explicitPath, "--identity-file", identity); code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"invalid_backup\"") {
+		t.Fatalf("configured identity unexpectedly decrypted explicit-recipient backup: code=%d out=%s err=%s", code, out, diagnostic)
 	}
 }

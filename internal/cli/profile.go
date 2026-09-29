@@ -2,10 +2,12 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/backup"
 	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
+	"github.com/jinyongp/devtools/internal/profiletransfer"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -159,25 +161,33 @@ func (a *App) registerProfiles() {
 			Run:    a.diffProfiles,
 		},
 		Command{
+			Name:        "profile transfer prepare",
+			Description: "Prepare this user installation to receive encrypted profile transfers.",
+			Output: changedItemOutput(object(map[string]any{
+				"recipient": stringSchema(),
+			}, "recipient")),
+			Run: a.prepareProfileTransfer,
+		},
+		Command{
 			Name:        "profile export",
-			Description: "Encrypt one profile for transfer to another environment.",
+			Description: "Encrypt one profile for transfer to another device using its public recipient.",
 			Options: []Option{
 				profileIdentifierOption("profile", false),
 				{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory used when profile is omitted."},
-				filePathOption("output", false),
-				filePathOption("recipient-file", false),
-				publicRecipientOption(),
+				{Name: "output", MinLength: 1, Description: "Output path; defaults to ./<profile>.age."},
+				{Name: "recipient-file", MinLength: 1, Description: "Destination public age X25519 recipient file; choose exactly one of this or --recipient."},
+				{Name: "recipient", MinLength: 1, Description: "Destination public age X25519 recipient; choose exactly one of this or --recipient-file."},
 			},
-			InputOneOf: recipientInputOneOf(),
+			InputOneOf: requiredRecipientInputOneOf(),
 			Output:     changedItemOutput(profileExportItemSchema()),
 			Run:        a.exportProfile,
 		},
 		Command{
 			Name:        "profile import",
-			Description: "Preview an encrypted profile import; apply requires the preview digest and request ID.",
+			Description: "Preview an encrypted profile import using the prepared local identity unless an identity file is supplied.",
 			Options: []Option{
 				filePathOption("file", true),
-				filePathOption("identity-file", true),
+				{Name: "identity-file", MinLength: 1, Description: "Private age X25519 identity file; omission uses the prepared local transfer identity."},
 				profileIdentifierOption("profile", false),
 				profileIdentifierOption("as", false),
 				{Name: "replace", Boolean: true, Description: "Permit replacement of an existing target profile after creating a safety backup."},
@@ -200,6 +210,83 @@ func (a *App) registerProfiles() {
 			Run: a.importProfile,
 		},
 	)
+}
+
+func (a *App) profileTransferStore() (profiletransfer.Store, *protocol.Error) {
+	directory, err := a.dataDirectory()
+	if err != nil {
+		return profiletransfer.Store{}, err
+	}
+	return profiletransfer.Store{Data: filepath.Dir(directory)}, nil
+}
+
+func transferIdentityError(err error) *protocol.Error {
+	switch {
+	case errors.Is(err, profiletransfer.ErrIdentityMissing):
+		return protocol.NewError("transfer_identity_missing", "No local profile transfer identity is prepared.", 3, map[string]any{
+			"remedies": []protocol.Remedy{{
+				Argv:           []string{"devtools", "profile", "transfer", "prepare"},
+				RequiredInputs: []string{},
+				Message:        "Prepare this destination installation, then re-export the source profile to the new public recipient before importing.",
+			}},
+		})
+	case errors.Is(err, profiletransfer.ErrInvalidIdentity):
+		return protocol.NewError("transfer_identity_invalid", "The local profile transfer identity is invalid or unsafe.", 3, map[string]any{
+			"remedies": []protocol.Remedy{{
+				Argv:           []string{"devtools", "profile", "import"},
+				RequiredInputs: []string{"file", "identity-file"},
+				Message:        "Use a matching existing private identity with --identity-file, or restore the local identity's private permissions and original contents. A new key cannot decrypt old archives.",
+			}},
+		})
+	default:
+		return protocol.NewError("storage_error", "Cannot access private profile transfer storage.", 1, nil)
+	}
+}
+
+// Transfer shares the archive engine, but not the backup-configuration workflow.
+func transferArchiveError(err *protocol.Error) *protocol.Error {
+	remedy := protocol.Remedy{Argv: []string{}, RequiredInputs: []string{}}
+	message := ""
+	switch err.Code {
+	case "invalid_recipient":
+		message = "Supply a valid public age X25519 recipient for the destination device."
+		remedy.Argv = []string{"devtools", "profile", "transfer", "prepare"}
+		remedy.Message = "Run this on the destination device, then copy its public recipient into --recipient or --recipient-file on the source device."
+	case "invalid_backup":
+		message = "Cannot read or authenticate the profile archive with the selected identity."
+		remedy.Argv = []string{"devtools", "profile", "import"}
+		remedy.RequiredInputs = []string{"file"}
+		remedy.Message = "Check that the archive is complete and addressed to this identity. Use a matching --identity-file for an external-key archive, or re-export to this destination's prepared recipient."
+	case "profile_exists":
+		message = "The target profile already exists; replacement requires explicit authorization."
+		remedy.Argv = []string{"devtools", "profile", "import"}
+		remedy.RequiredInputs = []string{"file", "as"}
+		remedy.Message = "Choose an unused target with --as, or review a fresh preview and supply --replace with its digest and a request ID to replace the existing profile."
+	case "backup_error":
+		message = "The profile archive operation could not be completed."
+		remedy.Message = "Check archive paths and private storage permissions. Replacement requires a writable private recovery directory and a durable safety archive."
+	default:
+		return err
+	}
+	return protocol.NewError(err.Code, message, err.ExitCode, map[string]any{"remedies": []protocol.Remedy{remedy}})
+}
+
+func (a *App) prepareProfileTransfer(ctx context.Context, _ IO, _ Request) (any, *protocol.Error) {
+	store, err := a.profileTransferStore()
+	if err != nil {
+		return nil, err
+	}
+	prepared, prepareErr := store.Prepare(ctx)
+	if prepareErr != nil {
+		if errors.Is(prepareErr, context.Canceled) || errors.Is(prepareErr, context.DeadlineExceeded) {
+			return nil, protocol.NewError("canceled", "Execution canceled.", 130, nil)
+		}
+		return nil, transferIdentityError(prepareErr)
+	}
+	return map[string]any{
+		"item":    map[string]string{"recipient": prepared.Recipient},
+		"changed": prepared.Changed,
+	}, nil
 }
 
 func (a *App) listProfiles(ctx context.Context, _ IO, _ Request) (any, *protocol.Error) {
@@ -235,6 +322,19 @@ func (a *App) diffProfiles(ctx context.Context, _ IO, request Request) (any, *pr
 }
 
 func (a *App) exportProfile(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
+	recipient, recipientFile := request.Options["recipient"], request.Options["recipient-file"]
+	if recipient == "" && recipientFile == "" {
+		return nil, protocol.NewError("recipient_required", "Profile export requires the destination device's public recipient.", 3, map[string]any{
+			"remedies": []protocol.Remedy{{
+				Argv:           []string{"devtools", "profile", "transfer", "prepare"},
+				RequiredInputs: []string{},
+				Message:        "Run this command on the destination device, then pass its public recipient to profile export with --recipient.",
+			}},
+		})
+	}
+	if recipient != "" && recipientFile != "" {
+		return nil, argumentError("Choose recipient or recipient-file.", "recipient")
+	}
 	profile := request.Options["profile"]
 	if profile == "" {
 		p, err := project.Resolve(request.Options["dir"], "")
@@ -243,13 +343,30 @@ func (a *App) exportProfile(ctx context.Context, _ IO, request Request) (any, *p
 		}
 		profile = p.Profile
 	}
+	output := request.Options["output"]
+	if output == "" {
+		output = "./" + profile + ".age"
+	}
 	engine, err := a.backupEngine()
 	if err != nil {
 		return nil, err
 	}
-	result, failure := engine.CreateWithRecipient(ctx, backup.CreateOptions{Profile: profile, Output: request.Options["output"], RecipientPath: request.Options["recipient-file"], Recipient: request.Options["recipient"]})
+	result, failure := engine.CreateWithRecipient(ctx, backup.CreateOptions{Profile: profile, Output: output, RecipientPath: recipientFile, Recipient: recipient})
 	if failure != nil {
-		return nil, failure
+		if ctx.Err() != nil {
+			return nil, protocol.NewError("canceled", "Execution canceled.", 130, nil)
+		}
+		if failure.Code == "backup_error" && failure.Details != nil && failure.Details["cause"] == "output_exists" {
+			return nil, protocol.NewError("output_exists", "Profile export output already exists; choose another --output path.", 3, map[string]any{
+				"field": "output",
+				"remedies": []protocol.Remedy{{
+					Argv:           []string{},
+					RequiredInputs: []string{"output"},
+					Message:        "Retry profile export with a different --output path and the same destination recipient.",
+				}},
+			})
+		}
+		return nil, transferArchiveError(failure)
 	}
 	if len(result.Profiles) != 1 || result.Profiles[0].Profile != profile {
 		return nil, protocol.NewError("internal_error", "Profile export did not produce exactly one profile.", 1, nil)
@@ -262,21 +379,34 @@ func (a *App) importProfile(ctx context.Context, _ IO, request Request) (any, *p
 	if (request.Options["apply"] != "") != (request.Options["request-id"] != "") {
 		return nil, argumentError("Apply and request-id must be supplied together.", "")
 	}
+	transferStore, storeErr := a.profileTransferStore()
+	if storeErr != nil {
+		return nil, storeErr
+	}
+	identityPath := request.Options["identity-file"]
+	if identityPath == "" {
+		var identityErr error
+		identityPath, identityErr = transferStore.ExistingIdentityPath()
+		if identityErr != nil {
+			return nil, transferIdentityError(identityErr)
+		}
+	}
 	engine, engineErr := a.backupEngine()
 	if engineErr != nil {
 		return nil, engineErr
 	}
 	result, importErr := engine.Import(ctx, backup.ImportRequest{
-		Path:         request.Options["file"],
-		IdentityPath: request.Options["identity-file"],
-		Source:       request.Options["profile"],
-		Target:       request.Options["as"],
-		Expected:     request.Options["apply"],
-		RequestID:    request.Options["request-id"],
-		Replace:      request.Options["replace"] == "true",
+		Path:              request.Options["file"],
+		IdentityPath:      identityPath,
+		RecoveryDirectory: transferStore.RecoveryDirectory(),
+		Source:            request.Options["profile"],
+		Target:            request.Options["as"],
+		Expected:          request.Options["apply"],
+		RequestID:         request.Options["request-id"],
+		Replace:           request.Options["replace"] == "true",
 	})
 	if importErr != nil {
-		return nil, importErr
+		return nil, transferArchiveError(importErr)
 	}
 	if len(result.Plan.Targets) != 1 {
 		return nil, protocol.NewError("internal_error", "Profile import did not resolve exactly one target.", 1, nil)

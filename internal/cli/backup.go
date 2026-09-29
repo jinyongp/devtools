@@ -42,6 +42,13 @@ func recipientInputOneOf() []map[string]any {
 	}
 }
 
+func requiredRecipientInputOneOf() []map[string]any {
+	return []map[string]any{
+		{"required": []string{"recipient"}, "not": map[string]any{"required": []string{"recipient-file"}}},
+		{"required": []string{"recipient-file"}, "not": map[string]any{"required": []string{"recipient"}}},
+	}
+}
+
 func (a *App) registerBackup() {
 	add := func(name, description string, opts []Option, run func(context.Context, backup.Engine, Request) (any, *protocol.Error)) {
 		boolean := map[string]any{"type": "boolean"}

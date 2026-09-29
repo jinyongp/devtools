@@ -460,3 +460,37 @@ func TestRestoreDeletesTaskDomainAbsentFromBackup(t *testing.T) {
 		t.Fatalf("committed absent-domain restore did not replay: %#v %v", replayed, err)
 	}
 }
+
+func TestSnapshotExcludesProfileTransferIdentityState(t *testing.T) {
+	root := t.TempDir()
+	engine := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
+	store := values.Store{Directory: filepath.Join(engine.Data, "profiles"), Profile: "app"}
+	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+		return state.Set(values.Secret, "TOKEN", "", "PROFILE_VALUE_CANARY")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	transferDir := filepath.Join(engine.Data, "profile-transfer")
+	if err := os.MkdirAll(transferDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	const identityCanary = "AGE-SECRET-KEY-TRANSFER-IDENTITY-CANARY"
+	if err := os.WriteFile(filepath.Join(transferDir, "identity.txt"), []byte(identityCanary+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot, err := engine.snapshot("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), identityCanary) || strings.Contains(string(raw), "profile-transfer") {
+		t.Fatalf("transfer identity state entered profile snapshot: %s", raw)
+	}
+	if len(snapshot.Profiles) != 1 || snapshot.Profiles[0].Name != "app" {
+		t.Fatalf("unexpected snapshot profiles: %#v", snapshot.Profiles)
+	}
+}

@@ -79,13 +79,14 @@ type Plan struct {
 	importData   *importReceiptData
 }
 type ImportRequest struct {
-	Path         string
-	IdentityPath string
-	Source       string
-	Target       string
-	Expected     string
-	RequestID    string
-	Replace      bool
+	Path              string
+	IdentityPath      string
+	RecoveryDirectory string
+	Source            string
+	Target            string
+	Expected          string
+	RequestID         string
+	Replace           bool
 }
 type ImportResult struct {
 	Plan   Plan
@@ -115,6 +116,12 @@ type restoreFingerprintInput struct {
 	Expected string
 	Replace  bool
 }
+type recoveryOptions struct {
+	Directory string
+	Recipient string
+	Prefix    string
+}
+
 type restoreRequest struct {
 	Snapshot             Snapshot
 	Cipher               []byte
@@ -125,6 +132,7 @@ type restoreRequest struct {
 	OperationFingerprint string
 	Replace              bool
 	Import               *importContext
+	Recovery             *recoveryOptions
 }
 type Target struct {
 	Source  string `json:"source"`
@@ -154,12 +162,74 @@ func failure(code string) *protocol.Error {
 	}
 	return protocol.NewError(code, "Backup operation could not be completed; check the selected files and target state.", exit, nil)
 }
+
+func outputExistsFailure() *protocol.Error {
+	return protocol.NewError("backup_error", "Backup operation could not be completed; check the selected files and target state.", 3, map[string]any{"cause": "output_exists"})
+}
 func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 func file(domain, profile string) string {
 	return profilekey.StateRelative(domain, profile)
 }
 
+func ensurePrivateDirectoryChain(root, directory string) error {
+	if !filepath.IsAbs(root) || !filepath.IsAbs(directory) {
+		return errors.New("absolute private directory required")
+	}
+	relative, err := filepath.Rel(root, directory)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) || filepath.IsAbs(relative) {
+		return errors.New("private directory must be below data root")
+	}
+	if err := os.MkdirAll(root, 0700); err != nil {
+		return err
+	}
+	current := root
+	components := append([]string{"."}, strings.Split(relative, string(os.PathSeparator))...)
+	for index, component := range components {
+		created := false
+		parent := current
+		if index > 0 {
+			current = filepath.Join(current, component)
+			if err := os.Mkdir(current, 0700); err != nil {
+				if !errors.Is(err, os.ErrExist) {
+					return err
+				}
+			} else {
+				created = true
+			}
+		}
+		info, err := os.Lstat(current)
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+			return errors.New("private directory required")
+		}
+		if created {
+			dir, err := os.Open(parent)
+			if err != nil {
+				return err
+			}
+			syncErr := dir.Sync()
+			closeErr := dir.Close()
+			if syncErr != nil {
+				return syncErr
+			}
+			if closeErr != nil {
+				return closeErr
+			}
+		}
+	}
+	return nil
+}
+
 func exclusive(path string, b []byte) error {
+	return exclusiveContext(context.Background(), path, b)
+}
+
+func exclusiveContext(ctx context.Context, path string, b []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	// Publish a complete file through a hard link, refusing any existing target.
 	dir := filepath.Dir(path)
 	f, e := os.CreateTemp(dir, ".backup-*")
@@ -177,6 +247,9 @@ func exclusive(path string, b []byte) error {
 	}
 	if c != nil {
 		return c
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if e = os.Link(f.Name(), path); e != nil {
 		return e
@@ -356,7 +429,23 @@ func (e Engine) CreateWithRecipient(ctx context.Context, request CreateOptions) 
 	if request.Profile != "" && !project.ValidProfile(request.Profile) || request.RecipientPath != "" && request.Recipient != "" {
 		return CreateResult{}, failure("invalid_argument")
 	}
-	c, configErr := e.config()
+	var c Config
+	configLoaded := false
+	loadConfig := func() *protocol.Error {
+		if configLoaded {
+			return nil
+		}
+		configured, err := e.config()
+		if err != nil {
+			return failure("backup_not_configured")
+		}
+		c.Directory = configured.Directory
+		if c.Recipient == "" {
+			c.Recipient = configured.Recipient
+		}
+		configLoaded = true
+		return nil
+	}
 	switch {
 	case request.RecipientPath != "":
 		r, err := recipient(request.RecipientPath)
@@ -370,13 +459,15 @@ func (e Engine) CreateWithRecipient(ctx context.Context, request CreateOptions) 
 			return CreateResult{}, failure("invalid_recipient")
 		}
 		c.Recipient = r
-	case configErr != nil:
-		return CreateResult{}, failure("backup_not_configured")
+	default:
+		if failure := loadConfig(); failure != nil {
+			return CreateResult{}, failure
+		}
 	}
 	output := request.Output
 	if output == "" {
-		if configErr != nil {
-			return CreateResult{}, failure("backup_not_configured")
+		if failure := loadConfig(); failure != nil {
+			return CreateResult{}, failure
 		}
 		if os.MkdirAll(c.Directory, 0700) != nil {
 			return CreateResult{}, failure("backup_error")
@@ -392,64 +483,73 @@ func (e Engine) CreateWithRecipient(ctx context.Context, request CreateOptions) 
 	if err != nil {
 		return CreateResult{}, failure("backup_error")
 	}
+	if ctx.Err() != nil {
+		return CreateResult{}, failure("canceled")
+	}
 	b, err := encode(s, c.Recipient)
 	if err != nil {
 		return CreateResult{}, failure("backup_error")
 	}
-	if exclusive(output, b) != nil {
+	if err := exclusiveContext(ctx, output, b); err != nil {
+		if ctx.Err() != nil {
+			return CreateResult{}, failure("canceled")
+		}
+		if errors.Is(err, os.ErrExist) {
+			return CreateResult{}, outputExistsFailure()
+		}
 		return CreateResult{}, failure("backup_error")
 	}
 	return CreateResult{Path: output, Profiles: summaries(s), CreatedAt: s.Created}, nil
 }
-func decode(path, identityPath string) (Snapshot, []byte, error) {
+func decode(path, identityPath string) (Snapshot, []byte, string, error) {
 	var s Snapshot
 	b, e := maintenance.Read(path, limit+1<<20)
 	if e != nil {
-		return s, nil, e
+		return s, nil, "", e
 	}
 	key, e := maintenance.Read(identityPath, 4096)
 	if e != nil {
-		return s, nil, e
+		return s, nil, "", e
 	}
 	id, e := age.ParseX25519Identity(strings.TrimSpace(string(key)))
 	if e != nil {
-		return s, nil, e
+		return s, nil, "", e
 	}
 	reader, e := age.Decrypt(bytes.NewReader(b), id)
 	if e != nil {
-		return s, nil, e
+		return s, nil, "", e
 	}
 	// Read to authenticated EOF before any parsing or mutation.
 	plain, e := io.ReadAll(io.LimitReader(reader, limit+1))
 	if e != nil || int64(len(plain)) > limit {
-		return s, nil, errors.New("invalid encrypted backup")
+		return s, nil, "", errors.New("invalid encrypted backup")
 	}
 	d := json.NewDecoder(bytes.NewReader(plain))
 	d.DisallowUnknownFields()
 	if d.Decode(&s) != nil || d.Decode(new(any)) != io.EOF || s.Version != 1 {
-		return s, nil, errors.New("invalid backup")
+		return s, nil, "", errors.New("invalid backup")
 	}
 	seen := map[string]bool{}
 	for _, p := range s.Profiles {
 		if !project.ValidProfile(p.Name) || seen[p.Name] || p.Values == nil && p.Tasks == nil {
-			return s, nil, errors.New("invalid profile")
+			return s, nil, "", errors.New("invalid profile")
 		}
 		seen[p.Name] = true
 		if p.Values != nil {
 			if _, e = values.RestoreSnapshot(p.Values, p.Name, p.Name); e != nil {
-				return s, nil, e
+				return s, nil, "", e
 			}
 		}
 		if p.Tasks != nil {
 			if _, e = tasks.RestoreSnapshot(p.Tasks, p.Name, p.Name); e != nil {
-				return s, nil, e
+				return s, nil, "", e
 			}
 		}
 	}
-	return s, b, nil
+	return s, b, id.Recipient().String(), nil
 }
 func Inspect(path, identityPath string) (Metadata, *protocol.Error) {
-	s, _, e := decode(path, identityPath)
+	s, _, _, e := decode(path, identityPath)
 	if e != nil {
 		return Metadata{}, failure("invalid_backup")
 	}
@@ -489,7 +589,7 @@ func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult
 	if request.Source != "" && !project.ValidProfile(request.Source) || request.Target != "" && !project.ValidProfile(request.Target) {
 		return result, failure("invalid_argument")
 	}
-	snapshot, cipher, err := decode(request.Path, request.IdentityPath)
+	snapshot, cipher, identityRecipient, err := decode(request.Path, request.IdentityPath)
 	if err != nil {
 		return result, failure("invalid_backup")
 	}
@@ -516,7 +616,14 @@ func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult
 		return result, failure("invalid_backup")
 	}
 	operationFingerprint := restoreFingerprint(restoreFingerprintInput{Cipher: cipher, Source: source.Profile, Target: target, Expected: request.Expected, Replace: request.Replace})
-	plan, restoreErr := e.restore(ctx, restoreRequest{Snapshot: snapshot, Cipher: cipher, Source: source.Profile, Target: target, Expected: request.Expected, RequestID: request.RequestID, OperationFingerprint: operationFingerprint, Replace: request.Replace, Import: &importContext{Source: source, Canonical: sourceCanonical}})
+	var recovery *recoveryOptions
+	if request.RecoveryDirectory != "" {
+		if !filepath.IsAbs(request.RecoveryDirectory) {
+			return result, failure("invalid_argument")
+		}
+		recovery = &recoveryOptions{Directory: request.RecoveryDirectory, Recipient: identityRecipient, Prefix: "before-import-"}
+	}
+	plan, restoreErr := e.restore(ctx, restoreRequest{Snapshot: snapshot, Cipher: cipher, Source: source.Profile, Target: target, Expected: request.Expected, RequestID: request.RequestID, OperationFingerprint: operationFingerprint, Replace: request.Replace, Import: &importContext{Source: source, Canonical: sourceCanonical}, Recovery: recovery})
 	if restoreErr != nil {
 		return result, restoreErr
 	}
@@ -531,7 +638,7 @@ func (e Engine) Restore(ctx context.Context, path, identityPath, source, target,
 	if !filepath.IsAbs(e.Data) || !filepath.IsAbs(e.Cache) {
 		return plan, failure("invalid_argument")
 	}
-	snapshot, cipher, err := decode(path, identityPath)
+	snapshot, cipher, _, err := decode(path, identityPath)
 	if err != nil {
 		return plan, failure("invalid_backup")
 	}
@@ -650,23 +757,43 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		return plan, failure("profile_exists")
 	}
 	if exists {
-		c, err := e.config()
-		if err != nil {
-			return plan, failure("backup_not_configured")
+		directory, recoveryRecipient, prefix := "", "", "before-restore-"
+		if request.Recovery != nil {
+			directory = request.Recovery.Directory
+			recoveryRecipient = request.Recovery.Recipient
+			if request.Recovery.Prefix != "" {
+				prefix = request.Recovery.Prefix
+			}
+			if err := ensurePrivateDirectoryChain(e.Data, directory); err != nil {
+				return plan, failure("backup_error")
+			}
+			canonical, err := canonicalRecipient(recoveryRecipient)
+			if err != nil || canonical != recoveryRecipient {
+				return plan, failure("backup_error")
+			}
+		} else {
+			c, err := e.config()
+			if err != nil {
+				return plan, failure("backup_not_configured")
+			}
+			directory, recoveryRecipient = c.Directory, c.Recipient
+			if os.MkdirAll(directory, 0700) != nil {
+				return plan, failure("backup_error")
+			}
 		}
 		before, err := e.snapshot(target)
 		if err != nil {
 			return plan, failure("backup_error")
 		}
-		b, err := encode(before, c.Recipient)
+		b, err := encode(before, recoveryRecipient)
 		if err != nil {
 			return plan, failure("backup_error")
 		}
-		if os.MkdirAll(c.Directory, 0700) != nil {
-			return plan, failure("backup_error")
-		}
-		plan.SafetyBackup = filepath.Join(c.Directory, "before-restore-"+tasks.ID()+".age")
-		if exclusive(plan.SafetyBackup, b) != nil {
+		plan.SafetyBackup = filepath.Join(directory, prefix+tasks.ID()+".age")
+		if err := exclusiveContext(ctx, plan.SafetyBackup, b); err != nil {
+			if ctx.Err() != nil {
+				return plan, failure("canceled")
+			}
 			return plan, failure("backup_error")
 		}
 	}

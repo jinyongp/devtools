@@ -53,18 +53,20 @@ type Run struct {
 	Signature  string `json:"definition_signature,omitempty"`
 }
 type State struct {
-	Items            map[string]*Item
-	Runs             map[string]*Run
-	Events           []Event
-	Revision         int
-	Version          int
-	Tracking         map[string]*DefinitionBasis
-	HistoryEvents    map[int]Event
-	HistoryRefs      map[string][]int
-	historyRefCounts map[int]int
-	historyComplete  bool
-	assessments      map[string]Assessment
-	migrating        bool
+	Items                     map[string]*Item
+	Runs                      map[string]*Run
+	Events                    []Event
+	Revision                  int
+	Version                   int
+	Tracking                  map[string]*DefinitionBasis
+	HistoryEvents             map[int]Event
+	HistoryRefs               map[string][]int
+	historyRefCounts          map[int]int
+	historyComplete           bool
+	assessments               map[string]Assessment
+	migrating                 bool
+	replayDefinitionSignature string
+	replaySignatures          map[int]string
 }
 
 func (r Run) MarshalJSON() ([]byte, error) {
@@ -97,6 +99,7 @@ func NewState() *State {
 		HistoryRefs:      map[string][]int{},
 		historyRefCounts: map[int]int{},
 		historyComplete:  true,
+		replaySignatures: map[int]string{},
 	}
 }
 func ID() string {

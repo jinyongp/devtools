@@ -8,16 +8,29 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
-func applyCurrentFrames(state *State, frames []walFrame, expectedRevision int) (*State, int, error) {
+func applyCurrentFrames(resolution v3Resolution, state *State, frames []walFrame, expectedRevision int) (*State, int, error) {
 	for _, frame := range frames {
 		if frame.Meta.PreviousRevision != expectedRevision {
 			return nil, expectedRevision, errors.New("WAL revision discontinuity")
+		}
+		var receipt receiptCoordination
+		hasReceipt := false
+		if frameNeedsDefinitionSignature(frame) && frame.Receipt != nil {
+			var err error
+			receipt, hasReceipt, err = readFrameReceipt(resolution, frame)
+			if err != nil {
+				return nil, expectedRevision, err
+			}
 		}
 		for _, event := range frame.Events {
 			if event.Sequence != state.Revision+1 {
 				return nil, expectedRevision, errors.New("WAL event sequence mismatch")
 			}
-			if err := safeApply(state, event); err != nil {
+			signature := ""
+			if hasReceipt && eventNeedsDefinitionSignature(event) {
+				signature = definitionSignatureFromReceipt(event.Action, receipt.Result)
+			}
+			if err := applyReplayEvent(state, event, signature); err != nil {
 				return nil, expectedRevision, err
 			}
 		}
@@ -35,7 +48,7 @@ func loadCurrentFromWAL(resolution v3Resolution) (*State, error) {
 		return nil, err
 	}
 	state := NewState()
-	current, revision, err := applyCurrentFrames(state, scan.Frames, 0)
+	current, revision, err := applyCurrentFrames(resolution, state, scan.Frames, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +63,7 @@ func loadCurrentV3Cached(resolution v3Resolution) (*State, bool, error) {
 	if snapshotErr == nil {
 		scan, scanErr := scanWAL(resolution.WAL, snapshot.WALOffset, true)
 		if scanErr == nil {
-			current, revision, applyErr := applyCurrentFrames(state, scan.Frames, snapshot.Revision)
+			current, revision, applyErr := applyCurrentFrames(resolution, state, scan.Frames, snapshot.Revision)
 			if applyErr == nil && current.Revision == revision {
 				needsCheckpoint := scan.IncompleteTail ||
 					len(scan.Frames) >= CheckpointMaxFrames ||
@@ -180,26 +193,11 @@ func loadHistoryV3(resolution v3Resolution) (*State, error) {
 	if err != nil {
 		return nil, err
 	}
-	state := NewState()
-	expectedRevision := 0
-	for _, frame := range scan.Frames {
-		if frame.Meta.PreviousRevision != expectedRevision {
-			return nil, errors.New("WAL revision discontinuity")
-		}
-		for _, event := range frame.Events {
-			if event.Sequence != state.Revision+1 {
-				return nil, errors.New("WAL event sequence mismatch")
-			}
-			if err := safeApply(state, event); err != nil {
-				return nil, err
-			}
-		}
-		if state.Revision != frame.Meta.FinalRevision {
-			return nil, errors.New("WAL final revision mismatch")
-		}
-		expectedRevision = frame.Meta.FinalRevision
+	state, revision, err := applyCurrentFrames(resolution, NewState(), scan.Frames, 0)
+	if err != nil {
+		return nil, err
 	}
-	if state.Revision != expectedRevision {
+	if state.Revision != revision {
 		return nil, errors.New("history WAL revision mismatch")
 	}
 	return state, nil

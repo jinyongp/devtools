@@ -24,6 +24,34 @@ func logicalVersionFromEvents(events []Event) int {
 	return version
 }
 
+func readFrameReceipt(resolution v3Resolution, frame walFrame) (receiptCoordination, bool, error) {
+	var payload receiptCoordination
+	if frame.Receipt == nil {
+		return payload, false, nil
+	}
+	value, exists, err := readCommittedReceipt(resolution, frame.Receipt.Key)
+	if err != nil {
+		return payload, false, err
+	}
+	if !exists ||
+		value.PayloadDigest != frame.Receipt.PayloadDigest ||
+		value.FrameDigest != frame.Digest ||
+		value.RequestID != frame.Meta.RequestID ||
+		value.Fingerprint != frame.Meta.Fingerprint {
+		return payload, false, errors.New("receipt/frame mismatch")
+	}
+	return value, true, nil
+}
+
+func frameNeedsDefinitionSignature(frame walFrame) bool {
+	for _, event := range frame.Events {
+		if eventNeedsDefinitionSignature(event) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s Store) loadV3(resolution v3Resolution) (*Journal, *State, *protocol.Error) {
 	scan, err := scanWAL(resolution.WAL, 0, true)
 	if err != nil {
@@ -35,21 +63,21 @@ func (s Store) loadV3(resolution v3Resolution) (*Journal, *State, *protocol.Erro
 		if frame.Meta.PreviousRevision != expectedRevision {
 			return nil, nil, storageError()
 		}
+		receipt, hasReceipt, receiptErr := readFrameReceipt(resolution, frame)
+		if receiptErr != nil {
+			return nil, nil, storageError()
+		}
 		for _, event := range frame.Events {
 			if safeApplyEventSequence(journal.Events, event) != nil {
 				return nil, nil, storageError()
 			}
 			journal.Events = append(journal.Events, event)
 		}
-		if frame.Receipt != nil {
-			payload, exists, err := readCommittedReceipt(resolution, frame.Receipt.Key)
-			if err != nil || !exists || payload.PayloadDigest != frame.Receipt.PayloadDigest || payload.FrameDigest != frame.Digest || payload.RequestID != frame.Meta.RequestID || payload.Fingerprint != frame.Meta.Fingerprint {
+		if hasReceipt {
+			if _, duplicate := journal.Receipts[receipt.RequestID]; duplicate {
 				return nil, nil, storageError()
 			}
-			if _, duplicate := journal.Receipts[payload.RequestID]; duplicate {
-				return nil, nil, storageError()
-			}
-			journal.Receipts[payload.RequestID] = Receipt{Fingerprint: payload.Fingerprint, ContextHash: payload.ContextHash, Result: copyObject(payload.Result)}
+			journal.Receipts[receipt.RequestID] = Receipt{Fingerprint: receipt.Fingerprint, ContextHash: receipt.ContextHash, Result: copyObject(receipt.Result)}
 		}
 		for _, ref := range frame.Contexts {
 			payload, exists, err := readCommittedContext(resolution, ref.Key)

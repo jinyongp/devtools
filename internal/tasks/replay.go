@@ -143,6 +143,40 @@ func (s *State) applyUpgrade(e Event) {
 	s.assessments = nil
 }
 
+func eventNeedsDefinitionSignature(e Event) bool {
+	if str(e.Data, "definition_signature") != "" {
+		return false
+	}
+	switch e.Action {
+	case "run.claimed", "run.taken_over", "task.completed", "workstream.close":
+		return true
+	default:
+		return false
+	}
+}
+
+func definitionSignatureFromReceipt(action string, result Object) string {
+	if action == "run.claimed" || action == "run.taken_over" {
+		if signature := str(objectValue(result["run"]), "definition_signature"); signature != "" {
+			return signature
+		}
+	}
+	return str(objectValue(result["item"]), "definition_signature")
+}
+
+func applyReplayEvent(s *State, e Event, signature string) error {
+	previous := s.replayDefinitionSignature
+	s.replayDefinitionSignature = signature
+	if signature != "" {
+		if s.replaySignatures == nil {
+			s.replaySignatures = map[int]string{}
+		}
+		s.replaySignatures[e.Sequence] = signature
+	}
+	defer func() { s.replayDefinitionSignature = previous }()
+	return safeApply(s, e)
+}
+
 func (s *State) trackEvent(e Event, before string, beforeSpec, beforePlan Object) {
 	i := s.Items[e.Target]
 	if i == nil {
@@ -185,14 +219,21 @@ func (s *State) trackEvent(e Event, before string, beforeSpec, beforePlan Object
 			owner.Order = append(owner.Order, i.ID)
 		}
 	}
+	signature := str(e.Data, "definition_signature")
+	if signature == "" {
+		signature = s.replayDefinitionSignature
+	}
 	if e.Action == "run.claimed" || e.Action == "run.taken_over" {
 		if run := s.Current(i.ID); run != nil && run.Signature == "" {
-			run.Signature = s.Assessment(i.ID).Signature
+			run.Signature = signature
+			if run.Signature == "" {
+				run.Signature = s.Assessment(i.ID).Signature
+			}
 		}
 	}
 	if e.Action == "task.completed" || e.Action == "workstream.close" {
 		b.Completions = append(b.Completions, CompletionBasis{EventID: e.ID, Revision: e.Sequence,
-			Signature: str(e.Data, "definition_signature"), Result: e.Data})
+			Signature: signature, Result: e.Data})
 		if b.Completions[len(b.Completions)-1].Signature == "" {
 			b.Completions[len(b.Completions)-1].Signature = s.Assessment(i.ID).Signature
 		}
@@ -207,7 +248,13 @@ func replayJournal(j *Journal) (*State, *protocol.Error) {
 	}
 	s := NewState()
 	for n, e := range j.Events {
-		if e.Sequence != n+1 || safeApply(s, e) != nil {
+		signature := ""
+		if eventNeedsDefinitionSignature(e) {
+			if receipt, ok := j.Receipts[e.RequestID]; ok {
+				signature = definitionSignatureFromReceipt(e.Action, receipt.Result)
+			}
+		}
+		if e.Sequence != n+1 || applyReplayEvent(s, e, signature) != nil {
 			return nil, storageError()
 		}
 	}
@@ -228,7 +275,7 @@ func (s *State) AtRevision(revision int) (*State, *protocol.Error) {
 	}
 	out := NewState()
 	for _, e := range s.Events[:revision] {
-		if safeApply(out, e) != nil {
+		if applyReplayEvent(out, e, s.replaySignatures[e.Sequence]) != nil {
 			return nil, storageError()
 		}
 	}
@@ -245,6 +292,10 @@ func (s *State) clone() *State {
 		panic(errors.New("cannot clone task state"))
 	}
 	out.historyComplete = s.historyComplete
+	out.replaySignatures = map[int]string{}
+	for sequence, signature := range s.replaySignatures {
+		out.replaySignatures[sequence] = signature
+	}
 	if out.historyComplete {
 		if out.rebuildHistoryCounts() != nil {
 			panic(errors.New("cannot clone task history"))

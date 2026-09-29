@@ -97,7 +97,7 @@ run은 `id`, `task_id`, `state`(running·released·revoked·taken_over·complete
 
 checkpoint는 run 이력 변경이다. 성공하면 profile `revision`과 task의 `updated_at`/`current_run` 투영이 바뀌고 해당 task가 `affected_ids`에 포함되지만 `definition_revision`은 유지된다. checkpoint 본문은 `checkpoint list RUN_ID`나 history에서 확인한다.
 
-context 조회는 목표·문서 본문·최근 결정·현재 실행·다음 행동과 각 기록의 참조를 제공한다. 최대 응답은 2MiB이며 넘으면 `truncated: true`와 생략 문서 ID를 반환한다. `workstream spec show`, `workstream plan show`, `checkpoint list RUN_ID`, `validation show VAL_ID`로 필요한 내용을 추가 조회한다.
+context 조회는 목표·문서 본문·최근 결정·현재 실행·다음 행동과 각 기록의 참조를 제공한다. 최대 응답은 2MiB이며 넘으면 `truncated: true`와 생략 ID를 반환한다. 관련 문서·이력·task·validation을 생략한 뒤에도 item 자체가 한도를 넘으면 `item`은 ID·제목·설명·상태·리비전·시각 같은 bounded core metadata만 남긴다. `workstream spec show`, `workstream plan show`, `task show`, `checkpoint list RUN_ID`, `validation show VAL_ID`로 생략된 상세 내용을 추가 조회한다.
 
 ## 전이 표
 

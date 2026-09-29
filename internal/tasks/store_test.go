@@ -115,6 +115,43 @@ func TestStructuredBodyNormalizationDoesNotApplyRawJSONLimitToReencoding(t *test
 	}
 }
 
+func TestContextResponseStaysWithinTwoMiBWithOversizedItem(t *testing.T) {
+	s := fixture(t)
+	acceptance := make([]any, 130)
+	for index := range acceptance {
+		acceptance[index] = strings.Repeat("a", 16000)
+	}
+	requestBody := Object{"title": "large context", "acceptance": acceptance}
+	raw, err := json.Marshal(requestBody)
+	if err != nil || len(raw) >= contextResponseMax {
+		t.Fatalf("fixture request exceeds public input limit: bytes=%d err=%v", len(raw), err)
+	}
+	id := itemID(call(t, s, "task.add", "", requestBody))
+	call(t, s, "task.update", id, Object{"description": strings.Repeat("d", 16384)})
+
+	result, queryErr := s.Query(context.Background(), Query{Command: "context", Target: id})
+	if queryErr != nil {
+		t.Fatal(queryErr)
+	}
+	responseSize, err := contextResponseSize(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if responseSize > contextResponseMax || result["truncated"] != true {
+		t.Fatalf("context ceiling not enforced: bytes=%d truncated=%v", responseSize, result["truncated"])
+	}
+	item, ok := result["item"].(Object)
+	if !ok {
+		t.Fatalf("compact context item has unexpected type: %T", result["item"])
+	}
+	if item["id"] != id || item["title"] != "large context" || item["description"] == nil {
+		t.Fatalf("compact item lost core metadata: %#v", item)
+	}
+	if _, exists := item["acceptance"]; exists {
+		t.Fatalf("oversized acceptance survived compact context item: %#v", item)
+	}
+}
+
 func TestEmptyClaimReceipt(t *testing.T) {
 	s := fixture(t)
 	req := Request{Action: "run.claimed", Options: map[string]string{"request-id": ID()}}

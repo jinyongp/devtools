@@ -23,6 +23,31 @@ type Query struct {
 	Body    Object
 }
 
+const contextResponseMax = 2 << 20
+
+func contextResponseSize(data Object) (int, error) {
+	body, err := json.Marshal(struct {
+		SchemaVersion int    `json:"schema_version"`
+		OK            bool   `json:"ok"`
+		Data          Object `json:"data"`
+	}{SchemaVersion: protocol.EnvelopeVersion, OK: true, Data: data})
+	if err != nil {
+		return 0, err
+	}
+	// protocol.Success uses json.Encoder, which appends one trailing newline.
+	return len(body) + 1, nil
+}
+
+func compactContextItem(item Object) Object {
+	compact := Object{}
+	for _, key := range []string{"id", "kind", "title", "description", "state", "running", "ready", "workstream_id", "definition_revision", "created_at", "updated_at"} {
+		if value, ok := item[key]; ok {
+			compact[key] = value
+		}
+	}
+	return compact
+}
+
 func currentRunInDirectory(run *Run, directory string) bool {
 	return run.State == "running" && location.Same(run.Directory, directory)
 }
@@ -254,7 +279,8 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		}
 		return out, nil
 	case "context", "export":
-		out["item"] = s.View(item)
+		itemView := s.View(item)
+		out["item"] = itemView
 		out["documents"] = Object{}
 		out["tasks"] = []any{}
 		out["validations"] = []any{}
@@ -294,14 +320,28 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 			if len(history) > 20 {
 				out["history"] = history[len(history)-20:]
 			}
-			b, _ := json.Marshal(out)
-			if len(b) > 2<<20 {
+			responseSize, marshalErr := contextResponseSize(out)
+			if marshalErr != nil {
+				return nil, storageError()
+			}
+			if responseSize > contextResponseMax {
 				out["documents"] = Object{}
 				out["history"] = []Event{}
 				out["tasks"] = []any{}
 				out["validations"] = []any{}
 				out["truncated"] = true
 				out["omitted_ids"] = []string{item.ID}
+				responseSize, marshalErr = contextResponseSize(out)
+				if marshalErr != nil {
+					return nil, storageError()
+				}
+				if responseSize > contextResponseMax {
+					out["item"] = compactContextItem(itemView)
+					responseSize, marshalErr = contextResponseSize(out)
+					if marshalErr != nil || responseSize > contextResponseMax {
+						return nil, storageError()
+					}
+				}
 			}
 		}
 		return out, nil

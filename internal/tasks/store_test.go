@@ -84,6 +84,31 @@ func TestClaimRaceAndRecovery(t *testing.T) {
 	}
 	call(t, s, "task.reopen", id, Object{"reason": "follow-up"})
 }
+func TestStructuredBodyNormalizationDoesNotInflateHTMLEscapes(t *testing.T) {
+	s := fixture(t)
+	workstream := itemID(call(t, s, "workstream.create", "", Object{"title": "HTML-heavy spec"}))
+	body := strings.Repeat("<", 400000)
+	result := call(t, s, "spec.set", workstream, Object{
+		"body":         body,
+		"requirements": []any{},
+		"acceptance":   []any{},
+	})
+	if result["changed"] != true {
+		t.Fatalf("HTML-heavy document was not stored: %#v", result)
+	}
+	shown, err := s.Query(context.Background(), Query{Command: "workstream spec show", Target: workstream})
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, _ := shown["item"].(map[string]any)
+	if item == nil {
+		item = map[string]any(shown["item"].(Object))
+	}
+	if got, _ := item["body"].(string); got != body {
+		t.Fatalf("HTML-heavy body changed during normalization: got=%d want=%d", len(got), len(body))
+	}
+}
+
 func TestEmptyClaimReceipt(t *testing.T) {
 	s := fixture(t)
 	req := Request{Action: "run.claimed", Options: map[string]string{"request-id": ID()}}

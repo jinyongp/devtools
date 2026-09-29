@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -317,10 +318,13 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		options["dir"] = directory
 		r.Options = options
 	}
-	b, marshalErr := json.Marshal(r.Body)
-	if marshalErr != nil {
+	var encoded bytes.Buffer
+	encoder := json.NewEncoder(&encoded)
+	encoder.SetEscapeHTML(false)
+	if marshalErr := encoder.Encode(r.Body); marshalErr != nil {
 		return nil, failure("invalid_argument", "Invalid request body.")
 	}
+	b := bytes.TrimSuffix(encoded.Bytes(), []byte("\n"))
 	if r.Body == nil {
 		b = []byte("{}")
 	}

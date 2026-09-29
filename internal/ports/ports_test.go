@@ -2,10 +2,12 @@ package ports
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -204,6 +206,35 @@ func TestPersistentAllocationAndConcurrency(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+func TestRunLockSupportsFullValidPortNameRange(t *testing.T) {
+	id := "0123456789abcdef0123456789abcdef"
+	short := strings.Repeat("a", 106)
+	if got := runLock(id, short); got != "run-"+id+"-"+hex.EncodeToString([]byte(short))+".lock" || len(got) != 254 {
+		t.Fatalf("short-name lock compatibility changed: len=%d name=%q", len(got), got)
+	}
+	for _, length := range []int{107, 128} {
+		name := strings.Repeat("b", length)
+		got := runLock(id, name)
+		if len(got) > 255 {
+			t.Fatalf("lock basename for %d-byte name exceeds filesystem component limit: %d", length, len(got))
+		}
+	}
+
+	s := testPortStore(t)
+	name := strings.Repeat("c", 128)
+	release, err := s.Claim(context.Background(), id, []string{name})
+	if err != nil {
+		t.Fatalf("claiming maximum-length valid port name failed: %v", err)
+	}
+	if activeErr := s.Active(context.Background(), id, name); activeErr == nil || activeErr.Code != "port_run_active" {
+		t.Fatalf("active maximum-length lock was not observed: %v", activeErr)
+	}
+	release()
+	if activeErr := s.Active(context.Background(), id, name); activeErr != nil {
+		t.Fatalf("released maximum-length lock remained active: %v", activeErr)
+	}
+}
+
 func TestPrepareRollbackPreviewAndOccupied(t *testing.T) {
 	root := t.TempDir()
 	s := testPortStore(t)

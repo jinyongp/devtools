@@ -4,6 +4,7 @@ package ports
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -280,7 +281,12 @@ func (st *State) SyncInstance(i Instance) {
 	}
 }
 func runLock(id, name string) string {
-	return "run-" + id + "-" + hex.EncodeToString([]byte(name)) + ".lock"
+	legacy := "run-" + id + "-" + hex.EncodeToString([]byte(name)) + ".lock"
+	if len(legacy) <= 255 {
+		return legacy
+	}
+	digest := sha256.Sum256([]byte(name))
+	return "run-" + id + "-" + hex.EncodeToString(digest[:]) + ".lock"
 }
 func (s Store) Active(ctx context.Context, id, name string) *protocol.Error {
 	f, e := s.lock(ctx, runLock(id, name), false, false)

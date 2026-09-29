@@ -23,7 +23,7 @@ expose `data.replayed`, including false values. A replay preserves the original
 changed result and must not be counted as another mutation.
 Schema metadata declares `output_mode`: json, text, artifact, or passthrough.
 Only json commands have `output_schema`, describing the envelope's data.
-Use `version` for build metadata and `protocol_version` (3 for this source).
+Use `version` for build metadata and `protocol_version` (4 for this source).
 Every JSON response exposes envelope `schema_version: 1` at the top level;
 all `schema` responses also report the CLI protocol version. Keep `devtools.toml`
 versionless: do not add `version` or `schema_version` fields to project configuration.
@@ -152,19 +152,26 @@ Use `profile list`, `profile inspect NAME`, and `profile diff LEFT RIGHT` for me
 profile management. Diff reports key/scope and task/instance differences, not stored
 values or secret equality; no metadata difference does not prove equal values.
 
-Use `profile export` and `profile import` to move one encrypted profile between
-environments. Export defaults to the current project's profile. `backup status`
-reports configured public backup state. Create/export accept either `--recipient`
-or `--recipient-file`, never both; omission uses the configured public recipient.
-Transfer only the public recipient to the source and keep the identity on the destination.
+Use `profile transfer prepare`, `profile export`, and `profile import` to move one
+encrypted profile between environments. Run `profile transfer prepare` on the destination;
+it keeps the private age identity in devtools private storage and returns only a public
+recipient. Pass that public recipient to `profile export --recipient ...` on the source.
+Export defaults to the current project's profile and to `./<profile>.age`; it requires
+exactly one of `--recipient` or `--recipient-file` and never falls back to backup
+configuration. Copy only the resulting `.age` archive from source to destination.
 
-Import without `--apply` previews and returns `digest`, `target_exists`, and metadata-only
-`diff`. It infers a single source profile and keeps its name unless `--as` is supplied.
-Review that preview, then apply the same file/source/target with
-`--apply DIGEST --request-id UUID`. Existing targets require `--replace` at apply and
-a configured safety backup. Stale targets require a fresh preview and a new request ID.
-Identical apply retries replay the stored result; changed inputs conflict. Task claims,
-execution credentials, port assignments, and live processes are not transferred as active state.
+Import without `--identity-file` uses the destination's prepared local identity.
+`--identity-file` remains an explicit override for existing archives and external key
+management. Import without `--apply` previews and returns `digest`, `target_exists`,
+and metadata-only `diff`. It infers a single source profile and keeps its name unless
+`--as` is supplied. Review that preview, then apply the same file/source/target with
+`--apply DIGEST --request-id UUID`. Existing targets require `--replace` at apply.
+Before replacement, devtools creates a private safety archive encrypted to the identity
+used for the import; no backup configuration is required. The returned safety archive can
+be imported with that same identity. Stale targets require a fresh preview and a new
+request ID. Identical apply retries replay the stored result; changed inputs conflict.
+Task claims, execution credentials, port assignments, and live processes are not transferred
+as active state.
 
 Cleanup and restore start with a preview. Apply the selected IDs or digest,
 refreshing stale previews. Keep backup identities separate from project files.

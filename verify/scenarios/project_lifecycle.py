@@ -79,7 +79,7 @@ with socket.create_connection(('127.0.0.1', int(os.environ['PORT'])), timeout=.5
 ''')
 
 try:
-    assert api('version')['protocol_version'] == 3
+    assert api('version')['protocol_version'] == 4
     assert api('project', 'status')['items'] == []
 
     # serve-only commands do not require an env that is never injected or bound.

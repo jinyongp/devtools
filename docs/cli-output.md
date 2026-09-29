@@ -1,6 +1,6 @@
 # CLI 출력 계약
 
-이 문서는 현재 소스의 CLI protocol v3 출력 규칙을 설명합니다. v0.15.0용 protocol v3 전환과 v0.13.0의 JSON 경로 변경은 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
+이 문서는 현재 소스의 CLI protocol v4 출력 규칙을 설명합니다. protocol v4 전환, v0.15.0용 protocol v3 전환과 v0.13.0의 JSON 경로 변경은 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
 
 ## 출력 종류 확인
 
@@ -46,7 +46,7 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 3`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
+`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 4`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
 
 ## JSON 데이터 구조
 
@@ -97,6 +97,7 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `backup keygen/configure/create`, inspect | 각각 `item`·`changed`, `item` |
 | `backup restore` | 복구 계획·적용 보고서와 `changed`·`replayed`; 미리보기는 둘 다 false |
 | `profile list`, `profile inspect`, `profile diff` | 각각 `items`, `item`, `left`·`right`·`different`와 메타데이터 차이 보고서 |
+| `profile transfer prepare` | 공개 `recipient`를 담은 `item`, `changed` |
 | `profile export` | `item`, `changed` |
 | `profile import` | `item`, `digest`, `target_exists`, `diff`, `changed`, `replayed`, `safety_backup`; 미리보기는 변경하지 않음 |
 | `backup status` | 공개 설정 상태를 담은 `item` |
@@ -108,6 +109,27 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v4 마이그레이션
+
+Protocol v3 자동화 중 profile transfer 입력·discovery를 사용하는 코드는 다음 계약을
+함께 변경해야 합니다. 공통 envelope `schema_version`은 1로 유지되고 backup command
+계약은 바뀌지 않습니다.
+
+| 대상 | Protocol v3 | Protocol v4 |
+| --- | --- | --- |
+| `version`, `schema` | `data.protocol_version: 3` | `data.protocol_version: 4` |
+| 대상 기기 준비 | 사용자가 `backup keygen`으로 identity/recipient 파일 관리 | `profile transfer prepare`가 private identity를 내부 보관하고 공개 recipient만 반환 |
+| `profile export` recipient | configured backup recipient로 생략 가능 | `--recipient` 또는 `--recipient-file` 중 정확히 하나 필수 |
+| `profile export` output | configured backup directory로 생략 가능 | 생략 시 `./<profile>.age`; backup 설정을 사용하지 않음 |
+| `profile import` identity | `--identity-file` 필수 | 생략 시 prepared local transfer identity 사용; explicit file은 override |
+| 기존 profile 교체 | configured backup directory/recipient로 safety backup | import identity의 recipient와 private transfer recovery directory로 safety archive 생성 |
+| transfer 복구 안내 | backup 설정 중심 오류 | `recipient_required`, `transfer_identity_missing`, `transfer_identity_invalid`, `output_exists` 등 transfer-specific error와 structured remedy |
+
+정상 기기 간 이동은 대상에서 prepare한 공개 recipient 문자열을 원본에 전달하고,
+원본에서 생성한 encrypted archive 하나만 대상에 복사합니다. Private identity는 대상
+기기를 떠나지 않습니다. 기존 archive 또는 외부 키 관리 자동화는
+`--recipient-file`·`--identity-file`을 계속 사용할 수 있습니다.
 
 ## v0.15.0용 protocol v3 마이그레이션
 
@@ -136,7 +158,7 @@ Project lifecycle의 부분 실패는 stderr 오류의 `details.items`에서 확
 
 이전 JSON 키를 새 키와 중복해서 반환하지 않습니다. CLI를 파싱하는 스크립트는 해당 경로를 함께 변경해야 합니다.
 
-| 대상 | 이전 | 현재 소스 |
+| 대상 | 이전 | protocol v2 |
 | --- | --- | --- |
 | CLI machine contract | `protocol_version: 1`; 일부 schema 응답에만 노출 | `protocol_version: 2`; 모든 `schema` 응답에 노출. envelope `schema_version`은 1 유지 |
 | `version` | `data.version`, `data.commit` | 기존 필드 + `data.protocol_version` |

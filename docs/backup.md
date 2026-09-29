@@ -1,6 +1,6 @@
 # 암호화 백업, 복구와 profile 이동
 
-`devtools backup`은 전역 var/sec/env와 task/workstream을 age로 암호화해 보관하고, `devtools profile export/import`는 같은 포맷으로 한 profile을 다른 환경에 옮긴다. 공개키로 암호화하고 개인키 파일로 복호화한다. 모든 명령은 JSON을 반환하며 개인키와 백업에 담긴 값 원문은 출력하지 않는다.
+`devtools backup`은 전역 var/sec/env와 task/workstream을 age로 암호화해 보관한다. `devtools profile export/import`는 같은 암호화 포맷으로 한 profile을 다른 기기로 옮기지만, protocol v4의 기본 transfer 흐름에서는 대상 기기의 private identity를 devtools가 내부 보관한다. 모든 명령은 JSON을 반환하며 개인 identity와 백업에 담긴 값 원문은 출력하지 않는다.
 
 ## 키와 기본 위치 준비
 
@@ -19,9 +19,9 @@ devtools backup configure --directory /backups/devtools --recipient-file /secure
 `configured`, `directory`, 공개 `recipient`를 반환하며 개인 identity는 읽거나 출력하지 않는다.
 설정이 없으면 `configured: false`와 빈 문자열을 반환하고, 손상된 설정은 오류로 구별한다.
 
-`backup create`와 `profile export`는 `--recipient`에 공개키를 직접 받을 수도 있다.
-`--recipient-file`과는 상호 배타적이며 둘 다 생략하면 설정된 공개키를 사용한다.
-공개키와 출력 파일 경로를 모두 지정하면 `backup configure` 없이 생성할 수 있다.
+`backup create`는 `--recipient` 또는 `--recipient-file`을 명시할 수 있고, 둘 다 생략하면 `backup configure`의 공개 recipient를 사용한다. output을 생략하면 설정된 backup directory를 사용한다.
+
+`profile export`도 `--recipient` 또는 `--recipient-file` 중 하나를 받지만 **recipient 생략은 허용하지 않는다**. 대상 기기에서 `devtools profile transfer prepare`로 얻은 공개 recipient를 전달하며, output을 생략하면 `./<profile>.age`를 사용한다. Profile transfer는 `backup configure`를 사용하지 않는다.
 
 ## 백업 생성과 확인
 
@@ -40,12 +40,31 @@ CLI의 keygen·configure·create는 `data.item`에 결과 메타데이터를, `d
 
 ## 다른 환경으로 profile 이동
 
-한 profile을 다른 기기로 옮길 때는 `profile export`와 `profile import`를 사용한다.
-같은 age 백업 포맷을 사용하며 대상 환경에는 개인 identity를, 원본 환경에는 공개
-recipient만 준비한다. Protocol v3의 import는 기본적으로 미리보기만 수행하고,
-실제 적용에는 `--apply DIGEST --request-id UUID`가 필요하다.
+한 profile을 다른 기기로 옮길 때는 대상 기기에서 먼저 transfer identity를 준비합니다.
 
-조회·비교, 원본 선택, 교체와 재시도 절차는 [Profile 관리](profiles.md)에 정리되어 있다.
+```sh
+# 대상 기기
+devtools profile transfer prepare
+# 반환된 data.item.recipient만 원본 기기로 전달
+
+# 원본 기기
+devtools profile export --recipient age1...
+# 생성된 <profile>.age 파일 하나만 대상 기기로 복사
+
+# 대상 기기
+devtools profile import --file ./<profile>.age
+```
+
+Private identity는 대상 기기의 devtools data root 아래에 보관되며 정상 transfer에서는
+identity 파일을 직접 다루지 않습니다. 기존 archive나 외부 키 관리를 위해
+`--recipient-file`과 `--identity-file`은 계속 지원합니다.
+
+Protocol v4의 import는 기본적으로 미리보기만 수행하고 실제 적용에는
+`--apply DIGEST --request-id UUID`가 필요합니다. 기존 profile을 `--replace`할 때의
+safety backup도 transfer identity로 암호화되므로 `backup configure`가 필요하지 않습니다.
+해당 safety archive는 같은 identity로 다시 `profile import`할 수 있습니다.
+
+조회·비교, 원본 선택, 교체와 재시도 절차는 [Profile 관리](profiles.md)에 정리되어 있습니다.
 
 ## 복구 미리 보기와 적용
 

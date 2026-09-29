@@ -3,7 +3,7 @@
 Profile은 변수·secret·env와 task/workstream을 함께 관리하는 이름입니다. 프로젝트는
 `devtools.toml`의 `profile`로 이 데이터를 선택합니다. 같은 기기의 여러 worktree는 같은
 profile을 공유하지만, 다른 기기로 옮길 때는 암호화한 파일을 내보내고 가져와야 합니다.
-이 문서는 CLI protocol v3를 기준으로 설명합니다.
+이 문서는 CLI protocol v4를 기준으로 설명합니다.
 
 ## 저장된 profile 찾기
 
@@ -32,56 +32,79 @@ managed process만 남아 있는 profile도 목록에 포함됩니다.
 변경으로 표시하지 않습니다. 특히 secret 값의 동일 여부나 해시를 제공하지 않으므로,
 `different: false`는 저장된 값까지 같다는 보증이 아닙니다.
 
-## 내보내기 준비
+## 다른 기기로 내보내기
 
-대상 환경에서 [백업 키](backup.md#키와-기본-위치-준비)를 준비한 뒤 공개 recipient만
-원본 환경에 전달하세요. 개인 identity는 대상 환경에 남겨 둡니다. 아래 경로의 부모
-디렉터리는 미리 준비하고, `UUID`에는 새 요청 ID, `DIGEST`에는 미리보기 결과를 넣습니다.
+먼저 **대상 기기**에서 profile transfer identity를 준비합니다. devtools가 개인 identity를
+사용자 전용 data directory 안에 보관하고 공개 age recipient만 반환합니다. 개인키 파일을
+직접 만들거나 원본 기기로 복사할 필요가 없습니다.
 
 ```sh
-# 원본 환경: 현재 프로젝트의 profile을 내보냅니다.
-devtools profile export --output ./myapp.age --recipient-file /secure/recipient.txt
+# 대상 기기
+devtools profile transfer prepare
+# data.item.recipient의 age1... 값을 원본 기기에 전달
+```
 
-# 프로젝트 밖에서는 profile을 직접 지정합니다.
-devtools profile export --profile myapp --output ./myapp.age --recipient-file /secure/recipient.txt
+그 공개 recipient 문자열을 **원본 기기**의 export에 전달합니다.
+
+```sh
+# 원본 기기: 현재 프로젝트의 profile
+devtools profile export --recipient age1...
+
+# 프로젝트 밖에서는 profile을 직접 지정
+devtools profile export --profile myapp --recipient age1...
 ```
 
 `--profile`을 생략하면 현재 디렉터리 또는 `--dir PATH`에서 프로젝트를 찾습니다.
-`--recipient`에 공개 age X25519 recipient를 직접 전달할 수도 있습니다. `--recipient`와
-`--recipient-file`은 동시에 사용할 수 없습니다. recipient나 출력 경로를 생략하면
-`backup configure`로 저장한 기본값을 사용합니다. 출력 파일과 recipient를 모두 지정하면
-기본 백업 설정 없이 내보낼 수 있습니다. 기존 출력 파일은 덮어쓰지 않습니다.
+`--output`을 생략하면 현재 디렉터리에 `./<profile>.age`를 만들며 기존 파일은
+덮어쓰지 않습니다. `--recipient-file`은 외부 키 관리나 자동화를 위한 고급 입력으로
+계속 지원하지만 `--recipient`와 동시에 사용할 수 없습니다. profile export는
+`backup configure`의 recipient나 output directory를 사용하지 않습니다.
 
-파일에는 변수·secret·env와 task/workstream/validation 데이터가 들어갑니다.
-`devtools.toml`, port 할당, instance 연결, 실행 중 process, dashboard 세션은 이동하지 않습니다.
-프로젝트 파일은 Git 등 기존 배포 방식으로 별도로 준비하세요.
+원본에서 대상 기기로 복사해야 하는 filesystem artifact는 생성된 `.age` 파일 하나입니다.
+공개 recipient는 대상에서 원본으로 전달하는 비밀이 아닌 문자열입니다. archive에는
+변수·secret·env와 task/workstream/validation 데이터가 들어갑니다. `devtools.toml`, port
+할당, instance 연결, 실행 중 process, dashboard 세션은 이동하지 않습니다. 프로젝트 파일은
+Git 등 기존 방식으로 별도 준비하세요.
 
 ## 미리보기 후 가져오기
 
-가져오기의 기본 동작은 미리보기입니다. 이 단계는 대상 profile을 생성하거나 교체하지 않습니다.
+대상 기기에서 archive 하나를 가져온 뒤 import합니다. `--identity-file`을 생략하면
+`profile transfer prepare`가 준비한 로컬 identity를 자동 사용합니다. import가 identity를
+자동 생성하거나 교체하지는 않습니다.
 
 ```sh
-# 대상 환경
-devtools profile import --file ./myapp.age --identity-file /secure/identity.txt
+# 대상 기기
+devtools profile import --file ./myapp.age
 ```
 
 단일-profile 파일은 원본 이름을 자동 선택하며 대상도 같은 이름을 사용합니다.
 여러 profile이 있는 일반 backup 파일에서는 `--profile NAME`으로 원본을 선택합니다.
-다른 이름으로 가져오려면 `--as NAME`을 추가하세요.
+다른 이름으로 가져오려면 `--as NAME`을 추가하세요. 기존 archive나 외부 key manager를
+사용하는 경우에는 `--identity-file PATH`로 identity를 명시할 수 있습니다.
 
 결과의 `data.digest`는 파일과 대상 상태에 묶인 적용 토큰입니다. `data.target_exists`와
 `data.diff`를 검토한 뒤 같은 파일·원본·대상에 digest와 요청 ID를 전달합니다.
 
 ```sh
-devtools profile import --file ./myapp.age --identity-file /secure/identity.txt \
+devtools profile import --file ./myapp.age \
   --apply DIGEST --request-id UUID
 ```
 
 `--apply`와 `--request-id`는 반드시 함께 사용합니다. 기존 대상도 미리보기는 가능하지만
-실제 교체에는 `--replace`가 필요합니다. 교체할 때는 대상 환경의 `backup configure`가
-준비되어 있어야 하며, 기존 데이터를 암호화한 안전 백업을 만든 다음 적용합니다.
-안전 백업 경로는 `data.safety_backup`에 있습니다. 백업을 만들지 못하면 교체하지 않습니다.
-`--replace`는 미리보기를 확인한 뒤 적용 요청에 추가할 수 있습니다.
+실제 교체에는 `--replace`가 필요합니다. 교체 전 기존 profile은 현재 import에 사용한
+identity의 공개 recipient로 암호화되어 devtools의 private transfer recovery directory에
+저장됩니다. `backup configure`는 필요하지 않습니다. 경로는 `data.safety_backup`에
+반환되며, 같은 identity로 그 파일을 다시 `profile import --file`하여 복구할 수 있습니다.
+안전 백업을 만들지 못하면 대상 교체를 시작하지 않습니다.
+
+Transfer 관련 오류는 다음 복구 방향을 구분합니다. `recipient_required`는 대상 기기에서
+`profile transfer prepare`를 실행한 뒤 반환된 recipient로 다시 export해야 한다는 뜻입니다.
+`transfer_identity_missing`은 현재 archive의 private identity가 없다는 뜻이므로 새 identity를
+준비한 뒤 **원본 기기에서 새 recipient로 다시 export**해야 합니다. 잃어버린 identity로 암호화된
+기존 archive는 matching explicit identity가 없으면 복구할 수 없습니다.
+`transfer_identity_invalid`는 내부 identity의 형식·권한·symlink 경계가 안전하지 않다는 뜻이며
+devtools가 자동 교체하지 않습니다. `output_exists`는 기존 파일을 보존하므로 다른 `--output`
+경로를 선택해야 합니다.
 
 미리보기는 `changed: false`, `replayed: false`입니다. 적용은 `changed: true`를 반환합니다.
 같은 요청 ID와 동일한 적용 입력을 재전송하면 저장된 결과와 `replayed: true`를 반환합니다.

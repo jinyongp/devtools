@@ -6,7 +6,9 @@
 [포트 관리 계약](port-design.md)을 따른다. worktree별 `.localhost` route는
 [로컬 reverse proxy](proxy.md)를 참고한다. 저장된 profile의 조회·비교·환경 간 이동은
 [Profile 관리](profiles.md), `project up/status/logs/restart/down`은 [프로세스 관리](processes.md#프로젝트-서버를-함께-관리하기)를 따른다.
-현재 소스의 CLI machine contract는 protocol v6이며, 전환 규칙은 [CLI 출력 계약](cli-output.md)에 있다.
+현재 안정 버전 v0.22.3은 CLI protocol v5를 사용한다. 아직 배포하지 않은 `main` 소스는
+protocol v6이며, `run`의 인자 구분 규칙이 바뀐다. 버전별 사용법은 아래 명령 실행 절에,
+전환 규칙은 [CLI 출력 계약](cli-output.md#protocol-v6-마이그레이션)에 정리했다.
 
 이 문서는 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `import`, `env`, `command`의 사용법을 다룬다. `run`은 `command run`의 호환 alias다. 전체 기능 안내는 [README](../README.md), 설치된 바이너리의 명령 목록은 `devtools schema`에서 확인한다. 예시는 설치한 `devtools`가 PATH에 있는 환경을 기준으로 한다.
 
@@ -238,7 +240,8 @@ devtools command inspect dev
 devtools command list --dir ../other-project
 ```
 
-실행의 canonical 형식은 `devtools command run`이다. 기존 `devtools run`은 같은 입력·출력·종료 코드 계약을 유지하는 alias다. 환경변수 주입을 선택하면 var와 sec를 함께 적용한다.
+`devtools run`과 `devtools command run`, `devtools cmd run`은 같은 명령이다.
+환경변수 주입을 선택하면 var와 sec를 함께 적용한다.
 
 ### 직접 명령 실행
 
@@ -287,14 +290,14 @@ devtools command run lint
 devtools 0.22.2 이상에서 명령 이름은 1~128자로, `:`·`/`·`@` 같은 특수문자와 공백·한글을 사용할 수 있다.
 첫 글자 `-`와 제어문자(NUL, 줄바꿈, 탭 등)는 허용하지 않는다.
 이름은 입력한 문자열 그대로 조회하며 정규식이나 namespace로 해석하지 않는다.
-TOML에서는 특수문자가 포함된 key를 따옴표로 감싸고, 셸에서는 공백이나 셸 문법 문자가
-포함된 이름을 따옴표로 감싸거나 escape한다.
+TOML에서는 특수문자가 포함된 key를 큰따옴표(`"`)나 작은따옴표(`'`)로 감싼다.
+셸에서는 공백이나 셸 문법 문자가 포함된 이름을 따옴표로 감싸거나 escape한다.
 
 ```toml
 [commands."dev:docs"]
 exec = ["pnpm", "run", "docs:dev"]
 
-[commands."문서 개발"]
+[commands.'문서 개발']
 exec = ["pnpm", "run", "docs:dev"]
 ```
 
@@ -338,7 +341,8 @@ devtools command run --env local lint
 
 ### 이름 명령에 추가 인자 전달
 
-명령 이름 뒤의 인자는 모두 `exec` 배열 끝에 순서대로 추가한다. `--` 없이 실행 프로그램의 옵션을 전달할 수 있다. devtools의 `--profile`, `--env`, `--dir` 옵션은 명령 이름 앞에 둔다. 이 규칙은 `command run`과 별칭 `run`, `cmd run`에 적용되며 다른 명령의 옵션 위치는 기존과 같다.
+추가 인자는 `exec` 배열 끝에 순서대로 붙는다. devtools 옵션인 `--profile`, `--env`는
+명령 이름 앞에 두면 안정 버전과 `main`에서 모두 사용할 수 있다.
 
 ```toml
 [commands.test]
@@ -349,29 +353,49 @@ env = "test"
 
 ```sh
 # pnpm test --watch 실행
-devtools run test --watch
+devtools run test -- --watch
 
 # staging 값을 주입하고 pnpm test --watch 실행
-devtools run --env staging test --watch
+devtools run --env staging test -- --watch
 
 # 실행 프로그램의 도움말 보기
-devtools run test --help
+devtools run test -- --help
 
 # devtools run의 도움말 보기
 devtools run --help
 ```
 
-추가 인자는 각 인자의 경계를 유지해 실행 프로그램에 전달한다. `exec`에서 셸을 선택했다면 인자의 의미는 해당 셸의 호출 규칙을 따른다.
+이 `NAME -- ARG...` 형식은 현재 안정 버전 v0.22.3과 `main`에서 모두 지원한다.
+공백을 포함한 인자도 입력한 경계를 유지해 전달한다. `exec`에 셸을 지정했다면
+추가 인자의 의미는 해당 셸의 호출 규칙을 따른다.
+
+아직 배포하지 않은 `main`의 CLI protocol v6에서는 `--`를 생략할 수 있다.
+명령 이름 앞에서만 devtools 옵션을 해석하고, 이름 뒤의 인자는 모두 실행 프로그램에
+전달한다. 이 규칙은 `run`, `command run`, `cmd run`에만 적용한다.
+
+```sh
+# main에서 구분자 없이 실행
+devtools run --env staging test --watch
+
+# 실행 프로그램에 --help 전달
+devtools run test --help
+```
 
 | 호출 형식 | 실행 프로그램에 전달하는 인자 |
 | --- | --- |
 | `devtools command run -- PROGRAM ARG...` | 직접 실행할 프로그램과 인자 |
-| `devtools command run NAME ARG...` | 등록된 `exec` 뒤에 추가할 인자 |
-| `devtools command run NAME -- ARG...` | 등록된 `exec` 뒤에 추가할 인자 |
+| `devtools command run NAME -- ARG...` | 등록된 `exec` 뒤에 추가할 인자; 안정 버전과 main에서 지원 |
+| `devtools command run NAME ARG...` | 등록된 `exec` 뒤에 추가할 인자; 미배포 protocol v6부터 지원 |
 
-명령 이름 바로 뒤의 `--` 하나는 기존 형식의 구분자로 처리한다. 그 이후의 `--`는 실행 프로그램에 그대로 전달하므로, 자식 프로그램에 첫 인자로 `--`를 넘기려면 `devtools run NAME -- -- ARG...`를 사용한다. 직접 실행 형식에는 계속 `--`가 필요하다.
+protocol v6에서도 명령 이름 바로 뒤의 `--` 하나는 구분자로 처리한다. 이후의 `--`는
+실행 프로그램에 그대로 전달한다. 첫 인자로 `--`를 넘기려면
+`devtools run NAME -- -- ARG...`로 쓴다. 직접 프로그램을 실행하는 형식에는
+계속 `--`가 필요하다.
 
-명령 이름 이후에는 `--env`와 `--profile`도 자식 인자다. 예를 들어 `devtools run test --env staging`은 실행 프로그램에 `--env staging`을 전달한다. devtools의 환경을 선택하려면 `devtools run --env staging test`로 쓴다. 이 입력 규칙은 CLI protocol v6부터 적용되며, 설치한 빌드의 버전은 `devtools version`과 `devtools schema command run`으로 확인한다.
+protocol v6의 `devtools run test --env staging`은 실행 프로그램에 `--env staging`을
+전달한다. devtools의 환경을 선택하려면 `devtools run --env staging test`로 쓴다.
+설치한 빌드의 버전과 입력 계약은 `devtools version`, `devtools schema command run`으로
+확인한다. 다른 명령의 옵션 위치는 바뀌지 않는다.
 
 ### 여러 단계 구성
 

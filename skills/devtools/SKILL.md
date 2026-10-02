@@ -63,7 +63,9 @@ is executed by `devtools run dev:docs`. Quote TOML keys containing punctuation a
 shell arguments containing spaces or shell syntax. Profile, env, port, and proxy
 names keep their separate identifier rules. Check `devtools schema command run`
 for the installed command-name contract; CLI and Skill updates are separate.
-For CLI protocol v6, put all devtools options before the configured command name:
+On published protocol v5 builds, pass child arguments after an explicit separator:
+`devtools run --env local dev:docs -- --port 3000`. This form also works on v6.
+For CLI protocol v6 (currently unreleased main), put all devtools options before the configured command name:
 `devtools run --env local dev:docs --port 3000`. Every token after the name is a
 child argument, including `--env`, `--profile`, `--dir`, `--help`, and `-h`.
 Use `devtools run --help` for devtools help and `devtools run dev:docs --help`

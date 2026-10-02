@@ -65,6 +65,8 @@ worktree는 저장한 값을 공유합니다. 환경변수와 secret은 사용�
 명령 사용법이 필요하면 `devtools --help` 또는 `devtools task --help`처럼
 기능별 도움말을 확인하세요. 등록한 프로젝트 명령은 `devtools command list`로 볼 수 있습니다.
 
+### 등록한 명령 실행하기
+
 자주 쓰는 명령은 `devtools.toml`에 등록하세요. 프로젝트에 `docs:dev` 스크립트가
 있다면 다음처럼 이름을 붙일 수 있습니다.
 
@@ -73,15 +75,25 @@ worktree는 저장한 값을 공유합니다. 환경변수와 secret은 사용�
 exec = ["pnpm", "run", "docs:dev"]
 ```
 
-실행 프로그램의 인자는 명령 이름 뒤에 바로 붙이고, devtools 옵션은 이름 앞에 두세요.
+devtools 옵션은 명령 이름 앞에 두세요. 현재 안정 버전인 v0.22.3에서는
+실행 프로그램의 인자를 `--` 뒤에 붙입니다.
 
 ```sh
-devtools run dev:docs --port 3000
+devtools run dev:docs -- --port 3000
+devtools run --env local dev:docs -- --port 3000
+```
+
+등록한 명령의 도움말은 `devtools run dev:docs -- --help`로,
+devtools 자체의 도움말은 `devtools run --help`로 확인하세요.
+
+아직 배포하지 않은 `main` 버전에서는 구분자를 생략할 수 있습니다.
+
+```sh
 devtools run --env local dev:docs --port 3000
 ```
 
-`dev:docs` 뒤의 인자는 `--help`까지 모두 등록한 명령에 전달합니다.
-devtools 자체의 도움말은 `devtools run --help`로 확인하세요.
+이 버전에서는 이름 뒤의 인자가 `--env`, `--help`까지 모두 등록한 명령에 전달됩니다.
+버전별 사용법과 두 형식은 [명령 실행 가이드](docs/cli-contract.md#이름-명령에-추가-인자-전달)를 참고하세요.
 
 ## 사용 가이드
 

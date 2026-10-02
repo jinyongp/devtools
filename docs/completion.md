@@ -61,7 +61,9 @@ devtools completion fish > ~/.config/fish/completions/devtools.fish
 예를 들어 `devtools var get --env local ` 뒤에서 Tab을 누르면 `local`에서 사용할 수 있는
 변수 키를 고를 수 있습니다. `devtools task show ` 뒤에서는 task ID를 고릅니다.
 `devtools run docs:` 뒤에서는 `docs:dev`처럼 특수문자가 포함된 명령 이름도 고릅니다.
-`run`, `command run`, `cmd run`은 명령 이름 앞에서만 devtools 옵션을 완성합니다. 이름을 입력한 뒤에는 자식 프로그램의 인자 영역이므로 devtools 옵션과 profile·env 후보를 제안하지 않습니다.
+미배포 `main`의 CLI protocol v6에서는 `run`, `command run`, `cmd run`의 명령 이름 앞에서만
+devtools 옵션을 완성합니다. 이름 뒤는 자식 인자 영역이므로 devtools 옵션과 profile·env
+후보를 제안하지 않습니다. 현재 안정 버전 v0.22.3에서는 `--` 뒤부터 후보를 생략합니다.
 Bash 자동완성은 공백과 셸 문법 문자를 escape해 이름을 하나의 인수로 전달합니다.
 
 후보에는 이름과 ID만 포함합니다. 변수·secret의 값, task 본문, 실행 점유 증명은

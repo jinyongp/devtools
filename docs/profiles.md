@@ -3,7 +3,7 @@
 Profile은 변수·secret·env와 task/workstream을 함께 관리하는 이름입니다. 프로젝트는
 `devtools.toml`의 `profile`로 이 데이터를 선택합니다. 같은 기기의 여러 worktree는 같은
 profile을 공유하지만, 다른 기기로 옮길 때는 암호화한 파일을 내보내고 가져와야 합니다.
-이 문서는 CLI protocol v6를 기준으로 설명합니다.
+아래 profile 사용법은 현재 안정 버전의 CLI protocol v5와 `main`의 protocol v6에서 같습니다.
 
 ## 저장된 profile 찾기
 

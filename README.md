@@ -69,6 +69,8 @@ secrets and configure project commands.
 Use `devtools --help` or a command's help, such as `devtools task --help`, to
 explore the CLI. Run `devtools command list` to see your configured project commands.
 
+### Run a saved command
+
 To save a command you use often, add it to `devtools.toml`. For example, in a
 project with a `docs:dev` script:
 
@@ -77,15 +79,26 @@ project with a `docs:dev` script:
 exec = ["pnpm", "run", "docs:dev"]
 ```
 
-Pass arguments directly after the command name. Put devtools options before it:
+Put devtools options before the command name. In the current stable release,
+v0.22.3, use `--` to separate the saved command's arguments:
 
 ```sh
-devtools run dev:docs --port 3000
+devtools run dev:docs -- --port 3000
+devtools run --env local dev:docs -- --port 3000
+```
+
+Use `devtools run dev:docs -- --help` for the saved command's help, or
+`devtools run --help` for devtools' own help.
+
+On `main` (not yet released), the separator is optional:
+
+```sh
 devtools run --env local dev:docs --port 3000
 ```
 
-Everything after `dev:docs` goes to the saved command, including `--help`.
-Use `devtools run --help` for devtools' own help.
+In this upcoming version, every argument after the name belongs to the saved
+command, including `--env` and `--help`. See the [command execution guide](docs/cli-contract.md#이름-명령에-추가-인자-전달)
+for the version requirements and both forms.
 
 ## Guides
 

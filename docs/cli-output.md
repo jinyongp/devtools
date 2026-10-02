@@ -1,6 +1,9 @@
 # CLI 출력 계약
 
-이 문서는 현재 소스의 CLI protocol v6 출력 규칙을 설명합니다. 이전 protocol 전환과 JSON 경로 변경은 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
+이 문서는 아직 배포하지 않은 `main` 소스의 CLI protocol v6 입력·출력 규칙을 설명합니다.
+현재 안정 버전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
+아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
+버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
 
 ## 출력 종류 확인
 
@@ -13,7 +16,11 @@
 | `artifact` | `completion bash`, `completion zsh`, `completion fish` | 생성한 셸 스크립트 원문 |
 | `passthrough` | `command run`, 별칭 `run` | 자식 프로그램의 출력 원문 |
 
-devtools 옵션 위치의 `--help`는 실행 대신 도움말을 요청하므로 원래 명령의 출력 종류와 관계없이 텍스트를 반환합니다. `devtools run --help`는 devtools 도움말이고, `devtools run NAME --help`는 실행 프로그램에 `--help`를 전달해 그 프로그램의 출력을 그대로 반환합니다. 내부 자동완성 요청인 `__complete`는 공개 명령 카탈로그에 포함하지 않는 줄 단위 프로토콜입니다.
+devtools 옵션 위치의 `--help`는 텍스트 도움말을 반환합니다. `devtools run --help`는
+devtools 도움말입니다. 자식 프로그램의 도움말은 안정 버전에서
+`devtools run NAME -- --help`로 요청하며, protocol v6에서는 `devtools run NAME --help`도
+같이 동작합니다. 이때는 그 프로그램의 출력을 그대로 전달합니다.
+내부 자동완성 요청인 `__complete`는 공개 명령 카탈로그에 포함하지 않는 줄 단위 프로토콜입니다.
 
 생성물은 그대로 파일에 저장할 수 있습니다. 실행 명령은 자식의 stderr와 종료 코드도 보존합니다.
 
@@ -122,7 +129,10 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | 실행 프로그램의 도움말 | `devtools run test -- --help` | `devtools run test --help` |
 | 직접 프로그램 실행 | `devtools run --env local -- PROGRAM ARG...` | 동일 |
 
-기존 스크립트에서 명령 이름 뒤에 둔 `--env`, `--profile`, `--dir`은 이름 앞으로 옮기세요. 이름 뒤에 남겨 두면 실행 프로그램에 그대로 전달됩니다. 다른 명령의 옵션 위치는 바뀌지 않습니다. 설치한 빌드의 `devtools version`과 `devtools schema command run`을 확인하고, 업데이트 뒤에는 해당 계약을 다시 조회하세요.
+기존 스크립트에서 명령 이름 뒤에 둔 `--env`, `--profile`은 이름 앞으로 옮기세요.
+이름 뒤에 남겨 두면 실행 프로그램에 그대로 전달됩니다. 다른 명령의 옵션 위치는
+바뀌지 않습니다. `devtools version`과 `devtools schema command run`으로 설치한 빌드를
+확인하고, 업데이트 뒤에는 해당 계약을 다시 조회하세요.
 
 ## protocol v5 마이그레이션
 

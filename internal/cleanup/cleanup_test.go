@@ -108,6 +108,50 @@ func TestErrorExitCodes(t *testing.T) {
 	}
 }
 
+func TestOldBackupRestoreSurvivesBackupDirectoryChange(t *testing.T) {
+	root := t.TempDir()
+	e := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
+	oldDirectory := filepath.Join(root, "old-backups")
+	if err := write(filepath.Join(e.Config, "backup.json"), map[string]any{"directory": oldDirectory}); err != nil {
+		t.Fatal(err)
+	}
+	var oldest string
+	for i := 0; i < 4; i++ {
+		path := filepath.Join(oldDirectory, "devtools-"+tasks.ID()+".age")
+		if err := maintenance.Write(path, []byte("encrypted-backup")); err != nil {
+			t.Fatal(err)
+		}
+		age := time.Now().Add(-time.Duration(40-i) * 24 * time.Hour)
+		if err := os.Chtimes(path, age, age); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			oldest = path
+		}
+	}
+	ctx := context.Background()
+	plan, failure := e.Preview(ctx, "")
+	if failure != nil || len(plan.Items) != 1 || plan.Items[0].Source != oldest {
+		t.Fatal(plan, failure)
+	}
+	id := plan.Items[0].ID
+	if _, failure := e.Apply(ctx, plan.ID, []string{id}, tasks.ID()); failure != nil {
+		t.Fatal(failure)
+	}
+	if err := write(filepath.Join(e.Config, "backup.json"), map[string]any{"directory": filepath.Join(root, "new-backups")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, changed, failure := e.Restore(ctx, id); failure != nil || !changed {
+		t.Fatal(changed, failure)
+	}
+	if body, err := os.ReadFile(oldest); err != nil || string(body) != "encrypted-backup" {
+		t.Fatal(string(body), err)
+	}
+	if _, changed, failure := e.Restore(ctx, id); failure != nil || changed {
+		t.Fatal(changed, failure)
+	}
+}
+
 func TestCompletedProcessCleanupPreservesProfileEnumeration(t *testing.T) {
 	root := t.TempDir()
 	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}

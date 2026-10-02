@@ -898,7 +898,16 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 	if tasks.ReadPrivate(e.archivePath(id, "entry.json"), &a) != nil || a.ID != id {
 		return a, false, fail("archive_not_found")
 	}
-	if !e.validItem(a.Item) {
+	valid := e.validItem(a.Item)
+	if a.Kind == "old_backup" {
+		// Restoration uses the recorded source, independently of a later change
+		// to the directory used for new backup cleanup previews.
+		name := filepath.Base(a.Source)
+		valid = validID(a.ID) && a.Profile == "" && filepath.IsAbs(a.Source) &&
+			strings.HasPrefix(name, "devtools-") && strings.HasSuffix(name, ".age") &&
+			validID(strings.TrimSuffix(strings.TrimPrefix(name, "devtools-"), ".age"))
+	}
+	if !valid {
 		return a, false, fail("invalid_argument")
 	}
 	if a.PurgedAt != nil {

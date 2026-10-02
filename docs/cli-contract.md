@@ -6,7 +6,7 @@
 [포트 관리 계약](port-design.md)을 따른다. worktree별 `.localhost` route는
 [로컬 reverse proxy](proxy.md)를 참고한다. 저장된 profile의 조회·비교·환경 간 이동은
 [Profile 관리](profiles.md), `project up/status/logs/restart/down`은 [프로세스 관리](processes.md#프로젝트-서버를-함께-관리하기)를 따른다.
-현재 소스의 CLI machine contract는 protocol v5이며, 전환 규칙은 [CLI 출력 계약](cli-output.md)에 있다.
+현재 소스의 CLI machine contract는 protocol v6이며, 전환 규칙은 [CLI 출력 계약](cli-output.md)에 있다.
 
 이 문서는 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `import`, `env`, `command`의 사용법을 다룬다. `run`은 `command run`의 호환 alias다. 전체 기능 안내는 [README](../README.md), 설치된 바이너리의 명령 목록은 `devtools schema`에서 확인한다. 예시는 설치한 `devtools`가 PATH에 있는 환경을 기준으로 한다.
 
@@ -328,17 +328,17 @@ devtools run '문서 개발'
 devtools command run dev
 
 # staging으로 덮어써 실행
-devtools command run dev --env staging
+devtools command run --env staging dev
 
 # 주입 설정을 생략한 lint에도 local 값 주입
-devtools command run lint --env local
+devtools command run --env local lint
 ```
 
 명시적인 `--env`는 `inject = false`로 설정된 명령에서도 주입을 활성화한다. `--env`를 생략하면 명령의 `inject`와 `env` 설정을 적용한다.
 
 ### 이름 명령에 추가 인자 전달
 
-이름 명령 뒤의 `--` 이후 인자는 `exec` 배열 끝에 순서대로 추가한다.
+명령 이름 뒤의 인자는 모두 `exec` 배열 끝에 순서대로 추가한다. `--` 없이 실행 프로그램의 옵션을 전달할 수 있다. devtools의 `--profile`, `--env`, `--dir` 옵션은 명령 이름 앞에 둔다. 이 규칙은 `command run`과 별칭 `run`, `cmd run`에 적용되며 다른 명령의 옵션 위치는 기존과 같다.
 
 ```toml
 [commands.test]
@@ -349,20 +349,29 @@ env = "test"
 
 ```sh
 # pnpm test --watch 실행
-devtools command run test -- --watch
+devtools run test --watch
 
 # staging 값을 주입하고 pnpm test --watch 실행
-devtools command run test --env staging -- --watch
+devtools run --env staging test --watch
+
+# 실행 프로그램의 도움말 보기
+devtools run test --help
+
+# devtools run의 도움말 보기
+devtools run --help
 ```
 
 추가 인자는 각 인자의 경계를 유지해 실행 프로그램에 전달한다. `exec`에서 셸을 선택했다면 인자의 의미는 해당 셸의 호출 규칙을 따른다.
 
-| 호출 형식 | `--` 이후의 의미 |
+| 호출 형식 | 실행 프로그램에 전달하는 인자 |
 | --- | --- |
 | `devtools command run -- PROGRAM ARG...` | 직접 실행할 프로그램과 인자 |
+| `devtools command run NAME ARG...` | 등록된 `exec` 뒤에 추가할 인자 |
 | `devtools command run NAME -- ARG...` | 등록된 `exec` 뒤에 추가할 인자 |
 
-devtools의 `--profile`, `--env` 옵션은 구분자 `--` 앞에 지정한다.
+명령 이름 바로 뒤의 `--` 하나는 기존 형식의 구분자로 처리한다. 그 이후의 `--`는 실행 프로그램에 그대로 전달하므로, 자식 프로그램에 첫 인자로 `--`를 넘기려면 `devtools run NAME -- -- ARG...`를 사용한다. 직접 실행 형식에는 계속 `--`가 필요하다.
+
+명령 이름 이후에는 `--env`와 `--profile`도 자식 인자다. 예를 들어 `devtools run test --env staging`은 실행 프로그램에 `--env staging`을 전달한다. devtools의 환경을 선택하려면 `devtools run --env staging test`로 쓴다. 이 입력 규칙은 CLI protocol v6부터 적용되며, 설치한 빌드의 버전은 `devtools version`과 `devtools schema command run`으로 확인한다.
 
 ### 여러 단계 구성
 

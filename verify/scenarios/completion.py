@@ -61,6 +61,10 @@ cases = [
     (['task', 'add', '--workstream', ''], workstream_id),
     (['var', 'set', 'KEY', '--value', ''], None),
     (['run', '--', ''], None),
+    (['run', 'web', ''], None),
+    (['run', 'web', '--env', ''], None),
+    (['command', 'run', 'web', '--profile', ''], None),
+    (['cmd', 'run', 'web', '--help', ''], None),
 ]
 for shell in ('bash', 'zsh', 'fish'):
     if not shutil.which(shell):

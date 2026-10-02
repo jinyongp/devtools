@@ -150,9 +150,13 @@ def verify_project(cwd=project):
     named = json.loads(execute(["devtools", "run", "check"], cwd=cwd).stdout)
     assert named["level"] == "local" and named["secret_present"]
     assert named["cwd"] == str(cwd)
-    extra = json.loads(execute(["devtools", "run", "app", "--env", "staging",
-                               "--", "extra space"], cwd=cwd).stdout)
-    assert extra["level"] == "staging" and extra["args"] == ["extra space"]
+    extra = json.loads(execute(["devtools", "run", "--env", "staging", "app",
+                               "extra space", "--watch", "--help", "--env", "missing"], cwd=cwd).stdout)
+    assert extra["level"] == "staging"
+    assert extra["args"] == ["extra space", "--watch", "--help", "--env", "missing"]
+    separated = json.loads(execute(["devtools", "command", "run", "app", "--",
+                                   "--watch"], cwd=cwd).stdout)
+    assert separated["level"] == "local" and separated["args"] == ["--watch"]
     direct = json.loads(execute(["devtools", "run", "--", "python3", "app.py"],
                                cwd=cwd).stdout)
     assert direct["level"] == "common" and direct["secret_present"]

@@ -122,7 +122,7 @@ func (a *App) registerCommands() {
 		Command{
 			Name:        "command run",
 			Aliases:     []string{"cmd run", "run"},
-			Description: "Execute a configured command or a command after -- with profile values.",
+			Description: "Execute a configured command; put devtools options before its name and child arguments after it. Use -- PROGRAM to execute a program directly.",
 			Options:     profileOptions(true),
 			Arguments:   []Argument{{Name: "command", Pattern: project.CommandPattern}},
 			ChildArgs:   true,

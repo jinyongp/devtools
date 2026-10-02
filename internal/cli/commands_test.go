@@ -147,7 +147,7 @@ func TestLiteralProjectCommandNames(t *testing.T) {
 			}
 		}
 	}
-	code, _, stderr := invoke(t, app, "", "run", "docs:dev", "--profile", "app:bad")
+	code, _, stderr := invoke(t, app, "", "run", "--profile", "app:bad", "docs:dev")
 	if code != 2 || !strings.Contains(stderr, `"field":"profile"`) {
 		t.Fatalf("profile identifier rules changed: %d %q", code, stderr)
 	}

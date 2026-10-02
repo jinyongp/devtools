@@ -58,7 +58,7 @@ def mutate(command, target_id=None, body=None, guarded=False):
     return api(source, *args, input=json.dumps(body) if body is not None else None)
 
 
-assert api(source, 'version')['protocol_version'] == 5
+assert api(source, 'version')['protocol_version'] == 6
 assert api(source, 'profile', 'list')['items'] == []
 assert api(source, 'backup', 'status')['item']['configured'] is False
 assert api(target, 'backup', 'status')['item']['configured'] is False

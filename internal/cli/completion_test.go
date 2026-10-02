@@ -48,6 +48,11 @@ func TestCompletionScripts(t *testing.T) {
 				{[]string{"devtools", "var", "set", "KEY", "--profile", ""}, "", true},
 				{[]string{"devtools", "var", "set", "KEY", "--profile", "demo", ""}, "--value", false},
 				{[]string{"devtools", "run", "--", ""}, "", true},
+				{[]string{"devtools", "run", "--env", "local", ""}, "--profile", false},
+				{[]string{"devtools", "run", "web", ""}, "", true},
+				{[]string{"devtools", "run", "web", "--env", ""}, "", true},
+				{[]string{"devtools", "command", "run", "web", ""}, "", true},
+				{[]string{"devtools", "cmd", "run", "web", "--profile=", ""}, "", true},
 				{[]string{"devtools", "completion", ""}, "fish", false},
 				{[]string{"dvt", "var", ""}, "get", false},
 			}

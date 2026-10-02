@@ -53,6 +53,9 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 		}
 		var b strings.Builder
 		fmt.Fprintf(&b, "Usage: devtools %s", exact.Name)
+		if exact.Name == "command run" && len(exact.Options) > 0 {
+			b.WriteString(" [options]")
+		}
 		for _, arg := range exact.Arguments {
 			name := arg.Name
 			if arg.Repeatable {
@@ -64,11 +67,11 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 				fmt.Fprintf(&b, " [%s]", name)
 			}
 		}
-		if len(exact.Options) > 0 {
+		if exact.Name != "command run" && len(exact.Options) > 0 {
 			b.WriteString(" [options]")
 		}
 		if exact.ChildArgs {
-			b.WriteString(" [-- args...]")
+			b.WriteString(" [args...]")
 		}
 		fmt.Fprintf(&b, "\n\n%s\n", exact.Description)
 		for _, o := range exact.Options {

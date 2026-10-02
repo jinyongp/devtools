@@ -37,6 +37,13 @@ func parseRequest(command Command, tokens []string) (Request, *protocol.Error) {
 		}
 		if !strings.HasPrefix(token, "-") {
 			request.Args = append(request.Args, token)
+			if command.Name == "command run" {
+				request.Child = tokens[i+1:]
+				if len(request.Child) > 0 && request.Child[0] == "--" {
+					request.Child = request.Child[1:]
+				}
+				break
+			}
 			continue
 		}
 		if !strings.HasPrefix(token, "--") {

@@ -195,7 +195,18 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	if len(args) == 1 && args[0] == "--version" {
 		args = []string{"version"}
 	}
-	if args[0] == "help" || args[0] == "schema" || ((args[len(args)-1] == "--help" || args[len(args)-1] == "-h") && !strings.Contains(strings.Join(args[:len(args)-1], " "), "--")) {
+	var selected *Command
+	var rest []string
+	for i := range a.commands {
+		for _, name := range append([]string{a.commands[i].Name}, a.commands[i].Aliases...) {
+			words := strings.Fields(name)
+			if len(args) >= len(words) && strings.Join(args[:len(words)], " ") == name && (selected == nil || len(words) > len(args)-len(rest)) {
+				selected, rest = &a.commands[i], args[len(words):]
+			}
+		}
+	}
+	runCommand := selected != nil && selected.Name == "command run"
+	if args[0] == "help" || args[0] == "schema" || (!runCommand && (args[len(args)-1] == "--help" || args[len(args)-1] == "-h") && !strings.Contains(strings.Join(args[:len(args)-1], " "), "--")) {
 		schema := args[0] == "schema"
 		targetArgs := args[1:]
 		if len(targetArgs) == 1 && (targetArgs[0] == "--help" || targetArgs[0] == "-h") {
@@ -225,16 +236,6 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 			return fail(protocol.NewError("io_error", "Cannot write output.", 1, nil))
 		}
 		return 0
-	}
-	var selected *Command
-	var rest []string
-	for i := range a.commands {
-		for _, name := range append([]string{a.commands[i].Name}, a.commands[i].Aliases...) {
-			words := strings.Fields(name)
-			if len(args) >= len(words) && strings.Join(args[:len(words)], " ") == name && (selected == nil || len(words) > len(args)-len(rest)) {
-				selected, rest = &a.commands[i], args[len(words):]
-			}
-		}
 	}
 	if selected == nil {
 		return fail(protocol.NewError("invalid_argument", "Unknown command. Run devtools schema to discover commands.", 2, nil))

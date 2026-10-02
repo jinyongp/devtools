@@ -121,9 +121,9 @@ exec = ["/bin/sh", "-c", "printf raw; printf diagnostic >&2; exit 23"]
 		diagnostic string
 	}{
 		{[]string{"run", "check", "--", "extra space"}, canonical + "|local|extra space", 0, ""},
-		{[]string{"run", "check", "--env", "staging", "--", "--watch"}, canonical + "|staging|--watch", 0, ""},
+		{[]string{"run", "--env", "staging", "check", "--", "--watch"}, canonical + "|staging|--watch", 0, ""},
 		{[]string{"run", "plain"}, "parent", 0, ""},
-		{[]string{"run", "plain", "--env", "staging"}, "staging", 0, ""},
+		{[]string{"run", "--env", "staging", "plain"}, "staging", 0, ""},
 		{[]string{"command", "run", "--", "/bin/sh", "-c", "printf '%s|%s' \"$PWD\" \"$LEVEL\""}, current + "|common", 0, ""},
 		{[]string{"run", "--", "/bin/sh", "-c", "printf '%s|%s' \"$PWD\" \"$LEVEL\""}, current + "|common", 0, ""},
 		{[]string{"run", "fail"}, "raw", 23, "diagnostic"},
@@ -133,7 +133,7 @@ exec = ["/bin/sh", "-c", "printf raw; printf diagnostic >&2; exit 23"]
 			t.Fatalf("%v: %d %q %q", tc.args, code, out, diagnostic)
 		}
 	}
-	if code, out, diagnostic := invoke(t, app, "", "run", "plain", "--env", "missing"); code != 3 || out != "" || !strings.Contains(diagnostic, "env_not_found") {
+	if code, out, diagnostic := invoke(t, app, "", "run", "--env", "missing", "plain"); code != 3 || out != "" || !strings.Contains(diagnostic, "env_not_found") {
 		t.Fatalf("%d %s %s", code, out, diagnostic)
 	}
 	if os.Getenv("LEVEL") != "parent" {
@@ -219,7 +219,7 @@ func TestNamedProfileOverrideAndNoInjection(t *testing.T) {
 	if code != 0 {
 		t.Fatal(diagnostic)
 	}
-	code, out, diagnostic := invoke(t, app, "", "run", "show", "--profile", "other")
+	code, out, diagnostic := invoke(t, app, "", "run", "--profile", "other", "show")
 	if code != 0 || out != "override" || diagnostic != "" {
 		t.Fatalf("%d %s %s", code, out, diagnostic)
 	}

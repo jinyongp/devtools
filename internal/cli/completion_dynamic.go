@@ -118,6 +118,9 @@ func (a *App) dynamicCandidates(words []string) []string {
 		}
 		positionalValues[word] = true
 		positionals++
+		if cmd.Name == "command run" {
+			return nil
+		}
 	}
 	replacement := ""
 	if pending == "" && strings.HasPrefix(prefix, "--") {

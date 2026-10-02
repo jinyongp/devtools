@@ -69,6 +69,24 @@ secrets and configure project commands.
 Use `devtools --help` or a command's help, such as `devtools task --help`, to
 explore the CLI. Run `devtools command list` to see your configured project commands.
 
+To save a command you use often, add it to `devtools.toml`. For example, in a
+project with a `docs:dev` script:
+
+```toml
+[commands."dev:docs"]
+exec = ["pnpm", "run", "docs:dev"]
+```
+
+Pass arguments directly after the command name. Put devtools options before it:
+
+```sh
+devtools run dev:docs --port 3000
+devtools run --env local dev:docs --port 3000
+```
+
+Everything after `dev:docs` goes to the saved command, including `--help`.
+Use `devtools run --help` for devtools' own help.
+
 ## Guides
 
 The detailed guides below are currently in Korean.

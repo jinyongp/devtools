@@ -67,7 +67,7 @@ func (a *App) catalog() map[string]any {
 			required = append(required, "args")
 		}
 		if command.ChildArgs {
-			properties["child_args"] = map[string]any{"type": "array", "items": stringSchema()}
+			properties["child_args"] = map[string]any{"type": "array", "items": stringSchema(), "description": "Arguments after the configured command name, optionally separated by --; devtools options precede the name. Without a name, -- introduces the program and its arguments."}
 		}
 		input := object(properties, required...)
 		if len(required) == 0 {
@@ -95,7 +95,7 @@ func (a *App) catalog() map[string]any {
 		"protocol_version": protocol.ProtocolVersion,
 		"commands":         commands,
 		"transport": map[string]any{
-			"input":         "CLI flags and positional args; child_args follow --. Schemas describe parsed inputs, not a JSON stdin endpoint. Secret --stdin reads a raw UTF-8 value.",
+			"input":         "CLI flags and positional args. For command run, devtools options precede the command name and all following tokens are child_args; an optional -- immediately after the name is a separator. Without a name, -- introduces the program and its arguments. Schemas describe parsed inputs, not a JSON stdin endpoint. Secret --stdin reads a raw UTF-8 value.",
 			"success":       "Follow output_mode: json encodes one response envelope on stdout; text is help; artifact is generated file content; passthrough delegates stdout, stderr, and exit status to the child.",
 			"failure":       "Devtools errors use one JSON response on stderr, including help and artifact errors. After child execution starts, passthrough preserves child output and exit status.",
 			"output_modes":  []OutputMode{OutputJSON, OutputText, OutputArtifact, OutputPassthrough},

@@ -26,7 +26,7 @@ expose `data.replayed`, including false values. A replay preserves the original
 changed result and must not be counted as another mutation.
 Schema metadata declares `output_mode`: json, text, artifact, or passthrough.
 Only json commands have `output_schema`, describing the envelope's data.
-Use `version` for build metadata and `protocol_version` (5 for this source).
+Use `version` for build metadata and `protocol_version` (6 for this source).
 Every JSON response exposes envelope `schema_version: 1` at the top level;
 all `schema` responses also report the CLI protocol version. Keep `devtools.toml`
 versionless: do not add `version` or `schema_version` fields to project configuration.
@@ -63,6 +63,14 @@ is executed by `devtools run dev:docs`. Quote TOML keys containing punctuation a
 shell arguments containing spaces or shell syntax. Profile, env, port, and proxy
 names keep their separate identifier rules. Check `devtools schema command run`
 for the installed command-name contract; CLI and Skill updates are separate.
+For CLI protocol v6, put all devtools options before the configured command name:
+`devtools run --env local dev:docs --port 3000`. Every token after the name is a
+child argument, including `--env`, `--profile`, `--dir`, `--help`, and `-h`.
+Use `devtools run --help` for devtools help and `devtools run dev:docs --help`
+for the child's help. A single `--` immediately after the name remains an optional
+separator; later `--` tokens are passed through. Direct execution still uses
+`devtools run --env local -- PROGRAM ARG...`. The same rules apply to `command run`
+and `cmd run`; other commands keep their existing option placement.
 Save the returned execution ID. `process status` reports lifetime; a configured
 `process wait EXECUTION_ID` establishes readiness before dependent work. `process check`
 can exit successfully with `readiness.ready: false`.

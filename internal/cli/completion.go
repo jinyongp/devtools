@@ -19,8 +19,9 @@ func (a *App) registerCompletion() {
 }
 
 type completionNode struct {
-	children map[string]string
-	options  map[string]Option
+	children           map[string]string
+	options            map[string]Option
+	childArgsAfterName bool
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
@@ -30,7 +31,7 @@ func (a *App) completionScript(shell string) string {
 	nodes := map[string]*completionNode{}
 	node := func(path string) *completionNode {
 		if nodes[path] == nil {
-			nodes[path] = &completionNode{map[string]string{}, map[string]Option{}}
+			nodes[path] = &completionNode{children: map[string]string{}, options: map[string]Option{}}
 		}
 		return nodes[path]
 	}
@@ -47,6 +48,7 @@ func (a *App) completionScript(shell string) string {
 			for _, opt := range cmd.Options {
 				node(name).options["--"+opt.Name] = opt
 			}
+			node(name).childArgsAfterName = cmd.Name == "command run"
 		}
 	}
 	for _, sh := range []string{"bash", "fish", "zsh"} {
@@ -139,6 +141,13 @@ func (a *App) completionScript(shell string) string {
 					b.WriteString(":")
 				}
 				b.WriteString(";;\n")
+			}
+		}
+		if n.childArgsAfterName {
+			if shell == "fish" {
+				fmt.Fprintf(&b, "      case %s\n        return\n", shellQuote(path+"|*"))
+			} else {
+				fmt.Fprintf(&b, "      %s*) return;;\n", shellQuote(path+"|"))
 			}
 		}
 	}

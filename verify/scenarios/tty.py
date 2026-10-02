@@ -9,6 +9,7 @@ sys.path = [entry for entry in sys.path if os.path.abspath(entry or os.getcwd())
 
 import pty
 import select
+import signal
 import subprocess
 import termios
 import time
@@ -264,6 +265,31 @@ try:
     send("devtools var get MODE --profile tty-copy\n")
     copied = read_until(prompt)
     assert b'"value":"tty-source"' in copied, copied
+
+    # Cancellation must finish without another line of input and restore echo.
+    send("devtools profile export --output ./canceled.age\n")
+    read_until(b"Profile transfer passphrase: ")
+    assert not termios.tcgetattr(master)[3] & (termios.ECHO | termios.ECHONL)
+    send(b"\x03")
+    canceled = read_until(prompt, timeout=3)
+    assert b'"code":"canceled"' in canceled, canceled
+    # Readline disables echo at its prompt; inspect restored settings from a
+    # foreground child after Bash restores the normal terminal mode.
+    send("printf 'CANCEL_STATUS:%s\\n' $?; python3 -c 'import termios;print(\"CANCEL_ECHO:\"+str(bool(termios.tcgetattr(0)[3]&termios.ECHO)))'\n")
+    restored = read_until(prompt)
+    assert b"CANCEL_STATUS:130" in restored and b"CANCEL_ECHO:True" in restored, restored
+
+    send("devtools profile export --output ./term-canceled.age\n")
+    read_until(b"Profile transfer passphrase: ")
+    partial_passphrase = b"PARTIAL_TRANSFER_PRIVATE_CANARY"
+    send(partial_passphrase)
+    time.sleep(.05)
+    os.kill(os.tcgetpgrp(master), signal.SIGTERM)
+    terminated = read_until(prompt, timeout=3)
+    assert b'"code":"canceled"' in terminated and partial_passphrase not in terminated, terminated
+    send("printf 'TERM_CANCEL_STATUS:%s\\n' $?\n")
+    resumed = read_until(prompt)
+    assert b"TERM_CANCEL_STATUS:130" in resumed and partial_passphrase not in resumed, resumed
     send("stty -echo\n")
     read_until(prompt)
 finally:

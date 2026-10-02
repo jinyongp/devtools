@@ -145,26 +145,32 @@ pnpm release
 pnpm release --publish
 ```
 
-origin이 있으면 태그를 가져온 뒤 HEAD에 포함된 가장 높은 안정 버전 태그 이후의
-커밋을 확인한다. 버전은 `0.x`를 유지하며 Conventional Commits의 `!`,
+origin에서 태그를 가져오고 GitHub의 게시된 릴리즈를 조회한 뒤, HEAD에 포함된 가장
+높은 안정 릴리즈 이후의 커밋을 확인한다. draft·사전 릴리스·게시되지 않은 태그는
+버전 기준에서 제외한다. 인증된 GitHub CLI(`gh`)가 필요하다.
+버전은 `0.x`를 유지하며 Conventional Commits의 `!`,
 `BREAKING CHANGE:`, `feat`는 minor, 나머지는 patch를 추천한다. 첫 릴리스는 `0.1.0`이며,
 추가 커밋이 없으면 완료 메시지를 반환한다. 커밋 메시지에 기록된 변경을 기준으로
 추천하므로 출력된 커밋 목록과 버전을 함께 확인한다.
 
-`--publish`는 깨끗한 main에서 추천 버전의 태그를 생성하고 main과 태그를
-atomic push로 함께 올린다. 원격 main과 충돌하면 두 참조 모두 보존하며,
-로컬 태그와 재시도 명령을 안내한다. 배포 결과는 GitHub Actions의 Release 실행에서 확인한다.
+`--publish`는 깨끗한 main을 올리고 버전과 커밋 SHA를 Release 워크플로에 전달한다.
+이 명령은 태그를 만들지 않는다. 원격 main과 충돌하면 검증 요청 전에 실패한다.
+추천 버전의 태그가 다른 커밋에 이미 있으면 교체하지 않고 오류를 반환한다.
+배포 결과는 GitHub Actions의 Release 실행에서 확인한다.
 
-자동 실행의 진입점은 `v0.1.0` 형태의 태그 푸시다. Release 워크플로는
-태그 커밋이 원격 main에 포함됐는지 확인한 뒤 macOS와 Linux 검사를 병렬로 실행한다.
+Release 워크플로는 `workflow_dispatch`로 요청한 커밋이 main에 포함됐는지 확인한 뒤
+macOS와 Linux 검사를 병렬로 실행한다. 버전은 `v` 없이 전달하고 커밋은 전체 SHA로 고정한다.
 Linux 검사는 실제 Chromium Dashboard smoke와 설치된 release 시나리오를 포함하고,
 macOS도 같은 release 시나리오를 실행한다. 두 운영체제의 검증이 모두 성공하면 네 플랫폼 배포물을 생성한다. 이후
 플랫폼별 CLI 아카이브·체크섬, 플랫폼 독립 Agent Skill 아카이브·체크섬,
 설치기와 버전 파일을 GitHub Releases에 함께 게시한다.
-빌드에는 태그의 버전과 커밋 식별자를 기록한다.
+빌드에는 요청한 버전과 커밋 식별자를 기록한다. 테스트와 배포물 검증이 모두 성공한 뒤에만
+태그를 생성하고 Releaseway로 게시한다. 테스트가 실패하면 버전은 소모되지 않는다.
+게시가 실패하면 같은 실행의 실패한 job을 재실행해 동일 태그·커밋·배포물로 재시도한다.
+검증만 실행하려면 `publish=false`로 요청한다. 자세한 명령은 [개발 가이드](development.md#릴리스)에 있다.
 
-안정 Release workflow가 성공적으로 끝나면 `.github/workflows/pages.yml`의 `workflow_run`이
-기본 브랜치에서 실행된다. 이 workflow는 해당 릴리스의 `install.sh`를 내려받아 태그의
+안정 릴리스 게시가 성공하면 installer job이 `.github/workflows/pages.yml`을
+게시된 태그로 요청한다. 이 workflow는 해당 릴리스의 `install.sh`를 내려받아 태그의
 `scripts/install.sh`와 일치하는지 확인한 뒤 GitHub Pages에 게시한다.
 devtools 프로젝트 Pages에는 별도 custom domain을 설정하지 않고 사용자 사이트의
 `jinyongp.dev`를 상속해 `/devtools/install.sh` 경로를 사용한다.
@@ -172,10 +178,11 @@ devtools 프로젝트 Pages에는 별도 custom domain을 설정하지 않고 �
 
 Pages source는 저장소의 **Settings → Pages → Build and deployment → Source**에서
 **GitHub Actions**를 사용한다. `github-pages` 환경은 기본 브랜치만 배포하도록 유지하며,
-`workflow_run`도 기본 브랜치 ref에서 실행된다. **Publish Installer Page** workflow를
+installer workflow 요청도 기본 브랜치 ref에서 실행된다. **Publish Installer Page** workflow를
 수동 실행하면 최신 안정 릴리스를 다시 게시할 수 있다.
 
-`v0.2.0-rc.1`처럼 접미사가 붙은 태그는 사전 릴리스로 게시한다. 기본 설치는 GitHub가 최신으로 선택한 안정 릴리스를 사용하고, 사전 릴리스는 버전을 지정해 설치한다.
+워크플로에 `version=0.2.0-rc.1`처럼 접미사를 붙이면 사전 릴리스로 게시한다.
+기본 설치는 GitHub가 최신으로 선택한 안정 릴리스를 사용하고, 사전 릴리스는 버전을 지정해 설치한다.
 
 ## 설치 환경 검증하기
 

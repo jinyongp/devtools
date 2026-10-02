@@ -96,17 +96,41 @@ pnpm release
 pnpm release --publish
 ```
 
-버전을 추천받고 main과 태그를 함께 올린다. 태그가 Release 워크플로를 시작하면
-태그 검증 뒤 macOS와 Linux CI를 병렬로 실행한다. Linux CI는 Agent Skill의 local/public `skills` discovery와 실제 Chromium dashboard smoke를 확인하고,
-macOS와 Linux CI는 모두 `just verify`로 설치된 release 시나리오를 통과해야 한다. 두 CI가 성공한 뒤 CLI·Agent Skill을
-패키징하고, 고정 SHA의 `releaseway/actions`가 태그와 커밋·전체 `dist/*` 자산을 검증해
-immutable GitHub Release를 게시한다. 릴리즈 노트는 `notes: standard` 기본 템플릿으로
+버전 추천은 HEAD에 포함된 실제 게시된 안정 릴리즈를 기준으로 계산한다.
+실패하거나 게시하지 않은 태그는 다음 버전의 기준이 되지 않는다. `--publish`는
+깨끗한 main을 올린 뒤 버전과 정확한 커밋 SHA로 Release 워크플로를 요청한다.
+로컬에서 릴리즈 태그를 만들지 않는다. Node.js, pnpm과 인증된 GitHub CLI(`gh`)가 필요하다.
+
+워크플로는 대상 커밋이 main에 포함됐는지 확인하고 macOS와 Linux 검사를 병렬로
+실행한다. Linux는 Agent Skill의 local/public discovery와 Chromium dashboard smoke를
+포함한다. 두 OS 모두 `just verify`를 통과해야 하며, 각 설치 시나리오는 180초를
+넘기면 이름을 출력하고 실패한다. 검사가 끝나면 네 플랫폼의 CLI와 Agent Skill을
+패키징하고 체크섬·바이너리 버전·커밋·양쪽 OS의 Skill 일치를 확인한다.
+이 단계까지 실패하면 새 태그와 GitHub Release는 만들어지지 않는다.
+
+게시 job은 준비된 `release-assets` artifact를 내려받아 태그를 생성하고,
+고정 SHA의 `releaseway/actions`로 immutable GitHub Release를 게시한다.
+같은 버전의 태그가 이미 있으면 동일 커밋인지 확인해 재사용하며, 다른 커밋의 태그는
+교체하지 않는다. 릴리즈 노트는 `notes: standard` 기본 템플릿으로
 게시된 이전 릴리즈 이후의 커밋을 Features·Fixes 등으로 분류한다. 이 경로를 사용하려면
 저장소에서 immutable releases를 활성화해야 한다.
-안정 릴리스 게시 후에는 `.github/workflows/pages.yml`이 릴리스의
+게시 단계가 실패하면 같은 실행의 실패한 job을 재실행한다. 준비한 artifact를 그대로
+사용하므로 새 버전이나 태그 교체 없이 Releaseway의 게시 재시도를 사용할 수 있다.
+artifact는 30일간 보관한다. GitHub Release 게시 이후 Homebrew와 installer 배포는
+독립적으로 실행한다. installer job은 `.github/workflows/pages.yml`에 게시된 태그를
+전달하고, 해당 workflow가 릴리스의
 `install.sh`를 `jinyongp.dev/devtools/install.sh`에 배포한다. Pages source는 저장소
 설정에서 GitHub Actions로 한 번 활성화해야 하며, workflow를 수동 실행하면 최신 안정
-릴리스를 바로 게시할 수 있다. 로컬에서 스킬 배포물만 확인하려면
+릴리스를 바로 게시할 수 있다.
+
+태그 생성과 게시 없이 모든 검증·패키징을 실행하려면 다음 명령을 사용한다.
+이 경우 `release-assets` artifact에서 준비된 배포물을 확인할 수 있다.
+
+```sh
+gh workflow run release.yml --ref main -f version=0.23.0 -f commit="$(git rev-parse HEAD)" -f publish=false
+```
+
+로컬에서 스킬 배포물만 확인하려면
 `just release-skill VERSION`을 실행한다.
 [배포 상세](install.md#github-releases-게시)와
 [설치된 release 검증](../verify/README.md)을 참고한다.

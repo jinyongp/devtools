@@ -1,5 +1,9 @@
 # GitHub Pages installer endpoint
 
+Historical implementation plan. For the current release and installer workflow,
+see [the development guide](development.md#릴리스). Installer publication now uses
+`workflow_dispatch` on the default branch after GitHub Release publication.
+
 ## Goal
 
 Serve the latest stable devtools release installer from the devtools repository's own GitHub Pages project site so the public install command becomes:

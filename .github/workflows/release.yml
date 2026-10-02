@@ -1,35 +1,74 @@
 name: Release
+run-name: Release v${{ inputs.version }} at ${{ inputs.commit }}
 
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without the v prefix
+        required: true
+        type: string
+      commit:
+        description: Full commit SHA on main to validate and release
+        required: true
+        type: string
+      publish:
+        description: Create the tag and publish after all checks pass
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
-  validate-tag:
+  validate-release:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.input.outputs.tag }}
+    steps:
+      - name: Validate release input
+        id: input
+        env:
+          VERSION: ${{ inputs.version }}
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          [ "$GITHUB_REF" = refs/heads/main ]
+          [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          printf 'tag=v%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+      - name: Validate main ancestry and tag ownership
+        env:
+          TAG: ${{ steps.input.outputs.tag }}
+          COMMIT: ${{ inputs.commit }}
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          [ "$(git rev-parse HEAD)" = "$COMMIT" ]
+          git merge-base --is-ancestor "$COMMIT" refs/remotes/origin/main
+          if [ "$PUBLISH" = true ] && git show-ref --verify --quiet "refs/tags/$TAG"; then
+            [ "$(git rev-parse "$TAG^{commit}")" = "$COMMIT" ] || {
+              echo "$TAG already belongs to another commit; refusing to replace it." >&2
+              exit 1
+            }
+          fi
+
+  ci-macos:
+    needs: validate-release
+    runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-      - name: Validate tag and main ancestry
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
-          git merge-base --is-ancestor HEAD refs/remotes/origin/main
-
-  ci-macos:
-    needs: validate-tag
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+          ref: ${{ inputs.commit }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.1'
@@ -49,23 +88,27 @@ jobs:
       - run: just verify
       - name: Package macOS Agent Skill reference
         env:
-          TAG: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${TAG#v}" OUTPUT_DIR=dist-macos sh scripts/package-skill.sh
+          OUTPUT_DIR=dist-macos sh scripts/package-skill.sh
           sh scripts/verify-skill-package.sh \
-            "dist-macos/devtools-skill_${TAG#v}.tar.gz" \
-            "dist-macos/devtools-skill_${TAG#v}.tar.gz.sha256"
+            "dist-macos/devtools-skill_${VERSION}.tar.gz" \
+            "dist-macos/devtools-skill_${VERSION}.tar.gz.sha256"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: macos-agent-skill
           path: dist-macos/
           if-no-files-found: error
+          overwrite: true
 
   ci-linux:
-    needs: validate-tag
+    needs: validate-release
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.1'
@@ -90,13 +133,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y fish zsh
       - run: just verify
 
-  release:
-    needs: [ci-macos, ci-linux]
+  package:
+    needs: [validate-release, ci-macos, ci-linux]
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
+    timeout-minutes: 15
+    env:
+      VERSION: ${{ inputs.version }}
+      COMMIT: ${{ inputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.1'
@@ -111,14 +158,7 @@ jobs:
         with:
           name: macos-agent-skill
           path: dist-macos
-      - name: Set release version
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          printf 'VERSION=%s\n' "${TAG#v}" >> "$GITHUB_ENV"
       - name: Package release targets
-        env:
-          COMMIT: ${{ github.sha }}
         run: |
           for target_os in darwin linux; do
             for target_arch in amd64 arm64; do
@@ -136,24 +176,78 @@ jobs:
           cp scripts/install.sh dist/install.sh
           cp LICENSE dist/LICENSE
           printf '%s\n' "$VERSION" > dist/version.txt
+      - name: Verify prepared checksums and binary identity
+        run: |
+          (cd dist && sha256sum -c ./*.sha256)
+          sh -n dist/install.sh
+          mkdir -p "$RUNNER_TEMP/release-binary"
+          tar -xzf "dist/devtools_${VERSION}_linux_amd64.tar.gz" -C "$RUNNER_TEMP/release-binary"
+          "$RUNNER_TEMP/release-binary/devtools" version | jq -e \
+            --arg version "$VERSION" --arg commit "$COMMIT" \
+            '.ok and .data.version == $version and .data.commit == $commit'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: true
+
+  release:
+    needs: [validate-release, package]
+    if: ${{ inputs.publish }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.validate-release.outputs.tag }}
+      COMMIT: ${{ inputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets
+          path: dist
+      - name: Create or reuse the verified release tag
+        run: sh scripts/publish-release-tag.sh
       - name: Publish release
         uses: releaseway/actions@4fdc624aafb0c824fb81dd7aaf59031bb1f5aa0f # v0.2.0
         with:
-          tag: ${{ github.ref_name }}
-          commit: ${{ github.sha }}
+          tag: ${{ needs.validate-release.outputs.tag }}
+          commit: ${{ inputs.commit }}
           assets: |
             dist/*
           notes: standard
-          prerelease: ${{ contains(github.ref_name, '-') && 'true' || 'false' }}
-          latest: ${{ contains(github.ref_name, '-') && 'false' || 'automatic' }}
+          prerelease: ${{ contains(inputs.version, '-') && 'true' || 'false' }}
+          latest: ${{ contains(inputs.version, '-') && 'false' || 'automatic' }}
 
   homebrew:
-    needs: release
-    if: ${{ !contains(github.ref_name, '-') }}
+    needs: [validate-release, release]
+    if: ${{ !contains(inputs.version, '-') }}
     uses: releaseway/homebrew-actions/.github/workflows/publish.yml@c035d14050bca1e2028a6368823797d36c9cdbc5 # v0.1.0
     with:
-      commit: ${{ github.sha }}
-      version: ${{ github.ref_name }}
+      commit: ${{ inputs.commit }}
+      version: ${{ needs.validate-release.outputs.tag }}
       tap-repository: jinyongp/homebrew-tap
     secrets:
       tap_deploy_key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+
+  installer-page:
+    needs: [validate-release, release]
+    if: ${{ !contains(inputs.version, '-') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Publish the released installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.validate-release.outputs.tag }}
+        run: gh workflow run pages.yml --ref main -f "tag=$TAG"

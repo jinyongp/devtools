@@ -14,13 +14,18 @@ dashboard:
 fmt:
     gofmt -w cmd internal scripts skills
 
-check: check-skill-release check-dashboard check-installer
+check: check-skill-release check-dashboard check-installer check-release
     test -z "$(gofmt -l cmd internal scripts skills)"
     go vet ./...
     go test -race ./...
 
 check-dashboard:
     node --test scripts/dashboard-*.test.mjs
+
+check-release:
+    sh -n scripts/publish-release-tag.sh
+    node --test scripts/release.test.mjs
+    PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s verify -p test_run.py
 
 check-installer:
     sh -n scripts/install.sh

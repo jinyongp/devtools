@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 
-const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+const run = (program, ...args) => execFileSync(program, args, { encoding: 'utf8' }).trim();
+const git = (...args) => run('git', ...args);
+const gh = (...args) => run('gh', ...args);
+const stableVersion = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 try {
   const args = process.argv.slice(2);
@@ -9,12 +12,17 @@ try {
     throw new Error('Usage: pnpm release [--publish]');
   }
   const publish = args.includes('--publish');
-  const remote = git('remote').split('\n').includes('origin');
-  if (remote) git('fetch', 'origin', '--tags');
+  if (!git('remote').split('\n').includes('origin')) throw new Error('Configure origin before planning a release.');
+  git('fetch', 'origin', '--tags');
 
-  // Stable tags reachable from HEAD are the release baseline.
-  const previous = git('tag', '--merged', 'HEAD', '--sort=-version:refname')
-    .split('\n').find(tag => /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag));
+  // Failed or unpublished tags never advance the released version.
+  const reachable = new Set(git('tag', '--merged', 'HEAD').split('\n'));
+  const releases = JSON.parse(gh('api', 'repos/{owner}/{repo}/releases?per_page=100', '--paginate', '--slurp')).flat();
+  const published = new Set(releases.filter(release =>
+    !release.draft && !release.prerelease && release.published_at && stableVersion.test(release.tag_name)
+  ).map(release => release.tag_name));
+  const previous = git('tag', '--sort=-version:refname').split('\n')
+    .find(tag => reachable.has(tag) && published.has(tag));
   const range = previous ? `${previous}..HEAD` : 'HEAD';
   const messages = git('log', '--format=%B%x00', range).split('\0').map(s => s.trim()).filter(Boolean);
   if (!messages.length) {
@@ -39,17 +47,17 @@ try {
     console.log('\nPublish: pnpm release --publish');
     process.exit(0);
   }
-  if (!remote) throw new Error('Configure origin before publishing.');
   if (git('branch', '--show-current') !== 'main') throw new Error('Publish from main.');
   if (git('status', '--porcelain')) throw new Error('Commit or stash working tree changes first.');
-  if (git('tag', '--list', tag)) throw new Error(`${tag} already exists. Check its release before retrying.`);
-  git('tag', '-a', tag, '-m', `Release ${tag}`);
-  try {
-    git('push', '--atomic', 'origin', 'refs/heads/main:refs/heads/main', `refs/tags/${tag}`);
-  } catch {
-    throw new Error(`Push was not confirmed. Local tag ${tag} remains; check origin, then retry: git push --atomic origin main refs/tags/${tag}`);
+  const commit = git('rev-parse', 'HEAD');
+  if (git('tag', '--list', tag) && git('rev-parse', `${tag}^{commit}`) !== commit) {
+    throw new Error(`${tag} belongs to another commit but has no published stable release. Resolve that tag before publishing; it does not advance the recommended version.`);
   }
-  console.log(`\nPublished tag ${tag}. GitHub Actions will validate and publish the release.`);
+  git('push', 'origin', 'refs/heads/main:refs/heads/main');
+  const dispatched = gh('workflow', 'run', 'release.yml', '--ref', 'main',
+    '-f', `version=${version}`, '-f', `commit=${commit}`, '-f', 'publish=true');
+  console.log(`\nRequested ${tag} at ${commit}. GitHub Actions creates the tag only after validation and packaging succeed.`);
+  if (dispatched) console.log(dispatched);
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;

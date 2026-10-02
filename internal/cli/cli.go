@@ -205,8 +205,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 			}
 		}
 	}
-	runCommand := selected != nil && selected.Name == "command run"
-	if args[0] == "help" || args[0] == "schema" || (!runCommand && (args[len(args)-1] == "--help" || args[len(args)-1] == "-h") && !strings.Contains(strings.Join(args[:len(args)-1], " "), "--")) {
+	if args[0] == "help" || args[0] == "schema" || (selected == nil && (args[len(args)-1] == "--help" || args[len(args)-1] == "-h") && !strings.Contains(strings.Join(args[:len(args)-1], " "), "--")) {
 		schema := args[0] == "schema"
 		targetArgs := args[1:]
 		if len(targetArgs) == 1 && (targetArgs[0] == "--help" || targetArgs[0] == "-h") {

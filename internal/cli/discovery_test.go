@@ -51,3 +51,20 @@ func TestScopedDiscovery(t *testing.T) {
 		t.Fatal(code)
 	}
 }
+
+func TestCommandHelpAfterPositionalArguments(t *testing.T) {
+	a := New("test", "test")
+	for _, args := range [][]string{
+		{"var", "get", "PORT", "--help"},
+		{"var", "get", "PORT", "-h"},
+		{"doctor", "test", "--help"},
+		{"doctor", "test", "-h"},
+		{"project", "up", "docs:dev", "--help"},
+		{"project", "up", "docs:dev", "-h"},
+	} {
+		code, out, stderr := invoke(t, a, "", args...)
+		if code != 0 || stderr != "" || !strings.Contains(out, "Usage:") {
+			t.Fatalf("%v: %d %q %q", args, code, out, stderr)
+		}
+	}
+}

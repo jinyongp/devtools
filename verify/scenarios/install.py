@@ -140,7 +140,7 @@ assert dotenv.exists()
 (project / "devtools.toml").write_text(
     'profile="fixture"\n'
     '[commands.check]\nexec=["just","check"]\ninject=true\nenv="local"\n'
-    '[commands.app]\nexec=["python3","app.py"]\ninject=true\nenv="local"\n'
+    '[commands."dev:app"]\nexec=["python3","app.py"]\ninject=true\nenv="local"\n'
 )
 plain = json.loads(execute(["just", "check"]).stdout)
 assert plain["level"] is None and not plain["secret_present"]
@@ -150,13 +150,14 @@ def verify_project(cwd=project):
     named = json.loads(execute(["devtools", "run", "check"], cwd=cwd).stdout)
     assert named["level"] == "local" and named["secret_present"]
     assert named["cwd"] == str(cwd)
-    extra = json.loads(execute(["devtools", "run", "--env", "staging", "app",
+    extra = json.loads(execute(["devtools", "run", "--env", "staging", "dev:app",
                                "extra space", "--watch", "--help", "--env", "missing"], cwd=cwd).stdout)
     assert extra["level"] == "staging"
     assert extra["args"] == ["extra space", "--watch", "--help", "--env", "missing"]
-    separated = json.loads(execute(["devtools", "command", "run", "app", "--",
+    separated = json.loads(execute(["devtools", "command", "run", "dev:app", "--",
                                    "--watch"], cwd=cwd).stdout)
     assert separated["level"] == "local" and separated["args"] == ["--watch"]
+    assert api("project", "status", "dev:app", cwd=cwd)["data"]["items"] == []
     direct = json.loads(execute(["devtools", "run", "--", "python3", "app.py"],
                                cwd=cwd).stdout)
     assert direct["level"] == "common" and direct["secret_present"]

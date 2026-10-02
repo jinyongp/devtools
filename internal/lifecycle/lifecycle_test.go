@@ -91,6 +91,31 @@ func runningRecord(p project.Context, command, id string) services.Record {
 	return services.Record{ID: id, Profile: p.Profile, Instance: "instance", Directory: p.Root, Command: command, CreatedAt: now, StartedAt: &now, State: "running"}
 }
 
+func TestLiteralCommandNamesAcrossLifecycleSelections(t *testing.T) {
+	for _, name := range []string{"docs:dev", "@docs/dev", "space name", "문서 개발", "equals=dev"} {
+		t.Run(name, func(t *testing.T) {
+			p := testProject(t, name)
+			for _, action := range []string{ActionUp, ActionRestart, ActionDown} {
+				processes := &fakeProcesses{records: []services.Record{runningRecord(p, name, tasks.ID())}}
+				processes.apply = func(request services.Request, _ int) (services.Result, *protocol.Error) {
+					return services.Result{Item: runningRecord(p, name, request.RequestID), Changed: true}, nil
+				}
+				manager := Manager{Data: t.TempDir(), Processes: processes}
+				request := Request{Action: action, Project: p, Commands: []string{name}, Timeout: time.Second, RequestID: tasks.ID()}
+				if _, err := manager.Apply(context.Background(), request); err != nil {
+					t.Fatalf("%s rejected literal name %q: %v", action, name, err)
+				}
+			}
+			processes := &fakeProcesses{records: []services.Record{runningRecord(p, name, tasks.ID())}}
+			manager := Manager{Data: t.TempDir(), Processes: processes}
+			items, err := manager.Status(context.Background(), p, []string{name})
+			if err != nil || len(items) != 1 || items[0].Command != name {
+				t.Fatalf("status rejected literal name %q: %#v %v", name, items, err)
+			}
+		})
+	}
+}
+
 func TestUpPreflightsAllCommandsBeforeMutation(t *testing.T) {
 	p := testProject(t, "web", "api")
 	processes := &fakeProcesses{}

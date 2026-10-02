@@ -146,7 +146,7 @@ func validateRequest(request Request) *protocol.Error {
 	}
 	seen := map[string]bool{}
 	for _, name := range request.Commands {
-		if !project.ValidProfile(name) || seen[name] {
+		if !project.ValidCommand(name) || seen[name] {
 			return fail("invalid_argument", "Project lifecycle command selection is invalid.", 2, map[string]any{"command": name})
 		}
 		seen[name] = true
@@ -260,7 +260,7 @@ func (m Manager) Status(ctx context.Context, p project.Context, commands []strin
 	}
 	selected := map[string]int{}
 	for index, name := range commands {
-		if !project.ValidProfile(name) || selected[name] != 0 {
+		if !project.ValidCommand(name) || selected[name] != 0 {
 			return nil, fail("invalid_argument", "Project lifecycle command selection is invalid.", 2, map[string]any{"command": name})
 		}
 		selected[name] = index + 1

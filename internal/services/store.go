@@ -649,6 +649,9 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	}
 	unlock, e := tasks.Lock(ctx, filepath.Join(s.root(), "operations.lock"))
 	if e != nil {
+		if ctx.Err() != nil {
+			return out, failure("canceled")
+		}
 		return out, storageError()
 	}
 	defer unlock()

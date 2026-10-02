@@ -317,6 +317,25 @@ func TestStartReusesSingletonWithoutColdStartPreflight(t *testing.T) {
 	}
 }
 
+func TestApplyCanceledWhileWaitingForOperationsLock(t *testing.T) {
+	s := Store{Data: privateTempDir(t)}
+	unlock, err := s.Lock(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	request := tasks.ID()
+	_, failure := s.Apply(ctx, Request{Action: "stop", ID: tasks.ID(), RequestID: request})
+	if failure == nil || failure.Code != "canceled" || failure.ExitCode != 130 {
+		t.Fatalf("lock cancellation became storage failure: %v", failure)
+	}
+	if _, err := os.Stat(filepath.Join(s.root(), "receipts", request+".json")); !os.IsNotExist(err) {
+		t.Fatalf("canceled operation wrote receipt: %v", err)
+	}
+}
+
 func TestBoundedRawLogs(t *testing.T) {
 	path := filepath.Join(privateTempDir(t), "output.log")
 	if e := os.Chmod(filepath.Dir(path), 0700); e != nil {

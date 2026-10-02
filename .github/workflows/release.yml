@@ -215,7 +215,7 @@ jobs:
       - name: Create or reuse the verified release tag
         run: sh scripts/publish-release-tag.sh
       - name: Publish release
-        uses: releaseway/actions@4fdc624aafb0c824fb81dd7aaf59031bb1f5aa0f # v0.2.0
+        uses: releaseway/actions@22219bebc51a4127c6dffd9e79706f08cdd678dc # v0.2.1
         with:
           tag: ${{ needs.validate-release.outputs.tag }}
           commit: ${{ inputs.commit }}
@@ -228,7 +228,7 @@ jobs:
   homebrew:
     needs: [validate-release, release]
     if: ${{ !contains(inputs.version, '-') }}
-    uses: releaseway/homebrew-actions/.github/workflows/publish.yml@c035d14050bca1e2028a6368823797d36c9cdbc5 # v0.1.0
+    uses: releaseway/homebrew-actions/.github/workflows/publish.yml@4bbfa6aafc92a6cb8e823a51d54a6573237e0a76 # v0.2.0
     with:
       commit: ${{ inputs.commit }}
       version: ${{ needs.validate-release.outputs.tag }}

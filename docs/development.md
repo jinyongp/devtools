@@ -100,7 +100,9 @@ pnpm release --publish
 태그 검증 뒤 macOS와 Linux CI를 병렬로 실행한다. Linux CI는 Agent Skill의 local/public `skills` discovery와 실제 Chromium dashboard smoke를 확인하고,
 macOS와 Linux CI는 모두 `just verify`로 설치된 release 시나리오를 통과해야 한다. 두 CI가 성공한 뒤 CLI·Agent Skill을
 패키징하고, 고정 SHA의 `releaseway/actions`가 태그와 커밋·전체 `dist/*` 자산을 검증해
-immutable GitHub Release를 게시한다. 이 경로를 사용하려면 저장소에서 immutable releases를 활성화해야 한다.
+immutable GitHub Release를 게시한다. 릴리즈 노트는 `notes: standard` 기본 템플릿으로
+게시된 이전 릴리즈 이후의 커밋을 Features·Fixes 등으로 분류한다. 이 경로를 사용하려면
+저장소에서 immutable releases를 활성화해야 한다.
 안정 릴리스 게시 후에는 `.github/workflows/pages.yml`이 릴리스의
 `install.sh`를 `jinyongp.dev/devtools/install.sh`에 배포한다. Pages source는 저장소
 설정에서 GitHub Actions로 한 번 활성화해야 하며, workflow를 수동 실행하면 최신 안정

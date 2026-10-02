@@ -11,6 +11,7 @@ import uuid
 
 
 TEST_VERSIONS = ("0.0.0-test.1", "0.0.0-test.2")
+SCENARIO_TIMEOUT_SECONDS = 180
 
 
 def host_target(repository: Path):
@@ -169,12 +170,18 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
                 DEVTOOLS_TEST_CANONICAL_SKILL=str(canonical_skill),
             )
             print(f"Running scenario: {name}", flush=True)
-            result = subprocess.run(
-                [sys.executable, str(scenarios[name])],
-                cwd=home,
-                env=env,
-            )
-            cleaned = cleanup_managed_processes(home, env)
+            try:
+                result = subprocess.run(
+                    [sys.executable, "-u", str(scenarios[name])],
+                    cwd=home,
+                    env=env,
+                    timeout=SCENARIO_TIMEOUT_SECONDS,
+                )
+            except subprocess.TimeoutExpired:
+                print(f"Scenario timed out after {SCENARIO_TIMEOUT_SECONDS}s: {name}", file=sys.stderr, flush=True)
+                return 124
+            finally:
+                cleaned = cleanup_managed_processes(home, env)
             if result.returncode:
                 return result.returncode if result.returncode > 0 else 128 - result.returncode
             if not cleaned:

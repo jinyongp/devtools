@@ -48,6 +48,10 @@ just verify --list
 release와 사용자 데이터가 자동으로 삭제된다. 시나리오가 실패해도 runner가 격리 HOME에서
 시작한 proxy, dashboard, managed process를 정리한 뒤 임시 데이터를 삭제한다.
 
+각 시나리오는 진행 로그를 즉시 출력한다. 180초 안에 끝나지 않으면 해당 시나리오의
+이름과 제한 시간을 stderr에 출력하고, 관리 프로세스를 정리한 뒤 종료 코드 124로
+실패한다. 다음 시나리오는 실행하지 않는다.
+
 Go, Python 3, POSIX sh, tar, Git, curl과 OpenSSL이 필요하다. completion 시나리오는 설치된
 bash·zsh·fish를 감지해 사용할 수 있는 shell만 검증한다. Release CI의 Linux runner는
 zsh와 fish를 명시적으로 설치해 세 shell을 모두 확인한다.

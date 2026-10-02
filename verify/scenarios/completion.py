@@ -5,7 +5,6 @@ from pathlib import Path
 import select
 import shlex
 import shutil
-import signal
 import subprocess
 import time
 import uuid
@@ -134,12 +133,18 @@ for shell in ('bash', 'zsh', 'fish'):
         terminal_env = dict(os.environ, TERM='dumb')
         shell_binary = shutil.which('bash')
         shell_args = [shell_binary, '--noprofile', '--norc', '-i']
-        pid, master = os.forkpty()
-        if pid == 0:
-            try:
-                os.execve(shell_binary, shell_args, terminal_env)
-            except BaseException:
-                os._exit(127)
+        # Readline needs terminal file descriptors; job control is tested by tty.py.
+        # Avoid Python work after fork, which can deadlock on macOS.
+        master, slave = os.openpty()
+        try:
+            process = subprocess.Popen(shell_args, stdin=slave, stdout=slave, stderr=slave,
+                                       env=terminal_env, start_new_session=True)
+        except BaseException:
+            os.close(master)
+            raise
+        finally:
+            os.close(slave)
+        print('Interactive Bash started', flush=True)
 
         def read_until(marker):
             output = b''
@@ -156,6 +161,7 @@ for shell in ('bash', 'zsh', 'fish'):
                      "printf '\\nREVIEW_READY\\n'\n")
             os.write(master, setup.encode())
             read_until(b'\r\nREVIEW_READY\r\n')
+            print('Interactive Bash completion ready', flush=True)
             for prefix, expected in [
                 ('@docs/d', '@docs/dev'), ('@@docs/d', '@@docs/dev'),
                 ('foo:@docs/d', 'foo:@docs/dev'),
@@ -169,23 +175,12 @@ for shell in ('bash', 'zsh', 'fish'):
                 read_until(('\r\nREVIEW_RESULT:2:' + expected + '\r\n').encode())
             assert not Path('COMMAND_NAME_EXECUTED').exists()
             os.write(master, b'exit\n')
-            deadline = time.monotonic() + 3
-            while True:
-                exited, status = os.waitpid(pid, os.WNOHANG)
-                if exited:
-                    pid = None
-                    assert os.waitstatus_to_exitcode(status) == 0, status
-                    break
-                assert time.monotonic() < deadline, 'Interactive Bash did not exit'
-                time.sleep(.01)
+            assert process.wait(timeout=3) == 0, process.returncode
         finally:
-            if pid is not None:
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                os.waitpid(pid, 0)
             os.close(master)
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=3)
         print('bash interactive Readline quoting and special word breaks passed')
     if shell == 'fish':
         result = subprocess.run(

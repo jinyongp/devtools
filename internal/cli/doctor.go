@@ -24,7 +24,7 @@ func (a *App) registerDoctor() {
 		"remedies":         map[string]any{"type": "array", "items": remedySchema()},
 		"expected_version": stringSchema(),
 	}, "id", "status", "message", "remedies")
-	a.commands = append(a.commands, Command{Name: "doctor", Description: "Diagnose project prerequisites; inspect data.ready and checks for actionable failures.", Arguments: []Argument{{Name: "command"}}, Options: options, Output: object(map[string]any{"ready": map[string]any{"type": "boolean"}, "profile": stringSchema(), "directory": stringSchema(), "env": stringSchema(), "command": stringSchema(), "checks": map[string]any{"type": "array", "items": check}}, "ready", "profile", "directory", "env", "command", "checks"), Run: a.diagnose})
+	a.commands = append(a.commands, Command{Name: "doctor", Description: "Diagnose project prerequisites; inspect data.ready and checks for actionable failures.", Arguments: []Argument{{Name: "command", Pattern: project.CommandPattern}}, Options: options, Output: object(map[string]any{"ready": map[string]any{"type": "boolean"}, "profile": stringSchema(), "directory": stringSchema(), "env": stringSchema(), "command": stringSchema(), "checks": map[string]any{"type": "array", "items": check}}, "ready", "profile", "directory", "env", "command", "checks"), Run: a.diagnose})
 }
 
 func (a *App) diagnose(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {

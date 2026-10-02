@@ -1,9 +1,12 @@
 package project
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -124,6 +127,45 @@ func TestCommandDefinitions(t *testing.T) {
 		_, err := parse([]byte("profile='app'\n[commands.test]\n"+definition), "/project/devtools.toml", "/project")
 		if err == nil || err.Code != "invalid_config" {
 			t.Fatalf("accepted %s: %v", definition, err)
+		}
+	}
+}
+
+func TestCommandNameConfiguration(t *testing.T) {
+	cases := []struct {
+		name  string
+		valid bool
+	}{
+		{"docs:dev", true}, {"docs.dev", true}, {"@docs/dev", true},
+		{"docs+dev", true}, {"docs=dev", true}, {"docs dev", true},
+		{"文書:開発", true}, {"docs'\"$;`dev", true}, {"/^docs:/", true},
+		{"_docs", true}, {strings.Repeat("文", 128), true},
+		{"", false}, {"-docs", false}, {"docs\ndev", false},
+		{"docs\rdev", false}, {"docs\tdev", false}, {"docs\x00dev", false},
+		{"docs\x1bdev", false}, {"docs\x7fdev", false}, {"docs\u0085dev", false},
+		{strings.Repeat("x", 129), false}, {strings.Repeat("文", 129), false},
+	}
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%q", tc.name), func(t *testing.T) {
+			key, _ := json.Marshal(tc.name)
+			config := fmt.Sprintf("profile='app'\n[commands.%s]\nexec=['printf','ok']\n", key)
+			p, err := parse([]byte(config), "/project/devtools.toml", "/project")
+			if tc.valid {
+				if err != nil || len(p.Commands) != 1 || len(p.Commands[tc.name].Exec) != 2 {
+					t.Fatalf("command key was not preserved: %+v %v", p, err)
+				}
+			} else if err == nil || err.Code != "invalid_config" {
+				t.Fatalf("invalid command key was accepted: %v", err)
+			}
+		})
+	}
+	for _, config := range []string{
+		"profile='docs:dev'",
+		"profile='app'\n[commands.\"docs:dev\"]\nexec=['printf','ok']\nenv='docs:dev'",
+		"profile='app'\n[ports.\"docs:dev\"]\nport=3000\nrange=[3000,3099]\n",
+	} {
+		if _, err := parse([]byte(config), "/project/devtools.toml", "/project"); err == nil {
+			t.Fatalf("command name rules leaked to other identifiers: %s", config)
 		}
 	}
 }

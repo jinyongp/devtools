@@ -166,7 +166,7 @@ func (a *App) dynamicCandidates(words []string) []string {
 			}
 		}
 		switch {
-		case cmd.Name == "command run" || cmd.Name == "command inspect" || cmd.Name == "process start" || cmd.Name == "project up" || cmd.Name == "project status" || cmd.Name == "project down":
+		case cmd.Name == "command run" || cmd.Name == "command inspect" || cmd.Name == "process start" || cmd.Name == "doctor" || strings.HasPrefix(cmd.Name, "project "):
 			source = "command"
 		case cmd.Name == "env remove":
 			source = "env"
@@ -204,8 +204,11 @@ func (a *App) dynamicCandidates(words []string) []string {
 		if pending == "depends-on" && name == firstArgument || cmd.UniqueArgs && pending == "" && positionalValues[name] {
 			continue
 		}
-		// Candidates are identifiers only. This also prevents shell control text.
-		if !completionIdentifier.MatchString(name) || !strings.HasPrefix(name, prefix) {
+		valid := completionIdentifier.MatchString(name)
+		if source == "command" {
+			valid = project.ValidCommand(name)
+		}
+		if !valid || !strings.HasPrefix(name, prefix) {
 			continue
 		}
 		value := replacement + name

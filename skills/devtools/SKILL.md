@@ -53,6 +53,10 @@ conversation, and logs. Child output and explicitly captured logs may contain se
 Use `command list` to discover configured commands, `command inspect NAME` to
 inspect one, and `command run NAME` for foreground work. Use `process start NAME`
 for a persistent server.
+Command names are literal keys of 1–128 characters. Punctuation, spaces, and Unicode
+are supported; leading `-` and control characters are invalid. Quote TOML keys such
+as `[commands."docs:dev"]` and shell arguments containing spaces or shell syntax.
+`devtools run docs:dev` executes that exact configured name.
 Save the returned execution ID. `process status` reports lifetime; a configured
 `process wait EXECUTION_ID` establishes readiness before dependent work. `process check`
 can exit successfully with `readiness.ready: false`.

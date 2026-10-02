@@ -69,7 +69,33 @@ func (a *App) completionScript(shell string) string {
 		}
 		b.WriteString("_devtools() {\n  local ctx='' skip=0 word i\n")
 		if shell == "bash" {
-			b.WriteString("  COMPREPLY=()\n  local cur=\"${COMP_WORDS[COMP_CWORD]}\" candidate\n  while IFS= read -r candidate; do\n    COMPREPLY+=(\"$candidate\")\n  done < <(printf '%s\\0' \"${COMP_WORDS[@]:1:COMP_CWORD}\" | command devtools __complete 2>/dev/null)\n  for ((i=1; i<COMP_CWORD; i++)); do\n    word=${COMP_WORDS[i]}\n")
+			b.WriteString(`  COMPREPLY=()
+  local -a completion_words=()
+  local remaining="${COMP_LINE-}" j=-1 separator=0
+  # Rejoin ':' and '=' word breaks only when adjacent in the original line.
+  for ((i=0; i<=COMP_CWORD; i++)); do
+    word=${COMP_WORDS[i]}
+    if [[ -n ${COMP_LINE-} && $i -gt 1 && $j -gt 0 && $remaining != [[:blank:]]* ]] &&
+       { [[ $word =~ ^[:=]+$ ]] || [[ $separator == 1 ]]; }; then
+      completion_words[j]+=$word
+    else
+      ((j++))
+      completion_words[j]=$word
+    fi
+    separator=0
+    [[ $word =~ ^[:=]+$ ]] && separator=1
+    remaining=${remaining#*"$word"}
+  done
+  local cur="${completion_words[j]}" candidate trim
+  trim=${cur%"${COMP_WORDS[COMP_CWORD]}"}
+  [[ ${COMP_WORDS[COMP_CWORD]} =~ ^[:=]+$ ]] && trim=$cur
+  while IFS= read -r candidate; do
+    printf -v candidate '%q' "${candidate#"$trim"}"
+    COMPREPLY+=("$candidate")
+  done < <(printf '%s\0' "${completion_words[@]:1}" | command devtools __complete 2>/dev/null)
+  for ((i=1; i<j; i++)); do
+    word=${completion_words[i]}
+`)
 		} else {
 			b.WriteString("  local -a candidates dynamic\n  dynamic=(\"${(@f)$(printf '%s\\0' \"${(@)words[2,CURRENT]}\" | command devtools __complete 2>/dev/null)}\")\n  if [[ -n ${dynamic[1]} ]]; then compadd -a dynamic; fi\n  for ((i=2; i<CURRENT; i++)); do\n    word=${words[i]}\n")
 		}

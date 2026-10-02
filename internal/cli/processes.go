@@ -38,7 +38,7 @@ func (a *App) registerProcesses() {
 			c.Arguments = []Argument{{Name: "execution-id", Required: true, Pattern: uuidPattern}}
 		}
 		if action == "start" {
-			c.Arguments = []Argument{{Name: "command", Required: true, Pattern: project.ProfilePattern}}
+			c.Arguments = []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern}}
 			c.Options = append(c.Options, Option{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory."})
 		}
 		if action == "start" || action == "restart" {

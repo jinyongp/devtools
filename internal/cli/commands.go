@@ -112,7 +112,7 @@ func (a *App) registerCommands() {
 			Aliases:     []string{"cmd inspect"},
 			Description: "Show the effective definition of one configured project command.",
 			Options:     projectOptions,
-			Arguments:   []Argument{{Name: "command", Required: true, Pattern: project.ProfilePattern}},
+			Arguments:   []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern}},
 			Output: object(map[string]any{
 				"profile": stringSchema(),
 				"item":    projectCommandDetailsSchema(),
@@ -124,7 +124,7 @@ func (a *App) registerCommands() {
 			Aliases:     []string{"cmd run", "run"},
 			Description: "Execute a configured command or a command after -- with profile values.",
 			Options:     profileOptions(true),
-			Arguments:   []Argument{{Name: "command", Pattern: project.ProfilePattern}},
+			Arguments:   []Argument{{Name: "command", Pattern: project.CommandPattern}},
 			ChildArgs:   true,
 			OutputMode:  OutputPassthrough,
 			Output:      map[string]any{},

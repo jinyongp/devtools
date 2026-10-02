@@ -2,10 +2,13 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jinyongp/devtools/internal/project"
 )
 
 func TestProjectCommandListInspectAndRunAlias(t *testing.T) {
@@ -101,6 +104,90 @@ exec = ["/bin/true"]
 		code, out, diagnostic = invoke(t, app, "", args...)
 		if code != 0 || out != "zeta" || diagnostic != "" {
 			t.Fatalf("%v: %d %q %q", args, code, out, diagnostic)
+		}
+	}
+}
+
+func TestLiteralProjectCommandNames(t *testing.T) {
+	app := testApp(t)
+	root := privateTempDir(t)
+	t.Chdir(root)
+	names := []string{"docs:dev", "@docs/dev", "docs=dev", "docs dev", "문서:개발", "docs'\"$;`dev", "/^docs:/"}
+	var config strings.Builder
+	config.WriteString("profile='app'\n")
+	for _, name := range names {
+		key, _ := json.Marshal(name)
+		fmt.Fprintf(&config, "[commands.%s]\nexec=['printf','%%s','ran']\n", key)
+	}
+	if err := os.WriteFile("devtools.toml", []byte(config.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		for _, prefix := range [][]string{{"run"}, {"command", "run"}, {"cmd", "run"}} {
+			args := append(append([]string{}, prefix...), name)
+			code, out, stderr := invoke(t, app, "", args...)
+			if code != 0 || out != "ran" || stderr != "" {
+				t.Fatalf("%q: %d %q %q", args, code, out, stderr)
+			}
+		}
+		code, out, stderr := invoke(t, app, "", "command", "inspect", name)
+		var response struct {
+			Data struct {
+				Item projectCommandDetails `json:"item"`
+			} `json:"data"`
+		}
+		if code != 0 || stderr != "" || json.Unmarshal([]byte(out), &response) != nil || response.Data.Item.Name != name {
+			t.Fatalf("inspect lost key %q: %d %q %q", name, code, out, stderr)
+		}
+		for _, prefix := range [][]string{{"run"}, {"command", "inspect"}, {"process", "start"}, {"project", "up"}, {"project", "restart"}, {"project", "logs"}} {
+			words := append(append([]string{}, prefix...), name)
+			code, out, stderr := invoke(t, app, strings.Join(words, "\x00")+"\x00", "__complete")
+			if code != 0 || out != name+"\n" || stderr != "" {
+				t.Fatalf("completion lost key %q: %d %q %q", words, code, out, stderr)
+			}
+		}
+	}
+	code, _, stderr := invoke(t, app, "", "run", "docs:dev", "--profile", "app:bad")
+	if code != 2 || !strings.Contains(stderr, `"field":"profile"`) {
+		t.Fatalf("profile identifier rules changed: %d %q", code, stderr)
+	}
+}
+
+func TestAllCommandNameArguments(t *testing.T) {
+	app := New("test", "test")
+	for _, command := range app.commands {
+		switch command.Name {
+		case "command run", "command inspect", "process start", "project up", "project status", "project restart", "project logs", "project down", "doctor":
+		default:
+			continue
+		}
+		for _, argument := range command.Arguments {
+			if argument.Name != "command" {
+				continue
+			}
+			if argument.Pattern != project.CommandPattern {
+				t.Fatalf("%s uses a different command name contract: %q", command.Name, argument.Pattern)
+			}
+			for _, name := range []string{"docs:dev", "@docs/dev", "문서 개발"} {
+				args := []string{name}
+				for _, option := range command.Options {
+					if option.Name == "request-id" {
+						args = append(args, "--request-id", "00000000-0000-0000-0000-000000000001")
+					}
+				}
+				if _, err := parseRequest(command, args); err != nil {
+					t.Fatalf("%s rejected %q: %v", command.Name, name, err)
+				}
+			}
+			for _, name := range []string{"bad\nname", "bad\tname", strings.Repeat("x", 129)} {
+				args := []string{name, "--request-id", "00000000-0000-0000-0000-000000000001"}
+				if command.Name == "command run" || command.Name == "command inspect" || command.Name == "project status" || command.Name == "project logs" || command.Name == "doctor" {
+					args = args[:1]
+				}
+				if _, err := parseRequest(command, args); err == nil || err.Details["field"] != "command" {
+					t.Fatalf("%s accepted invalid key %q", command.Name, name)
+				}
+			}
 		}
 	}
 }

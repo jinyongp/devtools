@@ -92,8 +92,8 @@ func (a *App) projectLifecycleManager() (lifecycle.Manager, *protocol.Error) {
 }
 
 func (a *App) registerProjectLifecycle() {
-	commandArgument := Argument{Name: "command", Required: true, Repeatable: true, Pattern: project.ProfilePattern}
-	optionalCommands := Argument{Name: "command", Repeatable: true, Pattern: project.ProfilePattern}
+	commandArgument := Argument{Name: "command", Required: true, Repeatable: true, Pattern: project.CommandPattern}
+	optionalCommands := Argument{Name: "command", Repeatable: true, Pattern: project.CommandPattern}
 	directory := Option{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory."}
 
 	a.commands = append(a.commands,
@@ -139,7 +139,7 @@ func (a *App) registerProjectLifecycle() {
 		Command{
 			Name:        "project logs",
 			Description: "Read retained output for one active command in the current project instance.",
-			Arguments:   []Argument{{Name: "command", Required: true, Pattern: project.ProfilePattern}},
+			Arguments:   []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern}},
 			Options:     []Option{directory},
 			Output: object(map[string]any{
 				"id":      stringSchema(),

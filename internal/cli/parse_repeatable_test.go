@@ -13,20 +13,20 @@ func TestRepeatableFinalArgumentParsingAndDiscovery(t *testing.T) {
 		Name:        "repeat",
 		Aliases:     []string{},
 		Description: "Repeat commands.",
-		Arguments:   []Argument{{Name: "command", Required: true, Repeatable: true, Pattern: project.ProfilePattern}},
+		Arguments:   []Argument{{Name: "command", Required: true, Repeatable: true, Pattern: project.CommandPattern}},
 		UniqueArgs:  true,
 		Options:     []Option{},
 		OutputMode:  OutputJSON,
 		Output:      object(map[string]any{"items": map[string]any{"type": "array"}}, "items"),
 	}
-	request, err := parseRequest(command, []string{"web", "api", "worker"})
-	if err != nil || !reflect.DeepEqual(request.Args, []string{"web", "api", "worker"}) {
+	request, err := parseRequest(command, []string{"docs:dev", "@api/dev", "worker job"})
+	if err != nil || !reflect.DeepEqual(request.Args, []string{"docs:dev", "@api/dev", "worker job"}) {
 		t.Fatalf("repeatable positional parse failed: %#v %v", request.Args, err)
 	}
 	if _, err := parseRequest(command, nil); err == nil || err.Code != "invalid_argument" || err.Details["field"] != "command" {
 		t.Fatalf("missing repeated argument was accepted: %#v", err)
 	}
-	if _, err := parseRequest(command, []string{"web", "bad/value"}); err == nil || err.Code != "invalid_argument" || err.Details["field"] != "command" {
+	if _, err := parseRequest(command, []string{"web", "bad\nvalue"}); err == nil || err.Code != "invalid_argument" || err.Details["field"] != "command" {
 		t.Fatalf("invalid repeated argument was accepted: %#v", err)
 	}
 	if _, err := parseRequest(command, []string{"web", "web"}); err == nil || err.Code != "invalid_argument" {
@@ -55,7 +55,7 @@ func TestRepeatableFinalArgumentParsingAndDiscovery(t *testing.T) {
 }
 
 func TestOptionalRepeatableFinalArgumentAllowsZero(t *testing.T) {
-	command := Command{Name: "repeat", Arguments: []Argument{{Name: "command", Repeatable: true, Pattern: project.ProfilePattern}}}
+	command := Command{Name: "repeat", Arguments: []Argument{{Name: "command", Repeatable: true, Pattern: project.CommandPattern}}}
 	request, err := parseRequest(command, nil)
 	if err != nil || len(request.Args) != 0 {
 		t.Fatalf("optional repeatable argument rejected zero values: %#v %v", request.Args, err)

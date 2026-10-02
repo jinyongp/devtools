@@ -49,7 +49,7 @@ devtools completion fish > ~/.config/fish/completions/devtools.fish
 | `--profile` | 값·task 저장소와 현재 프로젝트의 profile 이름 |
 | 값 명령·`command run`·`run`·`process start`의 `--env`, `env remove` | 선택한 profile의 env 이름 |
 | `var get/set/unset`, `sec set/unset` | 선택한 profile·env에서 사용할 수 있는 키 이름 |
-| `command inspect`, `command run`, `run`, `process start` | `devtools.toml`에 정의한 명령 이름 |
+| `command inspect`, `command run`, `run`, `process start`, `doctor`, `project up/status/restart/logs/down` | `devtools.toml`에 정의한 명령 이름 |
 | task·workstream·validation의 ID 인수 | 해당 종류의 ID |
 | `--workstream`, `--task`, `--task-ids`, `--validation-ids`, `--depends-on` | 해당 관계에 맞는 ID |
 | `task checkpoint`, `task release`, `task checkpoint list` | 실행 run ID |
@@ -60,6 +60,8 @@ devtools completion fish > ~/.config/fish/completions/devtools.fish
 
 예를 들어 `devtools var get --env local ` 뒤에서 Tab을 누르면 `local`에서 사용할 수 있는
 변수 키를 고를 수 있습니다. `devtools task show ` 뒤에서는 task ID를 고릅니다.
+`devtools run docs:` 뒤에서는 `docs:dev`처럼 특수문자가 포함된 명령 이름도 고릅니다.
+Bash 자동완성은 공백과 셸 문법 문자를 escape해 이름을 하나의 인수로 전달합니다.
 
 후보에는 이름과 ID만 포함합니다. 변수·secret의 값, task 본문, 실행 점유 증명은
 자동완성으로 노출하지 않습니다. 값을 받는 일반 옵션 다음에는 직접 값을 입력하며,

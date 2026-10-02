@@ -284,6 +284,25 @@ devtools command run lint
 
 `exec` 배열의 첫 항목은 실행 파일이고, 나머지는 해당 프로그램에 전달할 인자다. 각 이름은 단일 명령을 실행한다.
 
+명령 이름은 1~128자로, `:`·`/`·`@` 같은 특수문자와 공백·한글을 사용할 수 있다.
+첫 글자 `-`와 제어문자(NUL, 줄바꿈, 탭 등)는 허용하지 않는다.
+이름은 입력한 문자열 그대로 조회하며 정규식이나 namespace로 해석하지 않는다.
+TOML에서는 특수문자가 포함된 key를 따옴표로 감싸고, 셸에서는 공백이나 셸 문법 문자가
+포함된 이름을 따옴표로 감싸거나 escape한다.
+
+```toml
+[commands."docs:dev"]
+exec = ["pnpm", "run", "docs:dev"]
+
+[commands."문서 개발"]
+exec = ["pnpm", "run", "docs:dev"]
+```
+
+```sh
+devtools run docs:dev
+devtools run '문서 개발'
+```
+
 | 설정 | 동작 |
 | --- | --- |
 | `inject = false` 또는 생략 | 부모 프로세스의 환경을 상속한다. |

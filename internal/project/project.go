@@ -47,9 +47,14 @@ type Context struct {
 
 const ProfilePattern = `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`
 
+// Command names are literal keys, with controls and leading option markers excluded.
+const CommandPattern = `^[^-\x00-\x1F\x7F-\x9F][^\x00-\x1F\x7F-\x9F]{0,127}$`
+
 var profilePattern = regexp.MustCompile(ProfilePattern)
+var commandPattern = regexp.MustCompile(CommandPattern)
 
 func ValidProfile(profile string) bool { return profilePattern.MatchString(profile) }
+func ValidCommand(name string) bool    { return commandPattern.MatchString(name) }
 
 // Resolve gives an explicit profile precedence over filesystem configuration.
 // Otherwise it searches upward, including but never crossing a .git boundary.
@@ -115,7 +120,7 @@ func parse(data []byte, path, root string) (Context, *protocol.Error) {
 		if !command.Requirements.Valid() || !config.Requirements.Merge(command.Requirements).Valid() {
 			return Context{}, protocol.NewError("invalid_config", "Invalid command requirements.", 3, map[string]any{"path": path, "field": "commands"})
 		}
-		if !ValidProfile(name) || len(command.Exec) == 0 || command.Exec[0] == "" || (command.Env != "" && !ValidProfile(command.Env)) {
+		if !ValidCommand(name) || len(command.Exec) == 0 || command.Exec[0] == "" || (command.Env != "" && !ValidProfile(command.Env)) {
 			return Context{}, protocol.NewError("invalid_config", "Invalid command definition.", 3, map[string]any{"path": path, "field": "commands"})
 		}
 		for _, arg := range command.Exec {

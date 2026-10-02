@@ -1,32 +1,36 @@
 # devtools
 
-devtools는 프로젝트의 개발환경과 작업을 한곳에서 관리하는 CLI입니다.
-환경변수와 secret을 저장해 명령 실행에 사용하고, 개발 서버의 실행·포트·로컬 주소를
-관리할 수 있습니다. 작업과 진행 기록을 남겨 다른 세션이나 에이전트에서 이어갈 수도 있습니다.
-macOS, Linux, WSL에서 사용할 수 있습니다.
+[English](README.md) | [한국어](README.ko.md)
 
-## 설치
+devtools is a CLI for managing your project's development environment and work.
+Store environment variables and secrets, pass them to commands, and manage
+development servers, ports, and local URLs. Track tasks and progress so you can
+pick up where you left off in another session or with a coding agent.
+It runs on macOS, Linux, and WSL.
 
-Homebrew를 사용한다면 다음 명령으로 설치하세요. 설치 후 바로 `devtools`로 실행할 수 있습니다.
+## Install
+
+If you use Homebrew, install devtools with:
 
 ```sh
 brew install jinyongp/tap/devtools
 ```
 
-Homebrew는 zsh·bash·fish 자동완성 파일도 함께 설치합니다. 셸 자동완성이 활성화되어
-있으면 `devtools` 뒤에서 Tab으로 명령과 옵션을 고를 수 있습니다.
-[자동완성 설정](docs/completion.md)에서 셸별 설정 방법을 확인하세요.
+Homebrew also installs completion files for zsh, bash, and fish. Once shell
+completion is enabled, press Tab after `devtools` to explore commands and options.
+See the [completion guide](docs/completion.md) for shell setup.
 
-### 설치 스크립트 사용
+### Install script
 
-아래 명령을 터미널에 붙여 넣으세요. 설치기가 운영체제와 CPU를 확인해 최신 안정
-버전을 `~/.local/bin/devtools`에 설치하고 짧은 명령 `dvt`도 제공합니다. curl이 필요합니다.
+Paste the following command into your terminal. The installer detects your
+operating system and CPU, installs the latest stable release to
+`~/.local/bin/devtools`, and provides the shorter command `dvt`. You need curl.
 
 ```sh
 curl -fsSL https://jinyongp.dev/devtools/install.sh | sh
 ```
 
-설치한 명령을 어디서든 실행할 수 있도록 설치 경로를 PATH에 추가하세요.
+Add the install directory to your PATH so you can run devtools from anywhere:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
@@ -34,14 +38,14 @@ devtools version
 dvt version
 ```
 
-새 터미널에서도 사용하려면 위의 `export` 줄을 사용하는 셸의 설정 파일
-(예: zsh의 `~/.zshrc`)에 추가하세요.
-[설치 안내](docs/install.md)에서 버전 지정과 설치 위치 변경 방법을 확인할 수 있습니다.
+To keep this setting in new terminals, add the `export` line to your shell's
+configuration file, such as `~/.zshrc` for zsh. See the [installation guide](docs/install.md)
+for choosing a version or a different install location.
 
-## 시작하기
+## Get started
 
-프로젝트 디렉터리로 이동한 뒤 아래 예시를 실행해 보세요. `myapp`은 프로젝트를
-구분하는 profile 이름입니다. 사용할 프로젝트 이름으로 바꾸면 됩니다.
+Open your project directory and run the example below. `myapp` is the profile
+name that identifies your project; replace it with your own project name.
 
 ```sh
 devtools init --profile myapp
@@ -51,63 +55,68 @@ devtools var set LOG_LEVEL --env local --value debug
 devtools run --env local -- sh -c 'echo "$LOG_LEVEL"'
 ```
 
-이 예시는 공통 `LOG_LEVEL`을 `info`로 등록하고, `local` 환경에서는 `debug`로
-덮어씁니다. 마지막 명령이 `debug`를 출력하면 환경변수 주입이 동작한 것입니다.
-실제 프로젝트에서는 `sh -c ...` 자리에 `pnpm dev`, `go run .` 등 기존 실행 명령을 넣으세요.
+This sets `LOG_LEVEL` to `info` by default and overrides it with `debug` in the
+`local` environment. The final command prints `debug`, showing that devtools
+passed the environment variable to the command. In your project, replace
+`sh -c ...` with your usual command, such as `pnpm dev` or `go run .`.
 
-생성된 `devtools.toml`은 Git에 커밋해 두세요. 같은 profile을 사용하는 프로젝트와
-worktree는 저장한 값을 공유합니다. 환경변수와 secret은 사용자 전용 권한의 평문 파일로
-저장되며, 백업은 별도로 암호화합니다. secret 등록과 프로젝트 명령 설정은
-[값과 실행 가이드](docs/cli-contract.md)를 참고하세요.
+Commit the generated `devtools.toml` to Git. Projects and worktrees that use the
+same profile share stored values. Environment variables and secrets are stored
+in plaintext files accessible only to your user account; backups are encrypted
+separately. See [values and command execution](docs/cli-contract.md) to add
+secrets and configure project commands.
 
-명령 사용법이 필요하면 `devtools --help` 또는 `devtools task --help`처럼
-기능별 도움말을 확인하세요. 등록한 프로젝트 명령은 `devtools command list`로 볼 수 있습니다.
+Use `devtools --help` or a command's help, such as `devtools task --help`, to
+explore the CLI. Run `devtools command list` to see your configured project commands.
 
-## 사용 가이드
+## Guides
 
-| 하고 싶은 일 | 안내 |
+The detailed guides below are currently in Korean.
+
+| What you want to do | Guide |
 | --- | --- |
-| 변수·secret 등록, 기존 .env 가져오기, 명령 실행 | [값과 실행](docs/cli-contract.md) |
-| 실행에 필요한 도구·설정 확인, 설치 상태 점검 | [환경 진단](docs/doctor.md) |
-| 포트 충돌 관리, 다른 프로젝트 URL 연결 | [포트](docs/ports.md) |
-| worktree별 `.localhost` 주소로 개발 서버 연결 | [로컬 reverse proxy](docs/proxy.md) |
-| 서버 실행·상태·로그·재시작 관리 | [프로세스](docs/processes.md) · [준비 확인](docs/process-readiness.md) |
-| 계획 수립, 작업 분담, 세션 인계 | [task와 workstream](docs/tasks.md) |
-| 브라우저에서 환경변수와 작업 관리 | `devtools dashboard`를 실행한 뒤 출력된 접속 링크 열기 |
-| 프로젝트 설정 비교, 다른 컴퓨터로 이동 | [Profile 관리](docs/profiles.md) |
-| 암호화 백업·복구, 오래된 데이터 정리 | [백업](docs/backup.md) · [정리](docs/cleanup.md) |
+| Store variables and secrets, import .env files, and run commands | [Values and command execution](docs/cli-contract.md) |
+| Check required tools, configuration, and installation status | [Environment diagnostics](docs/doctor.md) |
+| Avoid port conflicts and connect to other project URLs | [Ports](docs/ports.md) |
+| Give each worktree a `.localhost` URL for its development server | [Local reverse proxy](docs/proxy.md) |
+| Run servers, check status and logs, and restart them | [Processes](docs/processes.md) · [Readiness checks](docs/process-readiness.md) |
+| Plan work, share tasks, and hand off between sessions | [Tasks and workstreams](docs/tasks.md) |
+| Manage environment variables and tasks in a browser | Run `devtools dashboard` and open the URL it prints |
+| Compare project settings or move to another computer | [Profiles](docs/profiles.md) |
+| Back up and restore data, or remove old data | [Backups](docs/backup.md) · [Cleanup](docs/cleanup.md) |
 
-## 에이전트와 사용하기
+## Use with a coding agent
 
-사용 중인 코딩 에이전트에 devtools Skill을 설치하면 프로젝트 준비, 서버 관리,
-작업 기록에 필요한 사용 지침을 제공할 수 있습니다.
+Install the devtools Skill to give your coding agent instructions for setting up
+projects, managing servers, and recording progress:
 
 ```sh
 npx skills add jinyongp/devtools
 ```
 
-설치 도구가 에이전트를 감지하고 설치 위치를 안내합니다. 모든 프로젝트에서 사용하려면
-`--global`을 추가하세요. 자세한 설정과 업데이트는 [Agent Skill 설치](docs/agent-skill.md)를 참고하세요.
+The installer detects your agents and guides you through the install location.
+Add `--global` to use the Skill across projects. See [Agent Skill setup](docs/agent-skill.md)
+for configuration and updates.
 
-## 업데이트
+## Update
 
-Homebrew로 설치했다면 Homebrew로 업데이트하세요.
+If you installed with Homebrew, update with Homebrew:
 
 ```sh
 brew upgrade jinyongp/tap/devtools
 ```
 
-설치 스크립트로 설치했다면 `devtools update`로 최신 안정 버전으로 갱신합니다.
+If you used the install script, run `devtools update` to get the latest stable release:
 
 ```sh
 devtools update
 ```
 
-기존 profile 데이터와 프로젝트 설정을 유지하며 실행 파일을 교체합니다.
-완료 후 `devtools version`으로 새 버전을 확인하세요.
+The update replaces the executable and preserves your profile data and project
+configuration. Check the new version with `devtools version`.
 
-에이전트와 사용한다면 [Skill도 함께 업데이트](docs/agent-skill.md#업데이트)하세요.
-CLI와 Skill은 각각 사용하는 설치 도구로 갱신합니다.
+If you use a coding agent, [update the Skill too](docs/agent-skill.md#업데이트).
+The CLI and Skill are updated separately through their respective installers.
 
-MIT 라이선스로 제공됩니다. 자세한 내용은 [LICENSE](LICENSE)를 참고하세요.
-프로젝트 개발과 기여는 [개발 안내](docs/development.md)를 참고하세요.
+devtools is available under the [MIT license](LICENSE).
+See the [development guide](docs/development.md) to contribute to the project.

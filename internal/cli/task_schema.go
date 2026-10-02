@@ -53,6 +53,12 @@ func taskBody(def tasks.Definition) map[string]any {
 		properties[field] = s
 	}
 	body := object(properties, def.Required...)
+	if def.Action == "validation.add" {
+		body["oneOf"] = []any{
+			map[string]any{"required": []string{"task_id"}, "not": map[string]any{"required": []string{"workstream_id"}}},
+			map[string]any{"required": []string{"workstream_id"}, "not": map[string]any{"required": []string{"task_id"}}},
+		}
+	}
 	if strings.HasSuffix(def.Action, ".update") {
 		body["minProperties"] = 1
 	}
@@ -137,9 +143,6 @@ func editBodySchema() map[string]any {
 				if kind == "validation" && action == "add" {
 					p["task_id"] = ref
 					p["workstream_id"] = map[string]any{"type": "string", "format": "uuid"}
-					value["oneOf"] = []any{
-						map[string]any{"required": []string{"task_id"}, "not": map[string]any{"required": []string{"workstream_id"}}}, map[string]any{"required": []string{"workstream_id"}, "not": map[string]any{"required": []string{"task_id"}}},
-					}
 				}
 			} else {
 				p := map[string]any{"text": text}

@@ -9,9 +9,12 @@ compatibility: Requires the devtools CLI in PATH and filesystem access to the ta
 
 ## Discover only what you need
 
+Check `devtools version` for the installed build before using release-specific behavior.
 Start with `devtools <group> --help`. For structured input, request one contract,
 such as `devtools schema task claim`. Bare `schema` lists groups; `schema --all`
-is for explicit full-catalog work. Reuse discovered contracts during the session.
+is for explicit full-catalog work. Reuse discovered contracts for the same installed
+build; rediscover affected contracts after upgrading the CLI. A published release
+does not update the installed CLI or this Skill automatically.
 Command examples here name operations; obtain required flags from their help.
 
 Resolve the profile from tracked `devtools.toml` or explicit `--profile`.
@@ -53,10 +56,13 @@ conversation, and logs. Child output and explicitly captured logs may contain se
 Use `command list` to discover configured commands, `command inspect NAME` to
 inspect one, and `command run NAME` for foreground work. Use `process start NAME`
 for a persistent server.
-Command names are literal keys of 1–128 characters. Punctuation, spaces, and Unicode
-are supported; leading `-` and control characters are invalid. Quote TOML keys such
-as `[commands."docs:dev"]` and shell arguments containing spaces or shell syntax.
-`devtools run docs:dev` executes that exact configured name.
+In devtools 0.22.2 and newer, command names are literal keys of 1–128 characters.
+Punctuation, spaces, and Unicode are supported; leading `-` and control characters
+are invalid. For example, `[commands."dev:docs"]` with `exec = ["pnpm", "run", "docs:dev"]`
+is executed by `devtools run dev:docs`. Quote TOML keys containing punctuation and
+shell arguments containing spaces or shell syntax. Profile, env, port, and proxy
+names keep their separate identifier rules. Check `devtools schema command run`
+for the installed command-name contract; CLI and Skill updates are separate.
 Save the returned execution ID. `process status` reports lifetime; a configured
 `process wait EXECUTION_ID` establishes readiness before dependent work. `process check`
 can exit successfully with `readiness.ready: false`.

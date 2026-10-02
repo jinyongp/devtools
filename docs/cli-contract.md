@@ -284,14 +284,14 @@ devtools command run lint
 
 `exec` 배열의 첫 항목은 실행 파일이고, 나머지는 해당 프로그램에 전달할 인자다. 각 이름은 단일 명령을 실행한다.
 
-명령 이름은 1~128자로, `:`·`/`·`@` 같은 특수문자와 공백·한글을 사용할 수 있다.
+devtools 0.22.2 이상에서 명령 이름은 1~128자로, `:`·`/`·`@` 같은 특수문자와 공백·한글을 사용할 수 있다.
 첫 글자 `-`와 제어문자(NUL, 줄바꿈, 탭 등)는 허용하지 않는다.
 이름은 입력한 문자열 그대로 조회하며 정규식이나 namespace로 해석하지 않는다.
 TOML에서는 특수문자가 포함된 key를 따옴표로 감싸고, 셸에서는 공백이나 셸 문법 문자가
 포함된 이름을 따옴표로 감싸거나 escape한다.
 
 ```toml
-[commands."docs:dev"]
+[commands."dev:docs"]
 exec = ["pnpm", "run", "docs:dev"]
 
 [commands."문서 개발"]
@@ -299,9 +299,17 @@ exec = ["pnpm", "run", "docs:dev"]
 ```
 
 ```sh
-devtools run docs:dev
+devtools run dev:docs
 devtools run '문서 개발'
 ```
+
+`dev:docs`는 devtools가 조회하는 명령 이름이고, `docs:dev`는 `pnpm run`에 전달하는
+프로젝트 스크립트 이름이다. 두 이름은 같을 필요가 없다. profile·env·port·proxy 이름은
+명령 이름과 별도의 규칙을 사용한다.
+
+에이전트나 CLI가 콜론을 거부하면 `devtools version`과 `devtools schema command run`으로
+실제로 실행되는 설치본을 확인한다. 최신 릴리즈를 게시해도 설치된 CLI와 Agent Skill은
+각각 업데이트해야 한다. [Agent Skill 업데이트](agent-skill.md#업데이트)를 참고한다.
 
 | 설정 | 동작 |
 | --- | --- |

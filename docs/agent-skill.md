@@ -37,6 +37,8 @@ npx skills list --global
 ## 업데이트
 
 CLI와 Agent Skill은 각각 사용하는 설치 도구로 업데이트합니다.
+릴리즈 게시만으로 현재 설치본이 바뀌지는 않습니다. `devtools version`으로 실제 실행되는
+CLI 버전을 확인하고, 에이전트도 업데이트한 Skill을 다시 읽도록 새 세션에서 사용하세요.
 
 Homebrew로 devtools를 설치했다면:
 
@@ -61,6 +63,11 @@ npx skills update devtools --global
 Skill은 현재 devtools 명령을 `--help`와 `schema`로 발견하도록 작성되어 있습니다.
 CLI를 오래된 버전으로 고정해서 사용하는 환경에서는 Skill도 그 환경에서 실제 제공하는
 명령 계약을 기준으로 동작해야 합니다.
+
+예를 들어 devtools 0.22.2 이상에서는 `[commands."dev:docs"]`를 정의하고
+`devtools run dev:docs`로 실행할 수 있습니다. 콜론을 거부하는 설치본이라면
+`devtools version`과 `devtools schema command run`을 확인한 뒤 CLI와 Skill을
+업데이트하세요. 업데이트 전 세션에서 읽은 명령 계약도 다시 조회해야 합니다.
 
 ## 제거
 

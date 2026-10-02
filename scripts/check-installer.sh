@@ -52,3 +52,14 @@ HOME="$home" sh scripts/install.sh \
 grep -F '"action":"install"' "$scratch/result.json" >/dev/null
 [ -x "$bin_dir/devtools" ]
 "$bin_dir/devtools" version | grep -F '"version":"'"$version"'"' >/dev/null
+
+# Relative destinations are relative to the caller, even with a shell CDPATH.
+installer="$(CDPATH='' cd -- scripts && pwd -P)/install.sh"
+mkdir -p "$scratch/caller/bin" "$scratch/elsewhere/bin"
+(
+  cd "$scratch/caller"
+  HOME="$home" CDPATH="$scratch/elsewhere" sh "$installer" \
+    --version "$version" --source "$release" --bin-dir bin > "$scratch/relative.json"
+)
+[ -x "$scratch/caller/bin/devtools" ]
+[ ! -e "$scratch/elsewhere/bin/devtools" ]

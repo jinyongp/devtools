@@ -20,7 +20,7 @@ CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" go build -trimpath \
 archive="devtools_${VERSION}_${target_os}_${target_arch}.tar.gz"
 tar -czf "$output/$archive" -C "$scratch" devtools
 (
-  cd "$output"
+  CDPATH='' cd -- "$output"
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$archive" > "$archive.sha256"
   else

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +9,7 @@ import test from 'node:test';
 
 const releaseScript = fileURLToPath(new URL('./release.mjs', import.meta.url));
 const tagScript = fileURLToPath(new URL('./publish-release-tag.sh', import.meta.url));
+const packageScript = fileURLToPath(new URL('./package.sh', import.meta.url));
 
 function fixture(t, inherited = {}) {
   const root = mkdtempSync(join(tmpdir(), 'devtools-release-test-'));
@@ -76,6 +78,21 @@ test('fixture setup cannot mutate an inherited caller repository or index', t =>
   assert.deepEqual(readFileSync(index), before);
   assert.deepEqual(readFileSync(join(caller.repository, '.git', 'config')), config);
   assert.equal(inner.git('rev-parse', '--show-toplevel'), inner.repository);
+});
+
+test('relative package output ignores inherited CDPATH when writing checksums', t => {
+  const f = fixture(t);
+  const elsewhere = join(f.root, 'elsewhere');
+  mkdirSync(join(elsewhere, 'dist'), { recursive: true });
+  writeFileSync(join(f.root, 'go'), '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do\nif [ "$1" = -o ]; then printf fixture > "$2"; exit 0; fi\nshift\ndone\nexit 1\n');
+  chmodSync(join(f.root, 'go'), 0o755);
+  const result = spawnSync('sh', [packageScript], { cwd: f.repository, encoding: 'utf8',
+    env: { ...f.env, VERSION: '0.0.0-test', COMMIT: 'test', TARGET_OS: 'linux',
+      TARGET_ARCH: 'amd64', OUTPUT_DIR: 'dist', CDPATH: elsewhere } });
+  assert.equal(result.status, 0, result.stderr);
+  const archive = 'devtools_0.0.0-test_linux_amd64.tar.gz';
+  const digest = createHash('sha256').update(readFileSync(join(f.repository, 'dist', archive))).digest('hex');
+  assert.equal(readFileSync(join(f.repository, 'dist', archive + '.sha256'), 'utf8').split(/\s/)[0], digest);
 });
 
 test('version baseline uses published stable releases, excluding failed tags and drafts', t => {

@@ -56,7 +56,7 @@ case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *
 
 archive="devtools_${version}_${platform}_${arch}.tar.gz"
 mkdir -p "$bin_dir" || fail 'Cannot create installation directory.'
-bin_dir=$(cd "$bin_dir" && pwd -P)
+bin_dir=$(CDPATH='' cd -- "$bin_dir" && pwd -P)
 destination="$bin_dir/devtools"
 alias_destination="$bin_dir/dvt"
 lock="$bin_dir/.devtools-install.lock"

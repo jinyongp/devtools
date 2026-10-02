@@ -22,6 +22,14 @@ func TestCurrentQueriesAgreeOnStaleAndRemoved(t *testing.T) {
 	if e != nil || len(rows["items"].([]any)) != 1 {
 		t.Fatal(rows, e)
 	}
+	rows, e = s.Query(context.Background(), Query{Command: "list", Options: map[string]string{"scope": "included"}})
+	if e != nil || len(rows["items"].([]any)) != 1 {
+		t.Fatal("explicit included scope hid current completion", rows, e)
+	}
+	rows, e = s.Query(context.Background(), Query{Command: "list"})
+	if e != nil || len(rows["items"].([]any)) != 0 {
+		t.Fatal("implicit queue did not hide current completion", rows, e)
+	}
 	before, _ := s.Read(context.Background())
 	call(t, s, "workstream.edited", w, editBody(Object{"op": "task.update", "id": task, "value": Object{"description": "changed"}}))
 	rows, e = s.Query(context.Background(), Query{Command: "list"})

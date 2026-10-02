@@ -525,7 +525,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 			if completion != "" && completion != "all" && status != completion {
 				continue
 			}
-			if state == "" && completion == "" && scope != "removed" && scope != "all" && (i.State == "done" && status != "stale" || i.State == "canceled") {
+			if state == "" && completion == "" && scope == "" && (i.State == "done" && status != "stale" || i.State == "canceled") {
 				continue
 			}
 			if state != "" && state != "all" && i.State != state {

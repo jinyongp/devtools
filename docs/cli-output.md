@@ -1,7 +1,7 @@
 # CLI 출력 계약
 
-이 문서는 아직 배포하지 않은 `main` 소스의 CLI protocol v6 입력·출력 규칙을 설명합니다.
-현재 안정 버전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
+이 문서는 v0.23.0부터 적용되는 CLI protocol v6 입력·출력 규칙을 설명합니다.
+이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
 
@@ -17,7 +17,7 @@
 | `passthrough` | `command run`, 별칭 `run` | 자식 프로그램의 출력 원문 |
 
 devtools 옵션 위치의 `--help`는 텍스트 도움말을 반환합니다. `devtools run --help`는
-devtools 도움말입니다. 자식 프로그램의 도움말은 안정 버전에서
+devtools 도움말입니다. 자식 프로그램의 도움말은 protocol v5에서
 `devtools run NAME -- --help`로 요청하며, protocol v6에서는 `devtools run NAME --help`도
 같이 동작합니다. 이때는 그 프로그램의 출력을 그대로 전달합니다.
 내부 자동완성 요청인 `__complete`는 공개 명령 카탈로그에 포함하지 않는 줄 단위 프로토콜입니다.

@@ -6,8 +6,8 @@
 [포트 관리 계약](port-design.md)을 따른다. worktree별 `.localhost` route는
 [로컬 reverse proxy](proxy.md)를 참고한다. 저장된 profile의 조회·비교·환경 간 이동은
 [Profile 관리](profiles.md), `project up/status/logs/restart/down`은 [프로세스 관리](processes.md#프로젝트-서버를-함께-관리하기)를 따른다.
-현재 안정 버전 v0.22.3은 CLI protocol v5를 사용한다. 아직 배포하지 않은 `main` 소스는
-protocol v6이며, `run`의 인자 구분 규칙이 바뀐다. 버전별 사용법은 아래 명령 실행 절에,
+v0.23.0부터 CLI protocol v6를 사용하며, `run`의 인자 구분 규칙이 바뀐다.
+이전 v0.22.3은 protocol v5를 사용한다. 버전별 사용법은 아래 명령 실행 절에,
 전환 규칙은 [CLI 출력 계약](cli-output.md#protocol-v6-마이그레이션)에 정리했다.
 
 이 문서는 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `import`, `env`, `command`의 사용법을 다룬다. `run`은 `command run`의 호환 alias다. 전체 기능 안내는 [README](../README.md), 설치된 바이너리의 명령 목록은 `devtools schema`에서 확인한다. 예시는 설치한 `devtools`가 PATH에 있는 환경을 기준으로 한다.
@@ -342,7 +342,7 @@ devtools command run --env local lint
 ### 이름 명령에 추가 인자 전달
 
 추가 인자는 `exec` 배열 끝에 순서대로 붙는다. devtools 옵션인 `--profile`, `--env`는
-명령 이름 앞에 두면 안정 버전과 `main`에서 모두 사용할 수 있다.
+명령 이름 앞에 두면 protocol v5와 v6에서 모두 사용할 수 있다.
 
 ```toml
 [commands.test]
@@ -365,16 +365,16 @@ devtools run test -- --help
 devtools run --help
 ```
 
-이 `NAME -- ARG...` 형식은 현재 안정 버전 v0.22.3과 `main`에서 모두 지원한다.
+이 `NAME -- ARG...` 형식은 v0.22.3과 v0.23.0 이상에서 모두 지원한다.
 공백을 포함한 인자도 입력한 경계를 유지해 전달한다. `exec`에 셸을 지정했다면
 추가 인자의 의미는 해당 셸의 호출 규칙을 따른다.
 
-아직 배포하지 않은 `main`의 CLI protocol v6에서는 `--`를 생략할 수 있다.
+v0.23.0부터 적용되는 CLI protocol v6에서는 `--`를 생략할 수 있다.
 명령 이름 앞에서만 devtools 옵션을 해석하고, 이름 뒤의 인자는 모두 실행 프로그램에
 전달한다. 이 규칙은 `run`, `command run`, `cmd run`에만 적용한다.
 
 ```sh
-# main에서 구분자 없이 실행
+# v0.23.0 이상에서 구분자 없이 실행
 devtools run --env staging test --watch
 
 # 실행 프로그램에 --help 전달
@@ -384,8 +384,8 @@ devtools run test --help
 | 호출 형식 | 실행 프로그램에 전달하는 인자 |
 | --- | --- |
 | `devtools command run -- PROGRAM ARG...` | 직접 실행할 프로그램과 인자 |
-| `devtools command run NAME -- ARG...` | 등록된 `exec` 뒤에 추가할 인자; 안정 버전과 main에서 지원 |
-| `devtools command run NAME ARG...` | 등록된 `exec` 뒤에 추가할 인자; 미배포 protocol v6부터 지원 |
+| `devtools command run NAME -- ARG...` | 등록된 `exec` 뒤에 추가할 인자; protocol v5와 v6에서 지원 |
+| `devtools command run NAME ARG...` | 등록된 `exec` 뒤에 추가할 인자; v0.23.0의 protocol v6부터 지원 |
 
 protocol v6에서도 명령 이름 바로 뒤의 `--` 하나는 구분자로 처리한다. 이후의 `--`는
 실행 프로그램에 그대로 전달한다. 첫 인자로 `--`를 넘기려면

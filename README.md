@@ -79,25 +79,21 @@ project with a `docs:dev` script:
 exec = ["pnpm", "run", "docs:dev"]
 ```
 
-Put devtools options before the command name. In the current stable release,
-v0.22.3, use `--` to separate the saved command's arguments:
+Put devtools options before the command name. In devtools v0.23.0 and newer,
+the `--` separator before the saved command's arguments is optional:
 
 ```sh
+devtools run dev:docs --port 3000
 devtools run dev:docs -- --port 3000
-devtools run --env local dev:docs -- --port 3000
-```
-
-Use `devtools run dev:docs -- --help` for the saved command's help, or
-`devtools run --help` for devtools' own help.
-
-On `main` (not yet released), the separator is optional:
-
-```sh
 devtools run --env local dev:docs --port 3000
 ```
 
-In this upcoming version, every argument after the name belongs to the saved
-command, including `--env` and `--help`. See the [command execution guide](docs/cli-contract.md#이름-명령에-추가-인자-전달)
+Use `devtools run dev:docs --help` for the saved command's help, or
+`devtools run --help` for devtools' own help.
+
+Every argument after the name belongs to the saved command, including `--env`
+and `--help`. On older versions such as v0.22.3, use the explicit `--` separator.
+See the [command execution guide](docs/cli-contract.md#이름-명령에-추가-인자-전달)
 for the version requirements and both forms.
 
 ## Guides

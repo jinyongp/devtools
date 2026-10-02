@@ -1,13 +1,12 @@
 """Exercise dynamic completion using only an installed release binary."""
-import fcntl
 import json
 import os
 from pathlib import Path
 import select
 import shlex
 import shutil
+import signal
 import subprocess
-import termios
 import time
 import uuid
 
@@ -131,14 +130,16 @@ for shell in ('bash', 'zsh', 'fish'):
         print('bash word breaks and literal shell quoting passed')
 
         # Readline supplies raw shell quotes and word breaks, unlike synthetic COMP_WORDS.
-        master, slave = os.openpty()
+        print('Starting bash interactive Readline verification', flush=True)
         terminal_env = dict(os.environ, TERM='dumb')
-        process = subprocess.Popen(
-            [shutil.which('bash'), '--noprofile', '--norc', '-i'],
-            stdin=slave, stdout=slave, stderr=slave, env=terminal_env,
-            start_new_session=True,
-            preexec_fn=lambda: fcntl.ioctl(slave, termios.TIOCSCTTY, 0))
-        os.close(slave)
+        shell_binary = shutil.which('bash')
+        shell_args = [shell_binary, '--noprofile', '--norc', '-i']
+        pid, master = os.forkpty()
+        if pid == 0:
+            try:
+                os.execve(shell_binary, shell_args, terminal_env)
+            except BaseException:
+                os._exit(127)
 
         def read_until(marker):
             output = b''
@@ -168,11 +169,22 @@ for shell in ('bash', 'zsh', 'fish'):
                 read_until(('\r\nREVIEW_RESULT:2:' + expected + '\r\n').encode())
             assert not Path('COMMAND_NAME_EXECUTED').exists()
             os.write(master, b'exit\n')
-            process.wait(timeout=3)
+            deadline = time.monotonic() + 3
+            while True:
+                exited, status = os.waitpid(pid, os.WNOHANG)
+                if exited:
+                    pid = None
+                    assert os.waitstatus_to_exitcode(status) == 0, status
+                    break
+                assert time.monotonic() < deadline, 'Interactive Bash did not exit'
+                time.sleep(.01)
         finally:
-            if process.poll() is None:
-                process.kill()
-                process.wait()
+            if pid is not None:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                os.waitpid(pid, 0)
             os.close(master)
         print('bash interactive Readline quoting and special word breaks passed')
     if shell == 'fish':

@@ -1,10 +1,14 @@
 """Exercise dynamic completion using only an installed release binary."""
+import fcntl
 import json
 import os
 from pathlib import Path
+import select
 import shlex
 import shutil
 import subprocess
+import termios
+import time
 import uuid
 
 binary = str(Path.home() / '.local/bin/devtools')
@@ -19,6 +23,8 @@ def call(*args, input=None):
 literal_commands = {
     'docs:dev': 'docs:',
     '@docs/dev': '@docs/',
+    '@@docs/dev': '@@docs/',
+    'foo:@docs/dev': 'foo:@docs/',
     'space name': 'space',
     'money$dev': 'money',
     "quote'cmd": 'quote',
@@ -97,6 +103,8 @@ for shell in ('bash', 'zsh', 'fish'):
             ('devtools run docs:d', ['devtools', 'run', 'docs', ':', 'd'], 'dev'),
             ('devtools run docs:', ['devtools', 'run', 'docs', ':'], 'dev'),
             ('devtools run equals=d', ['devtools', 'run', 'equals', '=', 'd'], 'dev'),
+            ('devtools run @docs/d', ['devtools', 'run', '@', 'docs/d'], '@docs/dev'),
+            ('devtools run foo:@docs/d', ['devtools', 'run', 'foo', ':@', 'docs/d'], '@docs/dev'),
             ('devtools var list --profile=ot', ['devtools', 'var', 'list', '--profile', '=', 'ot'], 'other'),
             ('devtools project up docs:dev @docs/', ['devtools', 'project', 'up', 'docs', ':', 'dev', '@docs/'], '@docs/dev'),
         ]
@@ -121,6 +129,52 @@ for shell in ('bash', 'zsh', 'fish'):
             assert output == 'LITERAL_COMMAND_RAN', (name, candidate, output)
         assert not Path('COMMAND_NAME_EXECUTED').exists()
         print('bash word breaks and literal shell quoting passed')
+
+        # Readline supplies raw shell quotes and word breaks, unlike synthetic COMP_WORDS.
+        master, slave = os.openpty()
+        terminal_env = dict(os.environ, TERM='dumb')
+        process = subprocess.Popen(
+            [shutil.which('bash'), '--noprofile', '--norc', '-i'],
+            stdin=slave, stdout=slave, stderr=slave, env=terminal_env,
+            start_new_session=True,
+            preexec_fn=lambda: fcntl.ioctl(slave, termios.TIOCSCTTY, 0))
+        os.close(slave)
+
+        def read_until(marker):
+            output = b''
+            deadline = time.monotonic() + 5
+            while marker not in output and time.monotonic() < deadline:
+                if select.select([master], [], [], .1)[0]:
+                    output += os.read(master, 8192)
+            assert marker in output, (marker, output)
+            return output
+
+        try:
+            setup = ("PS1='REVIEW_PROMPT> '; source " + shlex.quote(str(script)) +
+                     "; devtools() { printf '\\nREVIEW_RESULT:%s:%s\\n' \"$#\" \"$2\"; }; "
+                     "printf '\\nREVIEW_READY\\n'\n")
+            os.write(master, setup.encode())
+            read_until(b'\r\nREVIEW_READY\r\n')
+            for prefix, expected in [
+                ('@docs/d', '@docs/dev'), ('@@docs/d', '@@docs/dev'),
+                ('foo:@docs/d', 'foo:@docs/dev'),
+                ("'space", 'space name'), ('"space', 'space name'),
+                ('space\\ na', 'space name'),
+                ("'quote", "quote'cmd"), ('"quote', "quote'cmd"),
+                ('"money', 'money$dev'),
+                ('"meta', 'meta$(touch COMMAND_NAME_EXECUTED)'),
+            ]:
+                os.write(master, ('devtools run ' + prefix + '\t\n').encode())
+                read_until(('\r\nREVIEW_RESULT:2:' + expected + '\r\n').encode())
+            assert not Path('COMMAND_NAME_EXECUTED').exists()
+            os.write(master, b'exit\n')
+            process.wait(timeout=3)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+            os.close(master)
+        print('bash interactive Readline quoting and special word breaks passed')
     if shell == 'fish':
         result = subprocess.run(
             [shutil.which(shell), '--no-config', '-c',

@@ -74,25 +74,71 @@ func (a *App) completionScript(shell string) string {
 			b.WriteString(`  COMPREPLY=()
   local -a completion_words=()
   local remaining="${COMP_LINE-}" j=-1 separator=0
-  # Rejoin ':' and '=' word breaks only when adjacent in the original line.
+  # Rejoin name and option separators only when adjacent in the original line.
   for ((i=0; i<=COMP_CWORD; i++)); do
     word=${COMP_WORDS[i]}
     if [[ -n ${COMP_LINE-} && $i -gt 1 && $j -gt 0 && $remaining != [[:blank:]]* ]] &&
-       { [[ $word =~ ^[:=]+$ ]] || [[ $separator == 1 ]]; }; then
+       { [[ $word =~ ^[:=@]+$ ]] || [[ $separator == 1 ]]; }; then
       completion_words[j]+=$word
     else
       ((j++))
       completion_words[j]=$word
     fi
     separator=0
-    [[ $word =~ ^[:=]+$ ]] && separator=1
+    [[ $word =~ ^[:=@]+$ ]] && separator=1
     remaining=${remaining#*"$word"}
   done
-  local cur="${completion_words[j]}" candidate trim
-  trim=${cur%"${COMP_WORDS[COMP_CWORD]}"}
-  [[ ${COMP_WORDS[COMP_CWORD]} =~ ^[:=]+$ ]] && trim=$cur
+  local cur="${completion_words[j]}" candidate trim raw quote char next decoded k
+  if (( $# >= 2 )); then
+    # Readline's replacement text can differ from COMP_WORDS across Bash versions.
+    trim=${cur%"$2"}
+  else
+    trim=${cur%"${COMP_WORDS[COMP_CWORD]}"}
+    [[ ${COMP_WORDS[COMP_CWORD]} =~ ^[:=@]+$ ]] && trim=$cur
+    trim=${trim%@}
+  fi
+  # Decode shell quoting as literal text. Never evaluate command substitutions.
+  for ((i=-1; i<=j; i++)); do
+    if (( i == -1 )); then raw=$trim; else raw=${completion_words[i]}; fi
+    decoded='' quote=''
+    for ((k=0; k<${#raw}; k++)); do
+      char=${raw:k:1}
+      case $quote in
+        "'")
+          if [[ $char == "'" ]]; then quote=''; else decoded+=$char; fi
+          ;;
+        '"')
+          if [[ $char == '"' ]]; then
+            quote=''
+          elif [[ $char == '\' && $((k+1)) -lt ${#raw} ]]; then
+            next=${raw:k+1:1}
+            case $next in '$'|$'\140'|'"'|'\') decoded+=$next; ((k++));; *) decoded+=$char;; esac
+          else
+            decoded+=$char
+          fi
+          ;;
+        *)
+          case $char in
+            "'"|'"') quote=$char;;
+            '\') ((k++)); decoded+=${raw:k:1};;
+            *) decoded+=$char;;
+          esac
+          ;;
+      esac
+    done
+    if (( i == -1 )); then trim=$decoded; else completion_words[i]=$decoded; fi
+  done
+  cur=${completion_words[j]}
   while IFS= read -r candidate; do
     candidate=${candidate#"$trim"}
+    if [[ $quote == '"' ]]; then
+      candidate=${candidate//\\/\\\\}
+      candidate=${candidate//\"/\\\"}
+      candidate=${candidate//\$/\\\$}
+      candidate=${candidate//$'\140'/\\$'\140'}
+      COMPREPLY+=("$candidate")
+      continue
+    fi
     # Quote literal bytes without Bash's locale-dependent printf %q.
     case $candidate in
       ''|*[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:@%+=,-]*)

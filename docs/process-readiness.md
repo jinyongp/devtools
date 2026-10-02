@@ -7,7 +7,7 @@
 | 목적 | 명령 | 판단 기준 |
 | --- | --- | --- |
 | 실행에 필요한 설정·도구 확인 | `doctor web` | `data.ready`와 검사 항목 |
-| 프로세스 수명 확인 | `process status EXECUTION_ID` | `data.state` |
+| 프로세스 수명 확인 | `process status EXECUTION_ID` | `data.item.state` |
 | 포트 점유·연결 확인 | `port check web` | 포트 검사 결과 |
 | 서비스 준비 조건 한 번 확인 | `process check EXECUTION_ID` | `data.readiness.ready` |
 | 서비스 준비 조건 충족까지 대기 | `process wait EXECUTION_ID` | 종료 코드 0이면 준비 완료 |

@@ -25,7 +25,7 @@ the Dashboard JavaScript tests.
 and invalid fixtures. The repository also exact-pins `skills` 1.6.0; after `pnpm install`,
 `pnpm test:skill-discovery` verifies local repository discovery and
 `pnpm test:skill-discovery:public` verifies the public `jinyongp/devtools` source.
-Tag-triggered release validation runs on macOS and Ubuntu 24.04 with
+Release workflow validation runs on macOS and Ubuntu 24.04 with
 Go 1.27.1. The workflow disables setup-uv caching because uv is used only to run
 the Agent Skills validator and this repository has no Python dependency manifest.
 WSL uses the Linux build; testing in an actual WSL environment is a separate check.

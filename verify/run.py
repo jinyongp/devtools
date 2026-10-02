@@ -13,6 +13,16 @@ import uuid
 TEST_VERSIONS = ("0.0.0-test.1", "0.0.0-test.2")
 SCENARIO_TIMEOUT_SECONDS = 180
 
+# Repository-local variables exported by Git hooks must not route fixture Git
+# operations into the caller's worktree, object database, refs, or index.
+GIT_LOCAL_ENVIRONMENT = (
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
+    "GIT_SHALLOW_FILE", "GIT_COMMON_DIR", "GIT_NAMESPACE",
+)
+
 
 def host_target(repository: Path):
     result = subprocess.run(
@@ -169,6 +179,8 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
                 DEVTOOLS_TEST_INSTALL_DOC=str(install_doc),
                 DEVTOOLS_TEST_CANONICAL_SKILL=str(canonical_skill),
             )
+            for key in GIT_LOCAL_ENVIRONMENT:
+                env.pop(key, None)
             print(f"Running scenario: {name}", flush=True)
             try:
                 result = subprocess.run(

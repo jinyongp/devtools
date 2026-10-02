@@ -9,18 +9,22 @@ import test from 'node:test';
 const releaseScript = fileURLToPath(new URL('./release.mjs', import.meta.url));
 const tagScript = fileURLToPath(new URL('./publish-release-tag.sh', import.meta.url));
 
-function fixture(t) {
+function fixture(t, inherited = {}) {
   const root = mkdtempSync(join(tmpdir(), 'devtools-release-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const remote = join(root, 'remote.git');
   const repository = join(root, 'repository');
   const calls = join(root, 'gh-calls.jsonl');
-  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+  const env = { ...process.env, ...inherited, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
     GIT_AUTHOR_NAME: 'Release Test', GIT_AUTHOR_EMAIL: 'release@example.test',
     GIT_COMMITTER_NAME: 'Release Test', GIT_COMMITTER_EMAIL: 'release@example.test',
     GH_CALLS: calls, RELEASES_JSON: JSON.stringify([[{
       tag_name: 'v0.22.3', draft: false, prerelease: false, published_at: '2026-10-02T00:00:00Z',
     }]]), PATH: root + ':' + process.env.PATH };
+  for (const key of ['GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS',
+    'GIT_CONFIG_COUNT', 'GIT_OBJECT_DIRECTORY', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_IMPLICIT_WORK_TREE',
+    'GIT_GRAFT_FILE', 'GIT_INDEX_FILE', 'GIT_NO_REPLACE_OBJECTS', 'GIT_REPLACE_REF_BASE',
+    'GIT_PREFIX', 'GIT_SHALLOW_FILE', 'GIT_COMMON_DIR', 'GIT_NAMESPACE']) delete env[key];
   const command = (cwd, ...args) => execFileSync('git', args,
     { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   command(root, 'init', '--bare', '--initial-branch=main', remote);
@@ -57,8 +61,22 @@ if (args[0] === 'api') {
   const publishTag = (extra = {}) => spawnSync('sh', [tagScript],
     { cwd: repository, env: { ...env, TAG: 'v0.23.0', COMMIT: git('rev-parse', 'HEAD'), ...extra }, encoding: 'utf8' });
   const ghCalls = () => readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
-  return { git, commit, feature, head, env, run, publishTag, ghCalls, remote, command };
+  return { git, commit, feature, head, env, run, publishTag, ghCalls, remote, command, repository, root };
 }
+
+test('fixture setup cannot mutate an inherited caller repository or index', t => {
+  const caller = fixture(t);
+  const index = join(caller.repository, '.git', 'index');
+  const before = readFileSync(index);
+  const config = readFileSync(join(caller.repository, '.git', 'config'));
+  const head = caller.git('rev-parse', 'HEAD');
+  const inner = fixture(t, { GIT_DIR: join(caller.repository, '.git'),
+    GIT_WORK_TREE: caller.repository, GIT_INDEX_FILE: index });
+  assert.equal(caller.git('rev-parse', 'HEAD'), head);
+  assert.deepEqual(readFileSync(index), before);
+  assert.deepEqual(readFileSync(join(caller.repository, '.git', 'config')), config);
+  assert.equal(inner.git('rev-parse', '--show-toplevel'), inner.repository);
+});
 
 test('version baseline uses published stable releases, excluding failed tags and drafts', t => {
   const f = fixture(t);

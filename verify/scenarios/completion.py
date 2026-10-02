@@ -108,7 +108,9 @@ for shell in ('bash', 'zsh', 'fish'):
             harness = (source + 'COMP_WORDS=(devtools run ' + shlex.quote(prefix) + ')\n'
                        'COMP_CWORD=2\n_devtools\nprintf "%s\\n" "${COMPREPLY[@]}"')
             candidate = subprocess.check_output(['bash', '--noprofile', '--norc', '-c', harness], text=True).strip()
-            assert shlex.split(candidate) == [name], (name, candidate)
+            completed_name = subprocess.check_output(
+                ['bash', '--noprofile', '--norc', '-c', 'printf "%s" ' + candidate], text=True)
+            assert completed_name == name, (name, candidate)
             # Execute the completion exactly as inserted; shell syntax in names stays literal.
             output = subprocess.check_output(['bash', '--noprofile', '--norc', '-c',
                                               shlex.quote(binary) + ' run ' + candidate], text=True)

@@ -90,7 +90,8 @@ func (a *App) completionScript(shell string) string {
   trim=${cur%"${COMP_WORDS[COMP_CWORD]}"}
   [[ ${COMP_WORDS[COMP_CWORD]} =~ ^[:=]+$ ]] && trim=$cur
   while IFS= read -r candidate; do
-    printf -v candidate '%q' "${candidate#"$trim"}"
+    # Escape bytes consistently, including on macOS Bash 3.2.
+    LC_ALL=C printf -v candidate '%q' "${candidate#"$trim"}"
     COMPREPLY+=("$candidate")
   done < <(printf '%s\0' "${completion_words[@]:1}" | command devtools __complete 2>/dev/null)
   for ((i=1; i<j; i++)); do

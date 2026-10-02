@@ -37,6 +37,10 @@ func TestStandaloneWorkstreamMetadataUpdateUsesCanonicalEdit(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	_, e = s.Execute(context.Background(), Request{Action: "workstream.update", Target: w, Body: Object{"title": "Original"}, Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision)}})
+	if e == nil || e.Code != "no_change" {
+		t.Fatal("identical fresh metadata synthesized a plan", e)
+	}
 	request := Request{Action: "workstream.update", Target: w, Body: Object{"title": "Renamed", "description": "New goal"}, Options: map[string]string{"request-id": ID(), "if-revision": fmt.Sprint(state.Revision)}}
 	out, e := s.Execute(context.Background(), request)
 	if e != nil {

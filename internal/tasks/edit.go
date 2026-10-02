@@ -381,9 +381,6 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 			return nil, conflict("dependency_conflict", []string{target})
 		}
 	}
-	plan := objectValue(w.Props["plan"])
-	plan["task_ids"] = []string{}
-	plan["validation_ids"] = []string{}
 	taskIDs, valIDs := []string{}, []string{}
 	for _, i := range s.List("task") {
 		if i.Workstream == target && s.Included(i) {
@@ -395,8 +392,11 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 			valIDs = append(valIDs, v.ID)
 		}
 	}
-	plan["task_ids"], plan["validation_ids"] = unique(taskIDs), unique(valIDs)
-	w.Props["plan"] = plan
+	if _, hasPlan := w.Props["plan"]; hasPlan || len(taskIDs)+len(valIDs) > 0 {
+		plan := objectValue(w.Props["plan"])
+		plan["task_ids"], plan["validation_ids"] = unique(taskIDs), unique(valIDs)
+		w.Props["plan"] = plan
+	}
 	// Apply semantic epochs once per item, using the final candidate definition.
 	for _, i := range s.List("") {
 		old := before.Items[i.ID]

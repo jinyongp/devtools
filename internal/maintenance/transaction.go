@@ -419,6 +419,13 @@ func cleanupOrphanTransactions(root, active string) error {
 	if err != nil {
 		return err
 	}
+	if len(entries) > 0 {
+		// A previous cleanup may have removed the pointer but failed to sync
+		// that removal. Checkpoint its directory before discarding before-images.
+		if err := syncDir(filepath.Dir(pendingPath(root))); err != nil {
+			return err
+		}
+	}
 	for _, entry := range entries {
 		if entry.Name() == active {
 			continue

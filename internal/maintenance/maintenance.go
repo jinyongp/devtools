@@ -78,7 +78,10 @@ func Write(path string, data []byte) error {
 	}
 	return syncDir(dir)
 }
-func syncDir(path string) error {
+
+var syncDir = syncDirectory
+
+func syncDirectory(path string) error {
 	f, e := os.Open(path)
 	if e != nil {
 		return e

@@ -224,15 +224,16 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 		pathOverride = nil
 	}
 	checks := doctor.CheckRequirements(ctx, doctor.Input{
-		Profile:      command.Project.Profile,
-		Directory:    command.Directory,
-		Env:          command.Env,
-		Requirements: requirements,
-		State:        state,
-		Inject:       command.Inject,
-		Executable:   executable,
-		Environment:  parentEnvironment,
-		PathOverride: pathOverride,
+		Profile:        command.Project.Profile,
+		Directory:      command.Directory,
+		Env:            command.Env,
+		Requirements:   requirements,
+		State:          state,
+		Inject:         command.Inject,
+		CheckInjection: true,
+		Executable:     executable,
+		Environment:    parentEnvironment,
+		PathOverride:   pathOverride,
 	})
 	if !ChecksPassed(checks) {
 		return protocol.NewError("requirements_failed", "Command prerequisites are not satisfied.", 3, map[string]any{

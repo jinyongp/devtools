@@ -55,15 +55,16 @@ func (r *Report) Add(id, status, message string, remedies ...protocol.Remedy) {
 }
 
 type Input struct {
-	Profile      string
-	Directory    string
-	Env          string
-	Requirements project.Requirements
-	State        *values.State
-	Inject       bool
-	Executable   string
-	Environment  []string
-	PathOverride *string
+	Profile        string
+	Directory      string
+	Env            string
+	Requirements   project.Requirements
+	State          *values.State
+	Inject         bool
+	CheckInjection bool
+	Executable     string
+	Environment    []string
+	PathOverride   *string
 }
 
 func CheckRequirements(ctx context.Context, in Input) []Check {
@@ -170,7 +171,7 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 			}
 		}
 	}
-	if in.Executable != "" && !in.Inject && len(in.Requirements.Vars)+len(in.Requirements.Secs) > 0 {
+	if (in.CheckInjection || in.Executable != "") && !in.Inject && len(in.Requirements.Vars)+len(in.Requirements.Secs) > 0 {
 		report.Add("injection", "fail", "This command requires registered values and injection is disabled.", Remedy("Set inject = true for this command or select --env.", nil))
 	}
 	return report.Checks

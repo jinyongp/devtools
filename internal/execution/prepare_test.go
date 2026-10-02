@@ -251,3 +251,28 @@ func TestValidatePendingPathStillChecksAbsoluteToolRequirements(t *testing.T) {
 		t.Fatalf("absolute tool requirement was incorrectly deferred with PATH: %v", failure)
 	}
 }
+
+func TestValidatePendingPathStillChecksInjectionRequirements(t *testing.T) {
+	root := privateTempDir(t)
+	dependencies := Dependencies{ValuesDirectory: filepath.Join(root, "profiles"),
+		Ports: ports.Store{Directory: filepath.Join(root, "ports")}}
+	store := values.Store{Directory: dependencies.ValuesDirectory, Profile: "app"}
+	if _, err := store.Update(context.Background(), func(s *values.State) (bool, *protocol.Error) {
+		return s.Set(values.Variable, "TOKEN", "", "registered")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	port := 26123
+	command := Command{Project: project.Context{Profile: "app", Root: root,
+		Ports: map[string]project.Port{"web": {Port: &port, Strict: true}}},
+		Name: "web", Exec: []string{"relative-command"}, Directory: root, Serve: []string{"web"},
+		Bind:         map[string]project.Binding{"PATH": {Port: "web"}},
+		Requirements: project.Requirements{Vars: []string{"TOKEN"}}}
+	if failure := Validate(context.Background(), command, dependencies, nil); failure == nil || failure.Code != "requirements_failed" {
+		t.Fatalf("deferred executable skipped known injection failure: %v", failure)
+	}
+	command.Inject = true
+	if failure := Validate(context.Background(), command, dependencies, nil); failure != nil {
+		t.Fatalf("deferred executable with injection failed: %v", failure)
+	}
+}

@@ -228,9 +228,11 @@ try:
 
     send("devtools profile export --output .\n")
     export_prompt = read_until(b"Profile transfer passphrase: ")
+    assert not termios.tcgetattr(master)[3] & (termios.ECHO | termios.ECHONL)
     assert transfer_passphrase.encode() not in export_prompt
     send(transfer_passphrase + "\n")
     confirm_prompt = read_until(b"Confirm profile transfer passphrase: ")
+    assert not termios.tcgetattr(master)[3] & (termios.ECHO | termios.ECHONL)
     assert transfer_passphrase.encode() not in confirm_prompt
     send(transfer_passphrase + "\n")
     exported = read_until(prompt)
@@ -239,6 +241,7 @@ try:
 
     send("devtools profile import --file ./tty.age --as tty-copy\n")
     import_prompt = read_until(b"Profile transfer passphrase: ")
+    assert not termios.tcgetattr(master)[3] & (termios.ECHO | termios.ECHONL)
     assert transfer_passphrase.encode() not in import_prompt
     send(transfer_passphrase + "\n")
     preview_output = read_until(prompt)
@@ -251,6 +254,7 @@ try:
 
     send(f"devtools profile import --file ./tty.age --as tty-copy --apply {digest} --request-id {request_id}\n")
     apply_prompt = read_until(b"Profile transfer passphrase: ")
+    assert not termios.tcgetattr(master)[3] & (termios.ECHO | termios.ECHONL)
     assert transfer_passphrase.encode() not in apply_prompt
     send(transfer_passphrase + "\n")
     applied = read_until(prompt)

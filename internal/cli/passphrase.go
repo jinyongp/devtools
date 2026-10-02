@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jinyongp/devtools/internal/protocol"
+	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
 
@@ -114,12 +115,24 @@ func readTerminalPassphrase(ctx context.Context, streams IO, prompt string) (str
 	if !ok || !term.IsTerminal(int(file.Fd())) {
 		return "", passphraseRequiredError("import")
 	}
+	fd := int(file.Fd())
+	state, err := unix.IoctlGetTermios(fd, terminalReadState)
+	if err != nil {
+		return "", protocol.NewError("io_error", "Cannot read terminal settings.", 1, nil)
+	}
+	quiet := *state
+	quiet.Lflag &^= unix.ECHO | unix.ECHONL
+	if err := unix.IoctlSetTermios(fd, terminalWriteState, &quiet); err != nil {
+		return "", protocol.NewError("io_error", "Cannot disable terminal echo.", 1, nil)
+	}
+	defer func() { _ = unix.IoctlSetTermios(fd, terminalWriteState, state) }()
+	// A visible prompt must mean input can already be sent without being echoed.
 	if streams.Err != nil {
 		if _, err := io.WriteString(streams.Err, prompt); err != nil {
 			return "", protocol.NewError("io_error", "Cannot write passphrase prompt.", 1, nil)
 		}
 	}
-	body, err := term.ReadPassword(int(file.Fd()))
+	body, err := term.ReadPassword(fd)
 	if streams.Err != nil {
 		_, _ = io.WriteString(streams.Err, "\n")
 	}

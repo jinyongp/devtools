@@ -89,9 +89,10 @@ func (identity fileIdentity) same(other fileIdentity) bool {
 }
 
 type cachedProject struct {
-	identity fileIdentity
-	config   project.Context
-	err      *protocol.Error
+	identity           fileIdentity
+	canonicalDirectory string
+	config             project.Context
+	err                *protocol.Error
 }
 
 type cachedRegistry struct {
@@ -101,6 +102,7 @@ type cachedRegistry struct {
 }
 
 type resolverCache struct {
+	listGate chan struct{}
 	mu       sync.Mutex
 	entries  map[string]cachedProject
 	registry cachedRegistry
@@ -114,7 +116,7 @@ type Resolver struct {
 }
 
 func NewResolver(store ports.Store) Resolver {
-	return Resolver{Ports: store, cache: &resolverCache{entries: map[string]cachedProject{}}}
+	return Resolver{Ports: store, cache: &resolverCache{entries: map[string]cachedProject{}, listGate: make(chan struct{}, 1)}}
 }
 
 func (r Resolver) readPorts() (*ports.State, bool, *protocol.Error) {
@@ -179,12 +181,13 @@ func (r Resolver) resolveProject(instance ports.Instance) (project.Context, *pro
 	r.cache.mu.Lock()
 	cached, ok := r.cache.entries[path]
 	r.cache.mu.Unlock()
-	if ok && cached.identity.same(identity) {
+	canonicalDirectory, canonicalErr := filepath.EvalSymlinks(instance.Directory)
+	if ok && canonicalErr == nil && cached.canonicalDirectory == canonicalDirectory && cached.identity.same(identity) {
 		return cached.config, cached.err, false
 	}
 	config, err := project.Resolve(instance.Directory, "")
 	r.cache.mu.Lock()
-	r.cache.entries[path] = cachedProject{identity: identity, config: config, err: err}
+	r.cache.entries[path] = cachedProject{identity: identity, canonicalDirectory: canonicalDirectory, config: config, err: err}
 	r.cache.mu.Unlock()
 	return config, err, true
 }
@@ -192,6 +195,15 @@ func (r Resolver) resolveProject(instance ports.Instance) (project.Context, *pro
 func (r Resolver) List(ctx context.Context, profile string) ([]Item, *protocol.Error) {
 	if profile != "" && !project.ValidProfile(profile) {
 		return nil, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, map[string]any{"field": "profile"})
+	}
+	if r.cache != nil {
+		// Registry, project identities and their aggregate must advance together.
+		select {
+		case <-ctx.Done():
+			return nil, protocol.NewError("canceled", "Request canceled.", 130, nil)
+		case r.cache.listGate <- struct{}{}:
+		}
+		defer func() { <-r.cache.listGate }()
 	}
 	state, registryChanged, err := r.readPorts()
 	if err != nil {

@@ -92,7 +92,9 @@ function itemActions(node, data, parent) {
   const version = detailGeneration;
   const fresh = () => current === profile && version === detailGeneration;
   const prepare = async action => {
-    try { await action(); } catch (error) { if (fresh()) notice(error.message); }
+    const owner = editorGeneration;
+    const stillFresh = () => fresh() && editorGeneration === owner;
+    try { await action(stillFresh); } catch (error) { if (stillFresh()) notice(error.message); }
   };
   if (terminal) {
     button(actions, "Reopen", () => edit(`Reopen ${node.kind}`, p => {
@@ -133,12 +135,12 @@ function itemActions(node, data, parent) {
     const reason = field(p, "Reason", "", "textarea"); reason.required = true;
     return () => ({reason:reason.value});
   }, body => editPlan(body.reason, [{op:item.scope === "removed" ? "task.restore" : "task.remove", id:item.id}])));
-  if (node.kind === "workstream" || item.workstream_id) button(secondary, "Dependencies", () => prepare(async () => {
+  if (node.kind === "workstream" || item.workstream_id) button(secondary, "Dependencies", () => prepare(async stillFresh => {
     const candidates = await taskChoices(current, node.kind === "workstream" ? "workstream list" : "list", rev, item.workstream_id ? {workstream:item.workstream_id} : {});
     const successors = new Set([item.id]);
     let changed;
     do { changed = false; for (const candidate of candidates) if (!successors.has(candidate.id) && candidate.depends_on?.some(id => successors.has(id))) { successors.add(candidate.id); changed = true; } } while (changed);
-    if (!fresh()) return;
+    if (!stillFresh()) return;
     edit("Choose prerequisites", p => {
       text("p", "This item becomes ready after every selected prerequisite is complete.", p);
       const read = choiceField(p, "Prerequisites", candidates.filter(candidate => !successors.has(candidate.id)), item.depends_on || []);
@@ -159,9 +161,9 @@ function itemActions(node, data, parent) {
         return () => ({body:body.value});
       }, body => editPlan("Update implementation plan", [{op:"plan.update", value:body}]));
     });
-    button(secondary, "Restore excluded tasks", () => prepare(async () => {
+    button(secondary, "Restore excluded tasks", () => prepare(async stillFresh => {
       const excluded = await taskChoices(current, "list", rev, {workstream:item.id, scope:"removed"});
-      if (!fresh()) return;
+      if (!stillFresh()) return;
       edit("Restore excluded tasks", p => {
         const selected = choiceField(p, "Excluded tasks", excluded);
         const reason = field(p, "Reason", "", "textarea"); reason.required = true;
@@ -176,9 +178,9 @@ function itemActions(node, data, parent) {
       text("p", `${label}: ${item.title}. Coverage and completion checks apply.`, p); return () => ({});
     }, body => send(item.state === "draft" ? "workstream.activate" : "workstream.close", body), () => load(), true));
   }
-  if (!run && !terminal) button(secondary, "Cancel", () => prepare(async () => {
+  if (!run && !terminal) button(secondary, "Cancel", () => prepare(async stillFresh => {
     const impact = await api("/api/query?" + new URLSearchParams({profile:current, command:node.kind === "workstream" ? "workstream impact" : "impact", id:node.id}));
-    if (!fresh()) return;
+    if (!stillFresh()) return;
     if (impact.revision !== rev) throw Error("The profile changed. Refresh the item before canceling.");
     if (impact.running_ids.length || impact.completed_ids.length) throw Error("Cancellation is blocked by active executions or completed dependent work. Review their status first.");
     if (data.truncated) throw Error("The context is too large to preview cancellation. Review it with the CLI.");

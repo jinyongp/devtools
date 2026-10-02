@@ -389,7 +389,7 @@ button[aria-pressed="true"] { background: #e1eee7; color: #145d51; }
 #values-panel .value-edit { display:block; text-align:left; background:transparent; border-color:transparent; width:100%; margin:0; padding:8px; overflow-wrap:anywhere; }
 #values-panel .value-edit:hover { background:#e1eee7; border-color:#cbd4ce; }
 #values-panel .value-cell { width:40%; }
-.inline-value input { margin:0; }
+.inline-value input, .inline-value textarea { margin:0; }
 .inline-value .manage-toolbar { margin:8px 0 0; }
 .inline-value small { display:block; margin-top:8px; }
 .value-inherited { background:#f0f3ef; }

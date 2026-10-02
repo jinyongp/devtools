@@ -17,15 +17,16 @@ async function loadStorage(version) {
     }));
   }
   button(toolbar,"Preview cleanup",async()=>{
+    const owner=editorGeneration;
     try{
-      const plan=await api("/api/cleanup-preview?"+new URLSearchParams({profile:current}));if(generation!==version)return;
+      const plan=await api("/api/cleanup-preview?"+new URLSearchParams({profile:current}));if(generation!==version||editorGeneration!==owner)return;
       edit("Choose cleanup candidates",p=>{
         text("p","Selected data moves to the private recovery archive. The preview is valid for 10 minutes.",p);
         const inputs=plan.items.map(item=>({item,input:field(p,`${item.kind} · ${item.profile||"shared"} · ${item.source} · ${item.bytes} bytes`,"","checkbox")}));
         if(!inputs.length)text("p","No eligible cleanup candidates.",p);
         return()=>{const ids=inputs.filter(x=>x.input.checked).map(x=>x.item.id);if(!ids.length)throw Error("Select at least one candidate.");return{action:"apply",plan:plan.id,ids,request_id:crypto.randomUUID()};};
       },send,()=>load(),true);
-    }catch(e){notice(e.message);}
+    }catch(e){if(generation===version&&editorGeneration===owner)notice(e.message);}
   });
   text("p","Archives preserve retired data until explicitly purged after the 30-day recovery period.",panel);
   try{

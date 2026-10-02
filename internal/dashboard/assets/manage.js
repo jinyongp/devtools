@@ -1,5 +1,6 @@
 "use strict";
 let valueEnv = "";
+let editorGeneration = 0;
 
 function field(parent, label, initial = "", type = "text") {
   const wrapper = text("label", label, parent);
@@ -14,6 +15,8 @@ function button(parent, label, action) {
 }
 function edit(title, build, request, after = () => load(), destructive = false) {
   const dialog = $("editor"), form = $("edit-form"), fields = $("editor-fields");
+  const owner = ++editorGeneration;
+  const ownsEditor = () => editorGeneration === owner && dialog.open;
   fields.replaceChildren(); $("editor-title").textContent = title;
   $("editor-target").textContent = `Profile: ${profile || "new selection"}`;
   $("editor-error").textContent = "";
@@ -25,14 +28,18 @@ function edit(title, build, request, after = () => load(), destructive = false) 
   const fixed = new Set(controls().filter(c => c.disabled));
   dialog.oncancel = event => { if (busy) event.preventDefault(); };
   $("editor-cancel").onclick = () => dialog.close();
-  dialog.onclose = () => { pending = null; fields.replaceChildren(); form.onsubmit = null; };
+  dialog.onclose = () => {
+    if (editorGeneration !== owner || dialog.open) return;
+    pending = null; fields.replaceChildren(); form.onsubmit = null;
+  };
   form.onsubmit = async event => {
-    event.preventDefault(); if (busy) return;
+    event.preventDefault(); if (busy || !ownsEditor()) return;
     try {
       if (!pending) pending = request(read());
       busy = true; controls().forEach(c => c.disabled = true);
       if (pending.action === "workstream.edited" && !reviewed) {
         const preview = (await api("/api/actions", {...pending, options:{...pending.options, "dry-run":"true"}})).data;
+        if (!ownsEditor()) return;
         reviewed = true; busy = false;
         $("editor-error").textContent = `Preview: ${preview.changes.length} changes, ${preview.effects.length} related adjustments, ${preview.impact.affected_ids.length} affected items. ${preview.issues.length} coverage issues. Confirm to save this revision. ${preview.issues.map(issue => issue.message).join(" ")}`;
         $("editor-save").disabled = false; $("editor-cancel").disabled = false;
@@ -40,10 +47,12 @@ function edit(title, build, request, after = () => load(), destructive = false) 
         return;
       }
       const response = pending.local ? pending.local() : (await api("/api/actions", pending)).data;
+      if (!ownsEditor()) return;
       pending = null; busy = false;
       await new Promise(resolve => { dialog.addEventListener("close", resolve, {once:true}); dialog.close(); });
-      await after(response);
+      if (editorGeneration === owner) await after(response, () => editorGeneration === owner);
     } catch (error) {
+      if (!ownsEditor()) return;
       busy = false;
       if (error.responded) { pending = null; reviewed = false; }
       $("editor-error").textContent = error.message + (pending ? " Retry sends the same request." : " Reopen after reloading if the profile changed.");

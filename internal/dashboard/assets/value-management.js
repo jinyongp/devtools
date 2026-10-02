@@ -1,26 +1,36 @@
 "use strict";
 const valueFilters = {search:"", kind:"all", source:"all"};
 
+function variableValue(parent, label, original = "") {
+  const input = field(parent, label, original, "textarea");
+  input.spellcheck = false;
+  // Textarea display normalizes CRLF/CR; saving untouched content must retain
+  // the stored bytes, including those original line endings.
+  const displayed = input.value;
+  return {input, read: () => input.value === displayed ? original : input.value};
+}
+
 function overrideValue(item, view, version) {
   edit(`Override ${item.key}`, p => {
     text("p", "Choose the environment that will store its own value. Common stays unchanged.", p);
     const label = text("label", "Environment", p), target = text("select", "", label);
     for (const name of view.envs) text("option", name, target).value = name;
     return () => target.value;
-  }, env => ({local:() => env}), async env => {
+  }, env => ({local:() => env}), async (env, stillCurrent) => {
     try {
       const target = await api("/api/values?" + new URLSearchParams({profile:view.profile, env}));
-      if (generation !== version) return;
+      if (generation !== version || !stillCurrent()) return;
       const existing = target.items.find(value => value.key === item.key);
       const replacing = existing?.source === "env";
       const kind = existing?.kind || item.kind;
       edit(`${replacing ? "Edit override" : "Create override"}: ${item.key}`, p => {
         text("p", `Target: ${view.profile} / ${env}. ${replacing ? "Saving replaces this environment’s existing override." : "Common stays unchanged."}`, p);
-        const value = field(p, kind === "secret" ? "New secret value" : "Value", kind === "secret" ? "" : (existing?.value ?? item.value ?? ""), kind === "secret" ? "password" : "text");
-        return () => ({key:item.key, env, value:value.value});
+        const value = kind === "secret" ? field(p, "New secret value", "", "password") :
+          variableValue(p, "Value", existing?.value ?? item.value ?? "");
+        return () => ({key:item.key, env, value:kind === "secret" ? value.value : value.read()});
       }, body => valueRequest(target, kind + ".set", body), () => { valueEnv = env; valueFilters.source = "all"; load(); });
       $("editor-save").textContent = replacing ? "Save override" : "Create override";
-    } catch (error) { if (generation === version) notice(error.message); }
+    } catch (error) { if (generation === version && stillCurrent()) notice(error.message); }
   });
   $("editor-save").textContent = "Continue";
 }
@@ -69,8 +79,11 @@ function inlineValue(cell, item, view, version) {
   const inherited = !!view.env && item.source === "common";
   cell.replaceChildren();
   const form = text("form", "", cell); form.className = "inline-value";
-  const input = document.createElement("input"); input.type = item.kind === "secret" ? "password" : "text";
-  input.value = item.value ?? ""; input.setAttribute("aria-label", `New value for ${item.key}`);
+  const input = document.createElement(item.kind === "secret" ? "input" : "textarea");
+  if (item.kind === "secret") input.type = "password";
+  const original = item.value ?? "";
+  input.value = original; const displayed = input.value;
+  input.spellcheck = false; input.setAttribute("aria-label", `New value for ${item.key}`);
   input.autocomplete = "off"; form.append(input);
   if (item.source === "common" && view.env) text("small", `Creates an override in ${view.env}.`, form);
   const actions = text("div", "", form); actions.className = "manage-toolbar";
@@ -81,7 +94,7 @@ function inlineValue(cell, item, view, version) {
   let pending=null, busy=false;
   form.onsubmit=async event=>{
     event.preventDefault(); if(busy)return;
-    pending ||= valueRequest(view,item.kind+".set",{key:item.key,value:input.value,env:view.env});
+    pending ||= valueRequest(view,item.kind+".set",{key:item.key,value:input.value===displayed?original:input.value,env:view.env});
     busy=true; input.disabled=save.disabled=cancel.disabled=true;
     try { await api("/api/actions",pending); input.value=""; pending=null; if(generation===version)load(); }
     catch(e){
@@ -109,8 +122,15 @@ async function loadValues(version) {
     button(toolbar,"Add value",()=>edit("Add value",p=>{
       const key=field(p,"Key"),kindLabel=text("label","Kind",p),kind=text("select","",kindLabel);
       for(const name of ["secret","variable"])text("option",name,kind).value=name;
-      const value=field(p,"Value","","password");kind.onchange=()=>{value.value="";value.type=kind.value==="secret"?"password":"text";};
-      return()=>({action:kind.value+".set",key:key.value,value:value.value,env:view.env});
+      const secret=field(p,"Value","","password"),variable=variableValue(p,"Value").input;
+      variable.parentElement.hidden=true;
+      kind.onchange=()=>{
+        secret.value=variable.value="";
+        const isSecret=kind.value==="secret";
+        secret.parentElement.hidden=!isSecret;
+        variable.parentElement.hidden=isSecret;
+      };
+      return()=>({action:kind.value+".set",key:key.value,value:(kind.value==="secret"?secret:variable).value,env:view.env});
     },body=>{const {action,...rest}=body;return valueRequest(view,action,rest);}));
     button(toolbar,"Import .env",()=>bulkValues(view));
     const table=text("table","",panel);table.className="values-table";

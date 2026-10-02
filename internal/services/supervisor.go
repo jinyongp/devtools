@@ -22,6 +22,18 @@ import (
 
 type Execute func(context.Context, Record, process.Runner, io.Writer) *protocol.Error
 
+type environmentSelectionKey struct{}
+type environmentSelection struct {
+	Env    string
+	Inject bool
+}
+
+// WithEnvironmentSelection carries the actual prepared selection to the
+// supervisor, which records it only when the child starts successfully.
+func WithEnvironmentSelection(ctx context.Context, env string, inject bool) context.Context {
+	return context.WithValue(ctx, environmentSelectionKey{}, environmentSelection{Env: env, Inject: inject})
+}
+
 // Serve supports markerless legacy/internal invocations by acquiring the lease
 // itself. New launch protocol records must use ServeWithLease.
 func (s Store) Serve(ctx context.Context, id string, execute Execute) error {
@@ -176,6 +188,10 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 		}
 		now := time.Now().UTC()
 		mu.Lock()
+		if selection, ok := ctx.Value(environmentSelectionKey{}).(environmentSelection); ok {
+			r.Env = selection.Env
+			r.Inject = &selection.Inject
+		}
 		if config := process.ReadyProbe(ctx); config != nil {
 			preparedEnv := append([]string{}, env...)
 			probe = func(query context.Context) Readiness { return runProbe(query, *config, dir, preparedEnv) }

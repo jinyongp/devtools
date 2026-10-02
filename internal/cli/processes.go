@@ -186,6 +186,7 @@ func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 		if !execution.ChecksPassed(checks) {
 			return protocol.NewError("requirements_failed", "Command prerequisites are not satisfied. Run devtools doctor for diagnostics.", 3, map[string]any{"checks": checks})
 		}
+		ctx = services.WithEnvironmentSelection(ctx, command.Env, command.Inject)
 		_, err = prepared.Execute(ctx, os.Environ(), runner, nil, output, output)
 		return err
 	}

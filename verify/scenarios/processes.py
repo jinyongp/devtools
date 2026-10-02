@@ -69,11 +69,17 @@ first_id=str(uuid.uuid4())
 first=api("process","start","web","--request-id",first_id)
 id=first["item"]["id"]
 assert first["item"]["state"]=="running",first
+assert first["item"]["inject"] is True,first
 assert api("process","start","web","--request-id",first_id)["replayed"]
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
     results=list(pool.map(lambda _:mutate("start","web"),range(4)))
 assert all(r["item"]["id"]==id and not r["changed"] for r in results)
 assert mutate("start","web","--env","local",expected=3)["code"]=="process_conflict"
+# Injection reflects the running child's selection, not an edited config file.
+(root/"devtools.toml").write_text(config.replace('inject=true', 'inject=false', 1))
+assert mutate("start","web",expected=3)["code"]=="process_conflict"
+assert api("process","status",id)["item"]["inject"] is True
+(root/"devtools.toml").write_text(config)
 port=api("port","show","web")["item"]["port"]
 def read(expected):
     for _ in range(60):

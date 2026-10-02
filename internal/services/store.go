@@ -48,6 +48,7 @@ type Record struct {
 	Command         string     `json:"command"`
 	Env             string     `json:"env"`
 	EnvOverride     *string    `json:"env_override"`
+	Inject          *bool      `json:"inject,omitempty"`
 	Capture         bool       `json:"capture_logs"`
 	CreatedAt       time.Time  `json:"created_at"`
 	StartedAt       *time.Time `json:"started_at"`
@@ -798,7 +799,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 				if r.State == "unknown" {
 					return out, failure("process_unavailable")
 				}
-				if r.Env != env || r.Capture != capture {
+				if !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture {
 					return out, failure("process_conflict")
 				}
 				return Result{Item: r}, nil
@@ -836,7 +837,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 				if r.State == "unknown" {
 					return out, failure("process_unavailable")
 				}
-				if r.Env != env || r.Capture != capture {
+				if !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture {
 					return out, failure("process_conflict")
 				}
 				return Result{Item: r}, nil
@@ -844,6 +845,8 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		}
 	}
 	r := Record{ID: q.RequestID, Profile: p.Profile, Instance: instance.ID, Directory: p.Root, Command: q.Command, Env: env, EnvOverride: q.Env, Capture: capture, CreatedAt: time.Now().UTC(), State: "starting", Previous: previous}
+	inject := c.Inject || q.Env != nil
+	r.Inject = &inject
 	exe, err := os.Executable()
 	if err != nil {
 		return out, storageError()
@@ -896,6 +899,18 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 			}
 		}
 	}
+}
+
+func sameExecutionEnvironment(record Record, env string, inject bool, override *string) bool {
+	if record.Env != env {
+		return false
+	}
+	if record.Inject != nil {
+		return *record.Inject == inject
+	}
+	// Older records have no injection snapshot. Preserve reuse for the same
+	// selection, but do not guess equivalence when explicit selection changes.
+	return (record.EnvOverride != nil) == (override != nil)
 }
 func (s Store) stop(ctx context.Context, r Record) (Result, *protocol.Error) {
 	if r.EndedAt != nil {

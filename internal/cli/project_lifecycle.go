@@ -31,6 +31,7 @@ func managedProcessSchema() map[string]any {
 		"command":          stringSchema(),
 		"env":              stringSchema(),
 		"env_override":     map[string]any{"type": []string{"string", "null"}},
+		"inject":           map[string]any{"type": "boolean"},
 		"capture_logs":     map[string]any{"type": "boolean"},
 		"created_at":       stringSchema(),
 		"started_at":       map[string]any{"type": []string{"string", "null"}},

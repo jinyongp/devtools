@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -252,12 +253,16 @@ func TestStartReusesSingletonWithoutColdStartPreflight(t *testing.T) {
 		t.Fatal(err)
 	}
 	token := strings.Repeat("b", 64)
+	var recordMu sync.Mutex
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/status" || request.Header.Get("Authorization") != "Bearer "+token {
 			http.Error(w, "unexpected request", http.StatusForbidden)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(existing)
+		recordMu.Lock()
+		snapshot := existing
+		recordMu.Unlock()
+		_ = json.NewEncoder(w).Encode(snapshot)
 	}))
 	defer server.Close()
 	if err := writePrivate(s.path(existing.ID, "control.json"), control{ID: existing.ID, Address: server.URL, Token: token}); err != nil {
@@ -276,6 +281,39 @@ func TestStartReusesSingletonWithoutColdStartPreflight(t *testing.T) {
 	}, "")
 	if err != nil || result.Item.ID != existing.ID || result.Changed || called != 0 {
 		t.Fatalf("singleton reuse drifted: result=%#v called=%d err=%v", result, called, err)
+	}
+	// The same env name can still request different execution: explicitly
+	// selecting --env enables injection for an inject=false command.
+	env := ""
+	for _, before := range []func(context.Context) *protocol.Error{nil, func(context.Context) *protocol.Error {
+		t.Fatal("reuse conflict ran preflight")
+		return nil
+	}} {
+		_, err := s.start(context.Background(), Request{Action: "start", Directory: root,
+			Command: "web", RequestID: tasks.ID(), Env: &env, BeforeStart: before}, "")
+		if err == nil || err.Code != "process_conflict" {
+			t.Fatalf("different injection reused existing process: %v", err)
+		}
+	}
+	for _, existingInject := range []bool{false, true} {
+		recordMu.Lock()
+		existing.Inject = &existingInject
+		recordMu.Unlock()
+		for _, configuredInject := range []bool{false, true} {
+			config := fmt.Sprintf("profile='app'\n[commands.web]\nexec=['/bin/true']\ninject=%t\n", configuredInject)
+			if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
+				t.Fatal(err)
+			}
+			for _, override := range []*string{nil, &env} {
+				for _, before := range []func(context.Context) *protocol.Error{nil, func(context.Context) *protocol.Error { t.Fatal("reuse ran preflight"); return nil }} {
+					result, err := s.start(context.Background(), Request{Action: "start", Directory: root, Command: "web", RequestID: tasks.ID(), Env: override, BeforeStart: before}, "")
+					compatible := existingInject == (configuredInject || override != nil)
+					if compatible && (err != nil || result.Item.ID != existing.ID) || !compatible && (err == nil || err.Code != "process_conflict") {
+						t.Fatalf("snapshot=%t configured=%t explicit=%t result=%+v err=%v", existingInject, configuredInject, override != nil, result, err)
+					}
+				}
+			}
+		}
 	}
 }
 

@@ -15,7 +15,7 @@ start는 `item`에 실행 ID, profile, instance ID, 디렉터리, 명령, env, �
 
 list는 `data.items`, status는 `data.item`에 실행 정보를 반환한다. start·stop·restart는 `data.item`과 최상위 `data.changed`·`data.replayed`를 반환하며 false도 생략하지 않는다. check·wait의 readiness 보고서와 logs의 `data.content`는 별도 보고서로 유지한다. 공통 형식과 이전 버전의 경로 변경은 [CLI 출력 계약](cli-output.md)을 따른다.
 
-같은 `profile + instance + 명령`이 실행 중이면 같은 실행을 반환한다. env나 로그 설정이 다르면 `process_conflict`다. restart는 이전 실행을 종료하고 최신 프로젝트 설정과 값을 적용한 새 실행 ID를 반환하며 `previous_id`로 이전 실행을 연결한다. env를 지정했던 실행은 그 선택을 유지하고, 명령의 기본 env를 따랐던 실행은 현재 기본값을 적용한다. 이전 실행 ID에 대한 stop은 새 실행에 영향을 주지 않는다.
+같은 `profile + instance + 명령`이 실행 중이면 같은 실행을 반환한다. env, 값 주입 여부, 로그 설정이 다르면 `process_conflict`다. 실행 정보의 `inject`는 해당 실행을 시작할 때 적용한 값 주입 여부이며, 이전 버전에서 시작한 실행에는 없을 수 있다. 주입 여부를 확인할 수 없는 이전 실행은 env의 명시 선택 여부가 바뀌면 restart가 필요하다. restart는 이전 실행을 종료하고 최신 프로젝트 설정과 값을 적용한 새 실행 ID를 반환하며 `previous_id`로 이전 실행을 연결한다. env를 지정했던 실행은 그 선택을 유지하고, 명령의 기본 env를 따랐던 실행은 현재 기본값을 적용한다. 이전 실행 ID에 대한 stop은 새 실행에 영향을 주지 않는다.
 
 모든 변경은 UUID `--request-id`를 받는다. 같은 UUID와 입력은 기존 결과를 반환하며 다른 입력은 `request_conflict`다. 응답이 불확실하면 같은 요청을 재전송하고 실행 ID로 현재 상태를 확인한다. 작업 준비가 10초를 넘으면 `process_pending`과 함께 같은 요청으로 확인하도록 한다. 시작 기록은 남았지만 supervisor가 실제로 사라진 실행은 같은 start 요청의 재시도에서 `interrupted` / `supervisor_lost`로 종결된다. 이 경우 같은 요청 ID로 새 프로세스를 자동 재실행하지 않으며, 새 실행이 필요하면 새 request ID로 start 또는 restart를 실행한다.
 

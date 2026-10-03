@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func privateTempDir(t *testing.T) string {
+func privateTempDir(t testing.TB) string {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0700); err != nil {

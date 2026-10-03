@@ -12,7 +12,7 @@ import (
 func BenchmarkBoundedLog4KiBAtCapacity(b *testing.B) {
 	const writes = 512
 	const chunkSize = 4 << 10
-	root := b.TempDir()
+	root := privateTempDir(b)
 	initial := bytes.Repeat([]byte{'a'}, logLogicalCap)
 	payload := bytes.Repeat([]byte{'b'}, chunkSize)
 	var totalRewrite, totalRead, totalPhysicalReads, totalCompactions, totalFsync int64
@@ -70,7 +70,7 @@ func BenchmarkBoundedLog4KiBAtCapacity(b *testing.B) {
 func BenchmarkBoundedLog1KiBHighFrequency(b *testing.B) {
 	const writes = 1024
 	payload := bytes.Repeat([]byte{'x'}, 1<<10)
-	root := b.TempDir()
+	root := privateTempDir(b)
 	b.ReportAllocs()
 	b.SetBytes(int64(writes * len(payload)))
 	for i := 0; i < b.N; i++ {
@@ -86,7 +86,7 @@ func BenchmarkBoundedLog1KiBHighFrequency(b *testing.B) {
 
 func BenchmarkBoundedLogLargeWrite(b *testing.B) {
 	payload := bytes.Repeat([]byte{'z'}, 2<<20)
-	root := b.TempDir()
+	root := privateTempDir(b)
 	b.ReportAllocs()
 	b.SetBytes(int64(len(payload)))
 	for i := 0; i < b.N; i++ {

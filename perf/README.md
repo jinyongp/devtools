@@ -73,9 +73,10 @@ Groups are `cli`, `project`, `values`, `tasks`, `backup`, `process`, `proxy`,
 Sizes, extra-history counts, body sizes and completed-workstream counts form a
 Cartesian product. `--completed-workstreams` retains that many synthetic closed
 workstreams, each with spec and plan bodies and no child tasks. The selected
-workstream stays draft. `--attach-tasks` attaches the live tasks to it with short
-descriptions, so `--body-kib` varies document size without also multiplying task
-description size. Without this flag, live tasks remain independent and their
+workstream stays draft. Document bodies are distinct across documents and
+workstreams, while their lengths remain fixed. `--attach-tasks` attaches the live
+tasks to it with short descriptions, so `--body-kib` varies document size without
+also multiplying task description size. Without this flag, live tasks remain independent and their
 descriptions also use `--body-kib`.
 
 Hold the live size fixed when investigating history growth; measure live-data growth
@@ -88,6 +89,12 @@ its prerequisites; edit previews use current state rather than replaying the
 entire history. Current reads still decode the profile-wide storage snapshot,
 so retained workstreams and document bodies can increase latency. Measure
 completed-workstream growth separately from event-history growth.
+
+New checkpoints store large document bodies once in a snapshot-only table,
+including bodies referenced by recent canonical edit events. Existing snapshots
+remain readable and acquire this encoding at the next normal checkpoint. The
+WAL and public history retain the full document text. Older CLI versions can
+recover from the WAL when they do not recognize this disposable snapshot format.
 
 Read cases reuse their fixture during warmup and sampling, including storage and
 Dashboard caches. Mutation cases restore the baseline before **every** warmup

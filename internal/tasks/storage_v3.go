@@ -35,19 +35,20 @@ type taskV3Head struct {
 }
 
 type materializedState struct {
-	FormatVersion int                         `json:"format_version"`
-	Profile       string                      `json:"profile"`
-	Version       int                         `json:"version"`
-	Revision      int                         `json:"revision"`
-	WALOffset     int64                       `json:"wal_offset"`
-	Items         map[string]*Item            `json:"items"`
-	ItemOrders    map[string]int              `json:"item_orders"`
-	Runs          map[string]*Run             `json:"runs"`
-	Tracking      map[string]*DefinitionBasis `json:"tracking"`
-	HistoryEvents map[int]Event               `json:"history_events"`
-	HistoryRefs   map[string][]int            `json:"history_refs"`
-	LastEventAt   string                      `json:"last_event_at,omitempty"`
-	Checksum      string                      `json:"checksum"`
+	FormatVersion  int                         `json:"format_version"`
+	Profile        string                      `json:"profile"`
+	Version        int                         `json:"version"`
+	Revision       int                         `json:"revision"`
+	WALOffset      int64                       `json:"wal_offset"`
+	Items          map[string]*Item            `json:"items"`
+	ItemOrders     map[string]int              `json:"item_orders"`
+	Runs           map[string]*Run             `json:"runs"`
+	Tracking       map[string]*DefinitionBasis `json:"tracking"`
+	HistoryEvents  map[int]Event               `json:"history_events"`
+	HistoryRefs    map[string][]int            `json:"history_refs"`
+	LastEventAt    string                      `json:"last_event_at,omitempty"`
+	Checksum       string                      `json:"checksum"`
+	DocumentBodies []string                    `json:"document_bodies,omitempty"`
 }
 
 type v3Resolution struct {
@@ -317,12 +318,13 @@ func snapshotFromState(profile string, state *State, walOffset int64, lastEventA
 		HistoryRefs:   historyRefs,
 		LastEventAt:   lastEventAt,
 	}
+	compactSnapshotBodies(&snapshot)
 	snapshot.Checksum = materializedStateChecksum(snapshot)
 	return snapshot
 }
 
 func materializedStateChecksum(snapshot materializedState) string {
-	if snapshot.HistoryEvents == nil && snapshot.HistoryRefs == nil {
+	if snapshot.DocumentBodies == nil && snapshot.HistoryEvents == nil && snapshot.HistoryRefs == nil {
 		legacy := struct {
 			FormatVersion int                         `json:"format_version"`
 			Profile       string                      `json:"profile"`
@@ -356,8 +358,11 @@ func materializedStateChecksum(snapshot materializedState) string {
 func (m materializedState) state(profile string) (*State, error) {
 	historyMissing := m.HistoryEvents == nil && m.HistoryRefs == nil
 	historyPartial := (m.HistoryEvents == nil) != (m.HistoryRefs == nil)
-	if m.FormatVersion != taskStorageVersion || m.Profile != profile || m.Version != 1 && m.Version != JournalVersion || m.Revision < 0 || m.WALOffset < 0 || m.Items == nil || m.ItemOrders == nil || len(m.ItemOrders) != len(m.Items) || m.Runs == nil || m.Tracking == nil || historyPartial || !validDigest(m.Checksum) || m.Checksum != materializedStateChecksum(m) {
+	if (m.FormatVersion != taskStorageVersion && m.FormatVersion != compactSnapshotVersion) || m.Profile != profile || m.Version != 1 && m.Version != JournalVersion || m.Revision < 0 || m.WALOffset < 0 || m.Items == nil || m.ItemOrders == nil || len(m.ItemOrders) != len(m.Items) || m.Runs == nil || m.Tracking == nil || historyPartial || !validDigest(m.Checksum) || m.Checksum != materializedStateChecksum(m) {
 		return nil, errors.New("invalid materialized snapshot")
+	}
+	if err := expandSnapshotBodies(&m); err != nil {
+		return nil, err
 	}
 	historyEvents := m.HistoryEvents
 	historyRefs := m.HistoryRefs

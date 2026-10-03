@@ -12,10 +12,10 @@ dashboard:
     ./bin/dashboard
 
 fmt:
-    gofmt -w cmd internal scripts skills
+    gofmt -w cmd internal scripts skills perf
 
-check: check-skill-release check-dashboard check-installer check-release
-    test -z "$(gofmt -l cmd internal scripts skills)"
+check: check-skill-release check-dashboard check-installer check-release check-perf
+    test -z "$(gofmt -l cmd internal scripts skills perf)"
     go vet ./...
     go test -race ./...
 
@@ -55,3 +55,14 @@ release-skill version:
 
 verify +scenarios='all':
     python3 verify/run.py "$@"
+
+# Measure CLI, managed services, HTTP APIs, and command discovery with hyperfine.
+perf +args='all':
+    PYTHONDONTWRITEBYTECODE=1 python3 perf/run.py "$@"
+
+# Diagnose allocations, journal growth, proxy scaling, and bounded log I/O.
+perf-go *args:
+    PYTHONDONTWRITEBYTECODE=1 python3 perf/run.py --go --runs 3 "$@"
+
+check-perf:
+    PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s perf -p test_run.py

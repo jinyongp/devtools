@@ -5,3 +5,5 @@
 /.pnpm-store/
 /playwright-report/
 /test-results/
+/perf-results/
+/perf/__pycache__/

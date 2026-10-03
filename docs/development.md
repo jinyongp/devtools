@@ -15,6 +15,11 @@ just verify proxies
 ./bin/devtools project inspect
 ```
 
+For repeatable performance measurements, use `just perf` (hyperfine end-to-end
+suite) or `just perf-go` (internal Go benchmarks). See the
+[performance guide](../perf/README.md) for isolated fixtures, group filters,
+data-size/history matrices and baseline comparison.
+
 `just check` validates the Agent Skill and its release archive with
 `skills-ref==0.1.1`, runs the Dashboard JavaScript regression tests with Node's
 built-in test runner, checks `scripts/install.sh` syntax, checks formatting, runs

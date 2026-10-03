@@ -98,6 +98,7 @@ func TestSeedRetainsCompletedWorkstreamsWithFixedLiveCardinality(t *testing.T) {
 		t.Fatal("attached fixture cannot measure plan updates", mutationErr)
 	}
 	completed := 0
+	documentBodies := map[string]bool{}
 	for _, item := range state.List("workstream") {
 		if item.State == "done" {
 			completed++
@@ -107,6 +108,11 @@ func TestSeedRetainsCompletedWorkstreamsWithFixedLiveCardinality(t *testing.T) {
 			if len(doc["body"].(string)) != 4*1024 {
 				t.Fatal("missing retained body")
 			}
+			body := doc["body"].(string)
+			if documentBodies[body] {
+				t.Fatal("fixture repeats document bodies across documents")
+			}
+			documentBodies[body] = true
 		}
 	}
 	if completed != 5 {

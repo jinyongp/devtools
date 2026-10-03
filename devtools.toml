@@ -1,1 +1,97 @@
 profile = "devtools"
+
+[commands."build:cli"]
+exec = ["go", "build", "-o", "bin/devtools", "./cmd/devtools"]
+inject = false
+
+[commands."dev:dashboard"]
+exec = ["sh", "scripts/project.sh", "dashboard"]
+inject = false
+
+[commands."fmt:go"]
+exec = ["gofmt", "-w", "cmd", "internal", "scripts", "skills", "perf"]
+inject = false
+
+[commands."check:all"]
+exec = ["sh", "scripts/project.sh", "check"]
+inject = false
+
+[commands."check:dashboard"]
+exec = ["node", "--test", "scripts/dashboard-*.test.mjs"]
+inject = false
+
+[commands."test:dashboard-browser"]
+exec = ["corepack", "pnpm", "exec", "playwright", "test", "scripts/dashboard-browser.spec.mjs", "--workers=1", "--reporter=line"]
+inject = false
+
+[commands."check:skill-discovery"]
+exec = ["corepack", "pnpm", "exec", "skills", "add", ".", "--list"]
+inject = false
+
+[commands."check:skill-discovery-public"]
+exec = ["corepack", "pnpm", "exec", "skills", "add", "jinyongp/devtools", "--list"]
+inject = false
+
+[commands."check:release"]
+exec = ["sh", "scripts/project.sh", "release-check"]
+inject = false
+
+[commands."check:project"]
+exec = ["node", "--test", "scripts/project.test.mjs"]
+inject = false
+
+[commands."check:installer"]
+exec = ["sh", "scripts/project.sh", "installer-check"]
+inject = false
+
+[commands."check:skill"]
+exec = ["sh", "scripts/validate-skill.sh"]
+inject = false
+
+[commands."check:skill-release"]
+exec = ["sh", "scripts/check-skill-release.sh"]
+inject = false
+
+[commands."check:perf"]
+exec = ["python3", "-B", "-m", "unittest", "discover", "-s", "perf", "-p", "test_run.py"]
+inject = false
+
+[commands."test:go"]
+exec = ["go", "test", "./..."]
+inject = false
+
+[commands."lint:go"]
+exec = ["go", "vet", "./..."]
+inject = false
+
+[commands."clean:build"]
+exec = ["rm", "-rf", "bin", "coverage.out"]
+inject = false
+
+[commands."release:cli"]
+exec = ["sh", "scripts/project.sh", "package-cli"]
+inject = false
+
+[commands."release:plan"]
+exec = ["node", "scripts/release.mjs"]
+inject = false
+
+[commands."release:publish"]
+exec = ["node", "scripts/release.mjs", "--publish"]
+inject = false
+
+[commands."release:skill"]
+exec = ["sh", "scripts/project.sh", "package-skill"]
+inject = false
+
+[commands."test:installed"]
+exec = ["python3", "-B", "verify/run.py"]
+inject = false
+
+[commands."perf:all"]
+exec = ["python3", "-B", "perf/run.py"]
+inject = false
+
+[commands."perf:go"]
+exec = ["python3", "-B", "perf/run.py", "--go", "--runs", "3"]
+inject = false

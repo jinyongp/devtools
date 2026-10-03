@@ -254,7 +254,7 @@ go test -race ./internal/project ./internal/ports ./internal/proxy ./internal/cl
 go vet ./...
 GOOS=darwin GOARCH=arm64 go build ./cmd/devtools
 GOOS=linux GOARCH=amd64 go build ./cmd/devtools
-just verify proxies
+devtools run test:installed proxies
 ```
 
 실제 브라우저 WebSocket과 IPv6 확인은 macOS host 검증 기록으로 남긴다.

@@ -603,7 +603,7 @@ def main():
                    "unmeasured_commands": sorted(set(names) - selected_commands - discovered_commands),
                    "limits": ["HTTP measurements include curl startup; browser rendering is not measured.",
                               "Network updates, interactive editors, destructive lifecycle variants and migration are discovery-only.",
-                              "Projects/proxy routes: one; use just perf-go for the 1/50/200-project resolver matrix."]})
+                              "Projects/proxy routes: one; use devtools run perf:go for the 1/50/200-project resolver matrix."]})
         summary["complete"] = True
         summary.pop("active_case", None)
         if args.compare:

@@ -7,19 +7,25 @@ existing profiles, tasks, servers and configuration stay outside these fixtures.
 
 The end-to-end runner currently supports Linux and WSL. It requires Python 3.10+
 with its standard library, Go from `go.mod`, hyperfine 1.20+, curl, Git and the usual
-Unix `true` and `printf` programs. `just` provides the shortcuts below. Start it
-from a shell with your development toolchain loaded.
+Unix `true` and `printf` programs. Project commands live in `devtools.toml`.
+Start from a shell with your development toolchain loaded, then select this
+checkout's CLI:
+
+```sh
+go build -o bin/devtools ./cmd/devtools
+export PATH="$PWD/bin:$PATH"
+```
 The runner looks for hyperfine on `PATH`, then in the ignored `bin/hyperfine`
 location; `--hyperfine` can select another executable.
 
 ## Start with the whole suite
 
 ```sh
-just perf --list
-just perf
+devtools run perf:all --list
+devtools run perf:all
 ```
 
-`just perf` builds the current CLI and measures all groups serially at 10, 100 and
+`devtools run perf:all` builds the current CLI and measures all groups serially at 10, 100 and
 1,000 live tasks and variable keys. Each case has three warmup runs and ten timed
 runs. There is also one draft workstream with specification and plan bodies.
 The default body size is 1 KiB and there are no additional historical updates.
@@ -31,7 +37,7 @@ The discovery count follows the measured binary's schema automatically.
 For a quick check of every group:
 
 ```sh
-just perf --sizes 10 --runs 3 --warmup 1
+devtools run perf:all --sizes 10 --runs 3 --warmup 1
 ```
 
 Results go to a new `perf-results/<timestamp>/` directory, ignored by Git:
@@ -53,11 +59,11 @@ If cleanup fails, the runner retains the fixture and prints its path.
 ## Narrow down a slow area
 
 ```sh
-just perf tasks values --sizes 10,100,1000
-just perf tasks --case workstream --body-kib 1,64,256 --sizes 10
-just perf tasks --case context --sizes 1 --histories 1000,10000,100000
-just perf process proxy dashboard --sizes 10
-just perf discovery --sizes 10
+devtools run perf:all tasks values --sizes 10,100,1000
+devtools run perf:all tasks --case workstream --body-kib 1,64,256 --sizes 10
+devtools run perf:all tasks --case context --sizes 1 --histories 1000,10000,100000
+devtools run perf:all process proxy dashboard --sizes 10
+devtools run perf:all discovery --sizes 10
 ```
 
 Groups are `cli`, `project`, `values`, `tasks`, `backup`, `process`, `proxy`,
@@ -86,9 +92,9 @@ rather than runtime cases. The coverage file makes these gaps visible.
 ## Compare a candidate with a baseline
 
 ```sh
-just perf tasks --sizes 100 --output /tmp/devtools-baseline
+devtools run perf:all tasks --sizes 100 --output /tmp/devtools-baseline
 # Make a change, then rerun the same sampling configuration.
-just perf tasks --sizes 100 --output /tmp/devtools-candidate \
+devtools run perf:all tasks --sizes 100 --output /tmp/devtools-candidate \
   --compare /tmp/devtools-baseline/summary.json
 ```
 
@@ -103,7 +109,7 @@ With ten samples, p95 is effectively the slowest observed run.
 To measure an existing release or a specific hyperfine executable:
 
 ```sh
-just perf --binary /absolute/path/to/devtools \
+devtools run perf:all --binary /absolute/path/to/devtools \
   --hyperfine /absolute/path/to/hyperfine --sizes 10
 ```
 
@@ -116,8 +122,8 @@ Choose a fresh `--output` directory for every run.
 ## Diagnose the cost inside a command
 
 ```sh
-just perf-go
-just perf-go --benchtime 10x --runs 5 --output /tmp/devtools-go-perf
+devtools run perf:go
+devtools run perf:go --benchtime 10x --runs 5 --output /tmp/devtools-go-perf
 ```
 
 This runs the existing Go benchmarks with allocation reporting and saves
@@ -126,7 +132,7 @@ events, mutations, cursor pagination, large workstream bodies, lifecycle replay,
 1/50/200-project proxy routing and bounded log I/O. Go's benchmark timer excludes
 its declared fixture setup; Go results are distinct from hyperfine end-to-end
 timings. The suite runs packages serially without the race detector to avoid
-instrumentation and package contention. Use `just check-perf` for runner regression
+instrumentation and package contention. Use `devtools run check:perf` for runner regression
 tests; performance runs are deliberately separate from correctness checks.
 
 ## Add a workload

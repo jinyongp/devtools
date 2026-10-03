@@ -108,4 +108,4 @@ release는 활성 실행과 포트 점유를 확인한 뒤 할당을 해제한�
 
 전체 설정·범위·응답·오류는 [사용 계약](port-design.md), 명령별 옵션은
 `devtools schema`에서 확인한다. 설치된 release 바이너리의 실제 포트 동작은
-`just verify ports`로 검증한다.
+`devtools run test:installed ports`로 검증한다.

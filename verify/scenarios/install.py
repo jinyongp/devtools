@@ -136,18 +136,17 @@ assert dotenv.exists()
     "secret_present=os.getenv('TOKEN')=='fixture-secret', "
     "args=sys.argv[1:],cwd=os.getcwd())))\n"
 )
-(project / "justfile").write_text("check:\n    @python3 app.py\n")
 (project / "devtools.toml").write_text(
     'profile="fixture"\n'
-    '[commands.check]\nexec=["just","check"]\ninject=true\nenv="local"\n'
+    '[commands."check:app"]\nexec=["python3","app.py"]\ninject=true\nenv="local"\n'
     '[commands."dev:app"]\nexec=["python3","app.py"]\ninject=true\nenv="local"\n'
 )
-plain = json.loads(execute(["just", "check"]).stdout)
+plain = json.loads(execute(["python3", "app.py"]).stdout)
 assert plain["level"] is None and not plain["secret_present"]
 
 
 def verify_project(cwd=project):
-    named = json.loads(execute(["devtools", "run", "check"], cwd=cwd).stdout)
+    named = json.loads(execute(["devtools", "run", "check:app"], cwd=cwd).stdout)
     assert named["level"] == "local" and named["secret_present"]
     assert named["cwd"] == str(cwd)
     extra = json.loads(execute(["devtools", "run", "--env", "staging", "dev:app",

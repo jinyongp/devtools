@@ -8,39 +8,46 @@ Git 전역 설정을 별도 임시 경로로 분리하므로 현재 devtools 상
 
 ## 실행
 
+저장소 루트에서 현재 소스로 CLI를 빌드하고 PATH에 먼저 등록한다.
+
+```sh
+go build -o bin/devtools ./cmd/devtools
+export PATH="$PWD/bin:$PATH"
+```
+
 ```sh
 # 전체 시나리오
-just verify
+devtools run test:installed
 
 # 설치·업데이트 시나리오
-just verify install
+devtools run test:installed install
 
 # 작업 관리·인계·대시보드 시나리오
-just verify tasks
+devtools run test:installed tasks
 
 # 환경 진단·명령 실행 전 필수 조건 시나리오
-just verify doctor
+devtools run test:installed doctor
 
 # 포트 할당·실제 서버 실행·프로젝트 간 참조
-just verify ports
+devtools run test:installed ports
 
 # reverse proxy route·WebSocket·daemon 재시작
-just verify proxies
+devtools run test:installed proxies
 
 # 암호화 백업·복구·재시도·충돌·직전 백업
-just verify backup
+devtools run test:installed backup
 
 # Profile 탐색·값 비노출·recipient·import preview/apply와 동시 replay
-just verify profiles
+devtools run test:installed profiles
 
 # 실제 서버의 다중 시작·readiness·재사용·worktree 격리·부분 재시도
-just verify project_lifecycle
+devtools run test:installed project_lifecycle
 
 # 프로세스 준비 확인·대기·취소·실행 기준 유지
-just verify readiness
+devtools run test:installed readiness
 
 # 시나리오 목록
-just verify --list
+devtools run test:installed --list
 ```
 
 기본 실행은 현재 OS/architecture용 `0.0.0-test.1`, `0.0.0-test.2` CLI release와

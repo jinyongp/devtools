@@ -248,8 +248,9 @@ receipts are separate from the variable/secret store.
 The project pins Go 1.27.1 and go-toml 2.4.3. The dashboard includes the exact
 official D3 7.9.0 bundle, with its license and SHA-256 in
 `internal/dashboard/assets/dependencies.json`. D3 declares no peer dependencies.
-CI actions use immutable commit references and just uses version 1.58.0.
+CI actions use immutable commit references. Project commands use the CLI built
+from the checked-out source and are declared in `devtools.toml`.
 
-`just check` runs the Go race tests. `just verify` runs installed-release scenarios for
+`devtools run check:all` runs the Go race tests. `devtools run test:installed` runs installed-release scenarios for
 concurrent claims, takeover, retries, worktree sharing, and dashboard sessions.
 Each scenario installs the compiled release into an isolated temporary home.

@@ -430,8 +430,8 @@ Doctor `remedy -> remedies` 변경과 `profile import` preview/apply 전환은 �
 gofmt -w cmd internal scripts skills
 go vet ./...
 go test -race ./...
-just check
-just verify
+devtools run check:all
+devtools run test:installed
 ```
 
 설치된 release 시나리오는 기존 `backup`, `doctor`, `discovery`, `processes`, `workflow` 회귀를 유지하고,

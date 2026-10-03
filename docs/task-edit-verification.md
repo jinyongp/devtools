@@ -34,9 +34,9 @@ Browser Plugin 검증은 `TestEditBrowserFixture`가 만드는 격리 profile을
 필수 통합 명령:
 
 ```sh
-just check
-pnpm test:dashboard
-just verify tasks workflow backup cleanup completion discovery
+devtools run check:all
+devtools run check:dashboard
+devtools run test:installed tasks workflow backup cleanup completion discovery
 ```
 
 실제 검증 결과와 코드 기준은 workstream의 task별 validation 및 통합 validation에 기록한다. syscall별 커널 장애를 모두 재현한 것으로 해석하지 않으며 저장 실패는 원자 교체 전·후 경계로 검증한다.

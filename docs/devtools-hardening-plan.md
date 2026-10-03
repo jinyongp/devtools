@@ -13,7 +13,7 @@
 핵심 목표는 다음과 같다.
 
 1. 태그가 push된 뒤 실제 GitHub Release와 Homebrew 게시가 시작되기 전에 macOS/Linux 설치 release/Dashboard 검증을 독립 CI 단계에서 모두 통과하도록 한다.
-2. Dashboard JavaScript 회귀 테스트를 공식 `just check` gate에 포함한다.
+2. Dashboard JavaScript 회귀 테스트를 공식 `devtools run check:all` gate에 포함한다.
 3. 이름 명령의 env·requirements·port/binding·실행 파일 준비 규칙을 하나의 application 계층으로 모아 `command run`, `doctor`, `process`, `project`, Dashboard의 의미 drift를 막는다.
 4. project lifecycle에서 자주 필요한 로그 조회와 재시작을 execution ID를 직접 찾지 않고 수행할 수 있게 한다.
 5. profile 폐기, 통합 diagnostics, retention, 실제 browser smoke의 후속 확장을 저장 모델과 보안 경계를 깨지 않는 방식으로 진행한다.
@@ -31,8 +31,8 @@
 
 ### Dashboard test gate
 
-- 기존 `scripts/dashboard-*.test.mjs`를 새 `just check-dashboard` recipe에서 직접 `node --test`로 실행한다.
-- `just check`가 `check-dashboard`를 포함한다.
+- 기존 `scripts/dashboard-*.test.mjs`를 `devtools run check:dashboard` 명령에서 직접 `node --test`로 실행한다.
+- `devtools run check:all`가 `check-dashboard`를 포함한다.
 - CI에서는 Node 버전을 명시적으로 준비해 runner 기본 설치 버전에 기대지 않는다.
 - pnpm 설치는 Dashboard unit test 실행에 필요하지 않으므로 check path에 추가하지 않는다.
 
@@ -71,13 +71,13 @@ Supervisor가 CLI `runCommand`를 다시 호출하는 현재 결합은 공통 ex
 
 ### Release workflow
 
-현재 workflow도 게시 전에 검증하지만 Linux `just check`와 `just verify`가 `contents: write`를 가진 `release` job 내부에 있다. macOS 검증은 별도 job이므로 두 OS 검증 구조도 비대칭이다.
+현재 workflow도 게시 전에 검증하지만 Linux `devtools run check:all`와 `devtools run test:installed`가 `contents: write`를 가진 `release` job 내부에 있다. macOS 검증은 별도 job이므로 두 OS 검증 구조도 비대칭이다.
 
 따라서 게시 전 CI를 별도 job으로 분리하는 변경은 의미가 있다. 태그가 먼저 존재하는 것은 허용된 운영 모델이다.
 
 ### Dashboard
 
-`package.json`에는 `test:dashboard`가 있고 현재 11개 Node test가 통과한다. 그러나 `just check`에는 포함되지 않는다. Release의 macOS/Linux 검사도 `just check`만 호출하므로 Dashboard JS regression은 release gate 밖에 있다.
+`package.json`에는 `test:dashboard`가 있고 현재 11개 Node test가 통과한다. 그러나 `devtools run check:all`에는 포함되지 않는다. Release의 macOS/Linux 검사도 `devtools run check:all`만 호출하므로 Dashboard JS regression은 release gate 밖에 있다.
 
 ### Execution/preflight
 
@@ -109,8 +109,8 @@ Profile identity는 values/tasks만으로 끝나지 않고 port instance와 mana
 
 ### Phase 1 — release와 기본 gate
 
-- [x] **WI-001 — Dashboard tests를 `just check`에 편입**
-  - `check-dashboard` recipe 추가.
+- [x] **WI-001 — Dashboard tests를 `devtools run check:all`에 편입**
+  - `check:dashboard` 프로젝트 명령 추가.
   - 기존 11개 test를 직접 Node test runner로 실행.
   - `check` 의존성에 연결.
   - 개발 문서의 prerequisites와 check 설명 갱신.
@@ -119,8 +119,8 @@ Profile identity는 values/tasks만으로 끝나지 않고 port instance와 mana
 - [x] **WI-002 — Release workflow CI/release 역할 분리**
   - `validate-tag` 유지.
   - `ci-macos`, `ci-linux`를 validate 이후 병렬 실행.
-  - macOS: `just check`, build, `project inspect`, `just verify`, Agent Skill reference package 생성.
-  - Linux: `just check`, `just verify`.
+  - macOS: `devtools run check:all`, build, `project inspect`, `devtools run test:installed`, Agent Skill reference package 생성.
+  - Linux: `devtools run check:all`, `devtools run test:installed`.
   - `release`는 두 CI job 성공을 `needs`로 요구.
   - `release`에서는 재검증을 제거하고 네 플랫폼 package, cross-OS Skill 비교, GitHub Release 게시만 수행.
   - stable release 성공 뒤 Homebrew reusable workflow 실행은 유지.
@@ -207,7 +207,7 @@ go test ./internal/cli ./internal/lifecycle ./internal/services ./internal/profi
 
 ### VAL-002 — Phase 1
 
-- `just check`가 Dashboard JS tests까지 실행하는지 확인.
+- `devtools run check:all`가 Dashboard JS tests까지 실행하는지 확인.
 - `go test -race ./...`, `go vet ./...`.
 - release workflow에서 `release.needs`가 macOS/Linux CI 둘 다 요구하고 `contents: write`가 release job에만 있는지 diff review.
 - 실제 tag release 시 두 CI job 실패가 Publish release/Homebrew 실행을 막는지 GitHub Actions 결과로 최종 확인.
@@ -218,7 +218,7 @@ go test ./internal/cli ./internal/lifecycle ./internal/services ./internal/profi
 - missing tool/var/sec/env, bad PATH, port conflict, bind reference, env override를 모든 public start 경로에서 동일하게 검증.
 - failed cold start가 process record를 남기지 않는 회귀 테스트.
 - existing singleton 재사용과 process/project retry receipt 회귀 테스트.
-- `just verify doctor processes project_lifecycle workflow`.
+- `devtools run test:installed doctor processes project_lifecycle workflow`.
 
 ### VAL-004 — project UX
 
@@ -244,7 +244,7 @@ go test ./internal/cli ./internal/lifecycle ./internal/services ./internal/profi
 ## 완료 기준
 
 - Release 게시 job은 별도 macOS/Linux CI가 모두 성공한 뒤에만 실행된다.
-- `just check`가 Go/Skill/Dashboard 회귀를 함께 막는다.
+- `devtools run check:all`가 Go/Skill/Dashboard 회귀를 함께 막는다.
 - 사용자-facing command 실행 경로가 하나의 effective command/preflight 구현을 공유한다.
 - supervisor가 CLI App에 재진입하지 않는다.
 - project logs/restart가 canonical worktree identity와 retry-safe lifecycle 계약을 따른다.
@@ -281,23 +281,23 @@ go test ./internal/cli ./internal/lifecycle ./internal/services ./internal/profi
   - 재검토 결과: stale project config, inherited env, restart stop-result, cold-start preflight, actual readiness 경계에서 추가 actionable finding 없음. oscillation 없음.
   - scoped validation: execution/doctor/process/services/lifecycle/cli/dashboard/diagnostics/retention/cleanup/tasks race PASS; 전체 go vet PASS; Dashboard JS 11/11 PASS; browser syntax/discovery PASS; actionlint, frozen pnpm lockfile, diff-check, Agent Skill package 생성 PASS.
   - 당시 남은 검증 제약: 실제 Chromium launch는 Playwright CDN 403, 공식 Agent Skill validator는 uvx 부재였다. Release CI에서 검증하도록 구성했다.
-- Cycle 4: 완료. 설치 검증을 `just verify`로 단순화한 범위의 Node/runtime·CI portability·Planning/contracts 축을 review-and-fix했다.
+- Cycle 4: 완료. 설치 검증을 `devtools run test:installed`로 단순화한 범위의 Node/runtime·CI portability·Planning/contracts 축을 review-and-fix했다.
   - 수정: 실패한 시나리오 뒤 격리 HOME의 proxy/dashboard/managed process를 정리하고, process-only profile도 `devtools.toml`의 project inspect로 발견하도록 runner cleanup을 보강했다. 테스트 release target은 `GOHOSTOS/GOHOSTARCH`로 고정해 ambient `TARGET_OS/TARGET_ARCH` 오염을 차단했다. Python 최소 버전을 불필요하게 올리는 built-in generic annotation을 제거하고 개발 prerequisite·검증 문서를 실제 요구사항과 맞췄다.
   - 재검토 결과: current-session verification simplification 범위에서 추가 actionable finding 없음. 동일 root cause의 oscillation 없음.
-  - cycle validation: intentional detached-process failure 후 test port 재사용 PASS; cross-target env override 재현 PASS; `just verify` 전체 16개 시나리오 PASS; `processes workflow tasks` scoped scenarios PASS; 전체 `go test -race ./...`, `go vet ./...`, `just check-installer`, actionlint, actions-up, diff-check PASS; stale legacy 검증 경로 참조 없음.
+  - cycle validation: intentional detached-process failure 후 test port 재사용 PASS; cross-target env override 재현 PASS; `devtools run test:installed` 전체 16개 시나리오 PASS; `processes workflow tasks` scoped scenarios PASS; 전체 `go test -race ./...`, `go vet ./...`, `devtools run check:installer`, actionlint, actions-up, diff-check PASS; stale legacy 검증 경로 참조 없음.
   - unresolved finding: 없음. 남은 user decision 없음.
 
 ## Verification follow-up — 2026-09-19
 
-- 설치 시나리오를 `verify/`로 모으고 단일 `just verify` recipe로 통합했다.
-- `just verify`가 현재 host용 테스트 release 두 버전과 Agent Skill artifact를 임시 생성해 격리된 HOME/XDG에서 전체 시나리오를 실행한다.
-- Release CI의 macOS와 Linux hosted runner가 모두 `just verify`를 실행해 clean OS 검증을 담당한다.
+- 설치 시나리오를 `verify/`로 모으고 단일 `devtools run test:installed` 명령으로 통합했다.
+- `devtools run test:installed`가 현재 host용 테스트 release 두 버전과 Agent Skill artifact를 임시 생성해 격리된 HOME/XDG에서 전체 시나리오를 실행한다.
+- Release CI의 macOS와 Linux hosted runner가 모두 `devtools run test:installed`를 실행해 clean OS 검증을 담당한다.
 - Go unit test는 실제 port/listener가 직접 대상이 아닌 경우 probe/listener 주입으로 결정적으로 유지한다.
 
 ## Release follow-up — v0.16.0 Linux CI
 
 - [x] **WI-013 — Port availability test의 플랫폼 경계 정리**
-  - 원인: macOS의 BSD socket semantics 보강용 `localProbeAddresses()`를 공통 테스트가 Linux에서도 직접 호출해, 제품 Linux 경로와 무관한 netlink 제약이 `just check`를 실패시킴.
+  - 원인: macOS의 BSD socket semantics 보강용 `localProbeAddresses()`를 공통 테스트가 Linux에서도 직접 호출해, 제품 Linux 경로와 무관한 netlink 제약이 `devtools run check:all`를 실패시킴.
   - macOS 전용 interface 열거를 Darwin build 경계로 격리한다.
   - 공통 테스트는 private helper 대신 `Available()`의 wildcard/loopback listener 계약을 검증한다.
   - Linux에서 netlink/interface enumeration 없이 `go test -race ./internal/ports`가 통과해야 한다.

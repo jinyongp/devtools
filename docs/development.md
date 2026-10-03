@@ -4,43 +4,50 @@
 사용자 설치와 실행은 [README](../README.md)를 참고한다.
 
 
-Requires Go 1.27.x, Node.js 24.x, Python 3, Git, curl, OpenSSL, tar, just, and uv with `uvx`.
+Requires Go 1.27.x, Node.js 24.x, Python 3, Git, curl, OpenSSL, tar, and uv with `uvx`.
+Bootstrap the CLI from this checkout and put it first on PATH. All subsequent
+project commands come from `devtools.toml` and use `{purpose}:{command}` names.
 
 ```sh
-just build
-just check
-just verify proxies
+go build -o bin/devtools ./cmd/devtools
+export PATH="$PWD/bin:$PATH"
+devtools command list
+devtools run build:cli
+devtools run check:all
+devtools run test:installed proxies
 ./bin/devtools version
 ./bin/devtools schema
-./bin/devtools project inspect
+devtools project inspect
 ```
 
-For repeatable performance measurements, use `just perf` (hyperfine end-to-end
-suite) or `just perf-go` (internal Go benchmarks). See the
+For repeatable performance measurements, use `devtools run perf:all` (hyperfine end-to-end
+suite) or `devtools run perf:go` (internal Go benchmarks). See the
 [performance guide](../perf/README.md) for isolated fixtures, group filters,
 data-size/history matrices and baseline comparison.
 
-`just check` validates the Agent Skill and its release archive with
+`devtools run check:all` validates the Agent Skill and its release archive with
 `skills-ref==0.1.1`, runs the Dashboard JavaScript regression tests with Node's
 built-in test runner, checks `scripts/install.sh` syntax, checks formatting, runs
-`go vet`, and runs Go tests with the race detector. `just check-dashboard` runs only
+`go vet`, and runs Go tests with the race detector. `devtools run check:dashboard` runs only
 the Dashboard JavaScript tests.
-`just check-skill` runs only the official format validator, while
-`just check-skill-release` also tests archive structure, checksums, source identity,
+`devtools run check:project` verifies aggregate-check failure propagation and
+release packaging inputs.
+`devtools run check:skill` runs only the official format validator, while
+`devtools run check:skill-release` also tests archive structure, checksums, source identity,
 and invalid fixtures. The repository also exact-pins `skills` 1.6.0; after `pnpm install`,
-`pnpm test:skill-discovery` verifies local repository discovery and
-`pnpm test:skill-discovery:public` verifies the public `jinyongp/devtools` source.
+`devtools run check:skill-discovery` verifies local repository discovery and
+`devtools run check:skill-discovery-public` verifies the public `jinyongp/devtools` source.
 Release workflow validation runs on macOS and Ubuntu 24.04 with
 Go 1.27.1. The workflow disables setup-uv caching because uv is used only to run
 the Agent Skills validator and this repository has no Python dependency manifest.
 WSL uses the Linux build; testing in an actual WSL environment is a separate check.
-`just verify proxies`는 배포 아카이브를 설치한 격리 환경에서 HTTP route,
+`devtools run test:installed proxies`는 배포 아카이브를 설치한 격리 환경에서 HTTP route,
 WebSocket, 동적 port 변경, daemon 재시작과 listener reservation을 검증한다.
 
 Go 단위 테스트는 OS가 관리하는 비어 있는 port 번호를 미리 골라 닫은 뒤 재사용하지 않는다.
 port 가용성이나 proxy listener가 테스트의 직접 대상이 아니면 주입 가능한 probe/listener를
 사용해 상태 전이와 저장소 동작을 결정적으로 검증한다. 실제 TCP bind, occupied/free 판정,
-IPv4/IPv6 listener, 설치된 바이너리의 proxy 동작은 `just verify ports proxies`에서 검증한다.
+IPv4/IPv6 listener, 설치된 바이너리의 proxy 동작은 `devtools run test:installed ports proxies`에서 검증한다.
 이 경계를 유지해 호스트의 포트 사용 상태나 병렬 프로세스 때문에 단위 테스트가 흔들리지 않게 한다.
 
 
@@ -49,13 +56,13 @@ IPv4/IPv6 listener, 설치된 바이너리의 proxy 동작은 `just verify ports
 저장소에서 다음 명령을 실행하고 출력된 링크를 연다.
 
 ```sh
-just dashboard
+devtools run dev:dashboard
 ```
 
 개발 전용 실행 파일을 빌드한 뒤 서버를 터미널에서 실행한다.
 `internal/dashboard/assets`의 HTML·JS·CSS를 수정하고 브라우저를 새로고침하면
 수정 내용이 바로 반영된다. 응답은 `Cache-Control: no-store`로 제공한다.
-Go 코드를 수정했을 때는 `Ctrl+C`로 종료하고 `just dashboard`를 다시 실행한다.
+Go 코드를 수정했을 때는 `Ctrl+C`로 종료하고 `devtools run dev:dashboard`를 다시 실행한다.
 
 현재 사용자의 devtools 데이터와 저장소의 profile을 사용한다. 개발 서버는
 별도의 임시 registry와 포트를 사용하며 종료할 때 임시 파일을 정리한다.
@@ -64,14 +71,14 @@ Go 코드를 수정했을 때는 `Ctrl+C`로 종료하고 `just dashboard`를 �
 XDG_DATA_HOME·XDG_CONFIG_HOME·XDG_CACHE_HOME도 격리 디렉터리로 지정한다.
 
 일반 `devtools dashboard`는 실행 파일에 내장된 화면을 제공한다.
-DOM 없이 실행하는 빠른 JavaScript 회귀 테스트는 `pnpm test:dashboard`로 확인한다.
+DOM 없이 실행하는 빠른 JavaScript 회귀 테스트는 `devtools run check:dashboard`로 확인한다.
 실제 Chromium smoke는 빌드된 CLI와 격리한 HOME/XDG 경로를 사용한다.
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm exec playwright install chromium
-just build
-pnpm test:dashboard:browser
+devtools run build:cli
+devtools run test:dashboard-browser
 ```
 
 Smoke는 dashboard 로그인, Values 화면의 변수 수정, URL navigation과 session 유지 상태의 reload,
@@ -97,18 +104,18 @@ CLI에서 확인한 최종 값을 한 흐름으로 검증한다. Release의 Linu
 ## 릴리스
 
 ```sh
-pnpm release
-pnpm release --publish
+devtools run release:plan
+devtools run release:publish
 ```
 
 버전 추천은 HEAD에 포함된 실제 게시된 안정 릴리즈를 기준으로 계산한다.
 실패하거나 게시하지 않은 태그는 다음 버전의 기준이 되지 않는다. `--publish`는
 깨끗한 main을 올린 뒤 버전과 정확한 커밋 SHA로 Release 워크플로를 요청한다.
-로컬에서 릴리즈 태그를 만들지 않는다. Node.js, pnpm과 인증된 GitHub CLI(`gh`)가 필요하다.
+로컬에서 릴리즈 태그를 만들지 않는다. Node.js와 인증된 GitHub CLI(`gh`)가 필요하다.
 
 워크플로는 대상 커밋이 main에 포함됐는지 확인하고 macOS와 Linux 검사를 병렬로
 실행한다. Linux는 Agent Skill의 local/public discovery와 Chromium dashboard smoke를
-포함한다. 두 OS 모두 `just verify`를 통과해야 하며, 각 설치 시나리오는 180초를
+포함한다. 두 OS 모두 `devtools run test:installed`를 통과해야 하며, 각 설치 시나리오는 180초를
 넘기면 이름을 출력하고 실패한다. 검사가 끝나면 네 플랫폼의 CLI와 Agent Skill을
 패키징하고 체크섬·바이너리 버전·커밋·양쪽 OS의 Skill 일치를 확인한다.
 이 단계까지 실패하면 새 태그와 GitHub Release는 만들어지지 않는다.
@@ -136,7 +143,7 @@ gh workflow run release.yml --ref main -f version=0.23.0 -f commit="$(git rev-pa
 ```
 
 로컬에서 스킬 배포물만 확인하려면
-`just release-skill VERSION`을 실행한다.
+`devtools run release:skill VERSION`을 실행한다.
 [배포 상세](install.md#github-releases-게시)와
 [설치된 release 검증](../verify/README.md)을 참고한다.
 

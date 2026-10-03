@@ -7,13 +7,15 @@ devtools는 운영체제와 CPU에 맞는 실행 파일을 설치해 사용한�
 저장소에서 버전을 명시해 배포물을 만든다. 이 단계에는 Go 1.27.x가 필요하다.
 
 ```sh
-just release 0.1.0
+go build -o bin/devtools ./cmd/devtools
+export PATH="$PWD/bin:$PATH"
+devtools run release:cli 0.1.0
 ```
 
 기본 대상은 빌드 환경의 운영체제와 CPU다. 다른 대상을 지정할 때는 환경변수를 사용한다.
 
 ```sh
-TARGET_OS=linux TARGET_ARCH=amd64 just release 0.1.0
+TARGET_OS=linux TARGET_ARCH=amd64 devtools run release:cli 0.1.0
 ```
 
 `dist/`에 실행 파일 하나를 담은 아카이브와 SHA-256 체크섬이 생성된다.
@@ -27,11 +29,11 @@ devtools_0.1.0_linux_amd64.tar.gz.sha256
 
 오프라인·수동 설치용 Agent Skill 아카이브도 같은 버전으로 만든다. 일반 설치는
 `npx skills add jinyongp/devtools`로 저장소에서 직접 수행한다.
-아카이브 생성 자체에는 `uvx`와 `skills-ref`가 필요하지 않지만, 게시 전 `just check`가
+아카이브 생성 자체에는 `uvx`와 `skills-ref`가 필요하지 않지만, 게시 전 `devtools run check:all`가
 공식 Agent Skills 검증을 수행한다.
 
 ```sh
-just release-skill 0.1.0
+devtools run release:skill 0.1.0
 ```
 
 `dist/`에는 `devtools/` 스킬 디렉터리를 담은 아카이브와 체크섬이 생성된다.
@@ -138,11 +140,11 @@ devtools version
 
 ## GitHub Releases 게시
 
-Node.js와 pnpm이 있는 저장소에서 다음 명령으로 버전을 추천받는다.
+Node.js가 있는 저장소에서 현재 소스로 빌드한 devtools를 사용해 버전을 추천받는다.
 
 ```sh
-pnpm release
-pnpm release --publish
+devtools run release:plan
+devtools run release:publish
 ```
 
 origin에서 태그를 가져오고 GitHub의 게시된 릴리즈를 조회한 뒤, HEAD에 포함된 가장
@@ -187,7 +189,7 @@ installer workflow 요청도 기본 브랜치 ref에서 실행된다. **Publish 
 ## 설치 환경 검증하기
 
 ```sh
-just verify install
+devtools run test:installed install
 ```
 
 [설치된 release 검증](../verify/README.md)의 `install` 시나리오로 검증한다.
@@ -199,7 +201,7 @@ runner는 현재 OS와 architecture용 테스트 release 두 버전을 임시 �
 - 동작 인자를 생략한 기본 설치, 기본 경로 설치와 PATH 호출, 설치된 버전 조회.
 - `dvt` 별칭 생성과 기존 동명 파일 충돌 시 보존.
 - 일반 변수·secret·env 등록과 조회 권한 구분.
-- 기존 justfile 명령의 독립 실행과 devtools를 통한 주입 실행.
+- 프로젝트 프로그램의 독립 실행과 devtools 명령을 통한 값 주입 실행.
 - 이름 명령, env 덮어쓰기, 추가 인자, 별도 Git worktree 사용.
 - 전역 데이터의 사용자 전용 파일 권한.
 - 손상된 배포물의 업데이트 실패와 기존 실행 파일 보존.
@@ -214,7 +216,7 @@ runner는 현재 OS와 architecture용 테스트 release 두 버전을 임시 �
 
 테스트용 두 버전은 같은 소스에 서로 다른 버전 정보를 넣어 만든다. 이 검증은 설치·교체·데이터 보존을 확인한다. 향후 데이터 형식이 바뀌는 릴리스에서는 해당 이전 버전의 배포물을 함께 검증해야 한다.
 
-Release CI의 macOS와 Linux job은 모두 `just verify`로 등록된 전체 시나리오를 실행한다.
+Release CI의 macOS와 Linux job은 모두 `devtools run test:installed`로 등록된 전체 시나리오를 실행한다.
 이때 `proxies` 시나리오는 설치된 실행 파일로 route 전달, WebSocket, 동적 port 변경,
 daemon 재시작과 listener reservation 유지를 확인한다. WSL 고유 동작은 실제 WSL
 환경에서 별도로 검증할 수 있다.

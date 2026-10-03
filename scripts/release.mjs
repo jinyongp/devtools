@@ -9,7 +9,7 @@ const stableVersion = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 try {
   const args = process.argv.slice(2);
   if (args.some(arg => arg !== '--publish') || args.length > 1) {
-    throw new Error('Usage: pnpm release [--publish]');
+    throw new Error('Usage: devtools run release:plan or devtools run release:publish');
   }
   const publish = args.includes('--publish');
   if (!git('remote').split('\n').includes('origin')) throw new Error('Configure origin before planning a release.');
@@ -44,7 +44,7 @@ try {
   console.log(`Previous: ${previous ?? 'none'}\nRecommended: ${tag} (${previous ? bump : 'first release'})\n`);
   console.log(git('log', '--oneline', range));
   if (!publish) {
-    console.log('\nPublish: pnpm release --publish');
+    console.log('\nPublish: devtools run release:publish');
     process.exit(0);
   }
   if (git('branch', '--show-current') !== 'main') throw new Error('Publish from main.');

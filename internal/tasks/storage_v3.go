@@ -1,8 +1,6 @@
 package tasks
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -277,11 +275,7 @@ func snapshotFromState(profile string, state *State, walOffset int64, lastEventA
 	items := map[string]*Item{}
 	itemOrders := map[string]int{}
 	for id, item := range state.Items {
-		raw, _ := json.Marshal(item)
-		var copied Item
-		_ = json.Unmarshal(raw, &copied)
-		copied.Order = item.Order
-		items[id] = &copied
+		items[id] = copyItem(item)
 		itemOrders[id] = item.Order
 	}
 	runs := map[string]*Run{}
@@ -290,17 +284,24 @@ func snapshotFromState(profile string, state *State, walOffset int64, lastEventA
 		runs[id] = &copied
 	}
 	tracking := map[string]*DefinitionBasis{}
-	raw, _ := json.Marshal(state.Tracking)
-	_ = json.Unmarshal(raw, &tracking)
+	for id, basis := range state.Tracking {
+		tracking[id] = copyDefinition(basis)
+	}
 	var historyEvents map[int]Event
 	var historyRefs map[string][]int
 	if state.historyComplete {
 		historyEvents = map[int]Event{}
-		raw, _ = json.Marshal(state.HistoryEvents)
-		_ = json.Unmarshal(raw, &historyEvents)
+		for sequence, event := range state.HistoryEvents {
+			historyEvents[sequence] = copyEvent(event)
+		}
 		historyRefs = map[string][]int{}
-		raw, _ = json.Marshal(state.HistoryRefs)
-		_ = json.Unmarshal(raw, &historyRefs)
+		for id, refs := range state.HistoryRefs {
+			if refs == nil {
+				historyRefs[id] = nil
+			} else {
+				historyRefs[id] = append([]int{}, refs...)
+			}
+		}
 	}
 	snapshot := materializedState{
 		FormatVersion: taskStorageVersion,
@@ -346,14 +347,10 @@ func materializedStateChecksum(snapshot materializedState) string {
 			Tracking:      snapshot.Tracking,
 			LastEventAt:   snapshot.LastEventAt,
 		}
-		raw, _ := json.Marshal(legacy)
-		sum := sha256.Sum256(raw)
-		return hex.EncodeToString(sum[:])
+		return streamJSONHash(legacy)
 	}
 	snapshot.Checksum = ""
-	raw, _ := json.Marshal(snapshot)
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:])
+	return streamJSONHash(snapshot)
 }
 
 func (m materializedState) state(profile string) (*State, error) {

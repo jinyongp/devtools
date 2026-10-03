@@ -16,9 +16,13 @@ type EditEvaluation struct {
 }
 
 func copyObject(v Object) Object {
-	raw, _ := json.Marshal(v)
-	var out Object
-	_ = json.Unmarshal(raw, &out)
+	if v == nil {
+		return nil
+	}
+	out := make(Object, len(v))
+	for key, value := range v {
+		out[key] = copyJSONValue(value)
+	}
 	return out
 }
 
@@ -347,7 +351,7 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 				return nil, failure("invalid_argument", "Explicit acceptance reference is not included.")
 			}
 		}
-		if hash(keys) != hash(arr(i.Props, "acceptance_keys")) {
+		if !sameJSON(keys, arr(i.Props, "acceptance_keys")) {
 			effects = append(effects, Object{"target_id": i.ID, "field": "acceptance_keys", "before": arr(i.Props, "acceptance_keys"), "after": keys})
 			i.Props["acceptance_keys"] = keys
 		}
@@ -364,7 +368,7 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 					return nil, failure("invalid_argument", "Explicit dependency is excluded.")
 				}
 			}
-			if hash(deps) != hash(i.Depends) {
+			if !sameJSON(deps, i.Depends) {
 				effects = append(effects, Object{"target_id": i.ID, "field": "depends_on", "before": i.Depends, "after": deps})
 				i.Depends = deps
 			}
@@ -404,13 +408,13 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 		if i.Kind == "validation" && old != nil && (old.Props["required"] != false) != (i.Props["required"] != false) {
 			effects = append(effects, Object{"target_id": i.ID, "field": "required", "before": old.Props["required"] != false, "after": i.Props["required"] != false})
 		}
-		if old == nil || hash(before.ownDefinition(old)) != hash(s.ownDefinition(i)) || before.definition(i.ID).Removed != b.Removed {
+		if old == nil || !sameJSON(before.ownDefinition(old), s.ownDefinition(i)) || before.definition(i.ID).Removed != b.Removed {
 			b.Epoch = revision
 		}
 	}
 	oldw := before.Items[target]
 	for _, doc := range []string{"spec", "plan"} {
-		if hash(objectValue(oldw.Props[doc])["body"]) != hash(objectValue(w.Props[doc])["body"]) {
+		if !sameJSON(objectValue(oldw.Props[doc])["body"], objectValue(w.Props[doc])["body"]) {
 			wb.BodyEpochs[doc] = revision
 		}
 	}
@@ -422,7 +426,7 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 		}
 		for _, v := range append(objects(oldSpec, field), objects(spec, field)...) {
 			k := str(v, "key")
-			if hash(keyed(objects(oldSpec, field), k)) != hash(keyed(objects(spec, field), k)) {
+			if !sameJSON(keyed(objects(oldSpec, field), k), keyed(objects(spec, field), k)) {
 				wb.KeyEpochs[prefix+k] = revision
 			}
 		}
@@ -440,11 +444,11 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 		old := before.Items[i.ID]
 		props := Object{}
 		for k, v := range i.Props {
-			if old == nil || hash(old.Props[k]) != hash(v) {
+			if old == nil || !sameJSON(old.Props[k], v) {
 				props[k] = v
 			}
 		}
-		if old != nil && hash(before.ownDefinition(old)) == hash(s.ownDefinition(i)) && old.Title == i.Title && len(props) == 0 && hash(before.Tracking[i.ID]) == hash(s.Tracking[i.ID]) {
+		if old != nil && sameJSON(before.ownDefinition(old), s.ownDefinition(i)) && old.Title == i.Title && len(props) == 0 && sameJSON(before.Tracking[i.ID], s.Tracking[i.ID]) {
 			continue
 		}
 		patches = append(patches, Object{"id": i.ID, "kind": i.Kind, "title": i.Title, "description": i.Description, "workstream_id": i.Workstream, "depends_on": i.Depends, "props": props, "basis": s.Tracking[i.ID], "order": i.Order})

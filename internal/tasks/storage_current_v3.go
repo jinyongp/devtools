@@ -8,6 +8,17 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
+// Reuse only the checkpoint metadata from this request's validated snapshot.
+// Execute holds the profile exclusive lock from this load through commit; the
+// WAL tail is still scanned before each checkpoint decision. This avoids a
+// second decode/checksum of all retained document bodies during one mutation.
+type checkpointBasis struct {
+	root            string
+	walOffset       int64
+	lastEventAt     string
+	historyComplete bool
+}
+
 func applyCurrentFrames(resolution v3Resolution, state *State, frames []walFrame, expectedRevision int) (*State, int, error) {
 	for _, frame := range frames {
 		if frame.Meta.PreviousRevision != expectedRevision {
@@ -60,11 +71,17 @@ func loadCurrentFromWAL(resolution v3Resolution) (*State, error) {
 
 func loadCurrentV3Cached(resolution v3Resolution) (*State, bool, error) {
 	snapshot, state, snapshotErr := readMaterializedSnapshot(resolution.Snapshot, resolution.Marker.Profile)
+	return loadCurrentV3Snapshot(resolution, snapshot, state, snapshotErr)
+}
+
+func loadCurrentV3Snapshot(resolution v3Resolution, snapshot materializedState, state *State, snapshotErr error) (*State, bool, error) {
 	if snapshotErr == nil {
 		scan, scanErr := scanWAL(resolution.WAL, snapshot.WALOffset, true)
 		if scanErr == nil {
 			current, revision, applyErr := applyCurrentFrames(resolution, state, scan.Frames, snapshot.Revision)
 			if applyErr == nil && current.Revision == revision {
+				current.checkpoint = &checkpointBasis{root: resolution.Root, walOffset: snapshot.WALOffset,
+					lastEventAt: snapshot.LastEventAt, historyComplete: current.historyComplete}
 				needsCheckpoint := scan.IncompleteTail ||
 					len(scan.Frames) >= CheckpointMaxFrames ||
 					scan.ValidOffset-snapshot.WALOffset >= CheckpointMaxTailBytes
@@ -85,8 +102,8 @@ func loadCurrentV3Cached(resolution v3Resolution) (*State, bool, error) {
 	return current, true, err
 }
 
-func loadCurrentV3ForMutation(resolution v3Resolution) (*State, bool, error) {
-	current, needsCheckpoint, err := loadCurrentV3Cached(resolution)
+func loadMutationV3Snapshot(resolution v3Resolution, snapshot materializedState, state *State, snapshotErr error) (*State, bool, error) {
+	current, needsCheckpoint, err := loadCurrentV3Snapshot(resolution, snapshot, state, snapshotErr)
 	if err != nil || current == nil || current.historyComplete {
 		return current, needsCheckpoint, err
 	}

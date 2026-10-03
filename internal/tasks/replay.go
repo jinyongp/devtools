@@ -283,13 +283,35 @@ func (s *State) AtRevision(revision int) (*State, *protocol.Error) {
 }
 
 func (s *State) clone() *State {
-	raw, err := json.Marshal(s)
-	if err != nil {
-		panic(err)
-	}
 	out := NewState()
-	if json.Unmarshal(raw, out) != nil {
-		panic(errors.New("cannot clone task state"))
+	out.Revision, out.Version = s.Revision, s.Version
+	for id, item := range s.Items {
+		out.Items[id] = copyItem(item)
+	}
+	for id, run := range s.Runs {
+		copied := *run
+		out.Runs[id] = &copied
+	}
+	for id, basis := range s.Tracking {
+		out.Tracking[id] = copyDefinition(basis)
+	}
+	if s.Events != nil {
+		out.Events = make([]Event, len(s.Events))
+	} else {
+		out.Events = nil
+	}
+	for i, event := range s.Events {
+		out.Events[i] = copyEvent(event)
+	}
+	for sequence, event := range s.HistoryEvents {
+		out.HistoryEvents[sequence] = copyEvent(event)
+	}
+	for id, refs := range s.HistoryRefs {
+		if refs == nil {
+			out.HistoryRefs[id] = nil
+		} else {
+			out.HistoryRefs[id] = append([]int{}, refs...)
+		}
 	}
 	out.historyComplete = s.historyComplete
 	out.replaySignatures = map[int]string{}
@@ -302,9 +324,6 @@ func (s *State) clone() *State {
 		}
 	} else {
 		out.historyRefCounts = map[int]int{}
-	}
-	for id, i := range s.Items {
-		out.Items[id].Order = i.Order
 	}
 	return out
 }

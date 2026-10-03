@@ -347,6 +347,10 @@ func snapshotTailOffset(resolution v3Resolution) int64 {
 }
 
 func recoverPendingV3(resolution v3Resolution) error {
+	return recoverPendingV3AtOffset(resolution, -1)
+}
+
+func recoverPendingV3AtOffset(resolution v3Resolution, startOffset int64) error {
 	manifest, exists, err := readPendingManifest(resolution)
 	if err != nil {
 		return err
@@ -360,7 +364,9 @@ func recoverPendingV3(resolution v3Resolution) error {
 		if _, err := readPendingContexts(resolution, manifest); err != nil {
 			return err
 		}
-		startOffset := snapshotTailOffset(resolution)
+		if startOffset < 0 {
+			startOffset = snapshotTailOffset(resolution)
+		}
 		scan, err := scanWAL(resolution.WAL, startOffset, true)
 		if err != nil {
 			if startOffset == 0 {
@@ -405,7 +411,10 @@ func recoverPendingV3(resolution v3Resolution) error {
 }
 
 func prepareWALForMutation(resolution v3Resolution) error {
-	startOffset := snapshotTailOffset(resolution)
+	return prepareWALForMutationAtOffset(resolution, snapshotTailOffset(resolution))
+}
+
+func prepareWALForMutationAtOffset(resolution v3Resolution, startOffset int64) error {
 	scan, err := scanWAL(resolution.WAL, startOffset, false)
 	if err != nil {
 		if startOffset == 0 {

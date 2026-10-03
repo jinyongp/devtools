@@ -35,9 +35,16 @@ func checkpointV3(resolution v3Resolution, state *State) error {
 	walSize := info.Size()
 	needsCheckpoint := false
 	var snapshot materializedState
-	if existing, existingState, err := readMaterializedSnapshot(resolution.Snapshot, resolution.Marker.Profile); err == nil {
-		snapshot = existing
-		if !existingState.historyComplete {
+	basis := state.checkpoint
+	if basis == nil || basis.root != resolution.Root {
+		if existing, existingState, err := readMaterializedSnapshot(resolution.Snapshot, resolution.Marker.Profile); err == nil {
+			basis = &checkpointBasis{root: resolution.Root, walOffset: existing.WALOffset,
+				lastEventAt: existing.LastEventAt, historyComplete: existingState.historyComplete}
+		}
+	}
+	if basis != nil {
+		snapshot.WALOffset, snapshot.LastEventAt = basis.walOffset, basis.lastEventAt
+		if !basis.historyComplete {
 			needsCheckpoint = true
 		}
 		if snapshot.WALOffset < 0 || snapshot.WALOffset > walSize {
@@ -58,8 +65,6 @@ func checkpointV3(resolution v3Resolution, state *State) error {
 				needsCheckpoint = true
 			}
 		}
-	} else if errors.Is(err, os.ErrNotExist) {
-		needsCheckpoint = true
 	} else {
 		// Snapshot is an accelerator; a valid WAL/state can repair it.
 		needsCheckpoint = true
@@ -74,12 +79,27 @@ func checkpointV3(resolution v3Resolution, state *State) error {
 	if err := writeMaterializedSnapshot(resolution.Snapshot, snapshotFromState(resolution.Marker.Profile, state, walSize, lastEventAt)); err != nil {
 		return err
 	}
-	return syncPrivateDirectory(resolution.Root)
+	if err := syncPrivateDirectory(resolution.Root); err != nil {
+		return err
+	}
+	state.checkpoint = &checkpointBasis{root: resolution.Root, walOffset: walSize,
+		lastEventAt: lastEventAt, historyComplete: state.historyComplete}
+	return nil
 }
 
 func commitActiveV3(resolution v3Resolution, state *State, events []Event, previousRevision int, requestID, fingerprint, contextHash string, result Object, newContexts map[string]string, hook func(func() error) error) error {
-	if err := prepareWALForMutation(resolution); err != nil {
-		return err
+	startOffset := int64(-1)
+	if state.checkpoint != nil && state.checkpoint.root == resolution.Root {
+		startOffset = state.checkpoint.walOffset
+	}
+	var prepareErr error
+	if startOffset < 0 {
+		prepareErr = prepareWALForMutation(resolution)
+	} else {
+		prepareErr = prepareWALForMutationAtOffset(resolution, startOffset)
+	}
+	if prepareErr != nil {
+		return prepareErr
 	}
 	receipt := newReceiptCoordination(requestID, fingerprint, contextHash, result, "")
 	contexts := make([]contextCoordination, 0, len(newContexts))

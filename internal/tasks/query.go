@@ -239,6 +239,9 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 	if item == nil && contains([]string{"show", "spec show", "plan show", "check", "impact", "context", "export"}, cmd) {
 		return nil, failure("invalid_argument", "Provide a target UUID.")
 	}
+	if item != nil && kind == "workstream" && contains([]string{"show", "plan show", "context"}, cmd) {
+		s.assessments = s.assessTargets([]string{item.ID})
+	}
 	items := []any{}
 	switch cmd {
 	case "show":
@@ -516,16 +519,18 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		if state != "" && !contains(allowed, state) {
 			return nil, failure("invalid_argument", "Invalid state filter.")
 		}
+		if kind == "workstream" && state != "" && state != "all" {
+			targets := []string{}
+			for _, i := range s.Items {
+				if i.Kind == kind && i.State == state {
+					targets = append(targets, i.ID)
+				}
+			}
+			s.assessments = s.assessTargets(targets)
+		}
 		for _, i := range s.List(kind) {
 			included := s.Included(i)
 			if kind != "workstream" && ((scope == "" || scope == "included") && !included || scope == "removed" && included) {
-				continue
-			}
-			status := s.Assessment(i.ID).CompletionStatus
-			if completion != "" && completion != "all" && status != completion {
-				continue
-			}
-			if state == "" && completion == "" && scope == "" && (i.State == "done" && status != "stale" || i.State == "canceled") {
 				continue
 			}
 			if state != "" && state != "all" && i.State != state {
@@ -539,6 +544,13 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 				if itemWorkstream != ws {
 					continue
 				}
+			}
+			status := s.Assessment(i.ID).CompletionStatus
+			if completion != "" && completion != "all" && status != completion {
+				continue
+			}
+			if state == "" && completion == "" && scope == "" && (i.State == "done" && status != "stale" || i.State == "canceled") {
+				continue
 			}
 			items = append(items, s.View(i))
 		}

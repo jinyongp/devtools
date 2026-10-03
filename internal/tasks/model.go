@@ -67,17 +67,16 @@ type State struct {
 	migrating                 bool
 	replayDefinitionSignature string
 	replaySignatures          map[int]string
+	checkpoint                *checkpointBasis
 }
 
 func (r Run) MarshalJSON() ([]byte, error) {
-	type plain Run
-	b, e := json.Marshal(plain(r))
-	if e != nil {
-		return nil, e
-	}
-	v := Object{}
-	if e = json.Unmarshal(b, &v); e != nil {
-		return nil, e
+	v := Object{"id": r.ID, "task_id": r.TaskID, "state": r.State,
+		"previous_run_id": r.Previous, "directory": r.Directory,
+		"started_at": r.Started, "last_activity_at": r.Activity, "ended_at": r.Ended,
+		"definition_revision": r.Definition, "spec_revision": r.Spec, "plan_revision": r.Plan}
+	if r.Signature != "" {
+		v["definition_signature"] = r.Signature
 	}
 	if r.Previous == "" {
 		v["previous_run_id"] = nil
@@ -449,10 +448,10 @@ func (s *State) Apply(e Event) {
 	}
 }
 func (s *State) View(i *Item) Object {
-	b, _ := json.Marshal(i)
-	v := Object{}
-	_ = json.Unmarshal(b, &v)
-	delete(v, "properties")
+	v := Object{"id": i.ID, "kind": i.Kind, "state": i.State, "title": i.Title,
+		"description": i.Description, "workstream_id": i.Workstream,
+		"depends_on": copyJSONValue(i.Depends), "definition_revision": float64(i.Revision),
+		"created_at": i.Created, "updated_at": i.Updated}
 	for k, x := range i.Props {
 		if k != "bases" && k != "records" && k != "spec" && k != "plan" {
 			v[k] = x

@@ -342,7 +342,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 			return nil, gateError(ctx)
 		}
 		defer profileRelease()
-		_, state, e := s.load()
+		state, e := s.loadCurrent()
 		if e != nil {
 			return nil, e
 		}
@@ -389,11 +389,22 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	if probeErr != nil {
 		return nil, probeErr
 	}
+	var snapshot materializedState
+	var snapshotState *State
+	var snapshotErr error
 	if probed.V3 != nil {
-		if prepareErr := prepareWALForMutation(*probed.V3); prepareErr != nil {
+		// One validated snapshot belongs to this exclusive-lock transaction.
+		// Pending recovery updates coordination files and the WAL; apply its
+		// recovered tail to this snapshot afterward instead of decoding it again.
+		snapshot, snapshotState, snapshotErr = readMaterializedSnapshot(probed.V3.Snapshot, s.Profile)
+		startOffset := int64(0)
+		if snapshotErr == nil {
+			startOffset = snapshot.WALOffset
+		}
+		if prepareErr := prepareWALForMutationAtOffset(*probed.V3, startOffset); prepareErr != nil {
 			return nil, storageError()
 		}
-		if recoverErr := recoverPendingV3(*probed.V3); recoverErr != nil {
+		if recoverErr := recoverPendingV3AtOffset(*probed.V3, startOffset); recoverErr != nil {
 			return nil, storageError()
 		}
 	}
@@ -405,7 +416,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	)
 	if probed.V3 != nil {
 		storage = probed
-		current, needsCheckpoint, currentErr := loadCurrentV3ForMutation(*probed.V3)
+		current, needsCheckpoint, currentErr := loadMutationV3Snapshot(*probed.V3, snapshot, snapshotState, snapshotErr)
 		if currentErr != nil {
 			return nil, storageError()
 		}
@@ -643,7 +654,7 @@ func changedItemIDs(before, after *State) []string {
 	}
 	ids := []string{}
 	for id := range seen {
-		if hash(before.Items[id]) != hash(after.Items[id]) || hash(before.Tracking[id]) != hash(after.Tracking[id]) {
+		if !sameJSON(before.Items[id], after.Items[id]) || !sameJSON(before.Tracking[id], after.Tracking[id]) {
 			ids = append(ids, id)
 		}
 	}

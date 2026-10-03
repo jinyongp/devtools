@@ -165,7 +165,7 @@ func (s *State) Assessments() map[string]Assessment {
 		a.Ready = i.Kind == "task" && a.NeedsWork && s.Current(i.ID) == nil && len(blockers) == 0
 		return a
 	}
-	assessTask := func(t *Item, w *Item) {
+	assessTask := func(t *Item, w *Item, definitionHash func(Object) string) {
 		b := s.definition(t.ID)
 		definition := Object{"self": s.ownDefinition(t), "epoch": b.Epoch, "included": s.Included(t), "validations": validationDefs(t.ID)}
 		blockers := []Object{}
@@ -241,14 +241,22 @@ func (s *State) Assessments() map[string]Assessment {
 				add("coverage", t.ID, "Define validation for this task.")
 			}
 		}
-		out[t.ID] = finish(t, hash(definition), blockers)
+		out[t.ID] = finish(t, definitionHash(definition), blockers)
 	}
 	for _, t := range topological(tasks[""]) {
-		assessTask(t, nil)
+		assessTask(t, nil, func(definition Object) string { return hash(definition) })
 	}
 	for _, w := range topological(s.List("workstream")) {
+		wb := s.definition(w.ID)
+		definitionHash := func(definition Object) string { return hash(definition) }
+		if len(tasks[w.ID]) > 0 {
+			definitionHash = commonDefinitionHasher(Object{
+				"spec": objectValue(w.Props["spec"])["body"],
+				"plan": objectValue(w.Props["plan"])["body"], "epochs": wb.BodyEpochs,
+			})
+		}
 		for _, t := range topological(tasks[w.ID]) {
-			assessTask(t, w)
+			assessTask(t, w, definitionHash)
 		}
 		children := []Object{}
 		deps := []Object{}
@@ -265,7 +273,7 @@ func (s *State) Assessments() map[string]Assessment {
 			}
 		}
 		b := s.definition(w.ID)
-		signature := hash(Object{"definition": s.ownDefinition(w), "epoch": b.Epoch, "body_epochs": b.BodyEpochs, "key_epochs": b.KeyEpochs,
+		signature := streamJSONHash(Object{"definition": s.ownDefinition(w), "epoch": b.Epoch, "body_epochs": b.BodyEpochs, "key_epochs": b.KeyEpochs,
 			"spec": w.Props["spec"], "plan_body": objectValue(w.Props["plan"])["body"], "tasks": children, "dependencies": deps, "validations": validationDefs(w.ID)})
 		out[w.ID] = finish(w, signature, blockers)
 	}

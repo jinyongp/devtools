@@ -64,15 +64,30 @@ devtools run perf:all tasks --case workstream --body-kib 1,64,256 --sizes 10
 devtools run perf:all tasks --case context --sizes 1 --histories 1000,10000,100000
 devtools run perf:all process proxy dashboard --sizes 10
 devtools run perf:all discovery --sizes 10
+devtools run perf:all tasks --case workstream --sizes 10,100 --attach-tasks \
+  --completed-workstreams 0,10,100 --body-kib 1,64,256
 ```
 
 Groups are `cli`, `project`, `values`, `tasks`, `backup`, `process`, `proxy`,
 `dashboard` and `discovery`. `--case` selects names containing the given text.
-Sizes, extra-history counts and body sizes form a Cartesian product. Hold the
-live size fixed when investigating history growth; measure live-data growth
+Sizes, extra-history counts, body sizes and completed-workstream counts form a
+Cartesian product. `--completed-workstreams` retains that many synthetic closed
+workstreams, each with spec and plan bodies and no child tasks. The selected
+workstream stays draft. `--attach-tasks` attaches the live tasks to it with short
+descriptions, so `--body-kib` varies document size without also multiplying task
+description size. Without this flag, live tasks remain independent and their
+descriptions also use `--body-kib`.
+
+Hold the live size fixed when investigating history growth; measure live-data growth
 separately. Large history with many live tasks also increases fixture setup cost.
 Extra history is imported in batches of 200 updates. This varies history volume
 with fixed live data, rather than accumulating live claims and retry receipts.
+
+Current workstream detail/context queries assess the selected workstream and
+its prerequisites; edit previews use current state rather than replaying the
+entire history. Current reads still decode the profile-wide storage snapshot,
+so retained workstreams and document bodies can increase latency. Measure
+completed-workstream growth separately from event-history growth.
 
 Read cases reuse their fixture during warmup and sampling, including storage and
 Dashboard caches. Mutation cases restore the baseline before **every** warmup

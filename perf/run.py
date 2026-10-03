@@ -4,6 +4,7 @@
 import argparse
 import csv
 import hashlib
+import itertools
 import json
 import math
 import os
@@ -31,7 +32,7 @@ GIT_ENV = (
     "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_PREFIX", "GIT_CONFIG", "GIT_CONFIG_COUNT",
     "GIT_CONFIG_PARAMETERS", "GIT_NAMESPACE", "GIT_SHALLOW_FILE", "GIT_REPLACE_REF_BASE",
 )
-BENCHMARKS = "Benchmark(TaskStorage(CurrentList|Mutation|CursorSecondPage|WorkstreamListTail|LifecycleReplay)|TaskContextRecentHistory|ProxyRequestRegisteredProjects|BoundedLog)"
+BENCHMARKS = "Benchmark(TaskStorage(CurrentList|Mutation|CursorSecondPage|WorkstreamListTail|WorkstreamContextTail|LifecycleReplay)|TaskContextRecentHistory|ProxyRequestRegisteredProjects|BoundedLog)"
 
 
 def write_json(path, value):
@@ -178,7 +179,7 @@ def free_port():
         return listener.getsockname()[1]
 
 
-def make_fixture(root, binary, seed_binary, size, history, body_kib):
+def make_fixture(root, binary, seed_binary, size, history, body_kib, completed=0, attach_tasks=False):
     env = isolated_env(root)
     for name in ("config", "data", "cache", "runtime", "project"):
         (root / name).mkdir(mode=0o700)
@@ -218,7 +219,9 @@ exec = ["sh", "-c", {readiness}]
 timeout = "2s"
 ''')
     info = json.loads(execute([str(seed_binary), "--root", str(root), "--size", str(size),
-                               "--history", str(history), "--body-kib", str(body_kib)], env=env, cwd=REPO))
+                               "--history", str(history), "--body-kib", str(body_kib),
+                               "--completed-workstreams", str(completed),
+                               *(["--attach-tasks"] if attach_tasks else [])], env=env, cwd=REPO))
     info["proxy_port"] = free_port()
     fixture = Fixture(root, binary, env, info)
     fixture.cli("instance", "name", "bench")
@@ -231,7 +234,7 @@ timeout = "2s"
     (root / "import.env").write_text("IMPORTED_KEY=synthetic-value\n")
     write_json(root / "edit.json", {"reason": "Fixture edit", "operations": [{"op": "workstream.update", "value": {"title": "Edited fixture"}}]})
     write_json(root / "spec.json", {"body": "Updated fixture document", "requirements": [], "acceptance": []})
-    write_json(root / "plan.json", {"body": "Updated fixture document", "task_ids": [], "validation_ids": []})
+    write_json(root / "plan.json", {"body": "Updated fixture document", "task_ids": info.get("task_ids", []), "validation_ids": []})
     fixture.cleanup()
     (root / "baseline").mkdir(mode=0o700)
     for name in ("config", "data", "cache"):
@@ -459,6 +462,8 @@ def main():
     parser.add_argument("--sizes", type=lambda value: numbers(value, 1), default=[10, 100, 1000])
     parser.add_argument("--histories", type=numbers, default=[0], help="Additional updates; crossed with --sizes")
     parser.add_argument("--body-kib", type=numbers, default=[1], help="Task description KiB; crossed with --sizes and --histories")
+    parser.add_argument("--completed-workstreams", type=numbers, default=[0], help="Retained completed workstreams; crossed with other fixture sizes")
+    parser.add_argument("--attach-tasks", action="store_true", help="Attach --sizes live tasks with short descriptions to the selected workstream")
     parser.add_argument("--runs", type=positive, default=10)
     parser.add_argument("--warmup", type=nonnegative, default=3)
     parser.add_argument("--timeout", type=positive, default=300, help="Wall time budget for hyperfine, including hooks")
@@ -546,18 +551,22 @@ def main():
         http_cases = set()
         for size in args.sizes:
             for history in args.histories:
-                for body_kib in args.body_kib:
-                    root = scratch / f"fixture-{size}-{history}-{body_kib}"
+                for body_kib, completed in itertools.product(args.body_kib, args.completed_workstreams):
+                    root = scratch / f"fixture-{size}-{history}-{body_kib}-{completed}"
                     root.mkdir(mode=0o700)
                     # Set fixture before setup so failed setup still has a cleanup path.
                     fixture = Fixture(root, binary, isolated_env(root))
-                    fixture = make_fixture(root, binary, seed_binary, size, history, body_kib)
+                    fixture = make_fixture(root, binary, seed_binary, size, history, body_kib, completed, args.attach_tasks)
                     selected = [case for case in cases_for(fixture, catalog) if case.group in groups
                                 and (not args.case or args.case in case.name)]
                     if not selected:
                         raise ValueError("No cases match the selected groups/filter.")
                     for number, original in enumerate(selected):
                         key = f"{original.name}:size={size}:history={history}:body_kib={body_kib}"
+                        if completed:
+                            key += f":completed_workstreams={completed}"
+                        if args.attach_tasks:
+                            key += ":attach_tasks=true"
                         print(f"[{number + 1}/{len(selected)}] {key}", flush=True)
                         summary["active_case"] = key
                         fixture.reset()
@@ -572,7 +581,7 @@ def main():
                         write_json(manifest, {"root": str(root), "binary": str(binary), "info": fixture.info,
                                              "cases": {case.name: asdict(case)}})
                         manifest.chmod(0o600)
-                        raw_path = output / f"{size}-{history}-{body_kib}-{number:03d}.json"
+                        raw_path = output / f"{size}-{history}-{body_kib}-{completed}-{number:03d}.json"
                         command = [hyperfine, "--shell=none", "--output=pipe", "--runs", str(args.runs),
                                    "--warmup", str(args.warmup), "--command-name", key, "--export-json", str(raw_path)]
                         if case.reset:
@@ -584,7 +593,8 @@ def main():
                         (output / f"{raw_path.stem}.log").write_text(log)
                         result = valid_result(json.loads(raw_path.read_text()), args.runs)
                         summary["results"].append({"key": key, "name": case.name, "size": size, "history": history,
-                                                   "body_kib": body_kib, **{k: result[k] for k in ("mean", "median", "p95", "stddev", "min", "max", "times")}})
+                                                   "body_kib": body_kib, "completed_workstreams": completed, "attach_tasks": args.attach_tasks,
+                                                   **{k: result[k] for k in ("mean", "median", "p95", "stddev", "min", "max", "times")}})
                         if case.group == "discovery":
                             discovered_commands.update(case.commands)
                         elif case.argv[0] == "curl":

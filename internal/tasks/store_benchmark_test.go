@@ -326,6 +326,32 @@ func BenchmarkTaskStorageWorkstreamListTail(b *testing.B) {
 	}
 }
 
+func BenchmarkTaskStorageWorkstreamContextTail(b *testing.B) {
+	for _, tailFrames := range []int{128, 255} {
+		b.Run(fmt.Sprintf("tail_%d", tailFrames), func(b *testing.B) {
+			store := benchmarkV3WorkstreamTailStore(b, 256<<10, tailFrames)
+			state, err := store.ReadCurrent(context.Background())
+			if err != nil {
+				b.Fatal(err)
+			}
+			target := state.List("workstream")[0].ID
+			b.ReportAllocs()
+			b.ResetTimer()
+			for index := 0; index < b.N; index++ {
+				result, err := store.Query(context.Background(), Query{Command: "workstream context", Target: target})
+				if err != nil {
+					b.Fatal(err)
+				}
+				if result["truncated"] != false || len(result["tasks"].([]any)) != 13 {
+					b.Fatal("unexpected context scope")
+				}
+			}
+			b.ReportMetric(float64(tailFrames), "tail-frames")
+			b.ReportMetric(256, "body-KiB")
+		})
+	}
+}
+
 func benchmarkItemPatch(item *Item, basis *DefinitionBasis) Object {
 	return Object{
 		"id": item.ID, "kind": item.Kind, "title": item.Title, "description": item.Description,

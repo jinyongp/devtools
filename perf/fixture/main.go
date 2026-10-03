@@ -22,15 +22,17 @@ func main() {
 	size := flag.Int("size", 10, "Live tasks and variable keys")
 	history := flag.Int("history", 0, "Additional updates with fixed live cardinality")
 	bodyKiB := flag.Int("body-kib", 1, "Task description size")
+	completed := flag.Int("completed-workstreams", 0, "Retained completed workstreams with specification and plan bodies")
+	attachTasks := flag.Bool("attach-tasks", false, "Attach live tasks with short descriptions to the selected workstream")
 	flag.Parse()
-	if err := seed(*root, *size, *history, *bodyKiB); err != nil {
+	if err := seed(*root, *size, *history, *bodyKiB, *completed, *attachTasks); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func seed(root string, size, history, bodyKiB int) error {
-	if !filepath.IsAbs(root) || size < 1 || history < 0 || bodyKiB < 0 {
+func seed(root string, size, history, bodyKiB, completed int, attachTasks bool) error {
+	if !filepath.IsAbs(root) || size < 1 || history < 0 || bodyKiB < 0 || completed < 0 {
 		return fmt.Errorf("absolute fixture root and nonnegative sizes required")
 	}
 	marker, err := os.Lstat(filepath.Join(root, ".devtools-perf"))
@@ -64,14 +66,37 @@ func seed(root string, size, history, bodyKiB int) error {
 	appendEvent("profile.upgraded", "", tasks.Object{"version": tasks.JournalVersion, "baseline": map[string]*tasks.DefinitionBasis{}})
 	ids := make([]string, size)
 	body := strings.Repeat("x", bodyKiB*1024)
+	workstreamID := tasks.ID()
+	if attachTasks {
+		appendEvent("workstream.create", workstreamID, tasks.Object{"title": "Fixture workstream"})
+	}
 	for i := range ids {
 		ids[i] = tasks.ID()
-		appendEvent("task.add", ids[i], tasks.Object{"title": fmt.Sprintf("Fixture task %06d", i), "description": body})
+		data := tasks.Object{"title": fmt.Sprintf("Fixture task %06d", i), "description": body}
+		if attachTasks {
+			data["workstream_id"] = workstreamID
+			data["description"] = "Fixture task description"
+		}
+		appendEvent("task.add", ids[i], data)
 	}
-	workstreamID := tasks.ID()
-	appendEvent("workstream.create", workstreamID, tasks.Object{"title": "Fixture workstream"})
+	if !attachTasks {
+		appendEvent("workstream.create", workstreamID, tasks.Object{"title": "Fixture workstream"})
+	}
 	appendEvent("spec.set", workstreamID, tasks.Object{"body": body, "requirements": []tasks.Object{}, "acceptance": []tasks.Object{}})
-	appendEvent("plan.set", workstreamID, tasks.Object{"body": body, "task_ids": []string{}, "validation_ids": []string{}})
+	planTasks := []string{}
+	if attachTasks {
+		planTasks = append(planTasks, ids...)
+	}
+	appendEvent("plan.set", workstreamID, tasks.Object{"body": body, "task_ids": planTasks, "validation_ids": []string{}})
+	// Retain synthetic completed definitions in current storage, as a long-lived
+	// profile does. The selected workstream and live task count remain fixed.
+	for i := 0; i < completed; i++ {
+		id := tasks.ID()
+		appendEvent("workstream.create", id, tasks.Object{"title": fmt.Sprintf("Completed workstream %06d", i)})
+		appendEvent("spec.set", id, tasks.Object{"body": body, "requirements": []tasks.Object{}, "acceptance": []tasks.Object{}})
+		appendEvent("plan.set", id, tasks.Object{"body": body, "task_ids": []string{}, "validation_ids": []string{}})
+		appendEvent("workstream.close", id, tasks.Object{"summary": "Synthetic completed workstream"})
+	}
 	// Import synthetic history in bounded batches instead of fsyncing one frame
 	// per update. Live definitions retain their individual request boundaries.
 	batchRequestID := tasks.ID()
@@ -99,5 +124,5 @@ func seed(root string, size, history, bodyKiB int) error {
 	if err := taskStore.PublishStagedHeld(staged); err != nil {
 		return err
 	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]any{"task_id": ids[0], "workstream_id": workstreamID, "revision": len(j.Events), "size": size, "history": history, "body_kib": bodyKiB})
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{"task_id": ids[0], "workstream_id": workstreamID, "task_ids": planTasks, "revision": len(j.Events), "size": size, "history": history, "body_kib": bodyKiB, "completed_workstreams": completed, "attach_tasks": attachTasks})
 }

@@ -6,16 +6,12 @@ import json
 import os
 import plistlib
 from pathlib import Path
-import pty
-import select
-import signal
 import shutil
 import socket
 import ssl
 import subprocess
 import sys
 import tempfile
-import time
 import uuid
 
 def main():
@@ -63,56 +59,11 @@ PORT={{port='web'}}
 exec=['python3','-c',"import os,socket; socket.create_connection(('127.0.0.1',int(os.environ['PORT'])),timeout=1).close()"]
 timeout='10s'
 ''')
-        def api(*words,terminal=False,error=None,env_override=None):
+        def api(*words,error=None,env_override=None):
             argv=[str(binary),*words]
             execution_env=env if env_override is None else env_override
-            if terminal:
-                pid,fd=pty.fork()
-                if pid==0:
-                    os.chdir(project);os.execve(str(binary),argv,execution_env)
-                content=bytearray();limit=150 if sys.platform=="darwin" else 45;deadline=time.monotonic()+limit
-                try:
-                    while True:
-                        if time.monotonic()>deadline:
-                            # Retain only this fixture command's process tree and
-                            # partial output, including a Go stack for a blocked CLI.
-                            processes=subprocess.run(["ps","-axo","pid=,ppid=,comm="],capture_output=True,text=True,timeout=5)
-                            rows=[line.split(None,2) for line in processes.stdout.splitlines()]
-                            owned={pid}
-                            while True:
-                                children={int(row[0]) for row in rows if len(row)==3 and int(row[1]) in owned}
-                                expanded=owned|children
-                                if expanded==owned:break
-                                owned=expanded
-                            details=subprocess.run(["ps","-p",','.join(map(str,sorted(owned))),"-o","pid=,ppid=,command="],capture_output=True,text=True,timeout=5)
-                            report["terminal_timeout_processes"]=details.stdout
-                            try:os.kill(pid,signal.SIGQUIT)
-                            except ProcessLookupError:pass
-                            drain=time.monotonic()+2
-                            while time.monotonic()<drain:
-                                ready,_,_=select.select([fd],[],[],.1)
-                                if ready:
-                                    try:part=os.read(fd,65536)
-                                    except OSError:break
-                                    if not part:break
-                                    content.extend(part)
-                            report["terminal_timeout_output"]=content.decode(errors="replace")
-                            report["commands"].append({"argv":list(words),"exit":None,"timeout":True})
-                            try:os.kill(pid,signal.SIGKILL)
-                            except ProcessLookupError:pass
-                            os.waitpid(pid,0)
-                            raise TimeoutError(f"Interactive network operation exceeded {limit} seconds; fixture process tree and partial output retained in evidence")
-                        ready,_,_=select.select([fd],[],[],.2)
-                        if ready:
-                            try:part=os.read(fd,65536)
-                            except OSError:break
-                            if not part:break
-                            content.extend(part)
-                    _,status=os.waitpid(pid,0);code=os.waitstatus_to_exitcode(status)
-                finally:os.close(fd)
-                text=content.decode(errors="replace")
-            else:
-                p=subprocess.Popen(argv,cwd=project,env=execution_env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            p=subprocess.Popen(argv,cwd=project,env=execution_env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            try:
                 try:
                     stdout,stderr=p.communicate(timeout=30 if sys.platform=="darwin" else 45)
                 except subprocess.TimeoutExpired:
@@ -130,10 +81,13 @@ timeout='10s'
                                 report["security_sample"]=sample.stdout+sample.stderr
                         stdout,stderr=p.communicate(timeout=120)
                     else:
-                        p.kill();p.communicate();raise
-                code=p.returncode;text=stderr if code else stdout
+                        raise
+            finally:
+                if p.poll() is None:
+                    p.kill();p.communicate()
+            code=p.returncode;text=stderr if code else stdout
             report["commands"].append({"argv":list(words),"exit":code})
-            # Interactive previews/sudo output precede the single JSON envelope.
+            # Preparation previews can precede the single JSON envelope.
             start=text.find('{"schema_version"')
             if start<0:raise RuntimeError("Network command did not return a JSON envelope")
             result=json.JSONDecoder().raw_decode(text[start:])[0]
@@ -166,10 +120,11 @@ timeout='10s'
             # An unavailable authorization must fail before launching a backend.
             denied=root/"denied";denied.mkdir()
             sudo=denied/"sudo"
-            sudo.write_text("#!/bin/sh\n[ \"$1\" = -n ] || exit 99\nexit 1\n");sudo.chmod(0o700)
+            sudo.write_text("#!/bin/sh\nprintf '%s' \"$1\" > \"$0.first-arg\"\nexit 1\n");sudo.chmod(0o700)
             previous_path=env["PATH"];env["PATH"]=str(denied)+os.pathsep+previous_path
             try:
                 mutate("project","up","web","--proxy",error="permission_required")
+                assert sudo.with_name("sudo.first-arg").read_text()=="-n"
                 assert not api("process","list","--profile","platform-network")["items"]
             finally:env["PATH"]=previous_path
             mutate("project","up","web","--proxy")

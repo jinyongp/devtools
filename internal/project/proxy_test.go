@@ -22,10 +22,9 @@ port="web"
 		`host="app.localhost"`,
 		`port="web"`,
 		`host="app.localhost"\nport="missing"`,
-		`host="${unknown}.app.localhost"\nport="web"`,
+		`host="${invalid.name}.app.localhost"\nport="web"`,
 		`host="${instance.alias.app.localhost"\nport="web"`,
 		`host="App.localhost"\nport="web"`,
-		`host="app.example.com"\nport="web"`,
 		`host="-app.localhost"\nport="web"`,
 		`host="app_.localhost"\nport="web"`,
 		`host="app.localhost"\nport="web"\nunknown=true`,
@@ -45,6 +44,9 @@ func TestProxyHostLengthAndLabels(t *testing.T) {
 	ports := map[string]Port{"web": {}}
 	for _, host := range []string{
 		"app.localhost",
+		"app.example.test",
+		"localhost",
+		"${DOMAIN:-app.localhost}",
 		"app-${proxy}.localhost",
 		"${instance.alias}.app.localhost",
 		strings.Repeat("a", 63) + ".localhost",
@@ -54,7 +56,6 @@ func TestProxyHostLengthAndLabels(t *testing.T) {
 		}
 	}
 	for _, host := range []string{
-		"localhost",
 		".localhost",
 		strings.Repeat("a", 64) + ".localhost",
 		strings.Repeat("a.", 125) + "aaa.localhost",

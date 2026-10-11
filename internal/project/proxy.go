@@ -1,28 +1,32 @@
 package project
 
-import "strings"
+import (
+	"github.com/jinyongp/devtools/internal/network"
+	"strings"
+)
 
 type Proxy struct {
-	Host string `toml:"host"`
-	Port string `toml:"port"`
+	Host     string `toml:"host"`
+	Port     string `toml:"port"`
+	Listener string `toml:"listener,omitempty"`
+	DNS      string `toml:"dns,omitempty"`
 }
 
 func (p Proxy) Valid(ports map[string]Port) bool {
+	if p.Listener != "" && !ValidProfile(p.Listener) || p.DNS != "" && p.DNS != "auto" && p.DNS != "hosts" && p.DNS != "external" {
+		return false
+	}
 	if !ValidProfile(p.Port) {
 		return false
 	}
 	if _, ok := ports[p.Port]; !ok {
 		return false
 	}
-	expanded, err := Expand(p.Host, func(key string) (string, bool) {
-		switch key {
-		case "profile", "instance.alias", "proxy":
-			return "value", true
-		default:
-			return "", false
-		}
-	})
-	return err == nil && ValidProxyHost(expanded)
+	if !ValidNetworkExpression(p.Host, true) {
+		return false
+	}
+	expanded, err := ExpandNetwork(p.Host, func(string) (string, bool) { return "value", true }, func(string) (string, bool) { return "value", true })
+	return err == nil && network.ValidHost(expanded)
 }
 
 func ValidProxyHost(host string) bool {

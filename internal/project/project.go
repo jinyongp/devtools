@@ -17,6 +17,7 @@ import (
 const Filename = "devtools.toml"
 
 type Config struct {
+	EnvFiles     []string           `toml:"env_files,omitempty"`
 	Ports        map[string]Port    `toml:"ports,omitempty"`
 	Proxies      map[string]Proxy   `toml:"proxies,omitempty"`
 	Requirements Requirements       `toml:"requirements,omitempty"`
@@ -35,6 +36,7 @@ type Command struct {
 }
 
 type Context struct {
+	EnvFiles     []string           `json:"-"`
 	Ports        map[string]Port    `json:"-"`
 	Proxies      map[string]Proxy   `json:"-"`
 	Requirements Requirements       `json:"-"`
@@ -103,12 +105,17 @@ func Resolve(start, explicitProfile string) (Context, *protocol.Error) {
 
 func parse(data []byte, path, root string) (Context, *protocol.Error) {
 	var config Config
-	decoder := toml.NewDecoder(bytes.NewReader(data)).DisallowUnknownFields()
+	decoder := toml.NewDecoder(bytes.NewReader(data)).DisallowUnknownFields().EnableUnmarshalerInterface()
 	if err := decoder.Decode(&config); err != nil {
 		return Context{}, protocol.NewError("invalid_config", "Invalid TOML or unknown configuration fields.", 3, map[string]any{"path": path})
 	}
 	if !ValidProfile(config.Profile) {
 		return Context{}, protocol.NewError("invalid_config", "A valid profile identifier is required.", 3, map[string]any{"path": path, "field": "profile"})
+	}
+	for _, path := range config.EnvFiles {
+		if path == "" || strings.ContainsRune(path, 0) {
+			return Context{}, protocol.NewError("invalid_config", "Invalid env_files path.", 3, nil)
+		}
 	}
 	for name, command := range config.Commands {
 		if command.Ready != nil && !command.Ready.Valid() {
@@ -142,7 +149,7 @@ func parse(data []byte, path, root string) (Context, *protocol.Error) {
 			return Context{}, protocol.NewError("invalid_config", "Invalid proxy declaration.", 3, map[string]any{"path": path, "field": "proxies"})
 		}
 	}
-	return Context{Profile: config.Profile, Source: "file", ConfigPath: path, Root: root, Commands: config.Commands, Requirements: config.Requirements, Ports: config.Ports, Proxies: config.Proxies}, nil
+	return Context{Profile: config.Profile, Source: "file", ConfigPath: path, Root: root, Commands: config.Commands, Requirements: config.Requirements, Ports: config.Ports, Proxies: config.Proxies, EnvFiles: config.EnvFiles}, nil
 }
 
 func ioError(path string) *protocol.Error {

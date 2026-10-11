@@ -10,6 +10,13 @@ provider 실접속은 별도 환경 근거가 필요하며 unit/fake 결과로 �
 `DEVTOOLS_DISPOSABLE_HOST=1`인 disposable macOS/Linux에서만 실행한다. 실제 hosts·OS trust·
 80/443·최소 capability를 변경하고 정리를 확인한다. 실패하면 private CA와 복구 root를 보존한다.
 release workflow의 `system_network_smoke`는 기본 false인 opt-in 입력이다.
+
+macOS GitHub runner의 무인 검증은 `--preauthorize-macos-trust`를 명시한다.
+마지막 관리자 CA 신뢰 항목 제거 시 필요한 시스템 인증 창을 처리할 수 있도록,
+일회용 runner에서 `com.apple.trust-settings.admin` 정책을 검증 동안만 허용한다.
+기존 정책을 먼저 보존하고 성공·실패 시 모두 복원한 뒤 원본과 비교한다.
+정책 준비나 복원이 실패하면 검증도 실패하며, 이 조건은 결과 JSON에 기록된다.
+일반 macOS에서 시스템 인증 창에 응답하는 사용자 흐름은 별도 수동 검증 대상이다.
 실제 결과 파일이 없으면 해당 platform 수용 검증은 pending이다.
 
 저장소에서 devtools 자체를 수정하는 개발자를 위한 안내다.

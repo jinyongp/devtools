@@ -5,6 +5,7 @@ import http.client
 import json
 import os
 from pathlib import Path
+import plistlib
 import pty
 import select
 import signal
@@ -21,9 +22,12 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary",type=Path,required=True)
     parser.add_argument("--evidence",type=Path,required=True)
+    parser.add_argument("--preauthorize-macos-trust",action="store_true",help="Temporarily authorize trust administration on a disposable GitHub macOS runner and restore its exact policy afterward.")
     args=parser.parse_args()
     if os.environ.get("DEVTOOLS_DISPOSABLE_HOST")!="1" or os.geteuid()==0:
         parser.error("Requires DEVTOOLS_DISPOSABLE_HOST=1 and a non-root user on a disposable host with interactive sudo available.")
+    if args.preauthorize_macos_trust and (sys.platform!="darwin" or os.environ.get("GITHUB_ACTIONS")!="true"):
+        parser.error("Trust preauthorization is available only on a disposable GitHub macOS runner.")
     source=args.binary.resolve()
     report={"platform":sys.platform,"binary_sha256":hashlib.sha256(source.read_bytes()).hexdigest(),"result":"fail","commands":[]}
     temporary=tempfile.mkdtemp(prefix="devtools-system-network-")
@@ -123,7 +127,19 @@ timeout='10s'
             assert code==0,result
             return result['data']
         def mutate(*words,**kwargs):return api(*words,"--request-id",str(uuid.uuid4()),**kwargs)
+        authorization=None
+        def trust_policy(action,data=None,rule=None):
+            argv=["/usr/bin/sudo","-n","/usr/bin/security","authorizationdb",action,"com.apple.trust-settings.admin"]
+            if rule:argv.append(rule)
+            return subprocess.run(argv,input=data,capture_output=True,timeout=10,check=True).stdout
         try:
+            if args.preauthorize_macos_trust:
+                # A headless runner cannot answer the GUI prompt macOS uses
+                # when removing its final admin trust entry, even under sudo.
+                authorization=trust_policy("read")
+                assert isinstance(plistlib.loads(authorization),dict)
+                trust_policy("write",rule="allow")
+                report["macos_trust_preauthorized"]=True
             mutate("proxy","setup",terminal=True)
             setup=api("proxy","setup","--check")["item"]
             if sys.platform=="linux":assert setup["enabled"],setup
@@ -182,8 +198,14 @@ timeout='10s'
                 report["cleanup_error"]=type(e).__name__
                 raise
             finally:
-                args.evidence.parent.mkdir(parents=True,exist_ok=True)
-                args.evidence.write_text(json.dumps(report,indent=2)+"\n")
+                try:
+                    if authorization is not None:
+                        trust_policy("write",authorization)
+                        assert plistlib.loads(trust_policy("read"))==plistlib.loads(authorization)
+                        report["macos_trust_authorization_restored"]=True
+                finally:
+                    args.evidence.parent.mkdir(parents=True,exist_ok=True)
+                    args.evidence.write_text(json.dumps(report,indent=2)+"\n")
         report["result"]="pass"
         args.evidence.write_text(json.dumps(report,indent=2)+"\n")
         shutil.rmtree(root)

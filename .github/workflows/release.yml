@@ -88,10 +88,6 @@ jobs:
         run: |
           go build -o bin/devtools ./cmd/devtools
           echo "$PWD/bin" >> "$GITHUB_PATH"
-      - run: devtools run check:all
-      - run: devtools run build:cli
-      - run: ./bin/devtools project inspect
-      - run: devtools run test:installed
       - name: Verify disposable macOS system network
         id: system_network
         if: inputs.system_network_smoke
@@ -105,6 +101,10 @@ jobs:
           name: system-network-macos
           path: system-network-macos.json
           if-no-files-found: error
+      - run: devtools run check:all
+      - run: devtools run build:cli
+      - run: ./bin/devtools project inspect
+      - run: devtools run test:installed
       - name: Package macOS Agent Skill reference
         env:
           VERSION: ${{ inputs.version }}

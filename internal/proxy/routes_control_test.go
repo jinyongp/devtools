@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,43 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
+
+func TestDNSMappingUsesReachableLoopbackForWildcardListeners(t *testing.T) {
+	for _, tc := range []struct {
+		name, host, dns, http, https, want, errorCode string
+	}{
+		{name: "IPv4 wildcard", host: "app.test", dns: "auto", http: "0.0.0.0", want: "127.0.0.1"},
+		{name: "IPv6 wildcard", host: "app.test", dns: "hosts", http: "::", want: "::1"},
+		{name: "IPv4 loopback", host: "app.test", dns: "auto", http: "127.0.0.2", want: "127.0.0.2"},
+		{name: "IPv6 loopback", host: "app.test", dns: "auto", http: "::1", want: "::1"},
+		{name: "HTTPS selected", host: "app.test", dns: "auto", http: "0.0.0.0", https: "::", want: "::1"},
+		{name: "localhost unchanged", host: "app.localhost", dns: "auto", http: "0.0.0.0"},
+		{name: "external unchanged", host: "app.test", dns: "external", http: "0.0.0.0"},
+		{name: "specific remote rejected", host: "app.test", dns: "auto", http: "192.0.2.1", errorCode: "dns_address_required"},
+		{name: "invalid rejected", host: "app.test", dns: "auto", http: "invalid", errorCode: "dns_address_required"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			listener := network.Listener{HTTPHost: tc.http, HTTPSHost: tc.https}
+			if tc.https != "" {
+				listener.HTTPSReservation = "tls"
+			}
+			got, err := DNSMapping(tc.host, tc.dns, listener)
+			if tc.errorCode != "" {
+				if err == nil || err.Code != tc.errorCode {
+					t.Fatal(got, err)
+				}
+				return
+			}
+			var want []hosts.Mapping
+			if tc.want != "" {
+				want = []hosts.Mapping{{Host: tc.host, Address: tc.want}}
+			}
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatal(got, err, want)
+			}
+		})
+	}
+}
 
 func TestGlobalRouteConnectsBusyBackendAndRetainsIdentity(t *testing.T) {
 	m := liveNetworkManager(t)

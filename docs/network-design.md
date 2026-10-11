@@ -65,6 +65,8 @@ compatible literal routes retain hot reload when DNS preparation is already sati
 
 `dns=auto` leaves `.localhost` untouched and prepares owned loopback hosts entries for
 other hosts. Start/up previews and applies expected-digest changes idempotently.
+Wildcard listeners map local hostnames to the matching IPv4/IPv6 loopback address,
+never to an unspecified address; specific remote listener addresses require external DNS.
 Existing identical mappings require no write/elevation. A constrained helper obtains
 TTY authentication; noninteractive insufficient permissions return `permission_required`
 without waiting for sudo. External mappings and symlinks are protected. Last-owner

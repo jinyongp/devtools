@@ -83,8 +83,15 @@ func DNSMapping(host, dns string, listener network.Listener) ([]hosts.Mapping, *
 		address = listener.HTTPSHost
 	}
 	ip, e := netip.ParseAddr(address)
+	if e == nil && ip.IsUnspecified() {
+		if ip.Is4() {
+			ip = netip.MustParseAddr("127.0.0.1")
+		} else {
+			ip = netip.IPv6Loopback()
+		}
+	}
 	if e != nil || !ip.IsLoopback() {
-		return nil, protocol.NewError("dns_address_required", "Automatic hosts preparation requires a concrete loopback listener address; use external DNS for reachable listeners.", 3, nil)
+		return nil, protocol.NewError("dns_address_required", "Automatic hosts preparation requires a loopback or wildcard listener address; use external DNS for a specific remote address.", 3, nil)
 	}
 	return []hosts.Mapping{{Host: host, Address: ip.String()}}, nil
 }

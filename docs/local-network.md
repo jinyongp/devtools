@@ -103,6 +103,8 @@ setup 의도와 실제 bind 권한은 별도로 검사한다. standalone 업데�
 `dns` 생략은 `auto`다. `.localhost`는 기존처럼 hosts 파일을 수정하지 않는다.
 custom host는 `proxy up` 또는 `--proxy` 시작 안에서 devtools 소유 hosts mapping을
 준비한다. 별도 hosts 명령은 일상 실행에 필요하지 않다.
+wildcard listener의 로컬 hosts mapping은 IPv4의 `127.0.0.1`, IPv6의 `::1`을 사용하며
+`0.0.0.0`이나 `::`를 hosts에 기록하지 않는다.
 변경이 필요하면 initiating CLI가 내용을 보여 주고 필요한 OS 인증을 요청한다.
 비대화형 권한 부족은 `permission_required`다. daemon과 조회 명령은 OS를 수정하지 않는다.
 `dns = "external"`은 사용자가 준비한 DNS, `dns = "hosts"`는 명시 hosts 준비다.

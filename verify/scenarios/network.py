@@ -4,6 +4,8 @@ import http.client
 import json
 import os
 from pathlib import Path
+import select
+import signal
 import socket
 import ssl
 import subprocess
@@ -208,6 +210,24 @@ try:
     external.terminate();external.wait(timeout=5);external=None
     p = subprocess.run([str(binary),"--isolated-root",str(isolated),"proxy","run","external","--global","--","python3","-c","import os,sys; print(os.environ['PORT'],os.environ['DEVTOOLS_EXTERNAL_ROUTE_URL']);sys.exit(7)"],cwd=home,env=env,capture_output=True,text=True,timeout=10)
     assert p.returncode == 7 and p.stdout.strip() == f"{port} https://external.localhost:{preview_tls}", (p.returncode,p.stdout,p.stderr)
+    child = subprocess.Popen([
+        str(binary), "--isolated-root", str(isolated), "proxy", "run", "external", "--global", "--",
+        "python3", "-c", "import signal,sys,time;signal.signal(signal.SIGTERM,lambda *_:sys.exit(42));print('ready',flush=True);time.sleep(60)",
+    ], cwd=home, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert select.select([child.stdout], [], [], 10)[0], "global foreground startup timed out"
+        assert child.stdout.readline().strip() == "ready"
+        child.send_signal(signal.SIGTERM)
+        stdout, stderr = child.communicate(timeout=10)
+        assert child.returncode == 42, (child.returncode, stdout, stderr)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=5)
+    # Signal completion releases the global backend claim for the next invocation.
+    p = subprocess.run([str(binary), "--isolated-root", str(isolated), "proxy", "run", "external", "--global", "--", "true"],
+                       cwd=home, env=env, capture_output=True, text=True, timeout=15)
+    assert p.returncode == 0, (p.returncode, p.stderr)
     mutate("proxy","down","external","--global",cwd=home)
     mutate("proxy","stop","--listener","preview")
     p=subprocess.run([str(binary),"--isolated-root",str(isolated),"proxy","run","external","--global","--","true"],cwd=home,env=env,capture_output=True,text=True,timeout=15)

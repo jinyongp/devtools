@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/cleanup"
-	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -41,7 +40,7 @@ func (a *App) registerCleanup() {
 			c.Arguments = []Argument{{Name: "archive-id", Required: true, Pattern: uuidPattern}}
 		}
 		c.Run = func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
-			dirs, err := paths.Current()
+			dirs, err := a.currentPaths()
 			if err != nil {
 				return nil, argumentError("Cannot resolve directories.", "")
 			}

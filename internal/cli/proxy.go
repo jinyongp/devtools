@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"github.com/jinyongp/devtools/internal/network"
 	"path/filepath"
 	"strconv"
 
@@ -19,6 +20,7 @@ func proxyStatusSchema() map[string]any {
 		"url":        stringSchema(),
 		"started_at": map[string]any{"type": []string{"string", "null"}, "format": "date-time"},
 		"reason":     stringSchema(),
+		"id":         stringSchema(), "name": stringSchema(), "generation": stringSchema(), "https_port": map[string]any{"type": "integer"}, "daemon_running": map[string]any{"type": "boolean"},
 	}, "running", "state", "port", "url", "started_at", "reason")
 }
 
@@ -34,6 +36,8 @@ func proxyItemSchema() map[string]any {
 		"service":     map[string]any{"type": []string{"string", "null"}},
 		"target_port": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 65535},
 		"status":      stringSchema(),
+		"listener":    stringSchema(),
+		"scope":       stringSchema(), "route_id": stringSchema(),
 	}, "kind", "host", "proxy", "profile", "instance_id", "alias", "directory", "service", "target_port", "status")
 }
 
@@ -42,7 +46,13 @@ func (a *App) proxyStore() (proxy.Manager, *protocol.Error) {
 	if err != nil {
 		return proxy.Manager{}, err
 	}
-	return a.proxyManager(filepath.Dir(directory)), nil
+	m := a.proxyManager(filepath.Dir(directory))
+	directories, e := a.currentPaths()
+	if e != nil {
+		return m, portFailure("io_error")
+	}
+	m.IsolatedRoot = directories.IsolatedRoot
+	return m, nil
 }
 
 func (a *App) registerProxy() {
@@ -63,6 +73,7 @@ func (a *App) registerProxy() {
 		case "list":
 			command.Description = "List routes and instance diagnostics from current project state."
 			command.Options = []Option{{Name: "profile", Description: "Filter by profile; omission lists all profiles.", Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128}}
+			command.Options = append(command.Options, Option{Name: "global", Boolean: true, Description: "List only global routes; excludes --profile."})
 			command.Output = object(map[string]any{"items": map[string]any{"type": "array", "items": proxyItemSchema()}}, "items")
 		case "stop":
 			command.Description = "Stop the user-local reverse proxy daemon while retaining its port."
@@ -74,12 +85,56 @@ func (a *App) registerProxy() {
 				return nil, err
 			}
 			q := proxy.Request{Action: action, RequestID: request.Options["request-id"]}
+			if action != "list" {
+				enabled, e := manager.NetworkEnabled()
+				if e != nil {
+					return nil, e
+				}
+				name, all := request.Options["listener"], request.Options["all"] == "true"
+				if all && name != "" || all && request.Options["port"] != "" {
+					return nil, argumentError("--all excludes --listener and --port.", "")
+				}
+				if enabled || name != "" && name != network.DefaultListener || all && action == "start" {
+					if action == "status" {
+						if all {
+							items, e := manager.NetworkStatuses(ctx)
+							return map[string]any{"items": items}, e
+						}
+						item, e := manager.NetworkStatus(ctx, name)
+						return map[string]any{"item": item}, e
+					}
+					port := 0
+					if value := request.Options["port"]; value != "" {
+						parsed, e := strconv.Atoi(value)
+						if e != nil || parsed < 1 || parsed > 65535 {
+							return nil, argumentError("Expected TCP port 1..65535.", "port")
+						}
+						port = parsed
+					}
+					return manager.NetworkApply(ctx, action, name, all, request.Options["request-id"], port)
+				}
+			}
 			switch action {
 			case "status":
 				item, err := manager.Status(ctx)
+				if request.Options["all"] == "true" {
+					return map[string]any{"items": []any{proxyStatusResult(item)}}, err
+				}
 				return map[string]any{"item": proxyStatusResult(item)}, err
 			case "list":
+				if request.Options["global"] == "true" && request.Options["profile"] != "" {
+					return nil, argumentError("Choose --global or --profile.", "")
+				}
 				items, listErr := (proxy.Resolver{Ports: managerPortStore(manager)}).List(ctx, request.Options["profile"])
+				if request.Options["global"] == "true" {
+					filtered := []proxy.Item{}
+					for _, item := range items {
+						if item.Scope == "global" {
+							filtered = append(filtered, item)
+						}
+					}
+					items = filtered
+				}
 				return map[string]any{"items": items}, listErr
 			case "start":
 				if value := request.Options["port"]; value != "" {
@@ -91,10 +146,19 @@ func (a *App) registerProxy() {
 				}
 			}
 			result, err := manager.Apply(ctx, q)
+			if request.Options["all"] == "true" {
+				return map[string]any{"items": []any{proxyStatusResult(result)}, "changed": result.Changed, "replayed": result.Replayed}, err
+			}
 			return map[string]any{"item": proxyStatusResult(result), "changed": result.Changed, "replayed": result.Replayed}, err
+		}
+		if action != "list" {
+			command.Options = append(command.Options, Option{Name: "listener", Pattern: project.ProfilePattern, Description: "Named listener; omission selects default."}, Option{Name: "all", Boolean: true, Description: "Select all configured listeners."})
+			command.Output = listenerOutput(action != "status")
 		}
 		a.commands = append(a.commands, command)
 	}
+	a.registerNetworkProxy()
+	a.registerProxyRoutes()
 }
 
 // Mutation metadata belongs beside the resource, including false values.

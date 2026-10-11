@@ -37,6 +37,7 @@ type actionRequest struct {
 	Process *services.Request `json:"process,omitempty"`
 	Cleanup *cleanupRequest   `json:"cleanup,omitempty"`
 	Backup  *backupRequest    `json:"backup,omitempty"`
+	Network *networkRequest   `json:"network,omitempty"`
 }
 type cleanupRequest struct {
 	Action    string   `json:"action"`
@@ -168,13 +169,19 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		invalidAction(w)
 		return
 	}
-	if req.Cleanup != nil && req.Domain != "cleanup" || req.Backup != nil && req.Domain != "backup" {
+	if req.Cleanup != nil && req.Domain != "cleanup" || req.Backup != nil && req.Domain != "backup" || req.Network != nil && req.Domain != "network" {
 		invalidAction(w)
 		return
 	}
 	var result any
 	var err *protocol.Error
 	switch req.Domain {
+	case "network":
+		if req.Network == nil || req.Process != nil || req.Change != nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
+			invalidAction(w)
+			return
+		}
+		result, err = s.networkAction(r.Context(), *req.Network)
 	case "cleanup", "backup":
 		if req.Process != nil || req.Change != nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
 			invalidAction(w)
@@ -237,6 +244,10 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if req.Process.Action == "restart" {
+				if record.ProxyMode {
+					apiError(w, protocol.NewError("network_preparation_required", "Restart this proxy-enabled execution with devtools process restart so the initiating CLI can prepare DNS and the complete binding snapshot before stopping it.", 3, nil))
+					return
+				}
 				envOverride := req.Process.Env
 				req.Process.RestartPreflight = func(ctx context.Context, old services.Record, phase services.RestartPhase) *protocol.Error {
 					env := envOverride

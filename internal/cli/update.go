@@ -12,6 +12,7 @@ import (
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/scripts"
+	"golang.org/x/term"
 )
 
 // Set by package-manager builds to preserve ownership of installed files.
@@ -30,7 +31,14 @@ func (a *App) registerUpdate() {
 				"status": map[string]any{"enum": []string{"created", "unchanged", "skipped_conflict", "failed"}},
 			}, "name", "status"),
 		}, "action", "version", "alias", "changed"),
-		Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
+		Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+			directories, pathErr := a.currentPaths()
+			if pathErr != nil {
+				return nil, portFailure("io_error")
+			}
+			if directories.IsolatedRoot != "" {
+				return nil, protocol.NewError("isolated_operation_not_allowed", "Installed executable updates are unavailable in isolated mode.", 3, nil)
+			}
 			if r.Options["source"] != "" && r.Options["version"] == "" {
 				return nil, argumentError("Source requires an explicit version.", "version")
 			}
@@ -41,12 +49,12 @@ func (a *App) registerUpdate() {
 			if err != nil || filepath.Base(executable) != "devtools" {
 				return nil, protocol.NewError("update_failed", "Update requires an installed devtools executable.", 1, nil)
 			}
-			return updateExecutable(ctx, executable, r.Options)
+			return updateExecutable(ctx, executable, r.Options, streams)
 		},
 	})
 }
 
-func updateExecutable(ctx context.Context, executable string, options map[string]string) (any, *protocol.Error) {
+func updateExecutable(ctx context.Context, executable string, options map[string]string, streams ...IO) (any, *protocol.Error) {
 	if updateManager == "homebrew" {
 		return nil, protocol.NewError("package_managed", "Update this Homebrew installation with brew upgrade jinyongp/tap/devtools.", 3, map[string]any{"manager": "homebrew", "command": "brew upgrade jinyongp/tap/devtools"})
 	}
@@ -64,7 +72,13 @@ func updateExecutable(ctx context.Context, executable string, options map[string
 		}
 	}
 	var output bytes.Buffer
-	code, e := process.Execute(ctx, args, filepath.Dir(executable), os.Environ(), strings.NewReader(scripts.Installer), &output, io.Discard)
+	diagnostic := io.Writer(io.Discard)
+	if len(streams) > 0 {
+		if f, ok := streams[0].Err.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+			diagnostic = f
+		}
+	}
+	code, e := process.Execute(ctx, args, filepath.Dir(executable), os.Environ(), strings.NewReader(scripts.Installer), &output, diagnostic)
 	if e != nil {
 		return nil, e
 	}

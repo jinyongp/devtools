@@ -5,13 +5,12 @@ import (
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/backup"
-	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 func (a *App) backupEngine() (backup.Engine, *protocol.Error) {
-	dirs, err := paths.Current()
+	dirs, err := a.currentPaths()
 	if err != nil {
 		return backup.Engine{}, argumentError("Cannot resolve user directories.", "")
 	}

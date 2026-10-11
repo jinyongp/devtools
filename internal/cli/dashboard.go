@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"github.com/jinyongp/devtools/internal/dashboard"
-	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"path/filepath"
@@ -29,7 +28,7 @@ func (a *App) registerDashboard() {
 			output = object(map[string]any{"changed": map[string]any{"type": "boolean"}}, "changed")
 		}
 		a.commands = append(a.commands, Command{Name: name, Aliases: aliases, Description: "Manage the local D3 Canvas dashboard and editing session.", Options: options, Output: output, Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
-			dirs, e := paths.Current()
+			dirs, e := a.currentPaths()
 			if e != nil {
 				return nil, argumentError("Cannot resolve user directories.", "")
 			}
@@ -46,7 +45,7 @@ func (a *App) registerDashboard() {
 					return nil, err
 				}
 			}
-			result, err := dashboard.Manage(ctx, action, dirs.Cache, filepath.Join(filepath.Dir(dir), "tasks"), profile)
+			result, err := dashboard.ManageWithRoot(ctx, action, dirs.Cache, filepath.Join(filepath.Dir(dir), "tasks"), profile, dirs.IsolatedRoot)
 			if err != nil {
 				return nil, err
 			}

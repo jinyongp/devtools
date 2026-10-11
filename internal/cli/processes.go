@@ -8,16 +8,25 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/execution"
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
+	"github.com/jinyongp/devtools/internal/tasks"
 )
 
 func (a *App) serviceStore() (services.Store, *protocol.Error) {
 	d, e := a.dataDirectory()
-	return services.Store{Data: filepath.Dir(d)}, e
+	if e != nil {
+		return services.Store{}, e
+	}
+	directories, err := a.currentPaths()
+	if err != nil {
+		return services.Store{}, portFailure("io_error")
+	}
+	return services.Store{Data: filepath.Dir(d), IsolatedRoot: directories.IsolatedRoot}, nil
 }
 func (a *App) registerProcesses() {
 	descriptions := map[string]string{
@@ -40,6 +49,7 @@ func (a *App) registerProcesses() {
 		if action == "start" {
 			c.Arguments = []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern}}
 			c.Options = append(c.Options, Option{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory."})
+			c.Options = append(c.Options, Option{Name: "proxy", Boolean: true, Description: "Prepare the declared route and DNS before starting."})
 		}
 		if action == "start" || action == "restart" {
 			c.Options = append(c.Options, Option{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment."}, Option{Name: "capture-logs", Boolean: true, Description: "Retain bounded raw output for seven days after exit."})
@@ -115,11 +125,42 @@ func (a *App) registerProcesses() {
 			}
 			if action == "start" {
 				command, env := q.Command, q.Env
+				if r.Options["proxy"] == "true" {
+					snapshots, e := a.prepareProxyNetwork(ctx, startProject, []string{command}, nil, map[string]*string{command: env}, streams, q.RequestID)
+					if e != nil {
+						return nil, e
+					}
+					q.ProxyMode = true
+					q.Network = snapshots[command]
+				}
 				q.BeforeStart = func(ctx context.Context) *protocol.Error {
+					if q.Network != nil {
+						return a.preflightNetworkSnapshot(ctx, startProject, command, env, q.Network, false)
+					}
 					return a.preflightProjectCommand(ctx, startProject, command, env)
 				}
 			}
 			if action == "restart" {
+				original, e := s.Status(ctx, q.ID)
+				if e != nil {
+					return nil, e
+				}
+				if original.ProxyMode {
+					p, e := project.Resolve(original.Directory, "")
+					if e != nil {
+						return nil, e
+					}
+					env := q.Env
+					if env == nil {
+						env = original.EnvOverride
+					}
+					snapshots, e := a.prepareProxyNetwork(ctx, p, []string{original.Command}, []services.Record{original}, map[string]*string{original.Command: env}, streams, q.RequestID)
+					if e != nil {
+						return nil, e
+					}
+					q.ProxyMode = true
+					q.Network = snapshots[original.Command]
+				}
 				envOverride := q.Env
 				q.RestartPreflight = func(ctx context.Context, record services.Record, phase services.RestartPhase) *protocol.Error {
 					env := envOverride
@@ -127,6 +168,9 @@ func (a *App) registerProcesses() {
 						env = record.EnvOverride
 					}
 					snapshot := project.Context{Root: record.Directory, Profile: record.Profile}
+					if q.Network != nil {
+						return a.preflightNetworkSnapshot(ctx, snapshot, record.Command, env, q.Network, phase == services.RestartBeforeStop)
+					}
 					switch phase {
 					case services.RestartBeforeStop:
 						return a.validateProjectCommand(ctx, snapshot, record.Command, env)
@@ -165,9 +209,19 @@ func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 		if err != nil {
 			return err
 		}
+		if r.ProxyMode {
+			var snapshot network.ExecutionSnapshot
+			if tasks.ReadPrivate(filepath.Join(data, "processes", r.ID, "network.json"), &snapshot) != nil || snapshot.ID != r.NetworkSnapshotID {
+				return protocol.NewError("network_snapshot_required", "The managed network snapshot is unavailable.", 3, nil)
+			}
+			command.Network = &snapshot
+		}
 		configRoot := ""
 		if len(command.Bind)+len(command.Serve) > 0 {
 			dirs, pathErr := paths.Current()
+			if r.IsolatedRoot != "" {
+				dirs, pathErr = paths.Isolated(r.IsolatedRoot)
+			}
 			if pathErr != nil {
 				return protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil)
 			}

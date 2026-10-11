@@ -115,6 +115,10 @@ func Status(ctx context.Context, cache string) (tasks.Object, *protocol.Error) {
 }
 
 func Manage(ctx context.Context, action, cache, data, profile string) (tasks.Object, *protocol.Error) {
+	return ManageWithRoot(ctx, action, cache, data, profile, "")
+}
+
+func ManageWithRoot(ctx context.Context, action, cache, data, profile, isolatedRoot string) (tasks.Object, *protocol.Error) {
 	if action == "status" {
 		return Status(ctx, cache)
 	}
@@ -157,6 +161,9 @@ func Manage(ctx context.Context, action, cache, data, profile string) (tasks.Obj
 			return nil, fail()
 		}
 		cmd := exec.Command(exe, "__dashboard-serve", dir, data)
+		if isolatedRoot != "" {
+			cmd.Env = append(os.Environ(), "DEVTOOLS_ISOLATED_ROOT="+isolatedRoot)
+		}
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		if e = cmd.Start(); e != nil {
 			return nil, fail()
@@ -383,6 +390,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			reply(map[string]any{"items": items, "instances": instances})
+			return
+		}
+		if r.URL.Path == "/api/network" {
+			result, e := s.networkView(r.Context(), r.URL.Query().Get("profile"))
+			if e != nil {
+				apiError(w, e)
+				return
+			}
+			reply(result)
 			return
 		}
 		if r.URL.Path == "/api/project" {

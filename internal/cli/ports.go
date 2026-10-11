@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -27,8 +26,8 @@ func (a *App) portStore() (ports.Store, *protocol.Error) {
 	d, e := a.dataDirectory()
 	return ports.Store{Directory: filepath.Join(filepath.Dir(d), "ports"), Probe: a.portProbe}, e
 }
-func portDefaults() ([]int, *protocol.Error) {
-	d, e := paths.Current()
+func (a *App) portDefaults() ([]int, *protocol.Error) {
+	d, e := a.currentPaths()
 	if e != nil {
 		return nil, portFailure("invalid_config")
 	}
@@ -300,6 +299,10 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 			if p.Root != root || p.Profile != profile {
 				return false, portFailure("instance_conflict")
 			}
+			p, e = p.ResolvePorts(os.Environ(), []string{name})
+			if e != nil {
+				return false, e
+			}
 			def, ok := p.Ports[name]
 			if !ok {
 				return false, portFailure("port_not_found")
@@ -310,7 +313,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 					return false, e
 				}
 			}
-			defaults, e := portDefaults()
+			defaults, e := a.portDefaults()
 			if e != nil {
 				return false, e
 			}

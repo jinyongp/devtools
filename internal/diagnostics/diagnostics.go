@@ -17,9 +17,10 @@ import (
 )
 
 type Input struct {
-	Data   string "json:\"data\""
-	Config string "json:\"config\""
-	Cache  string "json:\"cache\""
+	IsolatedRoot string `json:"isolated_root,omitempty"`
+	Data         string "json:\"data\""
+	Config       string "json:\"config\""
+	Cache        string "json:\"cache\""
 }
 
 type Paths struct {
@@ -84,6 +85,7 @@ type Issue struct {
 }
 
 type Report struct {
+	Network   Network   `json:"network"`
 	Ready     bool      "json:\"ready\""
 	Paths     Paths     "json:\"paths\""
 	Profiles  Profiles  "json:\"profiles\""
@@ -236,6 +238,12 @@ func Inspect(ctx context.Context, input Input) (Report, *protocol.Error) {
 
 	if err := canceled(ctx); err != nil {
 		return Report{}, err
+	}
+	networkState, networkErr := inspectNetwork(ctx, input)
+	report.Network = networkState
+	if networkErr != nil {
+		report.Network.Section = Section{Status: "fail", ErrorCode: networkErr.Code}
+		report.issue("network", networkErr)
 	}
 	return report, nil
 }

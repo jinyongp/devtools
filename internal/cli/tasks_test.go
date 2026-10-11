@@ -217,6 +217,7 @@ func TestCLIIdentifierAndDescriptionContracts(t *testing.T) {
 			}
 		}
 		if expected, exists := wantQueryOptions[name]; exists {
+			expected = append(append([]string{}, expected...), "isolated-root")
 			actual := map[string]bool{}
 			for _, raw := range command["options"].([]any) {
 				actual[raw.(map[string]any)["name"].(string)] = true

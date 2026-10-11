@@ -58,6 +58,7 @@ type App struct {
 	proxyManager     func(string) proxy.Manager
 	portProbe        ports.AvailabilityProbe
 	lifecycleManager func(string) lifecycle.Manager
+	isolatedRoot     string
 }
 
 type Argument struct {
@@ -114,8 +115,8 @@ func New(version, commit string) *App {
 			{Name: "profile", Description: "Explicit profile; bypasses configuration lookup.", Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128},
 		}, Output: object(map[string]any{
 			"item":  object(map[string]any{"profile": stringSchema(), "source": map[string]any{"enum": []string{"flag", "file"}}, "config_path": stringSchema(), "root": stringSchema()}, "profile", "source"),
-			"paths": object(map[string]any{"config": stringSchema(), "data": stringSchema(), "cache": stringSchema()}, "config", "data", "cache"),
-		}, "item", "paths"), Run: inspect},
+			"paths": object(map[string]any{"config": stringSchema(), "data": stringSchema(), "cache": stringSchema(), "runtime": stringSchema()}, "config", "data", "cache"),
+		}, "item", "paths"), Run: a.inspect},
 	}
 	a.registerTools()
 	a.registerCommands()
@@ -126,6 +127,7 @@ func New(version, commit string) *App {
 	a.registerDiagnostics()
 	a.registerPorts()
 	a.registerProxy()
+	a.registerCA()
 	a.registerBackup()
 	a.registerProfiles()
 	a.registerProcesses()
@@ -134,6 +136,7 @@ func New(version, commit string) *App {
 	a.registerUpdate()
 	a.registerCompletion()
 	for i := range a.commands {
+		a.commands[i].Options = append(a.commands[i].Options, Option{Name: "isolated-root", MinLength: 1, Description: "Use independent config/data/cache/runtime; shared OS mutations are prohibited."})
 		if a.commands[i].Name == "schema" || a.commands[i].Name == "help" {
 			a.commands[i].Arguments = []Argument{{Name: "command"}, {Name: "subcommand"}, {Name: "action"}, {Name: "operation"}}
 			a.commands[i].Output = map[string]any{"type": "object"}
@@ -160,13 +163,13 @@ func New(version, commit string) *App {
 	return a
 }
 
-func inspect(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
+func (a *App) inspect(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
 	options := request.Options
 	p, err := project.Resolve(options["dir"], options["profile"])
 	if err != nil {
 		return nil, err
 	}
-	dirs, pathErr := paths.Current()
+	dirs, pathErr := a.currentPaths()
 	if pathErr != nil {
 		return nil, protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil)
 	}
@@ -188,6 +191,22 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	}
 	if ctx.Err() != nil {
 		return fail(protocol.NewError("canceled", "Execution canceled.", 130, nil))
+	}
+	rootPrefix := ""
+	if len(args) > 0 && (args[0] == "--isolated-root" || strings.HasPrefix(args[0], "--isolated-root=")) {
+		if args[0] == "--isolated-root" {
+			if len(args) < 3 || args[1] == "" {
+				return fail(argumentError("Supply an isolation root and command.", "isolated-root"))
+			}
+			rootPrefix = args[1]
+			args = args[2:]
+		} else {
+			rootPrefix = strings.TrimPrefix(args[0], "--isolated-root=")
+			args = args[1:]
+			if rootPrefix == "" || len(args) == 0 {
+				return fail(argumentError("Supply an isolation root and command.", "isolated-root"))
+			}
+		}
 	}
 	if len(args) == 0 || (len(args) == 1 && (args[0] == "--help" || args[0] == "-h")) {
 		args = []string{"help"}
@@ -249,6 +268,23 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 			return fail(protocol.NewError("io_error", "Cannot write output.", 1, nil))
 		}
 		return 0
+	}
+	if rootPrefix != "" && request.Options["isolated-root"] != "" {
+		return fail(argumentError("Specify the isolation root once.", "isolated-root"))
+	}
+	root := request.Options["isolated-root"]
+	if root == "" {
+		root = rootPrefix
+	}
+	if root != "" {
+		dirs, err := paths.Isolated(root)
+		if err != nil {
+			return fail(argumentError("Cannot resolve isolation root.", "isolated-root"))
+		}
+		oldRoot, oldDirectory := a.isolatedRoot, a.dataDirectory
+		a.isolatedRoot = dirs.IsolatedRoot
+		a.dataDirectory = func() (string, *protocol.Error) { return dirs.Data + "/profiles", nil }
+		defer func() { a.isolatedRoot = oldRoot; a.dataDirectory = oldDirectory }()
 	}
 	data, err := selected.Run(ctx, streams, request)
 	if err != nil {

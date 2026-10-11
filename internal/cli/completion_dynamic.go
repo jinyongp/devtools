@@ -110,6 +110,8 @@ func (a *App) dynamicCandidates(words []string) []string {
 				selected[opt.Name] = value
 			} else if !opt.Boolean {
 				pending = opt.Name
+			} else {
+				selected[opt.Name] = "true"
 			}
 			continue
 		}
@@ -133,6 +135,8 @@ func (a *App) dynamicCandidates(words []string) []string {
 	}
 	source := ""
 	switch pending {
+	case "listener", "provider", "dns":
+		source = pending
 	case "profile", "env":
 		source = pending
 		// Restart inherits the recorded process profile, not the caller's cwd.
@@ -169,8 +173,12 @@ func (a *App) dynamicCandidates(words []string) []string {
 			}
 		}
 		switch {
-		case cmd.Name == "command run" || cmd.Name == "command inspect" || cmd.Name == "process start" || cmd.Name == "doctor" || strings.HasPrefix(cmd.Name, "project "):
+		case cmd.Name == "command run" || cmd.Name == "command inspect" || cmd.Name == "command env" || cmd.Name == "process start" || cmd.Name == "doctor" || strings.HasPrefix(cmd.Name, "project "):
 			source = "command"
+		case cmd.Name == "expose status" || cmd.Name == "expose stop":
+			source = "exposure"
+		case cmd.Name == "expose start" || cmd.Name == "proxy env" || cmd.Name == "proxy up" || cmd.Name == "proxy down" || cmd.Name == "proxy rm" || cmd.Name == "proxy run" || strings.HasPrefix(cmd.Name, "proxy hosts "):
+			source = "route"
 		case cmd.Name == "env remove":
 			source = "env"
 		case strings.HasPrefix(cmd.Name, "variable "):
@@ -226,16 +234,69 @@ func (a *App) dynamicCandidates(words []string) []string {
 }
 
 func (a *App) completionNames(source string, selected map[string]string) []string {
+	if source == "provider" {
+		return []string{"local", "lan", "cloudflared", "tailscale"}
+	}
+	if source == "dns" {
+		return []string{"auto", "hosts", "external"}
+	}
+	if source == "listener" || source == "route" && selected["global"] == "true" {
+		store, e := a.portStore()
+		if e != nil {
+			return nil
+		}
+		st, e := store.Read()
+		if e != nil {
+			return nil
+		}
+		names := []string{}
+		if st.Network != nil {
+			if source == "listener" {
+				for _, def := range st.Network.Listeners {
+					names = append(names, def.Name)
+				}
+			} else {
+				for _, def := range st.Network.Routes {
+					names = append(names, def.Name)
+				}
+			}
+		}
+		if source == "listener" && len(names) == 0 {
+			names = append(names, "default")
+		}
+		return names
+	}
+	if source == "exposure" {
+		m, e := a.proxyStore()
+		if e != nil {
+			return nil
+		}
+		items, e := m.ExposureList(context.Background())
+		if e != nil {
+			return nil
+		}
+		names := []string{}
+		for _, item := range items {
+			names = append(names, item.ID)
+		}
+		return names
+	}
 	dir := selected["dir"]
 	if dir == "" {
 		dir = "."
 	}
-	if source == "command" {
+	if source == "command" || source == "route" {
 		p, e := project.Resolve(dir, "")
 		if e != nil {
 			return nil
 		}
 		names := []string{}
+		if source == "route" {
+			for name := range p.Proxies {
+				names = append(names, name)
+			}
+			return names
+		}
 		for name := range p.Commands {
 			names = append(names, name)
 		}

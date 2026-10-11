@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/execution"
-	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
@@ -23,7 +22,7 @@ func (a *App) executionDependencies(command execution.Command) (execution.Depend
 	}
 	configRoot := ""
 	if needsPorts {
-		dirs, pathErr := paths.Current()
+		dirs, pathErr := a.currentPaths()
 		if pathErr != nil {
 			return execution.Dependencies{}, protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil)
 		}

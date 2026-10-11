@@ -40,6 +40,7 @@ func managedProcessSchema() map[string]any {
 		"reason":           stringSchema(),
 		"state":            stringSchema(),
 		"previous_id":      stringSchema(),
+		"proxy_mode":       map[string]any{"type": "boolean"}, "network_snapshot_id": stringSchema(), "isolated_root": stringSchema(),
 	}, "ready_configured", "id", "profile", "instance_id", "directory", "command", "env", "env_override", "capture_logs", "created_at", "started_at", "ended_at", "exit_code", "reason", "state")
 }
 
@@ -87,6 +88,14 @@ func (a *App) projectLifecycleManager() (lifecycle.Manager, *protocol.Error) {
 		return lifecycle.Manager{}, protocol.NewError("internal_error", "Project lifecycle manager is unavailable.", 1, nil)
 	}
 	manager := a.lifecycleManager(data)
+	if store, ok := manager.Processes.(services.Store); ok {
+		directories, e := a.currentPaths()
+		if e != nil {
+			return manager, portFailure("io_error")
+		}
+		store.IsolatedRoot = directories.IsolatedRoot
+		manager.Processes = store
+	}
 	manager.Validate = a.validateProjectCommand
 	manager.Preflight = a.preflightProjectCommand
 	return manager, nil
@@ -105,6 +114,7 @@ func (a *App) registerProjectLifecycle() {
 			Arguments:   []Argument{commandArgument},
 			Options: []Option{
 				directory,
+				{Name: "proxy", Boolean: true, Description: "Prepare the selected serve union, DNS, and listeners before launching the batch."},
 				{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment for every selected command."},
 				{Name: "capture-logs", Boolean: true, Description: "Retain bounded raw output for every selected command."},
 				{Name: "timeout", Default: "30s", Description: "Readiness wait per selected command, greater than zero and at most 10m."},
@@ -175,7 +185,7 @@ func resolveLifecycleProject(directory string) (project.Context, *protocol.Error
 	return p, nil
 }
 
-func (a *App) projectUp(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
+func (a *App) projectUp(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
 	p, err := resolveLifecycleProject(request.Options["dir"])
 	if err != nil {
 		return nil, err
@@ -189,6 +199,8 @@ func (a *App) projectUp(ctx context.Context, _ IO, request Request) (any, *proto
 		return nil, err
 	}
 	input := lifecycle.Request{Action: lifecycle.ActionUp, Project: p, Commands: append([]string{}, request.Args...), Timeout: timeout, RequestID: request.Options["request-id"]}
+	input.ProxyMode = request.Options["proxy"] == "true"
+	a.networkLifecycle(&manager, streams)
 	if env, ok := request.Options["env"]; ok {
 		input.Env = &env
 	}
@@ -199,7 +211,7 @@ func (a *App) projectUp(ctx context.Context, _ IO, request Request) (any, *proto
 	return manager.Apply(ctx, input)
 }
 
-func (a *App) projectRestart(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
+func (a *App) projectRestart(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
 	p, err := resolveLifecycleProject(request.Options["dir"])
 	if err != nil {
 		return nil, err
@@ -213,6 +225,7 @@ func (a *App) projectRestart(ctx context.Context, _ IO, request Request) (any, *
 		return nil, err
 	}
 	input := lifecycle.Request{Action: lifecycle.ActionRestart, Project: p, Commands: append([]string{}, request.Args...), Timeout: timeout, RequestID: request.Options["request-id"]}
+	a.networkLifecycle(&manager, streams)
 	if env, ok := request.Options["env"]; ok {
 		input.Env = &env
 	}

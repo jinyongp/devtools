@@ -105,7 +105,26 @@ tar -xzf "$scratch/package.tar.gz" -C "$scratch" devtools || fail 'Cannot extrac
 chmod 0755 "$scratch/devtools" || fail 'Cannot set executable permissions.'
 "$scratch/devtools" version > "$scratch/version.json" || fail 'Release executable cannot run on this system.'
 grep -F '"version":"'"$version"'"' "$scratch/version.json" >/dev/null || fail 'Release version does not match the request.'
+setup_intent=
+if [ "$platform" = linux ]; then
+  case "${XDG_DATA_HOME:-}" in /*) setup_data=$XDG_DATA_HOME ;; *) setup_data="$HOME/.local/share" ;; esac
+  setup_intent="$setup_data/devtools/netsetup/intent.json"
+elif [ "$platform" = darwin ]; then
+  setup_intent="$HOME/Library/Application Support/devtools/data/netsetup/intent.json"
+fi
+restore_setup=false
+if [ "$action" = update ] && [ -f "$setup_intent" ] && grep -F '"enabled":true' "$setup_intent" >/dev/null; then
+  [ -z "${DEVTOOLS_ISOLATED_ROOT:-}" ] || fail 'Executable permission changes are unavailable in isolated mode.'
+  ln "$destination" "$scratch/previous" || fail 'Cannot preserve the original executable for recovery.'
+  "$scratch/devtools" __install-prepare "$destination" || fail 'Cannot preserve low-port setup; the original executable is unchanged. Retry interactively or use high ports.'
+  restore_setup=true
+fi
 mv -f "$scratch/devtools" "$destination" || fail 'Cannot publish installed executable.'
+if [ "$restore_setup" = true ] && ! "$destination" __install-commit "$destination"; then
+  mv -f "$scratch/previous" "$destination" || fail 'Update recovery requires restoring the preserved original executable.'
+  "$destination" __install-rollback "$destination" || fail 'Executable restored; setup intent requires repair with proxy setup.'
+  fail 'Cannot commit low-port setup; the original executable was restored.'
+fi
 alias_status=created
 if [ -L "$alias_destination" ] && [ "$(readlink "$alias_destination")" = devtools ]; then
   alias_status=unchanged

@@ -24,7 +24,7 @@ func TestOutputModeCatalog(t *testing.T) {
 	if properties["schema_version"].(map[string]any)["const"] != protocol.EnvelopeVersion || protocol.EnvelopeVersion != 1 {
 		t.Fatalf("unexpected envelope version: %#v", properties["schema_version"])
 	}
-	nonJSON := map[string]OutputMode{"help": OutputText, "completion": OutputArtifact, "command run": OutputPassthrough}
+	nonJSON := map[string]OutputMode{"help": OutputText, "completion": OutputArtifact, "command run": OutputPassthrough, "proxy run": OutputPassthrough}
 	for _, entry := range catalog["commands"].([]map[string]any) {
 		name := entry["name"].(string)
 		want := OutputJSON

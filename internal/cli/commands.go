@@ -17,6 +17,8 @@ type projectCommandSummary struct {
 }
 
 type projectCommandBinding struct {
+	Proxy    string  `json:"proxy,omitempty"`
+	Format   string  `json:"format,omitempty"`
 	Port     string  `json:"port,omitempty"`
 	Profile  string  `json:"profile,omitempty"`
 	Instance string  `json:"instance,omitempty"`
@@ -76,6 +78,7 @@ func projectCommandRequirementsSchema() map[string]any {
 
 func projectCommandDetailsSchema() map[string]any {
 	binding := object(map[string]any{
+		"proxy": stringSchema(), "format": map[string]any{"enum": []string{"number", "url"}},
 		"port":     stringSchema(),
 		"profile":  stringSchema(),
 		"instance": stringSchema(),
@@ -94,6 +97,7 @@ func projectCommandDetailsSchema() map[string]any {
 }
 
 func (a *App) registerCommands() {
+	a.registerNetworkEnv()
 	projectOptions := []Option{{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory."}}
 	a.commands = append(a.commands,
 		Command{
@@ -131,6 +135,11 @@ func (a *App) registerCommands() {
 			Run:         a.runCommand,
 		},
 	)
+	for index := range a.commands {
+		if a.commands[index].Name == "command run" {
+			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "proxy", Boolean: true, Description: "Prepare declared proxy routes and DNS before running the configured server."})
+		}
+	}
 }
 
 func (a *App) listProjectCommands(_ context.Context, _ IO, request Request) (any, *protocol.Error) {
@@ -177,6 +186,7 @@ func describeProjectCommand(name string, command project.Command, requirements p
 	bind := make(map[string]projectCommandBinding, len(command.Bind))
 	for key, binding := range command.Bind {
 		bind[key] = projectCommandBinding{
+			Proxy: binding.Proxy, Format: binding.Format,
 			Port:     binding.Port,
 			Profile:  binding.Profile,
 			Instance: binding.Instance,

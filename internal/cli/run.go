@@ -7,6 +7,7 @@ import (
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/tasks"
 )
 
 func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
@@ -40,11 +41,28 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 			return nil, err
 		}
 	}
+	if request.Options["proxy"] == "true" {
+		if command.Name == "" {
+			return nil, argumentError("--proxy requires a configured command with declared serve routes.", "proxy")
+		}
+		var override *string
+		if env, explicit := request.Options["env"]; explicit {
+			override = &env
+		}
+		snapshots, e := a.prepareProxyNetwork(ctx, command.Project, []string{command.Name}, nil, map[string]*string{command.Name: override}, streams, tasks.ID())
+		if e != nil {
+			return nil, e
+		}
+		command.Network = snapshots[command.Name]
+	}
 	prepared, err := a.prepareExecution(ctx, command, false)
 	if err != nil {
 		return nil, err
 	}
 	defer prepared.Release()
+	if directories, e := a.currentPaths(); e == nil && directories.IsolatedRoot != "" {
+		prepared.Injected["DEVTOOLS_ISOLATED_ROOT"] = directories.IsolatedRoot
+	}
 	checks := prepared.Checks(ctx, os.Environ(), false)
 	if !execution.ChecksPassed(checks) {
 		return nil, protocol.NewError("requirements_failed", "Command prerequisites are not satisfied. Run devtools doctor for diagnostics.", 3, map[string]any{"checks": checks})

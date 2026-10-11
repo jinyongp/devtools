@@ -1,5 +1,8 @@
 # 사용법과 CLI 계약
 
+HTTPS·도메인·공유와 통합 시작의 확장 계약은
+[local network contract](network-design.md)를 따른다.
+
 이 문서는 확정된 사용 방식과 공개 CLI 계약을 정리한다.
 
 포트 할당과 명령별 `serve`·`bind`·템플릿은 [포트 사용 가이드](ports.md)와

@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/diagnostics"
-	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -77,6 +76,7 @@ func diagnosticsOutputSchema() map[string]any {
 		"dashboard": dashboard,
 		"backup":    backup,
 		"issues":    map[string]any{"type": "array", "items": issue},
+		"network":   networkDiagnosticsSchema(),
 	}, "ready", "paths", "profiles", "ports", "processes", "proxy", "dashboard", "backup", "issues")
 }
 
@@ -86,7 +86,7 @@ func (a *App) registerDiagnostics() {
 		Description: "Summarize local devtools subsystem health without returning secrets, raw logs, or credentials.",
 		Output:      diagnosticsOutputSchema(),
 		Run: func(ctx context.Context, _ IO, _ Request) (any, *protocol.Error) {
-			dirs, err := paths.Current()
+			dirs, err := a.currentPaths()
 			if err != nil {
 				return nil, protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil)
 			}
@@ -95,9 +95,10 @@ func (a *App) registerDiagnostics() {
 				return nil, failure
 			}
 			return diagnostics.Inspect(ctx, diagnostics.Input{
-				Data:   filepath.Dir(profilesDirectory),
-				Config: dirs.Config,
-				Cache:  dirs.Cache,
+				Data:         filepath.Dir(profilesDirectory),
+				Config:       dirs.Config,
+				Cache:        dirs.Cache,
+				IsolatedRoot: dirs.IsolatedRoot,
 			})
 		},
 	})

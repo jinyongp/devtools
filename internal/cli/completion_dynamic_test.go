@@ -18,7 +18,7 @@ func TestDynamicCompletion(t *testing.T) {
 	a := testApp(t)
 	projectDir := privateTempDir(t)
 	t.Chdir(projectDir)
-	if err := os.WriteFile("devtools.toml", []byte("profile = 'app'\n[commands.web]\nexec = ['echo', 'CANARY-VALUE']\n"), 0600); err != nil {
+	if err := os.WriteFile("devtools.toml", []byte("profile = 'app'\n[ports.web]\nport = 38082\n[proxies.web]\nhost = 'web.localhost'\nport = 'web'\n[commands.web]\nexec = ['echo', 'CANARY-VALUE']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for i := range a.commands {
@@ -49,6 +49,9 @@ func TestDynamicCompletion(t *testing.T) {
 	taskID := call("", "task", "add", "--title", "CANARY-TITLE", "--workstream", workstream, "--request-id", tasks.ID())["item"].(map[string]any)["id"].(string)
 	otherTask := call("", "task", "add", "--title", "CANARY-TITLE", "--request-id", tasks.ID())["item"].(map[string]any)["id"].(string)
 	runID := call("", "task", "claim", otherTask, "--request-id", tasks.ID())["run"].(map[string]any)["id"].(string)
+	call("", "proxy", "configure", "--http-address", "127.0.0.1:38080", "--request-id", tasks.ID())
+	call("", "proxy", "configure", "--listener", "preview", "--http-address", "127.0.0.1:38081", "--request-id", tasks.ID())
+	call("", "proxy", "add", "shared", "38083", "--global", "--host", "shared.localhost", "--request-id", tasks.ID())
 	data, _ := a.dataDirectory()
 	snapshot := func() map[string]string {
 		out := map[string]string{}
@@ -89,6 +92,14 @@ func TestDynamicCompletion(t *testing.T) {
 		{[]string{"variable", "get", "--env", "local", ""}, []string{"LOCAL_ONLY", "_LEVEL"}},
 		{[]string{"sec", "unset", ""}, []string{"TOKEN"}},
 		{[]string{"command", "inspect", "--dir", projectDir, ""}, []string{"web"}},
+		{[]string{"command", "env", ""}, []string{"web"}},
+		{[]string{"proxy", "env", ""}, []string{"web"}},
+		{[]string{"proxy", "env", "--global", ""}, []string{"shared"}},
+		{[]string{"proxy", "run", "--global", "sh"}, []string{"shared"}},
+		{[]string{"proxy", "start", "--listener", ""}, []string{"default", "preview"}},
+		{[]string{"proxy", "stop", "--listener=pre"}, []string{"--listener=preview"}},
+		{[]string{"expose", "start", "web", "--provider", ""}, []string{"cloudflared", "lan", "local", "tailscale"}},
+		{[]string{"proxy", "add", "shared", "38083", "--global", "--dns", ""}, []string{"auto", "external", "hosts"}},
 		{[]string{"command", "run", ""}, []string{"web"}},
 		{[]string{"run", ""}, []string{"web"}},
 		{[]string{"run", "--env", ""}, []string{"local"}},

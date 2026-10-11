@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -22,7 +21,7 @@ func (a *App) taskStore(r Request) (tasks.Store, *protocol.Error) {
 	if e != nil {
 		return tasks.Store{}, e
 	}
-	dirs, err := paths.Current()
+	dirs, err := a.currentPaths()
 	if err != nil {
 		return tasks.Store{}, argumentError("Cannot resolve cache directory.", "")
 	}

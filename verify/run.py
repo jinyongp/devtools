@@ -186,7 +186,7 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
             print(f"Running scenario: {name}", flush=True)
             try:
                 result = subprocess.run(
-                    [sys.executable, "-u", str(scenarios[name])],
+                    [sys.executable, "-B", "-u", str(scenarios[name])],
                     cwd=home,
                     env=env,
                     timeout=SCENARIO_TIMEOUT_SECONDS,

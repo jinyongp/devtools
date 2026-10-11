@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/expose"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -74,8 +75,9 @@ type receiptError struct {
 }
 
 type proxyControl struct {
-	Address string `json:"address"`
-	Token   string `json:"token"`
+	Address  string `json:"address"`
+	Token    string `json:"token"`
+	Protocol int    `json:"protocol,omitempty"`
 }
 
 type connectionRegistry struct {
@@ -144,14 +146,16 @@ func (registry *connectionRegistry) closeAll() {
 }
 
 type Manager struct {
-	Data          string
-	Spawn         func(string, string) error
-	Listen        func(int) ([]net.Listener, error)
-	ControlListen func() (net.Listener, error)
-	PortProbe     ports.AvailabilityProbe
-	commit        func(string, any) error
-	readyTimeout  time.Duration
-	stopTimeout   time.Duration
+	ExposureProviders map[string]expose.Provider
+	IsolatedRoot      string
+	Data              string
+	Spawn             func(string, string) error
+	Listen            func(int) ([]net.Listener, error)
+	ControlListen     func() (net.Listener, error)
+	PortProbe         ports.AvailabilityProbe
+	commit            func(string, any) error
+	readyTimeout      time.Duration
+	stopTimeout       time.Duration
 }
 
 func proxyFailure(code string) *protocol.Error {
@@ -162,7 +166,20 @@ func proxyFailure(code string) *protocol.Error {
 	if code == "canceled" {
 		exit = 130
 	}
-	return protocol.NewError(code, "Proxy operation could not satisfy the requested condition.", exit, nil)
+	message := "Proxy operation could not satisfy the requested condition."
+	switch code {
+	case "old_daemon_version":
+		message = "Stop the previous daemon with its installed CLI, or run proxy restart to replace it before using named listeners."
+	case "listener_running":
+		message = "Stop the selected listener before changing its configuration."
+	case "pinned":
+		message = "Stop the active exposure before changing its route, port, or listener."
+	case "permission_required":
+		message = "The listener bind requires permission; use a higher port or prepare low-port access with proxy setup."
+	case "listener_not_found":
+		message = "The selected listener is not configured; use proxy configure first."
+	}
+	return protocol.NewError(code, message, exit, nil)
 }
 
 func proxyStorageError() *protocol.Error {
@@ -430,6 +447,9 @@ func (m Manager) spawnAttempt(ctx context.Context, record Record) (Status, *prot
 	spawn := m.Spawn
 	if spawn == nil {
 		spawn = spawnProxy
+		if m.IsolatedRoot != "" {
+			spawn = func(data, id string) error { return spawnProxyWithRoot(data, id, m.IsolatedRoot) }
+		}
 	}
 	if spawnErr := spawn(m.Data, record.AttemptID); spawnErr != nil {
 		now := time.Now().UTC()
@@ -862,11 +882,17 @@ func sameOptionalTime(left, right *time.Time) bool {
 }
 
 func spawnProxy(data, attemptID string) error {
+	return spawnProxyWithRoot(data, attemptID, "")
+}
+func spawnProxyWithRoot(data, attemptID, root string) error {
 	executable, err := os.Executable()
 	if err != nil {
 		return err
 	}
 	command := exec.Command(executable, "__proxy-serve", data, attemptID)
+	if root != "" {
+		command.Env = append(os.Environ(), "DEVTOOLS_ISOLATED_ROOT="+root)
+	}
 	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := command.Start(); err != nil {
 		return err
@@ -876,6 +902,9 @@ func spawnProxy(data, attemptID string) error {
 }
 
 func (m Manager) Serve(ctx context.Context, attemptID string) error {
+	if state, e := m.portStore().Read(); e == nil && state.Network != nil && len(state.Network.Listeners) > 0 {
+		return m.serveNetwork(ctx, attemptID)
+	}
 	release, err := tasks.Lock(ctx, m.path("lease.lock"))
 	if err != nil {
 		return err

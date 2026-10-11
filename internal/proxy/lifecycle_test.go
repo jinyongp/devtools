@@ -977,8 +977,9 @@ func TestManagerExpiresStaleStartingAttemptAndAllowsNewRequest(t *testing.T) {
 	if err != nil || !started.Running || !started.Changed || started.Port != port {
 		t.Fatalf("stale recovery = %+v %v", started, err)
 	}
-	if elapsed := time.Since(startedAt); elapsed > 200*time.Millisecond {
-		t.Fatalf("stale attempt consumed a fresh timeout: %v", elapsed)
+	record, readErr := manager.readRecord()
+	if readErr != nil || record.CreatedAt.Before(startedAt) {
+		t.Fatalf("recovery reused the stale deadline anchor: %+v %v", record, readErr)
 	}
 	if _, err := manager.Apply(context.Background(), Request{Action: "stop", RequestID: "64646464-6464-4464-8464-646464646464"}); err != nil {
 		t.Fatal(err)

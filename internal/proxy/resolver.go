@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jinyongp/devtools/internal/hosts"
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -38,6 +40,20 @@ type Item struct {
 	Service    *string `json:"service"`
 	TargetPort *int    `json:"target_port"`
 	Status     string  `json:"status"`
+	Listener   string  `json:"listener,omitempty"`
+	Scope      string  `json:"scope,omitempty"`
+	RouteID    string  `json:"route_id,omitempty"`
+}
+
+func (i Item) Ref() network.RouteRef {
+	if i.Scope == "global" {
+		return network.RouteRef{Scope: "global", RouteID: i.RouteID}
+	}
+	name := ""
+	if i.Proxy != nil {
+		name = *i.Proxy
+	}
+	return network.RouteRef{Scope: "project", Profile: i.Profile, InstanceID: i.InstanceID, Proxy: name}
 }
 
 type fileIdentity struct {
@@ -217,6 +233,14 @@ func (r Resolver) List(ctx context.Context, profile string) ([]Item, *protocol.E
 	}
 	resolved := make([]resolution, 0, len(state.Instances))
 	stable := r.cache != nil && !registryChanged
+	if state.Network != nil {
+		for _, a := range state.Network.Activations {
+			if a.Mode == "active" {
+				stable = false
+				break
+			}
+		}
+	}
 	for _, instance := range state.Instances {
 		if ctx.Err() != nil {
 			return nil, protocol.NewError("canceled", "Request canceled.", 130, nil)
@@ -274,7 +298,35 @@ func (r Resolver) List(ctx context.Context, profile string) ([]Item, *protocol.E
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			items = append(items, route(*state, instance, name, config.Proxies[name]))
+			item := route(*state, instance, name, config.Proxies[name])
+			if definition := config.Ports[config.Proxies[name].Port]; definition.Expression != nil && item.Status == StatusReady && state.Activation(item.Ref()) == nil {
+				item.Status = "activation_required"
+			}
+			if a := state.Activation(item.Ref()); a != nil && a.Mode == "active" && a.EnvironmentBacked {
+				source, e := config.NetworkSources()
+				if e != nil || source != a.SourceDigest {
+					item.Status = "activation_required"
+				}
+			}
+			if item.Status == StatusReady {
+				r.dnsStatus(state, &item, config.Proxies[name].DNS)
+			}
+			items = append(items, item)
+		}
+	}
+	if state.Network != nil {
+		for _, definition := range state.Network.Routes {
+			name, host := definition.Name, definition.Host
+			item := Item{Kind: "route", Scope: "global", RouteID: definition.ID, Proxy: &name, Host: &host, Listener: definition.Listener, Status: "inactive"}
+			if reservation := state.Reservation(definition.Reservation); reservation != nil {
+				port := reservation.Port
+				item.TargetPort = &port
+			}
+			if a := state.Activation(definition.Ref()); a != nil && a.Mode == "active" && item.TargetPort != nil {
+				item.Status = StatusReady
+				r.dnsStatus(state, &item, definition.DNS)
+			}
+			items = append(items, item)
 		}
 	}
 	conflicts := map[string]int{}
@@ -319,6 +371,36 @@ func diagnostic(instance ports.Instance, status string) Item {
 func route(state ports.State, instance ports.Instance, name string, definition project.Proxy) Item {
 	service := definition.Port
 	item := Item{Kind: "route", Proxy: &name, Profile: instance.Profile, InstanceID: instance.ID, Alias: instance.Alias, Directory: instance.Directory, Service: &service}
+	item.Listener = network.ListenerName(definition.Listener)
+	activation := state.Activation(item.Ref())
+	disabled := activation != nil && activation.Mode == "disabled"
+	if disabled && project.NetworkEnvironmentBacked(definition.Host) {
+		item.Status = "inactive"
+		return item
+	}
+	if p := state.Get(instance.ID, definition.Port); p != nil {
+		port := p.Port
+		item.TargetPort = &port
+	}
+	backed := project.NetworkEnvironmentBacked(definition.Host)
+	if activation != nil && activation.Mode == "active" && activation.EnvironmentBacked {
+		host := activation.Host
+		item.Host = &host
+		item.Listener = activation.Listener
+		if project.Digest(definition) != activation.ConfigDigest {
+			item.Status = "activation_required"
+		} else if item.TargetPort == nil {
+			item.Status = StatusAssignmentMissing
+		} else {
+			item.Status = StatusReady
+		}
+		return item
+	}
+	// Environment expressions are interpreted by the initiating CLI only.
+	if backed {
+		item.Status = "activation_required"
+		return item
+	}
 	if instance.Alias == nil && strings.Contains(definition.Host, "${instance.alias}") {
 		item.Status = StatusAliasMissing
 		return item
@@ -339,7 +421,7 @@ func route(state ports.State, instance ports.Instance, name string, definition p
 			return "", false
 		}
 	})
-	if err != nil || !project.ValidProxyHost(host) {
+	if err != nil || !network.ValidHost(host) {
 		item.Status = StatusHostInvalid
 		return item
 	}
@@ -352,7 +434,38 @@ func route(state ports.State, instance ports.Instance, name string, definition p
 	port := assignment.Port
 	item.TargetPort = &port
 	item.Status = StatusReady
+	if disabled {
+		item.Status = "inactive"
+		return item
+	}
+	if activation == nil && (!project.ValidProxyHost(host) || item.Listener != network.DefaultListener || definition.DNS != "" && definition.DNS != "auto") {
+		item.Status = "activation_required"
+	}
 	return item
+}
+
+func (r Resolver) dnsStatus(state *ports.State, item *Item, dns string) {
+	if dns == "" {
+		dns = "auto"
+	}
+	listener := state.Listener(item.Listener)
+	if listener == nil {
+		if item.Listener != network.DefaultListener {
+			item.Status = "listener_not_found"
+		}
+		return
+	}
+	if item.Host == nil {
+		return
+	}
+	desired, e := DNSMapping(*item.Host, dns, *listener)
+	if e != nil {
+		item.Status = "activation_required"
+		return
+	}
+	if len(desired) > 0 && !(hosts.Manager{Data: filepath.Dir(r.Ports.Directory)}).Prepared(item.Ref().Key()+"/"+listener.ID, desired[0]) {
+		item.Status = "activation_required"
+	}
 }
 
 func itemKey(item Item) string {

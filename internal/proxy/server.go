@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -20,6 +21,9 @@ type RouteLister interface {
 type Handler struct {
 	Routes    RouteLister
 	Transport http.RoundTripper
+	Listener  string
+	HTTPSPort int
+	Guard     func(*http.Request, Item) bool
 }
 
 func NewHandler(routes RouteLister) *Handler {
@@ -32,6 +36,10 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 		http.Error(response, "route not found", http.StatusNotFound)
 		return
 	}
+	if request.TLS != nil && !strings.EqualFold(request.TLS.ServerName, host) {
+		http.Error(response, "route not found", http.StatusNotFound)
+		return
+	}
 	items, err := h.Routes.List(request.Context(), "")
 	if err != nil {
 		http.Error(response, "route unavailable", http.StatusServiceUnavailable)
@@ -39,7 +47,7 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 	}
 	var matches []Item
 	for _, item := range items {
-		if item.Kind == "route" && item.Host != nil && *item.Host == host {
+		if item.Kind == "route" && item.Host != nil && *item.Host == host && (h.Listener == "" || item.Listener == h.Listener || item.Listener == "" && h.Listener == "default") {
 			matches = append(matches, item)
 		}
 	}
@@ -49,6 +57,21 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 	}
 	if len(matches) != 1 || matches[0].Status != StatusReady || matches[0].TargetPort == nil {
 		http.Error(response, "route unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if h.Guard != nil && !h.Guard(request, matches[0]) {
+		http.Error(response, "route is not shared", http.StatusForbidden)
+		return
+	}
+	if h.HTTPSPort > 0 && request.TLS == nil {
+		authority := host
+		if h.HTTPSPort != 443 {
+			authority = net.JoinHostPort(host, fmt.Sprint(h.HTTPSPort))
+		}
+		redirect := *request.URL
+		redirect.Scheme = "https"
+		redirect.Host = authority
+		http.Redirect(response, request, redirect.String(), http.StatusTemporaryRedirect)
 		return
 	}
 	h.forward(response, request, *matches[0].TargetPort)
@@ -62,7 +85,17 @@ func (h *Handler) forward(response http.ResponseWriter, request *http.Request, p
 			proxyRequest.SetXForwarded()
 			proxyRequest.Out.Host = target.Host
 			proxyRequest.Out.Header.Set("X-Forwarded-Host", proxyRequest.In.Host)
-			proxyRequest.Out.Header.Set("X-Forwarded-Proto", "http")
+			scheme := "http"
+			if proxyRequest.In.TLS != nil {
+				scheme = "https"
+			}
+			proxyRequest.Out.Header.Set("X-Forwarded-Proto", scheme)
+			if ingress, ok := proxyRequest.In.Context().Value(ingressKey{}).(publicIngress); ok {
+				proxyRequest.Out.Header.Set("X-Forwarded-Host", ingress.Authority)
+				proxyRequest.Out.Header.Set("X-Forwarded-Proto", ingress.Scheme)
+				proxyRequest.Out.Header.Del("Authorization")
+			}
+			proxyRequest.Out.Header.Del("Forwarded")
 		},
 		Transport:     h.Transport,
 		FlushInterval: -1,
@@ -90,7 +123,7 @@ func requestHost(value string) (string, bool) {
 }
 
 func projectHost(host string) bool {
-	return strings.HasSuffix(host, ".localhost")
+	return network.ValidHost(host)
 }
 
 func loopbackTransport() *http.Transport {

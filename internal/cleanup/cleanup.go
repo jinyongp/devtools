@@ -374,6 +374,15 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 		if !missing(i.Directory) || manager.Active(ctx, i.ID) != nil {
 			continue
 		}
+		pinned := false
+		if st.Network != nil {
+			for _, pin := range st.Network.Pins {
+				pinned = pinned || pin.Route.InstanceID == i.ID
+			}
+		}
+		if pinned {
+			continue
+		}
 		value := location{Instance: i, Assignments: []ports.Assignment{}}
 		safe := true
 		for _, a := range st.Assignments {
@@ -778,6 +787,13 @@ func (e Engine) retire(ctx context.Context, c candidate) (Archive, *protocol.Err
 			}
 			if i == nil || !missing(i.Directory) || (services.Store{Data: e.Data}).Active(ctx, i.ID) != nil {
 				return false, fail("revision_conflict")
+			}
+			if st.Network != nil {
+				for _, pin := range st.Network.Pins {
+					if pin.Route.InstanceID == i.ID {
+						return false, fail("pinned")
+					}
+				}
 			}
 			value := location{Instance: *i, Assignments: []ports.Assignment{}}
 			for _, assignment := range st.Assignments {

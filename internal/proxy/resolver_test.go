@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -70,6 +71,40 @@ func TestResolverListsInstancesAndCurrentAssignments(t *testing.T) {
 	if err != nil || *items[0].TargetPort != 30103 {
 		t.Fatalf("updated route: %+v %v", items, err)
 	}
+}
+
+func TestLegacyRouteSurvivesUpgradeAndExplicitDownSurvivesReload(t *testing.T) {
+	ctx := context.Background()
+	store := ports.Store{Directory: filepath.Join(t.TempDir(), "ports"), Probe: func(int) (bool, *protocol.Error) { return true, nil }}
+	dir := t.TempDir()
+	writeConfig(t, dir, "app", "app.localhost")
+	i := register(t, store, "app", dir, nil, 30101)
+	resolver := Resolver{Ports: store}
+	check := func(want string) {
+		t.Helper()
+		items, e := resolver.List(ctx, "")
+		if e != nil || len(items) != 1 || items[0].Status != want {
+			t.Fatal(items, e)
+		}
+	}
+	check(StatusReady)
+	if _, e := store.ConfigureListener(ctx, "default", "127.0.0.1:32080", "", false); e != nil {
+		t.Fatal(e)
+	}
+	check(StatusReady)
+	ref := network.RouteRef{Scope: "project", Profile: i.Profile, InstanceID: i.ID, Proxy: "app"}
+	if e := store.Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
+		return true, st.SetActivation(network.Activation{Route: ref, Mode: "disabled"})
+	}); e != nil {
+		t.Fatal(e)
+	}
+	check("inactive")
+	if e := os.Remove(filepath.Join(dir, "devtools.toml")); e != nil {
+		t.Fatal(e)
+	}
+	writeConfig(t, dir, "app", "app.localhost")
+	resolver = Resolver{Ports: store}
+	check("inactive")
 }
 
 func TestResolverReportsRouteStatesAndConflicts(t *testing.T) {

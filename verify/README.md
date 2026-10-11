@@ -37,6 +37,9 @@ devtools run test:installed proxies
 # fresh batch·peer restart·CA 검증 HTTPS·선택 listener 정리·global foreground·격리
 devtools run test:installed network
 
+# 외부 계정 없이 provider 장애·복구와 실제 WebSocket·HTTP/2 연결 검증
+devtools run test:installed tailscale_simulated cloudflared_faults http2_exposure
+
 # 암호화 백업·복구·재시도·충돌·직전 백업
 devtools run test:installed backup
 
@@ -91,6 +94,22 @@ Go unit test는 port 가용성이나 실제 listener가 테스트 목적이 아�
 GitHub-hosted runner는 job마다 새 VM을 사용하므로 release 검증의 공식 clean OS 환경이다.
 별도 sandbox 제약은 release gate에 포함하지 않는다. 외부 네트워크가 필요한 시나리오는 없으며,
 설치 시나리오의 HTTPS 검증도 로컬 테스트 서버를 사용한다.
+
+`tailscale_simulated`는 가짜 `tailscale` 실행 파일과 로컬 HTTP LocalAPI를 사용한다.
+패키징된 CLI의 인증·조건부 설정 변경, 사용자 설정 보존, 동시 변경 충돌, 권한 오류,
+설정 반영 후 응답 유실과 데몬 강제 종료 뒤 소유 설정 복구를 검증한다.
+`cloudflared_faults`는 가짜 provider 프로세스로 시작 실패 시 origin 정리, provider·daemon
+SIGKILL, 자식 프로세스 정리, 인증 유실과 실제 WebSocket frame의 선택 종료·다른 연결 보존을
+검증한다. `http2_exposure`는 Go 표준 HTTP client와 실제 CLI TLS listener 사이에서
+HTTP/2 협상, 한 연결의 다중 stream 종료, SNI/authority 검사와 다른 route 연결 보존을
+검증한다. 같은 HTTP/2 연결에서 서로 다른 exposure의 stream을 선택 종료하는 계약은
+Go integration test에서 별도로 확인한다.
+
+세 시나리오는 전체 installed suite에 자동 포함되어 Linux·macOS GitHub Actions에서 실행된다.
+provider 모의 검증은 실제 Tailscale 두 장치 연결, Cloudflared 공개 DNS·ingress 검증과
+구분한다. Windows 브라우저의 DNS·CA 저장소 및 Windows mount의 filesystem 동작도
+실제 대상 환경에서 확인해야 한다. 기존 Linux·macOS OS 변경 검증은 별도 system-network
+job에서 계속 수행한다.
 
 ## 시나리오 추가
 

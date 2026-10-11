@@ -6,6 +6,12 @@ fresh batch·HTTPS·전역 route·격리·listener 정리를 검증한다. Linux
 같은 installed suite를 실행한다. 실제 OS hosts/trust/low-port, Windows browser, LAN peer와
 provider 실접속은 별도 환경 근거가 필요하며 unit/fake 결과로 대체하지 않는다.
 
+외부 계정 없이 장애를 재현하려면
+`devtools run test:installed tailscale_simulated cloudflared_faults http2_exposure`를 실행한다.
+패키징된 CLI와 가짜 provider·로컬 LocalAPI 사이의 충돌·응답 유실·강제 종료 복구,
+실제 WebSocket frame과 TLS HTTP/2 stream의 종료·다른 연결 보존을 확인한다.
+모의 provider와 실제 전송 검증 범위는 [검증 안내](../verify/README.md#검증-경계)에 구분했다.
+
 `verify/platform_network.py --binary bin/devtools --evidence result.json`은 명시
 `DEVTOOLS_DISPOSABLE_HOST=1`인 disposable macOS/Linux에서만 실행한다. 실제 hosts·OS trust·
 80/443·최소 capability를 변경하고 정리를 확인한다. 실패하면 private CA와 복구 root를 보존한다.

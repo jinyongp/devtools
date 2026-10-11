@@ -91,7 +91,8 @@ jobs:
       - run: devtools run check:all
       - run: devtools run build:cli
       - run: ./bin/devtools project inspect
-      - run: devtools run test:installed
+      - name: Verify installed CLI and simulated network failures
+        run: devtools run test:installed
       - name: Package macOS Agent Skill reference
         env:
           VERSION: ${{ inputs.version }}
@@ -138,7 +139,8 @@ jobs:
       - run: devtools run test:dashboard-browser
       - name: Install verification shells
         run: sudo apt-get update && sudo apt-get install -y fish zsh
-      - run: devtools run test:installed
+      - name: Verify installed CLI and simulated network failures
+        run: devtools run test:installed
 
   system-network:
     needs: validate-release

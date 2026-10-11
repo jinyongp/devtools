@@ -4,6 +4,7 @@ import hashlib
 import http.client
 import json
 import os
+import plistlib
 from pathlib import Path
 import pty
 import select
@@ -62,12 +63,13 @@ PORT={{port='web'}}
 exec=['python3','-c',"import os,socket; socket.create_connection(('127.0.0.1',int(os.environ['PORT'])),timeout=1).close()"]
 timeout='10s'
 ''')
-        def api(*words,terminal=False,error=None):
+        def api(*words,terminal=False,error=None,env_override=None):
             argv=[str(binary),*words]
+            execution_env=env if env_override is None else env_override
             if terminal:
                 pid,fd=pty.fork()
                 if pid==0:
-                    os.chdir(project);os.execve(str(binary),argv,env)
+                    os.chdir(project);os.execve(str(binary),argv,execution_env)
                 content=bytearray();limit=150 if sys.platform=="darwin" else 45;deadline=time.monotonic()+limit
                 try:
                     while True:
@@ -110,7 +112,7 @@ timeout='10s'
                 finally:os.close(fd)
                 text=content.decode(errors="replace")
             else:
-                p=subprocess.Popen(argv,cwd=project,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+                p=subprocess.Popen(argv,cwd=project,env=execution_env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
                 try:
                     stdout,stderr=p.communicate(timeout=30 if sys.platform=="darwin" else 45)
                 except subprocess.TimeoutExpired:
@@ -142,6 +144,15 @@ timeout='10s'
             assert code==0,result
             return result['data']
         def mutate(*words,**kwargs):return api(*words,"--request-id",str(uuid.uuid4()),**kwargs)
+        sibling_env=None
+        def trust_settings():
+            path=root/"trust-settings.plist"
+            subprocess.run(["/usr/bin/security","trust-settings-export","-d",str(path)],capture_output=True,text=True,timeout=10,check=True)
+            return plistlib.loads(path.read_bytes())["trustList"]
+        def check_public():
+            p=subprocess.run([str(binary),"__trust-check"],input=ca_path.read_bytes(),capture_output=True,timeout=15,check=True)
+            status=json.loads(p.stdout)
+            assert status["known"] and not status["trusted"],status
         try:
             mutate("proxy","setup")
             setup=api("proxy","setup","--check")["item"]
@@ -181,6 +192,27 @@ timeout='10s'
                 finally:c.close()
             mutate("proxy","trust")
             assert api("proxy","ca","status")["trusted"]
+            if sys.platform=="darwin":
+                sibling_root=root/"sibling";sibling_root.mkdir()
+                sibling_env=dict(env,HOME=str(sibling_root),XDG_CONFIG_HOME=str(sibling_root/"config"),XDG_DATA_HOME=str(sibling_root/"data"),XDG_CACHE_HOME=str(sibling_root/"cache"))
+                mutate("proxy","ca","init",env_override=sibling_env)
+                mutate("proxy","trust",env_override=sibling_env)
+                before_trust=trust_settings()
+                selected_hash=hashlib.sha1(ssl.PEM_cert_to_DER_cert(ca_path.read_text())).hexdigest().upper()
+                mutate("proxy","untrust")
+                check_public()
+                assert api("proxy","ca","status",env_override=sibling_env)["trusted"]
+                after_trust=trust_settings()
+                assert {k:v for k,v in before_trust.items() if k!=selected_hash}=={k:v for k,v in after_trust.items() if k!=selected_hash}
+                assert after_trust[selected_hash]["trustSettings"][0]["kSecTrustSettingsResult"]==3,after_trust[selected_hash]
+                # Re-importing only the public certificate cannot restore trust.
+                keychain="/Library/Keychains/System.keychain"
+                subprocess.run(["sudo","-n","/usr/bin/security","add-certificates","-k",keychain,str(ca_path)],check=True,capture_output=True,timeout=10)
+                check_public()
+                mutate("proxy","untrust")
+                mutate("proxy","trust")
+                assert api("proxy","ca","status")["trusted"]
+                report.update(macos_reimport_rejected=True,macos_sibling_trust_preserved=True,macos_explicit_retrust=True,macos_public_deny_retained=True)
             result=subprocess.run(["curl","--noproxy","*","--silent","--show-error","--fail","--max-time","5",f"https://{hostname}/"],env=env,capture_output=True,text=True,timeout=10)
             assert result.returncode==0,result.stderr
             if sys.platform=="linux":
@@ -199,6 +231,11 @@ timeout='10s'
                 plan=api("proxy","teardown","--all","--remove-ca")["item"]
                 mutate("proxy","teardown","--all","--remove-ca","--apply",plan["digest"])
                 mutate("proxy","setup","--remove")
+                if sibling_env is not None:
+                    assert api("proxy","ca","status",env_override=sibling_env)["trusted"]
+                    sibling_plan=api("proxy","teardown","--all","--remove-ca",env_override=sibling_env)["item"]
+                    mutate("proxy","teardown","--all","--remove-ca","--apply",sibling_plan["digest"],env_override=sibling_env)
+                    assert not api("proxy","ca","status",env_override=sibling_env)["item"]["present"]
                 if sys.platform=="linux":assert not api("proxy","setup","--check")["item"]["enabled"]
                 assert Path("/etc/hosts").read_bytes()==original_hosts
                 assert not api("proxy","ca","status")["item"]["present"]

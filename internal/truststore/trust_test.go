@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -21,7 +20,7 @@ func TestDarwinTrustAuthorizationIsBoundedAndHonorsCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s := System{GOOS: "darwin", Run: func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
+	s := System{GOOS: "darwin", Directory: t.TempDir(), Run: func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
 		deadline, ok := ctx.Deadline()
 		if !ok || time.Until(deadline) > 2*time.Minute {
 			t.Fatal("unbounded system authorization")
@@ -35,40 +34,47 @@ func TestDarwinTrustAuthorizationIsBoundedAndHonorsCancellation(t *testing.T) {
 	}
 }
 
-func TestDarwinUntrustRemovesOnlySelectedCertificateAndItsTrust(t *testing.T) {
+func TestDarwinUntrustRejectsSelectedCAThenRemovesItsKeychainItem(t *testing.T) {
 	a, _, e := (ca.Store{Data: t.TempDir()}).Init(context.Background())
 	if e != nil {
 		t.Fatal(e)
 	}
 	keychain := "/Library/Keychains/System.keychain"
 	for _, tc := range []struct {
-		name, output string
-		failure      error
-		wantDelete   bool
+		name        string
+		denyError   error
+		deleteError error
 	}{
-		{"present", "SHA-256 hash: " + strings.ToUpper(a.Fingerprint()), nil, true},
-		{"absent", "SHA-256 hash: " + strings.Repeat("0", 64), nil, false},
-		{"delete failure", "SHA-256 hash: " + a.Fingerprint(), errors.New("keychain locked"), true},
+		{"success", nil, nil},
+		{"deny failure", errors.New("authorization denied"), nil},
+		{"delete failure", nil, errors.New("keychain locked")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			deleted := false
-			s := System{GOOS: "darwin", Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+			denied, deleted := false, false
+			s := System{GOOS: "darwin", Directory: t.TempDir(), Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
 				if name != "/usr/bin/security" {
 					t.Fatalf("unexpected executable %q", name)
 				}
-				if slices.Equal(args, []string{"find-certificate", "-a", "-Z", keychain}) {
-					return []byte(tc.output), nil
+				if len(args) == 7 && slices.Equal(args[:6], []string{"add-trusted-cert", "-d", "-r", "deny", "-k", keychain}) {
+					data, err := os.ReadFile(args[6])
+					if err != nil || string(data) != string(a.PEM()) {
+						t.Fatalf("wrong CA rejection: %v", err)
+					}
+					denied = true
+					return nil, tc.denyError
 				}
-				// Apple's -t removes this item's trust settings as well as the
-				// certificate; the exact SHA-256 hash preserves sibling CAs.
-				if !slices.Equal(args, []string{"delete-certificate", "-t", "-Z", a.Fingerprint(), keychain}) {
+				if !denied || !slices.Equal(args, []string{"delete-certificate", "-Z", a.Fingerprint(), keychain}) {
 					t.Fatalf("unscoped certificate removal: %v", args)
 				}
 				deleted = true
-				return nil, tc.failure
+				return nil, tc.deleteError
 			}}
 			err := s.Apply(context.Background(), Request{Action: "untrust", Certificate: a.PEM()})
-			if !errors.Is(err, tc.failure) || deleted != tc.wantDelete {
+			wantError := tc.denyError
+			if wantError == nil {
+				wantError = tc.deleteError
+			}
+			if !errors.Is(err, wantError) || !denied || deleted != (tc.denyError == nil) {
 				t.Fatal(err, deleted)
 			}
 		})

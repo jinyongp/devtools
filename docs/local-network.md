@@ -106,7 +106,8 @@ custom host는 `proxy up` 또는 `--proxy` 시작 안에서 devtools 소유 host
 wildcard listener의 로컬 hosts mapping은 IPv4의 `127.0.0.1`, IPv6의 `::1`을 사용하며
 `0.0.0.0`이나 `::`를 hosts에 기록하지 않는다.
 변경이 필요하면 initiating CLI가 내용을 보여 주고 필요한 OS 인증을 요청한다.
-비대화형 권한 부족은 `permission_required`다. daemon과 조회 명령은 OS를 수정하지 않는다.
+비대화형 실행은 사전 승인된 sudo 권한으로 `sudo -n`을 사용한다. 권한 부족은
+암호 입력 없이 `permission_required`다. daemon과 조회 명령은 OS를 수정하지 않는다.
 `dns = "external"`은 사용자가 준비한 DNS, `dns = "hosts"`는 명시 hosts 준비다.
 외부 mapping과 충돌하면 덮어쓰지 않는다. 공유 mapping은 마지막 소유 참조 해제 시 제거한다.
 복구용 `proxy hosts preview/apply/remove`도 제공한다.
@@ -193,6 +194,8 @@ teardown은 preview와 같은 선택·digest로 apply한다. 선택 exposure·or
 정리하고 route를 비활성화하며 프로젝트 TOML과 global 선언은 보존한다.
 기본 정리는 공유 CA와 신뢰를 유지한다. 명시 `--all --remove-ca`만 남는 TLS 참조를 다시 확인하고
 OS untrust 확인 뒤 private key를 제거한다. 실패·불확실한 신뢰 상태는 키와 복구 기록을 보존한다.
+macOS untrust는 해당 CA의 불신 기록을 남기고 키체인의 인증서를 삭제한다. 공개 인증서만
+다시 등록해도 신뢰되지 않으며, 명시적인 `proxy trust`로 다시 신뢰할 수 있다.
 inactive 선언만으로 CA를 영구 유지하지 않는다. isolated root의 공유 OS untrust는 차단한다.
 backup/profile transfer는 CA·인증 key·exposure session·host mapping·실행 상태를 옮기지 않는다.
 

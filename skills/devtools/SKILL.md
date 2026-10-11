@@ -141,7 +141,9 @@ NAME --global -- PROGRAM ARG...` claims the exact free port and provides PORT/UR
 and normalized peer DEVTOOLS_* keys. Global scope requires explicit --global.
 
 HTTPS preparation creates a private host-local CA. `proxy ca status/export` reads public
-metadata/certificates; explicit `proxy trust/untrust` changes OS trust. Clients can use an
+metadata/certificates; explicit `proxy trust/untrust` changes OS trust.
+On macOS, untrust retains a public deny record and deletes the
+keychain certificate; explicit trust replaces the deny. Clients can use an
 exported CA before OS trust is registered. `proxy setup --check` reads low-port intent;
 explicit setup manages minimal installed-executable bind capability on Linux.
 On macOS, explicitly use wildcard addresses for unprivileged low ports; specific-address

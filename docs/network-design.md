@@ -81,7 +81,11 @@ leaves. Read/status creates nothing. Corrupt/expired roots are preserved and rep
 never silently replaced. Export contains the public certificate/fingerprint only.
 Server start requires valid TLS material and actual bind success. OS/browser trust
 is separate client readiness: `not_trusted` does not block the server; clients can
-supply the public CA. Trust/untrust are explicit CLI operations. Low-port setup is
+supply the public CA. Trust/untrust are explicit CLI operations. On macOS, untrust
+sets an explicit deny for the selected CA before deleting its keychain certificate.
+The public deny record persists, preventing trust through a supplied or re-imported
+copy; a later explicit trust replaces it. Other CA settings are preserved.
+Low-port setup is
 needed only when actual bind permissions require it, not merely because an intent
 record is missing. Capability setup fixes the binary inode/digest and application
 children do not inherit capabilities.

@@ -11,10 +11,12 @@ provider 실접속은 별도 환경 근거가 필요하며 unit/fake 결과로 �
 80/443·최소 capability를 변경하고 정리를 확인한다. 실패하면 private CA와 복구 root를 보존한다.
 release workflow의 `system_network_smoke`는 기본 false인 opt-in 입력이다.
 
-macOS는 CA 신뢰 제거 시 sudo와 별도로 시스템 인증 창의 승인을 요구할 수 있다.
-무인 runner에서는 승인이 불가능하여 `permission_required`로 실패할 수 있으며,
-신뢰 제거를 확인하기 전에는 CA 키와 복구 상태를 보존한다. 시스템 인증 대기는
-최대 2분이다. 이 경우 실제 정리와 인증 창 응답은 대화형 macOS에서 검증해야 한다.
+OS 변경은 비대화형에서도 사전 승인된 sudo 권한으로 실행한다. 권한 부족은
+암호 입력 없이 `permission_required`로 반환한다. 시스템 검증도 PTY 없이 실행한다.
+macOS untrust는 선택 CA를 명시적으로 불신 처리한 뒤 키체인 인증서를 삭제한다.
+공개 CA의 불신 기록은 남으며, 이후 명시적 trust로 다시 신뢰할 수 있다.
+검증은 공개 인증서 재등록 후에도 불신 유지, 다른 CA 신뢰 유지, 재신뢰와 CA 키 삭제를
+확인한다. OS 인증 대기는 최대 2분이며, 신뢰 제거 확인 전에는 CA 키와 복구 상태를 보존한다.
 workflow는 시스템 동작 검증을 독립된 job으로 실행해 일반 검사·설치 검증·패키징의
 결과를 함께 남긴다. opt-in 시스템 검증 실패는 전체 workflow 실패로 유지되며
 게시도 차단한다.

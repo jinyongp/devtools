@@ -46,7 +46,7 @@ func (m Manager) Apply(ctx context.Context, action string, authority *ca.Authori
 	}
 	e := run(ctx, "trust", Request{Action: action, Certificate: authority.PEM()}, m.Terminal)
 	if e != nil && e.Code == "permission_required" && runtime.GOOS == "darwin" {
-		e.Message = "The OS trust change did not complete. Approve the macOS system authorization dialog and retry from an interactive desktop. CA keys are retained until untrust is confirmed."
+		e.Message = "The OS trust change did not complete. Check sudo and macOS trust authorization. CA keys are retained until untrust is confirmed."
 	}
 	return e
 }
@@ -176,25 +176,15 @@ func readRegular(path string) ([]byte, error) {
 }
 
 func (s System) darwin(ctx context.Context, request Request, fingerprint string) error {
-	// macOS can require GUI authorization even after sudo, particularly when
-	// removing the last admin trust entry. Preserve recovery data on timeout.
+	// Keep OS authorization bounded and retain recovery data on failure.
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	keychain := "/Library/Keychains/System.keychain"
-	if request.Action == "untrust" {
-		output, e := s.execute(ctx, "/usr/bin/security", "find-certificate", "-a", "-Z", keychain)
-		if e != nil {
-			return e
-		}
-		if !strings.Contains(strings.ToLower(string(output)), fingerprint) {
-			return nil
-		}
-		// Resolve the stored certificate by its exact fingerprint and remove
-		// its trust settings with the same keychain item.
-		_, e = s.execute(ctx, "/usr/bin/security", "delete-certificate", "-t", "-Z", fingerprint, keychain)
-		return e
+	base := s.Directory
+	if base == "" {
+		base = "/private/tmp"
 	}
-	directory, e := os.MkdirTemp("/private/tmp", "devtools-trust-")
+	directory, e := os.MkdirTemp(base, "devtools-trust-")
 	if e != nil {
 		return e
 	}
@@ -203,6 +193,20 @@ func (s System) darwin(ctx context.Context, request Request, fingerprint string)
 	if e := os.WriteFile(path, request.Certificate, 0600); e != nil {
 		return e
 	}
-	_, e = s.execute(ctx, "/usr/bin/security", "add-trusted-cert", "-d", "-r", "trustRoot", "-k", keychain, path)
-	return e
+	result := "trustRoot"
+	if request.Action == "untrust" {
+		// Persist an explicit rejection before deleting the keychain item. This
+		// revokes even a supplied copy of the old CA without removing the last
+		// admin trust record, an operation that can require GUI authorization.
+		// The public rejection remains; a later explicit trust replaces it.
+		result = "deny"
+	}
+	if _, e := s.execute(ctx, "/usr/bin/security", "add-trusted-cert", "-d", "-r", result, "-k", keychain, path); e != nil {
+		return e
+	}
+	if request.Action == "untrust" {
+		_, e = s.execute(ctx, "/usr/bin/security", "delete-certificate", "-Z", fingerprint, keychain)
+		return e
+	}
+	return nil
 }

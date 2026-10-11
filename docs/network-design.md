@@ -82,6 +82,11 @@ supply the public CA. Trust/untrust are explicit CLI operations. Low-port setup 
 needed only when actual bind permissions require it, not merely because an intent
 record is missing. Capability setup fixes the binary inode/digest and application
 children do not inherit capabilities.
+On macOS, unprivileged low ports require explicitly configured wildcard addresses;
+specific low-port addresses still require privilege. Unshared routes retain their
+loopback request guard. Configuration never silently broadens a bind address.
+Darwin low-port availability probes disable address reuse on wildcard sockets to detect
+occupied specific sockets without requiring privileged specific-address probes.
 
 `--isolated-root PATH` / `DEVTOOLS_ISOLATED_ROOT` selects independent config/data/cache/
 runtime and propagates to daemon/children. Explicit flags precede command names and

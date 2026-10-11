@@ -142,8 +142,11 @@ and normalized peer DEVTOOLS_* keys. Global scope requires explicit --global.
 HTTPS preparation creates a private host-local CA. `proxy ca status/export` reads public
 metadata/certificates; explicit `proxy trust/untrust` changes OS trust. Clients can use an
 exported CA before OS trust is registered. `proxy setup --check` reads low-port intent;
-explicit setup manages minimal installed-executable bind capability on Linux. WSL Linux
-DNS/trust and Windows browser DNS/trust are separate. After external binary replacement,
+explicit setup manages minimal installed-executable bind capability on Linux.
+On macOS, explicitly use wildcard addresses for unprivileged low ports; specific-address
+low ports require privilege, and setup does not grant it. Unshared routes still reject
+non-loopback requests. Use high ports when a loopback socket is required.
+WSL Linux DNS/trust and Windows browser DNS/trust are separate. After external binary replacement,
 missing capability is a recovery action, not a reason to run all of devtools as root.
 
 `expose start ROUTE --provider lan|cloudflared|tailscale` requires auth from stdin/a private

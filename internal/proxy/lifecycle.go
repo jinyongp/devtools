@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -176,6 +177,9 @@ func proxyFailure(code string) *protocol.Error {
 		message = "Stop the active exposure before changing its route, port, or listener."
 	case "permission_required":
 		message = "The listener bind requires permission; use a higher port or prepare low-port access with proxy setup."
+		if runtime.GOOS == "darwin" {
+			message = "macOS requires permission for address-specific low ports. Use high loopback ports or explicitly configure wildcard addresses such as 0.0.0.0:80 and 0.0.0.0:443; routes remain guarded against unshared remote access."
+		}
 	case "listener_not_found":
 		message = "The selected listener is not configured; use proxy configure first."
 	}

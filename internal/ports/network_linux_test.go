@@ -8,7 +8,7 @@ import (
 )
 
 func TestLinuxAvailabilityProbesDoNotEnumerateInterfaces(t *testing.T) {
-	got, err := availabilityProbeAddresses()
+	got, err := availabilityProbeAddresses(20200)
 	if err != nil {
 		t.Fatal(err)
 	}

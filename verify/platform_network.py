@@ -100,6 +100,11 @@ timeout='10s'
             setup=api("proxy","setup","--check")["item"]
             if sys.platform=="linux":assert setup["enabled"],setup
             mutate("proxy","configure","--http-address","127.0.0.1:80","--https-address","127.0.0.1:443")
+            if sys.platform=="darwin":
+                mutate("proxy","start",error="permission_required")
+                assert not api("proxy","status")["item"]["running"]
+                mutate("proxy","configure","--http-address","0.0.0.0:80","--https-address","0.0.0.0:443")
+                report["specific_low_port_permission_checked"]=True
             # DNS preparation fails before a child starts when there is no terminal.
             mutate("project","up","web","--proxy",error="permission_required")
             assert not api("process","list","--profile","platform-network")["items"]

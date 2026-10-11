@@ -16,13 +16,13 @@ import (
 // retaining listeners. Platform-specific target discovery lives behind build
 // constraints so Linux availability checks never depend on interface netlink.
 func Available(port int) (bool, *protocol.Error) {
-	targets, err := availabilityProbeAddresses()
+	targets, err := availabilityProbeAddresses(port)
 	if err != nil {
 		return false, storageError()
 	}
 	checked := false
 	for _, target := range targets {
-		l, e := net.Listen(target.network, net.JoinHostPort(target.host, strconv.Itoa(port)))
+		l, e := listenAvailability(target, strconv.Itoa(port))
 		if e != nil {
 			if errors.Is(e, syscall.EAFNOSUPPORT) || errors.Is(e, syscall.EPROTONOSUPPORT) || errors.Is(e, syscall.EADDRNOTAVAIL) {
 				continue

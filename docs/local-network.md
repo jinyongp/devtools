@@ -87,10 +87,14 @@ OS 신뢰 등록은 명시 `devtools proxy trust --request-id UUID`로 수행한
 HTTP는 선택 HTTPS 주소로 경로와 query를 유지해 redirect한다.
 HTTPS는 활성 route의 SNI hostname만 허용한다.
 
-80/443이 필요하면 최초에 `devtools proxy setup --request-id UUID`를 실행하고
+Linux/WSL에서 80/443이 필요하면 최초에 `devtools proxy setup --request-id UUID`를 실행하고
 listener 주소를 `127.0.0.1:80`, `127.0.0.1:443`으로 설정한다.
 Linux setup은 설치 실행 파일에 최소 bind capability를 적용한다.
-macOS는 실제 bind 결과로 권한을 확인한다. `proxy setup --check`는 상태만 읽는다.
+macOS에서 권한 없이 80/443을 사용하려면 `--http-address 0.0.0.0:80
+--https-address 0.0.0.0:443`을 명시한다. wildcard socket에서도 공유하지 않은 route는
+loopback 요청만 허용한다. 낮은 포트의 `127.0.0.1` 등 특정 주소 bind는 권한이 필요하며
+자동으로 wildcard로 바꾸지 않는다. loopback socket이 필요하면 고포트를 사용한다.
+`proxy setup --check`는 상태만 읽으며 macOS setup은 bind 권한을 추가하지 않는다.
 setup 의도와 실제 bind 권한은 별도로 검사한다. standalone 업데이트는 설정 의도를
 보존하며 외부 package 교체로 capability가 사라지면 diagnostics가 복구를 안내한다.
 

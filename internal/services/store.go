@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/archiveproof"
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -29,7 +30,10 @@ import (
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
-type Store struct{ Data string }
+type Store struct {
+	Data         string
+	IsolatedRoot string
+}
 
 func writePrivate(path string, v any) error {
 	if e := tasks.PrivateDir(filepath.Dir(path)); e != nil {
@@ -39,24 +43,27 @@ func writePrivate(path string, v any) error {
 }
 
 type Record struct {
-	ReadyConfigured bool       `json:"ready_configured"`
-	Readiness       *Readiness `json:"readiness,omitempty"`
-	ID              string     `json:"id"`
-	Profile         string     `json:"profile"`
-	Instance        string     `json:"instance_id"`
-	Directory       string     `json:"directory"`
-	Command         string     `json:"command"`
-	Env             string     `json:"env"`
-	EnvOverride     *string    `json:"env_override"`
-	Inject          *bool      `json:"inject,omitempty"`
-	Capture         bool       `json:"capture_logs"`
-	CreatedAt       time.Time  `json:"created_at"`
-	StartedAt       *time.Time `json:"started_at"`
-	EndedAt         *time.Time `json:"ended_at"`
-	ExitCode        *int       `json:"exit_code"`
-	Reason          string     `json:"reason"`
-	State           string     `json:"state"`
-	Previous        string     `json:"previous_id,omitempty"`
+	ProxyMode         bool       `json:"proxy_mode,omitempty"`
+	NetworkSnapshotID string     `json:"network_snapshot_id,omitempty"`
+	IsolatedRoot      string     `json:"isolated_root,omitempty"`
+	ReadyConfigured   bool       `json:"ready_configured"`
+	Readiness         *Readiness `json:"readiness,omitempty"`
+	ID                string     `json:"id"`
+	Profile           string     `json:"profile"`
+	Instance          string     `json:"instance_id"`
+	Directory         string     `json:"directory"`
+	Command           string     `json:"command"`
+	Env               string     `json:"env"`
+	EnvOverride       *string    `json:"env_override"`
+	Inject            *bool      `json:"inject,omitempty"`
+	Capture           bool       `json:"capture_logs"`
+	CreatedAt         time.Time  `json:"created_at"`
+	StartedAt         *time.Time `json:"started_at"`
+	EndedAt           *time.Time `json:"ended_at"`
+	ExitCode          *int       `json:"exit_code"`
+	Reason            string     `json:"reason"`
+	State             string     `json:"state"`
+	Previous          string     `json:"previous_id,omitempty"`
 }
 
 type archiveMarker struct {
@@ -104,6 +111,8 @@ const (
 )
 
 type Request struct {
+	ProxyMode        bool                                                        `json:"proxy_mode,omitempty"`
+	Network          *network.ExecutionSnapshot                                  `json:"network,omitempty"`
 	Action           string                                                      `json:"action"`
 	ID               string                                                      `json:"id,omitempty"`
 	Directory        string                                                      `json:"directory,omitempty"`
@@ -694,6 +703,13 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 			err = failure("invalid_argument")
 			break
 		}
+		if q.Action == "restart" && r.ProxyMode {
+			q.ProxyMode = true
+			if q.Network == nil {
+				err = failure("network_snapshot_required")
+				break
+			}
+		}
 		if q.Action == "restart" && r.EndedAt == nil && q.RestartPreflight != nil {
 			err = q.RestartPreflight(ctx, r, RestartBeforeStop)
 			if err != nil {
@@ -802,7 +818,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 				if r.State == "unknown" {
 					return out, failure("process_unavailable")
 				}
-				if !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture {
+				if r.ProxyMode != q.ProxyMode || !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture {
 					return out, failure("process_conflict")
 				}
 				return Result{Item: r}, nil
@@ -840,7 +856,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 				if r.State == "unknown" {
 					return out, failure("process_unavailable")
 				}
-				if !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture {
+				if r.ProxyMode != q.ProxyMode || !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture {
 					return out, failure("process_conflict")
 				}
 				return Result{Item: r}, nil
@@ -848,17 +864,28 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		}
 	}
 	r := Record{ID: q.RequestID, Profile: p.Profile, Instance: instance.ID, Directory: p.Root, Command: q.Command, Env: env, EnvOverride: q.Env, Capture: capture, CreatedAt: time.Now().UTC(), State: "starting", Previous: previous}
+	r.ProxyMode = q.ProxyMode
+	r.IsolatedRoot = s.IsolatedRoot
+	if q.ProxyMode {
+		if q.Network == nil || !validID(q.Network.ID) || q.Network.InstanceID != instance.ID {
+			return out, failure("network_snapshot_required")
+		}
+		r.NetworkSnapshotID = q.Network.ID
+	}
 	inject := c.Inject || q.Env != nil
 	r.Inject = &inject
 	exe, err := os.Executable()
 	if err != nil {
 		return out, storageError()
 	}
-	lease, launchErr := s.prepareLaunch(r)
+	lease, launchErr := s.prepareLaunch(r, q.Network)
 	if launchErr != nil {
 		return out, launchErr
 	}
 	cmd := exec.Command(exe, "__process-serve", s.Data, r.ID, "3")
+	if r.IsolatedRoot != "" {
+		cmd.Env = append(os.Environ(), "DEVTOOLS_ISOLATED_ROOT="+r.IsolatedRoot)
+	}
 	cmd.Dir = p.Root
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.ExtraFiles = []*os.File{lease.file}

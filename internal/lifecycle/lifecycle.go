@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
@@ -33,13 +34,16 @@ type ProcessStore interface {
 type Preflight func(context.Context, project.Context, string, *string) *protocol.Error
 
 type Manager struct {
-	Data      string
-	Processes ProcessStore
-	Validate  Preflight
-	Preflight Preflight
+	PrepareNetwork    func(context.Context, Request, []services.Record, string) (map[string]*network.ExecutionSnapshot, *protocol.Error)
+	SnapshotPreflight func(context.Context, project.Context, string, *string, *network.ExecutionSnapshot, bool) *protocol.Error
+	Data              string
+	Processes         ProcessStore
+	Validate          Preflight
+	Preflight         Preflight
 }
 
 type Request struct {
+	ProxyMode bool
 	Action    string
 	Project   project.Context
 	Commands  []string
@@ -73,6 +77,7 @@ type Result struct {
 }
 
 type receiptItem struct {
+	Launched    bool   `json:"launched,omitempty"`
 	Command     string `json:"command"`
 	RequestID   string `json:"request_id"`
 	ExecutionID string `json:"execution_id,omitempty"`
@@ -81,14 +86,18 @@ type receiptItem struct {
 }
 
 type receipt struct {
-	Fingerprint string        `json:"fingerprint"`
-	Action      string        `json:"action"`
-	Profile     string        `json:"profile"`
-	Directory   string        `json:"directory"`
-	Items       []receiptItem `json:"items"`
+	NetworkRequestID string                                `json:"network_request_id,omitempty"`
+	NetworkPrepared  bool                                  `json:"network_prepared,omitempty"`
+	NetworkSnapshots map[string]*network.ExecutionSnapshot `json:"network_snapshots,omitempty"`
+	Fingerprint      string                                `json:"fingerprint"`
+	Action           string                                `json:"action"`
+	Profile          string                                `json:"profile"`
+	Directory        string                                `json:"directory"`
+	Items            []receiptItem                         `json:"items"`
 }
 
 type fingerprintInput struct {
+	ProxyMode bool     `json:"proxy_mode,omitempty"`
 	Action    string   `json:"action"`
 	Profile   string   `json:"profile"`
 	Directory string   `json:"directory"`
@@ -109,7 +118,7 @@ func storageError() *protocol.Error {
 }
 
 func fingerprint(request Request) string {
-	input := fingerprintInput{Action: request.Action, Profile: request.Project.Profile, Directory: request.Project.Root, Commands: append([]string{}, request.Commands...), Env: request.Env, Capture: request.Capture}
+	input := fingerprintInput{ProxyMode: request.ProxyMode, Action: request.Action, Profile: request.Project.Profile, Directory: request.Project.Root, Commands: append([]string{}, request.Commands...), Env: request.Env, Capture: request.Capture}
 	if request.Action == ActionUp || request.Action == ActionRestart {
 		input.Timeout = int64(request.Timeout)
 	}
@@ -214,7 +223,7 @@ func writeReceipt(path string, value receipt) *protocol.Error {
 
 func (m Manager) initialUp(ctx context.Context, request Request, fp string) (receipt, *protocol.Error) {
 	existing := map[string]bool{}
-	if m.Preflight != nil {
+	if m.Preflight != nil && !request.ProxyMode {
 		records, err := m.Processes.List(ctx, request.Project.Profile)
 		if err != nil {
 			return receipt{}, err
@@ -232,8 +241,25 @@ func (m Manager) initialUp(ctx context.Context, request Request, fp string) (rec
 		}
 	}
 	items := make([]receiptItem, 0, len(request.Commands))
+	byName := map[string][]services.Record{}
+	if request.ProxyMode {
+		records, e := m.Processes.List(ctx, request.Project.Profile)
+		if e != nil {
+			return receipt{}, e
+		}
+		for _, record := range activeRecords(records, request.Project) {
+			byName[record.Command] = append(byName[record.Command], record)
+		}
+	}
 	for _, name := range request.Commands {
-		items = append(items, receiptItem{Command: name, RequestID: tasks.ID(), Result: Item{Command: name, Status: "pending"}})
+		child := receiptItem{Command: name, RequestID: tasks.ID(), Result: Item{Command: name, Status: "pending"}}
+		if matches := byName[name]; len(matches) > 1 {
+			return receipt{}, fail("process_conflict", "Multiple active executions exist for the selected command.", 3, nil)
+		} else if len(matches) == 1 {
+			record := matches[0]
+			child.Result.Item = &record
+		}
+		items = append(items, child)
 	}
 	return receipt{Fingerprint: fp, Action: request.Action, Profile: request.Project.Profile, Directory: request.Project.Root, Items: items}, nil
 }
@@ -660,14 +686,61 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 		}
 		return result, nil
 	}
+	needsNetwork := request.Action == ActionUp && request.ProxyMode || request.Action == ActionRestart && value.hasProxyExecutions()
+	if needsNetwork && !value.NetworkPrepared {
+		if m.PrepareNetwork == nil {
+			return value.result(replayed), fail("internal_error", "Network preparation is unavailable.", 1, nil)
+		}
+		if value.NetworkRequestID == "" {
+			value.NetworkRequestID = tasks.ID()
+			if e := writeReceipt(path, value); e != nil {
+				return value.result(replayed), e
+			}
+		}
+		originals := []services.Record{}
+		for _, child := range value.Items {
+			if child.Result.Item != nil {
+				originals = append(originals, *child.Result.Item)
+			}
+		}
+		snapshots, e := m.PrepareNetwork(ctx, request, originals, value.NetworkRequestID)
+		if e != nil {
+			return value.result(replayed), e
+		}
+		// A mixed restart validates its legacy members before stopping any of
+		// the original executions, while each member keeps its stored mode.
+		if request.Action == ActionRestart && m.Validate != nil {
+			for _, child := range value.Items {
+				if child.Done || snapshots[child.Command] != nil {
+					continue
+				}
+				env := request.Env
+				if env == nil && child.Result.Item != nil {
+					env = child.Result.Item.EnvOverride
+				}
+				if e := m.Validate(ctx, request.Project, child.Command, env); e != nil {
+					return value.result(replayed), e
+				}
+			}
+		}
+		value.NetworkSnapshots = snapshots
+		value.NetworkPrepared = true
+		if e := writeReceipt(path, value); e != nil {
+			return value.result(replayed), e
+		}
+	}
 	var runErr *protocol.Error
-	switch request.Action {
-	case ActionUp:
-		runErr = m.runUp(ctx, request, &value, path)
-	case ActionRestart:
-		runErr = m.runRestart(ctx, request, &value, path)
-	default:
-		runErr = m.runDown(ctx, &value, path)
+	if needsNetwork {
+		runErr = m.runNetwork(ctx, request, &value, path)
+	} else {
+		switch request.Action {
+		case ActionUp:
+			runErr = m.runUp(ctx, request, &value, path)
+		case ActionRestart:
+			runErr = m.runRestart(ctx, request, &value, path)
+		default:
+			runErr = m.runDown(ctx, &value, path)
+		}
 	}
 	result := value.result(replayed)
 	if runErr != nil {

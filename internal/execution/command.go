@@ -2,6 +2,7 @@
 package execution
 
 import (
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -9,6 +10,7 @@ import (
 // Command is the immutable command-level input shared by foreground and managed
 // execution paths before storage, ports, or process lifetime are involved.
 type Command struct {
+	Network      *network.ExecutionSnapshot
 	Project      project.Context
 	Name         string
 	Exec         []string

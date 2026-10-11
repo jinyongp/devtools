@@ -100,6 +100,22 @@ func prepareResolved(ctx context.Context, command Command, state *values.State, 
 	if len(command.Bind)+len(command.Serve) == 0 {
 		return out, nil
 	}
+	if command.Network != nil {
+		if e := ValidateNetwork(command, dependencies); e != nil {
+			return out, e
+		}
+		definitions := make(map[string]project.Port, len(command.Project.Ports))
+		for name, definition := range command.Project.Ports {
+			definitions[name] = definition
+		}
+		for name, number := range command.Network.Ports {
+			definition := definitions[name]
+			definition.Expression = nil
+			definition.Port = &number
+			definitions[name] = definition
+		}
+		command.Project.Ports = definitions
+	}
 	prepared, release, err := dependencies.Ports.Prepare(ctx, command.Project, command.projectCommand(), command.Env, state, dependencies.PortDefaults, preview)
 	if err != nil {
 		return Prepared{}, err
@@ -109,11 +125,60 @@ func prepareResolved(ctx context.Context, command Command, state *values.State, 
 	for key, value := range prepared.Bind {
 		out.Injected[key] = value
 	}
+	if command.Network != nil {
+		for key, value := range command.Network.Bindings {
+			if prepared.Bind[key] != value {
+				release()
+				return Prepared{}, protocol.NewError("network_snapshot_changed", "The prepared network binding changed before launch.", 3, nil)
+			}
+		}
+		if root := command.Network.IsolatedRoot; root != "" {
+			out.Injected["DEVTOOLS_ISOLATED_ROOT"] = root
+		}
+	}
 	if path, ok := prepared.Bind["PATH"]; ok {
 		path := path
 		out.PathOverride = &path
 	}
 	return out, nil
+}
+
+func ValidateNetwork(command Command, dependencies Dependencies) *protocol.Error {
+	snapshot := command.Network
+	if snapshot == nil {
+		return nil
+	}
+	fail := func() *protocol.Error {
+		return protocol.NewError("network_snapshot_changed", "Network configuration or assignment changed; start a new operation.", 3, nil)
+	}
+	source, e := command.Project.NetworkSources()
+	if e != nil {
+		return e
+	}
+	if source != snapshot.SourceDigest {
+		return fail()
+	}
+	st, e := dependencies.Ports.Read()
+	if e != nil {
+		return e
+	}
+	instance := st.Find(command.Project.Profile, "", command.Project.Root)
+	if instance == nil || instance.ID != snapshot.InstanceID {
+		return fail()
+	}
+	for name, port := range snapshot.Ports {
+		assignment := st.Get(instance.ID, name)
+		if assignment == nil || assignment.Port != port {
+			return fail()
+		}
+	}
+	for name, generation := range snapshot.Listeners {
+		listener := st.Listener(name)
+		if listener == nil || listener.Generation != generation {
+			return fail()
+		}
+	}
+	return nil
 }
 
 // Checks applies the shared structured requirement diagnostics. forceExecutable

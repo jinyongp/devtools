@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -283,7 +284,7 @@ func (s Store) cleanupLaunchStaging() *protocol.Error {
 	return nil
 }
 
-func (s Store) prepareLaunch(record Record) (*lockedLease, *protocol.Error) {
+func (s Store) prepareLaunch(record Record, snapshots ...*network.ExecutionSnapshot) (*lockedLease, *protocol.Error) {
 	if err := tasks.PrivateDir(s.root()); err != nil {
 		return nil, storageError()
 	}
@@ -312,6 +313,14 @@ func (s Store) prepareLaunch(record Record) (*lockedLease, *protocol.Error) {
 
 	if err := writePrivate(filepath.Join(staging, "record.json"), record); err != nil {
 		return nil, storageError()
+	}
+	if record.ProxyMode {
+		if len(snapshots) == 0 || snapshots[0] == nil || snapshots[0].ID != record.NetworkSnapshotID {
+			return nil, failure("network_snapshot_required")
+		}
+		if err := writePrivate(filepath.Join(staging, "network.json"), snapshots[0]); err != nil {
+			return nil, storageError()
+		}
 	}
 	if err := writePrivate(filepath.Join(staging, "launch.json"), launchMarker{Version: 1, LeaseHandoff: "inherited-fd"}); err != nil {
 		return nil, storageError()

@@ -35,7 +35,10 @@ def port():
  with socket.socket() as s:s.bind(('127.0.0.1',0));return s.getsockname()[1]
 backend_port,listener_port,tls_port=port(),port(),port()
 server=home/"server.py"
-server.write_text('''import http.server,json,sys,time
+server.write_text('''import faulthandler,signal
+faulthandler.register(signal.SIGUSR1)
+faulthandler.dump_traceback_later(5)
+import http.server,json,sys,time
 class H(http.server.BaseHTTPRequestHandler):
  protocol_version='HTTP/1.1'
  def do_GET(self):
@@ -47,7 +50,9 @@ class H(http.server.BaseHTTPRequestHandler):
    return
   b=json.dumps(dict(self.headers)).encode();self.send_response(200);self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b)
  def log_message(self,*a):pass
-http.server.ThreadingHTTPServer(('127.0.0.1',int(sys.argv[1])),H).serve_forever()
+server=http.server.ThreadingHTTPServer(('127.0.0.1',int(sys.argv[1])),H)
+faulthandler.cancel_dump_traceback_later()
+server.serve_forever()
 ''')
 backend_log=home/'backend.log'
 backend_output=backend_log.open('w')

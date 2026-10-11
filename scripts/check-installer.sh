@@ -73,8 +73,12 @@ mkdir -p "$scratch/caller/bin" "$scratch/elsewhere/bin"
 
 # Existing setup intent makes update preparation explicit. A preparation or
 # post-publish commit failure preserves the exact original executable.
-mkdir -p "$XDG_DATA_HOME/devtools/netsetup"
-printf '%s\n' '{"enabled":true}' > "$XDG_DATA_HOME/devtools/netsetup/intent.json"
+case "$platform" in
+  linux) setup_dir="$XDG_DATA_HOME/devtools/netsetup" ;;
+  darwin) setup_dir="$home/Library/Application Support/devtools/data/netsetup" ;;
+esac
+mkdir -p "$setup_dir"
+printf '%s\n' '{"enabled":true}' > "$setup_dir/intent.json"
 cp "$bin_dir/devtools" "$scratch/original"
 printf '%s\n' '# release candidate marker' >> "$scratch/devtools"
 tar -czf "$release/$archive" -C "$scratch" devtools

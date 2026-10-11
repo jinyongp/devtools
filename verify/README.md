@@ -38,7 +38,7 @@ devtools run test:installed proxies
 devtools run test:installed network
 
 # 외부 계정 없이 provider 장애·복구와 실제 WebSocket·HTTP/2 연결 검증
-devtools run test:installed tailscale_simulated cloudflared_faults http2_exposure
+devtools run test:installed network_failures tailscale_simulated cloudflared_faults http2_exposure
 
 # 암호화 백업·복구·재시도·충돌·직전 백업
 devtools run test:installed backup
@@ -97,10 +97,14 @@ GitHub-hosted runner는 job마다 새 VM을 사용하므로 release 검증의 �
 
 `tailscale_simulated`는 가짜 `tailscale` 실행 파일과 로컬 HTTP LocalAPI를 사용한다.
 패키징된 CLI의 인증·조건부 설정 변경, 사용자 설정 보존, 동시 변경 충돌, 권한 오류,
-설정 반영 후 응답 유실과 데몬 강제 종료 뒤 소유 설정 복구를 검증한다.
+설정 반영 후 응답 유실, 로컬 record 저장 실패의 provider rollback·명시적 복구,
+데몬 강제 종료 뒤 소유 설정 복구를 검증한다.
 `cloudflared_faults`는 가짜 provider 프로세스로 시작 실패 시 origin 정리, provider·daemon
 SIGKILL, 자식 프로세스 정리, 인증 유실과 실제 WebSocket frame의 선택 종료·다른 연결 보존을
-검증한다. `http2_exposure`는 Go 표준 HTTP client와 실제 CLI TLS listener 사이에서
+검증한다. 같은 이름의 global route 삭제·재생성 뒤 과거 UUID와 pin의 격리도 확인한다.
+`network_failures`는 두 번째 socket bind 실패 후 첫 socket 정리·같은 요청 재시도와
+다른 listener의 TLS·WebSocket 연결 보존을 확인한다.
+`http2_exposure`는 Go 표준 HTTP client와 실제 CLI TLS listener 사이에서
 HTTP/2 협상, stop·TOML·env 파일 변경에 따른 한 연결의 다중 stream 종료,
 SNI/authority 검사와 다른 route 연결의 새로운 heartbeat 수신을
 검증한다. 같은 HTTP/2 연결에서 서로 다른 exposure의 stream을 선택 종료하는 계약은
@@ -108,11 +112,13 @@ Go integration test에서 별도로 확인한다.
 기존 `exposure` 시나리오도 TOML·env 파일 변경 시 열린 SSE·WebSocket의 선택 종료와
 다른 프로젝트·전역 route 연결 보존을 확인한다.
 
-세 시나리오는 전체 installed suite에 자동 포함되어 Linux·macOS GitHub Actions에서 실행된다.
+이 시나리오는 전체 installed suite에 자동 포함되어 Linux·macOS GitHub Actions에서 실행된다.
 provider 모의 검증은 실제 Tailscale 두 장치 연결, Cloudflared 공개 DNS·ingress 검증과
 구분한다. Windows 브라우저의 DNS·CA 저장소 및 Windows mount의 filesystem 동작도
 실제 대상 환경에서 확인해야 한다. 기존 Linux·macOS OS 변경 검증은 별도 system-network
 job에서 계속 수행한다.
+
+전체 수용 기준별 검사 위치와 남은 실제 환경 경계는 [network-coverage.md](network-coverage.md)에 기록한다.
 
 ## 시나리오 추가
 

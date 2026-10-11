@@ -4,7 +4,7 @@ let refreshTimer, refreshController, activeLoads = 0;
 function rememberRefreshRead(path, data) {
   const params = new URLSearchParams(path.split("?")[1]);
   const queryRead = path.startsWith("/api/query?") && !params.has("cursor") && ["list", "workstream list", "context", "workstream context"].includes(params.get("command"));
-  if (path === "/api/profiles" || path.startsWith("/api/values?") || path.startsWith("/api/processes?") || path.startsWith("/api/archives?") || queryRead) {
+  if (path === "/api/profiles" || path.startsWith("/api/values?") || path.startsWith("/api/processes?") || path.startsWith("/api/network?") || path.startsWith("/api/archives?") || queryRead) {
     refreshReads.set(path, JSON.stringify(data));
   }
 }

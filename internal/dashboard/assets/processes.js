@@ -10,6 +10,8 @@ async function loadProcesses(version) {
   try {
     const data=await api("/api/processes?"+new URLSearchParams({profile:current}));
     if(generation!==version)return;
+    await loadNetwork(panel,current,version);
+    if(generation!==version)return;
     button(panel,"Start command",()=>edit("Start named command",p=>{
       const directory=field(p,"Project directory",data.instances[0]?.directory||""),command=field(p,"Command name"),env=field(p,"Environment (blank uses command configuration)");
       const capture=field(p,"Capture raw output (may contain secrets)","","checkbox");
@@ -62,6 +64,7 @@ async function loadProcesses(version) {
       }
       for(const action of ["stop","restart"]){
         if(action==="stop"&&item.ended_at)continue;
+        if(action==="restart"&&item.proxy_mode){text("p",`Restart in the project terminal: devtools process restart ${item.id} --request-id UUID`,actions);continue;}
         button(actions,action==="stop"?"Stop":"Restart",()=>edit(`${action} ${item.command}`,p=>{
           text("p",`Execution ${item.id} in ${item.directory}.`,p);
           if(action==="restart")text("p","Starts a new execution with the current project configuration and values.",p);

@@ -224,3 +224,64 @@ func TestCustomHostPreparationUsesInjectedHelperAndFailsClosed(t *testing.T) {
 		t.Fatal(st, e)
 	}
 }
+
+func TestCustomHostRollbackAfterListenerFailureAndSameRequestRetry(t *testing.T) {
+	m := liveNetworkManager(t)
+	ctx := context.Background()
+	httpPort, tlsPort := freeNetworkPort(t), freeNetworkPort(t)
+	for tlsPort == httpPort {
+		tlsPort = freeNetworkPort(t)
+	}
+	if _, e := m.Configure(ctx, "default", fmt.Sprintf("127.0.0.1:%d", httpPort), fmt.Sprintf("127.0.0.1:%d", tlsPort), false, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := m.AddGlobal(ctx, "app", 31001, "app.test", "", "auto", tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	st, e := m.portStore().Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	ref := st.GlobalRoute("app").Ref()
+	path := filepath.Join(t.TempDir(), "hosts")
+	original := "127.0.0.1 localhost\n# user-owned\n"
+	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
+		t.Fatal(err)
+	}
+	system := hosts.System{Path: path}
+	hm := hosts.Manager{Data: m.Data, System: system, Run: func(ctx context.Context, _ string, input any, _ bool) *protocol.Error {
+		return system.Apply(ctx, input.(hosts.Request))
+	}}
+	busy, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", tlsPort))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+	requestID := tasks.ID()
+	if _, e := m.RouteUp(ctx, ref, project.Context{}, nil, hm, requestID); e == nil || e.Code != "port_in_use" {
+		t.Fatal(e)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil || string(content) != original {
+		t.Fatal("hosts were not rolled back", string(content), err)
+	}
+	st, e = m.portStore().Read()
+	if e != nil || st.Activation(ref) != nil && st.Activation(ref).Mode == "active" {
+		t.Fatal("failed route became active", st, e)
+	}
+	busy.Close()
+	if _, e := m.RouteUp(ctx, ref, project.Context{}, nil, hm, requestID); e != nil {
+		t.Fatal(e)
+	}
+	content, err = os.ReadFile(path)
+	if err != nil || !strings.Contains(string(content), "127.0.0.1\tapp.test") {
+		t.Fatal("retry did not prepare hosts", string(content), err)
+	}
+	if _, e := m.RouteDown(ctx, ref, hm, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	content, err = os.ReadFile(path)
+	if err != nil || string(content) != original {
+		t.Fatal("route down did not restore user hosts", string(content), err)
+	}
+}

@@ -129,3 +129,42 @@ func TestLeafChainAndTLSDoNotRequireOSTrust(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestExpiredLeafCanBeRenewedWithoutReplacingRoot(t *testing.T) {
+	s := Store{Data: t.TempDir()}
+	a, _, e := s.Init(context.Background())
+	if e != nil {
+		t.Fatal(e)
+	}
+	fingerprint := a.Fingerprint()
+	first, e := a.Leaf("app.localhost", time.Now())
+	if e != nil {
+		t.Fatal(e)
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(a.Certificate)
+	afterExpiry := first.Leaf.NotAfter.Add(time.Second)
+	options := x509.VerifyOptions{DNSName: "app.localhost", Roots: pool, CurrentTime: afterExpiry}
+	if _, err := first.Leaf.Verify(options); err == nil {
+		t.Fatal("expired leaf accepted")
+	}
+	renewed, e := a.Leaf("app.localhost", afterExpiry)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, err := renewed.Leaf.Verify(options); err != nil {
+		t.Fatal("renewed leaf is not trusted by the original root", err)
+	}
+	stored, e := s.Read()
+	if e != nil || stored.Fingerprint() != fingerprint {
+		t.Fatal("leaf renewal replaced root", e)
+	}
+	nearRootExpiry := a.Certificate.NotAfter.Add(-time.Hour)
+	last, e := a.Leaf("app.localhost", nearRootExpiry)
+	if e != nil || last.Leaf.NotAfter.After(a.Certificate.NotAfter) {
+		t.Fatal("leaf outlives root", e)
+	}
+	if _, e := a.Leaf("app.localhost", a.Certificate.NotAfter); e == nil || e.Code != "ca_expired" {
+		t.Fatal("expired root issued a leaf", e)
+	}
+}

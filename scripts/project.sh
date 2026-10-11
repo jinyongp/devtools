@@ -19,7 +19,7 @@ case "$action" in
     "$runner" run check:release
     "$runner" run check:project
     "$runner" run check:perf
-    test -z "$(gofmt -l cmd internal scripts skills perf)"
+    test -z "$(gofmt -l cmd internal scripts skills perf verify)"
     go vet ./...
     exec go test -race ./... "$@"
     ;;

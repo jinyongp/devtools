@@ -51,6 +51,9 @@ inject=false
 serve=['web']
 [commands.web.bind]
 PORT={{port='web'}}
+[commands.web.ready]
+exec=['python3','-c',"import os,socket; socket.create_connection(('127.0.0.1',int(os.environ['PORT'])),timeout=1).close()"]
+timeout='10s'
 ''')
         def api(*words,terminal=False,error=None):
             argv=[str(binary),*words]
@@ -104,7 +107,7 @@ PORT={{port='web'}}
             api("proxy","ca","export","--output",str(ca_path))
             # A public-CA client verifies transport independently of Python's OS-store integration.
             c=http.client.HTTPSConnection(hostname,443,context=ssl.create_default_context(cafile=str(ca_path)),timeout=5)
-            c.request("GET","/");r=c.getresponse();r.read();assert r.status==200;c.close()
+            c.request("GET","/");r=c.getresponse();r.read();assert r.status==200,r.status;c.close()
             if sys.platform=="linux":
                 c=http.client.HTTPSConnection(hostname,443,context=ssl.create_default_context(),timeout=5)
                 try:

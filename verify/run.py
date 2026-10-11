@@ -181,6 +181,8 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
             )
             for key in GIT_LOCAL_ENVIRONMENT:
                 env.pop(key, None)
+            for key in ("DEVTOOLS_ISOLATED_ROOT", "DEVTOOLS_TASK_CONTEXT"):
+                env.pop(key, None)
             print(f"Running scenario: {name}", flush=True)
             try:
                 result = subprocess.run(

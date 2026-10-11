@@ -34,6 +34,9 @@ devtools run test:installed ports
 # reverse proxy route·WebSocket·daemon 재시작
 devtools run test:installed proxies
 
+# fresh batch·peer restart·CA 검증 HTTPS·선택 listener 정리·global foreground·격리
+devtools run test:installed network
+
 # 암호화 백업·복구·재시도·충돌·직전 백업
 devtools run test:installed backup
 

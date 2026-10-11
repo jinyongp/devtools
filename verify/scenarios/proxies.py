@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import ssl
 import subprocess
 import time
 import urllib.error
@@ -124,6 +125,46 @@ try:
         finally:
             if probe is not None:
                 probe.close()
+
+    # Literal .localhost routes remain implicit across the real v2 -> v3 upgrade.
+    registry = next(home.rglob("ports/registry.json"))
+    before = json.loads(registry.read_text())
+    assert before["version"] == 2
+    mutate("stop")
+    running = False
+    with socket.socket() as candidate:
+        candidate.bind(("127.0.0.1", 0))
+        tls_port = candidate.getsockname()[1]
+    mutate("configure", "--http-address", "127.0.0.1:24400", "--https-address", f"127.0.0.1:{tls_port}")
+    after = json.loads(registry.read_text())
+    assert after["version"] == 3 and after["assignments"] == before["assignments"]
+    assert all(r in after["reservations"] for r in before["reservations"])
+    mutate("start")
+    running = True
+    public_ca = home / "public-ca.pem"
+    api("proxy", "ca", "export", "--output", str(public_ca))
+    def https_read(host):
+        with socket.create_connection(("127.0.0.1", tls_port), timeout=3) as raw:
+            with ssl.create_default_context(cafile=str(public_ca)).wrap_socket(raw, server_hostname=host) as connection:
+                connection.sendall(f"GET / HTTP/1.1\r\nHost: {host}:{tls_port}\r\nConnection: close\r\n\r\n".encode())
+                data = b""
+                while part := connection.recv(4096): data += part
+                assert b"200 OK" in data
+                return data
+    assert b"feature" in https_read("feature.shop.localhost")
+    assert b"replacement" in https_read("main.shop.localhost")
+    api("proxy", "down", "app", "--dir", str(feature), "--request-id", str(uuid.uuid4()))
+    saved = (feature / "devtools.toml").read_text()
+    (feature / "devtools.toml").unlink()
+    (feature / "devtools.toml").write_text(saved)
+    mutate("stop");running = False
+    mutate("start");running = True
+    items = api("proxy", "list")["items"]
+    assert next(r for r in items if r["host"] == "feature.shop.localhost")["status"] == "inactive"
+    assert b"replacement" in https_read("main.shop.localhost")
+    api("proxy", "up", "app", "--dir", str(feature), "--request-id", str(uuid.uuid4()))
+    assert b"feature" in https_read("feature.shop.localhost")
+    print("Packaged v2/v3 assignments, implicit .localhost TLS and persistent down tombstone verified")
 finally:
     if running:
         try: mutate("stop")

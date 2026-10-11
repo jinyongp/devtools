@@ -1,7 +1,5 @@
 """Packaged provider failure/recovery and WebSocket frames without public DNS."""
 
-import base64
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,7 +9,7 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from network_fixture import NetworkFixture
+from network_fixture import NetworkFixture, WebSocket
 
 
 fixture = NetworkFixture()
@@ -55,53 +53,6 @@ def gone(pid):
         return False
     except ProcessLookupError:
         return True
-
-
-class WebSocket:
-    def __init__(self, item, auth=None):
-        self.socket = socket.create_connection(("127.0.0.1", item["origin_port"]), timeout=3)
-        self.reader = self.socket.makefile("rb", buffering=0)
-        key = base64.b64encode(os.urandom(16)).decode()
-        headers = ["GET /ws HTTP/1.1", "Host: fault-fixture.trycloudflare.com", "Connection: Upgrade",
-                   "Upgrade: websocket", "Sec-WebSocket-Version: 13", "Sec-WebSocket-Key: " + key]
-        if auth:
-            headers.append("Authorization: Basic " + base64.b64encode(auth.encode()).decode())
-        self.socket.sendall(("\r\n".join(headers) + "\r\n\r\n").encode())
-        assert b" 101 " in self.reader.readline()
-        observed = {}
-        while True:
-            line = self.reader.readline()
-            if line == b"\r\n":
-                break
-            name, value = line.decode().split(":", 1)
-            observed[name.lower()] = value.strip()
-        expected = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
-        assert observed["sec-websocket-accept"] == expected
-        self.echo()
-
-    def read(self, length):
-        body = b""
-        while len(body) < length:
-            part = self.reader.read(length - len(body))
-            assert part, "WebSocket closed before complete frame"
-            body += part
-        return body
-
-    def echo(self):
-        body, mask = b"websocket-alive", os.urandom(4)
-        payload = bytes(value ^ mask[index % 4] for index, value in enumerate(body))
-        self.socket.sendall(bytes([0x81, 0x80 | len(body)]) + mask + payload)
-        assert self.read(2) == bytes([0x81, len(body)]) and self.read(len(body)) == body
-
-    def assert_closed(self):
-        try:
-            assert not self.reader.read(1), "revoked WebSocket still delivered frames"
-        except ConnectionResetError:
-            pass
-
-    def close(self):
-        self.reader.close()
-        self.socket.close()
 
 
 with fixture.network():

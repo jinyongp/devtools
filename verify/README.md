@@ -101,9 +101,12 @@ GitHub-hosted runner는 job마다 새 VM을 사용하므로 release 검증의 �
 `cloudflared_faults`는 가짜 provider 프로세스로 시작 실패 시 origin 정리, provider·daemon
 SIGKILL, 자식 프로세스 정리, 인증 유실과 실제 WebSocket frame의 선택 종료·다른 연결 보존을
 검증한다. `http2_exposure`는 Go 표준 HTTP client와 실제 CLI TLS listener 사이에서
-HTTP/2 협상, 한 연결의 다중 stream 종료, SNI/authority 검사와 다른 route 연결 보존을
+HTTP/2 협상, stop·TOML·env 파일 변경에 따른 한 연결의 다중 stream 종료,
+SNI/authority 검사와 다른 route 연결의 새로운 heartbeat 수신을
 검증한다. 같은 HTTP/2 연결에서 서로 다른 exposure의 stream을 선택 종료하는 계약은
 Go integration test에서 별도로 확인한다.
+기존 `exposure` 시나리오도 TOML·env 파일 변경 시 열린 SSE·WebSocket의 선택 종료와
+다른 프로젝트·전역 route 연결 보존을 확인한다.
 
 세 시나리오는 전체 installed suite에 자동 포함되어 Linux·macOS GitHub Actions에서 실행된다.
 provider 모의 검증은 실제 Tailscale 두 장치 연결, Cloudflared 공개 DNS·ingress 검증과

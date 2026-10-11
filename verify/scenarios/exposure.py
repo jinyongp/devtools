@@ -1,13 +1,18 @@
 """Packaged auth/origin/provider supervision with a local fake executable."""
 import base64
+from contextlib import closing
 import http.client
 import json
 import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import time
 import uuid
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from network_fixture import WebSocket
 
 home=Path.home()
 binary=home/".local/bin/devtools"
@@ -35,7 +40,11 @@ def port():
  with socket.socket() as s:s.bind(('127.0.0.1',0));return s.getsockname()[1]
 backend_port,listener_port,tls_port=port(),port(),port()
 server=home/"server.py"
-server.write_text('''import faulthandler,signal
+server.write_text(f'''import sys
+sys.dont_write_bytecode=True
+sys.path.insert(0,{str(Path(__file__).resolve().parents[1])!r})
+from network_fixture import Backend as FixtureBackend
+''' + '''import faulthandler,signal
 faulthandler.register(signal.SIGUSR1)
 faulthandler.dump_traceback_later(5)
 import http.server,json,socketserver,sys,time
@@ -43,9 +52,10 @@ class Backend(http.server.ThreadingHTTPServer):
  def server_bind(self):
   socketserver.TCPServer.server_bind(self)
   self.server_name,self.server_port=self.server_address[:2]
-class H(http.server.BaseHTTPRequestHandler):
+class H(FixtureBackend):
  protocol_version='HTTP/1.1'
  def do_GET(self):
+  if self.path=='/ws':return super().do_GET()
   if self.path=='/stream':
    self.send_response(200);self.send_header('Transfer-Encoding','chunked');self.end_headers()
    try:
@@ -147,9 +157,12 @@ try:
   assert item['route_ref']['scope']=='project' and second['route_ref']['scope']=='global'
   target_connection,target_stream=stream(item['origin_port'])
   sibling_connection,sibling_stream=stream(second['origin_port'])
-  source.write_text(source.read_text()+'\n# source changed\n')
-  assert_closed(target_stream)
-  assert sibling_stream.readline()==b'alive\n','global sibling was revoked by project source change'
+  with closing(WebSocket(item)) as target_ws, closing(WebSocket(second)) as sibling_ws:
+   source.write_text(source.read_text()+'\n# source changed\n')
+   assert_closed(target_stream)
+   assert sibling_stream.readline()==b'alive\n','global sibling was revoked by project source change'
+   target_ws.assert_closed()
+   sibling_ws.echo()
   target_connection.close();sibling_connection.close()
   for _ in range(60):
    if api('expose','status',item['id'])['item']['state']=='recovery_required':break
@@ -178,7 +191,7 @@ try:
  mutate('expose','stop',third['id'])
  markers=list((state/'data'/'exposure-providers').glob('*.json'))
  assert len(markers)==5 and all(json.loads(p.read_text())['state']=='stopped' for p in markers)
- print('Packaged provider supervision, auth loss/replay/redaction, route scope, one-second source watcher, selected stream revocation and HTTPS authority verified; live provider acceptance remains separate')
+ print('Packaged provider supervision, auth loss/replay/redaction, route scope, one-second TOML/env-file source watcher, selected SSE/WebSocket revocation and HTTPS authority verified; live provider acceptance remains separate')
 finally:
  for item in api('expose','list')['items']:
   if item['state']!='stopped':mutate('expose','stop',item['id'])

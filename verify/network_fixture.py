@@ -8,6 +8,7 @@ import http.server
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 import shlex
 import signal
 import socket
@@ -84,6 +85,53 @@ class Backend(http.server.BaseHTTPRequestHandler):
         pass
 
 
+class WebSocket:
+    def __init__(self, item, auth=None):
+        self.socket = socket.create_connection(("127.0.0.1", item["origin_port"]), timeout=3)
+        self.reader = self.socket.makefile("rb", buffering=0)
+        key = base64.b64encode(os.urandom(16)).decode()
+        headers = ["GET /ws HTTP/1.1", "Host: " + urlparse(item["url"]).netloc, "Connection: Upgrade",
+                   "Upgrade: websocket", "Sec-WebSocket-Version: 13", "Sec-WebSocket-Key: " + key]
+        if auth:
+            headers.append("Authorization: Basic " + base64.b64encode(auth.encode()).decode())
+        self.socket.sendall(("\r\n".join(headers) + "\r\n\r\n").encode())
+        assert b" 101 " in self.reader.readline()
+        observed = {}
+        while True:
+            line = self.reader.readline()
+            if line == b"\r\n":
+                break
+            name, value = line.decode().split(":", 1)
+            observed[name.lower()] = value.strip()
+        expected = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
+        assert observed["sec-websocket-accept"] == expected
+        self.echo()
+
+    def read(self, length):
+        body = b""
+        while len(body) < length:
+            part = self.reader.read(length - len(body))
+            assert part, "WebSocket closed before complete frame"
+            body += part
+        return body
+
+    def echo(self):
+        body, mask = b"websocket-alive", os.urandom(4)
+        payload = bytes(value ^ mask[index % 4] for index, value in enumerate(body))
+        self.socket.sendall(bytes([0x81, 0x80 | len(body)]) + mask + payload)
+        assert self.read(2) == bytes([0x81, len(body)]) and self.read(len(body)) == body
+
+    def assert_closed(self):
+        try:
+            assert not self.reader.read(1), "revoked WebSocket still delivered frames"
+        except ConnectionResetError:
+            pass
+
+    def close(self):
+        self.reader.close()
+        self.socket.close()
+
+
 @contextlib.contextmanager
 def serving(handler):
     server = LocalServer(("127.0.0.1", 0), handler)
@@ -102,6 +150,7 @@ class NetworkFixture:
         self.home = Path.home()
         self.binary = self.home / ".local/bin/devtools"
         self.state = self.home / "isolated"
+        self.projects = []
         self.env = dict(os.environ)
         self.env.pop("DEVTOOLS_TASK_CONTEXT", None)
         self.env.pop("DEVTOOLS_ISOLATED_ROOT", None)
@@ -142,6 +191,8 @@ class NetworkFixture:
                 for item in self.api("expose", "list")["items"]:
                     if item["state"] != "stopped":
                         self.mutate("expose", "stop", item["id"])
+                for project in self.projects:
+                    self.mutate("project", "down", "--dir", str(project))
                 plan = self.api("proxy", "teardown", "--all")["item"]
                 self.mutate("proxy", "teardown", "--all", "--apply", plan["digest"])
 
@@ -168,7 +219,6 @@ class NetworkFixture:
         raise AssertionError("killed daemon still reported running")
 
     def request(self, item, auth=None):
-        from urllib.parse import urlparse
         connection = http.client.HTTPConnection("127.0.0.1", item["origin_port"], timeout=3)
         headers = {"Host": urlparse(item["url"]).netloc}
         if auth:

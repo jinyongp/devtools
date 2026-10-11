@@ -11,12 +11,13 @@ provider 실접속은 별도 환경 근거가 필요하며 unit/fake 결과로 �
 80/443·최소 capability를 변경하고 정리를 확인한다. 실패하면 private CA와 복구 root를 보존한다.
 release workflow의 `system_network_smoke`는 기본 false인 opt-in 입력이다.
 
-macOS GitHub runner의 무인 검증은 `--preauthorize-macos-trust`를 명시한다.
-마지막 관리자 CA 신뢰 항목 제거 시 필요한 시스템 인증 창을 처리할 수 있도록,
-일회용 runner에서 `com.apple.trust-settings.admin` 정책을 검증 동안만 허용한다.
-기존 정책을 먼저 보존하고 성공·실패 시 모두 복원한 뒤 원본과 비교한다.
-정책 준비나 복원이 실패하면 검증도 실패하며, 이 조건은 결과 JSON에 기록된다.
-일반 macOS에서 시스템 인증 창에 응답하는 사용자 흐름은 별도 수동 검증 대상이다.
+macOS는 CA 신뢰 제거 시 sudo와 별도로 시스템 인증 창의 승인을 요구할 수 있다.
+무인 runner에서는 승인이 불가능하여 `permission_required`로 실패할 수 있으며,
+신뢰 제거를 확인하기 전에는 CA 키와 복구 상태를 보존한다. 시스템 인증 대기는
+최대 2분이다. 이 경우 실제 정리와 인증 창 응답은 대화형 macOS에서 검증해야 한다.
+workflow는 시스템 동작 검증을 독립된 job으로 실행해 일반 검사·설치 검증·패키징의
+결과를 함께 남긴다. opt-in 시스템 검증 실패는 전체 workflow 실패로 유지되며
+게시도 차단한다.
 실제 결과 파일이 없으면 해당 platform 수용 검증은 pending이다.
 
 저장소에서 devtools 자체를 수정하는 개발자를 위한 안내다.

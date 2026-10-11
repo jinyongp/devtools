@@ -88,19 +88,6 @@ jobs:
         run: |
           go build -o bin/devtools ./cmd/devtools
           echo "$PWD/bin" >> "$GITHUB_PATH"
-      - name: Verify disposable macOS system network
-        id: system_network
-        if: inputs.system_network_smoke
-        env:
-          DEVTOOLS_DISPOSABLE_HOST: '1'
-        run: python3 -B verify/platform_network.py --binary bin/devtools --evidence system-network-macos.json --preauthorize-macos-trust
-      - name: Preserve macOS system network evidence
-        if: always() && inputs.system_network_smoke && steps.system_network.outcome != 'skipped'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: system-network-macos
-          path: system-network-macos.json
-          if-no-files-found: error
       - run: devtools run check:all
       - run: devtools run build:cli
       - run: ./bin/devtools project inspect
@@ -152,18 +139,42 @@ jobs:
       - name: Install verification shells
         run: sudo apt-get update && sudo apt-get install -y fish zsh
       - run: devtools run test:installed
-      - name: Verify disposable Linux system network
+
+  system-network:
+    needs: validate-release
+    if: inputs.system_network_smoke
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            runner: macos-latest
+          - platform: linux
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+          cache: true
+      - name: Bootstrap project CLI
+        run: go build -o bin/devtools ./cmd/devtools
+      - name: Verify disposable system network
         id: system_network
-        if: inputs.system_network_smoke
         env:
           DEVTOOLS_DISPOSABLE_HOST: '1'
-        run: python3 -B verify/platform_network.py --binary bin/devtools --evidence system-network-linux.json
-      - name: Preserve Linux system network evidence
-        if: always() && inputs.system_network_smoke && steps.system_network.outcome != 'skipped'
+          EVIDENCE: system-network-${{ matrix.platform }}.json
+        run: python3 -B verify/platform_network.py --binary bin/devtools --evidence "$EVIDENCE"
+      - name: Preserve system network evidence
+        if: always() && steps.system_network.outcome != 'skipped'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: system-network-linux
-          path: system-network-linux.json
+          name: system-network-${{ matrix.platform }}
+          path: system-network-${{ matrix.platform }}.json
           if-no-files-found: error
 
   package:
@@ -228,8 +239,8 @@ jobs:
           overwrite: true
 
   release:
-    needs: [validate-release, package]
-    if: ${{ inputs.publish }}
+    needs: [validate-release, package, system-network]
+    if: ${{ inputs.publish && !cancelled() && needs.package.result == 'success' && (!inputs.system_network_smoke || needs.system-network.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

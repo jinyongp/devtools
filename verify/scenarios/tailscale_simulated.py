@@ -9,6 +9,7 @@ from pathlib import Path
 import socket
 import sys
 import threading
+import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from network_fixture import NetworkFixture, serving
@@ -73,6 +74,16 @@ class LocalAPI(http.server.BaseHTTPRequestHandler):
                 self.reply(412)
                 return
             config = json.loads(body)
+            if fault == "record-commit":
+                # Provider committed; prevent the following atomic local record replace.
+                # A directory obstruction works even when tests run as root.
+                matches = [path for path in (fixture.state / "data/exposures").glob("*.json")
+                           if json.loads(path.read_text()).get("serve_port") == 13443]
+                assert len(matches) == 1, matches
+                path = matches[0]
+                path.rename(fixture.home / "record-backup.json")
+                path.mkdir(mode=0o700)
+                fault = None
             if fault == "response-loss":
                 # Commit succeeded, but the client cannot observe the response.
                 fault = None
@@ -103,10 +114,11 @@ else:
     provider.chmod(0o700)
     fixture.env["PATH"] = str(fakebin) + ":" + fixture.env["PATH"]
 
-    def start(port, **kwargs):
+    def start(port, request_id=None, **kwargs):
         options = ["--auth-stdin"] if kwargs.get("auth") else ["--no-auth"]
-        return fixture.mutate("expose", "start", "app", "--global", "--provider", "tailscale",
-                              "--serve-port", str(port), *options, **kwargs)
+        return fixture.api("expose", "start", "app", "--global", "--provider", "tailscale",
+                           "--serve-port", str(port), *options,
+                           "--request-id", request_id or str(uuid.uuid4()), **kwargs)
 
     with fixture.network():
         first = start(8443, auth="reader:TAILSCALE_AUTH_CANARY\n")["item"]
@@ -156,6 +168,30 @@ else:
         failed = [item for item in fixture.api("expose", "list")["items"] if item["serve_port"] == 10443]
         assert len(failed) == 1 and failed[0]["state"] == "recovery_required"
         fixture.mutate("expose", "stop", failed[0]["id"])
+        operation = str(uuid.uuid4())
+        with lock:
+            fault = "record-commit"
+        try:
+            start(13443, request_id=operation, error="io_error")
+        finally:
+            backup = fixture.home / "record-backup.json"
+            if backup.exists():
+                saved = json.loads(backup.read_text())
+                path = fixture.state / "data/exposures" / (saved["id"] + ".json")
+                path.rmdir()
+                backup.rename(path)
+        with lock:
+            assert f"{DOMAIN}:13443" not in config["Web"], "record failure did not roll back provider config"
+        with socket.socket() as probe:
+            probe.settimeout(.5)
+            assert probe.connect_ex(("127.0.0.1", saved["origin_port"])) != 0, "record failure left origin open"
+        # Durable provider ownership makes an uncertain request require explicit recovery.
+        start(13443, request_id=operation, error="exposure_recovery_required")
+        fixture.mutate("expose", "stop", saved["id"])
+        recovered = start(13443)["item"]
+        assert recovered["id"] != saved["id"] and recovered["state"] == "active"
+        assert fixture.request(recovered)[0] == 200
+        fixture.mutate("expose", "stop", recovered["id"])
         with lock:
             assert f"{DOMAIN}:12443" not in config["Web"] and f"{DOMAIN}:9443" not in config["Web"]
             assert config["TCP"]["443"] == original["TCP"]["443"]
@@ -165,4 +201,4 @@ else:
                 data = path.read_bytes()
                 assert TOKEN.encode() not in data and b"TAILSCALE_AUTH_CANARY" not in data, path
         assert requests and all(requests)
-        print("SIMULATED Tailscale: packaged CLI/LocalAPI auth, conditional conflict, response-loss recovery, SIGKILL/auth loss and user configuration preservation passed; real tailnet/peer remains separate")
+        print("SIMULATED Tailscale: packaged CLI/LocalAPI auth, conditional conflict, response-loss recovery, local commit failure/provider rollback/explicit recovery, SIGKILL/auth loss and user configuration preservation passed; real tailnet/peer remains separate")

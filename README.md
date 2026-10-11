@@ -105,7 +105,7 @@ The detailed guides below are currently in Korean.
 | Store variables and secrets, import .env files, and run commands | [Values and command execution](docs/cli-contract.md) |
 | Check required tools, configuration, and installation status | [Environment diagnostics](docs/doctor.md) |
 | Avoid port conflicts and connect to other project URLs | [Ports](docs/ports.md) |
-| Give each worktree a `.localhost` URL for its development server | [Local reverse proxy](docs/proxy.md) |
+| Start servers with local domains, HTTPS, named listeners and optional sharing | [Local network and sharing](docs/local-network.md) |
 | Run servers, check status and logs, and restart them | [Processes](docs/processes.md) · [Readiness checks](docs/process-readiness.md) |
 | Plan work, share tasks, and hand off between sessions | [Tasks and workstreams](docs/tasks.md) |
 | Manage environment variables and tasks in a browser | Run `devtools dashboard` and open the URL it prints |

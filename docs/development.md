@@ -1,5 +1,17 @@
 # devtools 개발
 
+로컬 네트워크 기능의 사용자 흐름은 [가이드](local-network.md), 저장·복구 계약은
+[network design](network-design.md)을 따른다. `test:installed network`는 패키징된 실행 파일로
+fresh batch·HTTPS·전역 route·격리·listener 정리를 검증한다. Linux/macOS release matrix는
+같은 installed suite를 실행한다. 실제 OS hosts/trust/low-port, Windows browser, LAN peer와
+provider 실접속은 별도 환경 근거가 필요하며 unit/fake 결과로 대체하지 않는다.
+
+`verify/platform_network.py --binary bin/devtools --evidence result.json`은 명시
+`DEVTOOLS_DISPOSABLE_HOST=1`인 disposable macOS/Linux에서만 실행한다. 실제 hosts·OS trust·
+80/443·최소 capability를 변경하고 정리를 확인한다. 실패하면 private CA와 복구 root를 보존한다.
+release workflow의 `system_network_smoke`는 기본 false인 opt-in 입력이다.
+실제 결과 파일이 없으면 해당 platform 수용 검증은 pending이다.
+
 저장소에서 devtools 자체를 수정하는 개발자를 위한 안내다.
 사용자 설치와 실행은 [README](../README.md)를 참고한다.
 

@@ -36,6 +36,11 @@ status·check·wait·logs·stop·restart는 실행 ID로 대상을 선택하므�
 
 ## 프로젝트 서버를 함께 관리하기
 
+도메인과 HTTPS도 준비하려면 `project up web api --proxy --request-id UUID`를 사용한다.
+선택 서버의 포트와 binding을 함께 확정하고 DNS·listener를 준비한 뒤 모든 child를 launch하고
+readiness를 기다린다. proxy 모드 restart는 전체 후보를 준비한 다음 기존 실행을 교체한다.
+최초 준비와 설정은 [로컬 네트워크 가이드](local-network.md)를 참고한다.
+
 서버 여러 개를 하나의 작업으로 시작하려면 `project up`에 명령 이름을 명시한다.
 아래 예시의 `web`과 `api`는 `devtools.toml`에 등록된 이름이다. 모든 명령을 자동으로
 시작하지 않으므로 build/test 같은 일회성 명령이 의도치 않게 실행되지 않는다.

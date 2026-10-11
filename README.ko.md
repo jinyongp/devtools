@@ -98,7 +98,7 @@ v0.22.3 등 이전 버전에서는 구분자 `--`를 붙이세요.
 | 변수·secret 등록, 기존 .env 가져오기, 명령 실행 | [값과 실행](docs/cli-contract.md) |
 | 실행에 필요한 도구·설정 확인, 설치 상태 점검 | [환경 진단](docs/doctor.md) |
 | 포트 충돌 관리, 다른 프로젝트 URL 연결 | [포트](docs/ports.md) |
-| worktree별 `.localhost` 주소로 개발 서버 연결 | [로컬 reverse proxy](docs/proxy.md) |
+| 서버 실행·로컬 도메인·HTTPS·listener·공유 함께 관리 | [로컬 네트워크와 공유](docs/local-network.md) |
 | 서버 실행·상태·로그·재시작 관리 | [프로세스](docs/processes.md) · [준비 확인](docs/process-readiness.md) |
 | 계획 수립, 작업 분담, 세션 인계 | [task와 workstream](docs/tasks.md) |
 | 브라우저에서 환경변수와 작업 관리 | `devtools dashboard`를 실행한 뒤 출력된 접속 링크 열기 |

@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/ca"
 	"github.com/jinyongp/devtools/internal/privilege"
@@ -43,7 +44,11 @@ func (m Manager) Apply(ctx context.Context, action string, authority *ca.Authori
 	if run == nil {
 		run = privilege.Run
 	}
-	return run(ctx, "trust", Request{Action: action, Certificate: authority.PEM()}, m.Terminal)
+	e := run(ctx, "trust", Request{Action: action, Certificate: authority.PEM()}, m.Terminal)
+	if e != nil && e.Code == "permission_required" && runtime.GOOS == "darwin" {
+		e.Message = "The OS trust change did not complete. Approve the macOS system authorization dialog and retry from an interactive desktop. CA keys are retained until untrust is confirmed."
+	}
+	return e
 }
 
 func Trusted(authority *ca.Authority) bool {
@@ -171,6 +176,10 @@ func readRegular(path string) ([]byte, error) {
 }
 
 func (s System) darwin(ctx context.Context, request Request, fingerprint string) error {
+	// macOS can require GUI authorization even after sudo, particularly when
+	// removing the last admin trust entry. Preserve recovery data on timeout.
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
 	keychain := "/Library/Keychains/System.keychain"
 	if request.Action == "untrust" {
 		output, e := s.execute(ctx, "/usr/bin/security", "find-certificate", "-a", "-Z", keychain)
@@ -181,8 +190,7 @@ func (s System) darwin(ctx context.Context, request Request, fingerprint string)
 			return nil
 		}
 		// Resolve the stored certificate by its exact fingerprint and remove
-		// its trust settings with the same keychain item. Removing trust from
-		// a newly decoded file certificate can hang on macOS runners.
+		// its trust settings with the same keychain item.
 		_, e = s.execute(ctx, "/usr/bin/security", "delete-certificate", "-t", "-Z", fingerprint, keychain)
 		return e
 	}

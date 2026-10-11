@@ -8,10 +8,32 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/ca"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
+
+func TestDarwinTrustAuthorizationIsBoundedAndHonorsCancellation(t *testing.T) {
+	a, _, e := (ca.Store{Data: t.TempDir()}).Init(context.Background())
+	if e != nil {
+		t.Fatal(e)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := System{GOOS: "darwin", Run: func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
+		deadline, ok := ctx.Deadline()
+		if !ok || time.Until(deadline) > 2*time.Minute {
+			t.Fatal("unbounded system authorization")
+		}
+		cancel()
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}
+	if err := s.Apply(ctx, Request{Action: "untrust", Certificate: a.PEM()}); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+}
 
 func TestDarwinUntrustRemovesOnlySelectedCertificateAndItsTrust(t *testing.T) {
 	a, _, e := (ca.Store{Data: t.TempDir()}).Init(context.Background())

@@ -20,10 +20,14 @@ func fakeExecutable(t *testing.T, dir, name, content string) string {
 }
 func TestSetupIdentityRetryAndIsolatedGuard(t *testing.T) {
 	path := fakeExecutable(t, t.TempDir(), "devtools", "binary-one")
+	canonicalPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	calls := 0
 	m := Manager{Data: t.TempDir(), Executable: path, GOOS: "linux", Run: func(_ context.Context, k string, input any, _ bool) *protocol.Error {
 		calls++
-		if k != "netsetup" || input.(Request).Identity.Path != path {
+		if k != "netsetup" || input.(Request).Identity.Path != canonicalPath {
 			t.Fatal(k, input)
 		}
 		return nil
@@ -126,7 +130,7 @@ func TestReplacementPrepareFailureAndCommitRollback(t *testing.T) {
 		t.Fatal(e)
 	}
 	intent, e = m.ReadIntent()
-	if e != nil || intent.Identity.Digest == original.Identity.Digest || intent.Identity.Path != old {
+	if e != nil || intent.Identity.Digest == original.Identity.Digest || intent.Identity.Path != original.Identity.Path {
 		t.Fatal(intent, e)
 	}
 	if e := os.Rename(backup, old); e != nil {

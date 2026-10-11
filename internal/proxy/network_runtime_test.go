@@ -16,6 +16,9 @@ import (
 
 	"github.com/jinyongp/devtools/internal/ca"
 	"github.com/jinyongp/devtools/internal/expose"
+	"github.com/jinyongp/devtools/internal/hosts"
+	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
@@ -51,14 +54,19 @@ func liveNetworkManager(t *testing.T) Manager {
 	}
 	return m
 }
-func networkRoute(t *testing.T, m Manager, host, listener string, backend int) {
+func networkRoute(t *testing.T, m Manager, host, listener string, backend int) (project.Context, network.RouteRef) {
 	t.Helper()
 	dir := t.TempDir()
 	content := fmt.Sprintf("profile='app'\n[ports.web]\nport=%d\n[proxies.app]\nhost='%s'\nport='web'\nlistener='%s'\n", backend, host, listener)
 	if e := os.WriteFile(filepath.Join(dir, "devtools.toml"), []byte(content), 0600); e != nil {
 		t.Fatal(e)
 	}
-	register(t, m.portStore(), "app", dir, nil, backend)
+	p, e := project.Resolve(dir, "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	instance := register(t, m.portStore(), p.Profile, p.Root, nil, backend)
+	return p, network.RouteRef{Scope: "project", Profile: p.Profile, InstanceID: instance.ID, Proxy: "app"}
 }
 func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 	m := liveNetworkManager(t)
@@ -68,6 +76,11 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 	}))
 	defer backend.Close()
 	port := backend.Listener.Addr().(*net.TCPAddr).Port
+	otherBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "other")
+	}))
+	defer otherBackend.Close()
+	otherBackendPort := otherBackend.Listener.Addr().(*net.TCPAddr).Port
 	httpPort, tlsPort, otherPort := freeNetworkPort(t), freeNetworkPort(t), freeNetworkPort(t)
 	for _, v := range []struct{ name, http, https string }{{"default", fmt.Sprintf("127.0.0.1:%d", httpPort), fmt.Sprintf("127.0.0.1:%d", tlsPort)}, {"other", fmt.Sprintf("127.0.0.1:%d", otherPort), ""}} {
 		if _, e := m.Configure(ctx, v.name, v.http, v.https, false, tasks.ID()); e != nil {
@@ -75,9 +88,12 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 		}
 	}
 	networkRoute(t, m, "app.localhost", "default", port)
-	networkRoute(t, m, "other.localhost", "other", port+1)
+	otherProject, otherRef := networkRoute(t, m, "other.localhost", "other", otherBackendPort)
 	id := tasks.ID()
 	if _, e := m.NetworkApply(ctx, "start", "", true, id); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := m.RouteUp(ctx, otherRef, otherProject, nil, hosts.Manager{Data: m.Data, Isolated: true}, tasks.ID()); e != nil {
 		t.Fatal(e)
 	}
 	client := &http.Client{Timeout: time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -125,6 +141,17 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 	otherAfter, e2 := m.NetworkStatus(ctx, "other")
 	if e2 != nil || otherAfter["running"] != true || otherBefore["generation"] != otherAfter["generation"] {
 		t.Fatal(otherAfter, e2)
+	}
+	otherRequest, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/", otherPort), nil)
+	otherRequest.Host = "other.localhost"
+	otherResponse, err := client.Do(otherRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherBody, _ := io.ReadAll(otherResponse.Body)
+	otherResponse.Body.Close()
+	if otherResponse.StatusCode != http.StatusOK || string(otherBody) != "other" {
+		t.Fatal(otherResponse.StatusCode, string(otherBody))
 	}
 	// A completed receipt reports history without starting the stopped listener.
 	if _, e := m.NetworkApply(ctx, "start", "", true, id); e != nil {

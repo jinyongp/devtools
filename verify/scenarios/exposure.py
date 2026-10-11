@@ -38,7 +38,11 @@ server=home/"server.py"
 server.write_text('''import faulthandler,signal
 faulthandler.register(signal.SIGUSR1)
 faulthandler.dump_traceback_later(5)
-import http.server,json,sys,time
+import http.server,json,socketserver,sys,time
+class Backend(http.server.ThreadingHTTPServer):
+ def server_bind(self):
+  socketserver.TCPServer.server_bind(self)
+  self.server_name,self.server_port=self.server_address[:2]
 class H(http.server.BaseHTTPRequestHandler):
  protocol_version='HTTP/1.1'
  def do_GET(self):
@@ -50,7 +54,7 @@ class H(http.server.BaseHTTPRequestHandler):
    return
   b=json.dumps(dict(self.headers)).encode();self.send_response(200);self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b)
  def log_message(self,*a):pass
-server=http.server.ThreadingHTTPServer(('127.0.0.1',int(sys.argv[1])),H)
+server=Backend(('127.0.0.1',int(sys.argv[1])),H)
 faulthandler.cancel_dump_traceback_later()
 server.serve_forever()
 ''')

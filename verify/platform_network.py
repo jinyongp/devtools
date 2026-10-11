@@ -37,7 +37,13 @@ def main():
         original_hosts=Path("/etc/hosts").read_bytes()
         hostname="network-"+uuid.uuid4().hex[:12]+".test"
         with socket.socket() as s:s.bind(("127.0.0.1",0));backend=s.getsockname()[1]
-        (project/"server.py").write_text("import http.server,os\nhttp.server.HTTPServer(('127.0.0.1',int(os.environ['PORT'])),http.server.SimpleHTTPRequestHandler).serve_forever()\n")
+        (project/"server.py").write_text('''import http.server,os,socketserver
+class Backend(http.server.HTTPServer):
+ def server_bind(self):
+  socketserver.TCPServer.server_bind(self)
+  self.server_name,self.server_port=self.server_address[:2]
+Backend(('127.0.0.1',int(os.environ['PORT'])),http.server.SimpleHTTPRequestHandler).serve_forever()
+''')
         (project/"devtools.toml").write_text(f'''profile='platform-network'
 [ports.web]
 port={backend}

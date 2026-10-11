@@ -86,13 +86,17 @@ normal = home / ".local/share/devtools"
 normal_before = tree_digest(normal)
 http_port, tls_port, preview_http, preview_tls = [free_port() for _ in range(4)]
 web_port, api_port = free_port(), free_port()
-(project / "server.py").write_text('''import http.server,json,os
+(project / "server.py").write_text('''import http.server,json,os,socketserver
+class Backend(http.server.HTTPServer):
+ def server_bind(self):
+  socketserver.TCPServer.server_bind(self)
+  self.server_name,self.server_port=self.server_address[:2]
 class H(http.server.BaseHTTPRequestHandler):
  def do_GET(self):
   body=json.dumps({'pid':os.getpid(),'env':{k:os.environ.get(k) for k in ('PORT','API_URL','PUBLIC_URL','DEVTOOLS_ISOLATED_ROOT')},'headers':dict(self.headers)}).encode()
   self.send_response(200);self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
  def log_message(self,*a):pass
-http.server.HTTPServer(('127.0.0.1',int(os.environ['PORT'])),H).serve_forever()
+Backend(('127.0.0.1',int(os.environ['PORT'])),H).serve_forever()
 ''')
 (project / "ready.py").write_text('''import json,os,urllib.request,pathlib
 pid=json.load(urllib.request.urlopen(os.environ['API_URL'],timeout=1))['pid']

@@ -5,6 +5,7 @@ import http.cookiejar
 import http.server as http_server
 import json
 import os
+import socketserver
 from pathlib import Path
 import subprocess
 import time
@@ -13,6 +14,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+
+class FixtureHTTPServer(http_server.ThreadingHTTPServer):
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 home = Path.home()
 env = dict(os.environ, PATH=str(home / ".local/bin") + ":" + os.environ["PATH"])
@@ -136,7 +142,7 @@ class Legacy(http_server.BaseHTTPRequestHandler):
                 fcntl.flock(legacy_lock, fcntl.LOCK_UN)
                 legacy_lock.close()
             threading.Thread(target=finish, daemon=True).start()
-legacy = http_server.ThreadingHTTPServer(("127.0.0.1", 0), Legacy)
+legacy = FixtureHTTPServer(("127.0.0.1", 0), Legacy)
 (cache / "server.json").write_text(json.dumps({"id": legacy_id, "address": f"http://127.0.0.1:{legacy.server_port}", "token": "legacy-fixture"}))
 os.chmod(cache / "server.json", 0o600)
 threading.Thread(target=legacy.serve_forever, daemon=True).start()
@@ -185,7 +191,7 @@ try:
             received.append((self.headers.get("Cookie"), self.headers.get("Authorization")))
             self.send_response(200)
             self.end_headers()
-    other = http_server.ThreadingHTTPServer(("127.0.0.1", 0), OtherService)
+    other = FixtureHTTPServer(("127.0.0.1", 0), OtherService)
     thread = threading.Thread(target=other.handle_request, daemon=True)
     thread.start()
     client.open(f"http://127.0.0.1:{other.server_port}/", timeout=3).close()

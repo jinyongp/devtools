@@ -86,8 +86,10 @@ class Backend(http.server.BaseHTTPRequestHandler):
 
 
 class WebSocket:
-    def __init__(self, item, auth=None):
+    def __init__(self, item, auth=None, tls_context=None):
         self.socket = socket.create_connection(("127.0.0.1", item["origin_port"]), timeout=3)
+        if tls_context:
+            self.socket = tls_context.wrap_socket(self.socket, server_hostname=urlparse(item["url"]).hostname)
         self.reader = self.socket.makefile("rb", buffering=0)
         key = base64.b64encode(os.urandom(16)).decode()
         headers = ["GET /ws HTTP/1.1", "Host: " + urlparse(item["url"]).netloc, "Connection: Upgrade",

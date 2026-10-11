@@ -49,7 +49,20 @@ class H(http.server.BaseHTTPRequestHandler):
  def log_message(self,*a):pass
 http.server.ThreadingHTTPServer(('127.0.0.1',int(sys.argv[1])),H).serve_forever()
 ''')
-backend=subprocess.Popen(["python3",str(server),str(backend_port)],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+backend_log=home/'backend.log'
+backend_output=backend_log.open('w')
+backend=subprocess.Popen(["python3",str(server),str(backend_port)],env=env,stdout=subprocess.DEVNULL,stderr=backend_output)
+def wait_backend(port):
+ deadline=time.monotonic()+10
+ while time.monotonic()<deadline:
+  c=http.client.HTTPConnection('127.0.0.1',port,timeout=.5)
+  try:
+   c.request('GET','/');r=c.getresponse();body=r.read()
+   assert r.status==200 and isinstance(json.loads(body),dict)
+   return
+  except (OSError,http.client.HTTPException):time.sleep(.05)
+  finally:c.close()
+ raise AssertionError(f'Backend {port} never served HTTP; process={backend.poll()}; stderr={backend_log.read_text()}')
 def request(origin,auth=None):
  c=http.client.HTTPConnection("127.0.0.1",origin,timeout=3)
  headers={"Host":"packaged-fixture.trycloudflare.com","X-Forwarded-Proto":"spoof","X-Forwarded-Host":"spoof.invalid"}
@@ -84,10 +97,7 @@ serve=['app']
 ''')
 (project/'.env').write_text('DOMAIN=project.localhost\n')
 try:
- for _ in range(60):
-  try:
-   with socket.create_connection(('127.0.0.1',backend_port),timeout=.1):break
-  except OSError:time.sleep(.05)
+ wait_backend(backend_port)
  mutate('proxy','configure','--http-address',f'127.0.0.1:{listener_port}','--https-address',f'127.0.0.1:{tls_port}')
  mutate('proxy','add','app',str(backend_port),'--global','--host','app.localhost')
  mutate('proxy','up','app','--global')
@@ -95,7 +105,14 @@ try:
  first=api('expose','start','app','--global','--provider','cloudflared','--auth-stdin','--request-id',operation,auth='reader:PACKAGED_AUTH_CANARY\n')['item']
  assert first['state']=='active'
  assert request(first['origin_port'])[0]==401
- code,body=request(first['origin_port'],'reader:PACKAGED_AUTH_CANARY')
+ try:code,body=request(first['origin_port'],'reader:PACKAGED_AUTH_CANARY')
+ except Exception:
+  print('Exposure request failed; backend process:',backend.poll(),flush=True)
+  print('Backend stderr:',backend_log.read_text(),flush=True)
+  print('Route metadata:',json.dumps(api('proxy','list')),flush=True)
+  print('Exposure metadata:',json.dumps(api('expose','status',first['id'])),flush=True)
+  wait_backend(backend_port)
+  raise
  observed=json.loads(body)
  assert code==200 and observed['X-Forwarded-Proto']=='https' and observed['X-Forwarded-Host']=='packaged-fixture.trycloudflare.com'
  assert 'Authorization' not in observed
@@ -114,10 +131,7 @@ try:
  assert request(second['origin_port'])[0]==200
  # Project and global routes with the same name retain independent identities.
  mutate('project','up','app','--proxy','--dir',str(project))
- for _ in range(60):
-  try:
-   with socket.create_connection(('127.0.0.1',project_backend),timeout=.1):break
-  except OSError:time.sleep(.05)
+ wait_backend(project_backend)
  for source in (project/'.env',project/'devtools.toml'):
   mutate('proxy','up','app','--dir',str(project))
   item=mutate('expose','start','app','--dir',str(project),'--provider','cloudflared','--no-auth')['item']
@@ -161,4 +175,4 @@ finally:
   if item['state']!='stopped':mutate('expose','stop',item['id'])
  mutate('project','down','--dir',str(project))
  plan=api('proxy','teardown','--all')['item'];mutate('proxy','teardown','--all','--apply',plan['digest'])
- backend.terminate();backend.wait(timeout=5)
+ backend.terminate();backend.wait(timeout=5);backend_output.close()

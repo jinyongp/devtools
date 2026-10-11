@@ -7,6 +7,7 @@ import signal
 import socket
 import sys
 import time
+import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from network_fixture import NetworkFixture, WebSocket
@@ -33,9 +34,10 @@ provider.chmod(0o700)
 fixture.env["PATH"] = str(fakebin) + ":" + fixture.env["PATH"]
 
 
-def start(**kwargs):
+def start(request_id=None, **kwargs):
     options = ["--auth-stdin"] if kwargs.get("auth") else ["--no-auth"]
-    return fixture.mutate("expose", "start", "app", "--global", "--provider", "cloudflared", *options, **kwargs)
+    return fixture.api("expose", "start", "app", "--global", "--provider", "cloudflared", *options,
+                       "--request-id", request_id or str(uuid.uuid4()), **kwargs)
 
 
 def wait_until(check, message):
@@ -101,8 +103,30 @@ with fixture.network():
             first_ws.close()
         if sibling_ws:
             sibling_ws.close()
+    # A recycled display name must never recycle the identity behind an operation or pin.
+    old_route = fixture.api("proxy", "list", "--global")["items"][0]
+    old_start, old_stop = str(uuid.uuid4()), str(uuid.uuid4())
+    old = start(request_id=old_start)["item"]
+    fixture.mutate("proxy", "rm", "app", "--global", error="pinned")
+    fixture.api("expose", "stop", old["id"], "--request-id", old_stop)
+    with socket.socket() as probe:
+        probe.settimeout(.5)
+        assert probe.connect_ex(("127.0.0.1", old["origin_port"])) != 0, "deleted exposure retained its bridge"
+    fixture.mutate("proxy", "rm", "app", "--global")
+    fixture.mutate("proxy", "add", "app", str(old_route["target_port"]), "--global", "--host", "app.localhost")
+    fixture.mutate("proxy", "up", "app", "--global")
+    new_route = fixture.api("proxy", "list", "--global")["items"][0]
+    assert old_route["route_id"] != new_route["route_id"]
+    start(request_id=old_start, error="request_conflict")
+    new = start()["item"]
+    replay = fixture.api("expose", "stop", old["id"], "--request-id", old_stop)
+    assert replay["replayed"] and fixture.request(new)[0] == 200
+    assert fixture.api("expose", "status", old["id"])["item"]["state"] == "stopped"
+    # New origins may reuse freed ports; ownership and authority remain generation-bound.
+    assert new["route_ref"]["route_id"] != old["route_ref"]["route_id"]
+    fixture.mutate("expose", "stop", new["id"])
     markers = list((fixture.state / "data/exposure-providers").glob("*.json"))
     assert markers and all(json.loads(path.read_text())["state"] == "stopped" for path in markers)
     assert all(b"CLOUD_FAULT_AUTH_CANARY" not in path.read_bytes() for path in fixture.state.rglob("*") if path.is_file())
     fixture.mutate("proxy", "down", "app", "--global")  # Failed/crashed sessions released every pin.
-    print("SIMULATED Cloudflared: packaged start-failure origin rollback, real WebSocket framing/revocation/sibling preservation, provider SIGKILL and daemon SIGKILL descendant cleanup/auth loss passed; public ingress remains separate")
+    print("SIMULATED Cloudflared: packaged start-failure rollback, WebSocket isolation, provider/daemon SIGKILL cleanup/auth loss, route deletion/recreation and stale operation/pin isolation passed; public ingress remains separate")

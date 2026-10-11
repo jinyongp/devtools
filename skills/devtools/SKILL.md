@@ -124,7 +124,8 @@ replacement batch before stopping originals. Partial failure preserves successfu
 Project routes declare host, port, optional listener and dns. Omitted dns is auto:
 `.localhost` needs no hosts change; custom hosts are prepared inside up/`--proxy` by the
 initiating CLI, which previews owned changes and handles OS authentication. Noninteractive
-permission failures are explicit. `dns=external` uses user-prepared DNS. Queries and daemon
+execution uses `sudo -n` with preauthorized permissions; insufficient permissions return
+`permission_required` without a password prompt. `dns=external` uses user-prepared DNS. Queries and daemon
 watches never change system files. Root env_files resolve relative to the project;
 process env > earlier file > later file. `${NAME}` is required; `${NAME:-fallback}` covers
 unset/empty. Expansion is single-pass without shell execution. Environment-backed routes

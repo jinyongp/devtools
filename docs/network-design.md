@@ -68,8 +68,9 @@ other hosts. Start/up previews and applies expected-digest changes idempotently.
 Wildcard listeners map local hostnames to the matching IPv4/IPv6 loopback address,
 never to an unspecified address; specific remote listener addresses require external DNS.
 Existing identical mappings require no write/elevation. A constrained helper obtains
-TTY authentication; noninteractive insufficient permissions return `permission_required`
-without waiting for sudo. External mappings and symlinks are protected. Last-owner
+TTY authentication. Noninteractive execution uses `sudo -n` and succeeds with an
+existing authorization or permitting sudo policy; insufficient permissions return
+`permission_required` without a password prompt. External mappings and symlinks are protected. Last-owner
 removal and rollback affect only owned unused changes. Read-only commands and the
 background daemon never write hosts or prompt for OS privileges.
 

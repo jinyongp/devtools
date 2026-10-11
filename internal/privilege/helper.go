@@ -36,11 +36,13 @@ func Run(ctx context.Context, kind string, input any, terminal bool) *protocol.E
 	}
 	name, args := executable, []string{"__network-helper", kind}
 	if os.Geteuid() != 0 {
-		if !terminal {
-			return protocol.NewError("permission_required", "OS changes require permission. Retry from an interactive terminal after reviewing the requested change.", 3, nil)
-		}
 		name = "sudo"
 		args = []string{"--", executable, "__network-helper", kind}
+		if !terminal {
+			// JSON stdin belongs to the helper, never to sudo authentication.
+			// A cached authorization or a configured policy can permit automation.
+			args = append([]string{"-n"}, args...)
+		}
 	}
 	command := exec.CommandContext(ctx, name, args...)
 	command.Stdin = bytes.NewReader(encoded)
@@ -48,7 +50,7 @@ func Run(ctx context.Context, kind string, input any, terminal bool) *protocol.E
 	command.Stdout = &output
 	command.Stderr = os.Stderr
 	if e := command.Run(); e != nil {
-		return protocol.NewError("permission_required", "The limited OS helper did not complete; inspect diagnostics before retrying.", 3, nil)
+		return protocol.NewError("permission_required", "The limited OS helper did not complete. Noninteractive execution requires preauthorized sudo; inspect diagnostics before retrying.", 3, nil)
 	}
 	return nil
 }

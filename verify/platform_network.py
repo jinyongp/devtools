@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--evidence",type=Path,required=True)
     args=parser.parse_args()
     if os.environ.get("DEVTOOLS_DISPOSABLE_HOST")!="1" or os.geteuid()==0:
-        parser.error("Requires DEVTOOLS_DISPOSABLE_HOST=1 and a non-root user on a disposable host with interactive sudo available.")
+        parser.error("Requires DEVTOOLS_DISPOSABLE_HOST=1 and a non-root user on a disposable host with passwordless sudo available.")
     source=args.binary.resolve()
     report={"platform":sys.platform,"binary_sha256":hashlib.sha256(source.read_bytes()).hexdigest(),"result":"fail","commands":[]}
     temporary=tempfile.mkdtemp(prefix="devtools-system-network-")
@@ -110,8 +110,26 @@ timeout='10s'
                 finally:os.close(fd)
                 text=content.decode(errors="replace")
             else:
-                p=subprocess.run(argv,cwd=project,env=env,capture_output=True,text=True,timeout=45)
-                code=p.returncode;text=p.stderr if code else p.stdout
+                p=subprocess.Popen(argv,cwd=project,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+                try:
+                    stdout,stderr=p.communicate(timeout=30 if sys.platform=="darwin" else 45)
+                except subprocess.TimeoutExpired:
+                    if sys.platform=="darwin":
+                        processes=subprocess.run(["ps","-axo","pid=,ppid=,comm="],capture_output=True,text=True,timeout=5)
+                        rows=[line.split(None,2) for line in processes.stdout.splitlines()]
+                        owned={p.pid}
+                        while True:
+                            expanded=owned|{int(row[0]) for row in rows if len(row)==3 and int(row[1]) in owned}
+                            if expanded==owned:break
+                            owned=expanded
+                        for row in rows:
+                            if len(row)==3 and int(row[0]) in owned and row[2]=="/usr/bin/security":
+                                sample=subprocess.run(["sudo","-n","/usr/bin/sample",row[0],"1","1"],capture_output=True,text=True,timeout=10)
+                                report["security_sample"]=sample.stdout+sample.stderr
+                        stdout,stderr=p.communicate(timeout=120)
+                    else:
+                        p.kill();p.communicate();raise
+                code=p.returncode;text=stderr if code else stdout
             report["commands"].append({"argv":list(words),"exit":code})
             # Interactive previews/sudo output precede the single JSON envelope.
             start=text.find('{"schema_version"')
@@ -125,7 +143,7 @@ timeout='10s'
             return result['data']
         def mutate(*words,**kwargs):return api(*words,"--request-id",str(uuid.uuid4()),**kwargs)
         try:
-            mutate("proxy","setup",terminal=True)
+            mutate("proxy","setup")
             setup=api("proxy","setup","--check")["item"]
             if sys.platform=="linux":assert setup["enabled"],setup
             mutate("proxy","configure","--http-address","127.0.0.1:80","--https-address","127.0.0.1:443")
@@ -134,10 +152,16 @@ timeout='10s'
                 assert not api("proxy","status")["item"]["running"]
                 mutate("proxy","configure","--http-address","0.0.0.0:80","--https-address","0.0.0.0:443")
                 report["specific_low_port_permission_checked"]=True
-            # DNS preparation fails before a child starts when there is no terminal.
-            mutate("project","up","web","--proxy",error="permission_required")
-            assert not api("process","list","--profile","platform-network")["items"]
-            mutate("project","up","web","--proxy",terminal=True)
+            # An unavailable authorization must fail before launching a backend.
+            denied=root/"denied";denied.mkdir()
+            sudo=denied/"sudo"
+            sudo.write_text("#!/bin/sh\n[ \"$1\" = -n ] || exit 99\nexit 1\n");sudo.chmod(0o700)
+            previous_path=env["PATH"];env["PATH"]=str(denied)+os.pathsep+previous_path
+            try:
+                mutate("project","up","web","--proxy",error="permission_required")
+                assert not api("process","list","--profile","platform-network")["items"]
+            finally:env["PATH"]=previous_path
+            mutate("project","up","web","--proxy")
             assert "127.0.0.1" in socket.gethostbyname_ex(hostname)[2]
             c=http.client.HTTPConnection(hostname,80,timeout=5)
             c.request("GET","/path?q=1");r=c.getresponse();r.read()
@@ -155,7 +179,7 @@ timeout='10s'
                     raise AssertionError("System roots trusted the fresh CA before explicit trust")
                 except ssl.SSLCertVerificationError:pass
                 finally:c.close()
-            mutate("proxy","trust",terminal=True)
+            mutate("proxy","trust")
             assert api("proxy","ca","status")["trusted"]
             result=subprocess.run(["curl","--noproxy","*","--silent","--show-error","--fail","--max-time","5",f"https://{hostname}/"],env=env,capture_output=True,text=True,timeout=10)
             assert result.returncode==0,result.stderr
@@ -164,17 +188,17 @@ timeout='10s'
                 shutil.copy2(source,replacement);os.replace(replacement,binary)
                 setup=api("proxy","setup","--check")["item"]
                 assert setup["recovery_required"] and setup["executable_changed"] and not setup["enabled"],setup
-                mutate("proxy","setup",terminal=True)
+                mutate("proxy","setup")
                 setup=api("proxy","setup","--check")["item"]
                 assert setup["enabled"] and not setup["recovery_required"],setup
                 report["external_replacement_capability_recovery"]=True
-            report.update(hosts_automatic=True,os_trust_confirmed=True,verified_https_443=True,http_80_redirect=True,system_root_https=True,noninteractive_no_child=True)
+            report.update(hosts_automatic=True,os_trust_confirmed=True,verified_https_443=True,http_80_redirect=True,system_root_https=True,noninteractive=True,noninteractive_no_child=True)
         finally:
             try:
                 mutate("project","down")
                 plan=api("proxy","teardown","--all","--remove-ca")["item"]
-                mutate("proxy","teardown","--all","--remove-ca","--apply",plan["digest"],terminal=True)
-                mutate("proxy","setup","--remove",terminal=True)
+                mutate("proxy","teardown","--all","--remove-ca","--apply",plan["digest"])
+                mutate("proxy","setup","--remove")
                 if sys.platform=="linux":assert not api("proxy","setup","--check")["item"]["enabled"]
                 assert Path("/etc/hosts").read_bytes()==original_hosts
                 assert not api("proxy","ca","status")["item"]["present"]

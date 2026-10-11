@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import pty
 import select
+import signal
 import shutil
 import socket
 import ssl
@@ -71,7 +72,34 @@ timeout='10s'
                 try:
                     while True:
                         if time.monotonic()>deadline:
-                            os.kill(pid,15);raise TimeoutError("Interactive network operation exceeded 45 seconds")
+                            # Retain only this fixture command's process tree and
+                            # partial output, including a Go stack for a blocked CLI.
+                            processes=subprocess.run(["ps","-axo","pid=,ppid=,comm="],capture_output=True,text=True,timeout=5)
+                            rows=[line.split(None,2) for line in processes.stdout.splitlines()]
+                            owned={pid}
+                            while True:
+                                children={int(row[0]) for row in rows if len(row)==3 and int(row[1]) in owned}
+                                expanded=owned|children
+                                if expanded==owned:break
+                                owned=expanded
+                            details=subprocess.run(["ps","-p",','.join(map(str,sorted(owned))),"-o","pid=,ppid=,command="],capture_output=True,text=True,timeout=5)
+                            report["terminal_timeout_processes"]=details.stdout
+                            try:os.kill(pid,signal.SIGQUIT)
+                            except ProcessLookupError:pass
+                            drain=time.monotonic()+2
+                            while time.monotonic()<drain:
+                                ready,_,_=select.select([fd],[],[],.1)
+                                if ready:
+                                    try:part=os.read(fd,65536)
+                                    except OSError:break
+                                    if not part:break
+                                    content.extend(part)
+                            report["terminal_timeout_output"]=content.decode(errors="replace")
+                            report["commands"].append({"argv":list(words),"exit":None,"timeout":True})
+                            try:os.kill(pid,signal.SIGKILL)
+                            except ProcessLookupError:pass
+                            os.waitpid(pid,0)
+                            raise TimeoutError("Interactive network operation exceeded 45 seconds; fixture process tree and partial output retained in evidence")
                         ready,_,_=select.select([fd],[],[],.2)
                         if ready:
                             try:part=os.read(fd,65536)

@@ -1,5 +1,8 @@
 # 포트 관리와 명령별 값 연결
 
+URL binding·전역 backend 참조·registry v3 확장은
+[local network contract](network-design.md)를 따른다.
+
 port·instance 명령과 serve·bind의 사용 계약이다. 실행 예시는
 [포트 사용 가이드](ports.md), 값 관리와 실행 방식은 [CLI 계약](cli-contract.md)을 따른다.
 worktree별 `.localhost` route와 proxy listener reservation은

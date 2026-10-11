@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -38,6 +39,14 @@ type State struct {
 	Instances    []Instance    `json:"instances"`
 	Assignments  []Assignment  `json:"assignments"`
 	Reservations []Reservation `json:"reservations"`
+	Network      *NetworkState `json:"network,omitempty"`
+}
+
+type NetworkState struct {
+	Listeners   []network.Listener    `json:"listeners"`
+	Routes      []network.GlobalRoute `json:"routes"`
+	Activations []network.Activation  `json:"activations"`
+	Pins        []network.Pin         `json:"pins"`
 }
 type AvailabilityProbe func(int) (bool, *protocol.Error)
 
@@ -87,7 +96,7 @@ func (s Store) Read() (*State, *protocol.Error) {
 	return &st, nil
 }
 func (st *State) valid() bool {
-	if st.Version != 1 && st.Version != 2 || st.Instances == nil || st.Assignments == nil || st.Version == 2 && st.Reservations == nil || st.Version == 1 && len(st.Reservations) != 0 {
+	if st.Version < 1 || st.Version > 3 || st.Instances == nil || st.Assignments == nil || st.Version >= 2 && st.Reservations == nil || st.Version == 1 && len(st.Reservations) != 0 || st.Version < 3 && st.Network != nil || st.Version == 3 && st.Network == nil {
 		return false
 	}
 	ids, paths, aliases, keys, reservationNames, nums := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}, map[int]bool{}
@@ -122,7 +131,7 @@ func (st *State) valid() bool {
 		reservationNames[reservation.Name] = true
 		nums[reservation.Port] = true
 	}
-	return true
+	return st.validNetwork()
 }
 func sameAlias(a, b *string) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 func (s Store) lock(ctx context.Context, name string, wait bool, create bool) (*os.File, *protocol.Error) {
@@ -186,9 +195,15 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 	if e != nil {
 		return e
 	}
+	pinned := st.pinnedProjections()
 	changed, e := fn(st)
 	if e != nil || !changed {
 		return e
+	}
+	for id, current := range st.pinnedProjections() {
+		if previous, existed := pinned[id]; existed && previous != current {
+			return fail("pinned")
+		}
 	}
 	if st.Version == 1 {
 		st.Version = 2

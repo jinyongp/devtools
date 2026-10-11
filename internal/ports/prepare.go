@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
@@ -20,6 +21,11 @@ type Prepared struct {
 
 func (s Store) Prepare(ctx context.Context, p project.Context, c project.Command, env string, valuesState *values.State, defaults []int, preview bool) (Prepared, func(), *protocol.Error) {
 	result := Prepared{}
+	var resolveErr *protocol.Error
+	p, resolveErr = p.ResolvePorts(os.Environ(), c.Serve)
+	if resolveErr != nil {
+		return result, func() {}, resolveErr
+	}
 	release := func() {}
 	change := func(st *State) (bool, *protocol.Error) {
 		before := len(st.Instances)
@@ -164,8 +170,14 @@ func (st *State) bind(p project.Context, c project.Command, env string, state *v
 			return nil, nil, fail("binding_reference_error")
 		}
 		instance := st.Find(profile, binding.Instance, p.Root)
+		service := binding.Port
+		if binding.Proxy != "" && profile == p.Profile {
+			if definition, ok := p.Proxies[binding.Proxy]; ok {
+				service = definition.Port
+			}
+		}
 		if instance == nil {
-			if pendingSelfServe(profile, binding.Instance, binding.Port) {
+			if pendingSelfServe(profile, binding.Instance, service) {
 				pending[key] = true
 				continue
 			}
@@ -174,6 +186,35 @@ func (st *State) bind(p project.Context, c project.Command, env string, state *v
 		info, err := os.Stat(instance.Directory)
 		if err != nil || !info.IsDir() {
 			return nil, nil, fail("instance_not_found")
+		}
+		if binding.Proxy != "" {
+			selected := p
+			if instance.Profile != p.Profile || instance.Directory != p.Root {
+				var e *protocol.Error
+				selected, e = project.Resolve(instance.Directory, "")
+				if e != nil {
+					return nil, nil, e
+				}
+				if selected.Root != instance.Directory || selected.Profile != instance.Profile {
+					return nil, nil, fail("instance_conflict")
+				}
+			}
+			endpoint, e := st.ProjectEndpoint(selected, *instance, binding.Proxy)
+			if e != nil {
+				if e.Code == "port_not_found" && pendingSelfServe(profile, binding.Instance, service) {
+					pending[key] = true
+					continue
+				}
+				return nil, nil, e
+			}
+			if endpoint.Status == "activation_required" {
+				return nil, nil, fail("activation_required")
+			}
+			if st.EndpointConflict(endpoint) {
+				return nil, nil, fail("host_conflict")
+			}
+			out[key] = endpoint.RouteURL
+			continue
 		}
 		assignment := st.Get(instance.ID, binding.Port)
 		if assignment == nil {
@@ -184,6 +225,9 @@ func (st *State) bind(p project.Context, c project.Command, env string, state *v
 			return nil, nil, fail("port_not_found")
 		}
 		out[key] = strconv.Itoa(assignment.Port)
+		if binding.Format == "url" {
+			out[key] = network.BackendURL(assignment.Port)
+		}
 	}
 	for _, key := range keys {
 		binding := c.Bind[key]

@@ -5,11 +5,53 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jinyongp/devtools/internal/ca"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
+
+func TestDarwinUntrustRemovesOnlySelectedCertificateAndItsTrust(t *testing.T) {
+	a, _, e := (ca.Store{Data: t.TempDir()}).Init(context.Background())
+	if e != nil {
+		t.Fatal(e)
+	}
+	keychain := "/Library/Keychains/System.keychain"
+	for _, tc := range []struct {
+		name, output string
+		failure      error
+		wantDelete   bool
+	}{
+		{"present", "SHA-256 hash: " + strings.ToUpper(a.Fingerprint()), nil, true},
+		{"absent", "SHA-256 hash: " + strings.Repeat("0", 64), nil, false},
+		{"delete failure", "SHA-256 hash: " + a.Fingerprint(), errors.New("keychain locked"), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			deleted := false
+			s := System{GOOS: "darwin", Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+				if name != "/usr/bin/security" {
+					t.Fatalf("unexpected executable %q", name)
+				}
+				if slices.Equal(args, []string{"find-certificate", "-a", "-Z", keychain}) {
+					return []byte(tc.output), nil
+				}
+				// Apple's -t removes this item's trust settings as well as the
+				// certificate; the exact SHA-256 hash preserves sibling CAs.
+				if !slices.Equal(args, []string{"delete-certificate", "-t", "-Z", a.Fingerprint(), keychain}) {
+					t.Fatalf("unscoped certificate removal: %v", args)
+				}
+				deleted = true
+				return nil, tc.failure
+			}}
+			err := s.Apply(context.Background(), Request{Action: "untrust", Certificate: a.PEM()})
+			if !errors.Is(err, tc.failure) || deleted != tc.wantDelete {
+				t.Fatal(err, deleted)
+			}
+		})
+	}
+}
 
 func TestIsolatedTrustRejectsBeforeRunner(t *testing.T) {
 	m := Manager{Isolated: true, Run: func(context.Context, string, any, bool) *protocol.Error { t.Fatal("OS runner called"); return nil }}

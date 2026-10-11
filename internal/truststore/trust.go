@@ -180,6 +180,11 @@ func (s System) darwin(ctx context.Context, request Request, fingerprint string)
 		if !strings.Contains(strings.ToLower(string(output)), fingerprint) {
 			return nil
 		}
+		// Resolve the stored certificate by its exact fingerprint and remove
+		// its trust settings with the same keychain item. Removing trust from
+		// a newly decoded file certificate can hang on macOS runners.
+		_, e = s.execute(ctx, "/usr/bin/security", "delete-certificate", "-t", "-Z", fingerprint, keychain)
+		return e
 	}
 	directory, e := os.MkdirTemp("/private/tmp", "devtools-trust-")
 	if e != nil {
@@ -190,13 +195,6 @@ func (s System) darwin(ctx context.Context, request Request, fingerprint string)
 	if e := os.WriteFile(path, request.Certificate, 0600); e != nil {
 		return e
 	}
-	if request.Action == "trust" {
-		_, e = s.execute(ctx, "/usr/bin/security", "add-trusted-cert", "-d", "-r", "trustRoot", "-k", keychain, path)
-		return e
-	}
-	if _, e = s.execute(ctx, "/usr/bin/security", "remove-trusted-cert", "-d", path); e != nil {
-		return e
-	}
-	_, e = s.execute(ctx, "/usr/bin/security", "delete-certificate", "-Z", fingerprint, keychain)
+	_, e = s.execute(ctx, "/usr/bin/security", "add-trusted-cert", "-d", "-r", "trustRoot", "-k", keychain, path)
 	return e
 }

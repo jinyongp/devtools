@@ -38,6 +38,10 @@ profile 생략은 전역 데이터에 존재하는 모든 profile을 선택한�
 
 CLI의 keygen·configure·create는 `data.item`에 결과 메타데이터를, `data.changed`에 쓰기 여부를 반환한다. inspect는 `data.item`을 반환한다. restore는 `digest`·`targets`·`applied` 등 계획 보고서를 유지하며 `changed`와 `replayed`를 함께 제공한다. 미리보기에서는 둘 다 false이고, 동일한 적용 요청의 재시도에서는 최초 changed를 유지한 채 replayed가 true다. 전체 규칙은 [CLI 출력 계약](cli-output.md)을 따른다.
 
+복구·가져오기의 적용 영수증은 최대 128 MiB이며, 가져오기 영수증에는 전체 비교 결과도 포함된다. 쓰기와 재시도 읽기에
+같은 상한을 적용한다. 직렬화된 결과가 상한을 넘으면 `result_too_large`로 저장소 교체 전에
+거절한다. 이전 버전이 기록한 1 MiB 초과 영수증도 새 상한 안이면 재생할 수 있다.
+
 ## 다른 환경으로 profile 이동
 
 기본 profile transfer는 대상 기기를 먼저 준비하지 않습니다.

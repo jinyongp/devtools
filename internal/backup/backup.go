@@ -31,6 +31,10 @@ import (
 
 const limit int64 = 128 << 20
 
+// Import receipts include the complete metadata diff. Keep reads and writes
+// bounded by the same limit so every committed result can be replayed.
+const restoreReceiptLimit int64 = 128 << 20
+
 type Engine struct{ Data, Config, Cache string }
 type Config struct {
 	Directory string `json:"directory"`
@@ -796,7 +800,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		if !restoreRequestIDPattern.MatchString(requestID) {
 			return plan, failure("invalid_argument")
 		}
-		b, err := maintenance.Read(filepath.Join(e.Data, receiptPath), 1<<20)
+		b, err := maintenance.Read(filepath.Join(e.Data, receiptPath), restoreReceiptLimit)
 		if err == nil {
 			var previous restoreReceipt
 			if json.Unmarshal(b, &previous) != nil {
@@ -921,7 +925,16 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 			return plan, failure("backup_error")
 		}
 	}
-	files := map[string][]byte{}
+	appliedPlan := plan
+	appliedPlan.Applied = true
+	receipt, err := json.Marshal(restoreReceipt{Fingerprint: fingerprint, OperationFingerprint: request.OperationFingerprint, Plan: appliedPlan, Import: plan.importData})
+	if err != nil {
+		return plan, failure("storage_error")
+	}
+	if int64(len(receipt)) > restoreReceiptLimit {
+		return plan, protocol.NewError("result_too_large", "Restore result exceeds the replay receipt size limit.", 3, map[string]any{"limit_bytes": restoreReceiptLimit})
+	}
+	files := map[string][]byte{receiptPath: receipt}
 	var valuesPayload []byte
 	if selected.Values != nil {
 		valuesPayload, err = values.RestoreSnapshot(selected.Values, source, target)
@@ -968,10 +981,6 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		}
 	}
 	plan.Applied = true
-	files[receiptPath], err = json.Marshal(restoreReceipt{Fingerprint: fingerprint, OperationFingerprint: request.OperationFingerprint, Plan: plan, Import: plan.importData})
-	if err != nil {
-		return plan, failure("storage_error")
-	}
 	if maintenance.Replace(e.Data, files) != nil {
 		plan.Applied = false
 		return plan, failure("storage_error")

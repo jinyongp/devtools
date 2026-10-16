@@ -158,7 +158,7 @@ func TestCLIIdentifierAndDescriptionContracts(t *testing.T) {
 			"state": `^(draft|active|done|canceled|all)$`, "limit": `^([1-9]|[1-9][0-9]|1[0-9]{2}|200)$`,
 		},
 		"task tree": {
-			"direction": `^(upstream|downstream)$`, "depth": `^([1-9]|1[0-9]|20)$`,
+			"direction": `^(upstream|downstream)$`, "depth": `^(0|[1-9]|1[0-9]|20)$`,
 		},
 		"task workstream plan show": {"at-revision": positiveIntegerPattern},
 	}
@@ -245,6 +245,8 @@ func TestTaskQueryOptionsRejectValuesOutsidePublishedRanges(t *testing.T) {
 		{"task", "workstream", "list", "--state", "open"},
 		{"task", "list", "--limit", "201"},
 		{"task", "tree", "--depth", "21"},
+		{"task", "tree", "--depth", "-1"},
+		{"task", "workstream", "tree", "--depth", "-1"},
 		{"task", "tree", "--direction", "sideways"},
 		{"task", "list", "--scope", "unknown"},
 		{"task", "list", "--completion", "unknown"},

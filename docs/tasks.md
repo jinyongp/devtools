@@ -162,6 +162,10 @@ devtools dashboard stop
 Lists return `next_cursor`. Graphs return a `cursor` and continuation roots when
 truncated. Continue with the same cursor to keep the original revision for up to
 30 minutes. A fresh query observes the latest profile revision.
+Graph depth accepts 0 through 20. Depth 0 returns only the selected root nodes,
+without dependency edges or continuations beyond those nodes. Follow each emitted
+continuation's ID, direction, and depth with the graph cursor; a depth-0 continuation
+returns its boundary node and finishes that branch.
 
 `devtools dashboard` and its alias `dashboard start` return JSON with server
 metadata in `data.item` and a fresh login link in `data.item.url`. Open the full

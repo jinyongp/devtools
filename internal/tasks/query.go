@@ -81,6 +81,13 @@ func positive(o map[string]string, k string, def, max int) (int, *protocol.Error
 	return n, nil
 }
 
+func graphDepth(options map[string]string) (int, *protocol.Error) {
+	if options["depth"] == "0" {
+		return 0, nil
+	}
+	return positive(options, "depth", 3, 20)
+}
+
 func proposedEditImpact(s *State, item *Item, kind string, body Object) (Object, bool, *protocol.Error) {
 	operations := []any{}
 	target := item.ID
@@ -339,7 +346,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		}
 		return out, nil
 	case "tree":
-		depth, e := positive(q.Options, "depth", 3, 20)
+		depth, e := graphDepth(q.Options)
 		if e != nil {
 			return nil, e
 		}

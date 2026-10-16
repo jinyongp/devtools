@@ -113,7 +113,7 @@ func (s Store) graphCursorFast(q Query, kind string, limit int) (Object, *protoc
 			return nil, err
 		}
 	}
-	depth, err := positive(q.Options, "depth", 3, 20)
+	depth, err := graphDepth(q.Options)
 	if err != nil {
 		return nil, err
 	}

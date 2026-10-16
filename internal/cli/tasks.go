@@ -146,7 +146,7 @@ func taskQueryOptionDescription(option string) string {
 		"limit":      "Maximum number of results, from 1 to 200; defaults to 50.",
 		"cursor":     "Continue a previous paginated query.",
 		"direction":  "Dependency direction: upstream or downstream; defaults to upstream.",
-		"depth":      "Maximum dependency depth, from 1 to 20; defaults to 3.",
+		"depth":      "Maximum dependency depth, from 0 to 20; 0 returns only roots; defaults to 3.",
 		"dir":        "Execution directory used by current-run queries; defaults to the current directory.",
 	}
 	return descriptions[option]
@@ -165,7 +165,7 @@ func taskQueryOptionPattern(command, option string) string {
 	case "direction":
 		return `^(upstream|downstream)$`
 	case "depth":
-		return `^([1-9]|1[0-9]|20)$`
+		return `^(0|[1-9]|1[0-9]|20)$`
 	}
 	return ""
 }

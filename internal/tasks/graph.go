@@ -230,6 +230,9 @@ func (s *State) Tree(kind, id, ws, direction string, depth, limit int) Object {
 		}
 		seen[n.ID] = true
 		nodes = append(nodes, s.View(i))
+		if depth == 0 {
+			continue
+		}
 		next := i.Depends
 		if direction == "downstream" {
 			next = []string{}

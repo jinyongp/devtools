@@ -124,6 +124,7 @@ type resolverCache struct {
 	registry cachedRegistry
 	items    []Item
 	itemsOK  bool
+	routing  *routingSnapshot
 }
 
 type Resolver struct {
@@ -167,16 +168,26 @@ func (r Resolver) readPorts() (*ports.State, bool, *protocol.Error) {
 }
 
 func filterRouteItems(items []Item, profile string) []Item {
-	if profile == "" {
-		return append([]Item{}, items...)
-	}
-	filtered := make([]Item, 0)
+	filtered := make([]Item, 0, len(items))
 	for _, item := range items {
-		if item.Profile == profile {
+		if profile == "" || item.Profile == profile {
+			item.Host = copyRoutePointer(item.Host)
+			item.Proxy = copyRoutePointer(item.Proxy)
+			item.Alias = copyRoutePointer(item.Alias)
+			item.Service = copyRoutePointer(item.Service)
+			item.TargetPort = copyRoutePointer(item.TargetPort)
 			filtered = append(filtered, item)
 		}
 	}
 	return filtered
+}
+
+func copyRoutePointer[T any](value *T) *T {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }
 
 func (r Resolver) resolveProject(instance ports.Instance) (project.Context, *protocol.Error, bool) {
@@ -211,10 +222,12 @@ func (r Resolver) resolveProject(instance ports.Instance) (project.Context, *pro
 // routeSnapshot collects identity inputs from the same listing. It belongs to
 // one call; tracked sources must never be reused across requests.
 type routeSnapshot struct {
-	ref       network.RouteRef
-	state     *ports.State
-	source    string
-	sourceErr *protocol.Error
+	routingOnly bool
+	routing     *routingSnapshot
+	ref         network.RouteRef
+	state       *ports.State
+	source      string
+	sourceErr   *protocol.Error
 }
 
 func (r Resolver) List(ctx context.Context, profile string) ([]Item, *protocol.Error) {
@@ -248,7 +261,7 @@ func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnaps
 		err      *protocol.Error
 	}
 	resolved := make([]resolution, 0, len(state.Instances))
-	stable := r.cache != nil && !registryChanged && snapshot == nil
+	stable := r.cache != nil && !registryChanged && (snapshot == nil || snapshot.routingOnly)
 	if state.Network != nil {
 		for _, a := range state.Network.Activations {
 			if a.Mode == "active" {
@@ -280,10 +293,15 @@ func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnaps
 	}
 	if stable {
 		r.cache.mu.Lock()
-		cached := append([]Item(nil), r.cache.items...)
+		cached := r.cache.items
+		routing := r.cache.routing
 		ok := r.cache.itemsOK
 		r.cache.mu.Unlock()
 		if ok {
+			if snapshot != nil && snapshot.routingOnly {
+				snapshot.routing = routing
+				return nil, nil
+			}
 			return filterRouteItems(cached, profile), nil
 		}
 	}
@@ -371,11 +389,19 @@ func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnaps
 		a, b := items[left], items[right]
 		return itemKey(a) < itemKey(b)
 	})
+	routing := newRoutingSnapshot(items)
+	if snapshot != nil {
+		snapshot.routing = routing
+	}
 	if r.cache != nil {
 		r.cache.mu.Lock()
-		r.cache.items = append([]Item(nil), items...)
+		r.cache.routing = routing
+		r.cache.items = items
 		r.cache.itemsOK = true
 		r.cache.mu.Unlock()
+	}
+	if snapshot != nil && snapshot.routingOnly {
+		return nil, nil
 	}
 	return filterRouteItems(items, profile), nil
 }

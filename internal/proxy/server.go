@@ -40,26 +40,20 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 		http.Error(response, "route not found", http.StatusNotFound)
 		return
 	}
-	items, err := h.Routes.List(request.Context(), "")
+	decision, err := selectRoute(request.Context(), h.Routes, h.Listener, host)
 	if err != nil {
 		http.Error(response, "route unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	var matches []Item
-	for _, item := range items {
-		if item.Kind == "route" && item.Host != nil && *item.Host == host && (h.Listener == "" || item.Listener == h.Listener || item.Listener == "" && h.Listener == "default") {
-			matches = append(matches, item)
-		}
-	}
-	if len(matches) == 0 {
+	if decision.matches == 0 {
 		http.Error(response, "route not found", http.StatusNotFound)
 		return
 	}
-	if len(matches) != 1 || matches[0].Status != StatusReady || matches[0].TargetPort == nil {
+	if decision.matches != 1 || decision.item.Status != StatusReady || decision.item.TargetPort == nil {
 		http.Error(response, "route unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if h.Guard != nil && !h.Guard(request, matches[0]) {
+	if h.Guard != nil && !h.Guard(request, decision.item) {
 		http.Error(response, "route is not shared", http.StatusForbidden)
 		return
 	}
@@ -74,7 +68,7 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 		http.Redirect(response, request, redirect.String(), http.StatusTemporaryRedirect)
 		return
 	}
-	h.forward(response, request, *matches[0].TargetPort)
+	h.forward(response, request, *decision.item.TargetPort)
 }
 
 func (h *Handler) forward(response http.ResponseWriter, request *http.Request, port int) {

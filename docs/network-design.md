@@ -168,6 +168,13 @@ cancels its work before closing its idle backend connections, including when sto
 persistence or provider teardown fails. Shared Basic credentials are stripped;
 explicit no-auth preserves application Authorization headers. Within each route
 listing, source digests and read failures are reused per project, never across requests.
+Request routing uses an immutable table keyed by listener and host, published
+with the corresponding management list. The legacy handler can select across all
+listeners. Duplicate matches remain unavailable, and global host conflicts remain
+conflicts even across listeners. Acquiring a table still checks registry/project
+identities and current activation sources on each request; no TTL skips these
+checks. Management output is detached so a caller cannot mutate the routing table.
+
 Exposure identity calculation uses that listing's registry and source results,
 preserving the persisted digest projection and hostname conflict checks. Inactive,
 authority-mismatched, and unauthenticated requests are rejected before source I/O;

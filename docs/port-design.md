@@ -313,9 +313,18 @@ profile·instance와 관계없이 서비스 할당과 proxy listener reservation
 다른 사용자나 서로 격리된 실행 환경의 별도 저장소는 각각의 할당 영역이다.
 호스트 var는 접속 문자열의 재료이며 로컬 할당 영역을 변경하지 않는다.
 
-port registry version 1은 reservation이 없는 기존 저장 형식이다. 새 reader는 이를
-빈 reservation 목록으로 읽고, 첫 변경에서 기존 instance와 할당을 보존한 version 2로
-원자적으로 저장한다. 조회만으로는 저장 형식을 변경하지 않는다.
+port registry version 1은 reservation이 없는 기존 저장 형식이다. reader는 v1·v2·v3를
+계속 읽으며, 조회와 무변경 요청은 파일을 다시 쓰지 않는다. 다음 실제 변경에서 기존
+instance·할당·reservation·network 정보를 보존한 v4로 원자 전환한다. v4의 할당은
+`instance_id`·`name`·`port`만 저장하고 profile·directory·alias는 instance에서 결합해
+기존 CLI 응답 형식을 유지한다. metadata 변경을 각 할당에 전파하는 책임은 저장 경계가
+맡는다. v4를 지원하지 않는 바이너리는 전환된 registry를 거절하므로, 같은 registry의
+writer를 함께 업데이트해야 한다. 자동 downgrade는 제공하지 않는다.
+
+검증된 조회 상태에는 ID·디렉터리·alias·서비스·reservation·network 참조별 인덱스를
+구성한다. 변경 콜백은 인덱스를 버린 가변 상태를 받으며, 저장 전 검증에서 새 인덱스를
+구성한다. registry의 읽기·쓰기 상한은 모두 16 MiB이고, 초과 결과는 기존 파일 교체 전에
+거절한다.
 
 ## 진단과 응답
 

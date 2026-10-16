@@ -33,7 +33,6 @@ func register(t *testing.T, store ports.Store, profile, directory string, alias 
 			return false, err
 		}
 		instance.Alias = alias
-		state.SyncInstance(*instance)
 		out = *instance
 		if port != 0 {
 			state.Assignments = append(state.Assignments, ports.Assignment{Instance: *instance, Name: "web", Port: port})

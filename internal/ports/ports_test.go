@@ -57,13 +57,13 @@ func TestRegistryV1ReadAndFirstWriteMigration(t *testing.T) {
 		t.Fatalf("reserve = %v %v", changed, err)
 	}
 	state, err = s.Read()
-	if err != nil || state.Version != 2 || state.Reservation("proxy") == nil || state.Reservation("proxy").Port != 32101 || !reflect.DeepEqual(state.Instances, []Instance{instance}) || !reflect.DeepEqual(state.Assignments, []Assignment{assignment}) {
-		t.Fatalf("v2 read = %+v %v", state, err)
+	if err != nil || state.Version != registryVersion || state.Reservation("proxy") == nil || state.Reservation("proxy").Port != 32101 || !reflect.DeepEqual(state.Instances, []Instance{instance}) || !reflect.DeepEqual(state.Assignments, []Assignment{assignment}) {
+		t.Fatalf("v4 read = %+v %v", state, err)
 	}
 	var stored map[string]any
 	bytes, _ := os.ReadFile(registry)
 	if json.Unmarshal(bytes, &stored) != nil || stored["reservations"] == nil {
-		t.Fatalf("v2 storage = %s", bytes)
+		t.Fatalf("v4 storage = %s", bytes)
 	}
 }
 

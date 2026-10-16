@@ -21,7 +21,7 @@ func TestNetworkUpgradePreservesLegacyRegistryAndReadBytes(t *testing.T) {
 		t.Fatal(e)
 	}
 	before, _ := os.ReadFile(filepath.Join(s.Directory, "registry.json"))
-	if st, e := s.Read(); e != nil || st.Version != 2 {
+	if st, e := s.Read(); e != nil || st.Version != registryVersion {
 		t.Fatal(st, e)
 	}
 	after, _ := os.ReadFile(filepath.Join(s.Directory, "registry.json"))
@@ -33,7 +33,7 @@ func TestNetworkUpgradePreservesLegacyRegistryAndReadBytes(t *testing.T) {
 		t.Fatal(e)
 	}
 	st, e := s.Read()
-	if e != nil || st.Version != 3 || l.HTTPReservation != "proxy" || st.Reservation("proxy").Port != 32000 {
+	if e != nil || st.Version != registryVersion || l.HTTPReservation != "proxy" || st.Reservation("proxy").Port != 32000 {
 		t.Fatal(st, e)
 	}
 	if h, tls, e := st.ListenerPorts(""); e != nil || h != 32000 || tls != 32443 {
@@ -93,7 +93,7 @@ func TestPinnedAliasAndPortMutationPreserveStorage(t *testing.T) {
 		t.Fatal(e)
 	}
 	before, _ := os.ReadFile(filepath.Join(s.Directory, "registry.json"))
-	for _, mutation := range []func(*State){func(st *State) { alias := "changed"; st.Instances[0].Alias = &alias; st.SyncInstance(st.Instances[0]) }, func(st *State) { st.Assignments[0].Port = 32124 }} {
+	for _, mutation := range []func(*State){func(st *State) { alias := "changed"; st.Instances[0].Alias = &alias }, func(st *State) { st.Assignments[0].Port = 32124 }} {
 		e = s.Update(ctx, func(st *State) (bool, *protocol.Error) { mutation(st); return true, nil })
 		if e == nil || e.Code != "pinned" {
 			t.Fatal(e)
@@ -147,7 +147,7 @@ func TestRegistryRejectsMalformedNetworkAndFutureVersion(t *testing.T) {
 	}
 	path := filepath.Join(s.Directory, "registry.json")
 	data, _ := os.ReadFile(path)
-	for _, edit := range []func(map[string]any){func(v map[string]any) { v["version"] = 4 }, func(v map[string]any) { v["network"].(map[string]any)["unknown"] = true }, func(v map[string]any) { v["network"].(map[string]any)["listeners"] = nil }} {
+	for _, edit := range []func(map[string]any){func(v map[string]any) { v["version"] = registryVersion + 1 }, func(v map[string]any) { v["network"].(map[string]any)["unknown"] = true }, func(v map[string]any) { v["network"].(map[string]any)["listeners"] = nil }} {
 		var v map[string]any
 		if e := json.Unmarshal(data, &v); e != nil {
 			t.Fatal(e)

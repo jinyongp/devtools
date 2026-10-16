@@ -459,7 +459,6 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 			}
 			changed := i.Alias == nil || *i.Alias != alias
 			i.Alias = &alias
-			st.SyncInstance(*i)
 			result = map[string]any{"item": instanceResult(*i), "changed": changed}
 			return changed, nil
 		}
@@ -497,7 +496,6 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 			}
 			changed := i.Directory != p.Root
 			i.Directory = p.Root
-			st.SyncInstance(*i)
 			result = map[string]any{"item": instanceResult(*i), "changed": changed}
 			return changed, nil
 		case "remove":

@@ -35,6 +35,7 @@ type Reservation struct {
 	Port int    `json:"port"`
 }
 type State struct {
+	readIndex    *registryReadIndex
 	Version      int           `json:"version"`
 	Instances    []Instance    `json:"instances"`
 	Assignments  []Assignment  `json:"assignments"`
@@ -87,51 +88,71 @@ func (s Store) Read() (*State, *protocol.Error) {
 	if !private(f) {
 		return nil, storageError()
 	}
-	d := json.NewDecoder(io.LimitReader(f, 16<<20))
-	d.DisallowUnknownFields()
-	var st State
-	if d.Decode(&st) != nil || d.Decode(new(any)) != io.EOF || !st.valid() {
+	if info, err := f.Stat(); err != nil || info.Size() > registryDocumentLimit {
 		return nil, fail("invalid_storage")
 	}
+	d := json.NewDecoder(io.LimitReader(f, registryDocumentLimit))
+	d.DisallowUnknownFields()
+	var st State
+	if d.Decode(&st) != nil || d.Decode(new(any)) != io.EOF {
+		return nil, fail("invalid_storage")
+	}
+	index, ok := st.validatedIndex()
+	if !ok {
+		return nil, fail("invalid_storage")
+	}
+	st.readIndex = index
 	return &st, nil
 }
-func (st *State) valid() bool {
-	if st.Version < 1 || st.Version > 3 || st.Instances == nil || st.Assignments == nil || st.Version >= 2 && st.Reservations == nil || st.Version == 1 && len(st.Reservations) != 0 || st.Version < 3 && st.Network != nil || st.Version == 3 && st.Network == nil {
-		return false
+func (state *State) valid() bool {
+	_, ok := state.validatedIndex()
+	return ok
+}
+
+func (state *State) validatedIndex() (*registryReadIndex, bool) {
+	st := *state
+	st.readIndex = buildRegistryReadIndex(state)
+	if st.Version < 1 || st.Version > registryVersion || st.Instances == nil || st.Assignments == nil || st.Version >= 2 && st.Reservations == nil || st.Version == 1 && len(st.Reservations) != 0 || st.Version < 3 && st.Network != nil || st.Version == 3 && st.Network == nil {
+		return nil, false
 	}
-	ids, paths, aliases, keys, reservationNames, nums := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}, map[int]bool{}
+	index := st.readIndex
+	if len(index.instances) != len(st.Instances) || len(index.directories) != len(st.Instances) || len(index.assignments) != len(st.Assignments) || len(index.reservations) != len(st.Reservations) {
+		return nil, false
+	}
+	aliasCount := 0
+	nums := map[int]bool{}
 	for _, i := range st.Instances {
 		b, e := hex.DecodeString(i.ID)
-		if e != nil || len(b) != 16 || !project.ValidProfile(i.Profile) || !filepath.IsAbs(i.Directory) || ids[i.ID] || paths[i.Profile+"\x00"+i.Directory] {
-			return false
+		if e != nil || len(b) != 16 || !project.ValidProfile(i.Profile) || !filepath.IsAbs(i.Directory) {
+			return nil, false
 		}
-		ids[i.ID] = true
-		paths[i.Profile+"\x00"+i.Directory] = true
 		if i.Alias != nil {
-			k := i.Profile + "\x00" + *i.Alias
-			if !project.ValidProfile(*i.Alias) || aliases[k] {
-				return false
+			aliasCount++
+			if !project.ValidProfile(*i.Alias) {
+				return nil, false
 			}
-			aliases[k] = true
 		}
+	}
+	if aliasCount != len(index.aliases) {
+		return nil, false
 	}
 	for _, a := range st.Assignments {
 		i := st.ByID(a.ID)
-		k := a.ID + "\x00" + a.Name
-		if i == nil || i.Profile != a.Profile || i.Directory != a.Directory || !sameAlias(i.Alias, a.Alias) || !project.ValidProfile(a.Name) || a.Port < 1 || a.Port > 65535 || keys[k] || nums[a.Port] {
-			return false
+		if i == nil || i.Profile != a.Profile || i.Directory != a.Directory || !sameAlias(i.Alias, a.Alias) || !project.ValidProfile(a.Name) || a.Port < 1 || a.Port > 65535 || nums[a.Port] {
+			return nil, false
 		}
-		keys[k] = true
 		nums[a.Port] = true
 	}
 	for _, reservation := range st.Reservations {
-		if !project.ValidProfile(reservation.Name) || reservation.Port < 1 || reservation.Port > 65535 || reservationNames[reservation.Name] || nums[reservation.Port] {
-			return false
+		if !project.ValidProfile(reservation.Name) || reservation.Port < 1 || reservation.Port > 65535 || nums[reservation.Port] {
+			return nil, false
 		}
-		reservationNames[reservation.Name] = true
 		nums[reservation.Port] = true
 	}
-	return st.validNetwork()
+	if !st.validNetwork() {
+		return nil, false
+	}
+	return index, true
 }
 func sameAlias(a, b *string) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 func (s Store) lock(ctx context.Context, name string, wait bool, create bool) (*os.File, *protocol.Error) {
@@ -196,10 +217,12 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 		return e
 	}
 	pinned := st.pinnedProjections()
+	st.readIndex = nil
 	changed, e := fn(st)
 	if e != nil || !changed {
 		return e
 	}
+	st.joinAssignments()
 	for id, current := range st.pinnedProjections() {
 		if previous, existed := pinned[id]; existed && previous != current {
 			return fail("pinned")
@@ -214,9 +237,13 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 	if !st.valid() {
 		return fail("invalid_storage")
 	}
+	st.Version = registryVersion
 	b, err := json.Marshal(st)
 	if err != nil {
 		return storageError()
+	}
+	if len(b) > registryDocumentLimit {
+		return fail("invalid_storage")
 	}
 	f, err := os.CreateTemp(s.Directory, ".update-*")
 	if err != nil {
@@ -245,6 +272,12 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 	return nil
 }
 func (st *State) ByID(id string) *Instance {
+	if st.readIndex != nil {
+		if n, ok := st.readIndex.instances[id]; ok {
+			return &st.Instances[n]
+		}
+		return nil
+	}
 	for n := range st.Instances {
 		if st.Instances[n].ID == id {
 			return &st.Instances[n]
@@ -253,6 +286,22 @@ func (st *State) ByID(id string) *Instance {
 	return nil
 }
 func (st *State) Find(profile, selector, dir string) *Instance {
+	if st.readIndex != nil {
+		if len(selector) > 3 && selector[:3] == "id:" {
+			if i := st.ByID(selector[3:]); i != nil && i.Profile == profile {
+				return i
+			}
+			return nil
+		}
+		indices, key := st.readIndex.aliases, [2]string{profile, selector}
+		if selector == "" {
+			indices, key = st.readIndex.directories, [2]string{profile, dir}
+		}
+		if n, ok := indices[key]; ok {
+			return &st.Instances[n]
+		}
+		return nil
+	}
 	for n := range st.Instances {
 		i := &st.Instances[n]
 		if i.Profile == profile && (selector != "" && (selector == "id:"+i.ID || i.Alias != nil && selector == *i.Alias) || selector == "" && i.Directory == dir) {
@@ -262,6 +311,7 @@ func (st *State) Find(profile, selector, dir string) *Instance {
 	return nil
 }
 func (st *State) Register(profile, dir string) (*Instance, *protocol.Error) {
+	st.readIndex = nil
 	if i := st.Find(profile, "", dir); i != nil {
 		return i, nil
 	}
@@ -273,6 +323,12 @@ func (st *State) Register(profile, dir string) (*Instance, *protocol.Error) {
 	return &st.Instances[len(st.Instances)-1], nil
 }
 func (st *State) Get(id, name string) *Assignment {
+	if st.readIndex != nil {
+		if n, ok := st.readIndex.assignments[[2]string{id, name}]; ok {
+			return &st.Assignments[n]
+		}
+		return nil
+	}
 	for n := range st.Assignments {
 		if st.Assignments[n].ID == id && st.Assignments[n].Name == name {
 			return &st.Assignments[n]
@@ -281,6 +337,12 @@ func (st *State) Get(id, name string) *Assignment {
 	return nil
 }
 func (st *State) Reservation(name string) *Reservation {
+	if st.readIndex != nil {
+		if n, ok := st.readIndex.reservations[name]; ok {
+			return &st.Reservations[n]
+		}
+		return nil
+	}
 	for index := range st.Reservations {
 		if st.Reservations[index].Name == name {
 			return &st.Reservations[index]
@@ -288,13 +350,7 @@ func (st *State) Reservation(name string) *Reservation {
 	}
 	return nil
 }
-func (st *State) SyncInstance(i Instance) {
-	for n := range st.Assignments {
-		if st.Assignments[n].ID == i.ID {
-			st.Assignments[n].Instance = i
-		}
-	}
-}
+
 func runLock(id, name string) string {
 	legacy := "run-" + id + "-" + hex.EncodeToString([]byte(name)) + ".lock"
 	if len(legacy) <= 255 {

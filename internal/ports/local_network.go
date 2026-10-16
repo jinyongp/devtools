@@ -13,7 +13,10 @@ import (
 )
 
 func (st *State) UpgradeNetwork() {
-	st.Version = 3
+	st.readIndex = nil
+	if st.Version < 3 {
+		st.Version = 3
+	}
 	if st.Reservations == nil {
 		st.Reservations = []Reservation{}
 	}
@@ -41,6 +44,12 @@ func (st *State) EnsureDefaultListener(id, generation string) *protocol.Error {
 }
 
 func (st *State) Listener(name string) *network.Listener {
+	if st.readIndex != nil {
+		if n, ok := st.readIndex.listeners[network.ListenerName(name)]; ok {
+			return &st.Network.Listeners[n]
+		}
+		return nil
+	}
 	if st.Network == nil {
 		return nil
 	}
@@ -52,6 +61,12 @@ func (st *State) Listener(name string) *network.Listener {
 	return nil
 }
 func (st *State) GlobalRoute(name string) *network.GlobalRoute {
+	if st.readIndex != nil {
+		if n, ok := st.readIndex.routes[name]; ok {
+			return &st.Network.Routes[n]
+		}
+		return nil
+	}
 	if st.Network == nil {
 		return nil
 	}
@@ -63,6 +78,12 @@ func (st *State) GlobalRoute(name string) *network.GlobalRoute {
 	return nil
 }
 func (st *State) Activation(ref network.RouteRef) *network.Activation {
+	if st.readIndex != nil {
+		if n, ok := st.readIndex.activations[ref]; ok {
+			return &st.Network.Activations[n]
+		}
+		return nil
+	}
 	if st.Network == nil {
 		return nil
 	}
@@ -89,6 +110,9 @@ func (st *State) SetActivation(a network.Activation) *protocol.Error {
 	return nil
 }
 func (st *State) Pinned(ref network.RouteRef) bool {
+	if st.readIndex != nil {
+		return st.readIndex.pinned[ref]
+	}
 	if st.Network != nil {
 		for _, p := range st.Network.Pins {
 			if p.Route == ref {
@@ -99,6 +123,9 @@ func (st *State) Pinned(ref network.RouteRef) bool {
 	return false
 }
 func (st *State) ListenerPinned(id string) bool {
+	if st.readIndex != nil {
+		return st.readIndex.listenerPins[id]
+	}
 	if st.Network != nil {
 		for _, p := range st.Network.Pins {
 			if p.ListenerID == id {
@@ -132,6 +159,7 @@ func (st *State) ListenerPorts(name string) (int, int, *protocol.Error) {
 // Reference reserves a fixed external backend without probing or owning its
 // process. Other registry owners still make the number unavailable.
 func (st *State) Reference(name string, port int) (bool, *protocol.Error) {
+	st.readIndex = nil
 	if !project.ValidProfile(name) || port < 1 || port > 65535 {
 		return false, fail("invalid_argument")
 	}
@@ -331,6 +359,12 @@ func (st *State) validNetwork() bool {
 }
 
 func (st *State) ListenerForID(id string) *network.Listener {
+	if st.readIndex != nil {
+		if n, ok := st.readIndex.listenerIDs[id]; ok {
+			return &st.Network.Listeners[n]
+		}
+		return nil
+	}
 	if st.Network != nil {
 		for i := range st.Network.Listeners {
 			if st.Network.Listeners[i].ID == id {
@@ -383,6 +417,7 @@ func (st *State) pinnedProjections() map[string]string {
 }
 
 func (st *State) RemoveGlobal(name string) *protocol.Error {
+	st.readIndex = nil
 	r := st.GlobalRoute(name)
 	if r == nil {
 		return fail("route_not_found")

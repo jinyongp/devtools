@@ -33,8 +33,18 @@ references retain their host-template meaning.
 
 The registry is the only source of port numbers. Project backend numbers remain
 Assignments; listener/origin/global backend numbers are Reservations. Both collections
-share uniqueness under the registry lock. Reads of v1/v2 preserve bytes; the first
-new network mutation writes v3 atomically. Older readers/writers reject v3.
+share uniqueness under the registry lock. Reads and no-op transactions preserve
+v1/v2/v3 bytes; the next changed transaction writes v4 atomically. V4 assignments
+store only `instance_id`, `name`, and `port`. Instance metadata is joined for
+in-memory/output views at the storage boundary. Older binaries reject v4, so all
+writers sharing this registry must support v4 before a changed transaction. There
+is no automatic downgrade; retaining a pre-upgrade private data backup is required
+when rollback to an older binary is needed.
+
+Validated reads build lookup indices for instances, assignments, reservations,
+listeners, activations, and pins. These indices belong to one read snapshot and
+are discarded before a transaction receives mutable slices. Validation and writes
+share the 16 MiB registry limit; oversized writes fail before replacement.
 
 Global `proxy add --global NAME PORT --host HOST` creates an exact backend reference
 even if an external server is using the port. Project preferred integers retain

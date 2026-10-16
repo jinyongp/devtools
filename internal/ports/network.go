@@ -73,6 +73,7 @@ func (st *State) Allocate(ctx context.Context, i Instance, name string, p projec
 }
 
 func (st *State) allocate(ctx context.Context, i Instance, name string, p project.Port, defaults []int, probe AvailabilityProbe) (Assignment, bool, *protocol.Error) {
+	st.readIndex = nil
 	if p.Expression != nil {
 		return Assignment{}, false, fail("network_environment_required")
 	}

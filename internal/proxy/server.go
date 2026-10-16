@@ -93,7 +93,9 @@ func (h *Handler) forward(response http.ResponseWriter, request *http.Request, p
 			if ingress, ok := proxyRequest.In.Context().Value(ingressKey{}).(publicIngress); ok {
 				proxyRequest.Out.Header.Set("X-Forwarded-Host", ingress.Authority)
 				proxyRequest.Out.Header.Set("X-Forwarded-Proto", ingress.Scheme)
-				proxyRequest.Out.Header.Del("Authorization")
+				if ingress.Authenticated {
+					proxyRequest.Out.Header.Del("Authorization")
+				}
 			}
 			proxyRequest.Out.Header.Del("Forwarded")
 		},
@@ -141,6 +143,9 @@ func loopbackTransport() *http.Transport {
 			}
 			return dialer.DialContext(ctx, network, address)
 		},
-		ForceAttemptHTTP2: false,
+		ForceAttemptHTTP2:   false,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 2,
+		IdleConnTimeout:     90 * time.Second,
 	}
 }

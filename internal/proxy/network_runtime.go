@@ -57,7 +57,17 @@ type listenerGroup struct {
 	record      Record
 	servers     []*http.Server
 	connections *connectionRegistry
+	transport   *http.Transport
 }
+
+func (g *listenerGroup) close() {
+	for _, server := range g.servers {
+		_ = server.Close()
+	}
+	g.connections.closeAll()
+	g.transport.CloseIdleConnections()
+}
+
 type networkRuntime struct {
 	ctx        context.Context
 	attemptID  string
@@ -117,7 +127,8 @@ func (r *networkRuntime) start(ctx context.Context, t listenerTarget) (ListenerS
 			return ListenerStatus{}, err
 		}
 	}
-	handler := NewHandler(r.resolver)
+	transport := loopbackTransport()
+	handler := &Handler{Routes: r.resolver, Transport: transport}
 	handler.Listener = definition.Name
 	handler.HTTPSPort = httpsPort
 	handler.Guard = func(request *http.Request, _ Item) bool {
@@ -135,16 +146,13 @@ func (r *networkRuntime) start(ctx context.Context, t listenerTarget) (ListenerS
 		handler.ServeHTTP(w, request)
 	})
 	connections := &connectionRegistry{}
-	group := &listenerGroup{target: t, connections: connections, record: Record{CreatedAt: time.Now().UTC(), AttemptID: t.AttemptID, State: "starting"}}
+	group := &listenerGroup{target: t, connections: connections, transport: transport, record: Record{CreatedAt: time.Now().UTC(), AttemptID: t.AttemptID, State: "starting"}}
 	var sockets []net.Listener
 	rollback := func() {
 		for _, s := range sockets {
 			_ = s.Close()
 		}
-		for _, s := range group.servers {
-			_ = s.Close()
-		}
-		connections.closeAll()
+		group.close()
 	}
 	open := func(host string, port int, secure bool) *protocol.Error {
 		if port == 0 {
@@ -266,10 +274,7 @@ func (r *networkRuntime) stop(t listenerTarget, reason string) (ListenerStatus, 
 	if group.record.AttemptID != t.AttemptID {
 		return ListenerStatus{}, proxyFailure("request_conflict")
 	}
-	for _, server := range group.servers {
-		_ = server.Close()
-	}
-	group.connections.closeAll()
+	group.close()
 	now := time.Now().UTC()
 	group.record.State = "stopped"
 	group.record.EndedAt = &now
@@ -402,10 +407,7 @@ func (m Manager) serveNetwork(ctx context.Context, attemptID string) error {
 	runtime.exposureMu.Unlock()
 	runtime.mu.Lock()
 	for _, group := range runtime.groups {
-		for _, s := range group.servers {
-			_ = s.Close()
-		}
-		group.connections.closeAll()
+		group.close()
 		now := time.Now().UTC()
 		group.record.EndedAt = &now
 		group.record.State = "interrupted"

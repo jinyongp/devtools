@@ -151,8 +151,22 @@ HMAC commitment compares retries; raw auth/unkeyed password hashes/commitment ke
 absent from public status, logs, backup, and transfer. A loopback HTTP origin bridge
 dispatches a fixed route, rewrites backend Host as before, and supplies public HTTPS
 authority/scheme from the committed provider record. Forwarded request headers never
-establish trust. Public ingress skips local redirects. Source checks run per request
+establish trust. Provider bridges skip local redirects. Source checks run per accepted request
 and at most one second apart for streams, preserving other shared HTTP2 streams.
+Each exposure owns its backend transport and reuses its connection pool. Revocation
+cancels its work before closing its idle backend connections, including when stop
+persistence or provider teardown fails. Shared Basic credentials are stripped;
+explicit no-auth preserves application Authorization headers. Within each route
+listing, source digests and read failures are reused per project, never across requests.
+Exposure identity calculation uses that listing's registry and source results,
+preserving the persisted digest projection and hostname conflict checks. Inactive,
+authority-mismatched, and unauthenticated requests are rejected before source I/O;
+accepted requests still validate identity before forwarding. Listener groups also
+own their backend pools and close them on stop, startup rollback, and daemon exit.
+For LAN exposures published over HTTPS, plaintext ingress redirects to the committed
+HTTPS authority before authentication, preserving the request path and query. LAN
+forwarded scheme reflects the actual connection. Provider bridges remain HTTP on
+loopback after upstream TLS termination and use the committed public scheme.
 
 Lock order: UUID → sorted resource keys → registry. Runtime probes under the registry
 lock are nonblocking. OS/provider/IPC work runs outside it; commit rechecks operation,

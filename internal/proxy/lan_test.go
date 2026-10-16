@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,7 +24,9 @@ import (
 func TestLANAliasTLSAuthStopAndLocalRoutePreservation(t *testing.T) {
 	m := liveNetworkManager(t)
 	ctx := context.Background()
+	var backendRequests atomic.Int32
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		backendRequests.Add(1)
 		fmt.Fprint(w, r.Header.Get("X-Forwarded-Proto")+"|"+r.Header.Get("X-Forwarded-Host"))
 	}))
 	defer backend.Close()
@@ -44,6 +47,27 @@ func TestLANAliasTLSAuthStopAndLocalRoutePreservation(t *testing.T) {
 	item := result.(map[string]any)["item"].(expose.Public)
 	if item.Host != "app.local" || !strings.Contains(strings.Join(item.ClientSetup, " "), "does not advertise mDNS") {
 		t.Fatal(item)
+	}
+	plainTransport := &http.Transport{Proxy: nil}
+	defer plainTransport.CloseIdleConnections()
+	plain := &http.Client{Transport: plainTransport, Timeout: time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	for _, host := range []string{item.Host, fmt.Sprintf("%s:%d", item.Host, httpPort), fmt.Sprintf("%s:%d", item.Host, tlsPort)} {
+		for _, authenticated := range []bool{false, true} {
+			request, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/a%%2Fb?q=one%%20two", httpPort), nil)
+			request.Host = host
+			request.Header.Set("X-Forwarded-Proto", "https")
+			if authenticated {
+				request.SetBasicAuth("reader", "canary")
+			}
+			response, err := plain.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response.Body.Close()
+			if response.StatusCode != http.StatusTemporaryRedirect || response.Header.Get("Location") != item.URL+"/a%2Fb?q=one%20two" || response.Header.Get("WWW-Authenticate") != "" || backendRequests.Load() != 0 {
+				t.Fatal("plaintext LAN request reached authentication/backend", host, response.Status, response.Header)
+			}
+		}
 	}
 	authority, e := (ca.Store{Data: m.Data}).Read()
 	if e != nil {
@@ -105,5 +129,47 @@ func TestLANRefusesLoopbackOnlyAndInvalidAliases(t *testing.T) {
 	st, _ = m.portStore().Read()
 	if len(st.Network.Pins) != 0 {
 		t.Fatal("failed LAN setup left pin")
+	}
+}
+
+func TestLANHTTPOnlyPreservesApplicationAuthAndScheme(t *testing.T) {
+	m := liveNetworkManager(t)
+	backend := newExposureBackend(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%s|%s", r.Header.Get("X-Forwarded-Proto"), r.Header.Get("Authorization"))
+	})
+	ctx := context.Background()
+	hp := freeNetworkPort(t)
+	if _, e := m.Configure(ctx, "default", fmt.Sprintf("0.0.0.0:%d", hp), "", false, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := m.AddGlobal(ctx, "app", backend.server.Listener.Addr().(*net.TCPAddr).Port, "app.localhost", "", "auto", tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	st, e := m.portStore().Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	result, e := m.ExposeStart(ctx, ExposureRequest{Route: st.GlobalRoute("app").Ref(), Provider: "lan", NoAuth: true, RequestID: tasks.ID()}, project.Context{}, nil, hosts.Manager{Data: m.Data, Isolated: true})
+	if e != nil {
+		t.Fatal(e)
+	}
+	item := result.(map[string]any)["item"].(expose.Public)
+	request, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/", hp), nil)
+	request.Host = strings.TrimPrefix(item.URL, "http://")
+	request.Header.Set("Authorization", "Bearer dummy-app-token")
+	transport := &http.Transport{Proxy: nil}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil || response.StatusCode != 200 || string(body) != "http|Bearer dummy-app-token" {
+		t.Fatal(response.Status, string(body), err)
+	}
+	if _, e := m.ExposeStop(ctx, item.ID, tasks.ID()); e != nil {
+		t.Fatal(e)
 	}
 }

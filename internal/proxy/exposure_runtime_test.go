@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,7 +60,7 @@ func TestExposureBridgeAuthPinsSourceRevocationAndSecretRedaction(t *testing.T) 
 	ctx := context.Background()
 	provider := &fakeExposureProvider{}
 	m.ExposureProviders["cloudflared"] = provider
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	tracked := newExposureBackend(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/stream" {
 			fmt.Fprintln(w, "opened")
 			w.(http.Flusher).Flush()
@@ -69,8 +68,8 @@ func TestExposureBridgeAuthPinsSourceRevocationAndSecretRedaction(t *testing.T) 
 			return
 		}
 		fmt.Fprintf(w, "%s|%s|%s|%s", r.Header.Get("X-Forwarded-Proto"), r.Header.Get("X-Forwarded-Host"), r.Header.Get("Forwarded"), r.Header.Get("Authorization"))
-	}))
-	defer backend.Close()
+	})
+	backend := tracked.server
 	port := backend.Listener.Addr().(*net.TCPAddr).Port
 	if _, e := m.Configure(ctx, "default", fmt.Sprintf("127.0.0.1:%d", freeNetworkPort(t)), fmt.Sprintf("127.0.0.1:%d", freeNetworkPort(t)), false, tasks.ID()); e != nil {
 		t.Fatal(e)
@@ -125,6 +124,11 @@ func TestExposureBridgeAuthPinsSourceRevocationAndSecretRedaction(t *testing.T) 
 	if response.StatusCode != 403 {
 		t.Fatal(response.Status)
 	}
+	response = call("/", "public.example", "wrong-password")
+	response.Body.Close()
+	if response.StatusCode != 401 || tracked.accepted.Load() != 0 {
+		t.Fatal("rejected authentication reached backend", response.Status)
+	}
 	response = call("/", "public.example", "private-canary")
 	body, _ := io.ReadAll(response.Body)
 	response.Body.Close()
@@ -164,6 +168,7 @@ func TestExposureBridgeAuthPinsSourceRevocationAndSecretRedaction(t *testing.T) 
 	case <-time.After(3 * time.Second):
 		t.Fatal("watcher did not revoke stream")
 	}
+	tracked.waitOpen(t, 0)
 	if _, e := m.ExposeStop(ctx, item.ID, tasks.ID()); e != nil {
 		t.Fatal(e)
 	}

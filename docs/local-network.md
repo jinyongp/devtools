@@ -172,8 +172,14 @@ Tailscale은 로그인과 tailnet HTTPS가 필요하고 선택 Serve 포트의 �
 않고 `tailscale_configuration_changed`로 복구를 요구한다. LocalAPI 접근 권한과 조건부 갱신
 지원이 필요하며 해당 자격증명은 메모리에서만 사용한다.
 다른 포트·경로는 유지한다. Cloudflare Quick Tunnel은 provider 제약으로 SSE를 지원하지 않는다.
-공유 요청은 고정 route의 loopback bridge에서 인증과 확정 public authority를 검사한다.
-HTTPS redirect를 반복하지 않으며 backend에는 실제 public HTTPS scheme/host를 전달한다.
+Cloudflared·Tailscale 공유는 고정 route의 loopback bridge에서 인증과 확정 public authority를 검사한다.
+외부 HTTPS 요청을 내부 HTTP bridge에서 다시 리디렉션하지 않으며 backend에는 확정 public scheme/host를 전달한다.
+공유 Basic 인증에 사용한 `Authorization`은 backend에 전달하지 않는다. `--no-auth`에서는
+애플리케이션 인증을 위해 해당 헤더를 그대로 전달한다. backend 연결 풀은 공유별로 재사용하며,
+공유 중지나 source 변경 시 해당 공유의 요청·stream과 idle 연결을 정리한다.
+HTTPS로 설정한 LAN 공유의 HTTP 요청은 인증을 요구하기 전에 확정 HTTPS URL로 리디렉션한다.
+경로와 query는 보존한다. HTTP만 설정한 LAN 공유는 HTTP를 사용한다. Cloudflared·Tailscale의
+loopback bridge는 provider가 앞단에서 TLS를 종료하므로 이 LAN 리디렉션 대상이 아니다.
 
 ## 격리, WSL과 정리
 

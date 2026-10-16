@@ -208,7 +208,20 @@ func (r Resolver) resolveProject(instance ports.Instance) (project.Context, *pro
 	return config, err, true
 }
 
+// routeSnapshot collects identity inputs from the same listing. It belongs to
+// one call; tracked sources must never be reused across requests.
+type routeSnapshot struct {
+	ref       network.RouteRef
+	state     *ports.State
+	source    string
+	sourceErr *protocol.Error
+}
+
 func (r Resolver) List(ctx context.Context, profile string) ([]Item, *protocol.Error) {
+	return r.list(ctx, profile, nil)
+}
+
+func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnapshot) ([]Item, *protocol.Error) {
 	if profile != "" && !project.ValidProfile(profile) {
 		return nil, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, map[string]any{"field": "profile"})
 	}
@@ -225,6 +238,9 @@ func (r Resolver) List(ctx context.Context, profile string) ([]Item, *protocol.E
 	if err != nil {
 		return nil, err
 	}
+	if snapshot != nil {
+		snapshot.state = state
+	}
 	type resolution struct {
 		instance ports.Instance
 		status   string
@@ -232,7 +248,7 @@ func (r Resolver) List(ctx context.Context, profile string) ([]Item, *protocol.E
 		err      *protocol.Error
 	}
 	resolved := make([]resolution, 0, len(state.Instances))
-	stable := r.cache != nil && !registryChanged
+	stable := r.cache != nil && !registryChanged && snapshot == nil
 	if state.Network != nil {
 		for _, a := range state.Network.Activations {
 			if a.Mode == "active" {
@@ -297,14 +313,25 @@ func (r Resolver) List(ctx context.Context, profile string) ([]Item, *protocol.E
 			names = append(names, name)
 		}
 		sort.Strings(names)
+		var source string
+		var sourceErr *protocol.Error
+		sourceChecked := false
+		if snapshot != nil && snapshot.ref.Scope == "project" && snapshot.ref.Profile == instance.Profile && snapshot.ref.InstanceID == instance.ID {
+			source, sourceErr = config.NetworkSources()
+			sourceChecked = true
+			snapshot.source, snapshot.sourceErr = source, sourceErr
+		}
 		for _, name := range names {
 			item := route(*state, instance, name, config.Proxies[name])
 			if definition := config.Ports[config.Proxies[name].Port]; definition.Expression != nil && item.Status == StatusReady && state.Activation(item.Ref()) == nil {
 				item.Status = "activation_required"
 			}
 			if a := state.Activation(item.Ref()); a != nil && a.Mode == "active" && a.EnvironmentBacked {
-				source, e := config.NetworkSources()
-				if e != nil || source != a.SourceDigest {
+				if !sourceChecked {
+					source, sourceErr = config.NetworkSources()
+					sourceChecked = true
+				}
+				if sourceErr != nil || source != a.SourceDigest {
 					item.Status = "activation_required"
 				}
 			}

@@ -961,11 +961,18 @@ func (m Manager) Serve(ctx context.Context, attemptID string) error {
 	serveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	connections := &connectionRegistry{}
+	transport := loopbackTransport()
 	proxyServer := &http.Server{
-		Handler:           NewHandler(NewResolver(m.portStore())),
+		Handler:           &Handler{Routes: NewResolver(m.portStore()), Transport: transport},
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       time.Minute,
 	}
+	closeProxy := func() {
+		_ = proxyServer.Close()
+		connections.closeAll()
+		transport.CloseIdleConnections()
+	}
+	defer closeProxy()
 	serveErrors := make(chan error, len(listeners))
 	for _, listener := range listeners {
 		go func(listener net.Listener) {
@@ -1024,8 +1031,7 @@ func (m Manager) Serve(ctx context.Context, attemptID string) error {
 			reason = "control_failed"
 		}
 	}
-	_ = proxyServer.Close()
-	connections.closeAll()
+	closeProxy()
 	now = time.Now().UTC()
 	_, changed, err = m.changeAttempt(context.Background(), attemptID, func(active *Record) bool {
 		if active.State != "running" || active.EndedAt != nil {

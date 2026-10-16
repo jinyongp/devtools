@@ -36,14 +36,12 @@ type exposureRPCResult struct {
 }
 
 func (m Manager) exposureIdentity(ctx context.Context, ref network.RouteRef) (Item, network.Listener, string, *protocol.Error) {
-	st, e := m.portStore().Read()
+	snapshot := &routeSnapshot{ref: ref}
+	items, e := NewResolver(m.portStore()).list(ctx, "", snapshot)
 	if e != nil {
 		return Item{}, network.Listener{}, "", e
 	}
-	items, e := NewResolver(m.portStore()).List(ctx, "")
-	if e != nil {
-		return Item{}, network.Listener{}, "", e
-	}
+	st := snapshot.state
 	var selected Item
 	found := false
 	for _, item := range items {
@@ -63,23 +61,15 @@ func (m Manager) exposureIdentity(ctx context.Context, ref network.RouteRef) (It
 	if e != nil {
 		return selected, *l, "", e
 	}
-	source := ""
-	if ref.Scope == "project" {
-		p, e := project.Resolve(selected.Directory, "")
-		if e != nil {
-			return selected, *l, "", e
-		}
-		source, e = p.NetworkSources()
-		if e != nil {
-			return selected, *l, "", e
-		}
+	if snapshot.sourceErr != nil {
+		return selected, *l, "", snapshot.sourceErr
 	}
 	digest := project.Digest(struct {
 		Item        Item
 		Listener    network.Listener
 		HTTP, HTTPS int
 		Source      string
-	}{selected, *l, h, t, source})
+	}{selected, *l, h, t, snapshot.source})
 	return selected, *l, digest, nil
 }
 

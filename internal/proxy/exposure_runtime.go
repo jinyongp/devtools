@@ -17,17 +17,21 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
-type publicIngress struct{ Authority, Scheme string }
+type publicIngress struct {
+	Authority, Scheme string
+	Authenticated     bool
+}
 type ingressKey struct{}
 type exposureRuntime struct {
-	mu       sync.Mutex
-	stopMu   sync.Mutex
-	record   expose.Record
-	auth     string
-	sessions expose.Sessions
-	bridge   *http.Server
-	provider expose.ProviderSession
-	owner    *networkRuntime
+	mu        sync.Mutex
+	stopMu    sync.Mutex
+	record    expose.Record
+	auth      string
+	sessions  expose.Sessions
+	transport *http.Transport
+	bridge    *http.Server
+	provider  expose.ProviderSession
+	owner     *networkRuntime
 }
 
 func validateLANListener(l network.Listener, httpPort, httpsPort int) *protocol.Error {
@@ -124,7 +128,15 @@ func (r *networkRuntime) exposure(q exposureRPCRequest) (expose.Public, *protoco
 	} else if q.Auth != "" {
 		return record.Public, expose.Failure("request_conflict")
 	}
-	x := &exposureRuntime{record: record, auth: q.Auth, owner: r}
+	startingRecord := record
+	startingRecord.State = "starting"
+	x := &exposureRuntime{record: startingRecord, auth: q.Auth, owner: r, transport: loopbackTransport()}
+	started := false
+	defer func() {
+		if !started {
+			x.transport.CloseIdleConnections()
+		}
+	}()
 	if !x.valid() {
 		return record.Public, expose.Failure("exposure_identity_changed")
 	}
@@ -173,13 +185,14 @@ func (r *networkRuntime) exposure(q exposureRPCRequest) (expose.Public, *protoco
 			x.bridge.Close()
 			return record.Public, expose.Failure("invalid_provider_url")
 		}
-		x.record.URL = strings.TrimSuffix(u.String(), "/")
-		x.record.ProviderOwner = session.Owner()
+		record.URL = strings.TrimSuffix(u.String(), "/")
+		record.ProviderOwner = session.Owner()
 	}
-	x.record.Daemon = r.attemptID
-	x.record.State = "active"
-	x.record.Reason = ""
-	if e := store.Write(x.record); e != nil {
+	activeRecord := record
+	activeRecord.Daemon = r.attemptID
+	activeRecord.State = "active"
+	activeRecord.Reason = ""
+	if e := store.Write(activeRecord); e != nil {
 		_ = x.sessions.Close(context.Background())
 		if x.bridge != nil {
 			x.bridge.Close()
@@ -189,8 +202,14 @@ func (r *networkRuntime) exposure(q exposureRPCRequest) (expose.Public, *protoco
 		}
 		return record.Public, e
 	}
+	// Provider traffic can arrive as soon as its session starts. Publish one
+	// complete record only after the active state is durable.
+	x.mu.Lock()
+	x.record = activeRecord
+	x.mu.Unlock()
 	r.exposures[q.ID] = x
-	return x.record.Public, nil
+	started = true
+	return activeRecord.Public, nil
 }
 func itoa(number int) string { return strconv.Itoa(number) }
 
@@ -241,14 +260,31 @@ func (x *exposureRuntime) serve(w http.ResponseWriter, request *http.Request) {
 	x.mu.Lock()
 	active := x.record.State == "active"
 	record := x.record
-	authorized := x.authorized(request)
 	x.mu.Unlock()
-	if !active || !x.valid() {
+	if !active {
 		http.Error(w, "exposure unavailable", 503)
 		return
 	}
 	u, e := url.Parse(record.URL)
-	if e != nil || !strings.EqualFold(request.Host, u.Host) {
+	if e != nil {
+		http.Error(w, "exposure authority mismatch", 403)
+		return
+	}
+	if record.Provider == "lan" && u.Scheme == "https" && request.TLS == nil {
+		host, ok := requestHost(request.Host)
+		if !ok || !strings.EqualFold(host, u.Hostname()) {
+			http.Error(w, "exposure authority mismatch", 403)
+			return
+		}
+		// LAN terminates TLS here. Redirect to the committed HTTPS authority
+		// before inspecting credentials; provider bridges terminate TLS upstream.
+		redirect := *u
+		redirect.Path, redirect.RawPath = request.URL.Path, request.URL.RawPath
+		redirect.RawQuery, redirect.ForceQuery = request.URL.RawQuery, request.URL.ForceQuery
+		http.Redirect(w, request, redirect.String(), http.StatusTemporaryRedirect)
+		return
+	}
+	if !strings.EqualFold(request.Host, u.Host) {
 		http.Error(w, "exposure authority mismatch", 403)
 		return
 	}
@@ -256,9 +292,16 @@ func (x *exposureRuntime) serve(w http.ResponseWriter, request *http.Request) {
 		http.Error(w, "exposure authority mismatch", 403)
 		return
 	}
+	x.mu.Lock()
+	authorized := x.authorized(request)
+	x.mu.Unlock()
 	if !authorized {
 		w.Header().Set("WWW-Authenticate", `Basic realm="devtools", charset="UTF-8"`)
 		http.Error(w, "authentication required", 401)
+		return
+	}
+	if !x.valid() {
+		http.Error(w, "exposure unavailable", 503)
 		return
 	}
 	writer, req, end, ok := x.sessions.Begin(w, request)
@@ -267,8 +310,15 @@ func (x *exposureRuntime) serve(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 	defer end()
-	req = req.WithContext(context.WithValue(req.Context(), ingressKey{}, publicIngress{Authority: u.Host, Scheme: u.Scheme}))
-	h := NewHandler(x.owner.resolver)
+	scheme := u.Scheme
+	if record.Provider == "lan" {
+		scheme = "http"
+		if request.TLS != nil {
+			scheme = "https"
+		}
+	}
+	req = req.WithContext(context.WithValue(req.Context(), ingressKey{}, publicIngress{Authority: u.Host, Scheme: scheme, Authenticated: record.Auth}))
+	h := Handler{Transport: x.transport}
 	h.forward(writer, req, record.Pin.Port)
 }
 
@@ -286,10 +336,15 @@ func (x *exposureRuntime) stop(reason string) (expose.Public, *protocol.Error) {
 	record := x.record
 	x.mu.Unlock()
 	store := expose.Store{Data: x.owner.manager.Data}
-	if e := store.Write(record); e != nil {
-		return record.Public, e
+	writeErr := store.Write(record)
+	// Revoke local work even if persisting the stop intent fails. A retry can
+	// reconcile durable/provider state, but must not leave backend sockets open.
+	closed := x.sessions.Close(context.Background())
+	x.transport.CloseIdleConnections()
+	if writeErr != nil {
+		return record.Public, writeErr
 	}
-	if !x.sessions.Close(context.Background()) {
+	if !closed {
 		return record.Public, expose.Failure("stream_recovery_required")
 	}
 	if x.bridge != nil {

@@ -81,16 +81,6 @@ func (s Store) pageCursorFast(q Query, limit int) (Object, *protocol.Error) {
 	return pageSnapshotResult(s.Profile, snapshot, parts[0], offset, limit)
 }
 
-func replayGraphSnapshot(snapshot GraphSnapshot) (*State, *protocol.Error) {
-	state := NewState()
-	for _, event := range snapshot.Events {
-		if event.Sequence != state.Revision+1 || safeApply(state, event) != nil {
-			return nil, storageError()
-		}
-	}
-	return state, nil
-}
-
 func (s Store) graphCursorFast(q Query, kind string, limit int) (Object, *protocol.Error) {
 	token := q.Options["cursor"]
 	if !validID(token) {
@@ -98,34 +88,23 @@ func (s Store) graphCursorFast(q Query, kind string, limit int) (Object, *protoc
 	}
 	var snapshot GraphSnapshot
 	if err := ReadPrivate(filepath.Join(s.cacheDirectory(), token+".json"), &snapshot); err != nil ||
+		snapshot.Version != graphSnapshotVersion ||
+		snapshot.Nodes == nil || snapshot.Upstream == nil || snapshot.Downstream == nil ||
 		snapshot.Projection != ProjectionVersion ||
 		snapshot.Profile != s.Profile ||
 		snapshot.Kind != kind ||
 		time.Now().After(snapshot.Expires) {
 		return nil, failure("cursor_invalid", "Start a new graph query.")
 	}
-	state, stateErr := replayGraphSnapshot(snapshot)
-	if stateErr != nil {
-		return nil, stateErr
+	if q.Target != "" && snapshot.Nodes[q.Target] == nil {
+		return nil, failure("not_found", "The requested item does not exist in this profile.")
 	}
-	if q.Target != "" {
-		if _, err := state.Get(q.Target, kind); err != nil {
-			return nil, err
-		}
-	}
-	depth, err := graphDepth(q.Options)
+	direction, depth, err := graphOptions(q.Options)
 	if err != nil {
 		return nil, err
 	}
-	direction := q.Options["direction"]
-	if direction == "" {
-		direction = "upstream"
-	}
-	if direction != "upstream" && direction != "downstream" {
-		return nil, failure("invalid_argument", "Choose upstream or downstream.")
-	}
-	out := Object{"profile": s.Profile, "revision": state.Revision}
-	for key, value := range state.Tree(kind, q.Target, q.Options["workstream"], direction, depth, limit) {
+	out := Object{"profile": s.Profile, "revision": snapshot.Revision}
+	for key, value := range snapshot.tree(q.Target, q.Options["workstream"], direction, depth, limit) {
 		out[key] = value
 	}
 	out["cursor"] = nil

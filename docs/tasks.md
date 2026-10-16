@@ -167,6 +167,11 @@ without dependency edges or continuations beyond those nodes. Follow each emitte
 continuation's ID, direction, and depth with the graph cursor; a depth-0 continuation
 returns its boundary node and finishes that branch.
 
+Graph cursors freeze node views (including run and completion status) and graph
+relations at the first query revision. Follow-up queries do not replay event
+history. Cursors from the older event-based cache format return `cursor_invalid`;
+start a fresh query. This cache change does not migrate task journals or WALs.
+
 `devtools dashboard` and its alias `dashboard start` return JSON with server
 metadata in `data.item` and a fresh login link in `data.item.url`. Open the full
 link, including its fragment, to connect the browser tab. Choose a profile from

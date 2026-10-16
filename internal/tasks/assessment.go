@@ -101,6 +101,12 @@ func (s *State) Assessments() map[string]Assessment {
 	if s.assessments != nil {
 		return s.assessments
 	}
+	if s.readIndex == nil {
+		// Evaluation itself does not change graph membership or run state. Keep
+		// this index local to the pass when evaluating a mutable candidate.
+		s.prepareReads()
+		defer func() { s.readIndex = nil }()
+	}
 	if s.Version == 1 {
 		current := s.clone()
 		current.applyUpgrade(s.upgradeEvent())
@@ -109,14 +115,11 @@ func (s *State) Assessments() map[string]Assessment {
 	}
 	out := map[string]Assessment{}
 	validations := map[string][]*Item{}
-	tasks := map[string][]*Item{}
+	tasks := s.readIndex.members
 	for _, v := range s.List("validation") {
 		if o := s.owner(v); o != nil && s.Included(v) {
 			validations[o.ID] = append(validations[o.ID], v)
 		}
-	}
-	for _, t := range s.List("task") {
-		tasks[t.Workstream] = append(tasks[t.Workstream], t)
 	}
 	validationDefs := func(id string) []Object {
 		defs := []Object{}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -55,12 +56,19 @@ type Snapshot struct {
 	Items       []any     `json:"items"`
 }
 
+const graphSnapshotVersion = 1
+
 type GraphSnapshot struct {
-	Projection int       `json:"projection_version"`
-	Profile    string    `json:"profile"`
-	Kind       string    `json:"kind"`
-	Expires    time.Time `json:"expires"`
-	Events     []Event   `json:"events"`
+	Version    int                 `json:"version"`
+	Projection int                 `json:"projection_version"`
+	Profile    string              `json:"profile"`
+	Kind       string              `json:"kind"`
+	Expires    time.Time           `json:"expires"`
+	Revision   int                 `json:"revision"`
+	Nodes      map[string]Object   `json:"nodes"`
+	OrderedIDs []string            `json:"ordered_ids"`
+	Upstream   map[string][]string `json:"upstream"`
+	Downstream map[string][]string `json:"downstream"`
 }
 
 func (s Store) cacheDirectory() string {
@@ -81,11 +89,27 @@ func positive(o map[string]string, k string, def, max int) (int, *protocol.Error
 	return n, nil
 }
 
-func graphDepth(options map[string]string) (int, *protocol.Error) {
-	if options["depth"] == "0" {
-		return 0, nil
+// GraphDepthPattern is shared by the CLI schema and both graph query paths.
+const GraphDepthPattern = `^(0|[1-9]|1[0-9]|20)$`
+
+var graphDepthPattern = regexp.MustCompile(GraphDepthPattern)
+
+func graphOptions(options map[string]string) (string, int, *protocol.Error) {
+	depth := 3
+	if value := options["depth"]; value != "" {
+		if !graphDepthPattern.MatchString(value) {
+			return "", 0, failure("invalid_argument", "Numeric option is outside its allowed range.")
+		}
+		depth, _ = strconv.Atoi(value)
 	}
-	return positive(options, "depth", 3, 20)
+	direction := options["direction"]
+	if direction == "" {
+		direction = "upstream"
+	}
+	if direction != "upstream" && direction != "downstream" {
+		return "", 0, failure("invalid_argument", "Choose upstream or downstream.")
+	}
+	return direction, depth, nil
 }
 
 func proposedEditImpact(s *State, item *Item, kind string, body Object) (Object, bool, *protocol.Error) {
@@ -236,6 +260,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		}
 		out["revision"] = s.Revision
 	}
+	s.prepareReads()
 	var item *Item
 	if q.Target != "" && q.Command != "checkpoint list" {
 		item, e = s.Get(q.Target, kind)
@@ -346,16 +371,9 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		}
 		return out, nil
 	case "tree":
-		depth, e := graphDepth(q.Options)
+		direction, depth, e := graphOptions(q.Options)
 		if e != nil {
 			return nil, e
-		}
-		direction := q.Options["direction"]
-		if direction == "" {
-			direction = "upstream"
-		}
-		if direction != "upstream" && direction != "downstream" {
-			return nil, failure("invalid_argument", "Choose upstream or downstream.")
 		}
 		for k, v := range s.Tree(kind, q.Target, q.Options["workstream"], direction, depth, limit) {
 			out[k] = v
@@ -369,15 +387,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 					return nil, storageError()
 				}
 				token = ID()
-				historyState := s
-				if len(historyState.Events) != historyState.Revision {
-					fullState, loadErr := store.loadHistory()
-					if loadErr != nil || fullState.Revision != s.Revision {
-						return nil, storageError()
-					}
-					historyState = fullState
-				}
-				snapshot := GraphSnapshot{Projection: ProjectionVersion, Profile: store.Profile, Kind: kind, Expires: time.Now().Add(retention.QuerySnapshotTTL), Events: historyState.Events}
+				snapshot := s.graphSnapshot(store.Profile, kind)
 				if e := WritePrivate(filepath.Join(dir, token+".json"), snapshot); e != nil {
 					return nil, storageError()
 				}

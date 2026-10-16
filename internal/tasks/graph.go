@@ -31,13 +31,17 @@ func (s *State) Blockers(i *Item) []Object {
 	return out
 }
 func (s *State) successors(id string) []string {
+	index := s.readIndex
+	if index == nil {
+		index = buildTaskReadIndex(s)
+	}
 	seen := map[string]bool{}
 	q := []string{id}
 	for len(q) > 0 {
 		v := q[0]
 		q = q[1:]
-		for _, i := range s.Items {
-			if contains(i.Depends, v) && !seen[i.ID] {
+		for _, i := range index.dependents[v] {
+			if !seen[i.ID] {
 				seen[i.ID] = true
 				q = append(q, i.ID)
 			}
@@ -68,17 +72,16 @@ func (s *State) Impact(id string) Object {
 			runs = append(runs, r.ID)
 		}
 		if i.Kind == "workstream" {
-			for _, t := range s.List("task") {
-				if t.Workstream == x {
-					affected = append(affected, t.ID)
-					if r := s.Current(t.ID); r != nil {
-						runs = append(runs, r.ID)
-					}
-					if x != id && t.State == "done" {
-						done = append(done, t.ID)
-					}
+			for _, t := range s.workstreamTasks(x) {
+				affected = append(affected, t.ID)
+				if r := s.Current(t.ID); r != nil {
+					runs = append(runs, r.ID)
+				}
+				if x != id && t.State == "done" {
+					done = append(done, t.ID)
 				}
 			}
+
 		}
 	}
 	_ = target
@@ -192,15 +195,58 @@ func (s *State) validationWorkstream(v *Item) string {
 	return str(v.Props, "workstream_id")
 }
 func (s *State) Tree(kind, id, ws, direction string, depth, limit int) Object {
+	index := s.readIndex
+	if index == nil {
+		index = buildTaskReadIndex(s)
+	}
+	graph := graphReader{
+		has: func(id string) bool { return s.Items[id] != nil },
+		ordered: func() []string {
+			ids := []string{}
+			for _, item := range index.ordered[kind] {
+				if (ws == "" || item.Workstream == ws) && s.Included(item) {
+					ids = append(ids, item.ID)
+				}
+			}
+			return ids
+		},
+		view: func(id string) Object {
+			if item := s.Items[id]; item != nil {
+				return s.View(item)
+			}
+			return nil
+		},
+		neighbors: func(id string) []string {
+			if direction == "upstream" {
+				return s.Items[id].Depends
+			}
+			ids := []string{}
+			for _, item := range index.dependents[id] {
+				if item.Kind == kind {
+					ids = append(ids, item.ID)
+				}
+			}
+			return ids
+		},
+	}
+	return graph.tree(id, direction, depth, limit)
+}
+
+// graphReader is shared by live and frozen graph queries. Traversal, depth and
+// continuation semantics have a single implementation.
+type graphReader struct {
+	has       func(string) bool
+	ordered   func() []string
+	view      func(string) Object
+	neighbors func(string) []string
+}
+
+func (g graphReader) tree(id, direction string, depth, limit int) Object {
 	roots := []string{}
 	if id != "" {
 		roots = append(roots, id)
 	} else {
-		for _, i := range s.List(kind) {
-			if (ws == "" || i.Workstream == ws) && s.Included(i) {
-				roots = append(roots, i.ID)
-			}
-		}
+		roots = g.ordered()
 	}
 	type step struct {
 		ID    string
@@ -220,8 +266,7 @@ func (s *State) Tree(kind, id, ws, direction string, depth, limit int) Object {
 		if seen[n.ID] {
 			continue
 		}
-		i := s.Items[n.ID]
-		if i == nil {
+		if !g.has(n.ID) {
 			continue
 		}
 		if len(nodes) >= limit {
@@ -229,26 +274,18 @@ func (s *State) Tree(kind, id, ws, direction string, depth, limit int) Object {
 			continue
 		}
 		seen[n.ID] = true
-		nodes = append(nodes, s.View(i))
+		nodes = append(nodes, g.view(n.ID))
 		if depth == 0 {
 			continue
 		}
-		next := i.Depends
-		if direction == "downstream" {
-			next = []string{}
-			for _, x := range s.List(kind) {
-				if contains(x.Depends, i.ID) {
-					next = append(next, x.ID)
-				}
-			}
-		}
+		next := g.neighbors(n.ID)
 		for _, x := range next {
-			from, to := x, i.ID
+			from, to := x, n.ID
 			if direction == "downstream" {
-				from, to = i.ID, x
+				from, to = n.ID, x
 			}
 			if n.Depth >= depth {
-				cont = append(cont, Object{"id": i.ID, "direction": direction, "depth": depth})
+				cont = append(cont, Object{"id": n.ID, "direction": direction, "depth": depth})
 				continue
 			}
 			edges = append(edges, Object{"from": from, "to": to})

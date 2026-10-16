@@ -63,6 +63,7 @@ type State struct {
 	HistoryRefs               map[string][]int
 	historyRefCounts          map[int]int
 	historyComplete           bool
+	readIndex                 *taskReadIndex
 	assessments               map[string]Assessment
 	migrating                 bool
 	replayDefinitionSignature string
@@ -200,6 +201,9 @@ func (s *State) Get(id, kind string) (*Item, *protocol.Error) {
 	return i, nil
 }
 func (s *State) Current(id string) *Run {
+	if s.readIndex != nil {
+		return s.readIndex.activeRuns[id]
+	}
 	for _, r := range s.Runs {
 		if r.TaskID == id && r.State == "running" {
 			return r
@@ -208,6 +212,9 @@ func (s *State) Current(id string) *Run {
 	return nil
 }
 func (s *State) List(kind string) []*Item {
+	if s.readIndex != nil {
+		return append([]*Item{}, s.readIndex.ordered[kind]...)
+	}
 	r := []*Item{}
 	for _, i := range s.Items {
 		if kind == "" || i.Kind == kind {
@@ -225,6 +232,8 @@ func (s *State) List(kind string) []*Item {
 
 // Apply only reduces accepted events; authorization and guards precede append.
 func (s *State) Apply(e Event) {
+	// No derived read state may survive an event, including intermediate reads.
+	s.readIndex = nil
 	d := e.Data
 	i := s.Items[e.Target]
 	previousCompletions := map[string]bool{}
@@ -498,16 +507,14 @@ func (s *State) View(i *Item) Object {
 		c := Object{"open": 0, "done": 0, "canceled": 0}
 		completed := Object{"none": 0, "current": 0, "stale": 0}
 		removed := 0
-		for _, t := range s.Items {
-			if t.Kind == "task" && t.Workstream == i.ID {
-				if !s.Included(t) {
-					removed++
-					continue
-				}
-				c[t.State] = num(c, t.State) + 1
-				status := s.Assessment(t.ID).CompletionStatus
-				completed[status] = num(completed, status) + 1
+		for _, t := range s.workstreamTasks(i.ID) {
+			if !s.Included(t) {
+				removed++
+				continue
 			}
+			c[t.State] = num(c, t.State) + 1
+			status := s.Assessment(t.ID).CompletionStatus
+			completed[status] = num(completed, status) + 1
 		}
 		v["counts"] = c
 		v["completion_counts"] = completed

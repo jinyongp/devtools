@@ -165,7 +165,7 @@ func taskQueryOptionPattern(command, option string) string {
 	case "direction":
 		return `^(upstream|downstream)$`
 	case "depth":
-		return `^(0|[1-9]|1[0-9]|20)$`
+		return tasks.GraphDepthPattern
 	}
 	return ""
 }

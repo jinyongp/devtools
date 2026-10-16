@@ -385,7 +385,7 @@ validation은 `title`, `method`, `required`, 연결 대상 task 또는 workstrea
 
 profile 해석 오류는 기존 CLI 계약을 따른다. 오류 details에는 대상과 차단·충돌 원인을 담고 점유 증명과 컨텍스트는 포함하지 않는다. `context_invalid`는 원문 대신 `context_reason`으로 missing·unknown·inactive·target_mismatch를 구분한다. `target_mismatch`는 명령 위치 인자의 기대 종류와 실제 종류를 `expected_target_kind`·`actual_target_kind`로 함께 반환한다.
 
-목록은 기본 50개, 최대 200개와 cursor로 조회한다. ID 순으로 정렬하고 이어 읽기는 같은 리비전의 결과를 사용한다. 스냅샷은 마지막 접근 후 30분 동안 유지하며 만료하면 새 조회를 안내한다. 트리는 `--direction upstream|downstream`과 `--depth`를 제공한다. 기본은 upstream·깊이 3, 최대 깊이는 20이다. JSON에는 `nodes`, `edges`, `roots`, 리비전을 반환하고 응답당 최대 200개 노드 이후의 가지는 이어 조회할 ID를 표시한다.
+목록은 기본 50개, 최대 200개와 cursor로 조회한다. 생성 순서와 ID를 기준으로 정렬하고 이어 읽기는 같은 리비전의 결과를 사용한다. 스냅샷은 생성 후 30분 동안 유지하며 만료하면 새 조회를 안내한다. 트리는 `--direction upstream|downstream`과 `--depth`를 제공한다. 기본은 upstream·깊이 3, 최대 깊이는 20이다. JSON에는 `nodes`, `edges`, `roots`, 리비전을 반환하고 응답당 최대 200개 노드 이후의 가지는 이어 조회할 ID를 표시한다.
 
 ### Dashboard 수명과 접근
 
@@ -418,3 +418,24 @@ Canvas 그래프와 같은 정보를 검색 가능한 목록·상세 영역에�
 | 7 | dashboard | 사용자별 로컬 서버, 상태·종료 명령, 세션 접근 제어, 리비전 캐시와 동적 Canvas 조회. |
 
 구현 시 이 계약을 명령 스키마와 성공·오류·동시성·복구 테스트에 반영한다.
+
+
+## 작업 조회 모델과 그래프 스냅샷
+
+이벤트와 materialized state를 원본으로 유지한다. 조회 평가 단계에서 정렬된 종류별 항목,
+역방향 의존 관계, workstream 소속, 작업별 활성 run을 한 번 구성해 재사용한다. 인덱스는
+해당 State에만 속하며 저장하지 않는다. 이벤트 적용 시 폐기하고, 미리보기 clone에는
+전달하지 않는다. 가변 후보의 assessment 계산에서 사용하는 인덱스도 계산이 끝나면
+폐기한다. 따라서 여러 편집 연산 사이에 이전 관계나 실행 상태가 남지 않는다.
+
+그래프 cursor는 전체 이벤트 대신 해당 종류의 모든 노드 공개 view와 양방향 관계,
+정렬된 포함 노드 ID, revision·projection·만료 시각을 저장한다. 첫 페이지에 없는 노드와
+직접 참조 가능한 제거 노드도 보존한다. 실행·완료 상태를 포함한 view는 생성 시점으로
+고정하며, 후속 조회는 현재 journal을 읽거나 이벤트를 재생하지 않는다. 최초·후속 조회는
+같은 탐색기와 옵션 검증을 사용한다. CLI의 depth schema도 같은 패턴을 사용한다.
+
+그래프 캐시에는 별도 형식 버전이 있다. 이전 이벤트 기반 캐시나 지원하지 않는 형식은
+`cursor_invalid`로 새 조회를 안내한다. 영구 journal·WAL 형식은 바꾸지 않는다. 스냅샷은
+단일 JSON 파일이므로 후속 조회에도 그래프 전체의 읽기·역직렬화 비용은 남는다.
+미리보기의 깊은 복사는 유지한다. 중첩 map·slice의 변경 격리를 보장하며, 문자열 본문은
+공유한다. 변경 집합 방식은 실제 편집 workload의 allocation 측정 후 별도로 판단한다.

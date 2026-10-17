@@ -98,14 +98,14 @@ func adoptInheritedLease(file *os.File, path string) (*lockedLease, error) {
 func (s Store) readLaunchMarker(id string) (launchMarker, bool, *protocol.Error) {
 	var marker launchMarker
 	if !validID(id) {
-		return marker, false, storageError()
+		return marker, false, storageErrorAt("validate_launch_marker_id", nil)
 	}
 	root, err := platformfs.OpenRoot(s.path(id, ""), false)
 	if errors.Is(err, os.ErrNotExist) {
 		return marker, false, nil
 	}
 	if err != nil {
-		return marker, false, storageError()
+		return marker, false, storageErrorAt("open_launch_marker_directory", err)
 	}
 	defer root.Close()
 	body, err := root.ReadFile("launch.json", 4096)
@@ -113,28 +113,28 @@ func (s Store) readLaunchMarker(id string) (launchMarker, bool, *protocol.Error)
 		return marker, false, nil
 	}
 	if err != nil || json.Unmarshal(body, &marker) != nil || !validLaunchMarker(marker) {
-		return marker, false, storageError()
+		return marker, false, storageErrorAt("read_launch_marker", err)
 	}
 	return marker, true, nil
 }
 func (s Store) prepareLaunch(record Record, snapshots ...*network.ExecutionSnapshot) (*lockedLease, *protocol.Error) {
 	if !validID(record.ID) {
-		return nil, storageError()
+		return nil, storageErrorAt("validate_launch_id", nil)
 	}
 	root, err := platformfs.OpenRoot(s.Data, true)
 	if err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("open_launch_data", err)
 	}
 	defer root.Close()
 	if err = root.MkdirAll("processes"); err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("create_process_root", err)
 	}
 	if err = root.MkdirAll("process-leases"); err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("create_lease_root", err)
 	}
 	lease, acquired, err := tryLease(s.leasePath(record.ID), true)
 	if err != nil || !acquired {
-		return nil, storageError()
+		return nil, storageErrorAt("acquire_launch_lease", err)
 	}
 	keepLease := false
 	defer func() {
@@ -144,7 +144,7 @@ func (s Store) prepareLaunch(record Record, snapshots ...*network.ExecutionSnaps
 	}()
 	staging := filepath.Join("processes", launchStagingName(record.ID)+strings.ReplaceAll(tasks.ID(), "-", ""))
 	if err = root.MkdirAll(staging); err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("create_launch_staging", err)
 	}
 	published := false
 	defer func() {
@@ -160,28 +160,28 @@ func (s Store) prepareLaunch(record Record, snapshots ...*network.ExecutionSnaps
 		return root.WriteFile(context.Background(), filepath.Join(staging, name), body, false)
 	}
 	if err = write("record.json", record); err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("stage_launch_record", err)
 	}
 	if record.ProxyMode {
 		if len(snapshots) == 0 || snapshots[0] == nil || snapshots[0].ID != record.NetworkSnapshotID {
 			return nil, failure("network_snapshot_required")
 		}
 		if err = write("network.json", snapshots[0]); err != nil {
-			return nil, storageError()
+			return nil, storageErrorAt("stage_network_snapshot", err)
 		}
 	}
 	if err = write("launch.json", platformLaunchMarker()); err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("stage_launch_marker", err)
 	}
 	if err = root.PublishDirectory(context.Background(), staging, filepath.Join("processes", record.ID)); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return nil, failure("request_conflict")
 		}
-		return nil, storageError()
+		return nil, storageErrorAt("publish_launch_directory", err)
 	}
 	published = true
 	if err = validateLeaseIdentity(lease.file, s.leasePath(record.ID)); err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("open_published_lease", err)
 	}
 	keepLease = true
 	return lease, nil
@@ -193,12 +193,12 @@ func (s Store) cleanupLaunchStaging() *protocol.Error {
 		return nil
 	}
 	if err != nil {
-		return storageError()
+		return storageErrorAt("open_cleanup_root", err)
 	}
 	defer root.Close()
 	entries, err := os.ReadDir(s.root())
 	if err != nil {
-		return storageError()
+		return storageErrorAt("enumerate_launch_staging", err)
 	}
 	for _, entry := range entries {
 		if !validLaunchStagingName(entry.Name()) {
@@ -207,16 +207,16 @@ func (s Store) cleanupLaunchStaging() *protocol.Error {
 		path := filepath.Join(s.root(), entry.Name())
 		checked, err := platformfs.OpenRoot(path, false)
 		if err != nil {
-			return storageError()
+			return storageErrorAt("open_launch_staging", err)
 		}
 		if err = checked.Close(); err != nil {
-			return storageError()
+			return storageErrorAt("close_launch_staging", err)
 		}
 		// Only unpublished stages under the pinned private process root are removed.
 		// Stable process-leases is outside this tree and is never moved or deleted.
 		// A crash may leave a stage for the next cleanup; no directory fsync is claimed.
 		if err = os.RemoveAll(path); err != nil {
-			return storageError()
+			return storageErrorAt("remove_launch_staging", err)
 		}
 	}
 	return nil

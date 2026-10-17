@@ -117,15 +117,7 @@ func (s Store) Remove(ctx context.Context, fingerprint string) *protocol.Error {
 	if authority.Fingerprint() != fingerprint {
 		return failure("ca_changed")
 	}
-	if e := os.Remove(filepath.Join(s.root(), "material.json")); e != nil {
-		return failure("io_error")
-	}
-	d, e := os.Open(s.root())
-	if e != nil {
-		return failure("io_error")
-	}
-	defer d.Close()
-	if d.Sync() != nil {
+	if e := removeMaterial(ctx, s.root()); e != nil {
 		return failure("io_error")
 	}
 	return nil

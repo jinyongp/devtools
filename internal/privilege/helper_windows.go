@@ -124,7 +124,9 @@ type shellExecuteInfo struct {
 func spawnWindowsHelper(ctx context.Context, executable, pipe string, elevate bool) (windows.Handle, error) {
 	if !elevate {
 		command := exec.Command(executable, "__windows-network-helper", pipe)
-		command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW, HideWindow: true}
+		// Suppress only the console. A trust helper must be allowed to show the OS
+		// certificate confirmation; SW_HIDE would also hide its first GUI window.
+		command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW}
 		if err := command.Start(); err != nil {
 			return 0, err
 		}

@@ -207,7 +207,7 @@ func TestTLSRejectsUnknownSNI(t *testing.T) {
 		t.Fatal(e)
 	}
 	if _, e := m.NetworkApply(ctx, "start", "tls", false, tasks.ID()); e != nil {
-		t.Fatal(e)
+		t.Fatalf("TLS-only start: code=%s details=%v", e.Code, e.Details)
 	}
 	conn, e := tls.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port), &tls.Config{InsecureSkipVerify: true, ServerName: "unknown.localhost"})
 	if conn != nil {

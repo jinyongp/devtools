@@ -22,7 +22,7 @@ type fakeTailscale struct {
 }
 
 func newFakeTailscale() *fakeTailscale {
-	return &fakeTailscale{status: `{"Version":"1.86.0","BackendState":"Running","Self":{"DNSName":"device.tailnet.ts.net."},"CertDomains":["device.tailnet.ts.net"],"UnknownFutureField":true}`, config: map[string]any{"TCP": map[string]any{}, "Web": map[string]any{}, "FutureField": "accepted"}}
+	return &fakeTailscale{status: `{"Version":"1.104.1","BackendState":"Running","Self":{"DNSName":"device.tailnet.ts.net."},"CertDomains":["device.tailnet.ts.net"],"UnknownFutureField":true}`, config: map[string]any{"TCP": map[string]any{}, "Web": map[string]any{}, "FutureField": "accepted"}}
 }
 
 func (f *fakeTailscale) Read(context.Context) (map[string]json.RawMessage, string, *protocol.Error) {
@@ -114,8 +114,8 @@ func TestTailscaleSelectedHandlerOwnershipAndRecovery(t *testing.T) {
 }
 func TestTailscaleRefusesLoginHTTPSConflictAndOwnershipDrift(t *testing.T) {
 	for _, tc := range []struct{ name, status, code string }{
-		{"login", `{"Version":"1.86.0","BackendState":"NeedsLogin"}`, "tailscale_not_logged_in"},
-		{"https", `{"Version":"1.86.0","BackendState":"Running","Self":{"DNSName":"device.tailnet.ts.net."}}`, "tailscale_https_required"},
+		{"login", `{"Version":"1.104.1","BackendState":"NeedsLogin"}`, "tailscale_not_logged_in"},
+		{"https", `{"Version":"1.104.1","BackendState":"Running","Self":{"DNSName":"device.tailnet.ts.net."}}`, "tailscale_https_required"},
 		{"version", `{"Version":"1.40.0","BackendState":"Running"}`, "tailscale_version_unsupported"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

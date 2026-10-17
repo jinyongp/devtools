@@ -59,12 +59,9 @@ func (p Tailscale) run(ctx context.Context, args ...string) ([]byte, *protocol.E
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, path, args...)
 	out := &boundedOutput{limit: 1 << 20}
 	diagnostic := &boundedOutput{limit: 8192}
-	cmd.Stdout, cmd.Stderr = out, diagnostic
-	cmd.WaitDelay = time.Second
-	if e := cmd.Run(); e != nil {
+	if !runTailscaleCommand(ctx, path, args, out, diagnostic) {
 		if ctx.Err() != nil {
 			return nil, Failure("tailscale_timeout")
 		}
@@ -92,13 +89,7 @@ func (p Tailscale) node(ctx context.Context) (string, *protocol.Error) {
 	if json.Unmarshal(data, &status) != nil {
 		return "", Failure("tailscale_status_invalid")
 	}
-	version := strings.Split(status.Version, ".")
-	if len(version) < 2 {
-		return "", Failure("tailscale_version_unsupported")
-	}
-	major, _ := strconv.Atoi(version[0])
-	minor, _ := strconv.Atoi(version[1])
-	if major < 1 || major == 1 && minor < 52 {
+	if !platformTailscaleVersion(status.Version) {
 		return "", Failure("tailscale_version_unsupported")
 	}
 	if status.BackendState != "Running" {

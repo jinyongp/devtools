@@ -5,13 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
-	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -25,39 +21,11 @@ type tailscaleLocalAPI struct {
 	token  string
 }
 
-var tailscaleTCPCredentials = regexp.MustCompile(`^curl -u:([^\s]+) http://localhost:([0-9]+)/localapi/v0/status$`)
-
-// The installed CLI resolves its platform-specific LocalAPI socket/credentials.
-// These credentials stay in memory. They are never executed as shell text.
 func (p Tailscale) configAPI(ctx context.Context) (tailscaleConfigAPI, *protocol.Error) {
 	if p.API != nil {
 		return p.API, nil
 	}
-	data, e := p.run(ctx, "debug", "local-creds")
-	if e != nil {
-		return nil, Failure("tailscale_atomic_config_unavailable")
-	}
-	credentials := strings.TrimSpace(string(data))
-	network, address, token := "", "", ""
-	if match := tailscaleTCPCredentials.FindStringSubmatch(credentials); match != nil {
-		port, err := strconv.Atoi(match[2])
-		if err != nil || port < 1 || port > 65535 {
-			return nil, Failure("tailscale_atomic_config_unavailable")
-		}
-		network, address, token = "tcp", net.JoinHostPort("127.0.0.1", match[2]), match[1]
-	} else if strings.HasPrefix(credentials, "curl --unix-socket ") && strings.HasSuffix(credentials, " http://local-tailscaled.sock/localapi/v0/status") {
-		network = "unix"
-		address = strings.TrimSuffix(strings.TrimPrefix(credentials, "curl --unix-socket "), " http://local-tailscaled.sock/localapi/v0/status")
-		if !filepath.IsAbs(address) || strings.ContainsAny(address, "\r\n\x00") {
-			return nil, Failure("tailscale_atomic_config_unavailable")
-		}
-	} else {
-		return nil, Failure("tailscale_atomic_config_unavailable")
-	}
-	transport := &http.Transport{Proxy: nil, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return (&net.Dialer{}).DialContext(ctx, network, address)
-	}, DisableKeepAlives: true}
-	return tailscaleLocalAPI{client: &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, token: token}, nil
+	return p.platformConfigAPI(ctx)
 }
 func (a tailscaleLocalAPI) request(ctx context.Context, method string, body []byte, etag string) ([]byte, string, *protocol.Error) {
 	req, err := http.NewRequestWithContext(ctx, method, "http://local-tailscaled.sock/localapi/v0/serve-config", bytes.NewReader(body))

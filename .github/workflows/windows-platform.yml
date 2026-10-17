@@ -7,7 +7,7 @@ on:
         description: Focused feedback; full remains the final completion gate
         type: choice
         default: full
-        options: [full, network, installer]
+        options: [full, network, installer, providers]
   push:
     paths:
       - .github/workflows/windows-platform.yml
@@ -209,7 +209,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native ZIP validation failed' }
 
       - name: Test constrained native hosts and CurrentUser trust boundaries
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus != 'installer' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'network' }}
         env:
           DEVTOOLS_TEST_SYSTEM_NETWORK: '1'
         run: |
@@ -237,8 +237,24 @@ jobs:
           & go vet ./internal/privilege ./internal/hosts ./internal/truststore ./internal/winimage
           if ($LASTEXITCODE -ne 0) { throw 'Native network security vet failed' }
 
+      - name: Test native provider pipes, ownership and ARM emulation
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'providers' }}
+        run: |
+          if ('${{ matrix.arch }}' -eq 'arm64') {
+            $env:GOARCH = 'amd64'
+            try {
+              & go test -c -o "$env:RUNNER_TEMP\devtools-provider-amd64.test.exe" ./internal/expose
+              if ($LASTEXITCODE -ne 0) { throw 'Cannot build amd64 provider emulation fixture' }
+            } finally { Remove-Item Env:GOARCH }
+            $env:DEVTOOLS_TEST_X64_PROVIDER = "$env:RUNNER_TEMP\devtools-provider-amd64.test.exe"
+          }
+          & go test -json -count=1 -timeout 3m ./internal/expose | Tee-Object -FilePath windows-provider-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native provider pipe/lifecycle contract failed' }
+          & go vet ./internal/expose
+          if ($LASTEXITCODE -ne 0) { throw 'Native provider vet failed' }
+
       - name: Test native installer recovery and PS5/PS7 running-image updates
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus != 'network' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'installer' }}
         run: |
           $archive = Get-ChildItem dist -Filter '*.zip' | Select-Object -First 1
           $env:DEVTOOLS_INSTALL_TEST_ZIP = $archive.FullName
@@ -312,6 +328,7 @@ jobs:
             windows-network-security-results.jsonl
             windows-network-runtime-results.jsonl
             windows-tls-repeat-results.jsonl
+            windows-provider-results.jsonl
             windows-update-contract-results.jsonl
             windows-install-transaction-results.jsonl
             windows-install-results.json

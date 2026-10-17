@@ -68,6 +68,10 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $actual = (& go env GOHOSTARCH).Trim()
           if ($LASTEXITCODE -ne 0 -or $actual -ne '${{ matrix.arch }}') { throw 'Native architecture mismatch' }
+          $os = Get-CimInstance Win32_OperatingSystem
+          $release = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+          $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+          @{ commit = $env:GITHUB_SHA; os = $os.Caption; version = $os.Version; build = $os.BuildNumber; display_version = $release.DisplayVersion; architecture = $actual; elevated = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); powershell = $PSVersionTable.PSVersion.ToString() } | ConvertTo-Json | Set-Content -Encoding utf8 runner.json
           $account = 'dvt' + [guid]::NewGuid().ToString('N').Substring(0, 12)
           $password = 'Aa1!' + [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
           Write-Output "::add-mask::$password"
@@ -116,14 +120,23 @@ jobs:
           & go vet ./internal/tasks ./internal/values ./internal/profilekey ./internal/maintenance
           if ($LASTEXITCODE -ne 0) { throw 'Native storage recovery vet failed' }
 
-      - name: Test native backup, transfer, cleanup, logs and registry storage
+      - name: Test native backup, transfer, cleanup, logs and complete ports
         run: |
           & go test -json -count=1 -timeout 8m ./internal/backup ./internal/profiletransfer ./internal/cleanup ./internal/archiveproof ./internal/services | Tee-Object -FilePath storage-integration-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native storage integration tests failed' }
-          & go test -json -count=1 -timeout 3m -run '^Test(Registry|Reservation|Persistent|RunLock|PrepareRollback|NetworkUpgrade|ListenerConfiguration|FixedBackend|PinnedAlias|GlobalRecreation|SelectedPeer|TypedBindings|PublicBindings|GlobalPeer|Windows)' ./internal/ports | Tee-Object -FilePath registry-integration-results.jsonl
+          & go test -json -count=1 -timeout 3m ./internal/ports | Tee-Object -FilePath registry-integration-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native registry storage tests failed' }
           & go vet ./internal/backup ./internal/profiletransfer ./internal/cleanup ./internal/archiveproof ./internal/services ./internal/ports
           if ($LASTEXITCODE -ne 0) { throw 'Native storage integration vet failed' }
+
+      - name: Test native listener diagnostics and nonmutating setup
+        run: |
+          & go test -json -count=1 ./internal/netsetup | Tee-Object -FilePath netsetup-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native setup tests failed' }
+          & go test -json -count=1 -run '^TestWindowsListener|^TestWindowsLoopback' ./internal/proxy | Tee-Object -FilePath listener-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native listener diagnostics failed' }
+          & go vet ./internal/netsetup ./internal/proxy ./internal/ports
+          if ($LASTEXITCODE -ne 0) { throw 'Native listener vet failed' }
 
       - name: Test native console mode and redirected passphrase input
         run: |
@@ -190,6 +203,7 @@ jobs:
         with:
           name: windows-platform-${{ matrix.arch }}
           path: |
+            runner.json
             platformfs-results.jsonl
             process-results.jsonl
             execution-preflight-results.jsonl
@@ -200,6 +214,8 @@ jobs:
             storage-recovery-results.jsonl
             storage-integration-results.jsonl
             registry-integration-results.jsonl
+            netsetup-results.jsonl
+            listener-results.jsonl
             project-release-results.tap
             build-identity-results.jsonl
             dist/*.zip

@@ -41,7 +41,11 @@ type Manager struct {
 }
 
 func failure(code string) *protocol.Error {
-	return protocol.NewError(code, "Cannot prepare low-port access safely. Linux binaries need a filesystem supporting security capabilities; install on the Linux filesystem instead of a Windows mount, or use high ports.", 3, nil)
+	message := "Cannot prepare low-port access safely. Linux binaries need a filesystem supporting security capabilities; install on the Linux filesystem instead of a Windows mount, or use high ports."
+	if runtime.GOOS == "windows" {
+		message = "Cannot inspect native listener setup safely. No firewall, port reservation or portproxy setting was changed; the listener must pass its actual bind check."
+	}
+	return protocol.NewError(code, message, 3, nil)
 }
 
 func (m Manager) executable() string {

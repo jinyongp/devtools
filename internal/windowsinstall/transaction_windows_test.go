@@ -254,6 +254,9 @@ func TestWindowsExplicitUpdateRequiresOwnedInvocation(t *testing.T) {
 			} else if kind == "unowned alias" {
 				invoked = filepath.Join(e.directory, "dvt.exe")
 			}
+			if err := os.WriteFile(invoked, []byte("unowned invocation"), 0600); err != nil {
+				t.Fatal(err)
+			}
 			_, err := apply(context.Background(), Options{Action: "update", BinDir: e.directory}, invoked, func(context.Context, string) ([]byte, string, error) {
 				t.Fatal("explicit update loaded a replacement from an unowned invocation")
 				return nil, "", nil

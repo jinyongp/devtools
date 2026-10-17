@@ -73,13 +73,17 @@ exec = ['cmd.exe', '/d', '/c', 'echo CANARY_NEVER_RUN']
         $matches = @(Matches $line)
         Require (-not [bool]($matches | Where-Object { $_.ListItemText -in @('--profile','--env','completion-fixture') })) 'Child argv boundary leaked devtools candidates'
     }
+    $midLine = 'devtools run docs:dev --env child'
+    $midCursor = 'devtools run docs:'.Length
+    $midMatches = @([Management.Automation.CommandCompletion]::CompleteInput($midLine,$midCursor,$null).CompletionMatches)
+    Require ([bool]($midMatches | Where-Object { $_.ListItemText -ceq 'docs:dev' })) 'Cursor prefix included later argv'
     $canary = Join-Path $root 'MUST_NOT_EXIST'
     foreach ($line in @('devtools run $(Set-Content -LiteralPath MUST_NOT_EXIST -Value bad) ', 'devtools run "$(Set-Content -LiteralPath MUST_NOT_EXIST -Value bad)" ', 'devtools var get $env:USERPROFILE ')) {
         $null = Matches $line
         Require (-not (Test-Path -LiteralPath $canary)) 'Completion evaluated a dynamic expression'
     }
     $schema = & $main schema completion | ConvertFrom-Json
-    Require ($schema.data.protocol_version -eq 7 -and $schema.data.arguments[0].pattern.Contains('powershell')) 'Completion schema mismatch'
+    Require ($schema.data.protocol_version -eq 7 -and $schema.data.input_schema.properties.args.prefixItems[0].pattern.Contains('powershell')) 'Completion schema mismatch'
     [pscustomobject]@{shell=$PSVersionTable.PSVersion.ToString();edition=$PSEdition;protocol=7;native_registration='pass';utf8_nul_dynamic_names='pass';single_quote='pass';child_boundary='pass';dynamic_expression_canary='pass';platform_schema='pass'} | ConvertTo-Json
 } finally {
     Set-Location -LiteralPath $location.Path

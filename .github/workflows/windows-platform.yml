@@ -223,7 +223,7 @@ jobs:
             Add-LocalGroupMember -Group (Get-LocalGroup -SID 'S-1-5-32-545') -Member $account
             $env:DEVTOOLS_TEST_USER = $account
             $env:DEVTOOLS_TEST_PASSWORD = $password
-            & go test -json -count=1 -timeout 4m -run '^TestWindows' ./internal/privilege ./internal/hosts ./internal/truststore | Tee-Object -FilePath windows-network-security-results.jsonl
+            & go test -json -count=1 -timeout 4m -run '^TestWindows' ./internal/privilege ./internal/hosts ./internal/truststore ./cmd/devtools | Tee-Object -FilePath windows-network-security-results.jsonl
             if ($LASTEXITCODE -ne 0) { throw 'Native helper/hosts/trust contract failed' }
           } finally {
             Remove-Item Env:DEVTOOLS_TEST_USER -ErrorAction SilentlyContinue

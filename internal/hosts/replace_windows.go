@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"time"
 	"unsafe"
 
 	"github.com/jinyongp/devtools/internal/platformfs"
@@ -104,7 +103,7 @@ func replaceHostsFile(ctx context.Context, original *platformfs.File, body []byt
 		return err
 	}
 	attributes := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: security}
-	fileHandle, err := windows.CreateFile(ptr, windows.GENERIC_READ|windows.GENERIC_WRITE|windows.READ_CONTROL|windows.ACCESS_SYSTEM_SECURITY, windows.FILE_SHARE_READ, &attributes, windows.CREATE_NEW, info.FileAttributes|windows.FILE_FLAG_OPEN_REPARSE_POINT|windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	fileHandle, err := windows.CreateFile(ptr, windows.GENERIC_READ|windows.GENERIC_WRITE|windows.READ_CONTROL|windows.WRITE_DAC|windows.WRITE_OWNER|windows.ACCESS_SYSTEM_SECURITY, windows.FILE_SHARE_READ, &attributes, windows.CREATE_NEW, info.FileAttributes|windows.FILE_FLAG_OPEN_REPARSE_POINT|windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 	runtime.KeepAlive(security)
 	if err != nil {
 		return err
@@ -115,6 +114,9 @@ func replaceHostsFile(ctx context.Context, original *platformfs.File, body []byt
 		return err
 	}
 	if err = windows.SetFileTime(fileHandle, &info.CreationTime, &info.LastAccessTime, nil); err != nil {
+		return err
+	}
+	if err = windows.SetKernelObjectSecurity(fileHandle, windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.SACL_SECURITY_INFORMATION, security); err != nil {
 		return err
 	}
 	actual, err := windows.GetSecurityInfo(fileHandle, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.SACL_SECURITY_INFORMATION)
@@ -130,42 +132,20 @@ func replaceHostsFile(ctx context.Context, original *platformfs.File, body []byt
 	if err = file.Close(); err != nil {
 		return err
 	}
-	destination, err := windows.UTF16PtrFromString(`\\?\` + path)
+
+	// MoveFileEx(REPLACE_EXISTING) rejects an open destination on these native
+	// runners. Go Root.Rename uses NTFS POSIX replacement semantics, preserving
+	// the held original handle (and write exclusion) until publication completes.
+	root, err := os.OpenRoot(filepath.Dir(path))
 	if err != nil {
 		return err
 	}
-	deadline, delay := time.Now().Add(2*time.Second), 10*time.Millisecond
-	for {
-		if err = ctx.Err(); err != nil {
-			return err
-		}
-		if err = sameHostsFile(handle, path); err != nil {
-			return err
-		}
-		err = windows.MoveFileEx(ptr, destination, windows.MOVEFILE_REPLACE_EXISTING|windows.MOVEFILE_WRITE_THROUGH)
-		if err == nil {
-			return nil
-		}
-		if !errors.Is(err, windows.ERROR_SHARING_VIOLATION) && !errors.Is(err, windows.ERROR_ACCESS_DENIED) {
-			return err
-		}
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			return err
-		}
-		if delay > remaining {
-			delay = remaining
-		}
-		timer := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return ctx.Err()
-		case <-timer.C:
-		}
-		delay *= 2
-		if delay > 200*time.Millisecond {
-			delay = 200 * time.Millisecond
-		}
+	defer root.Close()
+	if err = ctx.Err(); err != nil {
+		return err
 	}
+	if err = sameHostsFile(handle, path); err != nil {
+		return err
+	}
+	return root.Rename(filepath.Base(candidate), filepath.Base(path))
 }

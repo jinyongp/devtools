@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -124,7 +125,7 @@ func replaceHostsFile(ctx context.Context, original *platformfs.File, body []byt
 		return err
 	}
 	if actual.String() != expectedSecurity {
-		return platformfs.ErrUnsafe
+		return fmt.Errorf("%w: hosts descriptor before=%s after=%s", platformfs.ErrUnsafe, expectedSecurity, actual.String())
 	}
 	if err = file.Sync(); err != nil {
 		return err

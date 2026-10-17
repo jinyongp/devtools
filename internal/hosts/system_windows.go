@@ -22,6 +22,7 @@ func windowsHostsFailure(code, stage string, err error) *protocol.Error {
 	}
 	if errors.Is(err, platformfs.ErrUnsafe) {
 		problem.Details["reason"] = "unsafe_metadata"
+		problem.Details["diagnostic"] = err.Error()
 	}
 	return problem
 }

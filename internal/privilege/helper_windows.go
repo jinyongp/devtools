@@ -23,6 +23,9 @@ func runPlatform(ctx context.Context, kind string, encoded []byte, terminal bool
 	if len(encoded) > helperLimit-256 {
 		return protocol.NewError("invalid_argument", "Windows helper input exceeds its bounded request size.", 2, nil)
 	}
+	if kind == "trust" && !terminal {
+		return protocol.NewError("permission_required", "Windows CurrentUser trust changes require an interactive terminal and approval of the OS certificate confirmation. Export the public CA when preparing a separate client.", 3, nil)
+	}
 	elevated := windows.GetCurrentProcessToken().IsElevated()
 	if kind != "trust" && !elevated && !terminal {
 		return helperFailure()
@@ -69,6 +72,15 @@ func runPlatform(ctx context.Context, kind string, encoded []byte, terminal bool
 		return helperCanceled(ctx)
 	}
 	defer windows.CloseHandle(process)
+	if kind == "trust" {
+		finished := make(chan struct{})
+		stop := context.AfterFunc(ctx, func() { defer close(finished); _ = windows.TerminateProcess(process, 130) })
+		defer func() {
+			if !stop() {
+				<-finished
+			}
+		}()
+	}
 	if err = acceptHelperPipe(ctx, pipe, process, identity); err != nil {
 		return helperCanceled(ctx)
 	}
@@ -117,7 +129,7 @@ func spawnWindowsHelper(ctx context.Context, executable, pipe string, elevate bo
 			return 0, err
 		}
 		// Cmd still holds its creation handle, preventing PID reuse before duplication.
-		handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.SYNCHRONIZE, false, uint32(command.Process.Pid))
+		handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.PROCESS_TERMINATE|windows.SYNCHRONIZE, false, uint32(command.Process.Pid))
 		if err != nil {
 			command.Process.Kill()
 			command.Wait()

@@ -213,6 +213,7 @@ private data, 원자적 publish, corruption detection 계약을 보존한다. �
   helper process handle을 확보한다. 취소·timeout 뒤 새 mutation 요청은 보내지 않고 기존 operation
   receipt로 결과를 재확인한다. UAC의 다른 계정 선택으로 SID가 달라지면 helper 요청을 거부한다.
 - Windows CA trust 대상은 CurrentUser Root. local-machine store는 변경하지 않는다.
+  Windows의 root 인증서 확인 창을 유지한다. trust/untrust는 대화형 터미널과 OS 확인이 필요하며, 비대화형 요청은 helper 실행 전에 `permission_required`를 반환한다. Actions는 해당 테스트 PID·고유 fixture CA subject의 확인 창만 처리한다. 실제 PC에서의 화면·사용자 조작은 미검증으로 공개한다.
   `proxy trust/untrust`는 선택한 public CA DER fingerprint로 확인하며 동일한 외부 인증서를
   원래부터 신뢰했다면 소유 receipt 없이 삭제하지 않는다. CA key는 private storage에만 둔다.
 - WSL Linux trust와 Windows browser trust는 별개다. 기존 `proxy ca export --output FILE`을 재사용하고,

@@ -18,7 +18,6 @@ import (
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"golang.org/x/sys/windows"
-	"golang.org/x/sys/windows/registry"
 )
 
 // A user-defined context property binds a NEW certificate to its private receipt.
@@ -54,18 +53,12 @@ func hasOwnership(cert *windows.CertContext, nonce string) bool {
 	return result != 0 && size <= uint32(len(buffer)) && bytes.Equal(buffer[:size], []byte(ownershipPrefix+nonce))
 }
 
-// Open the fixed CurrentUser registry-backed store through CryptoAPI. The
-// system-store providers can enter a modal root-confirmation dialog even in a
-// headless process. This explicit CLI trust operation does not alter root policy;
-// fresh OS-chain verification determines whether the current policy trusts it.
 func openUserRoot() (windows.Handle, error) {
-	key, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Microsoft\SystemCertificates\Root`, registry.READ|registry.WRITE)
+	name, err := windows.UTF16PtrFromString("Root")
 	if err != nil {
 		return 0, err
 	}
-	defer key.Close()
-	// The documented provider duplicates the input key; our handle remains ours.
-	return windows.CertOpenStore(windows.CERT_STORE_PROV_REG, 0, 0, 0, uintptr(key))
+	return windows.CertOpenStore(windows.CERT_STORE_PROV_SYSTEM_W, 0, 0, windows.CERT_SYSTEM_STORE_CURRENT_USER, uintptr(unsafe.Pointer(name)))
 }
 
 func findPublicCertificate(store windows.Handle, raw []byte) (*windows.CertContext, error) {

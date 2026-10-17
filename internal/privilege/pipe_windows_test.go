@@ -23,9 +23,11 @@ func TestMain(m *testing.M) {
 		if windows.GetCurrentProcessToken().IsElevated() {
 			os.Exit(91)
 		}
-		failure := runPlatform(context.Background(), "hosts", []byte(`{}`), false, "must-not-be-opened.exe")
-		if failure == nil || failure.Code != "permission_required" {
-			os.Exit(92)
+		for _, kind := range []string{"hosts", "trust"} {
+			failure := runPlatform(context.Background(), kind, []byte(`{}`), false, "must-not-be-opened.exe")
+			if failure == nil || failure.Code != "permission_required" {
+				os.Exit(92)
+			}
 		}
 		os.Exit(0)
 	}
@@ -68,10 +70,10 @@ func TestWindowsConstrainedPipeRoundtripAndOperationError(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	if failure := runPlatform(ctx, "trust", []byte(`{"value":"한글 🧪"}`), false, exe); failure != nil {
+	if failure := runPlatform(ctx, "trust", []byte(`{"value":"한글 🧪"}`), true, exe); failure != nil {
 		t.Fatalf("authenticated one-shot helper: %v", failure)
 	}
-	if failure := runPlatform(ctx, "trust", []byte(`{"value":"reject"}`), false, exe); failure == nil || failure.Code != "request_conflict" {
+	if failure := runPlatform(ctx, "trust", []byte(`{"value":"reject"}`), true, exe); failure == nil || failure.Code != "request_conflict" {
 		t.Fatalf("operation error lost: %v", failure)
 	}
 }
@@ -82,15 +84,15 @@ func TestWindowsConstrainedHelperCancellationAndBounds(t *testing.T) {
 	}
 	canceled, stop := context.WithCancel(context.Background())
 	stop()
-	if failure := runPlatform(canceled, "trust", []byte(`{}`), false, exe); failure == nil || failure.Code != "canceled" {
+	if failure := runPlatform(canceled, "trust", []byte(`{}`), true, exe); failure == nil || failure.Code != "canceled" {
 		t.Fatal(failure)
 	}
-	if failure := runPlatform(context.Background(), "trust", make([]byte, helperLimit), false, exe); failure == nil || failure.Code != "invalid_argument" {
+	if failure := runPlatform(context.Background(), "trust", make([]byte, helperLimit), true, exe); failure == nil || failure.Code != "invalid_argument" {
 		t.Fatal(failure)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
 	defer cancel()
-	if failure := runPlatform(ctx, "trust", []byte(`{"value":"wait"}`), false, exe); failure == nil {
+	if failure := runPlatform(ctx, "trust", []byte(`{"value":"wait"}`), true, exe); failure == nil {
 		t.Fatal("canceled helper succeeded")
 	}
 }

@@ -34,6 +34,7 @@ func windowsAuthority(t *testing.T) (System, *ca.Authority) {
 	if failure != nil {
 		t.Fatal(failure)
 	}
+	approveFixtureRootDialogs(t, authority.Certificate.Subject.CommonName)
 	return System{Directory: filepath.Join(data, "trust")}, authority
 }
 func userRootContains(t *testing.T, authority *ca.Authority) bool {

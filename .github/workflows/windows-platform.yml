@@ -1,0 +1,77 @@
+name: Windows platform boundaries
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/windows-platform.yml
+      - internal/platformfs/**
+      - internal/paths/**
+      - internal/location/**
+      - go.mod
+      - go.sum
+  pull_request:
+    paths:
+      - .github/workflows/windows-platform.yml
+      - internal/platformfs/**
+      - internal/paths/**
+      - internal/location/**
+      - go.mod
+      - go.sum
+
+permissions:
+  contents: read
+
+jobs:
+  private-storage:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: amd64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Test native private storage with a separate standard identity
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $actual = (& go env GOHOSTARCH).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne '${{ matrix.arch }}') { throw 'Native architecture mismatch' }
+          $account = 'dvt' + [guid]::NewGuid().ToString('N').Substring(0, 12)
+          $password = 'Aa1!' + [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          Write-Output "::add-mask::$password"
+          $created = $false
+          try {
+            New-LocalUser -Name $account -Password (ConvertTo-SecureString $password -AsPlainText -Force) -AccountNeverExpires -UserMayNotChangePassword | Out-Null
+            $created = $true
+            Add-LocalGroupMember -Group (Get-LocalGroup -SID 'S-1-5-32-545') -Member $account
+            $env:DEVTOOLS_TEST_USER = $account
+            $env:DEVTOOLS_TEST_PASSWORD = $password
+            & go test -json -count=1 ./internal/platformfs ./internal/paths ./internal/location | Tee-Object -FilePath platformfs-results.jsonl
+            if ($LASTEXITCODE -ne 0) { throw 'Private storage tests failed' }
+            & go vet ./internal/platformfs ./internal/paths ./internal/location
+            if ($LASTEXITCODE -ne 0) { throw 'Private storage vet failed' }
+          } finally {
+            Remove-Item Env:DEVTOOLS_TEST_USER -ErrorAction SilentlyContinue
+            Remove-Item Env:DEVTOOLS_TEST_PASSWORD -ErrorAction SilentlyContinue
+            if ($created) { Remove-LocalUser -Name $account }
+          }
+      - name: Preserve boundary test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-platform-${{ matrix.arch }}
+          path: platformfs-results.jsonl
+          if-no-files-found: warn
+          retention-days: 7

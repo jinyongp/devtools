@@ -6,12 +6,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"time"
 )
 
 func main() {
-	source := flag.String("source", "", "canonical SKILL.md path")
+	source := flag.String("source", "", "canonical skill entrypoint (includes sibling resources)")
 	output := flag.String("output", "", "output .tar.gz path")
 	flag.Parse()
 	if *source == "" || *output == "" || flag.NArg() != 0 {
@@ -32,11 +34,25 @@ func packageSkill(source, output string) (returnErr error) {
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("canonical skill is not a regular file")
 	}
-	skill, err := os.Open(source)
-	if err != nil {
-		return fmt.Errorf("open canonical skill: %w", err)
+	root := filepath.Dir(source)
+	// WalkDir gives a stable lexical order and never follows symlinks.
+	var entries []string
+	if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && !info.Mode().IsRegular() {
+			return fmt.Errorf("skill resource is not a regular file or directory: %s", path)
+		}
+		entries = append(entries, path)
+		return nil
+	}); err != nil {
+		return fmt.Errorf("inspect skill resources: %w", err)
 	}
-	defer skill.Close()
 
 	archive, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
@@ -55,27 +71,42 @@ func packageSkill(source, output string) (returnErr error) {
 	gzipWriter.Header.ModTime = time.Unix(0, 0).UTC()
 	gzipWriter.Header.OS = 255
 	tarWriter := tar.NewWriter(gzipWriter)
-	for _, header := range []*tar.Header{
-		{
-			Name: "devtools/", Mode: 0o755, Typeflag: tar.TypeDir,
+	for _, path := range entries {
+		info, err := os.Lstat(path)
+		if err != nil {
+			return fmt.Errorf("inspect skill resource: %w", err)
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		name := "devtools/"
+		if relative != "." {
+			name += filepath.ToSlash(relative)
+		}
+		header := &tar.Header{
+			Name: name, Mode: 0o644, Size: info.Size(), Typeflag: tar.TypeReg,
 			Uid: 0, Gid: 0, Uname: "root", Gname: "root",
 			ModTime: time.Unix(0, 0).UTC(), Format: tar.FormatUSTAR,
-		},
-		{
-			Name: "devtools/SKILL.md", Mode: 0o644, Size: info.Size(), Typeflag: tar.TypeReg,
-			Uid: 0, Gid: 0, Uname: "root", Gname: "root",
-			ModTime: time.Unix(0, 0).UTC(), Format: tar.FormatUSTAR,
-		},
-	} {
+		}
+		if info.IsDir() {
+			header.Mode, header.Size, header.Typeflag = 0o755, 0, tar.TypeDir
+			if relative != "." {
+				header.Name += "/"
+			}
+		} else if !info.Mode().IsRegular() {
+			return fmt.Errorf("skill resource is not a regular file: %s", path)
+		}
 		if err := tarWriter.WriteHeader(header); err != nil {
 			return fmt.Errorf("write archive header: %w", err)
 		}
 		if header.Typeflag == tar.TypeReg {
-			if _, err := io.Copy(tarWriter, skill); err != nil {
-				return fmt.Errorf("write skill content: %w", err)
+			if err := copyResource(tarWriter, path); err != nil {
+				return err
 			}
 		}
 	}
+
 	if err := tarWriter.Close(); err != nil {
 		return fmt.Errorf("close tar stream: %w", err)
 	}
@@ -83,4 +114,17 @@ func packageSkill(source, output string) (returnErr error) {
 		return fmt.Errorf("close gzip stream: %w", err)
 	}
 	return nil
+}
+
+func copyResource(out io.Writer, path string) error {
+	resource, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open skill resource: %w", err)
+	}
+	_, copyErr := io.Copy(out, resource)
+	closeErr := resource.Close()
+	if copyErr != nil {
+		return fmt.Errorf("write skill resource: %w", copyErr)
+	}
+	return closeErr
 }

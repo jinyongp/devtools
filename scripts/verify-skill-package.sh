@@ -48,16 +48,26 @@ listing=$(tar -tzf "$archive_dir/$archive_name") || {
   echo 'Cannot inspect the skill archive.' >&2
   exit 1
 }
-expected_listing=$(printf 'devtools/\ndevtools/SKILL.md')
+expected_listing=$(cd skills && find devtools -print | LC_ALL=C sort)
+listing=$(printf '%s\n' "$listing" | sed 's:/$::' | LC_ALL=C sort)
 [ "$listing" = "$expected_listing" ] || {
   echo 'Skill archive has an unexpected structure.' >&2
   exit 1
 }
-member_types=$(tar -tvzf "$archive_dir/$archive_name" | awk '{print substr($1, 1, 1)}') || {
+member_types=$(tar -tvzf "$archive_dir/$archive_name" | awk '{print substr($1, 1, 1)}' | LC_ALL=C sort) || {
   echo 'Cannot inspect skill archive member types.' >&2
   exit 1
 }
-expected_types=$(printf 'd\n-')
+expected_types=$(printf '%s\n' "$expected_listing" | while IFS= read -r member; do
+  if [ -d "skills/$member" ] && [ ! -L "skills/$member" ]; then
+    printf 'd\n'
+  elif [ -f "skills/$member" ] && [ ! -L "skills/$member" ]; then
+    printf '%s\n' '-'
+  else
+    echo 'Canonical skill contains an unsupported member.' >&2
+    exit 1
+  fi
+done | LC_ALL=C sort)
 [ "$member_types" = "$expected_types" ] || {
   echo 'Skill archive contains a non-regular member.' >&2
   exit 1
@@ -73,8 +83,8 @@ tar -xzf "$archive_dir/$archive_name" -C "$scratch" || {
   echo 'Skill archive does not contain a regular SKILL.md.' >&2
   exit 1
 }
-cmp skills/devtools/SKILL.md "$scratch/devtools/SKILL.md" >/dev/null || {
-  echo 'Packaged SKILL.md differs from the canonical source.' >&2
+diff -r skills/devtools "$scratch/devtools" >/dev/null || {
+  echo 'Packaged skill differs from the canonical source.' >&2
   exit 1
 }
 uvx --from skills-ref==0.1.1 agentskills validate "$scratch/devtools"

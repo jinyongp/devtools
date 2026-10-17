@@ -13,6 +13,19 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+func windowsHostsFailure(code, stage string, err error) *protocol.Error {
+	problem := failure(code)
+	problem.Details = map[string]any{"stage": stage}
+	var number windows.Errno
+	if errors.As(err, &number) {
+		problem.Details["win32_code"] = uint32(number)
+	}
+	if errors.Is(err, platformfs.ErrUnsafe) {
+		problem.Details["reason"] = "unsafe_metadata"
+	}
+	return problem
+}
+
 func (s System) path() string {
 	if s.Path != "" {
 		return s.Path
@@ -41,15 +54,15 @@ func (s System) Apply(ctx context.Context, request Request) *protocol.Error {
 	}
 	release, err := enableHostsMetadataPrivileges()
 	if err != nil {
-		return failure("permission_required")
+		return windowsHostsFailure("permission_required", "metadata_privileges", err)
 	}
 	defer release()
 	file, err := platformfs.OpenPublicNoFollow(s.path(), true)
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) || errors.Is(err, windows.ERROR_ACCESS_DENIED) {
-			return failure("permission_required")
+			return windowsHostsFailure("permission_required", "open", err)
 		}
-		return failure("hosts_unavailable")
+		return windowsHostsFailure("hosts_unavailable", "open", err)
 	}
 	defer file.Close()
 	before, err := io.ReadAll(io.LimitReader(file, 1<<20+1))
@@ -77,9 +90,9 @@ func (s System) Apply(ctx context.Context, request Request) *protocol.Error {
 			return failure("canceled")
 		}
 		if errors.Is(err, os.ErrPermission) {
-			return failure("permission_required")
+			return windowsHostsFailure("permission_required", "publication", err)
 		}
-		return failure("hosts_unavailable")
+		return windowsHostsFailure("hosts_unavailable", "publication", err)
 	}
 	return nil
 }

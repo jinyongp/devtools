@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 	"unsafe"
@@ -310,33 +309,47 @@ func TestWindowsConstrainedHelperRejectsDifferentSIDAndNoninteractiveElevation(t
 	if err = os.WriteFile(candidate, body, 0755); err != nil {
 		t.Fatal(err)
 	}
-	child := exec.Command(candidate, "__windows-helper-sleep")
-	child.Dir = directory
-	child.SysProcAttr = &syscall.SysProcAttr{Token: syscall.Token(token), HideWindow: true}
-	if err = child.Start(); err != nil {
-		t.Fatal("standard child launch failed", err)
+
+	launch := func(argument string) windows.Handle {
+		t.Helper()
+		app, _ := windows.UTF16PtrFromString(candidate)
+		command, _ := windows.UTF16PtrFromString(`"` + candidate + `" ` + argument)
+		directoryPtr, _ := windows.UTF16PtrFromString(directory)
+		startup := windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfo{}))}
+		var info windows.ProcessInformation
+		ok, _, failure := windows.NewLazySystemDLL("advapi32.dll").NewProc("CreateProcessWithTokenW").Call(uintptr(token), 0, uintptr(unsafe.Pointer(app)), uintptr(unsafe.Pointer(command)), windows.CREATE_NO_WINDOW, 0, uintptr(unsafe.Pointer(directoryPtr)), uintptr(unsafe.Pointer(&startup)), uintptr(unsafe.Pointer(&info)))
+		if ok == 0 {
+			t.Fatal("standard child launch failed", failure)
+		}
+		windows.CloseHandle(info.Thread)
+		return info.Process
 	}
-	defer func() { child.Process.Kill(); child.Wait() }()
-	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.SYNCHRONIZE, false, uint32(child.Process.Pid))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer windows.CloseHandle(handle)
+	handle := launch("__windows-helper-sleep")
+	defer func() {
+		windows.TerminateProcess(handle, 0)
+		windows.WaitForSingleObject(handle, 5000)
+		windows.CloseHandle(handle)
+	}()
 	guard, identity, err := openHelperImage(exe)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer guard.Close()
-	// SID validation precedes the image comparison, even though this child is a public fixture copy.
 	if err = verifyHelperProcess(handle, identity); err == nil || !strings.Contains(err.Error(), "SID differs") {
 		t.Fatalf("different SID not rejected at identity boundary: %v", err)
 	}
-	check := exec.Command(candidate, "__windows-helper-noninteractive")
-	check.Dir = directory
-	check.SysProcAttr = &syscall.SysProcAttr{Token: syscall.Token(token), HideWindow: true}
-	if err = check.Run(); err != nil {
-		t.Fatal("noninteractive standard token attempted elevation or did not return permission_required", err)
+	check := launch("__windows-helper-noninteractive")
+	defer windows.CloseHandle(check)
+	state, err := windows.WaitForSingleObject(check, 10000)
+	if err != nil || state != windows.WAIT_OBJECT_0 {
+		windows.TerminateProcess(check, 97)
+		t.Fatal("noninteractive standard token did not return promptly", err)
 	}
+	var code uint32
+	if err = windows.GetExitCodeProcess(check, &code); err != nil || code != 0 {
+		t.Fatal("noninteractive standard token attempted elevation or missed permission_required", code, err)
+	}
+
 }
 
 func TestWindowsConstrainedHelperIsolatedModeAndUnknownKindsDoNotLaunch(t *testing.T) {

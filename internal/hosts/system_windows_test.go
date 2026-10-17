@@ -46,7 +46,7 @@ func TestWindowsHostsExpectedDigestACLAndCRLFPreservation(t *testing.T) {
 	system := System{Path: path}
 	request := Request{Expected: digest(before), Mappings: []Mapping{{Host: "native.localhost", Address: "127.0.0.1"}}}
 	if failure := system.Apply(context.Background(), request); failure != nil {
-		t.Fatal(failure)
+		t.Fatalf("%s: %v", failure.Code, failure.Details)
 	}
 	actual, failure := system.Read()
 	if failure != nil || !bytes.HasPrefix(actual, before) || !bytes.Contains(actual, []byte("127.0.0.1\tnative.localhost\r\n")) {
@@ -60,7 +60,7 @@ func TestWindowsHostsExpectedDigestACLAndCRLFPreservation(t *testing.T) {
 		t.Fatalf("stale preview accepted: %v", failure)
 	}
 	if failure = system.Apply(context.Background(), Request{Expected: digest(actual)}); failure != nil {
-		t.Fatal(failure)
+		t.Fatalf("%s: %v", failure.Code, failure.Details)
 	}
 	restored, failure := system.Read()
 	if failure != nil || !bytes.Equal(restored, before) {
@@ -76,7 +76,7 @@ func TestWindowsHostsCanceledAndReparseTargetsStayUnchanged(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if failure := (System{Path: path}).Apply(ctx, Request{Expected: digest(body)}); failure == nil || failure.Code != "canceled" {
-		t.Fatal(failure)
+		t.Fatalf("%s: %v", failure.Code, failure.Details)
 	}
 	alias := filepath.Join(t.TempDir(), "alias")
 	if err := os.Symlink(path, alias); err != nil {
@@ -114,7 +114,7 @@ func TestWindowsSystemHostsRestoresDisposableRunner(t *testing.T) {
 	system := System{}
 	before, failure := system.Read()
 	if failure != nil {
-		t.Fatal(failure)
+		t.Fatalf("%s: %v", failure.Code, failure.Details)
 	}
 	if bytes.Contains(before, []byte(begin)) || bytes.Contains(before, []byte(end)) {
 		t.Fatal("disposable runner already has an owned hosts block")
@@ -140,7 +140,7 @@ func TestWindowsSystemHostsRestoresDisposableRunner(t *testing.T) {
 		}
 	})
 	if failure = system.Apply(context.Background(), request); failure != nil {
-		t.Fatal(failure)
+		t.Fatalf("%s: %v", failure.Code, failure.Details)
 	}
 
 	current, failure := system.Read()

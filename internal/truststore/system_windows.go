@@ -57,7 +57,7 @@ func openUserRoot() (windows.Handle, error) {
 	if err != nil {
 		return 0, err
 	}
-	return windows.CertOpenStore(windows.CERT_STORE_PROV_SYSTEM_W, 0, 0, windows.CERT_SYSTEM_STORE_CURRENT_USER, uintptr(unsafe.Pointer(name)))
+	return windows.CertOpenStore(windows.CERT_STORE_PROV_SYSTEM_REGISTRY_W, 0, 0, windows.CERT_SYSTEM_STORE_CURRENT_USER, uintptr(unsafe.Pointer(name)))
 }
 func findPublicCertificate(store windows.Handle, raw []byte) (*windows.CertContext, error) {
 	var previous *windows.CertContext

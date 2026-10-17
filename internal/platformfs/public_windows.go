@@ -26,7 +26,7 @@ func OpenPublicNoFollow(path string, writable bool) (*File, error) {
 	}
 	access := uint32(windows.GENERIC_READ | windows.READ_CONTROL | windows.FILE_READ_ATTRIBUTES)
 	if writable {
-		access |= windows.GENERIC_WRITE | windows.ACCESS_SYSTEM_SECURITY
+		access |= windows.ACCESS_SYSTEM_SECURITY
 	}
 	share := uint32(windows.FILE_SHARE_READ)
 	if writable {

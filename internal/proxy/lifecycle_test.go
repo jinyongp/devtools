@@ -1257,7 +1257,7 @@ func traceLegacyStart(t *testing.T, manager *Manager) func(string, Record, Statu
 	var mu sync.Mutex
 	var rows []string
 	observe := func(stage string, record Record, status Status, err error) {
-		row := fmt.Sprintf("elapsed=%s stage=%s record=%+v status=%+v error=%#v", time.Since(started), stage, record, status, err)
+		row := fmt.Sprintf("elapsed=%s stage=%s record=%+v status=%+v error=%#v message=%v", time.Since(started), stage, record, status, err, err)
 		mu.Lock()
 		if len(rows) < 512 {
 			rows = append(rows, row)

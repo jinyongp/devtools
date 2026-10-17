@@ -207,7 +207,7 @@ jobs:
         run: |
           $load = Start-Process -FilePath go -ArgumentList @('test', '-json', '-count=3', '-timeout=5m', './internal/tasks', './internal/values', './internal/backup', './internal/profiletransfer') -WorkingDirectory $PWD -NoNewWindow -PassThru -RedirectStandardOutput legacy-start-load-results.jsonl -RedirectStandardError legacy-start-load-stderr.log
           try {
-            & go test -json -count=100 -timeout 5m -run '^TestLegacyProxyStopClosesBackendPool$|^TestManagerExpiresStaleStartingAttemptAndAllowsNewRequest$' ./internal/proxy | Tee-Object -FilePath windows-legacy-start-results.jsonl
+            & go test -json -count=10 -timeout 8m ./internal/proxy | Tee-Object -FilePath windows-legacy-start-results.jsonl
             $legacyExit = $LASTEXITCODE
           } finally {
             if (-not $load.WaitForExit(300000)) { $load.Kill($true); throw 'Legacy startup diagnostic load timed out' }

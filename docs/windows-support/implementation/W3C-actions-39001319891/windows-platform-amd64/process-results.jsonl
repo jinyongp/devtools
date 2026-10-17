@@ -1,0 +1,48 @@
+{"Time":"2026-10-17T04:07:39.1668685Z","Action":"start","Package":"github.com/jinyongp/devtools/internal/process"}
+{"Time":"2026-10-17T04:07:39.1833897Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsArgvChild"}
+{"Time":"2026-10-17T04:07:39.1833897Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsArgvChild","Output":"=== RUN   TestWindowsArgvChild\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.1833897Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsArgvChild","Output":"--- PASS: TestWindowsArgvChild (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.1833897Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsArgvChild","Elapsed":0}
+{"Time":"2026-10-17T04:07:39.1833897Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsCaseInsensitiveEnvironment"}
+{"Time":"2026-10-17T04:07:39.1833897Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsCaseInsensitiveEnvironment","Output":"=== RUN   TestWindowsCaseInsensitiveEnvironment\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.1833897Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsCaseInsensitiveEnvironment","Output":"--- PASS: TestWindowsCaseInsensitiveEnvironment (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.1833897Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsCaseInsensitiveEnvironment","Elapsed":0}
+{"Time":"2026-10-17T04:07:39.1833897Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsSelectedPathAndPathext"}
+{"Time":"2026-10-17T04:07:39.1833897Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsSelectedPathAndPathext","Output":"=== RUN   TestWindowsSelectedPathAndPathext\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.190792Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsSelectedPathAndPathext","Output":"--- PASS: TestWindowsSelectedPathAndPathext (0.01s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.190792Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsSelectedPathAndPathext","Elapsed":0.01}
+{"Time":"2026-10-17T04:07:39.190792Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsExeLiteralArgv"}
+{"Time":"2026-10-17T04:07:39.190792Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsExeLiteralArgv","Output":"=== RUN   TestWindowsExeLiteralArgv\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.2477113Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsExeLiteralArgv","Output":"--- PASS: TestWindowsExeLiteralArgv (0.06s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.2477113Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsExeLiteralArgv","Elapsed":0.06}
+{"Time":"2026-10-17T04:07:39.2477113Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsBatchLiteralDomain"}
+{"Time":"2026-10-17T04:07:39.2477113Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsBatchLiteralDomain","Output":"=== RUN   TestWindowsBatchLiteralDomain\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.3016501Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsBatchLiteralDomain","Output":"--- PASS: TestWindowsBatchLiteralDomain (0.05s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.3016501Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsBatchLiteralDomain","Elapsed":0.05}
+{"Time":"2026-10-17T04:07:39.3016501Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsExplicitPowerShellAndStreams"}
+{"Time":"2026-10-17T04:07:39.3016501Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsExplicitPowerShellAndStreams","Output":"=== RUN   TestWindowsExplicitPowerShellAndStreams\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.3413679Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsExplicitPowerShellAndStreams","Output":"--- PASS: TestWindowsExplicitPowerShellAndStreams (0.04s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.3413679Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsExplicitPowerShellAndStreams","Elapsed":0.04}
+{"Time":"2026-10-17T04:07:39.3413679Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsCancelledDirectChild"}
+{"Time":"2026-10-17T04:07:39.3413679Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsCancelledDirectChild","Output":"=== RUN   TestWindowsCancelledDirectChild\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.4505286Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsCancelledDirectChild","Output":"--- PASS: TestWindowsCancelledDirectChild (0.11s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:39.4508524Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsCancelledDirectChild","Elapsed":0.11}
+{"Time":"2026-10-17T04:07:39.4508524Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsRealNpmPnpmShims"}
+{"Time":"2026-10-17T04:07:39.4508524Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsRealNpmPnpmShims","Output":"=== RUN   TestWindowsRealNpmPnpmShims\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:44.2559468Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsRealNpmPnpmShims","Output":"--- PASS: TestWindowsRealNpmPnpmShims (4.81s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:44.2559468Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsRealNpmPnpmShims","Elapsed":4.81}
+{"Time":"2026-10-17T04:07:44.2559468Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsActualPowerShellCallers"}
+{"Time":"2026-10-17T04:07:44.2559468Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsActualPowerShellCallers","Output":"=== RUN   TestWindowsActualPowerShellCallers\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:44.2607294Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsActualPowerShellCallers/powershell.exe"}
+{"Time":"2026-10-17T04:07:44.2607294Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsActualPowerShellCallers/powershell.exe","Output":"=== RUN   TestWindowsActualPowerShellCallers/powershell.exe\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:46.3190949Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsActualPowerShellCallers/powershell.exe","Output":"--- PASS: TestWindowsActualPowerShellCallers/powershell.exe (2.06s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:46.3190949Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsActualPowerShellCallers/powershell.exe","Elapsed":2.06}
+{"Time":"2026-10-17T04:07:46.3190949Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsActualPowerShellCallers/pwsh.exe"}
+{"Time":"2026-10-17T04:07:46.3190949Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsActualPowerShellCallers/pwsh.exe","Output":"=== RUN   TestWindowsActualPowerShellCallers/pwsh.exe\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:46.670701Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsActualPowerShellCallers/pwsh.exe","Output":"--- PASS: TestWindowsActualPowerShellCallers/pwsh.exe (0.35s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:46.670701Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsActualPowerShellCallers/pwsh.exe","Elapsed":0.35}
+{"Time":"2026-10-17T04:07:46.6730455Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsActualPowerShellCallers","Output":"--- PASS: TestWindowsActualPowerShellCallers (2.42s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:46.6730455Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/process","Test":"TestWindowsActualPowerShellCallers","Elapsed":2.42}
+{"Time":"2026-10-17T04:07:46.6730455Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-17T04:07:46.676646Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/process","Output":"ok  \tgithub.com/jinyongp/devtools/internal/process\t7.510s\n"}
+{"Time":"2026-10-17T04:07:46.676646Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/process","Elapsed":7.51}

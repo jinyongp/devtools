@@ -183,8 +183,73 @@ func main() {
 		must(os.WriteFile(f, []byte("{}"), 0600))
 		actual, err := windows.GetNamedSecurityInfo(f, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
 		must(err)
-		sddl := actual.String()
-		return strings.Contains(sddl, u.User.Sid.String()) && !strings.Contains(sddl, ";;;WD)") && !strings.Contains(sddl, ";;;BU)") && !strings.Contains(sddl, ";;;AU)"), "protected parent DACL; child inherits owner/SYSTEM; no second-user access test"
+		acl, _, err := actual.DACL()
+		must(err)
+		if acl == nil || acl.AceCount != 2 {
+			return false, "expected two non-null DACL entries"
+		}
+		system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+		must(err)
+		ownerSeen, systemSeen := false, false
+		for i := uint32(0); i < uint32(acl.AceCount); i++ {
+			var ace *windows.ACCESS_ALLOWED_ACE
+			must(windows.GetAce(acl, i, &ace))
+			if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE {
+				return false, "unexpected ACE type"
+			}
+			sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
+			if sid.Equals(u.User.Sid) {
+				ownerSeen = true
+			} else if sid.Equals(system) {
+				systemSeen = true
+			} else {
+				return false, "unexpected trustee"
+			}
+		}
+		parent, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+		must(err)
+		control, _, err := parent.Control()
+		must(err)
+		return ownerSeen && systemSeen && control&windows.SE_DACL_PROTECTED != 0, "protected parent DACL; exact owner/SYSTEM trustees; compares SID identity rather than SDDL aliases; no second-user access test"
+	})
+	check("overlapped_named_pipe_io", func() (bool, string) {
+		name := fmt.Sprintf(`\\.\pipe\devtools-preflight-%d-%d`, os.Getpid(), time.Now().UnixNano())
+		h, err := windows.CreateNamedPipe(ptr(name), windows.PIPE_ACCESS_DUPLEX|windows.FILE_FLAG_OVERLAPPED,
+			windows.PIPE_TYPE_BYTE|windows.PIPE_READMODE_BYTE|windows.PIPE_WAIT|windows.PIPE_REJECT_REMOTE_CLIENTS, 1, 4096, 4096, 0, nil)
+		must(err)
+		defer func() {
+			if h != 0 {
+				windows.CloseHandle(h)
+			}
+		}()
+		event, err := windows.CreateEvent(nil, 1, 0, nil)
+		must(err)
+		defer windows.CloseHandle(event)
+		overlap := windows.Overlapped{HEvent: event}
+		err = windows.ConnectNamedPipe(h, &overlap)
+		if err != nil && !errors.Is(err, windows.ERROR_IO_PENDING) {
+			must(err)
+		}
+		clientHandle, err := windows.CreateFile(ptr(name), windows.GENERIC_READ|windows.GENERIC_WRITE, 0, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OVERLAPPED, 0)
+		must(err)
+		client := os.NewFile(uintptr(clientHandle), name)
+		defer client.Close()
+		var done uint32
+		must(windows.GetOverlappedResult(h, &overlap, &done, true))
+		server := os.NewFile(uintptr(h), name)
+		h = 0
+		defer server.Close()
+		must(client.SetReadDeadline(time.Now().Add(30 * time.Millisecond)))
+		var one [1]byte
+		_, err = client.Read(one[:])
+		timedOut := errors.Is(err, os.ErrDeadlineExceeded)
+		must(client.SetReadDeadline(time.Now().Add(time.Second)))
+		must(server.SetWriteDeadline(time.Now().Add(time.Second)))
+		_, err = server.Write([]byte("p"))
+		must(err)
+		_, err = io.ReadFull(client, one[:])
+		must(err)
+		return timedOut && one[0] == 'p', "Go 1.27 os.NewFile on overlapped named pipe supports cancellable deadlines and duplex I/O; no third-party transport needed"
 	})
 	check("directory_sync_is_not_unix", func() (bool, string) {
 		f, err := os.Open(root)

@@ -116,8 +116,8 @@ public static class DevtoolsInstallerNativeArchitecture {
 }
 '@
     }
-    [ushort]$processMachine = 0
-    [ushort]$nativeMachine = 0
+    [UInt16]$processMachine = 0
+    [UInt16]$nativeMachine = 0
     if (-not [DevtoolsInstallerNativeArchitecture]::IsWow64Process2([DevtoolsInstallerNativeArchitecture]::GetCurrentProcess(), [ref]$processMachine, [ref]$nativeMachine)) { throw 'Cannot resolve native OS architecture.' }
     switch ([int]$nativeMachine) { 34404 { $arch = 'amd64' }; 43620 { $arch = 'arm64' }; default { throw 'Unsupported native architecture.' } }
     [Net.ServicePointManager]::SecurityProtocol = $previousTls -bor [Net.SecurityProtocolType]::Tls12

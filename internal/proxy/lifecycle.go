@@ -158,13 +158,6 @@ type Manager struct {
 	commit            func(string, any) error
 	readyTimeout      time.Duration
 	stopTimeout       time.Duration
-	observeStart      func(string, Record, Status, error)
-}
-
-func (m Manager) traceStart(stage string, record Record, status Status, err error) {
-	if m.observeStart != nil {
-		m.observeStart(stage, record, status, err)
-	}
 }
 
 func proxyFailure(code string) *protocol.Error {
@@ -252,9 +245,7 @@ func (m Manager) Status(ctx context.Context) (Status, *protocol.Error) {
 	if record.EndedAt != nil {
 		return status, nil
 	}
-	live, rpcErr := m.rpc(ctx, "status")
-	m.traceStart("status_rpc", live, status, rpcErr)
-	if rpcErr == nil {
+	if live, err := m.rpc(ctx, "status"); err == nil {
 		status.State, status.StartedAt, status.Reason = live.State, live.StartedAt, live.Reason
 		status.Running = live.State == "running"
 		return status, nil
@@ -688,7 +679,6 @@ func (m Manager) awaitStart(ctx context.Context, attemptID string, createdAt tim
 		case <-ctx.Done():
 			return Status{}, proxyFailure("canceled")
 		case <-deadline.C:
-			m.traceStart("await_deadline", Record{AttemptID: attemptID}, Status{}, nil)
 			status, statusErr := m.Status(ctx)
 			if statusErr != nil {
 				return Status{}, statusErr
@@ -707,7 +697,6 @@ func (m Manager) awaitStart(ctx context.Context, attemptID string, createdAt tim
 			return Status{}, proxyFailure("proxy_pending")
 		case <-ticker.C:
 			status, statusErr := m.Status(ctx)
-			m.traceStart("await_status", Record{}, status, statusErr)
 			if statusErr != nil {
 				return Status{}, statusErr
 			}
@@ -715,7 +704,6 @@ func (m Manager) awaitStart(ctx context.Context, attemptID string, createdAt tim
 				return status, nil
 			}
 			record, readErr := m.readRecord()
-			m.traceStart("await_record", record, status, readErr)
 			if readErr != nil {
 				return Status{}, proxyStorageError()
 			}

@@ -79,7 +79,6 @@ func TestListenerStopAndRestartCloseOnlyOwnedBackendPool(t *testing.T) {
 func TestLegacyProxyStopClosesBackendPool(t *testing.T) {
 	backend := newExposureBackend(t, nil)
 	m := testManager(t)
-	trace := traceLegacyStart(t, &m)
 	directory := t.TempDir()
 	writeConfig(t, directory, "app", "legacy.localhost")
 	register(t, m.portStore(), "app", directory, nil, backend.server.Listener.Addr().(*net.TCPAddr).Port)
@@ -97,7 +96,10 @@ func TestLegacyProxyStopClosesBackendPool(t *testing.T) {
 		cancel()
 		if started {
 			select {
-			case <-done:
+			case err := <-done:
+				if t.Failed() {
+					t.Logf("legacy daemon exit: error=%#v message=%v", err, err)
+				}
 			case <-time.After(3 * time.Second):
 				t.Error("legacy daemon did not stop")
 			}
@@ -105,13 +107,7 @@ func TestLegacyProxyStopClosesBackendPool(t *testing.T) {
 	})
 	m.Spawn = func(_ string, id string) error {
 		started = true
-		trace("spawn", Record{AttemptID: id}, Status{}, nil)
-		go func() {
-			err := m.Serve(ctx, id)
-			record, _ := m.readRecord()
-			trace("serve_exit", record, Status{}, err)
-			done <- err
-		}()
+		go func() { done <- m.Serve(ctx, id) }()
 		return nil
 	}
 	if status, e := m.Apply(ctx, Request{Action: "start", Port: &port, RequestID: tasks.ID()}); e != nil {

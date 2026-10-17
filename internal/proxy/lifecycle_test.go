@@ -987,7 +987,6 @@ func TestManagerStopDoesNotClaimUnknownSupervisorStopped(t *testing.T) {
 
 func TestManagerExpiresStaleStartingAttemptAndAllowsNewRequest(t *testing.T) {
 	manager := testManager(t)
-	trace := traceLegacyStart(t, &manager)
 	manager.readyTimeout = 500 * time.Millisecond
 	port := testPort()
 	if _, _, err := manager.portStore().Reserve(context.Background(), "proxy", port); err != nil {
@@ -1003,7 +1002,10 @@ func TestManagerExpiresStaleStartingAttemptAndAllowsNewRequest(t *testing.T) {
 		cancelServe()
 		if spawned {
 			select {
-			case <-serveDone:
+			case err := <-serveDone:
+				if t.Failed() {
+					t.Logf("stale recovery daemon exit: error=%#v message=%v", err, err)
+				}
 			case <-time.After(3 * time.Second):
 				t.Error("stale recovery daemon did not stop")
 			}
@@ -1011,13 +1013,7 @@ func TestManagerExpiresStaleStartingAttemptAndAllowsNewRequest(t *testing.T) {
 	})
 	manager.Spawn = func(_ string, attemptID string) error {
 		spawned = true
-		trace("spawn", Record{AttemptID: attemptID}, Status{}, nil)
-		go func() {
-			err := manager.Serve(serveContext, attemptID)
-			record, _ := manager.readRecord()
-			trace("serve_exit", record, Status{}, err)
-			serveDone <- err
-		}()
+		go func() { serveDone <- manager.Serve(serveContext, attemptID) }()
 		return nil
 	}
 	startedAt := time.Now()
@@ -1285,48 +1281,4 @@ func TestManagerStartReportsRecordReadFailureAfterReadinessRPC(t *testing.T) {
 	if spawned != 1 {
 		t.Fatalf("failed request replay spawned %d supervisors", spawned)
 	}
-}
-
-// traceLegacyStart records only public lifecycle state; control credentials and
-// arbitrary stored values are excluded. It is temporary failure instrumentation.
-func traceLegacyStart(t *testing.T, manager *Manager) func(string, Record, Status, error) {
-	t.Helper()
-	started := time.Now()
-	var mu sync.Mutex
-	type row struct {
-		elapsed time.Duration
-		stage   string
-		record  Record
-		status  Status
-		err     error
-	}
-	var rows []row
-	observe := func(stage string, record Record, status Status, err error) {
-		entry := row{time.Since(started), stage, record, status, err}
-		mu.Lock()
-		if len(rows) < 512 {
-			rows = append(rows, entry)
-		}
-		mu.Unlock()
-	}
-	manager.observeStart = observe
-	manager.commit = func(path string, value any) error {
-		before := time.Now()
-		err := tasks.WritePrivate(path, value)
-		record, _ := value.(Record)
-		observe(fmt.Sprintf("write:%s duration=%s", filepath.Base(path), time.Since(before)), record, Status{}, err)
-		return err
-	}
-	t.Cleanup(func() {
-		if !t.Failed() && os.Getenv("DEVTOOLS_LEGACY_START_TRACE") != "1" {
-			return
-		}
-		mu.Lock()
-		copyRows := append([]row(nil), rows...)
-		mu.Unlock()
-		for _, row := range copyRows {
-			t.Logf("LEGACY_START_TRACE elapsed=%s stage=%s record=%+v status=%+v error=%#v message=%v", row.elapsed, row.stage, row.record, row.status, row.err, row.err)
-		}
-	})
-	return observe
 }

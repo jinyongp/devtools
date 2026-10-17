@@ -203,7 +203,6 @@ jobs:
       - name: Diagnose repeated native project lifecycle
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.focus == 'lifecycle' }}
         env:
-          DEVTOOLS_LEGACY_START_TRACE: '1'
           DEVTOOLS_TEST_SYSTEM_NETWORK: '1'
           DEVTOOLS_TEST_PACKAGE_SHIMS: '1'
         run: |
@@ -226,7 +225,11 @@ jobs:
               } finally { Remove-Item Env:GOARCH }
               $env:DEVTOOLS_TEST_X64_PROVIDER = "$env:RUNNER_TEMP\devtools-provider-pressure-amd64.test.exe"
             }
-            $load = Start-Process -FilePath go -ArgumentList @('test', '-json', '-count=1', '-timeout=8m', './...') -WorkingDirectory $PWD -NoNewWindow -PassThru -RedirectStandardOutput legacy-start-load-results.jsonl -RedirectStandardError legacy-start-load-stderr.log
+            $packages = @(& go list ./...)
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot list diagnostic product packages' }
+            $loadPackages = @($packages | Where-Object { $_ -cne 'github.com/jinyongp/devtools/internal/proxy' })
+            $loadArguments = @('test', '-json', '-count=1', '-timeout=8m') + $loadPackages
+            $load = Start-Process -FilePath go -ArgumentList $loadArguments -WorkingDirectory $PWD -NoNewWindow -PassThru -RedirectStandardOutput legacy-start-load-results.jsonl -RedirectStandardError legacy-start-load-stderr.log
             & go test -json -count=5 -timeout 8m ./internal/proxy | Tee-Object -FilePath windows-legacy-start-results.jsonl
             $legacyExit = $LASTEXITCODE
             if (-not $load.WaitForExit(540000)) { throw 'Legacy startup diagnostic load timed out' }

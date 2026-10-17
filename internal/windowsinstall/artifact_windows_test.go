@@ -81,7 +81,7 @@ func TestWindowsInstallRealPackageIdentityAndWrongCPU(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		commit := os.Getenv("GITHUB_SHA")
+		commit := nativeFixtureCommit()
 		if commit == "" {
 			commit = "fixture"
 		}
@@ -115,7 +115,7 @@ func TestWindowsInstallRealPackageIdentityAndWrongCPU(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	checkRealPackage(t, body, os.Getenv("GITHUB_SHA"))
+	checkRealPackage(t, body, nativeFixtureCommit())
 }
 
 func checkRealPackage(t *testing.T, body []byte, commit string) {
@@ -152,4 +152,11 @@ func TestWindowsInstallBootstrapInputIsBoundedAndStrict(t *testing.T) {
 			t.Fatal("invalid bootstrap input accepted")
 		}
 	}
+}
+
+func nativeFixtureCommit() string {
+	if commit := os.Getenv("DEVTOOLS_SOURCE_COMMIT"); commit != "" {
+		return commit
+	}
+	return os.Getenv("GITHUB_SHA")
 }

@@ -9,7 +9,7 @@ on:
         required: true
         type: string
       commit:
-        description: Full commit SHA on main to validate and release
+        description: Full commit SHA to validate; publishing requires main
         required: true
         type: string
       publish:
@@ -42,8 +42,9 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           COMMIT: ${{ inputs.commit }}
+          PUBLISH: ${{ inputs.publish }}
         run: |
-          [ "$GITHUB_REF" = refs/heads/main ]
+          if [ "$PUBLISH" = true ]; then [ "$GITHUB_REF" = refs/heads/main ]; fi
           [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
           [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]
           printf 'tag=v%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
@@ -58,13 +59,23 @@ jobs:
           PUBLISH: ${{ inputs.publish }}
         run: |
           [ "$(git rev-parse HEAD)" = "$COMMIT" ]
-          git merge-base --is-ancestor "$COMMIT" refs/remotes/origin/main
+          if [ "$PUBLISH" = true ]; then
+            git merge-base --is-ancestor "$COMMIT" refs/remotes/origin/main
+          fi
           if [ "$PUBLISH" = true ] && git show-ref --verify --quiet "refs/tags/$TAG"; then
             [ "$(git rev-parse "$TAG^{commit}")" = "$COMMIT" ] || {
               echo "$TAG already belongs to another commit; refusing to replace it." >&2
               exit 1
             }
           fi
+
+  ci-windows:
+    needs: validate-release
+    uses: ./.github/workflows/windows-platform.yml
+    with:
+      commit: ${{ inputs.commit }}
+      version: ${{ inputs.version }}
+      focus: full
 
   ci-macos:
     needs: validate-release
@@ -180,7 +191,7 @@ jobs:
           if-no-files-found: error
 
   package:
-    needs: [validate-release, ci-macos, ci-linux]
+    needs: [validate-release, ci-macos, ci-linux, ci-windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:

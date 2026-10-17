@@ -1,13 +1,24 @@
 name: Windows platform boundaries
 
 on:
+  workflow_call:
+    inputs:
+      commit:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      focus:
+        type: string
+        default: full
   workflow_dispatch:
     inputs:
       focus:
         description: Focused feedback; full remains the final completion gate
         type: choice
         default: full
-        options: [full, network, installer, providers, completion, lifecycle]
+        options: [full, network, installer, providers, completion, lifecycle, suite]
   push:
     paths:
       - .github/workflows/windows-platform.yml
@@ -43,12 +54,16 @@ jobs:
           - runner: windows-11-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 45
+    env:
+      DEVTOOLS_SOURCE_COMMIT: ${{ inputs.commit || github.sha }}
     defaults:
       run:
         shell: pwsh
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -66,12 +81,12 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $actual -ne '${{ matrix.arch }}') { throw 'Native architecture mismatch' }
           $os = Get-CimInstance Win32_OperatingSystem
           $release = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
-          @{ commit = $env:GITHUB_SHA; os = $os.Caption; version = $os.Version; build = $os.BuildNumber; display_version = $release.DisplayVersion; architecture = $actual; focus = '${{ inputs.focus }}'; powershell = $PSVersionTable.PSVersion.ToString() } | ConvertTo-Json | Set-Content -Encoding utf8 runner.json
+          @{ commit = $env:DEVTOOLS_SOURCE_COMMIT; workflow_commit = $env:GITHUB_SHA; runner_image = $env:ImageVersion; image_os = $env:ImageOS; os = $os.Caption; version = $os.Version; build = $os.BuildNumber; display_version = $release.DisplayVersion; architecture = $actual; focus = '${{ inputs.focus }}'; powershell = $PSVersionTable.PSVersion.ToString() } | ConvertTo-Json | Set-Content -Encoding utf8 runner.json
       - name: Prepare focused installer package
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.focus == 'installer' }}
         run: |
           $env:VERSION = '0.0.0-native-package'
-          $env:COMMIT = $env:GITHUB_SHA
+          $env:COMMIT = $env:DEVTOOLS_SOURCE_COMMIT
           $env:TARGET_OS = 'windows'
           $env:TARGET_ARCH = '${{ matrix.arch }}'
           $env:OUTPUT_DIR = 'dist'
@@ -79,7 +94,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native focused ZIP validation failed' }
 
       - name: Prepare actual package-manager shims
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'suite' }}
         run: |
           $ErrorActionPreference = 'Stop'
           $shims = Join-Path $env:RUNNER_TEMP 'devtools-package-shims'
@@ -98,7 +113,7 @@ jobs:
           $os = Get-CimInstance Win32_OperatingSystem
           $release = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
           $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
-          @{ commit = $env:GITHUB_SHA; os = $os.Caption; version = $os.Version; build = $os.BuildNumber; display_version = $release.DisplayVersion; architecture = $actual; elevated = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); powershell = $PSVersionTable.PSVersion.ToString() } | ConvertTo-Json | Set-Content -Encoding utf8 runner.json
+          @{ commit = $env:DEVTOOLS_SOURCE_COMMIT; workflow_commit = $env:GITHUB_SHA; runner_image = $env:ImageVersion; image_os = $env:ImageOS; os = $os.Caption; version = $os.Version; build = $os.BuildNumber; display_version = $release.DisplayVersion; architecture = $actual; elevated = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); powershell = $PSVersionTable.PSVersion.ToString() } | ConvertTo-Json | Set-Content -Encoding utf8 runner.json
           $account = 'dvt' + [guid]::NewGuid().ToString('N').Substring(0, 12)
           $password = 'Aa1!' + [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
           Write-Output "::add-mask::$password"
@@ -187,6 +202,44 @@ jobs:
           & go test -json -count=20 -timeout 3m -run '^TestWindowsProjectReal' ./internal/lifecycle | Tee-Object -FilePath project-lifecycle-diagnostic-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Repeated native project lifecycle requires investigation' }
 
+      - name: Complete native Go product suite
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'suite' }}
+        env:
+          DEVTOOLS_TEST_SYSTEM_NETWORK: '1'
+          DEVTOOLS_TEST_PACKAGE_SHIMS: '1'
+        run: |
+          $account = 'dvt' + [guid]::NewGuid().ToString('N').Substring(0, 12)
+          $password = 'Aa1!' + [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          Write-Output "::add-mask::$password"
+          $created = $false
+          try {
+            New-LocalUser -Name $account -Password (ConvertTo-SecureString $password -AsPlainText -Force) -AccountNeverExpires -UserMayNotChangePassword | Out-Null
+            $created = $true
+            Add-LocalGroupMember -Group (Get-LocalGroup -SID 'S-1-5-32-545') -Member $account
+            $env:DEVTOOLS_TEST_USER = $account
+            $env:DEVTOOLS_TEST_PASSWORD = $password
+            if ('${{ matrix.arch }}' -eq 'arm64') {
+              $env:GOARCH = 'amd64'
+              try {
+                & go test -c -o "$env:RUNNER_TEMP\devtools-provider-suite-amd64.test.exe" ./internal/expose
+                if ($LASTEXITCODE -ne 0) { throw 'Cannot build emulation fixture' }
+              } finally { Remove-Item Env:GOARCH }
+              $env:DEVTOOLS_TEST_X64_PROVIDER = "$env:RUNNER_TEMP\devtools-provider-suite-amd64.test.exe"
+            }
+            & go test -json -count=1 -timeout 8m ./... | Tee-Object -FilePath windows-product-suite-results.jsonl
+            if ($LASTEXITCODE -ne 0) { throw 'Complete native product suite failed' }
+            & go vet ./...
+            if ($LASTEXITCODE -ne 0) { throw 'Complete native product vet failed' }
+          } finally {
+            if (Test-Path -LiteralPath windows-product-suite-results.jsonl) {
+              $log = [IO.File]::ReadAllText((Join-Path $PWD 'windows-product-suite-results.jsonl'))
+              [IO.File]::WriteAllText((Join-Path $PWD 'windows-product-suite-results.jsonl'), $log.Replace($password, '[redacted disposable credential]'), [Text.UTF8Encoding]::new($false))
+            }
+            Remove-Item Env:DEVTOOLS_TEST_USER -ErrorAction SilentlyContinue
+            Remove-Item Env:DEVTOOLS_TEST_PASSWORD -ErrorAction SilentlyContinue
+            if ($created) { Remove-LocalUser -Name $account }
+          }
+
       - name: Test native console mode and redirected passphrase input
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
         run: |
@@ -207,7 +260,7 @@ jobs:
           & go test -json -count=1 ./cmd/devtools | Tee-Object -FilePath build-identity-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Build identity tests failed' }
           $env:VERSION = '0.0.0-native-package'
-          $env:COMMIT = $env:GITHUB_SHA
+          $env:COMMIT = $env:DEVTOOLS_SOURCE_COMMIT
           $env:TARGET_OS = 'windows'
           $env:TARGET_ARCH = '${{ matrix.arch }}'
           $env:OUTPUT_DIR = 'dist'
@@ -270,7 +323,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native updater ownership/error contract failed' }
           & go vet ./internal/windowsinstall
           if ($LASTEXITCODE -ne 0) { throw 'Native installer vet failed' }
-          & pwsh -NoProfile -NonInteractive -File scripts/test-windows-install.ps1 -Arch '${{ matrix.arch }}' -Commit $env:GITHUB_SHA
+          & pwsh -NoProfile -NonInteractive -File scripts/test-windows-install.ps1 -Arch '${{ matrix.arch }}' -Commit $env:DEVTOOLS_SOURCE_COMMIT
           if ($LASTEXITCODE -ne 0) { throw 'Native PowerShell installer/update tests failed' }
 
       - name: Test public native CLI and PowerShell completion
@@ -306,6 +359,7 @@ jobs:
             listener-results.jsonl
             detached-daemon-results.jsonl
             project-lifecycle-results.jsonl
+            windows-product-suite-results.jsonl
             project-lifecycle-repeat-results.jsonl
             project-lifecycle-diagnostic-results.jsonl
             windows-network-security-results.jsonl

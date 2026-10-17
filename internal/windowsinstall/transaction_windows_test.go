@@ -247,3 +247,138 @@ func TestWindowsInstallLockInteroperatesWithDotNetFileShareNone(t *testing.T) {
 		t.Fatalf("empty retained lock treated as busy: %q", got)
 	}
 }
+
+func TestWindowsInstallConcurrentAndUnownedRootsFailBeforeDownload(t *testing.T) {
+	t.Run("same install lock", func(t *testing.T) {
+		directory := filepath.Join(t.TempDir(), "bin")
+		e := fixtureEngine(t, directory)
+		before := fixtureInstallation(t, e, true)
+		lock, err := e.root.OpenExclusive(".devtools-install.lock", true, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer lock.Close()
+		_, err = apply(context.Background(), Options{Action: "update", BinDir: directory}, filepath.Join(directory, "devtools.exe"), func(context.Context, string) ([]byte, string, error) {
+			t.Fatal("concurrent install downloaded")
+			return nil, "", nil
+		})
+		if err == nil {
+			t.Fatal("concurrent install acquired lock")
+		}
+		assertOriginal(t, e, before)
+	})
+	t.Run("public root", func(t *testing.T) {
+		directory := t.TempDir()
+		_, err := apply(context.Background(), Options{Action: "install", BinDir: directory}, "", func(context.Context, string) ([]byte, string, error) {
+			t.Fatal("unsafe root downloaded")
+			return nil, "", nil
+		})
+		if err == nil {
+			t.Fatal("public install root was silently repaired")
+		}
+		entries, err := os.ReadDir(directory)
+		if err != nil || len(entries) != 0 {
+			t.Fatal("unsafe install root mutated", err)
+		}
+	})
+	t.Run("unmanaged image", func(t *testing.T) {
+		directory := filepath.Join(t.TempDir(), "bin")
+		e := fixtureEngine(t, directory)
+		if err := e.root.WriteFile(context.Background(), "devtools.exe", []byte("package managed"), false); err != nil {
+			t.Fatal(err)
+		}
+		_, err := apply(context.Background(), Options{Action: "update", BinDir: directory}, filepath.Join(directory, "devtools.exe"), func(context.Context, string) ([]byte, string, error) {
+			t.Fatal("unowned image downloaded")
+			return nil, "", nil
+		})
+		if err == nil {
+			t.Fatal("unowned package image adopted")
+		}
+		body, _ := e.root.ReadFile("devtools.exe", 100)
+		if string(body) != "package managed" {
+			t.Fatal("package image replaced")
+		}
+	})
+	t.Run("external alias", func(t *testing.T) {
+		e := fixtureEngine(t, filepath.Join(t.TempDir(), "bin"))
+		result, err := e.transact(context.Background(), Options{Action: "install", ExternalAlias: true}, []byte("image"), identity{"0.0.0-test.2", "fixture"}, nil)
+		if err != nil || result.Alias.Status != "skipped_conflict" {
+			t.Fatal(result, err)
+		}
+		if _, err = os.Stat(filepath.Join(e.directory, "dvt.exe")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("external alias shadowed", err)
+		}
+	})
+}
+
+func TestWindowsInstallRunningImageChild(t *testing.T) {
+	if os.Getenv("DEVTOOLS_INSTALL_RUNNING_CHILD") != "1" {
+		return
+	}
+	if err := os.WriteFile(os.Getenv("DEVTOOLS_INSTALL_RUNNING_READY"), []byte("ready"), 0600); err != nil {
+		os.Exit(95)
+	}
+	time.Sleep(time.Minute)
+	os.Exit(96)
+}
+func TestWindowsInstallRetainsMappedOldImageAndCleansAfterExit(t *testing.T) {
+	e := fixtureEngine(t, filepath.Join(t.TempDir(), "bin"))
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = e.root.WriteFile(context.Background(), "devtools.exe", body, false); err != nil {
+		t.Fatal(err)
+	}
+	proof, _, err := e.inspect("devtools.exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := &manifest{Format: 1, Identity: identity{"0.0.0-test.1", "fixture"}, Main: proof}
+	if err = e.writeJSON(context.Background(), manifestName, before); err != nil {
+		t.Fatal(err)
+	}
+	ready := filepath.Join(t.TempDir(), "ready")
+	child := exec.Command(filepath.Join(e.directory, "devtools.exe"), "-test.run=^TestWindowsInstallRunningImageChild$")
+	child.Env = append(os.Environ(), "DEVTOOLS_INSTALL_RUNNING_CHILD=1", "DEVTOOLS_INSTALL_RUNNING_READY="+ready)
+	if err = child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { child.Process.Kill(); child.Wait() }()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if _, err = os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("mapped image fixture never became ready")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err = e.transact(context.Background(), Options{Action: "update"}, []byte("new image"), identity{"0.0.0-test.2", "fixture"}, before); err != nil {
+		t.Fatal(err)
+	}
+	var current manifest
+	if present, err := e.readJSON(manifestName, &current); !present || err != nil || len(current.Retired) != 1 {
+		t.Fatal("mapped old image was not retained", current.Retired, err)
+	}
+	retiredPath := filepath.Join(e.directory, current.Retired[0].Name)
+	if _, err = os.Stat(retiredPath); err != nil {
+		t.Fatal("running image backup missing", err)
+	}
+	child.Process.Kill()
+	child.Wait()
+	if err = e.cleanupRetired(context.Background(), &current); err != nil || len(current.Retired) != 0 {
+		t.Fatal("released image did not clean up", err)
+	}
+	if _, err = os.Stat(retiredPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("old image still retained", err)
+	}
+	if err = e.require("devtools.exe", current.Main); err != nil {
+		t.Fatal("cleanup damaged committed image", err)
+	}
+}

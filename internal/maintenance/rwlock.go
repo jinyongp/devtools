@@ -8,6 +8,19 @@ import (
 	"path/filepath"
 )
 
+// lockedFile retains OS-specific parent guards along with the lock handle.
+type lockedFile struct {
+	*os.File
+	closeGuard func() error
+}
+
+func (f *lockedFile) Close() error {
+	if f.closeGuard != nil {
+		return f.closeGuard()
+	}
+	return f.File.Close()
+}
+
 type lockMode uint8
 
 const (

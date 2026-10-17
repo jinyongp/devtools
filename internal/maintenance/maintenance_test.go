@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -577,26 +576,7 @@ func TestWriterIntentBlocksNewReaders(t *testing.T) {
 		writerReady <- release
 	}()
 
-	turnstile, err := os.OpenFile(gate+".turnstile", os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer turnstile.Close()
-	deadline := time.Now().Add(time.Second)
-	for {
-		err = syscall.Flock(int(turnstile.Fd()), syscall.LOCK_SH|syscall.LOCK_NB)
-		if errors.Is(err, syscall.EWOULDBLOCK) {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = syscall.Flock(int(turnstile.Fd()), syscall.LOCK_UN)
-		if time.Now().After(deadline) {
-			t.Fatal("writer never acquired turnstile")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	waitForWriterIntent(t, gate+".turnstile")
 
 	readerReady := make(chan func(), 1)
 	readerErr := make(chan error, 1)

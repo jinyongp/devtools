@@ -316,7 +316,7 @@ func (s Store) Active(ctx context.Context, id, name string) *protocol.Error {
 	return e
 }
 func (s Store) Claim(ctx context.Context, id string, names []string) (func(), *protocol.Error) {
-	files := []*os.File{}
+	files := []io.Closer{}
 	release := func() {
 		for _, f := range files {
 			f.Close()

@@ -46,7 +46,7 @@ func flockMode(mode lockMode) int {
 	return syscall.LOCK_EX | syscall.LOCK_NB
 }
 
-func acquireFileLock(ctx context.Context, path string, mode lockMode) (*os.File, error) {
+func acquireFileLock(ctx context.Context, path string, mode lockMode) (*lockedFile, error) {
 	file, err := openPrivateLock(path)
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func acquireFileLock(ctx context.Context, path string, mode lockMode) (*os.File,
 		}
 		err = syscall.Flock(int(file.Fd()), flockMode(mode))
 		if err == nil {
-			return file, nil
+			return &lockedFile{File: file}, nil
 		}
 		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EINTR) {
 			_ = file.Close()
@@ -73,7 +73,7 @@ func acquireFileLock(ctx context.Context, path string, mode lockMode) (*os.File,
 	}
 }
 
-func unlockFile(file *os.File) {
+func unlockFile(file *lockedFile) {
 	if file == nil {
 		return
 	}

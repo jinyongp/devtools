@@ -5,6 +5,7 @@ package ports
 
 import (
 	"context"
+	"io"
 
 	"errors"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
-func (s Store) lock(ctx context.Context, name string, wait bool, create bool) (*os.File, *protocol.Error) {
+func (s Store) lock(ctx context.Context, name string, wait bool, create bool) (io.Closer, *protocol.Error) {
 	if create {
 		if os.MkdirAll(s.Directory, 0700) != nil {
 			return nil, storageError()

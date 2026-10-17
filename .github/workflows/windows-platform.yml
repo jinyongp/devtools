@@ -89,6 +89,15 @@ jobs:
           & go test -json -count=1 -run '^TestWindows' ./internal/execution ./internal/doctor | Tee-Object -FilePath execution-preflight-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native execution preflight tests failed' }
 
+      - name: Test native storage locks and launch leases
+        run: |
+          & go test -json -count=1 -run 'TestWindows|TestWriterIntentBlocksNewReaders|TestSharedMaintenanceGateAllowsConcurrentReaders' ./internal/maintenance | Tee-Object -FilePath maintenance-lock-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native lock tests failed' }
+          & go test -json -count=1 -run '^TestWindows' ./internal/services | Tee-Object -FilePath service-lease-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native launch lease tests failed' }
+          & go test -json -count=1 -run '^TestWindows' ./internal/ports | Tee-Object -FilePath port-lock-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native port lock tests failed' }
+
       - name: Build native CLI and check explicit intermediate failures
         run: |
           $ErrorActionPreference = 'Stop'
@@ -132,6 +141,9 @@ jobs:
             platformfs-results.jsonl
             process-results.jsonl
             execution-preflight-results.jsonl
+            maintenance-lock-results.jsonl
+            service-lease-results.jsonl
+            port-lock-results.jsonl
             unsupported*.json
           if-no-files-found: warn
           retention-days: 7

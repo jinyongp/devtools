@@ -94,6 +94,10 @@ func (r *Root) MkdirAll(name string) error {
 
 // OpenFile checks the parent chain and file security before truncating data.
 func (r *Root) OpenFile(name string, flags int) (*File, error) {
+	return r.openFile(name, flags, openPrivateFile)
+}
+
+func (r *Root) openFile(name string, flags int, open func(string, int) (*os.File, error)) (*File, error) {
 	path, err := r.child(name)
 	if err != nil {
 		return nil, err
@@ -105,7 +109,7 @@ func (r *Root) OpenFile(name string, flags int) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
-	f, err := openPrivateFile(path, flags)
+	f, err := open(path, flags)
 	if err != nil {
 		_ = guard.close()
 		return nil, err

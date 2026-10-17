@@ -205,6 +205,10 @@ func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, er
 }
 
 func openPrivateFile(path string, flags int) (*os.File, error) {
+	return openPrivateFileWithShare(path, flags, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE)
+}
+
+func openPrivateFileWithShare(path string, flags int, share uint32) (*os.File, error) {
 	access := uint32(windows.READ_CONTROL | windows.FILE_READ_ATTRIBUTES)
 	if flags&os.O_WRONLY == 0 {
 		access |= windows.GENERIC_READ
@@ -236,7 +240,7 @@ func openPrivateFile(path string, flags int) (*os.File, error) {
 		return nil, err
 	}
 	sa := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sd}
-	h, err := windows.CreateFile(ptr, access, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, &sa, disposition, windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
+	h, err := windows.CreateFile(ptr, access, share, &sa, disposition, windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
 	if err != nil {
 		return nil, &os.PathError{Op: "open", Path: path, Err: err}
 	}

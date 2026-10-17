@@ -4,14 +4,12 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
+
 	"strings"
 
 	"time"
 
-	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/protocol"
-	"github.com/jinyongp/devtools/internal/tasks"
 )
 
 const legacyStartupGrace = 10 * time.Second
@@ -22,14 +20,21 @@ type launchMarker struct {
 }
 
 type lockedLease struct {
-	file *os.File
+	file       *os.File
+	closeGuard func() error
 }
 
 func (l *lockedLease) closeReference() error {
 	if l == nil || l.file == nil {
 		return nil
 	}
-	err := l.file.Close()
+	var err error
+	if l.closeGuard != nil {
+		err = l.closeGuard()
+		l.closeGuard = nil
+	} else {
+		err = l.file.Close()
+	}
 	l.file = nil
 	return err
 }
@@ -37,21 +42,6 @@ func (l *lockedLease) closeReference() error {
 func privateRegular(file *os.File) bool {
 	info, err := file.Stat()
 	return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0077 == 0
-}
-
-func validateLeaseIdentity(file *os.File, path string) error {
-	if file == nil || !privateRegular(file) {
-		return errors.New("invalid inherited lease")
-	}
-	expected, err := os.Lstat(path)
-	if err != nil || !expected.Mode().IsRegular() || expected.Mode().Perm()&0077 != 0 {
-		return errors.New("invalid lease path")
-	}
-	actual, err := file.Stat()
-	if err != nil || !os.SameFile(expected, actual) {
-		return errors.New("lease identity mismatch")
-	}
-	return nil
 }
 
 func syncDirectory(path string) error {
@@ -68,26 +58,17 @@ func syncDirectory(path string) error {
 }
 
 func validLaunchMarker(marker launchMarker) bool {
-	return marker.Version == 1 && marker.LeaseHandoff == "inherited-fd"
-}
-
-func (s Store) readLaunchMarker(id string) (launchMarker, bool, *protocol.Error) {
-	var marker launchMarker
-	err := tasks.ReadPrivate(s.path(id, "launch.json"), &marker)
-	if errors.Is(err, os.ErrNotExist) {
-		return marker, false, nil
-	}
-	if err != nil || !validLaunchMarker(marker) {
-		return marker, false, storageError()
-	}
-	return marker, true, nil
+	return marker == platformLaunchMarker()
 }
 
 func (s Store) leaseAvailable(ctx context.Context, id string, allowMissing bool) (bool, *protocol.Error) {
+	if !validID(id) {
+		return false, storageError()
+	}
 	if ctx.Err() != nil {
 		return false, failure("canceled")
 	}
-	lease, acquired, err := tryLease(s.path(id, "lease.lock"), false)
+	lease, acquired, err := tryLease(s.leasePath(id), false)
 	if errors.Is(err, os.ErrNotExist) {
 		if allowMissing {
 			return true, nil
@@ -106,10 +87,13 @@ func (s Store) leaseAvailable(ctx context.Context, id string, allowMissing bool)
 }
 
 func (s Store) claimLease(ctx context.Context, id string, allowCreate bool) (*lockedLease, bool, *protocol.Error) {
+	if !validID(id) {
+		return nil, false, storageError()
+	}
 	if ctx.Err() != nil {
 		return nil, false, failure("canceled")
 	}
-	lease, acquired, err := tryLease(s.path(id, "lease.lock"), allowCreate)
+	lease, acquired, err := tryLease(s.leasePath(id), allowCreate)
 	if errors.Is(err, os.ErrNotExist) && !allowCreate {
 		return nil, false, storageError()
 	}
@@ -201,99 +185,4 @@ func validLaunchStagingName(name string) bool {
 		}
 	}
 	return true
-}
-
-func (s Store) cleanupLaunchStaging() *protocol.Error {
-	root := s.root()
-	entries, err := os.ReadDir(root)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return storageError()
-	}
-	removed := false
-	for _, entry := range entries {
-		if !validLaunchStagingName(entry.Name()) {
-			continue
-		}
-		path := filepath.Join(root, entry.Name())
-		info, statErr := os.Lstat(path)
-		if statErr != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-			return storageError()
-		}
-		if err := os.RemoveAll(path); err != nil {
-			return storageError()
-		}
-		removed = true
-	}
-	if removed && syncDirectory(root) != nil {
-		return storageError()
-	}
-	return nil
-}
-
-func (s Store) prepareLaunch(record Record, snapshots ...*network.ExecutionSnapshot) (*lockedLease, *protocol.Error) {
-	if err := tasks.PrivateDir(s.root()); err != nil {
-		return nil, storageError()
-	}
-	staging, err := os.MkdirTemp(s.root(), launchStagingName(record.ID))
-	if err != nil {
-		return nil, storageError()
-	}
-	published := false
-	defer func() {
-		if !published {
-			_ = os.RemoveAll(staging)
-			_ = syncDirectory(s.root())
-		}
-	}()
-
-	lease, acquired, err := tryLease(filepath.Join(staging, "lease.lock"), true)
-	if err != nil || !acquired {
-		return nil, storageError()
-	}
-	keepLease := false
-	defer func() {
-		if !keepLease {
-			_ = lease.unlockClose()
-		}
-	}()
-
-	if err := writePrivate(filepath.Join(staging, "record.json"), record); err != nil {
-		return nil, storageError()
-	}
-	if record.ProxyMode {
-		if len(snapshots) == 0 || snapshots[0] == nil || snapshots[0].ID != record.NetworkSnapshotID {
-			return nil, failure("network_snapshot_required")
-		}
-		if err := writePrivate(filepath.Join(staging, "network.json"), snapshots[0]); err != nil {
-			return nil, storageError()
-		}
-	}
-	if err := writePrivate(filepath.Join(staging, "launch.json"), launchMarker{Version: 1, LeaseHandoff: "inherited-fd"}); err != nil {
-		return nil, storageError()
-	}
-	if err := syncDirectory(staging); err != nil {
-		return nil, storageError()
-	}
-
-	target := filepath.Join(s.root(), record.ID)
-	if _, err := os.Lstat(target); err == nil {
-		return nil, failure("request_conflict")
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, storageError()
-	}
-	if err := os.Rename(staging, target); err != nil {
-		return nil, storageError()
-	}
-	published = true
-	if err := syncDirectory(s.root()); err != nil {
-		return nil, storageError()
-	}
-	if err := validateLeaseIdentity(lease.file, s.path(record.ID, "lease.lock")); err != nil {
-		return nil, storageError()
-	}
-	keepLease = true
-	return lease, nil
 }

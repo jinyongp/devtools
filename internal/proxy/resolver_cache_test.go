@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"github.com/jinyongp/devtools/internal/testfixture"
 	"os"
 	"path/filepath"
 	"sync"
@@ -199,7 +200,7 @@ func TestResolverCacheStillEnforcesPrivatePortDirectory(t *testing.T) {
 	if items, err := resolver.List(context.Background(), "app"); err != nil || len(items) != 1 {
 		t.Fatalf("warm resolver: %+v %v", items, err)
 	}
-	if err := os.Chmod(store.Directory, 0755); err != nil {
+	if err := testfixture.MakePublic(store.Directory); err != nil {
 		t.Fatal(err)
 	}
 	defer os.Chmod(store.Directory, 0700)

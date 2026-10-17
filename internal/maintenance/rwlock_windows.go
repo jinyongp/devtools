@@ -59,3 +59,28 @@ func unlockFile(file *lockedFile) {
 	_ = windows.UnlockFileEx(windows.Handle(file.Fd()), 0, 1, 0, &windows.Overlapped{})
 	_ = file.Close()
 }
+
+func tryAcquireFileLock(ctx context.Context, path string, mode lockMode) (*lockedFile, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	root, err := platformfs.OpenRoot(filepath.Dir(path), false)
+	if err != nil {
+		return nil, false, err
+	}
+	defer root.Close()
+	file, err := root.OpenFile(filepath.Base(path), os.O_RDWR|os.O_CREATE)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := ctx.Err(); err != nil {
+		_ = file.Close()
+		return nil, false, err
+	}
+	acquired, err := file.TryLock(mode == lockShared)
+	if err != nil || !acquired {
+		_ = file.Close()
+		return nil, false, err
+	}
+	return &lockedFile{File: file.File, closeGuard: file.Close}, true, nil
+}

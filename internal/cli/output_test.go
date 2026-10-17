@@ -147,7 +147,7 @@ func outputData(t *testing.T, app *App, args []string) map[string]any {
 
 func TestNonJSONOutputBoundaries(t *testing.T) {
 	t.Chdir(privateTempDir(t))
-	config := "profile='app'\n[commands.fail]\nexec=['/bin/sh','-c','printf output; printf diagnostic >&2; exit 17']\n"
+	config := "profile='app'\n[commands.fail]\nexec=" + fixtureExec(t, "output-fail") + "\n"
 	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}

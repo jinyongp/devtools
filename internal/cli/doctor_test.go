@@ -25,10 +25,10 @@ env="dev"
 [commands.check.requirements]
 secs=["TOKEN"]
 `
+	tool := versionToolFixture(t, false)
+	config = strings.ReplaceAll(config, `executable="./tool"`, "executable="+mustJSON(t, tool))
+	config = strings.ReplaceAll(config, `exec=["/bin/sh","-c","test -n \"$TOKEN\" && printf ran > marker"]`, "exec="+fixtureExec(t, "check-marker"))
 	if e := os.WriteFile("devtools.toml", []byte(config), 0600); e != nil {
-		t.Fatal(e)
-	}
-	if e := os.WriteFile("tool", []byte("#!/bin/sh\necho 'fixture 1.2.3 CANARY-SECRET'\n"), 0700); e != nil {
 		t.Fatal(e)
 	}
 	diagnose := func(want bool, args ...string) {
@@ -72,7 +72,8 @@ secs=["TOKEN"]
 	if _, e := os.Stat("marker"); e != nil {
 		t.Fatal(e)
 	}
-	if e := os.WriteFile("tool", []byte("#!/bin/sh\necho 'fixture 1.2.30 CANARY-SECRET'\n"), 0700); e != nil {
+	config = strings.ReplaceAll(config, mustJSON(t, tool), mustJSON(t, versionToolFixture(t, true)))
+	if e := os.WriteFile("devtools.toml", []byte(config), 0600); e != nil {
 		t.Fatal(e)
 	}
 	diagnose(false, "check")

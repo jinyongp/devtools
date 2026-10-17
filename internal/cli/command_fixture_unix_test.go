@@ -2,12 +2,32 @@
 
 package cli
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func commandFixture(t *testing.T, kind string) []string {
 	t.Helper()
 	script := ""
 	switch kind {
+	case "true":
+		return []string{"/bin/true"}
+	case "version", "version-bad":
+		version := "1.2.3"
+		if kind == "version-bad" {
+			version = "1.2.30"
+		}
+		return []string{"/bin/sh", "-c", "echo fixture " + version + " CANARY-SECRET"}
+	case "dev", "zeta":
+		return []string{"/bin/sh", "-c", "printf " + kind}
+	case "check-marker":
+		script = `test -n "$TOKEN" && printf ran > marker`
+	case "bind":
+		return []string{"/bin/sh", "-c", `printf '%s|%s' "$URL" "$1"`, "--"}
+	case "output-fail":
+		script = `printf output; printf diagnostic >&2; exit 17`
 	case "cwd-level-first":
 		return []string{"/bin/sh", "-c", `printf '%s|%s|%s' "$PWD" "$LEVEL" "$1"`, "label"}
 	case "cwd-level":
@@ -32,4 +52,17 @@ func commandFixture(t *testing.T, kind string) []string {
 		t.Fatal("unknown command fixture", kind)
 	}
 	return []string{"/bin/sh", "-c", script}
+}
+
+func versionToolFixture(t *testing.T, bad bool) string {
+	t.Helper()
+	version := "1.2.3"
+	if bad {
+		version = "1.2.30"
+	}
+	path := filepath.Join(t.TempDir(), "tool")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\necho fixture "+version+" CANARY-SECRET\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

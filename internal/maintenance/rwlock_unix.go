@@ -80,3 +80,26 @@ func unlockFile(file *lockedFile) {
 	_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
 	_ = file.Close()
 }
+
+func tryAcquireFileLock(ctx context.Context, path string, mode lockMode) (*lockedFile, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	file, err := openPrivateLock(path)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := ctx.Err(); err != nil {
+		_ = file.Close()
+		return nil, false, err
+	}
+	err = syscall.Flock(int(file.Fd()), flockMode(mode))
+	if err != nil {
+		_ = file.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	return &lockedFile{File: file}, true, nil
+}

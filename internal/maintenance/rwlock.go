@@ -129,3 +129,25 @@ func AcquireShared(ctx context.Context, root string) (func(), error) {
 		// writer left new recovery state between lock handoffs.
 	}
 }
+
+// TryLockExclusive checks both writer intent and the gate once, after private
+// storage validation. Contention is distinct from cancellation or unsafe storage;
+// ACL inspection latency is never mistaken for contention by an artificial timer.
+func TryLockExclusive(ctx context.Context, path string) (func(), bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	if err := ensurePrivateLockDirectory(filepath.Dir(path)); err != nil {
+		return nil, false, err
+	}
+	turnstile, acquired, err := tryAcquireFileLock(ctx, path+".turnstile", lockExclusive)
+	if err != nil || !acquired {
+		return nil, false, err
+	}
+	defer unlockFile(turnstile)
+	gate, acquired, err := tryAcquireFileLock(ctx, path, lockExclusive)
+	if err != nil || !acquired {
+		return nil, false, err
+	}
+	return func() { unlockFile(gate) }, true, nil
+}

@@ -150,6 +150,7 @@ exec=["/bin/sh","-c","true"]
 [commands.api]
 exec=["/bin/sh","-c","true"]
 `
+	config = strings.ReplaceAll(config, `exec=["/bin/sh","-c","true"]`, "exec="+fixtureExec(t, "true"))
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -266,6 +267,7 @@ func TestProjectLifecycleCanonicalDirectoryIdentity(t *testing.T) {
 [commands.web]
 exec=["/bin/sh","-c","true"]
 `
+	config = strings.ReplaceAll(config, `exec=["/bin/sh","-c","true"]`, "exec="+fixtureExec(t, "true"))
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -297,6 +299,7 @@ inject=true
 [commands.api.requirements]
 secs=["TOKEN"]
 `
+	config = strings.ReplaceAll(config, `exec=["/bin/sh","-c","true"]`, "exec="+fixtureExec(t, "true"))
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -332,6 +335,8 @@ env="missing"
 [commands.web.requirements.tools.shell]
 executable="/bin/sh"
 `
+	config = strings.ReplaceAll(config, `executable="/bin/sh"`, "executable="+mustJSON(t, commandFixture(t, "true")[0]))
+	config = strings.ReplaceAll(config, `exec=["/bin/sh","-c","true"]`, "exec="+fixtureExec(t, "true"))
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +397,7 @@ func TestProjectLogsSelectsCurrentCanonicalProjectExecution(t *testing.T) {
 	app.lifecycleManager = func(data string) lifecycle.Manager { return lifecycle.Manager{Data: data, Processes: processes} }
 
 	for _, record := range []services.Record{current, otherRecord} {
-		if err := os.MkdirAll(filepath.Join(dataRoot, "processes", record.ID), 0700); err != nil {
+		if err := tasks.PrivateDir(filepath.Join(dataRoot, "processes", record.ID)); err != nil {
 			t.Fatal(err)
 		}
 		if err := tasks.WritePrivate(filepath.Join(dataRoot, "processes", record.ID, "record.json"), record); err != nil {
@@ -438,7 +443,7 @@ func TestProjectLogsRequiresOneActiveCapturedExecution(t *testing.T) {
 
 	now := time.Now().UTC()
 	uncaptured := services.Record{ID: tasks.ID(), Profile: "app", Instance: "one", Directory: canonicalRoot, Command: "web", Capture: false, CreatedAt: now, StartedAt: &now, State: "running"}
-	if err := os.MkdirAll(filepath.Join(dataRoot, "processes", uncaptured.ID), 0700); err != nil {
+	if err := tasks.PrivateDir(filepath.Join(dataRoot, "processes", uncaptured.ID)); err != nil {
 		t.Fatal(err)
 	}
 	if err := tasks.WritePrivate(filepath.Join(dataRoot, "processes", uncaptured.ID, "record.json"), uncaptured); err != nil {

@@ -9,7 +9,6 @@ import (
 	"github.com/jinyongp/devtools/internal/tasks"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -74,15 +73,11 @@ func TestProfilesEndpointIncludesPassiveProcessProfiles(t *testing.T) {
 	root := privateTempDir(t)
 	id := tasks.ID()
 	processDirectory := filepath.Join(root, "processes", id)
-	if err := os.MkdirAll(processDirectory, 0700); err != nil {
+	if err := tasks.PrivateDir(processDirectory); err != nil {
 		t.Fatal(err)
 	}
 	record := services.Record{ID: id, Profile: "process-only", Directory: filepath.Join(root, "project")}
-	body, err := json.Marshal(record)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(processDirectory, "record.json"), body, 0600); err != nil {
+	if err := tasks.WritePrivate(filepath.Join(processDirectory, "record.json"), record); err != nil {
 		t.Fatal(err)
 	}
 

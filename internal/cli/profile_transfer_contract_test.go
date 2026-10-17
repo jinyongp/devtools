@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"github.com/jinyongp/devtools/internal/testfixture"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,7 +99,7 @@ func TestProfileTransferUnsafeParentReturnsIdentityError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(directory, 0755); err != nil {
+	if err := testfixture.MakePublic(directory); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(directory, 0700) })

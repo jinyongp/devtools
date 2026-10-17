@@ -103,6 +103,10 @@ func TestNamedAndDirectRun(t *testing.T) {
 	if cwdErr != nil {
 		t.Fatal(cwdErr)
 	}
+	current, cwdErr = filepath.EvalSymlinks(current)
+	if cwdErr != nil {
+		t.Fatal(cwdErr)
+	}
 	canonical, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		t.Fatal(err)

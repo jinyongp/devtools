@@ -41,6 +41,26 @@ func init() {
 	args := os.Args[1:]
 	switch mode {
 	case "true":
+	case "print":
+		fmt.Print(strings.Join(args, ""))
+	case "check-marker":
+		if os.Getenv("TOKEN") == "" {
+			os.Exit(1)
+		}
+		if err := os.WriteFile("marker", []byte("ran"), 0600); err != nil {
+			os.Exit(1)
+		}
+	case "bind":
+		if len(args) != 1 {
+			os.Exit(2)
+		}
+		fmt.Printf("%s|%s", os.Getenv("URL"), args[0])
+	case "output-fail":
+		fmt.Print("output")
+		fmt.Fprint(os.Stderr, "diagnostic")
+		os.Exit(17)
+	case "version-bad":
+		fmt.Print("fixture 1.2.30 CANARY-SECRET\n")
 	case "version":
 		fmt.Print("tool 1.2.3 fixture-secret\n")
 	case "env":

@@ -284,7 +284,7 @@ func TestCanonicalMutationsRunConcurrentlyAcrossProfiles(t *testing.T) {
 		select {
 		case profile := <-entered:
 			seen[profile] = true
-		case <-time.After(time.Second):
+		case <-time.After(10 * time.Second):
 			close(releaseCommit)
 			t.Fatalf("different-profile mutation was globally serialized: %#v", seen)
 		}

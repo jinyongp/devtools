@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/expose"
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -1118,10 +1119,8 @@ func (m Manager) rpc(ctx context.Context, action string) (Record, error) {
 }
 
 func (m Manager) leaseFree(ctx context.Context) bool {
-	wait, cancel := context.WithTimeout(ctx, 5*time.Millisecond)
-	defer cancel()
-	release, err := tasks.Lock(wait, m.path("lease.lock"))
-	if err != nil {
+	release, acquired, err := maintenance.TryLockExclusive(ctx, m.path("lease.lock"))
+	if err != nil || !acquired {
 		return false
 	}
 	release()

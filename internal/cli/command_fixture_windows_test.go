@@ -8,6 +8,10 @@ import (
 func commandFixture(t *testing.T, kind string) []string {
 	t.Helper()
 	switch kind {
+	case "true", "version", "version-bad", "check-marker", "bind", "output-fail":
+		return []string{testfixture.Copy(t, kind)}
+	case "dev", "zeta":
+		return []string{testfixture.Copy(t, "print"), kind}
 	case "level":
 		return []string{testfixture.Copy(t, "env"), "LEVEL"}
 	case "marker":
@@ -20,4 +24,13 @@ func commandFixture(t *testing.T, kind string) []string {
 		t.Fatal("unknown command fixture", kind)
 		return nil
 	}
+}
+
+func versionToolFixture(t *testing.T, bad bool) string {
+	t.Helper()
+	mode := "version"
+	if bad {
+		mode = "version-bad"
+	}
+	return testfixture.Copy(t, mode)
 }

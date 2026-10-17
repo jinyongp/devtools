@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jinyongp/devtools/internal/testfixture"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -213,10 +214,7 @@ func TestManagerPreservesReservationAfterSpawnFailure(t *testing.T) {
 	if portErr != nil || state.Reservation("proxy") == nil || state.Reservation("proxy").Port != port {
 		t.Fatalf("failed reservation = %+v %v", state, portErr)
 	}
-	info, statErr := os.Stat(filepath.Join(manager.Data, "proxy"))
-	if statErr != nil || info.Mode().Perm()&0077 != 0 {
-		t.Fatalf("proxy directory permissions = %v %v", info, statErr)
-	}
+	testfixture.AssertPrivate(t, filepath.Join(manager.Data, "proxy"), os.ModeDir|0700)
 }
 
 func TestManagerDoesNotOverwriteLateSupervisorAfterSpawnError(t *testing.T) {

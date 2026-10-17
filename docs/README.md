@@ -5,7 +5,8 @@
 
 ## 문서 버전과 예제 읽기
 
-이 checkout은 Windows 네이티브 지원을 포함한 **다음 릴리스 후보**를 설명한다.
+이 checkout은 Windows 네이티브 지원을 포함한 **v0.25.0 배포 대상**을 설명한다.
+v0.25.0 게시 전에는 검증된 후보로 사용한다.
 게시된 릴리스와 소스 후보의 기능을 구분하고, 설치한 버전의 계약은 다음 명령으로 확인한다.
 
 ```sh
@@ -71,6 +72,7 @@ Windows 자산의 게시 여부·지원 목표·검증 한계는 [Windows 안내
 ## 개발과 검증
 
 - [이번 문서 개선 검토](documentation-review.md): 범위·문서별 리뷰·실행한 예제와 미검증 항목.
+- [v0.25.0 배포 준비](releases/v0.25.0.md): 변경 요약, 게시 전후 절차와 복구 조건.
 - [개발 안내](development.md): checkout 준비, 검사 선택, dashboard 수정과 릴리스 절차.
 - [설치된 배포물 검증](../verify/README.md): Unix 시나리오와 Windows native Actions의 역할.
 - [네트워크 검증 범위](../verify/network-coverage.md): 수용 기준별 검사 위치와 실제 환경의 미검증 항목.

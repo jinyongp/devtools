@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-devtools는 운영체제와 CPU에 맞는 실행 파일을 설치해 사용한다. 설치된 프로그램은 Go 도구 없이 실행할 수 있다. 현재 stable 배포물은 macOS와 Linux의 amd64·arm64이며, WSL은 Linux 배포물을 사용한다. 현재 소스의 다음 릴리스 후보는 Windows x64·ARM64 ZIP도 만든다. [Windows 안내](windows.md)의 미게시 상태와 검증 한계를 먼저 확인한다.
+devtools는 운영체제와 CPU에 맞는 실행 파일을 설치해 사용한다. 설치된 프로그램은 Go 도구 없이 실행할 수 있다. v0.24.1까지는 macOS와 Linux의 amd64·arm64를 배포하며, WSL은 Linux 배포물을 사용한다. v0.25.0은 Windows x64·ARM64 ZIP을 추가하는 첫 릴리스 대상이다. 게시 전 후보 설치와 검증 한계는 [Windows 안내](windows.md)를 먼저 확인한다.
 
 ## 처음 설치하기
 
@@ -104,9 +104,8 @@ devtools version
 
 ## Windows 네이티브 후보
 
-Windows는 다음 릴리스를 위한 x64·ARM64 구현 후보입니다. 아직 게시하지 않은 Windows
-자산을 현재 stable URL에서 받으라고 안내하지 않습니다. 같은 후보의 `install.ps1`·ZIP·
-checksum을 사용하세요. [Windows 설치·업데이트·지원 한계](windows.md)에 기본 경로,
+Windows x64·ARM64의 첫 릴리스 대상은 v0.25.0입니다. 게시 전에는 같은 후보의
+`install.ps1`·ZIP·checksum을 사용하세요. 게시 후에는 v0.25.0 이상의 Windows 자산을 사용합니다. [Windows 설치·업데이트·지원 한계](windows.md)에 기본 경로,
 `-Version`/`-Source`/`-BinDir`/`-AddToPath`, dvt 복사본, 실행 중인 image 교체와 복구를
 정리했습니다. WSL에는 Linux용 설치를 유지합니다.
 

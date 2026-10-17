@@ -9,8 +9,8 @@ devtools는 프로젝트의 개발환경과 작업을 한곳에서 관리하는 
 ## 지원 환경
 
 - **macOS·Linux·WSL:** 아래 설치 방법을 사용합니다. WSL에는 Linux용 CLI를 설치하세요.
-- **Windows 네이티브:** 다음 릴리스 후보에 x64·ARM64 구현이 포함되어 있습니다.
-  Windows 자산은 아직 게시하지 않았습니다. 대상은 Windows 11 25H2·26H2입니다.
+- **Windows 네이티브:** v0.25.0에 x64·ARM64 지원을 제공할 예정입니다.
+  v0.25.0 게시 전에는 검증된 후보 자산을 사용하세요. 대상은 Windows 11 25H2·26H2입니다.
   [Windows 안내](docs/windows.md)에서 후보 설치와 Actions 검증 범위·실제 PC 미검증 한계를 확인하세요.
 
 Windows와 WSL의 데이터·서버·CA는 별개입니다. 두 환경을 함께 사용한다면

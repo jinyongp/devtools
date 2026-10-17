@@ -10,8 +10,8 @@ pick up where you left off in another session or with a coding agent.
 ## Platforms
 
 - **macOS, Linux, WSL:** use the installation steps below. Install the Linux CLI inside WSL.
-- **Native Windows:** the next release candidate includes x64 and ARM64 support,
-  targeting Windows 11 25H2/26H2. Windows assets have not been published.
+- **Native Windows:** x64 and ARM64 support targets v0.25.0 and Windows 11 25H2/26H2.
+  Until v0.25.0 is published, use the validated candidate assets.
   See the [Windows guide](docs/windows.md) for candidate installation, Actions
   validation, and the limits of testing without a physical Windows PC.
 

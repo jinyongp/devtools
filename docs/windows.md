@@ -2,7 +2,8 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-Windows 네이티브 지원은 다음 릴리스 후보에 포함되어 있으며 Windows 자산은 아직 게시하지 않았다.
+Windows 네이티브 x64·ARM64 지원의 첫 배포 대상은 v0.25.0이다.
+v0.24.1까지는 Windows 배포물이 없으며, v0.25.0이 게시되기 전에는 검증된 후보 자산을 사용한다.
 이 가이드는 후보를 설치·실행할 때의 요구 사항과 한계를 설명한다.
 WSL 안에서 사용할 때는 [Linux용 설치와 WSL 안내](wsl.md)를 따른다.
 
@@ -23,7 +24,7 @@ artifact 저장량에는 계정의 저장 한도·과금 정책이 별도로 적
 
 ## 후보 설치와 업데이트
 
-현재는 공개 stable 설치 URL 대신 검증된 후보 파일을 사용한다. [최종 후보 검증 기록](windows-support/implementation/W9.md)에서
+v0.25.0 게시 전에는 공개 stable 설치 URL 대신 검증된 후보 파일을 사용한다. [최종 후보 검증 기록](windows-support/implementation/W9.md)에서
 해당 Actions 실행을 확인하고 `release-assets` artifact를 받는다. installer·해당 CPU ZIP·checksum·
 `version.txt`를 같은 디렉터리에 준비한다. 다른 실행의 파일을 섞지 않는다.
 
@@ -34,7 +35,16 @@ PowerShell을 installer가 있는 디렉터리에서 열고 아래 버전·경�
 .\install.ps1 -Version CANDIDATE_VERSION -Source C:\Temp\devtools-release
 ```
 
-기본 bin은 Known Folder LocalAppData 아래 `Programs\devtools\bin`이다. ARM64 OS에서
+v0.25.0이 실제 게시된 뒤에는 해당 GitHub Release의 `install.ps1`과 Windows 자산을 사용한다.
+Pages 설치기 게시도 완료되었다면 다음 PowerShell 명령으로 같은 버전을 설치할 수 있다.
+이 명령은 릴리스와 Pages 게시 전에 실행하지 않는다.
+
+```powershell
+Invoke-WebRequest -Uri 'https://jinyongp.dev/devtools/install.ps1' -OutFile '.\install.ps1'
+.\install.ps1 -Version 0.25.0
+```
+
+다운로드한 설치기의 출처와 내용을 확인한 뒤 실행한다. 기본 bin은 Known Folder LocalAppData 아래 `Programs\devtools\bin`이다. ARM64 OS에서
 x64 PowerShell을 실행해도 ARM64 archive를 고른다. 설치기는 checksum·ZIP·PE CPU·실제
 version/commit을 확인한다. ZIP에는 regular `devtools.exe` 하나만 들어간다.
 `dvt.exe`는 같은 내용의 별도 파일이며 symlink나 `.cmd`가 필요 없다. 외부 소유 `dvt`와

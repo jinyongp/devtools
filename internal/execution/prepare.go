@@ -97,6 +97,18 @@ func prepareResolved(ctx context.Context, command Command, state *values.State, 
 		}
 		out.Injected = injected
 	}
+	// Validate the complete injected key space before allocating ports. Keep
+	// values out of errors, including case collisions imported from Unix.
+	keys := make(map[string]string, len(out.Injected)+len(command.Bind))
+	for key, value := range out.Injected {
+		keys[key] = value
+	}
+	for key := range command.Bind {
+		keys[key] = ""
+	}
+	if err := process.ValidateEnvironment(keys); err != nil {
+		return Prepared{}, err
+	}
 	if len(command.Bind)+len(command.Serve) == 0 {
 		return out, nil
 	}
@@ -136,7 +148,7 @@ func prepareResolved(ctx context.Context, command Command, state *values.State, 
 			out.Injected["DEVTOOLS_ISOLATED_ROOT"] = root
 		}
 	}
-	if path, ok := prepared.Bind["PATH"]; ok {
+	if path, ok := process.EnvironmentValue(prepared.Bind, "PATH"); ok {
 		path := path
 		out.PathOverride = &path
 	}
@@ -264,7 +276,7 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 			}
 		}
 		args = append(resolvedExec, command.ExtraArgs...)
-		if path, ok := bindings["PATH"]; ok {
+		if path, ok := process.EnvironmentValue(bindings, "PATH"); ok {
 			path := path
 			pathOverride = &path
 		}
@@ -335,6 +347,9 @@ func (p Prepared) Environment(parent []string) []string {
 // Execute runs a prepared command using either the regular foreground process
 // path or a caller-provided managed-process runner.
 func (p Prepared) Execute(ctx context.Context, parentEnvironment []string, runner process.Runner, in io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
+	if err := process.ValidateEnvironment(p.Injected); err != nil {
+		return 0, err
+	}
 	ctx = process.WithReadyProbe(ctx, p.Command.Ready)
 	if runner != nil {
 		ctx = process.WithRunner(ctx, runner)

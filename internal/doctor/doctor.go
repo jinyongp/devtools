@@ -76,7 +76,15 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 	// Use the effective PATH, while keeping profile secrets out of version probes.
 	if in.Inject && in.State != nil {
 		if effective, e := in.State.Environment(in.Env); e == nil {
-			if path, ok := effective["PATH"]; ok {
+			if err := process.ValidateEnvironment(effective); err != nil {
+				message := err.Message
+				if keys, ok := err.Details["keys"].([]string); ok {
+					message += " Keys: " + strings.Join(keys, ", ")
+				}
+				report.Add("environment:names", "fail", message, Remedy("Use one spelling for each injected environment name.", nil))
+				return report.Checks
+			}
+			if path, ok := process.EnvironmentValue(effective, "PATH"); ok {
 				probeEnv = process.Environment(probeEnv, map[string]string{"PATH": path})
 			}
 		}
@@ -89,7 +97,7 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 		id := "tool:" + name
 		path, e := process.LookPath(tool.Executable, in.Directory, probeEnv)
 		info, statErr := os.Stat(path)
-		if e != nil || statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+		if e != nil || statErr != nil || !process.IsExecutable(info) {
 			report.Add(id, "fail", "Required executable is unavailable.", Remedy("Install the declared tool or update the command's PATH.", nil))
 			return
 		}

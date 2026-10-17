@@ -41,6 +41,19 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Prepare actual package-manager shims
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $shims = Join-Path $env:RUNNER_TEMP 'devtools-package-shims'
+          New-Item -ItemType Directory -Force $shims | Out-Null
+          & corepack enable --install-directory $shims pnpm
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare pnpm shim' }
+          & corepack pnpm --version
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot activate the pinned pnpm version' }
+          $shims | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Test native private storage with a separate standard identity
         run: |
           $ErrorActionPreference = 'Stop'
@@ -65,6 +78,17 @@ jobs:
             Remove-Item Env:DEVTOOLS_TEST_PASSWORD -ErrorAction SilentlyContinue
             if ($created) { Remove-LocalUser -Name $account }
           }
+      - name: Test native argv, actual shells and package-manager shims
+        env:
+          DEVTOOLS_TEST_PACKAGE_SHIMS: '1'
+        run: |
+          & go test -json -count=1 ./internal/process | Tee-Object -FilePath process-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native process boundary tests failed' }
+          & go vet ./internal/process
+          if ($LASTEXITCODE -ne 0) { throw 'Native process boundary vet failed' }
+          & go test -json -count=1 -run '^TestWindows' ./internal/execution ./internal/doctor | Tee-Object -FilePath execution-preflight-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native execution preflight tests failed' }
+
       - name: Build native CLI and check explicit intermediate failures
         run: |
           $ErrorActionPreference = 'Stop'
@@ -106,6 +130,8 @@ jobs:
           name: windows-platform-${{ matrix.arch }}
           path: |
             platformfs-results.jsonl
+            process-results.jsonl
+            execution-preflight-results.jsonl
             unsupported*.json
           if-no-files-found: warn
           retention-days: 7

@@ -73,6 +73,9 @@ func (a *App) registerGlobalRun() {
 		if roots, e := a.currentPaths(); e == nil && roots.IsolatedRoot != "" {
 			env["DEVTOOLS_ISOLATED_ROOT"] = roots.IsolatedRoot
 		}
+		if err := process.ValidateEnvironment(env); err != nil {
+			return nil, err
+		}
 		exit, e := process.Execute(ctx, r.Child, dir, process.Environment(os.Environ(), env), streams.In, streams.Out, streams.Err)
 		return processResult{ExitCode: exit}, e
 	}

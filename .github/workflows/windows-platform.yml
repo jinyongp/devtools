@@ -85,10 +85,18 @@ jobs:
         run: |
           $actualCommit = (& git rev-parse HEAD).Trim()
           if ($LASTEXITCODE -ne 0 -or $actualCommit -cne $env:DEVTOOLS_SOURCE_COMMIT) { throw 'Checkout/source commit mismatch' }
+      - name: Separate Go caches by validation lane
+        run: |
+          New-Item -ItemType Directory -Force bin | Out-Null
+          '${{ matrix.lane }}' | Set-Content -Encoding utf8 bin/.devtools-ci-cache-scope
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
+          cache-dependency-path: |
+            go.mod
+            go.sum
+            bin/.devtools-ci-cache-scope
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'

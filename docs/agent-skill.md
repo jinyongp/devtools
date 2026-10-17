@@ -1,5 +1,7 @@
 # Agent Skill 설치
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 devtools Agent Skill은 [Agent Skills 규약](https://agentskills.io/specification)을 따르는
 표준 Skill입니다. 원본은 저장소의 `skills/devtools/SKILL.md`이며,
 `skills` CLI가 저장소에서 직접 발견하고 사용 중인 에이전트에 맞는 위치에 설치합니다.

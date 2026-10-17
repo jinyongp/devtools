@@ -1,52 +1,13 @@
 # 설치와 업데이트
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 devtools는 운영체제와 CPU에 맞는 실행 파일을 설치해 사용한다. 설치된 프로그램은 Go 도구 없이 실행할 수 있다. 현재 stable 배포물은 macOS와 Linux의 amd64·arm64이며, WSL은 Linux 배포물을 사용한다. 현재 소스의 다음 릴리스 후보는 Windows x64·ARM64 ZIP도 만든다. [Windows 안내](windows.md)의 미게시 상태와 검증 한계를 먼저 확인한다.
 
-## 배포물 준비
-
-저장소에서 버전을 명시해 배포물을 만든다. 이 단계에는 Go 1.27.x가 필요하다.
-
-```sh
-go build -o bin/devtools ./cmd/devtools
-export PATH="$PWD/bin:$PATH"
-devtools run release:cli 0.1.0
-```
-
-기본 대상은 빌드 환경의 운영체제와 CPU다. 다른 대상을 지정할 때는 환경변수를 사용한다.
-
-```sh
-TARGET_OS=linux TARGET_ARCH=amd64 devtools run release:cli 0.1.0
-```
-
-`dist/`에 실행 파일 하나를 담은 아카이브와 SHA-256 체크섬이 생성된다.
-
-```text
-devtools_0.1.0_linux_amd64.tar.gz
-devtools_0.1.0_linux_amd64.tar.gz.sha256
-```
-
-`OUTPUT_DIR`로 출력 디렉터리, `COMMIT`으로 빌드의 커밋 식별자를 지정할 수 있다. 배포 버전은 명시적으로 선택한다.
-
-오프라인·수동 설치용 Agent Skill 아카이브도 같은 버전으로 만든다. 일반 설치는
-`npx skills add jinyongp/devtools`로 저장소에서 직접 수행한다.
-아카이브 생성 자체에는 `uvx`와 `skills-ref`가 필요하지 않지만, 게시 전 `devtools run check:all`가
-공식 Agent Skills 검증을 수행한다.
-
-```sh
-devtools run release:skill 0.1.0
-```
-
-`dist/`에는 `devtools/` 스킬 디렉터리를 담은 아카이브와 체크섬이 생성된다.
-
-```text
-devtools-skill_0.1.0.tar.gz
-devtools-skill_0.1.0.tar.gz.sha256
-```
-
-Agent Skill의 한 줄 설치, 전역 설치, 업데이트와 수동 설치 방법은
-[Agent Skill 설치](agent-skill.md)를 참고한다.
-
 ## 처음 설치하기
+
+이 절의 Homebrew·`install.sh` 명령은 macOS·Linux·WSL용이다.
+Windows 후보는 [아래 안내](#windows-네이티브-후보)와 [Windows 가이드](windows.md)를 따른다.
 
 Homebrew에서는 `brew install jinyongp/tap/devtools`로 설치할 수 있습니다.
 이 경로는 태그 커밋의 소스를 내려받아 Go로 빌드하며 필요한 Go 도구는 Homebrew가 준비합니다.
@@ -88,6 +49,9 @@ HTTPS 배포 서버를 운영한다면 `--source`에 아카이브와 체크섬�
 체크섬은 배포물의 전송 무결성을 확인한다. 설치 스크립트와 배포물은 신뢰하는 출처에서 받아 사용한다.
 
 ## 업데이트하기
+
+이 절의 curl·설치 잠금 디렉터리 설명은 Unix 설치기에 해당한다.
+Windows의 Go 기반 업데이트와 journal 복구는 [Windows 안내](windows.md#후보-설치와-업데이트)를 따른다.
 
 Homebrew 설치본에서 `devtools update`를 호출하면 종료 코드 3의 `package_managed`와
 `brew upgrade jinyongp/tap/devtools` 안내를 반환합니다. Homebrew가 설치 파일의 버전을 관리합니다.
@@ -137,6 +101,60 @@ devtools version
 ```
 
 동일한 설치 경로의 갱신은 설치 잠금으로 직렬화한다. 실행 중인 설치기가 있으면 새 호출은 오류를 반환한다. 강제 종료 등으로 잠금이 남았다면 실행 중인 설치기가 있는지 확인한 뒤 설치 디렉터리의 빈 `.devtools-install.lock` 디렉터리를 제거하고 다시 실행한다.
+
+## Windows 네이티브 후보
+
+Windows는 다음 릴리스를 위한 x64·ARM64 구현 후보입니다. 아직 게시하지 않은 Windows
+자산을 현재 stable URL에서 받으라고 안내하지 않습니다. 같은 후보의 `install.ps1`·ZIP·
+checksum을 사용하세요. [Windows 설치·업데이트·지원 한계](windows.md)에 기본 경로,
+`-Version`/`-Source`/`-BinDir`/`-AddToPath`, dvt 복사본, 실행 중인 image 교체와 복구를
+정리했습니다. WSL에는 Linux용 설치를 유지합니다.
+
+## 배포물 준비
+
+이 절부터는 배포물을 만드는 개발자·유지보수자를 위한 절차다. 일반 설치에는 필요하지 않다.
+저장소의 [개발 도구](development.md#개발-도구와-첫-빌드)를 준비한다. 빌드는 Go 1.27.x,
+packaging 명령은 Python 3를 사용한다. 아래 `0.1.0`은 예시 버전이며 실제 후보 버전을 명시한다.
+
+```sh
+go build -o bin/devtools ./cmd/devtools
+export PATH="$PWD/bin:$PATH"
+devtools run release:cli 0.1.0
+```
+
+기본 대상은 빌드 환경의 운영체제와 CPU다. 다른 대상을 지정할 때는 환경변수를 사용한다.
+
+```sh
+TARGET_OS=linux TARGET_ARCH=amd64 devtools run release:cli 0.1.0
+```
+
+`dist/`에 실행 파일 하나를 담은 아카이브와 SHA-256 체크섬이 생성된다.
+
+```text
+devtools_0.1.0_linux_amd64.tar.gz
+devtools_0.1.0_linux_amd64.tar.gz.sha256
+```
+
+`OUTPUT_DIR`로 출력 디렉터리, `COMMIT`으로 빌드의 커밋 식별자를 지정할 수 있다. 배포 버전은 명시적으로 선택한다.
+
+오프라인·수동 설치용 Agent Skill 아카이브도 같은 버전으로 만든다. 일반 설치는
+`npx skills add jinyongp/devtools`로 저장소에서 직접 수행한다.
+아카이브 생성 자체에는 `uvx`와 `skills-ref`가 필요하지 않지만, 게시 전 `devtools run check:all`가
+공식 Agent Skills 검증을 수행한다.
+
+```sh
+devtools run release:skill 0.1.0
+```
+
+`dist/`에는 `devtools/` 스킬 디렉터리를 담은 아카이브와 체크섬이 생성된다.
+
+```text
+devtools-skill_0.1.0.tar.gz
+devtools-skill_0.1.0.tar.gz.sha256
+```
+
+Agent Skill의 한 줄 설치, 전역 설치, 업데이트와 수동 설치 방법은
+[Agent Skill 설치](agent-skill.md)를 참고한다.
 
 ## GitHub Releases 게시
 
@@ -228,12 +246,3 @@ Release CI의 macOS와 Linux job은 모두 `devtools run test:installed`로 등�
 이때 `proxies` 시나리오는 설치된 실행 파일로 route 전달, WebSocket, 동적 port 변경,
 daemon 재시작과 listener reservation 유지를 확인한다. WSL 고유 동작은 실제 WSL
 환경에서 별도로 검증할 수 있다.
-
-
-## Windows 네이티브 후보
-
-Windows는 다음 릴리스를 위한 x64·ARM64 구현 후보입니다. 아직 게시하지 않은 Windows
-자산을 현재 stable URL에서 받으라고 안내하지 않습니다. 같은 후보의 `install.ps1`·ZIP·
-checksum을 사용하세요. [Windows 설치·업데이트·지원 한계](windows.md)에 기본 경로,
-`-Version`/`-Source`/`-BinDir`/`-AddToPath`, dvt 복사본, 실행 중인 image 교체와 복구를
-정리했습니다. WSL에는 Linux용 설치를 유지합니다.

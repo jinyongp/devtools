@@ -1,5 +1,7 @@
 # 포트 관리와 명령별 값 연결
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 URL binding·전역 backend 참조·registry v3 확장은
 [local network contract](network-design.md)를 따른다.
 
@@ -300,7 +302,10 @@ range = [10000, 19999]
 ```
 
 설정 디렉터리는 macOS에서 `~/Library/Application Support/devtools`,
-Linux·WSL에서 `$XDG_CONFIG_HOME/devtools`이며 기존 경로 기본값 규칙을 따른다.
+Linux·WSL에서는 `$XDG_CONFIG_HOME/devtools`(미지정 시 `~/.config/devtools`)다.
+Windows 후보는 Known Folder LocalAppData 아래 `devtools/config`를 사용한다.
+`project inspect`의 `paths`에서 실제 경로를 확인하며, 저장소 제한과 WSL의 별도 데이터 경계는
+[Windows 안내](windows.md)와 [WSL 안내](wsl.md)를 따른다.
 할당, instance와 proxy listener reservation은 사용자 데이터 디렉터리의 `ports`
 아래에서 관리한다.
 설정 변경은 다음 신규 할당에 적용한다.

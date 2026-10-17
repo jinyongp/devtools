@@ -1,8 +1,25 @@
 # WSL에서 devtools 사용하기
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 WSL에서는 Linux용 devtools와 Linux용 node·pnpm·git을 설치한다. Windows 네이티브
 설치와 WSL 설치는 데이터, daemon, CA, 실행 중인 서버를 공유하지 않는다. 프로필을
 옮기려면 암호화된 profile export/import를 사용하며 실행 소유권은 이전되지 않는다.
+
+## 설치와 첫 확인
+
+WSL 터미널에서 [README의 Linux 설치](../README.ko.md#설치)를 실행한다.
+Windows에 설치한 `devtools.exe`가 아니라 Linux 실행 파일을 선택했는지 확인한다.
+
+```sh
+command -v devtools
+devtools version
+devtools diagnostics
+```
+
+현재 소스 후보의 diagnostics는 `data.platform.runtime`으로 WSL을 보고한다.
+이 필드가 없는 구버전에서는 [출력 계약의 버전 경계](cli-output.md#protocol-v7-마이그레이션)를 확인한다.
+프로젝트 도구는 셸 초기화가 로드된 WSL 셸에서 설치·조회한다.
 
 ## 프로젝트와 저장소
 

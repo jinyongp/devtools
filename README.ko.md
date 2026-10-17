@@ -5,12 +5,16 @@
 devtools는 프로젝트의 개발환경과 작업을 한곳에서 관리하는 CLI입니다.
 환경변수와 secret을 저장해 명령 실행에 사용하고, 개발 서버의 실행·포트·로컬 주소를
 관리할 수 있습니다. 작업과 진행 기록을 남겨 다른 세션이나 에이전트에서 이어갈 수도 있습니다.
-macOS, Linux, WSL에서 사용할 수 있습니다. 다음 릴리스를 위한 Windows x64·ARM64
-구현도 포함하며, 이 작업에서 Windows 릴리스 자산을 게시하지는 않았습니다.
-대상은 Windows 11 25H2·26H2이고 검증은 GitHub Actions의 x64(Server 2025 테스트
-호스트)·ARM64(Windows 11)를 기준으로 합니다. 실제 PC UI·브라우저·터미널 및
-WSL2/Windows 네트워크 연동은 미검증입니다. [Windows 안내](docs/windows.md)와
-[WSL 안내](docs/wsl.md)에서 설치 경계와 한계를 확인하세요.
+
+## 지원 환경
+
+- **macOS·Linux·WSL:** 아래 설치 방법을 사용합니다. WSL에는 Linux용 CLI를 설치하세요.
+- **Windows 네이티브:** 다음 릴리스 후보에 x64·ARM64 구현이 포함되어 있습니다.
+  Windows 자산은 아직 게시하지 않았습니다. 대상은 Windows 11 25H2·26H2입니다.
+  [Windows 안내](docs/windows.md)에서 후보 설치와 Actions 검증 범위·실제 PC 미검증 한계를 확인하세요.
+
+Windows와 WSL의 데이터·서버·CA는 별개입니다. 두 환경을 함께 사용한다면
+[WSL 안내](docs/wsl.md)를 먼저 확인하세요.
 
 ## 설치
 
@@ -47,20 +51,36 @@ dvt version
 
 ## 시작하기
 
-프로젝트 디렉터리로 이동한 뒤 아래 예시를 실행해 보세요. `myapp`은 프로젝트를
-구분하는 profile 이름입니다. 사용할 프로젝트 이름으로 바꾸면 됩니다.
+처음 사용할 프로젝트 디렉터리에서 실행하세요. `myapp`은 값을 저장할 profile 이름입니다.
+같은 이름의 profile이 있다면 기존 값을 공유하므로 새 예제에는 사용하지 않은 이름을 고르세요.
+아래 첫 예제는 macOS·Linux·WSL과 Windows 후보에서 같습니다.
 
 ```sh
 devtools init --profile myapp
 devtools var set LOG_LEVEL --value info
 devtools env create local
 devtools var set LOG_LEVEL --env local --value debug
+devtools var get LOG_LEVEL --env local
+```
+
+마지막 JSON 응답의 `data.value`가 `debug`이면 `local` 환경의 덮어쓰기를 확인한 것입니다.
+자식 명령에 이 값을 전달하려면 사용하는 셸에 맞게 실행하세요.
+
+macOS·Linux·WSL의 POSIX 셸:
+
+```sh
 devtools run --env local -- sh -c 'echo "$LOG_LEVEL"'
 ```
 
-이 예시는 공통 `LOG_LEVEL`을 `info`로 등록하고, `local` 환경에서는 `debug`로
-덮어씁니다. 마지막 명령이 `debug`를 출력하면 환경변수 주입이 동작한 것입니다.
-실제 프로젝트에서는 `sh -c ...` 자리에 `pnpm dev`, `go run .` 등 기존 실행 명령을 넣으세요.
+Windows 후보의 PowerShell 또는 cmd:
+
+```powershell
+devtools run --env local -- cmd.exe /d /c set LOG_LEVEL
+```
+
+각각 `debug`, `LOG_LEVEL=debug`가 출력됩니다. 실제 프로젝트에서는 `--` 뒤에
+`pnpm dev`, `go run .` 등 설치된 프로젝트 도구의 명령을 넣으세요. devtools 명령은
+JSON을 반환하고, 실행한 자식 프로그램의 출력은 그대로 전달합니다.
 
 생성된 `devtools.toml`은 Git에 커밋해 두세요. 같은 profile을 사용하는 프로젝트와
 worktree는 저장한 값을 공유합니다. 환경변수와 secret은 사용자 전용 권한의 평문 파일로
@@ -98,17 +118,16 @@ v0.22.3 등 이전 버전에서는 구분자 `--`를 붙이세요.
 
 ## 사용 가이드
 
-| 하고 싶은 일 | 안내 |
-| --- | --- |
-| 변수·secret 등록, 기존 .env 가져오기, 명령 실행 | [값과 실행](docs/cli-contract.md) |
-| 실행에 필요한 도구·설정 확인, 설치 상태 점검 | [환경 진단](docs/doctor.md) |
-| 포트 충돌 관리, 다른 프로젝트 URL 연결 | [포트](docs/ports.md) |
-| 서버 실행·로컬 도메인·HTTPS·listener·공유 함께 관리 | [로컬 네트워크와 공유](docs/local-network.md) |
-| 서버 실행·상태·로그·재시작 관리 | [프로세스](docs/processes.md) · [준비 확인](docs/process-readiness.md) |
-| 계획 수립, 작업 분담, 세션 인계 | [task와 workstream](docs/tasks.md) |
-| 브라우저에서 환경변수와 작업 관리 | `devtools dashboard`를 실행한 뒤 출력된 접속 링크 열기 |
-| 프로젝트 설정 비교, 다른 컴퓨터로 이동 | [Profile 관리](docs/profiles.md) |
-| 암호화 백업·복구, 오래된 데이터 정리 | [백업](docs/backup.md) · [정리](docs/cleanup.md) |
+[전체 문서](docs/README.md)에서 사용자 가이드, API 계약, 개발 안내와 과거 설계 기록을 찾을 수 있습니다.
+
+- 값과 설정: [변수·secret·명령 실행](docs/cli-contract.md), [개발환경 진단](docs/doctor.md).
+- 서버와 주소: [포트](docs/ports.md), [서버 실행·종료](docs/processes.md),
+  [준비 확인](docs/process-readiness.md), [로컬 도메인·HTTPS·공유](docs/local-network.md).
+- 작업 관리: [task·workstream·dashboard](docs/tasks.md) — `devtools dashboard`가 반환한
+  `data.item.url`로 브라우저에 접속합니다. 로그인 링크는 인증정보이므로 공유하지 마세요.
+- 데이터 관리: [Profile 조회·이동](docs/profiles.md), [암호화 백업·복구](docs/backup.md),
+  [저장소 정리](docs/cleanup.md).
+- 셸과 자동화: [자동완성](docs/completion.md), [CLI 출력 계약](docs/cli-output.md).
 
 ## 에이전트와 사용하기
 

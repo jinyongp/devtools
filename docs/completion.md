@@ -1,5 +1,7 @@
 # 셸 자동완성
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 `devtools` 뒤에서 Tab을 누르면 현재 위치에 맞는 명령·하위 명령·별칭·옵션을
 완성합니다. zsh와 fish는 후보 옆에 설명도 표시합니다.
 
@@ -39,6 +41,10 @@ devtools completion fish > ~/.config/fish/completions/devtools.fish
 ```
 
 ## PowerShell 5.1 / 7
+
+PowerShell 자동완성은 현재 소스의 protocol v7 후보에 포함됩니다. Windows 자산의 게시 상태와
+지원 범위는 [Windows 안내](windows.md)를 확인하세요. 설치본이 이 셸을 지원하는지는
+`devtools completion --help`로 확인할 수 있습니다.
 
 다음 명령으로 생성한 파일을 직접 검토하고 현재 세션에 로드하세요. UTF-8을 명시해
 한글을 보존합니다. installer는 이 파일이나 shell profile을 자동으로 수정하지 않습니다.

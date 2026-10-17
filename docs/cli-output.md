@@ -1,5 +1,7 @@
 # CLI 출력 계약
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 이 문서는 현재 소스의 CLI protocol v7 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
@@ -116,6 +118,15 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v7 마이그레이션
+
+현재 소스는 Windows 지원 후보의 protocol 7입니다. `version`/`schema`의
+`data.protocol_version`이 7이고 envelope `schema_version`은 1입니다.
+`diagnostics`에 필수 `platform` 객체가 추가되고 `completion`의 공개 shell 목록에
+`powershell`이 추가됩니다. 설치된 binary의 schema를 다시 조회하세요.
+`run`의 child 인자 경계·출력 모드와 버전 없는 `devtools.toml`은 v6와 같습니다.
+이 변경은 Windows release/tag를 게시했다는 뜻이 아닙니다.
 
 ## protocol v6 마이그레이션
 
@@ -235,13 +246,3 @@ devtools dashboard | jq -r '.data.item.url'
 ```
 
 Dashboard URL에는 접속 토큰이 포함됩니다. 공개 로그에 남기지 말고 접속할 사용자에게만 전달하세요. JSON 포맷 자체가 비밀 값을 마스킹해 주는 것은 아닙니다. 자식 출력과 명시적으로 요청한 로그 역시 기존 보호 범위를 따릅니다.
-
-
-## protocol v7 마이그레이션
-
-현재 소스는 Windows 지원 후보의 protocol 7입니다. `version`/`schema`의
-`data.protocol_version`이 7이고 envelope `schema_version`은 1입니다.
-`diagnostics`에 필수 `platform` 객체가 추가되고 `completion`의 공개 shell 목록에
-`powershell`이 추가됩니다. 설치된 binary의 schema를 다시 조회하세요.
-`run`의 child 인자 경계·출력 모드와 버전 없는 `devtools.toml`은 v6와 같습니다.
-이 변경은 Windows release/tag를 게시했다는 뜻이 아닙니다.

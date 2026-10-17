@@ -1,5 +1,7 @@
 # 설치된 release 검증
 
+[Documentation index](../docs/README.md) · [Development](../docs/development.md)
+
 devtools의 설치 후 공개 CLI 흐름을 실제 패키징된 실행 파일로 검증한다.
 아래 Unix runner는 macOS/Linux/WSL용 테스트 release를 만들고, 각 시나리오를 독립적인
 HOME·XDG 경로·작업 디렉터리에서 실행한다. Windows native는 아래 전용 Actions 검사를 사용한다.

@@ -1,5 +1,7 @@
 # 관리 API 계약
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 dashboard의 task/workstream, var/sec/env, 프로젝트·프로세스, 백업·복구와 저장소 정리 API 계약이다.
 
 ## 접속과 요청

@@ -1,9 +1,10 @@
 # Windows 네이티브 사용
 
-Windows 지원은 다음 릴리스를 위한 구현 후보다. 현재 stable release에 Windows 자산이
-게시되었다는 뜻은 아니다. 실행 파일·installer·checksum은 반드시 같은 후보/릴리스에서
-가져온다. 개발자용 전체 검증과 후보 인계는 `docs/windows-support/implementation/`에
-기록하며, 이 작업에서 release/tag/main merge는 수행하지 않는다.
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
+Windows 네이티브 지원은 다음 릴리스 후보에 포함되어 있으며 Windows 자산은 아직 게시하지 않았다.
+이 가이드는 후보를 설치·실행할 때의 요구 사항과 한계를 설명한다.
+WSL 안에서 사용할 때는 [Linux용 설치와 WSL 안내](wsl.md)를 따른다.
 
 ## 지원과 검증 범위
 
@@ -22,8 +23,12 @@ artifact 저장량에는 계정의 저장 한도·과금 정책이 별도로 적
 
 ## 후보 설치와 업데이트
 
-PowerShell에서 검증된 installer 파일과 로컬 release directory를 사용한다. 아래 값은
-실제 후보 버전·경로로 바꾼다. `-Version`은 archive 이름/version과 정확히 맞아야 한다.
+현재는 공개 stable 설치 URL 대신 검증된 후보 파일을 사용한다. [최종 후보 검증 기록](windows-support/implementation/W9.md)에서
+해당 Actions 실행을 확인하고 `release-assets` artifact를 받는다. installer·해당 CPU ZIP·checksum·
+`version.txt`를 같은 디렉터리에 준비한다. 다른 실행의 파일을 섞지 않는다.
+
+PowerShell을 installer가 있는 디렉터리에서 열고 아래 버전·경로를 실제 값으로 바꾼다.
+`-Version`은 archive 이름/version과 정확히 맞아야 한다.
 
 ```powershell
 .\install.ps1 -Version CANDIDATE_VERSION -Source C:\Temp\devtools-release
@@ -39,14 +44,18 @@ version/commit을 확인한다. ZIP에는 regular `devtools.exe` 하나만 들�
 PATH 수정은 명시 `-AddToPath`에서만 수행한다. installer는 shell profile·시스템 PATH·
 영구 execution policy를 바꾸지 않는다. 실행 정책은 조직/사용자의 정책에 따라 처리한다.
 
+`myapp`이 기존 profile이면 값을 공유하므로 예제에는 사용하지 않은 이름을 고른다.
+
 ```powershell
 $env:PATH = "$env:LOCALAPPDATA\Programs\devtools\bin;" + $env:PATH
 devtools version
 dvt version
 devtools init --profile myapp
 devtools var set LOG_LEVEL --value info
-devtools run -- cmd.exe /d /c echo ready
+devtools run -- cmd.exe /d /c set LOG_LEVEL
 ```
+
+마지막 명령의 `LOG_LEVEL=info` 출력으로 값 주입을 확인한다.
 
 Known Folder가 리디렉션되어 있으면 설치 결과의 정확한 경로를 사용한다. `$env:LOCALAPPDATA`
 예시는 일반적인 기본 배치다. 이후 `devtools update`는 Go 내부 구현으로 설치를 갱신한다.

@@ -1,5 +1,7 @@
 # Measuring devtools performance
 
+[Documentation index](../docs/README.md) · [Development](../docs/development.md)
+
 Run the end-to-end suite to find slow commands and compare changes under the same
 conditions. It uses [hyperfine](https://github.com/sharkdp/hyperfine) for repeated
 measurements and creates disposable project data for every fixture size. Your
@@ -31,7 +33,7 @@ runs. There is also one draft workstream with specification and plan bodies.
 The default body size is 1 KiB and there are no additional historical updates.
 Builds, fixture generation, initial authentication and state restoration happen
 outside the timed command. A full run includes managed daemon lifecycles and all
-127 canonical commands' help paths in the current CLI; allow several minutes.
+canonical commands' help paths in the measured CLI; allow several minutes.
 The discovery count follows the measured binary's schema automatically.
 
 For a quick check of every group:

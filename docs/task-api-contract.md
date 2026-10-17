@@ -1,5 +1,7 @@
 # Task API 상세 계약과 전이 검증
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 task·workstream의 공개 계약이다. 계획 상시 편집·sync·저장 v2의 상세 계약은 [계획 편집 API](task-edit-api.md)를 함께 따른다. [workstream 설계](task-workstream-design.md)의 기본 동작을 입력·출력·전이·오류 기준으로 구체화한다. 명령별 입력과 JSON 본문 스키마는 `devtools schema`로 확인한다.
 
 ## 공통 입력

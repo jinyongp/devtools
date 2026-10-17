@@ -1,5 +1,7 @@
 # 개발환경 진단
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 `devtools doctor`는 프로젝트 디렉터리, 설정과 profile, 값·task 저장소,
 선택한 env, 필수 실행 도구와 var/sec 등록 여부를 진단한다.
 `doctor COMMAND`는 해당 명령의 실행 파일과 필수 조건까지 확인한다.

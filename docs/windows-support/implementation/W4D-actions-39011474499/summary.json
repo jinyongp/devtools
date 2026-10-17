@@ -1,0 +1,230 @@
+{
+  "amd64": {
+    "build-identity-results": {
+      "tests": 1,
+      "packages": [
+        "github.com/jinyongp/devtools/cmd/devtools"
+      ]
+    },
+    "console-results": {
+      "tests": 10,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/cli"
+      ]
+    },
+    "detached-daemon-results": {
+      "tests": 2,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/dashboard",
+        "github.com/jinyongp/devtools/internal/proxy"
+      ]
+    },
+    "execution-preflight-results": {
+      "tests": 5,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/doctor",
+        "github.com/jinyongp/devtools/internal/execution"
+      ]
+    },
+    "listener-results": {
+      "tests": 2,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/proxy"
+      ]
+    },
+    "maintenance-lock-results": {
+      "tests": 4,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/maintenance"
+      ]
+    },
+    "netsetup-results": {
+      "tests": 3,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/netsetup"
+      ]
+    },
+    "platformfs-results": {
+      "tests": 34,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/paths",
+        "github.com/jinyongp/devtools/internal/location",
+        "github.com/jinyongp/devtools/internal/platformfs"
+      ]
+    },
+    "port-lock-results": {
+      "tests": 9,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/ports"
+      ]
+    },
+    "process-results": {
+      "tests": 28,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/process"
+      ]
+    },
+    "project-lifecycle-results": {
+      "tests": 26,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/lifecycle"
+      ]
+    },
+    "registry-integration-results": {
+      "tests": 40,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/ports"
+      ]
+    },
+    "service-lease-results": {
+      "tests": 21,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/services"
+      ]
+    },
+    "storage-integration-results": {
+      "tests": 90,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/archiveproof",
+        "github.com/jinyongp/devtools/internal/profiletransfer",
+        "github.com/jinyongp/devtools/internal/cleanup",
+        "github.com/jinyongp/devtools/internal/services",
+        "github.com/jinyongp/devtools/internal/backup"
+      ]
+    },
+    "storage-recovery-results": {
+      "tests": 194,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/profilekey",
+        "github.com/jinyongp/devtools/internal/values",
+        "github.com/jinyongp/devtools/internal/tasks",
+        "github.com/jinyongp/devtools/internal/maintenance"
+      ]
+    },
+    "package": {
+      "archive": "devtools_0.0.0-native-package_windows_amd64.zip",
+      "sha256": "d91e383d5f25885c7c605553e2fce22786e814c29963f08214bf30ee40c9d915",
+      "members": [
+        "devtools.exe"
+      ],
+      "pe_machine": "0x8664",
+      "commit": "088a1da1ff058214cc5ad8f21736581e8d064a6a",
+      "version": "0.0.0-native-package",
+      "runtime_execution": "Executed by native Actions, never executed by this Linux inspection"
+    }
+  },
+  "arm64": {
+    "build-identity-results": {
+      "tests": 1,
+      "packages": [
+        "github.com/jinyongp/devtools/cmd/devtools"
+      ]
+    },
+    "console-results": {
+      "tests": 10,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/cli"
+      ]
+    },
+    "detached-daemon-results": {
+      "tests": 2,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/dashboard",
+        "github.com/jinyongp/devtools/internal/proxy"
+      ]
+    },
+    "execution-preflight-results": {
+      "tests": 5,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/doctor",
+        "github.com/jinyongp/devtools/internal/execution"
+      ]
+    },
+    "listener-results": {
+      "tests": 2,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/proxy"
+      ]
+    },
+    "maintenance-lock-results": {
+      "tests": 4,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/maintenance"
+      ]
+    },
+    "netsetup-results": {
+      "tests": 3,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/netsetup"
+      ]
+    },
+    "platformfs-results": {
+      "tests": 34,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/paths",
+        "github.com/jinyongp/devtools/internal/location",
+        "github.com/jinyongp/devtools/internal/platformfs"
+      ]
+    },
+    "port-lock-results": {
+      "tests": 9,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/ports"
+      ]
+    },
+    "process-results": {
+      "tests": 28,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/process"
+      ]
+    },
+    "project-lifecycle-results": {
+      "tests": 26,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/lifecycle"
+      ]
+    },
+    "registry-integration-results": {
+      "tests": 40,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/ports"
+      ]
+    },
+    "service-lease-results": {
+      "tests": 21,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/services"
+      ]
+    },
+    "storage-integration-results": {
+      "tests": 90,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/archiveproof",
+        "github.com/jinyongp/devtools/internal/profiletransfer",
+        "github.com/jinyongp/devtools/internal/cleanup",
+        "github.com/jinyongp/devtools/internal/backup",
+        "github.com/jinyongp/devtools/internal/services"
+      ]
+    },
+    "storage-recovery-results": {
+      "tests": 194,
+      "packages": [
+        "github.com/jinyongp/devtools/internal/profilekey",
+        "github.com/jinyongp/devtools/internal/values",
+        "github.com/jinyongp/devtools/internal/tasks",
+        "github.com/jinyongp/devtools/internal/maintenance"
+      ]
+    },
+    "package": {
+      "archive": "devtools_0.0.0-native-package_windows_arm64.zip",
+      "sha256": "4def65f6d6dba3c1e84734d7740bd5c417f08e28b0ce4f5e3e5feb76638371d7",
+      "members": [
+        "devtools.exe"
+      ],
+      "pe_machine": "0xaa64",
+      "commit": "088a1da1ff058214cc5ad8f21736581e8d064a6a",
+      "version": "0.0.0-native-package",
+      "runtime_execution": "Executed by native Actions, never executed by this Linux inspection"
+    }
+  }
+}

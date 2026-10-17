@@ -1,0 +1,40 @@
+ok  	github.com/jinyongp/devtools/cmd/devtools	0.004s
+ok  	github.com/jinyongp/devtools/internal/archiveproof	(cached)
+ok  	github.com/jinyongp/devtools/internal/backup	(cached)
+ok  	github.com/jinyongp/devtools/internal/ca	(cached)
+ok  	github.com/jinyongp/devtools/internal/cleanup	0.902s
+ok  	github.com/jinyongp/devtools/internal/cli	11.407s
+ok  	github.com/jinyongp/devtools/internal/dashboard	(cached)
+ok  	github.com/jinyongp/devtools/internal/diagnostics	0.101s
+ok  	github.com/jinyongp/devtools/internal/doctor	(cached)
+?   	github.com/jinyongp/devtools/internal/dotenv	[no test files]
+ok  	github.com/jinyongp/devtools/internal/execution	(cached)
+ok  	github.com/jinyongp/devtools/internal/expose	(cached)
+ok  	github.com/jinyongp/devtools/internal/hosts	(cached)
+ok  	github.com/jinyongp/devtools/internal/lifecycle	0.748s
+ok  	github.com/jinyongp/devtools/internal/location	(cached)
+ok  	github.com/jinyongp/devtools/internal/maintenance	(cached)
+ok  	github.com/jinyongp/devtools/internal/netops	(cached)
+ok  	github.com/jinyongp/devtools/internal/netsetup	(cached)
+ok  	github.com/jinyongp/devtools/internal/network	(cached)
+ok  	github.com/jinyongp/devtools/internal/paths	(cached)
+ok  	github.com/jinyongp/devtools/internal/platformfs	(cached)
+ok  	github.com/jinyongp/devtools/internal/ports	(cached)
+?   	github.com/jinyongp/devtools/internal/privilege	[no test files]
+ok  	github.com/jinyongp/devtools/internal/process	(cached)
+ok  	github.com/jinyongp/devtools/internal/profilekey	(cached)
+ok  	github.com/jinyongp/devtools/internal/profiles	0.467s
+ok  	github.com/jinyongp/devtools/internal/profiletransfer	(cached)
+ok  	github.com/jinyongp/devtools/internal/project	(cached)
+ok  	github.com/jinyongp/devtools/internal/protocol	(cached)
+ok  	github.com/jinyongp/devtools/internal/proxy	(cached)
+ok  	github.com/jinyongp/devtools/internal/retention	(cached)
+ok  	github.com/jinyongp/devtools/internal/services	(cached)
+ok  	github.com/jinyongp/devtools/internal/tasks	(cached)
+ok  	github.com/jinyongp/devtools/internal/truststore	(cached)
+ok  	github.com/jinyongp/devtools/internal/values	(cached)
+ok  	github.com/jinyongp/devtools/perf/fixture	(cached)
+?   	github.com/jinyongp/devtools/scripts	[no test files]
+?   	github.com/jinyongp/devtools/scripts/dashboard	[no test files]
+?   	github.com/jinyongp/devtools/scripts/package-skill	[no test files]
+?   	github.com/jinyongp/devtools/verify/fixtures	[no test files]

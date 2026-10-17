@@ -82,7 +82,8 @@ func TestWindowsProjectRealSupervisorsRetryRestartDownAndReadiness(t *testing.T)
 	up := lifecycle.Request{Action: lifecycle.ActionUp, Project: p, Commands: []string{"web", "peer"}, Timeout: 10 * time.Second, Capture: &capture, RequestID: tasks.ID()}
 	first, failure := manager.Apply(ctx, up)
 	if failure != nil || len(first.Items) != 2 || first.Items[0].Status != "ready" || first.Items[1].Status != "ready" {
-		t.Fatalf("up: %+v %v", first, failure)
+		detail, _ := json.Marshal(first)
+		t.Fatalf("up: %s %v", detail, failure)
 	}
 	web, peer := first.Items[0].Item.ID, first.Items[1].Item.ID
 	replay, failure := manager.Apply(ctx, up)

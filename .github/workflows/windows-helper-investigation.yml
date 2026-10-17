@@ -1,0 +1,46 @@
+name: Windows helper cancellation investigation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  helper-cancellation:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: amd64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Verify native source and force stack growth during pending I/O
+        run: |
+          $actual = (& git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:GITHUB_SHA) { throw 'Source mismatch' }
+          $arch = (& go env GOHOSTARCH).Trim()
+          if ($LASTEXITCODE -ne 0 -or $arch -cne '${{ matrix.arch }}') { throw 'Native architecture mismatch' }
+          & go test -json -count=1 -timeout 1m -run '^TestWindowsHelperConnectCancellationSurvivesStackGrowth$' ./internal/privilege | Tee-Object -FilePath helper-stack-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Pending I/O cancellation after stack growth failed' }
+          & go test -json -count=20 -timeout 2m -run '^TestWindowsConstrainedPipeRejectsWrongPIDWithSameImage$|^TestWindowsHelperConnectCancellationSurvivesStackGrowth$' ./internal/privilege | Tee-Object -FilePath helper-cancellation-repeat-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Repeated pending I/O and PID rejection failed' }
+      - name: Preserve cancellation evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-helper-investigation-${{ matrix.arch }}
+          path: |
+            helper-stack-results.jsonl
+            helper-cancellation-repeat-results.jsonl

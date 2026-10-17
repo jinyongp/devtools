@@ -377,3 +377,68 @@ func TestWindowsConstrainedHelperIsolatedModeAndUnknownKindsDoNotLaunch(t *testi
 		t.Fatal("isolated pipe helper accepted")
 	}
 }
+
+// The kernel retains OVERLAPPED after ConnectNamedPipe returns. Grow the Go
+// stack only after that call, before cancellation attempts to find the request.
+type helperStackGrowthContext struct{ context.Context }
+
+func (c helperStackGrowthContext) Err() error {
+	growHelperCancellationStack(64)
+	return c.Context.Err()
+}
+
+//go:noinline
+func growHelperCancellationStack(depth int) byte {
+	var frame [4096]byte
+	frame[0] = byte(depth)
+	if depth > 0 {
+		frame[len(frame)-1] = growHelperCancellationStack(depth - 1)
+	}
+	runtime.KeepAlive(&frame)
+	return frame[0] ^ frame[len(frame)-1]
+}
+
+func TestWindowsHelperConnectCancellationSurvivesStackGrowth(t *testing.T) {
+	const childFlag = "DEVTOOLS_TEST_HELPER_STACK_CHILD"
+	if os.Getenv(childFlag) != "1" {
+		exe, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Isolate the invalid native pointer in the unfixed implementation and
+		// bound a blocked kernel wait without leaking an owned goroutine.
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		command := exec.CommandContext(ctx, exe, "-test.run=^TestWindowsHelperConnectCancellationSurvivesStackGrowth$", "-test.count=1")
+		command.Env = append(os.Environ(), childFlag+"=1")
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("connect cancellation after stack growth: %v (deadline=%v)\n%s", err, ctx.Err(), output)
+		}
+		return
+	}
+	name := helperPrefix + strconv.Itoa(os.Getpid()) + "-dddddddddddddddddddddddddddddddd"
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := windows.SecurityDescriptorFromString("O:" + user.User.Sid.String() + "D:P(A;;GA;;;" + user.User.Sid.String() + ")(A;;GA;;;SY)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	attributes := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: descriptor}
+	ptr, err := windows.UTF16PtrFromString(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pipe, err := windows.CreateNamedPipe(ptr, windows.PIPE_ACCESS_DUPLEX|windows.FILE_FLAG_FIRST_PIPE_INSTANCE|windows.FILE_FLAG_OVERLAPPED, windows.PIPE_TYPE_BYTE|windows.PIPE_REJECT_REMOTE_CLIENTS, 1, 4096, 4096, 0, &attributes)
+	runtime.KeepAlive(descriptor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(pipe)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := connectHelperPipe(helperStackGrowthContext{ctx}, pipe); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("connect cancellation = %v", err)
+	}
+}

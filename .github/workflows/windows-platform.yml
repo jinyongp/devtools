@@ -171,6 +171,17 @@ jobs:
           & python -B scripts/package.py
           if ($LASTEXITCODE -ne 0) { throw 'Native ZIP validation failed' }
 
+      - name: Test native installer recovery and PS5/PS7 running-image updates
+        run: |
+          $archive = Get-ChildItem dist -Filter '*.zip' | Select-Object -First 1
+          $env:DEVTOOLS_INSTALL_TEST_ZIP = $archive.FullName
+          & go test -json -count=1 -timeout 4m ./internal/windowsinstall | Tee-Object -FilePath windows-install-transaction-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native installer transaction tests failed' }
+          & go vet ./internal/windowsinstall
+          if ($LASTEXITCODE -ne 0) { throw 'Native installer vet failed' }
+          & pwsh -NoProfile -NonInteractive -File scripts/test-windows-install.ps1 -Arch '${{ matrix.arch }}' -Commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Native PowerShell installer/update tests failed' }
+
       - name: Build native CLI and check explicit intermediate failures
         run: |
           $ErrorActionPreference = 'Stop'
@@ -227,6 +238,9 @@ jobs:
             listener-results.jsonl
             detached-daemon-results.jsonl
             project-lifecycle-results.jsonl
+            windows-install-transaction-results.jsonl
+            windows-install-results.json
+            windows-install-diagnostic.txt
             project-release-results.tap
             build-identity-results.jsonl
             dist/*.zip

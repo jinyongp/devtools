@@ -25,6 +25,9 @@ var version = "dev"
 var commit = "unknown"
 
 func main() {
+	if windowsInstallerEntry() {
+		return
+	}
 	if code := cli.InternalPlatformPreflight(os.Args[1:], os.Stderr); code != 0 {
 		os.Exit(code)
 	}

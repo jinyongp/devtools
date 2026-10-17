@@ -207,7 +207,7 @@ jobs:
           path: dist-macos
       - name: Package release targets
         run: |
-          for target_os in darwin linux; do
+          for target_os in darwin linux windows; do
             for target_arch in amd64 arm64; do
               TARGET_OS="$target_os" TARGET_ARCH="$target_arch" devtools run release:cli "$VERSION"
             done
@@ -221,6 +221,7 @@ jobs:
           cmp "dist/devtools-skill_${VERSION}.tar.gz.sha256" \
             "dist-macos/devtools-skill_${VERSION}.tar.gz.sha256"
           cp scripts/install.sh dist/install.sh
+          cp scripts/install.ps1 dist/install.ps1
           cp LICENSE dist/LICENSE
           printf '%s\n' "$VERSION" > dist/version.txt
       - name: Verify prepared checksums and binary identity

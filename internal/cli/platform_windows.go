@@ -9,7 +9,7 @@ import (
 // Removed as native backends become available in W2-W7. In particular, Unix
 // permission bits and unsupported locks must never appear to protect a store.
 func platformCommand(name string) *protocol.Error {
-	if name == "version" {
+	if name == "version" || name == "update" {
 		return nil
 	}
 	return protocol.NewError("unsupported_platform", "Windows native features are not implemented in this intermediate build.", 3, nil)

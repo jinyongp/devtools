@@ -54,6 +54,10 @@ jobs:
           mkdir -p pages
           gh release download "$TAG" --pattern install.sh --dir pages
           cmp scripts/install.sh pages/install.sh
+          if [ -f scripts/install.ps1 ]; then
+            gh release download "$TAG" --pattern install.ps1 --dir pages
+            cmp scripts/install.ps1 pages/install.ps1
+          fi
           sh -n pages/install.sh
           touch pages/.nojekyll
 

@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -79,15 +78,39 @@ func sameHostsFile(handle windows.Handle, path string) error {
 	}
 	return nil
 }
+
+// On a regular hosts file the AUTO_INHERITED control bits describe propagation
+// to child objects, which a regular file cannot have. Windows clears them when
+// assigning a descriptor. Compare every ACE (including inherited ACE flags),
+// owner/group, SACL and protection flag; normalize only those two control bits.
+func comparableHostsSecurity(sd *windows.SECURITY_DESCRIPTOR) (string, error) {
+	value := sd.String()
+	if value == "" {
+		return "", platformfs.ErrUnsafe
+	}
+	copy, err := windows.SecurityDescriptorFromString(value)
+	if err != nil {
+		return "", err
+	}
+	if err = copy.SetControl(windows.SE_DACL_AUTO_INHERITED|windows.SE_SACL_AUTO_INHERITED, 0); err != nil {
+		return "", err
+	}
+	value = copy.String()
+	if value == "" {
+		return "", platformfs.ErrUnsafe
+	}
+	return value, nil
+}
+
 func replaceHostsFile(ctx context.Context, original *platformfs.File, body []byte) error {
 	handle := windows.Handle(original.Fd())
 	security, err := windows.GetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.SACL_SECURITY_INFORMATION)
 	if err != nil {
 		return err
 	}
-	expectedSecurity := security.String()
-	if expectedSecurity == "" {
-		return platformfs.ErrUnsafe
+	expectedSecurity, err := comparableHostsSecurity(security)
+	if err != nil {
+		return err
 	}
 	var info windows.ByHandleFileInformation
 	if err = windows.GetFileInformationByHandle(handle, &info); err != nil {
@@ -142,8 +165,12 @@ func replaceHostsFile(ctx context.Context, original *platformfs.File, body []byt
 	if err != nil {
 		return err
 	}
-	if actual.String() != expectedSecurity {
-		return fmt.Errorf("%w: hosts descriptor before=%s after=%s", platformfs.ErrUnsafe, expectedSecurity, actual.String())
+	actualSecurity, err := comparableHostsSecurity(actual)
+	if err != nil {
+		return err
+	}
+	if actualSecurity != expectedSecurity {
+		return platformfs.ErrUnsafe
 	}
 	if err = file.Sync(); err != nil {
 		return err

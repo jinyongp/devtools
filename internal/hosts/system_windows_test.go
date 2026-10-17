@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"golang.org/x/sys/windows"
@@ -34,6 +35,11 @@ func hostsSecurity(t *testing.T, path string) string {
 	if value == "" {
 		t.Fatal("cannot serialize hosts security descriptor")
 	}
+	// Independently remove only the documented child-propagation header bits.
+	// Rights, ACE flags (including ID), owners and P/AR flags remain exact.
+	for _, pair := range [][2]string{{"D:PAI", "D:P"}, {"D:AI", "D:"}, {"S:PAI", "S:P"}, {"S:AI", "S:"}} {
+		value = strings.ReplaceAll(value, pair[0], pair[1])
+	}
 	return value
 }
 func TestWindowsHostsExpectedDigestACLAndCRLFPreservation(t *testing.T) {
@@ -42,21 +48,7 @@ func TestWindowsHostsExpectedDigestACLAndCRLFPreservation(t *testing.T) {
 	if err := os.WriteFile(path, before, 0644); err != nil {
 		t.Fatal(err)
 	}
-	user, err := windows.GetCurrentProcessToken().GetTokenUser()
-	if err != nil {
-		t.Fatal(err)
-	}
-	descriptor, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + user.User.Sid.String() + ")(A;;FR;;;BU)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	acl, _, err := descriptor.DACL()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil); err != nil {
-		t.Fatal(err)
-	}
+	prepareHostsTestFile(t, path)
 	security := hostsSecurity(t, path)
 	system := System{Path: path}
 	request := Request{Expected: digest(before), Mappings: []Mapping{{Host: "native.localhost", Address: "127.0.0.1"}}}
@@ -180,5 +172,75 @@ func TestWindowsHostsRefusesOutputThatWouldBecomeUnreadable(t *testing.T) {
 	actual, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(actual, before) {
 		t.Fatal("oversized hosts request changed original", err)
+	}
+}
+
+func TestWindowsHostsSecurityComparisonKeepsEveryPermissionBoundary(t *testing.T) {
+	baseline, err := windows.SecurityDescriptorFromString("O:SYG:SYD:PAI(A;;FR;;;BU)S:AINO_ACCESS_CONTROL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := comparableHostsSecurity(baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		descriptor string
+		equal      bool
+	}{
+		{"O:SYG:SYD:P(A;;FR;;;BU)S:NO_ACCESS_CONTROL", true},
+		{"O:SYG:SYD:P(A;;FW;;;BU)S:NO_ACCESS_CONTROL", false},
+		{"O:SYG:SYD:(A;;FR;;;BU)S:NO_ACCESS_CONTROL", false},
+		{"O:SYG:SYD:P(A;ID;FR;;;BU)S:NO_ACCESS_CONTROL", false},
+		{"O:BAG:SYD:P(A;;FR;;;BU)S:NO_ACCESS_CONTROL", false},
+		{"O:SYG:BAD:P(A;;FR;;;BU)S:NO_ACCESS_CONTROL", false},
+		{"O:SYG:SYD:P(A;;FR;;;BU)S:P(AU;SA;FR;;;WD)", false},
+	} {
+		sd, err := windows.SecurityDescriptorFromString(test.descriptor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := comparableHostsSecurity(sd)
+		if err != nil || (got == want) != test.equal {
+			t.Fatal("permission equivalence mismatch", test.descriptor, err)
+		}
+	}
+}
+
+func prepareHostsTestFile(t *testing.T, path string) {
+	t.Helper()
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + user.User.Sid.String() + ")(A;;FR;;;BU)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	acl, _, err := descriptor.DACL()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+func assertHostsTestPermissions(t *testing.T, path string) {
+	t.Helper()
+	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + user.User.Sid.String() + ")(A;;FR;;;BU)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	actual := strings.ReplaceAll(sd.String(), "D:PAI", "D:P")
+	if actual != expected.String() {
+		t.Fatal("hosts fixture DACL changed", actual)
 	}
 }

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, statSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { delimiter, join, relative, resolve } from 'node:path';
+import { delimiter, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test, { after } from 'node:test';
 
@@ -90,7 +90,9 @@ test('fixture setup cannot mutate an inherited caller repository or index', t =>
   assert.equal(caller.git('rev-parse', 'HEAD'), head);
   assert.deepEqual(readFileSync(index), before);
   assert.deepEqual(readFileSync(join(caller.repository, '.git', 'config')), config);
-  assert.equal(resolve(inner.git('rev-parse', '--show-toplevel')), realpathSync(inner.repository));
+  const reported = statSync(inner.git('rev-parse', '--show-toplevel'), { bigint: true });
+  const expected = statSync(inner.repository, { bigint: true });
+  assert.deepEqual({ dev: reported.dev, ino: reported.ino }, { dev: expected.dev, ino: expected.ino });
 });
 
 test('relative package output ignores inherited CDPATH when writing checksums', t => {

@@ -65,9 +65,12 @@ irm https://jinyongp.dev/devtools/install.ps1 | iex
         foreach ($entry in @($beforePath -split ';' | Where-Object { $_ })) {
             Require ($entries -ccontains $entry) 'Default installation removed an existing user PATH entry.'
         }
-        $reinstalled = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $bin)
-        Require ($reinstalled.ok) 'Repeated installation failed.'
-        Require ([Environment]::GetEnvironmentVariable('Path', 'User') -ceq $registeredPath) 'Repeated installation duplicated or rewrote user PATH.'
+        $registeredBin = Join-Path $root ('already on PATH ' + [Guid]::NewGuid().ToString('N'))
+        $registeredPath += ';' + $registeredBin + '\'
+        [Environment]::SetEnvironmentVariable('Path', $registeredPath, 'User')
+        $registered = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $registeredBin)
+        Require ($registered.ok) 'Installation into an already registered PATH directory failed.'
+        Require ([Environment]::GetEnvironmentVariable('Path', 'User') -ceq $registeredPath) 'Installation duplicated or rewrote an existing user PATH entry.'
         $optOutBin = Join-Path $root ('no PATH ' + [Guid]::NewGuid().ToString('N'))
         $optOut = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $optOutBin, '-AddToPath', '-NoPath')
         Require ($optOut.ok) 'NoPath installation failed.'

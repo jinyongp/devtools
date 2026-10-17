@@ -1,5 +1,9 @@
 # devtools 개발
 
+Windows 네이티브·WSL 지원 추가의 구현 전 결정과 검증 범위는
+[Windows 지원 계획](windows-support-plan.md)과 [사전 조사 기록](windows-support/research.md)을 따른다.
+이 문서들은 현재 출시된 Windows 지원을 의미하지 않는다.
+
 로컬 네트워크 기능의 사용자 흐름은 [가이드](local-network.md), 저장·복구 계약은
 [network design](network-design.md)을 따른다. `test:installed network`는 패키징된 실행 파일로
 fresh batch·HTTPS·전역 route·격리·listener 정리를 검증한다. Linux/macOS release matrix는

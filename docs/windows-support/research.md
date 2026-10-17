@@ -202,7 +202,7 @@ Server 2025는 x64 자동 검증 환경이며 별도 제품 지원 약속은 아
 
 Windows 11 x64 25H2 자체를 실행한 근거는 없으며 x64 26H2·Server x64·ARM64 25H2의
 조합으로 지원 목표를 검증하는 한계를 공개한다. 모든 CPU × OS 버전을 직접 검증했다는 주장은 하지 않는다.
-첫 배포의 실제 x64 client 검증은 계획의 [로컬 제품 gate](../windows-support-plan.md#windows-11-x64-로컬-제품-gate)로 고정했다.
-8개 필수 행, 동일 후보 commit/ZIP 근거, 원복과 실패 시 게시 금지를 규정했다.
-이 gate는 제품 구현 후 실행하며 현재 primitive 결과로 PASS 처리하지 않는다.
-현재 로컬에는 PS7도 없어 gate 실행 전 준비가 필요하다. 새 VM·self-hosted runner나 ARM64 물리 장비는 요구하지 않는다.
+2026-10-17 사용자 결정으로 실제 PC 제품 gate를 Actions 검증과 미검증 한계 공개로 대체했다.
+[현재 검증 정책](../windows-support-plan.md#actions-검증과-실제-pc-미검증-한계)을 따른다.
+기존 로컬 primitive·WSL 보조 결과는 역사적 근거로 보존하지만 새 제품의 실제 PC 동작으로 확대하지 않는다.
+로컬 Windows 실행·PS7 설치·UAC/browser 수동 조작을 추가로 수행하지 않는다.

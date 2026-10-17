@@ -146,6 +146,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native detached daemon contract failed' }
           & go test -json -count=1 -timeout 3m ./internal/lifecycle | Tee-Object -FilePath project-lifecycle-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native project lifecycle contract failed' }
+          & go test -json -count=5 -timeout 4m -run '^TestWindowsProjectReal' ./internal/lifecycle | Tee-Object -FilePath project-lifecycle-repeat-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Repeated native project lifecycle contract failed' }
       - name: Test native console mode and redirected passphrase input
         run: |
           & go test -json -count=1 -run '^TestWindowsConsole|^TestWindowsPassphrase' ./internal/cli | Tee-Object -FilePath console-results.jsonl
@@ -266,6 +268,7 @@ jobs:
             listener-results.jsonl
             detached-daemon-results.jsonl
             project-lifecycle-results.jsonl
+            project-lifecycle-repeat-results.jsonl
             windows-network-security-results.jsonl
             windows-network-runtime-results.jsonl
             windows-update-contract-results.jsonl

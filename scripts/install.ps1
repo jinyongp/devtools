@@ -132,6 +132,8 @@ public static class DevtoolsInstallerNativeArchitecture {
         $uri = [Uri]$Source
         if (-not $uri.IsAbsoluteUri -or $uri.Scheme -ne 'https' -or $uri.UserInfo -or $uri.Query -or $uri.Fragment) { throw 'Release Source must be an HTTPS directory.' }
     }
+    if ($Source -notmatch '://') { $Source = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Source) }
+    if ($BinDir) { $BinDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($BinDir) }
     $archiveName = 'devtools_' + $Version + '_windows_' + $arch + '.zip'
     $checksumText = [Text.Encoding]::UTF8.GetString((Read-Artifact $Source ($archiveName + '.sha256') 1024)).Trim()
     $fields = $checksumText -split '\s+'

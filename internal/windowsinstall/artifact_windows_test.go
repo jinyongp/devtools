@@ -41,7 +41,8 @@ func TestWindowsInstallArtifactRejectsUnsafeArchivesAndChecksums(t *testing.T) {
 			}
 			entry.Write([]byte("fixture"))
 			if kind == "duplicate" {
-				entry, err = writer.CreateHeader(&header)
+				duplicate := header
+				entry, err = writer.CreateHeader(&duplicate)
 				if err != nil {
 					t.Fatal(err)
 				}

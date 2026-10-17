@@ -101,6 +101,12 @@ Actions이며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 절차를 대
   결과는 `windows-platform-{amd64,arm64}-{suite,boundaries,product,race}` artifact에 보관한다.
   새로운 push/PR은 이전 CI를 취소하지만 release 실행은 취소하지 않는다.
 
+Release의 `profile-exchange`는 이미 빌드한 Linux·macOS·Windows x64/ARM64 CLI와 합성 데이터로
+암호화 archive를 교환한다. 네 native consumer가 다른 세 producer의 archive를 import해 총 12개
+방향을 확인한다. 값·secret·env override·task·workstream·validation, preview/apply/retry를 검사한다.
+경로 문자열은 그대로 보존하는지 확인하며 자동 변환은 약속하지 않는다. 별도 빌드는 하지 않고
+package 작업과 병렬 실행하되 게시 전에 성공을 요구한다. 실제 사용자 데이터는 사용하지 않는다.
+
 실제 PC의 UAC·CurrentUser trust/browser 통합·터미널 닫기·설치/update 관찰과 최종 WSL2/Windows
 browser 연계는 NOT RUN이다. runner browser 성공이나 과거 standalone probe로 그 범위를
 확대하지 않는다. [지원 범위와 한계](../docs/windows.md)를 함께 확인한다.

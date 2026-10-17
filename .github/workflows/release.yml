@@ -140,6 +140,17 @@ jobs:
           if-no-files-found: error
           overwrite: true
 
+      - name: Export native encrypted profile fixture
+        env:
+          SOURCE_COMMIT: ${{ inputs.commit }}
+        run: python3 -B scripts/check-profile-exchange.py export --binary bin/devtools --origin macos --commit "$SOURCE_COMMIT" --directory profile-exchange-macos
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: profile-exchange-macos
+          path: profile-exchange-macos/
+          if-no-files-found: error
+          retention-days: 7
+
   ci-linux:
     needs: validate-release
     runs-on: ubuntu-24.04
@@ -173,6 +184,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y fish zsh
       - name: Verify installed CLI and simulated network failures
         run: devtools run test:installed
+
+      - name: Export native encrypted profile fixture
+        env:
+          SOURCE_COMMIT: ${{ inputs.commit }}
+        run: python3 -B scripts/check-profile-exchange.py export --binary bin/devtools --origin linux --commit "$SOURCE_COMMIT" --directory profile-exchange-linux
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: profile-exchange-linux
+          path: profile-exchange-linux/
+          if-no-files-found: error
+          retention-days: 7
 
   system-network:
     needs: validate-release
@@ -210,6 +232,46 @@ jobs:
           name: system-network-${{ matrix.platform }}
           path: system-network-${{ matrix.platform }}.json
           if-no-files-found: error
+
+  profile-exchange:
+    needs: [ci-macos, ci-linux, ci-windows]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            origin: linux
+          - runner: macos-latest
+            origin: macos
+          - runner: windows-2025
+            origin: windows-amd64
+          - runner: windows-11-arm
+            origin: windows-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: profile-exchange-*
+          path: profile-fixtures
+      - name: Import archives from every other native platform
+        env:
+          SOURCE_COMMIT: ${{ inputs.commit }}
+          ORIGIN: ${{ matrix.origin }}
+        run: python -B scripts/check-profile-exchange.py import --origin "$ORIGIN" --commit "$SOURCE_COMMIT" --directory profile-fixtures --evidence profile-exchange-results.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: profile-exchange-results-${{ matrix.origin }}
+          path: profile-exchange-results.json
+          if-no-files-found: error
+          retention-days: 7
 
   package:
     needs: [validate-release, ci-macos, ci-linux, ci-windows]
@@ -289,8 +351,8 @@ jobs:
           overwrite: true
 
   release:
-    needs: [validate-release, package, system-network]
-    if: ${{ inputs.publish && !cancelled() && needs.package.result == 'success' && (!inputs.system_network_smoke || needs.system-network.result == 'success') }}
+    needs: [validate-release, package, system-network, profile-exchange]
+    if: ${{ inputs.publish && !cancelled() && needs.package.result == 'success' && needs.profile-exchange.result == 'success' && (!inputs.system_network_smoke || needs.system-network.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

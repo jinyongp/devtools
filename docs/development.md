@@ -183,6 +183,10 @@ PowerShell completion·전체 Go suite와 실제 candidate ZIP의 설치·Chromi
 x64 race와 ARM64 native contention은 구분하며 browser/Node의 실제 CPU도 따로 기록한다.
 Windows의 실행 근거는 Actions이며 실제 PC·WSL2 연계 한계는 [Windows 안내](windows.md)를 따른다.
 
+프로필 전송은 같은 실행에서 빌드한 CLI와 합성 암호화 archive를 공유한다. 네 native consumer
+(Linux·macOS·Windows x64·ARM64)가 각각 나머지 세 producer를 import한다. OS 조합마다 전체 suite를
+다시 빌드하지 않는다. 이 12방향 검사는 packaging과 병렬 실행하며 게시의 필수 dependency다.
+
 모든 필수 job이 통과하면 macOS/Linux의 네 archive를 만들고 Windows native job이 실제 검증한
 두 ZIP을 checksum 확인 후 그대로 포함한다. 여섯 OS/CPU 배포물, Agent Skill과 checksum,
 설치기·버전 파일의 identity를 확인한다. 양쪽 Unix OS의 Skill도 byte 단위로 대조한다.

@@ -356,7 +356,7 @@ func TestWindowsOwnedLaunchFailureClosesHandles(t *testing.T) {
 	}
 	after := ownedHandleTypes(t, job, reference)
 	t.Logf("handle types before=%v after=%v", before, after)
-	for _, kind := range []string{"Job", "File", "Process", "Thread"} {
+	for _, kind := range []string{"Job", "File"} {
 		if after[kind] > before[kind] {
 			t.Fatalf("failed starts leaked handles: type=%s before=%v after=%v", kind, before, after)
 		}

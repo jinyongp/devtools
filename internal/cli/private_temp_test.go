@@ -8,7 +8,11 @@ import (
 
 func privateTempDir(t *testing.T) string {
 	t.Helper()
-	dir := filepath.Join(t.TempDir(), "private")
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(base, "private")
 	root, err := platformfs.OpenRoot(dir, true)
 	if err != nil {
 		t.Fatal(err)

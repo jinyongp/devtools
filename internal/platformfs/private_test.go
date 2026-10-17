@@ -10,7 +10,13 @@ import (
 
 func testRoot(t *testing.T) *Root {
 	t.Helper()
-	root, err := OpenRoot(filepath.Join(t.TempDir(), "private"), true)
+	// Darwin temp paths start at the system /var alias; keep the SDK no-follow
+	// contract and pass the existing physical fixture directory.
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := OpenRoot(filepath.Join(base, "private"), true)
 	if err != nil {
 		t.Fatal(err)
 	}

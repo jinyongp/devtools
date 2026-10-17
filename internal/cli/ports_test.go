@@ -32,6 +32,7 @@ PATH={template="/bin:/usr/bin"}
 `
 	trueTool := commandFixture(t, "true")[0]
 	trueName := filepath.Base(trueTool)
+	t.Setenv("PATH", filepath.Dir(trueTool)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	config = strings.ReplaceAll(config, `exec=["/bin/sh","-c","printf '%s|%s' \"$URL\" \"$1\"","--","${bind.P}"]`, "exec="+strings.TrimSuffix(fixtureExec(t, "bind"), "]")+`,"${bind.P}"]`)
 	config = strings.ReplaceAll(config, `executable="true"`, "executable="+mustJSON(t, trueName))
 	config = strings.ReplaceAll(config, `EXE={template="true"}`, "EXE={template="+mustJSON(t, trueName)+"}")

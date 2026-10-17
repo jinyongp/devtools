@@ -10,7 +10,11 @@ import (
 )
 
 func TestTryLockExclusiveDistinguishesFreeBusyAndCanceled(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "private")
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(base, "private")
 	checked, err := platformfs.OpenRoot(root, true)
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +52,11 @@ func TestTryLockExclusiveDistinguishesFreeBusyAndCanceled(t *testing.T) {
 }
 
 func TestTryLockExclusiveRejectsUnsafeDirectory(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "private")
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(base, "private")
 	root, err := platformfs.OpenRoot(path, true)
 	if err != nil {
 		t.Fatal(err)

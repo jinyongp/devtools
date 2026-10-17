@@ -1,0 +1,10 @@
+{
+  "os": "Microsoft Windows Server 2025 Datacenter",
+  "commit": "a8a638a5c64292793b0c1b3649ab4176d3c4247c",
+  "build": "26100",
+  "version": "10.0.26100",
+  "focus": "providers",
+  "architecture": "amd64",
+  "display_version": "24H2",
+  "powershell": "7.6.6"
+}

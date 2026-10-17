@@ -17,10 +17,10 @@
 ## 설정과 사용
 
 아래 예시는 POSIX 셸과 `python3`·curl이 설치된 macOS·Linux·WSL용이다.
-Windows 후보에서는 `exec`에 실제 설치한 Python 이름(예: `python`)을 쓰고 `ready.exec`를
+Windows에서는 `exec`에 실제 설치한 Python 이름(예: `python`)을 쓰고 `ready.exec`를
 프로젝트의 직접 실행 가능한 검사 명령으로 바꾼다. `sh`·`/dev/null`·아래 UUID 생성 문법은
 Windows에 기본 제공된다고 가정하지 않는다. PowerShell의 UUID 생성은
-[문서 예제 안내](README.md#문서-버전과-예제-읽기)를 참고한다.
+[문서 예제 안내](README.md#reading-examples)를 참고한다.
 작업 디렉터리를 제공하는 로컬 HTTP 서버를 띄우고 응답을 확인하는 예시다.
 먼저 같은 디렉터리에 예제 서버 `server.py`를 만든다.
 
@@ -85,7 +85,7 @@ devtools process stop EXECUTION_ID --request-id "$(python3 -c 'import uuid; prin
 
 `ready.timeout`은 1회 검사 제한으로 기본 2초, 허용 범위는 10ms부터 30초다.
 검사 취소 시 Unix는 소유 프로세스 그룹에 TERM을 보내고 최대 3초 후 강제 정리한다.
-Windows는 [소유 Job 종료 경계](windows.md#저장소와-프로세스)를 사용한다.
+Windows는 [소유 Job 종료 경계](windows.md#storage-and-processes)를 사용한다.
 호출 대기 시간이 끝나면 응답은 종료하고 supervisor가 남은 검사 정리를 맡는다.
 검사 스크립트는 자신이 시작한 작업을 마친 뒤 종료하도록 작성한다.
 

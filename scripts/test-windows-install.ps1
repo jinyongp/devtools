@@ -7,6 +7,11 @@ New-Item -ItemType Directory -Path $root | Out-Null
 $releases = Join-Path $root 'release files 한글'
 $installer = Join-Path $PWD 'scripts/install.ps1'
 $oldVersion = $env:VERSION; $oldCommit = $env:COMMIT; $oldOutput = $env:OUTPUT_DIR; $oldOS = $env:TARGET_OS; $oldArch = $env:TARGET_ARCH
+$originalUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$originalMachinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+$oldInstallerFixture = $env:DEVTOOLS_INSTALLER_FIXTURE
+$bootstrapBin = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\devtools\bin'
+$bootstrapOwned = $false
 function Require([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Invoke-Json([string]$Executable, [string[]]$Arguments) {
     $text = & $Executable @Arguments 2> (Join-Path $root 'diagnostic.txt')
@@ -35,13 +40,40 @@ try {
         $shells += $emulatedShell
     }
     $results = @()
+    Require (-not (Test-Path -LiteralPath $bootstrapBin)) 'Inline bootstrap fixture requires an unused default installation directory.'
+    # Serve the candidate installer text at the documented download boundary.
+    # Artifact metadata and packages still come from the public latest stable release.
+    $env:DEVTOOLS_INSTALLER_FIXTURE = $installer
+    $bootstrapCommand = @'
+$ErrorActionPreference = 'Stop'
+function Invoke-RestMethod([string]$Uri) {
+    if ($Uri -cne 'https://jinyongp.dev/devtools/install.ps1') { throw 'Unexpected bootstrap URL.' }
+    return [IO.File]::ReadAllText($env:DEVTOOLS_INSTALLER_FIXTURE)
+}
+irm https://jinyongp.dev/devtools/install.ps1 | iex
+'@
     foreach ($shell in $shells) {
         $shellVersion = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.ToString() | ConvertTo-Json')
         $bin = Join-Path $root ('설치 경로 ' + [Guid]::NewGuid().ToString('N') + '/bin')
         $beforePath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        $beforeProcessPath = $env:PATH
         $installed = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $bin)
         Require ($installed.ok -and $installed.data.action -eq 'install') 'Bootstrap install response mismatch.'
-        Require ([Environment]::GetEnvironmentVariable('Path', 'User') -ceq $beforePath) 'Installer changed user PATH without AddToPath.'
+        $registeredPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        $entries = @($registeredPath -split ';' | Where-Object { $_ })
+        Require (@($entries | Where-Object { $_.TrimEnd('\') -ieq $bin.TrimEnd('\') }).Count -eq 1) 'Default installation did not add its directory exactly once.'
+        foreach ($entry in @($beforePath -split ';' | Where-Object { $_ })) {
+            Require ($entries -ccontains $entry) 'Default installation removed an existing user PATH entry.'
+        }
+        $reinstalled = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $bin)
+        Require ($reinstalled.ok) 'Repeated installation failed.'
+        Require ([Environment]::GetEnvironmentVariable('Path', 'User') -ceq $registeredPath) 'Repeated installation duplicated or rewrote user PATH.'
+        $optOutBin = Join-Path $root ('no PATH ' + [Guid]::NewGuid().ToString('N'))
+        $optOut = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $optOutBin, '-AddToPath', '-NoPath')
+        Require ($optOut.ok) 'NoPath installation failed.'
+        Require ([Environment]::GetEnvironmentVariable('Path', 'User') -ceq $registeredPath) 'NoPath changed user PATH or did not override AddToPath.'
+        Require ($env:PATH -ceq $beforeProcessPath) 'Installer changed the parent process PATH.'
+        Require ([Environment]::GetEnvironmentVariable('Path', 'Machine') -ceq $originalMachinePath) 'Installer changed system PATH.'
         $main = Join-Path $bin 'devtools.exe'; $alias = Join-Path $bin 'dvt.exe'
         Require ([IO.File]::Exists($main) -and [IO.File]::Exists($alias)) 'Installer did not publish both executable copies.'
         Require ((Get-FileHash -Algorithm SHA256 -LiteralPath $main).Hash -ceq (Get-FileHash -Algorithm SHA256 -LiteralPath $alias).Hash) 'Alias copy differs.'
@@ -63,7 +95,17 @@ try {
         Require ($reported.ok -and $reported.data.version -ceq '0.0.0-test.1') 'Standalone alias requires PATH dependencies.'
         Require (-not [IO.File]::Exists((Join-Path $bin '.devtools-install-journal.json'))) 'Successful update left incomplete journal.'
         Require ([IO.File]::Exists((Join-Path $bin '.devtools-install.lock'))) 'Stable empty install lock was removed.'
-        $results += @{ shell = $shell; shell_version = $shellVersion; arch = $Arch; emulated_x64 = ($shell -eq $emulatedShell); install = 'pass'; alias_update = 'pass'; main_update = 'pass'; user_path_unchanged = $true; runtime_path_empty = 'pass' }
+        $bootstrapOwned = $true
+        $inline = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-Command', $bootstrapCommand)
+        Require ($inline.ok -and $inline.data.action -eq 'install') 'Argument-free inline bootstrap failed.'
+        $inlineVersion = Invoke-Json (Join-Path $bootstrapBin 'devtools.exe') @('version')
+        Require ($inlineVersion.ok -and $inlineVersion.data.version -ceq $inline.data.version) 'Inline bootstrap installed a different release.'
+        $inlineEntries = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';'
+        Require (@($inlineEntries | Where-Object { $_.TrimEnd('\') -ieq $bootstrapBin.TrimEnd('\') }).Count -eq 1) 'Inline bootstrap did not register its default directory.'
+        Remove-Item -LiteralPath $bootstrapBin -Recurse -Force
+        $bootstrapOwned = $false
+        [Environment]::SetEnvironmentVariable('Path', $beforePath, 'User')
+        $results += @{ shell = $shell; shell_version = $shellVersion; arch = $Arch; emulated_x64 = ($shell -eq $emulatedShell); install = 'pass'; alias_update = 'pass'; main_update = 'pass'; default_user_path = 'pass'; path_idempotency = 'pass'; no_path_opt_out = 'pass'; inline_bootstrap = 'pass'; inline_release = $inline.data.version; inline_installer_source = 'candidate download fixture'; inline_artifacts = 'public latest stable'; runtime_path_empty = 'pass' }
     }
     $pathBefore = [Environment]::GetEnvironmentVariable('Path', 'User')
     $pathBin = Join-Path $root 'explicit PATH install/bin'
@@ -79,6 +121,9 @@ try {
     if (Test-Path -LiteralPath $diagnostic) { Copy-Item -LiteralPath $diagnostic -Destination windows-install-diagnostic.txt -Force }
     throw
 } finally {
+    [Environment]::SetEnvironmentVariable('Path', $originalUserPath, 'User')
+    $env:DEVTOOLS_INSTALLER_FIXTURE = $oldInstallerFixture
+    if ($bootstrapOwned -and (Test-Path -LiteralPath $bootstrapBin)) { Remove-Item -LiteralPath $bootstrapBin -Recurse -Force -ErrorAction SilentlyContinue }
     $env:VERSION = $oldVersion; $env:COMMIT = $oldCommit; $env:OUTPUT_DIR = $oldOutput; $env:TARGET_OS = $oldOS; $env:TARGET_ARCH = $oldArch
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
 }

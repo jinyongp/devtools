@@ -3,7 +3,7 @@
 [Documentation index](README.md) · [Install and get started](../README.md)
 
 This extends the port, process, and HTTP proxy contracts on macOS, Linux, WSL,
-and the native Windows candidate. See the [Windows guide](windows.md) for target
+and native Windows. See the [Windows guide](windows.md) for target
 versions, privilege handling, and unverified desktop behavior. WSL and native
 Windows use separate stores, daemons, and CAs; Windows browsers connecting to
 WSL have a separate [client trust and DNS boundary](wsl.md).

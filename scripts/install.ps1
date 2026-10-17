@@ -3,7 +3,8 @@ param(
     [string]$Version,
     [string]$Source,
     [string]$BinDir,
-    [switch]$AddToPath
+    [switch]$AddToPath = $true,
+    [switch]$NoPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -210,7 +211,7 @@ public static class DevtoolsInstallerNativeArchitecture {
     if (-not $BinDir) { $BinDir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\devtools\bin' }
     $BinDir = [IO.Path]::GetFullPath($BinDir)
     $phase = 'user_path'
-    if ($AddToPath) {
+    if ($AddToPath -and -not $NoPath) {
         $currentPath = [Environment]::GetEnvironmentVariable('Path', 'User')
         $entries = @($currentPath -split ';' | Where-Object { $_ })
         if (-not ($entries | Where-Object { $_.TrimEnd('\') -ieq $BinDir.TrimEnd('\') })) {
@@ -218,7 +219,11 @@ public static class DevtoolsInstallerNativeArchitecture {
         }
     }
     Write-Utf8Json $output
-    [Console]::Error.WriteLine('Installed in ' + $BinDir + '. Open a new terminal after adding this directory to your user PATH.')
+    if ($AddToPath -and -not $NoPath) {
+        [Console]::Error.WriteLine('Installed in ' + $BinDir + '. Open a new terminal to use devtools.')
+    } else {
+        [Console]::Error.WriteLine('Installed in ' + $BinDir + '. Add this directory to your PATH to use devtools.')
+    }
 } catch {
     $message = 'Windows installation failed. Check the selected release, installation ownership/lock and any retained recovery journal before retrying.'
     if ($candidateFailure) { $message = $candidateFailure }

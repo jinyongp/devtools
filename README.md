@@ -7,56 +7,49 @@ Store environment variables and secrets, pass them to commands, and manage
 development servers, ports, and local URLs. Track tasks and progress so you can
 pick up where you left off in another session or with a coding agent.
 
-## Platforms
-
-- **macOS, Linux, WSL:** use the installation steps below. Install the Linux CLI inside WSL.
-- **Native Windows:** x64 and ARM64 support targets v0.25.0 and Windows 11 25H2/26H2.
-  Until v0.25.0 is published, use the validated candidate assets.
-  See the [Windows guide](docs/windows.md) for candidate installation, Actions
-  validation, and the limits of testing without a physical Windows PC.
-
-Windows and WSL have separate data, servers, and CAs. Read the
-[WSL guide](docs/wsl.md) when using both environments.
-
 ## Install
 
-If you use Homebrew, install devtools with:
+Install the latest stable release. No Go installation required when using the install scripts.
+
+### Windows (PowerShell)
+
+```powershell
+irm https://jinyongp.dev/devtools/install.ps1 | iex
+```
+
+Open a new terminal, then run `devtools version`. The installer selects x64 or
+ARM64 for your PC and adds devtools to your user PATH. No administrator access needed.
+Supports Windows 11 25H2/26H2; see the [Windows guide](docs/windows.md) for details.
+
+### macOS / Linux / WSL
+
+With Homebrew:
 
 ```sh
 brew install jinyongp/tap/devtools
 ```
 
-Homebrew also installs completion files for zsh, bash, and fish. Once shell
-completion is enabled, press Tab after `devtools` to explore commands and options.
-See the [completion guide](docs/completion.md) for shell setup.
-
-### Install script
-
-Paste the following command into your terminal. The installer detects your
-operating system and CPU, installs the latest stable release to
-`~/.local/bin/devtools`, and provides the shorter command `dvt`. You need curl.
+Or with curl:
 
 ```sh
 curl -fsSL https://jinyongp.dev/devtools/install.sh | sh
-```
-
-Add the install directory to your PATH so you can run devtools from anywhere:
-
-```sh
 export PATH="$HOME/.local/bin:$PATH"
 devtools version
-dvt version
 ```
 
-To keep this setting in new terminals, add the `export` line to your shell's
-configuration file, such as `~/.zshrc` for zsh. See the [installation guide](docs/install.md)
-for choosing a version or a different install location.
+For the curl install, add the `export` line to your shell configuration
+(such as `~/.zshrc`) to keep it in new terminals. Inside WSL, use this Linux install.
+
+The shorter command `dvt` is also available unless another program already owns
+that name. See [installation and updates](docs/install.md) for install locations,
+[completion](docs/completion.md) for shell setup, and the [WSL guide](docs/wsl.md)
+for using Windows and WSL together. Their data, servers, and CAs stay separate.
 
 ## Get started
 
 Run this in a new project directory. `myapp` names the profile that stores your
 values. Choose an unused profile name for this example: an existing name shares
-its stored values. These first commands work on macOS, Linux, WSL, and the Windows candidate.
+its stored values. These first commands work on macOS, Linux, WSL, and Windows.
 
 ```sh
 devtools init --profile myapp
@@ -75,7 +68,7 @@ In a POSIX shell on macOS, Linux, or WSL:
 devtools run --env local -- sh -c 'echo "$LOG_LEVEL"'
 ```
 
-In PowerShell or cmd with the Windows candidate:
+In PowerShell or cmd on Windows:
 
 ```powershell
 devtools run --env local -- cmd.exe /d /c set LOG_LEVEL

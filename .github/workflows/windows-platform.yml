@@ -99,6 +99,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native process boundary tests failed' }
           & go vet ./internal/process
           if ($LASTEXITCODE -ne 0) { throw 'Native process boundary vet failed' }
+          & python -B scripts/check-windows-handle-cleanup.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native handle cleanup negative control failed' }
           & go test -json -count=1 -run '^TestWindows' ./internal/execution ./internal/doctor | Tee-Object -FilePath execution-preflight-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native execution preflight tests failed' }
 
@@ -212,6 +214,7 @@ jobs:
             runner.json
             platformfs-results.jsonl
             process-results.jsonl
+            handle-cleanup-mutant.log
             execution-preflight-results.jsonl
             maintenance-lock-results.jsonl
             service-lease-results.jsonl

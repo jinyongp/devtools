@@ -148,7 +148,8 @@ func main() {
 		case <-ctx.Done():
 		}
 	}()
-	code := cli.New(version, commit).Run(ctx, os.Args[1:], cli.IO{In: os.Stdin, Out: os.Stdout, Err: os.Stderr})
+	releaseVersion, releaseCommit := buildVersion()
+	code := cli.New(releaseVersion, releaseCommit).Run(ctx, os.Args[1:], cli.IO{In: os.Stdin, Out: os.Stdout, Err: os.Stderr})
 	signal.Stop(signals)
 	cancel(nil)
 	os.Exit(code)

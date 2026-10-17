@@ -7,6 +7,9 @@ on:
       - .github/workflows/windows-platform.yml
       - internal/**
       - cmd/devtools/**
+      - scripts/**
+      - devtools.toml
+      - package.json
       - go.mod
       - go.sum
   pull_request:
@@ -14,6 +17,9 @@ on:
       - .github/workflows/windows-platform.yml
       - internal/**
       - cmd/devtools/**
+      - scripts/**
+      - devtools.toml
+      - package.json
       - go.mod
       - go.sum
 
@@ -44,6 +50,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
       - name: Prepare actual package-manager shims
         run: |
           $ErrorActionPreference = 'Stop'
@@ -114,6 +123,24 @@ jobs:
           & go vet ./internal/cli
           if ($LASTEXITCODE -ne 0) { throw 'Native CLI vet failed' }
 
+      - name: Test portable project and release tooling with native packages
+        run: |
+          & python -B --version
+          if ($LASTEXITCODE -ne 0) { throw 'Native Python is unavailable' }
+          & node --test scripts/project.test.mjs scripts/release.test.mjs | Tee-Object -FilePath project-release-results.tap
+          if ($LASTEXITCODE -ne 0) { throw 'Portable project/release tests failed' }
+          & python -B scripts/project.py skill-release-check
+          if ($LASTEXITCODE -ne 0) { throw 'Portable skill release validation failed' }
+          & go test -json -count=1 ./cmd/devtools | Tee-Object -FilePath build-identity-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Build identity tests failed' }
+          $env:VERSION = '0.0.0-native-package'
+          $env:COMMIT = $env:GITHUB_SHA
+          $env:TARGET_OS = 'windows'
+          $env:TARGET_ARCH = '${{ matrix.arch }}'
+          $env:OUTPUT_DIR = 'dist'
+          & python -B scripts/package.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native ZIP validation failed' }
+
       - name: Build native CLI and check explicit intermediate failures
         run: |
           $ErrorActionPreference = 'Stop'
@@ -162,6 +189,10 @@ jobs:
             port-lock-results.jsonl
             console-results.jsonl
             storage-recovery-results.jsonl
+            project-release-results.tap
+            build-identity-results.jsonl
+            dist/*.zip
+            dist/*.zip.sha256
             unsupported*.json
           if-no-files-found: warn
           retention-days: 7

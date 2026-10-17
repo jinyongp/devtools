@@ -1,11 +1,11 @@
 profile = "devtools"
 
 [commands."build:cli"]
-exec = ["go", "build", "-o", "bin/devtools", "./cmd/devtools"]
+exec = ["./scripts/project", "build-cli"]
 inject = false
 
 [commands."dev:dashboard"]
-exec = ["sh", "scripts/project.sh", "dashboard"]
+exec = ["./scripts/project", "dashboard"]
 inject = false
 
 [commands."fmt:go"]
@@ -13,11 +13,11 @@ exec = ["gofmt", "-w", "cmd", "internal", "scripts", "skills", "perf"]
 inject = false
 
 [commands."check:all"]
-exec = ["sh", "scripts/project.sh", "check"]
+exec = ["./scripts/project", "check"]
 inject = false
 
 [commands."check:dashboard"]
-exec = ["node", "--test", "scripts/dashboard-*.test.mjs"]
+exec = ["./scripts/project", "dashboard-check"]
 inject = false
 
 [commands."test:dashboard-browser"]
@@ -33,27 +33,27 @@ exec = ["corepack", "pnpm", "exec", "skills", "add", "jinyongp/devtools", "--lis
 inject = false
 
 [commands."check:release"]
-exec = ["sh", "scripts/project.sh", "release-check"]
+exec = ["./scripts/project", "release-check"]
 inject = false
 
 [commands."check:project"]
-exec = ["node", "--test", "scripts/project.test.mjs"]
+exec = ["./scripts/project", "project-check"]
 inject = false
 
 [commands."check:installer"]
-exec = ["sh", "scripts/project.sh", "installer-check"]
+exec = ["./scripts/project", "installer-check"]
 inject = false
 
 [commands."check:skill"]
-exec = ["sh", "scripts/validate-skill.sh"]
+exec = ["./scripts/project", "skill-check"]
 inject = false
 
 [commands."check:skill-release"]
-exec = ["sh", "scripts/check-skill-release.sh"]
+exec = ["./scripts/project", "skill-release-check"]
 inject = false
 
 [commands."check:perf"]
-exec = ["python3", "-B", "-m", "unittest", "discover", "-s", "perf", "-p", "test_run.py"]
+exec = ["./scripts/project", "python", "-B", "-m", "unittest", "discover", "-s", "perf", "-p", "test_run.py"]
 inject = false
 
 [commands."test:go"]
@@ -65,11 +65,11 @@ exec = ["go", "vet", "./..."]
 inject = false
 
 [commands."clean:build"]
-exec = ["rm", "-rf", "bin", "coverage.out"]
+exec = ["./scripts/project", "clean"]
 inject = false
 
 [commands."release:cli"]
-exec = ["sh", "scripts/project.sh", "package-cli"]
+exec = ["./scripts/project", "package-cli"]
 inject = false
 
 [commands."release:plan"]
@@ -81,17 +81,17 @@ exec = ["node", "scripts/release.mjs", "--publish"]
 inject = false
 
 [commands."release:skill"]
-exec = ["sh", "scripts/project.sh", "package-skill"]
+exec = ["./scripts/project", "package-skill"]
 inject = false
 
 [commands."test:installed"]
-exec = ["python3", "-B", "verify/run.py"]
+exec = ["./scripts/project", "python", "-B", "verify/run.py"]
 inject = false
 
 [commands."perf:all"]
-exec = ["python3", "-B", "perf/run.py"]
+exec = ["./scripts/project", "python", "-B", "perf/run.py"]
 inject = false
 
 [commands."perf:go"]
-exec = ["python3", "-B", "perf/run.py", "--go", "--runs", "3"]
+exec = ["./scripts/project", "python", "-B", "perf/run.py", "--go", "--runs", "3"]
 inject = false

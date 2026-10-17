@@ -1,0 +1,5 @@
+# Keep Unix compatibility entries executable after Windows checkouts.
+*.sh text eol=lf
+/scripts/project text eol=lf
+# Agent Skill archives use these exact canonical bytes on every host.
+/skills/devtools/SKILL.md text eol=lf

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -81,18 +80,9 @@ func TestStoreConcurrentUpdates(t *testing.T) {
 		t.Fatalf("lost updates: %+v %v", state, err)
 	}
 	for _, path := range []string{store.Directory, store.file(), store.file() + ".lock"} {
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := os.FileMode(0600)
-		if info.IsDir() {
-			want = 0700
-		}
-		if info.Mode().Perm() != want {
-			t.Fatalf("%s: mode %v", path, info.Mode())
-		}
+		assertPrivateStoredPath(t, path)
 	}
+
 	other := Store{Directory: store.Directory, Profile: "app"}
 	otherState, err := other.Read(context.Background())
 	if err != nil || len(otherState.Keys) != 0 {
@@ -123,41 +113,17 @@ func TestStorageCorruptionAndPermissions(t *testing.T) {
 	if string(data) != "CANARY invalid json" {
 		t.Fatal("overwrote corrupt storage")
 	}
-	if err := os.Chmod(store.file(), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.Read(context.Background()); err == nil || err.Code != "storage_error" {
-		t.Fatal(err)
-	}
-	if err := os.Remove(store.file()); err != nil {
-		t.Fatal(err)
-	}
-	target := filepath.Join(privateTempDir(t), "target")
-	if err := os.WriteFile(target, []byte("original"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(target, store.file()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.Read(context.Background()); err == nil {
-		t.Fatal("followed storage symlink")
-	}
+	assertUnsafeStoreRejected(t, store)
 }
 
 func TestLockCancellation(t *testing.T) {
 	store := Store{Directory: filepath.Join(privateTempDir(t), "profiles"), Profile: "app"}
-	if err := os.Mkdir(store.Directory, 0700); err != nil {
+	if err := privateDirectory(store.Directory); err != nil {
 		t.Fatal(err)
 	}
-	lock, err := os.OpenFile(store.file()+".lock", os.O_CREATE|os.O_RDWR, 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		t.Fatal(err)
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	release := holdProfileLock(t, store.file()+".lock")
+	defer release()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 	called := false
@@ -279,7 +245,7 @@ func TestInspectUsesSharedGateAfterInitialization(t *testing.T) {
 func TestCompletionRetriesAcrossLegacyMigration(t *testing.T) {
 	root := privateTempDir(t)
 	directory := filepath.Join(root, "profiles")
-	if err := os.Mkdir(directory, 0700); err != nil {
+	if err := privateDirectory(directory); err != nil {
 		t.Fatal(err)
 	}
 	store := Store{Directory: directory, Profile: "app"}

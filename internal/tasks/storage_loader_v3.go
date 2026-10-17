@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"errors"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"os"
 
 	"github.com/jinyongp/devtools/internal/profilekey"
@@ -169,7 +170,7 @@ func (s Store) resolveStorage() (taskStorageInfo, *protocol.Error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return info, nil
 	}
-	if err != nil || !stat.IsDir() || stat.Mode().Perm()&0077 != 0 {
+	if err != nil || !platformfs.DirectoryPrivate(s.Directory, stat) {
 		return info, storageError()
 	}
 	resolution, err := profilekey.Resolve(s.Directory, s.Profile, "tasks")

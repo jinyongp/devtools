@@ -1,4 +1,6 @@
-package values
+//go:build !windows
+
+package tasks
 
 import (
 	"os"
@@ -13,3 +15,5 @@ func privateTempDir(t *testing.T) string {
 	}
 	return dir
 }
+
+func directoryAlias(actual, alias string) error { return os.Symlink(actual, alias) }

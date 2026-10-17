@@ -3,6 +3,7 @@ package profilekey
 import (
 	"encoding/json"
 	"errors"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"os"
 	"path/filepath"
 
@@ -72,7 +73,7 @@ func Replacement(directory, profile, domain string, data []byte) (map[string][]b
 		if data == nil {
 			return files, nil
 		}
-		if err := os.Mkdir(directory, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+		if err := platformfs.MkdirPrivate(directory); err != nil && !errors.Is(err, os.ErrExist) {
 			return nil, err
 		}
 		if err := privateDirectory(directory); err != nil {

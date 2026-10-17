@@ -1,3 +1,5 @@
+//go:build !windows
+
 package profilekey
 
 import (
@@ -13,3 +15,5 @@ func privateTempDir(t *testing.T) string {
 	}
 	return dir
 }
+
+func directoryAlias(actual, alias string) error { return os.Symlink(actual, alias) }

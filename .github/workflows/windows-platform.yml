@@ -31,7 +31,7 @@ jobs:
           - runner: windows-11-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         shell: pwsh
@@ -98,6 +98,15 @@ jobs:
           & go test -json -count=1 -run '^TestWindows' ./internal/ports | Tee-Object -FilePath port-lock-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native port lock tests failed' }
 
+      - name: Test complete native task, value and profile storage recovery
+        run: |
+          & go test -json -count=1 -timeout 8m ./internal/tasks ./internal/values ./internal/profilekey | Tee-Object -FilePath storage-recovery-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native storage recovery tests failed' }
+          & go test -json -count=1 -timeout 3m ./internal/maintenance -large-storage-test | Tee-Object -FilePath storage-recovery-results.jsonl -Append
+          if ($LASTEXITCODE -ne 0) { throw 'Native maintenance recovery tests failed' }
+          & go vet ./internal/tasks ./internal/values ./internal/profilekey ./internal/maintenance
+          if ($LASTEXITCODE -ne 0) { throw 'Native storage recovery vet failed' }
+
       - name: Test native console mode and redirected passphrase input
         run: |
           & go test -json -count=1 -run '^TestWindowsConsole|^TestWindowsPassphrase' ./internal/cli | Tee-Object -FilePath console-results.jsonl
@@ -152,6 +161,7 @@ jobs:
             service-lease-results.jsonl
             port-lock-results.jsonl
             console-results.jsonl
+            storage-recovery-results.jsonl
             unsupported*.json
           if-no-files-found: warn
           retention-days: 7

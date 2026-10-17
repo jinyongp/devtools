@@ -3,7 +3,7 @@ package maintenance
 
 import (
 	"context"
-	"encoding/json"
+
 	"errors"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"io"
@@ -26,7 +26,7 @@ func Acquire(ctx context.Context, root string) (func(), error) {
 
 // Read accepts only private regular files and bounds allocation.
 func Read(path string, limit int64) ([]byte, error) {
-	f, e := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
+	f, e := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
 	if e != nil {
 		return nil, e
 	}
@@ -35,7 +35,7 @@ func Read(path string, limit int64) ([]byte, error) {
 	if e != nil {
 		return nil, e
 	}
-	if !i.Mode().IsRegular() || i.Mode().Perm()&0077 != 0 || i.Size() > limit {
+	if platformfs.CheckFile(f.File) != nil || i.Size() > limit {
 		return nil, errors.New("invalid private file")
 	}
 	b, e := io.ReadAll(io.LimitReader(f, limit+1))
@@ -43,51 +43,6 @@ func Read(path string, limit int64) ([]byte, error) {
 		return nil, errors.New("file too large")
 	}
 	return b, e
-}
-
-func Write(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if e := os.MkdirAll(dir, 0700); e != nil {
-		return e
-	}
-	i, e := os.Lstat(dir)
-	if e != nil {
-		return e
-	}
-	if !i.IsDir() || i.Mode().Perm()&0077 != 0 {
-		return errors.New("private directory required")
-	}
-	f, e := os.CreateTemp(dir, ".write-*")
-	if e != nil {
-		return e
-	}
-	defer os.Remove(f.Name())
-	_, e = f.Write(data)
-	if e == nil {
-		e = f.Sync()
-	}
-	closeErr := f.Close()
-	if e != nil {
-		return e
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	if e = os.Rename(f.Name(), path); e != nil {
-		return e
-	}
-	return syncDir(dir)
-}
-
-var syncDir = syncDirectory
-
-func syncDirectory(path string) error {
-	f, e := os.Open(path)
-	if e != nil {
-		return e
-	}
-	defer f.Close()
-	return f.Sync()
 }
 
 type before struct {
@@ -99,38 +54,6 @@ type before struct {
 func validPath(p string) bool {
 	parts := strings.Split(p, "/")
 	return len(parts) == 2 && (parts[0] == "profiles" || parts[0] == "tasks" || parts[0] == "backup-receipts") && strings.HasSuffix(parts[1], ".json") && parts[1] != ".json" && !strings.Contains(parts[1], "..") && !strings.Contains(parts[1], "\\")
-}
-
-func recoverLegacy(root string, body []byte) error {
-	var entries []before
-	if json.Unmarshal(body, &entries) != nil {
-		return errors.New("invalid recovery journal")
-	}
-	for _, entry := range entries {
-		if !validPath(entry.Path) {
-			return errors.New("invalid recovery path")
-		}
-	}
-	for _, entry := range entries {
-		target, err := targetPath(root, entry.Path, true)
-		if err != nil {
-			return err
-		}
-		if entry.Exists {
-			if err := Write(target, entry.Data); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := removeTarget(target); err != nil {
-			return err
-		}
-	}
-	path := pendingPath(root)
-	if err := os.Remove(path); err != nil {
-		return err
-	}
-	return syncDir(filepath.Dir(path))
 }
 
 func recoverPending(root string) error {

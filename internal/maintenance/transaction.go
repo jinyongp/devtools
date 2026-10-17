@@ -90,7 +90,7 @@ func validReplacementPath(path string) bool {
 func privateDirectoryComponent(path string, create bool) error {
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) && create {
-		if err := os.Mkdir(path, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+		if err := platformfs.MkdirPrivate(path); err != nil && !errors.Is(err, os.ErrExist) {
 			return err
 		}
 		info, err = os.Lstat(path)
@@ -98,7 +98,7 @@ func privateDirectoryComponent(path string, create bool) error {
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if !platformfs.DirectoryPrivate(path, info) {
 		return errors.New("private directory required")
 	}
 	return nil
@@ -122,59 +122,19 @@ func targetPath(root, relative string, createParents bool) (string, error) {
 	return filepath.Join(current, parts[len(parts)-1]), nil
 }
 
-func privateFileInfo(file *os.File) (os.FileInfo, error) {
+func privateFileInfo(file *platformfs.File) (os.FileInfo, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return nil, err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+	if platformfs.CheckFile(file.File) != nil {
 		return nil, errors.New("private file required")
 	}
 	return info, nil
 }
 
-func createTransactionDirectories(root, id string) (string, string, error) {
-	maintenanceDir := filepath.Join(root, ".maintenance")
-	if err := privateDirectoryComponent(maintenanceDir, false); err != nil {
-		return "", "", err
-	}
-	transactions := filepath.Join(maintenanceDir, "transactions")
-	if err := privateDirectoryComponent(transactions, true); err != nil {
-		return "", "", err
-	}
-	dir := filepath.Join(transactions, id)
-	if err := os.Mkdir(dir, 0700); err != nil {
-		return "", "", err
-	}
-	success := false
-	defer func() {
-		if !success {
-			_ = os.RemoveAll(dir)
-			_ = syncDir(transactions)
-		}
-	}()
-	if err := privateDirectoryComponent(dir, false); err != nil {
-		return "", "", err
-	}
-	before := filepath.Join(dir, "before")
-	if err := os.Mkdir(before, 0700); err != nil {
-		return "", "", err
-	}
-	if err := privateDirectoryComponent(before, false); err != nil {
-		return "", "", err
-	}
-	if err := syncDir(transactions); err != nil {
-		return "", "", err
-	}
-	if err := syncDir(dir); err != nil {
-		return "", "", err
-	}
-	success = true
-	return dir, before, nil
-}
-
 func copyPrivateFile(source, destination string) (int64, string, error) {
-	src, err := platformfs.OpenNoFollow(source, os.O_RDONLY, 0)
+	src, err := platformfs.OpenPrivate(source, os.O_RDONLY, 0)
 	if err != nil {
 		return 0, "", err
 	}
@@ -182,7 +142,7 @@ func copyPrivateFile(source, destination string) (int64, string, error) {
 	if _, err := privateFileInfo(src); err != nil {
 		return 0, "", err
 	}
-	dst, err := platformfs.OpenNoFollow(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	dst, err := platformfs.OpenPrivate(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return 0, "", err
 	}
@@ -215,7 +175,7 @@ func verifyBeforeImage(transactionDir string, entry transactionEntry) error {
 		return errors.New("invalid before image path")
 	}
 	path := filepath.Join(transactionDir, "before", entry.BeforePath)
-	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
+	file, err := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}
@@ -230,56 +190,6 @@ func verifyBeforeImage(transactionDir string, entry transactionEntry) error {
 		return errors.New("before image digest mismatch")
 	}
 	return nil
-}
-
-func restorePrivateFile(source, target string) error {
-	parent := filepath.Dir(target)
-	temp, err := os.CreateTemp(parent, ".restore-*")
-	if err != nil {
-		return err
-	}
-	tempPath := temp.Name()
-	defer os.Remove(tempPath)
-	src, err := platformfs.OpenNoFollow(source, os.O_RDONLY, 0)
-	if err != nil {
-		_ = temp.Close()
-		return err
-	}
-	if _, err := privateFileInfo(src); err != nil {
-		_ = src.Close()
-		_ = temp.Close()
-		return err
-	}
-	_, copyErr := io.Copy(temp, src)
-	closeSrcErr := src.Close()
-	if copyErr == nil {
-		copyErr = temp.Sync()
-	}
-	closeTempErr := temp.Close()
-	if copyErr != nil {
-		return copyErr
-	}
-	if closeSrcErr != nil {
-		return closeSrcErr
-	}
-	if closeTempErr != nil {
-		return closeTempErr
-	}
-	if err := os.Rename(tempPath, target); err != nil {
-		return err
-	}
-	return syncDir(parent)
-}
-
-func removeTarget(target string) error {
-	err := os.Remove(target)
-	if errors.Is(err, os.ErrNotExist) {
-		err = nil
-	}
-	if err != nil {
-		return err
-	}
-	return syncDir(filepath.Dir(target))
 }
 
 func transactionsRoot(root string) string {
@@ -349,35 +259,6 @@ func readManifest(root string, pointer transactionPointer) (transactionManifest,
 	return manifest, nil
 }
 
-func cleanupTransaction(root string, pointer transactionPointer) error {
-	pending := pendingPath(root)
-	observed, legacy, raw, err := readPointer(root)
-	if err != nil {
-		return err
-	}
-	if raw != nil {
-		if legacy || observed.TransactionID != pointer.TransactionID || observed.Phase != pointer.Phase {
-			return errors.New("unexpected recovery pointer")
-		}
-		if err := os.Remove(pending); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		if err := syncDir(filepath.Dir(pending)); err != nil {
-			return err
-		}
-	}
-	dir := transactionDir(root, pointer.TransactionID)
-	if err := os.RemoveAll(dir); err != nil {
-		return err
-	}
-	if info, err := os.Lstat(transactionsRoot(root)); err == nil && info.IsDir() {
-		return syncDir(transactionsRoot(root))
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return nil
-}
-
 func recoverTransaction(root string, pointer transactionPointer) error {
 	if pointer.Phase == "committed" {
 		if err := privateDirectoryComponent(transactionDir(root, pointer.TransactionID), false); err != nil {
@@ -404,42 +285,4 @@ func recoverTransaction(root string, pointer transactionPointer) error {
 		}
 	}
 	return cleanupTransaction(root, pointer)
-}
-
-func cleanupOrphanTransactions(root, active string) error {
-	parent := transactionsRoot(root)
-	info, err := os.Lstat(parent)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-		return errors.New("invalid transaction directory")
-	}
-	entries, err := os.ReadDir(parent)
-	if err != nil {
-		return err
-	}
-	if len(entries) > 0 {
-		// A previous cleanup may have removed the pointer but failed to sync
-		// that removal. Checkpoint its directory before discarding before-images.
-		if err := syncDir(filepath.Dir(pendingPath(root))); err != nil {
-			return err
-		}
-	}
-	for _, entry := range entries {
-		if entry.Name() == active {
-			continue
-		}
-		if !validTransactionID(entry.Name()) {
-			return errors.New("invalid transaction directory")
-		}
-		path := filepath.Join(parent, entry.Name())
-		if err := privateDirectoryComponent(path, false); err != nil {
-			return err
-		}
-		if err := os.RemoveAll(path); err != nil {
-			return err
-		}
-	}
-	return syncDir(parent)
 }

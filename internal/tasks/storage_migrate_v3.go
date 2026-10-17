@@ -261,17 +261,6 @@ func (s Store) appendTriggerFrame(resolution v3Resolution, journal *Journal, bef
 	return err
 }
 
-func generationDurable(resolution v3Resolution) error {
-	if err := syncPrivateDirectory(resolution.Root); err != nil {
-		return err
-	}
-	generations := filepath.Dir(resolution.Root)
-	if err := syncPrivateDirectory(generations); err != nil {
-		return err
-	}
-	return syncPrivateDirectory(filepath.Dir(generations))
-}
-
 func taskHeadRelative(profile string) string {
 	return "tasks/" + taskHeadFilename(profile)
 }

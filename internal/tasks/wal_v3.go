@@ -12,12 +12,12 @@ import (
 	"os"
 )
 
-func privateTaskFileInfo(file *os.File) (os.FileInfo, error) {
+func privateTaskFileInfo(file *platformfs.File) (os.FileInfo, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return nil, err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+	if platformfs.CheckFile(file.File) != nil {
 		return nil, errors.New("private file required")
 	}
 	return info, nil
@@ -197,7 +197,7 @@ func writeFrameFile(path string, frame walFrame) (string, int64, error) {
 	if err := validateFrame(frame); err != nil {
 		return "", 0, err
 	}
-	file, err := platformfs.OpenNoFollow(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+	file, err := platformfs.OpenPrivate(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
 	if err != nil {
 		return "", 0, err
 	}
@@ -331,7 +331,7 @@ func parseFrameBody(reader io.Reader) (walFrame, error) {
 
 func scanWAL(path string, startOffset int64, collect bool) (walScan, error) {
 	var result walScan
-	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
+	file, err := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
 	if err != nil {
 		return result, err
 	}
@@ -402,7 +402,7 @@ func scanWAL(path string, startOffset int64, collect bool) (walScan, error) {
 }
 
 func appendFrameFile(walPath, framePath string) (int64, error) {
-	frame, err := platformfs.OpenNoFollow(framePath, os.O_RDONLY, 0)
+	frame, err := platformfs.OpenPrivate(framePath, os.O_RDONLY, 0)
 	if err != nil {
 		return 0, err
 	}
@@ -410,7 +410,7 @@ func appendFrameFile(walPath, framePath string) (int64, error) {
 	if _, err := privateTaskFileInfo(frame); err != nil {
 		return 0, err
 	}
-	wal, err := platformfs.OpenNoFollow(walPath, os.O_WRONLY|os.O_APPEND, 0)
+	wal, err := platformfs.OpenPrivate(walPath, os.O_WRONLY|os.O_APPEND, 0)
 	if err != nil {
 		return 0, err
 	}
@@ -426,7 +426,7 @@ func appendFrameFile(walPath, framePath string) (int64, error) {
 }
 
 func truncateWAL(path string, offset int64) error {
-	file, err := platformfs.OpenNoFollow(path, os.O_RDWR, 0)
+	file, err := platformfs.OpenPrivate(path, os.O_RDWR, 0)
 	if err != nil {
 		return err
 	}

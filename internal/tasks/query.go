@@ -3,6 +3,7 @@ package tasks
 import (
 	"bytes"
 	"context"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -587,8 +588,8 @@ func pruneQueries(dir string) {
 			continue
 		}
 		path := filepath.Join(dir, entry.Name())
-		info, e := entry.Info()
-		if e == nil && info.Mode().IsRegular() && info.Mode().Perm()&0077 == 0 && time.Since(info.ModTime()) > retention.QuerySnapshotTTL {
+		info, e := platformfs.StatPrivate(path)
+		if e == nil && info.Mode().IsRegular() && time.Since(info.ModTime()) > retention.QuerySnapshotTTL {
 			_ = os.Remove(path)
 		}
 	}

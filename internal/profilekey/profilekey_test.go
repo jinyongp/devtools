@@ -1,6 +1,7 @@
 package profilekey
 
 import (
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,7 @@ func TestCanonicalKeyAndIdentity(t *testing.T) {
 	}
 	dir := privateTempDir(t)
 	identityDir := filepath.Join(dir, ".identity")
-	if err := os.Mkdir(identityDir, 0700); err != nil {
+	if err := platformfs.MkdirPrivate(identityDir); err != nil {
 		t.Fatal(err)
 	}
 	body, err := IdentityBytes(profile, "values")
@@ -98,7 +99,7 @@ func TestResolveLegacyCanonicalAndSplitBrain(t *testing.T) {
 	if err := os.Remove(legacy); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(dir, ".identity"), 0700); err != nil {
+	if err := platformfs.MkdirPrivate(filepath.Join(dir, ".identity")); err != nil {
 		t.Fatal(err)
 	}
 	identity, _ := IdentityBytes(profile, "values")

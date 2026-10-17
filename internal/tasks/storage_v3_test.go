@@ -267,9 +267,7 @@ func forceV2Storage(t *testing.T, s Store) Journal {
 		if err := os.RemoveAll(taskGenerationRoot(s.Directory, s.Profile)); err != nil {
 			t.Fatal(err)
 		}
-		if err := syncPrivateDirectory(s.Directory); err != nil {
-			t.Fatal(err)
-		}
+		// WritePrivate below publishes the replacement legacy image.
 		_ = v3
 	}
 	if err := WritePrivate(s.path(), copy); err != nil {
@@ -327,7 +325,7 @@ func TestResolveV3RejectsSymlinkedGenerationParent(t *testing.T) {
 	if err := os.Rename(generations, quarantine); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(quarantine, generations); err != nil {
+	if err := directoryAlias(quarantine, generations); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok, err := resolveV3(s.Directory, s.Profile); err == nil || !ok {

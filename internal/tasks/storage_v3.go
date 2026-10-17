@@ -10,7 +10,6 @@ import (
 
 	"time"
 
-	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
@@ -92,13 +91,12 @@ func taskHeadBytes(profile, generation string) ([]byte, error) {
 }
 
 func decodeOnePrivate(path string, value any) error {
-	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
+	file, err := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+	if err := platformfs.CheckFile(file.File); err != nil {
 		return errors.New("private file required")
 	}
 	decoder := json.NewDecoder(file)
@@ -114,7 +112,7 @@ func decodeOnePrivate(path string, value any) error {
 
 func readV3Marker(path, profile string) (taskV3Marker, bool, error) {
 	var marker taskV3Marker
-	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
+	file, err := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
 	if err != nil {
 		return marker, false, err
 	}
@@ -190,87 +188,10 @@ func validatePrivateDirectory(path string) error {
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if !platformfs.DirectoryPrivate(path, info) {
 		return errors.New("private directory required")
 	}
 	return nil
-}
-
-func ensurePrivateDirectory(parent, name string) (string, error) {
-	if !validStorageComponent(name) {
-		return "", errors.New("invalid storage component")
-	}
-	if err := validatePrivateDirectory(parent); err != nil {
-		return "", err
-	}
-	path := filepath.Join(parent, name)
-	info, err := os.Lstat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		if err := os.Mkdir(path, 0700); err != nil {
-			return "", err
-		}
-		if err := syncPrivateDirectory(parent); err != nil {
-			return "", err
-		}
-		info, err = os.Lstat(path)
-	}
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-		return "", errors.New("private directory required")
-	}
-	return path, nil
-}
-
-func syncPrivateDirectory(path string) error {
-	file, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	return file.Sync()
-}
-
-func createGeneration(directory, profile, generation string) (v3Resolution, error) {
-	var result v3Resolution
-	if !project.ValidProfile(profile) || !validID(generation) {
-		return result, errors.New("invalid generation")
-	}
-	if err := validatePrivateDirectory(directory); err != nil {
-		return result, err
-	}
-	generations, err := ensurePrivateDirectory(directory, profilekey.Key(profile)+".generations")
-	if err != nil {
-		return result, err
-	}
-	root := filepath.Join(generations, generation)
-	if err := os.Mkdir(root, 0700); err != nil {
-		return result, err
-	}
-	success := false
-	defer func() {
-		if !success {
-			_ = os.RemoveAll(root)
-			_ = syncPrivateDirectory(generations)
-		}
-	}()
-	if err := validatePrivateDirectory(root); err != nil {
-		return result, err
-	}
-	if err := syncPrivateDirectory(generations); err != nil {
-		return result, err
-	}
-	if err := maintenance.Write(filepath.Join(root, "wal"), []byte{}); err != nil {
-		return result, err
-	}
-	success = true
-	result = v3Resolution{
-		Marker:     taskV3Marker{StorageMarker: taskStorageMarker, Profile: profile, Head: taskHeadFilename(profile)},
-		Head:       taskV3Head{Version: taskStorageVersion, Profile: profile, Generation: generation},
-		Generation: generation,
-		Root:       root,
-		WAL:        filepath.Join(root, "wal"),
-		Snapshot:   filepath.Join(root, "snapshot.json"),
-	}
-	return result, nil
 }
 
 func snapshotFromState(profile string, state *State, walOffset int64, lastEventAt string) materializedState {

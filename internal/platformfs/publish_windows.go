@@ -89,3 +89,27 @@ func (r *Root) PublishDirectory(ctx context.Context, from, to string) error {
 		}
 	}
 }
+
+// PublishFile moves a closed private file between checked parents. Store phase
+// transitions use this operation instead of rename followed by a fake dir fsync.
+func (r *Root) PublishFile(ctx context.Context, from, to string, replace bool) error {
+	source, err := r.child(from)
+	if err != nil {
+		return err
+	}
+	target, err := r.child(to)
+	if err != nil {
+		return err
+	}
+	sourceParent, err := guardDirectory(filepath.Dir(source), r.path, false)
+	if err != nil {
+		return err
+	}
+	defer sourceParent.close()
+	targetParent, err := guardDirectory(filepath.Dir(target), r.path, false)
+	if err != nil {
+		return err
+	}
+	defer targetParent.close()
+	return publish(ctx, source, target, replace)
+}

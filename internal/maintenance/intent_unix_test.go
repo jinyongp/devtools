@@ -34,3 +34,5 @@ func waitForWriterIntent(t *testing.T, path string) {
 	}
 
 }
+
+func directoryAlias(actual, alias string) error { return os.Symlink(actual, alias) }

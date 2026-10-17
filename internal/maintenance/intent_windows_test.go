@@ -2,6 +2,7 @@ package maintenance
 
 import (
 	"errors"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -50,4 +51,8 @@ func waitForWriterIntent(t *testing.T, path string) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
+}
+
+func directoryAlias(actual, alias string) error {
+	return exec.Command("cmd.exe", "/d", "/c", "mklink", "/J", alias, actual).Run()
 }

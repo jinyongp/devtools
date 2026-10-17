@@ -3,6 +3,7 @@ package maintenance
 import (
 	"context"
 	"errors"
+	"github.com/jinyongp/devtools/internal/platformfs"
 
 	"os"
 	"path/filepath"
@@ -73,7 +74,7 @@ func recoveryNeeded(root string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if !platformfs.DirectoryPrivate(parent, info) {
 		return false, errors.New("invalid transaction directory")
 	}
 	entries, err := os.ReadDir(parent)

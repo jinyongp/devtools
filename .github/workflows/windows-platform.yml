@@ -175,8 +175,23 @@ jobs:
         env:
           DEVTOOLS_TEST_SYSTEM_NETWORK: '1'
         run: |
-          & go test -json -count=1 -timeout 4m -run '^TestWindows' ./internal/privilege ./internal/hosts ./internal/truststore | Tee-Object -FilePath windows-network-security-results.jsonl
-          if ($LASTEXITCODE -ne 0) { throw 'Native helper/hosts/trust contract failed' }
+          $account = 'dvt' + [guid]::NewGuid().ToString('N').Substring(0, 12)
+          $password = 'Aa1!' + [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          Write-Output "::add-mask::$password"
+          $created = $false
+          try {
+            New-LocalUser -Name $account -Password (ConvertTo-SecureString $password -AsPlainText -Force) -AccountNeverExpires -UserMayNotChangePassword | Out-Null
+            $created = $true
+            Add-LocalGroupMember -Group (Get-LocalGroup -SID 'S-1-5-32-545') -Member $account
+            $env:DEVTOOLS_TEST_USER = $account
+            $env:DEVTOOLS_TEST_PASSWORD = $password
+            & go test -json -count=1 -timeout 4m -run '^TestWindows' ./internal/privilege ./internal/hosts ./internal/truststore | Tee-Object -FilePath windows-network-security-results.jsonl
+            if ($LASTEXITCODE -ne 0) { throw 'Native helper/hosts/trust contract failed' }
+          } finally {
+            Remove-Item Env:DEVTOOLS_TEST_USER -ErrorAction SilentlyContinue
+            Remove-Item Env:DEVTOOLS_TEST_PASSWORD -ErrorAction SilentlyContinue
+            if ($created) { Remove-LocalUser -Name $account }
+          }
           & go test -json -count=1 -timeout 3m -run '^TestLeafChainAndTLS|^TestNetworkListenersTLS|^TestNetworkSecondSocket|^TestTLSRejects|^TestHandlerForwardsWebSocket' ./internal/ca ./internal/proxy | Tee-Object -FilePath windows-network-runtime-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native TLS, HTTP2 and WebSocket contract failed' }
           & go vet ./internal/privilege ./internal/hosts ./internal/truststore ./internal/winimage

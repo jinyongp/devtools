@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 	"unsafe"
@@ -18,6 +20,17 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) == 2 && os.Args[1] == "__windows-helper-noninteractive" {
+		if windows.GetCurrentProcessToken().IsElevated() {
+			os.Exit(91)
+		}
+		failure := runPlatform(context.Background(), "hosts", []byte(`{}`), false, "must-not-be-opened.exe")
+		if failure == nil || failure.Code != "permission_required" {
+			os.Exit(92)
+		}
+		os.Exit(0)
+	}
+
 	if len(os.Args) == 3 && os.Args[1] == "__windows-network-helper" {
 		err := ServePipe(context.Background(), os.Args[2], func(ctx context.Context, kind string, body json.RawMessage) *protocol.Error {
 			var input struct {
@@ -260,5 +273,68 @@ func TestWindowsConstrainedPipeRejectsWrongPIDWithSameImage(t *testing.T) {
 	}
 	if err = <-connected; err != nil {
 		t.Fatal("wrong-PID fixture did not actually connect", err)
+	}
+}
+
+func TestWindowsConstrainedHelperRejectsDifferentSIDAndNoninteractiveElevation(t *testing.T) {
+	user, password := os.Getenv("DEVTOOLS_TEST_USER"), os.Getenv("DEVTOOLS_TEST_PASSWORD")
+	if user == "" || password == "" {
+		if os.Getenv("CI") == "true" {
+			t.Fatal("standard identity fixture required")
+		}
+		t.Skip("requires disposable standard identity")
+	}
+	userPtr, _ := windows.UTF16PtrFromString(user)
+	domainPtr, _ := windows.UTF16PtrFromString(".")
+	passwordPtr, _ := windows.UTF16PtrFromString(password)
+	var token windows.Token
+	ok, _, err := windows.NewLazySystemDLL("advapi32.dll").NewProc("LogonUserW").Call(uintptr(unsafe.Pointer(userPtr)), uintptr(unsafe.Pointer(domainPtr)), uintptr(unsafe.Pointer(passwordPtr)), 2, 0, uintptr(unsafe.Pointer(&token)))
+	if ok == 0 {
+		t.Fatal("standard account logon failed", err)
+	}
+	defer token.Close()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory, err := os.MkdirTemp(os.Getenv("PUBLIC"), "devtools-helper-public-fixture-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(directory)
+	candidate := filepath.Join(directory, "helper.test.exe")
+	if err = os.WriteFile(candidate, body, 0755); err != nil {
+		t.Fatal(err)
+	}
+	child := exec.Command(candidate, "__windows-helper-sleep")
+	child.Dir = directory
+	child.SysProcAttr = &syscall.SysProcAttr{Token: syscall.Token(token), HideWindow: true}
+	if err = child.Start(); err != nil {
+		t.Fatal("standard child launch failed", err)
+	}
+	defer func() { child.Process.Kill(); child.Wait() }()
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.SYNCHRONIZE, false, uint32(child.Process.Pid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(handle)
+	guard, identity, err := openHelperImage(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	// SID validation precedes the image comparison, even though this child is a public fixture copy.
+	if err = verifyHelperProcess(handle, identity); err == nil || !strings.Contains(err.Error(), "SID differs") {
+		t.Fatalf("different SID not rejected at identity boundary: %v", err)
+	}
+	check := exec.Command(candidate, "__windows-helper-noninteractive")
+	check.Dir = directory
+	check.SysProcAttr = &syscall.SysProcAttr{Token: syscall.Token(token), HideWindow: true}
+	if err = check.Run(); err != nil {
+		t.Fatal("noninteractive standard token attempted elevation or did not return permission_required", err)
 	}
 }

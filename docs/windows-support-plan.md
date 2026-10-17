@@ -241,7 +241,7 @@ private data, 원자적 publish, corruption detection 계약을 보존한다. �
 - `scripts/install.ps1`은 PowerShell 5.1/7 양쪽에서 실행한다. ARM64 OS에서 x64 PowerShell을 실행해도
   **OS native architecture**를 조회해 ARM64 배포물을 선택한다. 프로세스 bitness만으로 결정하지 않는다.
   기존 `install.sh`와 Homebrew 경로는 유지한다. Pages는 같은 release tag의 두 installer를 게시한다.
-  installer 입력은 `-Version`, `-Source`, `-BinDir`, `-AddToPath`, `-NoPath`를 제공한다. `-Source`는
+  installer 입력은 `-Version`, `-Source`, `-BinDir`, `-AddToPath`, `-NoPath`, `-Json`을 제공한다. `-Source`는
   explicit version과 함께만 허용하고 로컬 release directory 또는 HTTPS directory를 받는다.
   Windows install lock은 install directory의 `.devtools-install.lock`을 FileShare.None으로 연 handle이며
   installer와 Go updater가 같은 방식을 사용한다. lock file의 존재만으로 busy라 판단하지 않는다.
@@ -249,6 +249,9 @@ private data, 원자적 publish, corruption detection 계약을 보존한다. �
   `-NoPath`로 끌 수 있으며 기존 `-AddToPath` 입력도 유지한다. `-NoPath`가 우선한다.
   중복 경로를 추가하지 않으며 시스템 PATH·현재 세션·영구 execution policy·shell profile은 바꾸지 않는다.
   과거 W7I의 opt-in 검증 기록은 당시 계약으로 보존한다.
+- 설치기는 기본으로 제품 설명·설치 결과·경로·다음 실행 명령을 일반 텍스트로 안내한다.
+  자동화는 명시 `-Json`으로 성공 stdout/실패 stderr의 JSON envelope를 요청한다.
+  JSON 모드에는 진행·사용 안내를 섞지 않으며 CLI 자체의 JSON 계약은 바꾸지 않는다.
 - `dvt.exe`는 installer가 만드는 동일 binary copy다. symlink 권한이나 `.cmd` wrapper를 요구하지 않는다.
   설치 manifest에서 소유 hash/identity를 기록하며 외부 `dvt`가 있으면 기존 `skipped_conflict` 동작을 유지한다.
 - Windows updater는 Go 내부 구현으로 실행한다. `/bin/sh`를 호출하지 않는다. Unix installer 기반 update는 유지한다.

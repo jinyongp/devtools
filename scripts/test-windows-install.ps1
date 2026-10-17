@@ -16,7 +16,21 @@ function Require([bool]$Condition, [string]$Message) { if (-not $Condition) { th
 function Invoke-Json([string]$Executable, [string[]]$Arguments) {
     $text = & $Executable @Arguments 2> (Join-Path $root 'diagnostic.txt')
     Require ($LASTEXITCODE -eq 0) ('Command failed; see disposable diagnostic file: ' + $Executable)
+    if ($Arguments -contains '-Json') {
+        Require (-not (Get-Content -LiteralPath (Join-Path $root 'diagnostic.txt') -Raw)) 'Successful JSON installer wrote human text to stderr.'
+    }
     return ($text -join "`n" | ConvertFrom-Json)
+}
+function Invoke-Text([string]$Executable, [string[]]$Arguments) {
+    $text = & $Executable @Arguments 2> (Join-Path $root 'diagnostic.txt')
+    Require ($LASTEXITCODE -eq 0) ('Human installer failed; see disposable diagnostic file: ' + $Executable)
+    Require (-not (Get-Content -LiteralPath (Join-Path $root 'diagnostic.txt') -Raw)) 'Successful human installer wrote its guidance to stderr.'
+    return ($text -join "`n")
+}
+function Require-HumanGuidance([string]$Text, [string]$Directory) {
+    Require ($Text -notmatch '"schema_version"\s*:') 'Default installer exposed a JSON envelope.'
+    Require ($Text.Contains($Directory)) 'Installer guidance omitted the actual install directory.'
+    Require ($Text.Contains('--help')) 'Installer guidance omitted an executable next step.'
 }
 try {
     $env:OUTPUT_DIR = $releases; $env:COMMIT = $Commit; $env:TARGET_OS = 'windows'; $env:TARGET_ARCH = $Arch
@@ -57,7 +71,7 @@ irm https://jinyongp.dev/devtools/install.ps1 | iex
         $bin = Join-Path $root ('설치 경로 ' + [Guid]::NewGuid().ToString('N') + '/bin')
         $beforePath = [Environment]::GetEnvironmentVariable('Path', 'User')
         $beforeProcessPath = $env:PATH
-        $installed = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $bin)
+        $installed = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Json', '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $bin)
         Require ($installed.ok -and $installed.data.action -eq 'install') 'Bootstrap install response mismatch.'
         $registeredPath = [Environment]::GetEnvironmentVariable('Path', 'User')
         $entries = @($registeredPath -split ';' | Where-Object { $_ })
@@ -68,15 +82,25 @@ irm https://jinyongp.dev/devtools/install.ps1 | iex
         $registeredBin = Join-Path $root ('already on PATH ' + [Guid]::NewGuid().ToString('N'))
         $registeredPath += ';' + $registeredBin + '\'
         [Environment]::SetEnvironmentVariable('Path', $registeredPath, 'User')
-        $registered = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $registeredBin)
+        $registered = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Json', '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $registeredBin)
         Require ($registered.ok) 'Installation into an already registered PATH directory failed.'
         Require ([Environment]::GetEnvironmentVariable('Path', 'User') -ceq $registeredPath) 'Installation duplicated or rewrote an existing user PATH entry.'
-        $optOutBin = Join-Path $root ('no PATH ' + [Guid]::NewGuid().ToString('N'))
-        $optOut = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $optOutBin, '-AddToPath', '-NoPath')
-        Require ($optOut.ok) 'NoPath installation failed.'
+        $optOutBin = Join-Path $root ('no PATH 한글 ' + [Guid]::NewGuid().ToString('N'))
+        $optOut = Invoke-Text $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $optOutBin, '-AddToPath', '-NoPath')
+        Require-HumanGuidance $optOut $optOutBin
+        Require ($optOut.Contains((Join-Path $optOutBin 'devtools.exe'))) 'NoPath guidance omitted the direct executable path.'
         Require ([Environment]::GetEnvironmentVariable('Path', 'User') -ceq $registeredPath) 'NoPath changed user PATH or did not override AddToPath.'
         Require ($env:PATH -ceq $beforeProcessPath) 'Installer changed the parent process PATH.'
         Require ([Environment]::GetEnvironmentVariable('Path', 'Machine') -ceq $originalMachinePath) 'Installer changed system PATH.'
+        $failureOutput = & $shell '-NoProfile' '-NonInteractive' '-ExecutionPolicy' 'Bypass' '-File' $installer '-Version' 'invalid' '-Source' $releases '-Json' 2> (Join-Path $root 'diagnostic.txt')
+        Require ($LASTEXITCODE -ne 0) 'Invalid JSON-mode installation exited successfully.'
+        Require (-not ($failureOutput -join '').Trim()) 'JSON-mode failure wrote progress to stdout.'
+        $failure = Get-Content -LiteralPath (Join-Path $root 'diagnostic.txt') -Raw | ConvertFrom-Json
+        Require ($failure.schema_version -eq 1 -and -not $failure.ok -and $failure.error.code -eq 'install_failed') 'JSON-mode error response mismatch.'
+        $humanFailureOutput = & $shell '-NoProfile' '-NonInteractive' '-ExecutionPolicy' 'Bypass' '-File' $installer '-Version' 'invalid' '-Source' $releases 2> (Join-Path $root 'diagnostic.txt')
+        Require ($LASTEXITCODE -ne 0) 'Invalid human-mode installation exited successfully.'
+        $humanFailure = Get-Content -LiteralPath (Join-Path $root 'diagnostic.txt') -Raw
+        Require ($humanFailure -and $humanFailure -notmatch '"schema_version"\s*:') 'Human failure was missing or exposed JSON.'
         $main = Join-Path $bin 'devtools.exe'; $alias = Join-Path $bin 'dvt.exe'
         Require ([IO.File]::Exists($main) -and [IO.File]::Exists($alias)) 'Installer did not publish both executable copies.'
         Require ((Get-FileHash -Algorithm SHA256 -LiteralPath $main).Hash -ceq (Get-FileHash -Algorithm SHA256 -LiteralPath $alias).Hash) 'Alias copy differs.'
@@ -99,21 +123,21 @@ irm https://jinyongp.dev/devtools/install.ps1 | iex
         Require (-not [IO.File]::Exists((Join-Path $bin '.devtools-install-journal.json'))) 'Successful update left incomplete journal.'
         Require ([IO.File]::Exists((Join-Path $bin '.devtools-install.lock'))) 'Stable empty install lock was removed.'
         $bootstrapOwned = $true
-        $inline = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-Command', $bootstrapCommand)
-        Require ($inline.ok -and $inline.data.action -eq 'install') 'Argument-free inline bootstrap failed.'
+        $inline = Invoke-Text $shell @('-NoProfile', '-NonInteractive', '-Command', $bootstrapCommand)
+        Require-HumanGuidance $inline $bootstrapBin
         $inlineVersion = Invoke-Json (Join-Path $bootstrapBin 'devtools.exe') @('version')
-        Require ($inlineVersion.ok -and $inlineVersion.data.version -ceq $inline.data.version) 'Inline bootstrap installed a different release.'
+        Require ($inlineVersion.ok -and $inline.Contains($inlineVersion.data.version)) 'Human bootstrap did not describe the installed release.'
         $inlineEntries = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';'
         Require (@($inlineEntries | Where-Object { $_.TrimEnd('\') -ieq $bootstrapBin.TrimEnd('\') }).Count -eq 1) 'Inline bootstrap did not register its default directory.'
         Remove-Item -LiteralPath $bootstrapBin -Recurse -Force
         $bootstrapOwned = $false
         [Environment]::SetEnvironmentVariable('Path', $beforePath, 'User')
-        $results += @{ shell = $shell; shell_version = $shellVersion; arch = $Arch; emulated_x64 = ($shell -eq $emulatedShell); install = 'pass'; alias_update = 'pass'; main_update = 'pass'; default_user_path = 'pass'; path_idempotency = 'pass'; no_path_opt_out = 'pass'; inline_bootstrap = 'pass'; inline_release = $inline.data.version; inline_installer_source = 'candidate download fixture'; inline_artifacts = 'public latest stable'; runtime_path_empty = 'pass' }
+        $results += @{ shell = $shell; shell_version = $shellVersion; arch = $Arch; emulated_x64 = ($shell -eq $emulatedShell); install = 'pass'; alias_update = 'pass'; main_update = 'pass'; default_user_path = 'pass'; path_idempotency = 'pass'; no_path_opt_out = 'pass'; inline_bootstrap = 'pass'; inline_release = $inlineVersion.data.version; human_output = $inline; no_path_output = $optOut; human_error = 'pass'; json_error = 'pass'; json_success = 'pass'; human_failure_output = $humanFailure; inline_installer_source = 'candidate download fixture'; inline_artifacts = 'public latest stable'; runtime_path_empty = 'pass' }
     }
     $pathBefore = [Environment]::GetEnvironmentVariable('Path', 'User')
     $pathBin = Join-Path $root 'explicit PATH install/bin'
     try {
-        $installed = Invoke-Json $shells[1] @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $pathBin, '-AddToPath')
+        $installed = Invoke-Json $shells[1] @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Json', '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $pathBin, '-AddToPath')
         Require ($installed.ok) 'Explicit PATH installation failed.'
         $entries = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';'
         Require ([bool]($entries | Where-Object { $_ -ieq $pathBin })) 'Explicit AddToPath was not applied.'

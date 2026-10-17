@@ -110,6 +110,19 @@ a downloaded installer. The existing `-AddToPath` option remains supported;
 shell profiles, execution policy, or system PATH. If Known
 Folders are redirected, use the actual path reported by the installer.
 
+### Automation output on Windows
+
+The Windows installer explains what was installed and how to start using it.
+For scripts that need machine-readable output, download the installer and pass `-Json`:
+
+```powershell
+.\install.ps1 -Json
+```
+
+Success writes one JSON response to stdout. Failure writes a JSON error to stderr
+and exits with a nonzero status. Progress and getting-started messages are omitted
+in this mode. Regular devtools data commands continue to return JSON.
+
 ### Choose a release or use offline assets
 
 Version selection is optional. Replace `VERSION` with the release number without

@@ -4,7 +4,8 @@ param(
     [string]$Source,
     [string]$BinDir,
     [switch]$AddToPath = $true,
-    [switch]$NoPath
+    [switch]$NoPath,
+    [switch]$Json
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,6 +19,10 @@ function Write-Utf8Json([string]$Text, [bool]$ErrorStream = $false) {
     if ($ErrorStream) { $stream = [Console]::OpenStandardError() } else { $stream = [Console]::OpenStandardOutput() }
     $stream.Write($bytes, 0, $bytes.Length)
     $stream.Flush()
+}
+
+function Write-InstallerMessage([string]$Text) {
+    if (-not $Json) { [Console]::Out.WriteLine($Text) }
 }
 
 function Read-Artifact([string]$Directory, [string]$Name, [long]$Limit) {
@@ -109,6 +114,7 @@ function Invoke-Candidate([string]$Executable, [string]$Arguments, [string]$Inpu
 try {
     if ($env:DEVTOOLS_ISOLATED_ROOT) { throw 'Installation is unavailable in isolated mode.' }
     if ($Source -and -not $Version) { throw 'Source requires an explicit Version.' }
+    Write-InstallerMessage 'Installing devtools...'
     $phase = 'native_architecture'
     Add-Type -AssemblyName System.Net.Http
     Add-Type -AssemblyName System.IO.Compression
@@ -218,16 +224,46 @@ public static class DevtoolsInstallerNativeArchitecture {
             [Environment]::SetEnvironmentVariable('Path', (($entries + $BinDir) -join ';'), 'User')
         }
     }
-    Write-Utf8Json $output
-    if ($AddToPath -and -not $NoPath) {
-        [Console]::Error.WriteLine('Installed in ' + $BinDir + '. Open a new terminal to use devtools.')
+    if ($Json) {
+        Write-Utf8Json $output
     } else {
-        [Console]::Error.WriteLine('Installed in ' + $BinDir + '. Add this directory to your PATH to use devtools.')
+        Write-InstallerMessage ''
+        Write-InstallerMessage ('Installed devtools ' + $Version + '.')
+        Write-InstallerMessage 'Manage environment variables, project commands, and development servers.'
+        Write-InstallerMessage ''
+        Write-InstallerMessage ('Location: ' + $BinDir)
+        if ($result.data.alias.status -eq 'skipped_conflict') {
+            Write-InstallerMessage 'Command: devtools'
+            Write-InstallerMessage 'The shortcut dvt was left unchanged because another command already uses that name.'
+        } else {
+            Write-InstallerMessage 'Commands: devtools, dvt'
+        }
+        Write-InstallerMessage ''
+        if ($AddToPath -and -not $NoPath) {
+            Write-InstallerMessage 'Added to your user PATH. Open a new PowerShell window, then run:'
+            Write-InstallerMessage '  devtools --help'
+        } else {
+            Write-InstallerMessage 'PATH was left unchanged. Run devtools directly:'
+            $executable = (Join-Path $BinDir 'devtools.exe').Replace("'", "''")
+            Write-InstallerMessage ("  & '" + $executable + "' --help")
+        }
+        Write-InstallerMessage ''
+        Write-InstallerMessage 'Get started: https://github.com/jinyongp/devtools#get-started'
     }
 } catch {
     $message = 'Windows installation failed. Check the selected release, installation ownership/lock and any retained recovery journal before retrying.'
     if ($candidateFailure) { $message = $candidateFailure }
-    Write-Utf8Json (@{ schema_version = 1; ok = $false; error = @{ code = 'install_failed'; message = $message; stage = $phase; exception = $_.Exception.GetType().Name; line = $_.InvocationInfo.ScriptLineNumber } } | ConvertTo-Json -Compress) $true
+    if ($Json) {
+        Write-Utf8Json (@{ schema_version = 1; ok = $false; error = @{ code = 'install_failed'; message = $message; stage = $phase; exception = $_.Exception.GetType().Name; line = $_.InvocationInfo.ScriptLineNumber } } | ConvertTo-Json -Compress) $true
+    } else {
+        [Console]::Error.WriteLine('Installation failed.')
+        if ($candidateFailure) {
+            [Console]::Error.WriteLine($candidateFailure)
+        } else {
+            [Console]::Error.WriteLine('Check the installer options, your internet connection, and write access to the installation folder, then try again.')
+        }
+        [Console]::Error.WriteLine('Help: https://github.com/jinyongp/devtools/blob/main/docs/windows.md#troubleshooting-installation')
+    }
     exit 1
 } finally {
     [Net.ServicePointManager]::SecurityProtocol = $previousTls

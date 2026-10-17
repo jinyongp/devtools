@@ -10,7 +10,8 @@ Run in PowerShell to install the latest stable release:
 irm https://jinyongp.dev/devtools/install.ps1 | iex
 ```
 
-Open a new terminal, then check:
+The installer explains what devtools does, shows its location, and gives the next
+command to run. Open a new terminal, then check:
 
 ```powershell
 devtools version

@@ -1,0 +1,24 @@
+{"Time":"2026-10-17T05:32:14.3695448Z","Action":"start","Package":"github.com/jinyongp/devtools/internal/execution"}
+{"Time":"2026-10-17T05:32:14.3695448Z","Action":"start","Package":"github.com/jinyongp/devtools/internal/doctor"}
+{"Time":"2026-10-17T05:32:14.3898975Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/doctor","Test":"TestWindowsDoctorReportsEnvironmentCaseKeysOnly"}
+{"Time":"2026-10-17T05:32:14.3904569Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/doctor","Test":"TestWindowsDoctorReportsEnvironmentCaseKeysOnly","Output":"=== RUN   TestWindowsDoctorReportsEnvironmentCaseKeysOnly\n","OutputType":"frame"}
+{"Time":"2026-10-17T05:32:14.3904569Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/execution","Test":"TestWindowsCaseCollisionPreventsSpawn"}
+{"Time":"2026-10-17T05:32:14.3904569Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/execution","Test":"TestWindowsCaseCollisionPreventsSpawn","Output":"=== RUN   TestWindowsCaseCollisionPreventsSpawn\n","OutputType":"frame"}
+{"Time":"2026-10-17T05:32:14.3904569Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/execution","Test":"TestWindowsCaseCollisionPreventsSpawn","Output":"--- PASS: TestWindowsCaseCollisionPreventsSpawn (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T05:32:14.3904569Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/execution","Test":"TestWindowsCaseCollisionPreventsSpawn","Elapsed":0}
+{"Time":"2026-10-17T05:32:14.3904569Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/execution","Test":"TestWindowsCaseCollisionPreventsPortPreparation"}
+{"Time":"2026-10-17T05:32:14.3904569Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/execution","Test":"TestWindowsCaseCollisionPreventsPortPreparation","Output":"=== RUN   TestWindowsCaseCollisionPreventsPortPreparation\n","OutputType":"frame"}
+{"Time":"2026-10-17T05:32:14.3934226Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/doctor","Test":"TestWindowsDoctorReportsEnvironmentCaseKeysOnly","Output":"--- PASS: TestWindowsDoctorReportsEnvironmentCaseKeysOnly (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T05:32:14.3934226Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/doctor","Test":"TestWindowsDoctorReportsEnvironmentCaseKeysOnly","Elapsed":0}
+{"Time":"2026-10-17T05:32:14.3934226Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/doctor","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-17T05:32:14.3940019Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/execution","Test":"TestWindowsCaseCollisionPreventsPortPreparation","Output":"--- PASS: TestWindowsCaseCollisionPreventsPortPreparation (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T05:32:14.3940019Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/execution","Test":"TestWindowsCaseCollisionPreventsPortPreparation","Elapsed":0}
+{"Time":"2026-10-17T05:32:14.3940019Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/execution","Test":"TestWindowsCaseCollisionPreventsLiveRestartValidation"}
+{"Time":"2026-10-17T05:32:14.3940019Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/execution","Test":"TestWindowsCaseCollisionPreventsLiveRestartValidation","Output":"=== RUN   TestWindowsCaseCollisionPreventsLiveRestartValidation\n","OutputType":"frame"}
+{"Time":"2026-10-17T05:32:14.3954064Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/execution","Test":"TestWindowsCaseCollisionPreventsLiveRestartValidation","Output":"--- PASS: TestWindowsCaseCollisionPreventsLiveRestartValidation (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T05:32:14.3959199Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/execution","Test":"TestWindowsCaseCollisionPreventsLiveRestartValidation","Elapsed":0}
+{"Time":"2026-10-17T05:32:14.3959199Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/execution","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-17T05:32:14.3967491Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/doctor","Output":"ok  \tgithub.com/jinyongp/devtools/internal/doctor\t0.027s\n"}
+{"Time":"2026-10-17T05:32:14.3967491Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/doctor","Elapsed":0.027}
+{"Time":"2026-10-17T05:32:14.3980404Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/execution","Output":"ok  \tgithub.com/jinyongp/devtools/internal/execution\t0.028s\n"}
+{"Time":"2026-10-17T05:32:14.3980404Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/execution","Elapsed":0.028}

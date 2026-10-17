@@ -77,7 +77,8 @@ func diagnosticsOutputSchema() map[string]any {
 		"backup":    backup,
 		"issues":    map[string]any{"type": "array", "items": issue},
 		"network":   networkDiagnosticsSchema(),
-	}, "ready", "paths", "profiles", "ports", "processes", "proxy", "dashboard", "backup", "issues")
+		"platform":  platformDiagnosticsSchema(),
+	}, "ready", "paths", "profiles", "ports", "processes", "proxy", "dashboard", "backup", "issues", "platform")
 }
 
 func (a *App) registerDiagnostics() {
@@ -102,4 +103,15 @@ func (a *App) registerDiagnostics() {
 			})
 		},
 	})
+}
+
+func platformDiagnosticsSchema() map[string]any {
+	return object(map[string]any{
+		"os": stringSchema(), "arch": stringSchema(),
+		"runtime":            map[string]any{"enum": []string{"native", "wsl"}},
+		"storage_filesystem": stringSchema(), "storage_supported": boolSchema(),
+		"interop":      map[string]any{"enum": []string{"available", "unavailable", "not_applicable", "unknown"}},
+		"client_trust": map[string]any{"enum": []string{"local_only", "separate_windows_store"}},
+		"limitations":  arraySchema(stringSchema()),
+	}, "os", "arch", "runtime", "storage_filesystem", "storage_supported", "interop", "client_trust", "limitations")
 }

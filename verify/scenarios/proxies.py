@@ -126,18 +126,35 @@ try:
             if probe is not None:
                 probe.close()
 
-    # Literal .localhost routes remain implicit across the real v2 -> v3 upgrade.
+    # Literal .localhost routes remain implicit across the real v2 -> v4 upgrade.
     registry = next(home.rglob("ports/registry.json"))
     before = json.loads(registry.read_text())
-    assert before["version"] == 2
+    assert before["version"] == 4
+    normalized_assignments = before["assignments"]
+    assert all(set(a) == {"instance_id", "name", "port"} for a in normalized_assignments)
     mutate("stop")
     running = False
+    # Seed the historical joined format after stopping the daemon. New writes
+    # already use v4, so normal setup alone cannot exercise legacy migration.
+    instances = {i["instance_id"]: i for i in before["instances"]}
+    legacy = {
+        "version": 2,
+        "instances": before["instances"],
+        "assignments": [dict(instances[a["instance_id"]], name=a["name"], port=a["port"])
+                        for a in normalized_assignments],
+        "reservations": before["reservations"],
+    }
+    registry.write_text(json.dumps(legacy))
+    legacy_bytes = registry.read_bytes()
+    assert all(r["status"] == "ready" for r in api("proxy", "list")["items"])
+    assert registry.read_bytes() == legacy_bytes, "Read migrated the legacy registry"
     with socket.socket() as candidate:
         candidate.bind(("127.0.0.1", 0))
         tls_port = candidate.getsockname()[1]
     mutate("configure", "--http-address", "127.0.0.1:24400", "--https-address", f"127.0.0.1:{tls_port}")
     after = json.loads(registry.read_text())
-    assert after["version"] == 3 and after["assignments"] == before["assignments"]
+    assert after["version"] == 4 and after["assignments"] == normalized_assignments
+    assert after["instances"] == before["instances"]
     assert all(r in after["reservations"] for r in before["reservations"])
     mutate("start")
     running = True
@@ -164,7 +181,7 @@ try:
     assert b"replacement" in https_read("main.shop.localhost")
     api("proxy", "up", "app", "--dir", str(feature), "--request-id", str(uuid.uuid4()))
     assert b"feature" in https_read("feature.shop.localhost")
-    print("Packaged v2/v3 assignments, implicit .localhost TLS and persistent down tombstone verified")
+    print("Packaged v2-to-v4 migration, normalized assignments, implicit .localhost TLS and persistent down tombstone verified")
 finally:
     if running:
         try: mutate("stop")

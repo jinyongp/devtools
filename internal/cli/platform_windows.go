@@ -6,21 +6,18 @@ import (
 	"strings"
 )
 
-// Removed as native backends become available in W2-W7. In particular, Unix
-// permission bits and unsupported locks must never appear to protect a store.
-func platformCommand(name string) *protocol.Error {
-	if name == "version" || name == "update" {
-		return nil
-	}
-	return protocol.NewError("unsupported_platform", "Windows native features are not implemented in this intermediate build.", 3, nil)
-}
+func platformCommand(string) *protocol.Error { return nil }
 
-// InternalPlatformPreflight also rejects private daemon/helper entry points;
-// guarding public commands alone would leave these mutation paths reachable.
+// Native implementations validate their own ownership and input. Unix-only or
+// unknown private entry points remain unavailable before any store is opened.
 func InternalPlatformPreflight(args []string, diagnostic io.Writer) int {
 	if len(args) == 0 || !strings.HasPrefix(args[0], "__") {
 		return 0
 	}
-	_ = protocol.Failure(diagnostic, platformCommand("internal"))
+	switch args[0] {
+	case "__complete", "__trust-check", "__exposure-provider", "__proxy-serve", "__process-serve", "__dashboard-serve":
+		return 0
+	}
+	_ = protocol.Failure(diagnostic, protocol.NewError("unsupported_platform", "This private entry point is unavailable on Windows.", 3, nil))
 	return 3
 }

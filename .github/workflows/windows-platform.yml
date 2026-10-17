@@ -7,7 +7,7 @@ on:
         description: Focused feedback; full remains the final completion gate
         type: choice
         default: full
-        options: [full, network, installer, providers]
+        options: [full, network, installer, providers, completion]
   push:
     paths:
       - .github/workflows/windows-platform.yml
@@ -267,41 +267,15 @@ jobs:
           & pwsh -NoProfile -NonInteractive -File scripts/test-windows-install.ps1 -Arch '${{ matrix.arch }}' -Commit $env:GITHUB_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Native PowerShell installer/update tests failed' }
 
-      - name: Build native CLI and check explicit intermediate failures
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
+      - name: Test public native CLI and PowerShell completion
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'completion' }}
         run: |
-          $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $false
           & go build -o devtools.exe ./cmd/devtools
           if ($LASTEXITCODE -ne 0) { throw 'Native CLI build failed' }
-          function Invoke-BoundaryCli([string[]] $CliArgs) {
-            $start = [Diagnostics.ProcessStartInfo]::new((Resolve-Path .\devtools.exe).Path)
-            $start.UseShellExecute = $false
-            $start.RedirectStandardOutput = $true
-            $start.RedirectStandardError = $true
-            foreach ($arg in $CliArgs) { $start.ArgumentList.Add($arg) }
-            $process = [Diagnostics.Process]::new()
-            $process.StartInfo = $start
-            try {
-              if (-not $process.Start()) { throw 'CLI did not start' }
-              $stdout = $process.StandardOutput.ReadToEndAsync()
-              $stderr = $process.StandardError.ReadToEndAsync()
-              $process.WaitForExit()
-              return [pscustomobject]@{ Code = $process.ExitCode; Out = $stdout.Result; Err = $stderr.Result }
-            } finally { $process.Dispose() }
-          }
-          $version = Invoke-BoundaryCli -CliArgs @('version')
-          Write-Host "Version exit: $($version.Code)"
-          if ($version.Code -ne 0 -or -not ($version.Out | ConvertFrom-Json).ok) { throw "Native version failed: $($version.Err)" }
-          $isolation = Join-Path $env:TEMP ('devtools-unimplemented-' + [guid]::NewGuid().ToString('N'))
-          $result = Invoke-BoundaryCli -CliArgs @('var', 'list', '--profile', 'windows-boundary', '--isolated-root', $isolation)
-          Write-Host "Unsupported public command exit: $($result.Code)"
-          $result.Err | Set-Content unsupported.json
-          if ($result.Code -ne 3 -or ($result.Err | ConvertFrom-Json).error.code -ne 'unsupported_platform' -or (Test-Path $isolation)) { throw "Unsafe intermediate public command: $($result.Err)" }
-          $result = Invoke-BoundaryCli -CliArgs @('__dashboard-serve', $isolation, $isolation)
-          Write-Host "Unsupported internal command exit: $($result.Code)"
-          $result.Err | Set-Content unsupported-internal.json
-          if ($result.Code -ne 3 -or ($result.Err | ConvertFrom-Json).error.code -ne 'unsupported_platform' -or (Test-Path $isolation)) { throw "Unsafe intermediate internal command: $($result.Err)" }
+          & pwsh -NoProfile -NonInteractive -File scripts/test-windows-completion.ps1 -Binary (Resolve-Path .\devtools.exe).Path
+          if ($LASTEXITCODE -ne 0) { throw 'Public Windows CLI/completion contract failed' }
+          & go test -json -count=1 -run '^TestWindowsPublicPlatform|^TestOutputModeCatalog|^TestVersionReportsMachine|^TestProtocolV7|^TestGeneratedConfig|^TestDiagnostics|^TestDynamicCompletion|^TestRun' ./internal/cli | Tee-Object -FilePath windows-public-contract-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native public CLI contracts failed' }
       - name: Preserve boundary test results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -329,6 +303,8 @@ jobs:
             windows-network-runtime-results.jsonl
             windows-tls-repeat-results.jsonl
             windows-provider-results.jsonl
+            windows-completion-results.json
+            windows-public-contract-results.jsonl
             windows-update-contract-results.jsonl
             windows-install-transaction-results.jsonl
             windows-install-results.json

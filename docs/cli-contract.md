@@ -9,7 +9,8 @@ HTTPS·도메인·공유와 통합 시작의 확장 계약은
 [포트 관리 계약](port-design.md)을 따른다. worktree별 `.localhost` route는
 [로컬 reverse proxy](proxy.md)를 참고한다. 저장된 profile의 조회·비교·환경 간 이동은
 [Profile 관리](profiles.md), `project up/status/logs/restart/down`은 [프로세스 관리](processes.md#프로젝트-서버를-함께-관리하기)를 따른다.
-v0.23.0부터 CLI protocol v6를 사용하며, `run`의 인자 구분 규칙이 바뀐다.
+현재 소스는 Windows 후보를 위한 CLI protocol v7이다. v0.23.0의 v6에서 도입한 `run` 인자 구분 규칙을 유지한다.
+새 platform 진단·PowerShell shell과 버전 경계는 [v7 마이그레이션](cli-output.md#protocol-v7-마이그레이션)을 따른다.
 이전 v0.22.3은 protocol v5를 사용한다. 버전별 사용법은 아래 명령 실행 절에,
 전환 규칙은 [CLI 출력 계약](cli-output.md#protocol-v6-마이그레이션)에 정리했다.
 

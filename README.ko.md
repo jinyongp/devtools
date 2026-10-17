@@ -5,7 +5,12 @@
 devtools는 프로젝트의 개발환경과 작업을 한곳에서 관리하는 CLI입니다.
 환경변수와 secret을 저장해 명령 실행에 사용하고, 개발 서버의 실행·포트·로컬 주소를
 관리할 수 있습니다. 작업과 진행 기록을 남겨 다른 세션이나 에이전트에서 이어갈 수도 있습니다.
-macOS, Linux, WSL에서 사용할 수 있습니다.
+macOS, Linux, WSL에서 사용할 수 있습니다. 다음 릴리스를 위한 Windows x64·ARM64
+구현도 포함하며, 이 작업에서 Windows 릴리스 자산을 게시하지는 않았습니다.
+대상은 Windows 11 25H2·26H2이고 검증은 GitHub Actions의 x64(Server 2025 테스트
+호스트)·ARM64(Windows 11)를 기준으로 합니다. 실제 PC UI·브라우저·터미널 및
+WSL2/Windows 네트워크 연동은 미검증입니다. [Windows 안내](docs/windows.md)와
+[WSL 안내](docs/wsl.md)에서 설치 경계와 한계를 확인하세요.
 
 ## 설치
 

@@ -6,7 +6,12 @@ devtools is a CLI for managing your project's development environment and work.
 Store environment variables and secrets, pass them to commands, and manage
 development servers, ports, and local URLs. Track tasks and progress so you can
 pick up where you left off in another session or with a coding agent.
-It runs on macOS, Linux, and WSL.
+It runs on macOS, Linux, and WSL. Native Windows x64/ARM64 support is implemented
+for the next release; matching Windows assets have not been published by this
+work. The target is Windows 11 25H2/26H2. Validation uses GitHub Actions x64
+(Server 2025 test host) and ARM64 (Windows 11), with real-PC UI/browser/terminal
+and WSL2-to-Windows networking unverified. See [Windows support](docs/windows.md)
+and [WSL setup](docs/wsl.md) for installation boundaries and limitations.
 
 ## Install
 

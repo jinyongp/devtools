@@ -220,3 +220,12 @@ Release CI의 macOS와 Linux job은 모두 `devtools run test:installed`로 등�
 이때 `proxies` 시나리오는 설치된 실행 파일로 route 전달, WebSocket, 동적 port 변경,
 daemon 재시작과 listener reservation 유지를 확인한다. WSL 고유 동작은 실제 WSL
 환경에서 별도로 검증할 수 있다.
+
+
+## Windows 네이티브 후보
+
+Windows는 다음 릴리스를 위한 x64·ARM64 구현 후보입니다. 아직 게시하지 않은 Windows
+자산을 현재 stable URL에서 받으라고 안내하지 않습니다. 같은 후보의 `install.ps1`·ZIP·
+checksum을 사용하세요. [Windows 설치·업데이트·지원 한계](windows.md)에 기본 경로,
+`-Version`/`-Source`/`-BinDir`/`-AddToPath`, dvt 복사본, 실행 중인 image 교체와 복구를
+정리했습니다. WSL에는 Linux용 설치를 유지합니다.

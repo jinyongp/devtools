@@ -1293,12 +1293,19 @@ func traceLegacyStart(t *testing.T, manager *Manager) func(string, Record, Statu
 	t.Helper()
 	started := time.Now()
 	var mu sync.Mutex
-	var rows []string
+	type row struct {
+		elapsed time.Duration
+		stage   string
+		record  Record
+		status  Status
+		err     error
+	}
+	var rows []row
 	observe := func(stage string, record Record, status Status, err error) {
-		row := fmt.Sprintf("elapsed=%s stage=%s record=%+v status=%+v error=%#v message=%v", time.Since(started), stage, record, status, err, err)
+		entry := row{time.Since(started), stage, record, status, err}
 		mu.Lock()
 		if len(rows) < 512 {
-			rows = append(rows, row)
+			rows = append(rows, entry)
 		}
 		mu.Unlock()
 	}
@@ -1315,10 +1322,10 @@ func traceLegacyStart(t *testing.T, manager *Manager) func(string, Record, Statu
 			return
 		}
 		mu.Lock()
-		copyRows := append([]string(nil), rows...)
+		copyRows := append([]row(nil), rows...)
 		mu.Unlock()
 		for _, row := range copyRows {
-			t.Log("LEGACY_START_TRACE", row)
+			t.Logf("LEGACY_START_TRACE elapsed=%s stage=%s record=%+v status=%+v error=%#v message=%v", row.elapsed, row.stage, row.record, row.status, row.err, row.err)
 		}
 	})
 	return observe

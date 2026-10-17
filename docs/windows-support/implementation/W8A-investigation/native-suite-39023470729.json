@@ -1,0 +1,33 @@
+{
+  "source": "4f1b4a062177c08bc95aff379e624c6d7d322fe5",
+  "run": "https://github.com/jinyongp/devtools/actions/runs/39023470729",
+  "overall": "CANCELED after confirmed macOS fixture failures; completed steps only, not final evidence",
+  "architectures": {
+    "amd64": {
+      "test_rows": {
+        "run": 925,
+        "output": 1877,
+        "pass": 923,
+        "skip": 2
+      },
+      "package_passes": 36,
+      "skips": [
+        "TestEditBrowserFixture",
+        "TestReplaceLargeBeforeImage"
+      ]
+    },
+    "arm64": {
+      "test_rows": {
+        "run": 925,
+        "output": 1877,
+        "pass": 923,
+        "skip": 2
+      },
+      "package_passes": 36,
+      "skips": [
+        "TestEditBrowserFixture",
+        "TestReplaceLargeBeforeImage"
+      ]
+    }
+  }
+}

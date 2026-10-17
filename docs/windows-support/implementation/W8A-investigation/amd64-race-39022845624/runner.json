@@ -1,0 +1,13 @@
+{
+  "focus": "race",
+  "powershell": "7.6.6",
+  "commit": "949c58b17884dd602718f643bbd2ea0f5dc00c1a",
+  "runner_image": "20261007.264.1",
+  "architecture": "amd64",
+  "workflow_commit": "949c58b17884dd602718f643bbd2ea0f5dc00c1a",
+  "build": "26100",
+  "version": "10.0.26100",
+  "display_version": "24H2",
+  "os": "Microsoft Windows Server 2025 Datacenter",
+  "image_os": "win25-vs2026"
+}

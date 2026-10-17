@@ -1,0 +1,16 @@
+{"Time":"2026-10-17T10:31:48.88304Z","Action":"start","Package":"github.com/jinyongp/devtools/internal/netsetup"}
+{"Time":"2026-10-17T10:31:48.8997796Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/netsetup","Test":"TestWindowsNativeSetupReplayWithoutSystemMutation"}
+{"Time":"2026-10-17T10:31:48.9003114Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/netsetup","Test":"TestWindowsNativeSetupReplayWithoutSystemMutation","Output":"=== RUN   TestWindowsNativeSetupReplayWithoutSystemMutation\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:31:48.9916844Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/netsetup","Test":"TestWindowsNativeSetupReplayWithoutSystemMutation","Output":"--- PASS: TestWindowsNativeSetupReplayWithoutSystemMutation (0.09s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:31:48.9916844Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/netsetup","Test":"TestWindowsNativeSetupReplayWithoutSystemMutation","Elapsed":0.09}
+{"Time":"2026-10-17T10:31:48.9916844Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/netsetup","Test":"TestWindowsExecutableIdentityRetainsImageUntilClose"}
+{"Time":"2026-10-17T10:31:48.9916844Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/netsetup","Test":"TestWindowsExecutableIdentityRetainsImageUntilClose","Output":"=== RUN   TestWindowsExecutableIdentityRetainsImageUntilClose\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:31:48.9957886Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/netsetup","Test":"TestWindowsExecutableIdentityRetainsImageUntilClose","Output":"--- PASS: TestWindowsExecutableIdentityRetainsImageUntilClose (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:31:48.9957886Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/netsetup","Test":"TestWindowsExecutableIdentityRetainsImageUntilClose","Elapsed":0}
+{"Time":"2026-10-17T10:31:48.9957886Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/netsetup","Test":"TestWindowsNativeSetupDoesNotMutateCapabilities"}
+{"Time":"2026-10-17T10:31:48.9957886Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/netsetup","Test":"TestWindowsNativeSetupDoesNotMutateCapabilities","Output":"=== RUN   TestWindowsNativeSetupDoesNotMutateCapabilities\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:31:49.0001746Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/netsetup","Test":"TestWindowsNativeSetupDoesNotMutateCapabilities","Output":"--- PASS: TestWindowsNativeSetupDoesNotMutateCapabilities (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:31:49.0001746Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/netsetup","Test":"TestWindowsNativeSetupDoesNotMutateCapabilities","Elapsed":0}
+{"Time":"2026-10-17T10:31:49.0001746Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/netsetup","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:31:49.0026359Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/netsetup","Output":"ok  \tgithub.com/jinyongp/devtools/internal/netsetup\t0.120s\n"}
+{"Time":"2026-10-17T10:31:49.0026359Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/netsetup","Elapsed":0.12}

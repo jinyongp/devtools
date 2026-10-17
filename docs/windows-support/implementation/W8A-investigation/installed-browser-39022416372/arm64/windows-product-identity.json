@@ -1,0 +1,8 @@
+{
+  "exe_sha256": "d1d8d3b137ecf9507cf60858a5b7a1e8739aa9d9dc3897b646851d91c4b713ec",
+  "zip_sha256": "151999666adbb4159690a8622dc93625754726264cd719e1cd15d867848766e5",
+  "zip": "devtools_0.0.0-windows-candidate_windows_arm64.zip",
+  "commit": "949c58b17884dd602718f643bbd2ea0f5dc00c1a",
+  "version": "0.0.0-windows-candidate",
+  "architecture": "arm64"
+}

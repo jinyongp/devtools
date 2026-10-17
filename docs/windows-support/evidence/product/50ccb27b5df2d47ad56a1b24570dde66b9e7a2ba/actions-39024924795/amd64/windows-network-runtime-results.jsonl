@@ -1,0 +1,31 @@
+{"Time":"2026-10-17T10:36:07.529918Z","Action":"start","Package":"github.com/jinyongp/devtools/internal/ca"}
+{"Time":"2026-10-17T10:36:07.5509925Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/ca","Test":"TestLeafChainAndTLSDoNotRequireOSTrust"}
+{"Time":"2026-10-17T10:36:07.5509925Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/ca","Test":"TestLeafChainAndTLSDoNotRequireOSTrust","Output":"=== RUN   TestLeafChainAndTLSDoNotRequireOSTrust\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:07.6427861Z","Action":"start","Package":"github.com/jinyongp/devtools/internal/proxy"}
+{"Time":"2026-10-17T10:36:07.6698937Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestNetworkListenersTLSRedirectAndIndependentLifecycle"}
+{"Time":"2026-10-17T10:36:07.6704157Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestNetworkListenersTLSRedirectAndIndependentLifecycle","Output":"=== RUN   TestNetworkListenersTLSRedirectAndIndependentLifecycle\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:07.691741Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/ca","Test":"TestLeafChainAndTLSDoNotRequireOSTrust","Output":"--- PASS: TestLeafChainAndTLSDoNotRequireOSTrust (0.14s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:07.6921545Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/ca","Test":"TestLeafChainAndTLSDoNotRequireOSTrust","Elapsed":0.14}
+{"Time":"2026-10-17T10:36:07.6921545Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/ca","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:07.6971727Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/ca","Output":"ok  \tgithub.com/jinyongp/devtools/internal/ca\t0.167s\n"}
+{"Time":"2026-10-17T10:36:07.6971727Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/ca","Elapsed":0.167}
+{"Time":"2026-10-17T10:36:08.1867285Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestNetworkListenersTLSRedirectAndIndependentLifecycle","Output":"    network_runtime_test.go:172: single cold TLS request phases: [tls_start=1ms tls_done_ok_true=5ms request_written_ok_true=5ms first_response_byte=8ms]\n"}
+{"Time":"2026-10-17T10:36:08.633082Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestNetworkListenersTLSRedirectAndIndependentLifecycle","Output":"--- PASS: TestNetworkListenersTLSRedirectAndIndependentLifecycle (0.96s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:08.633082Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestNetworkListenersTLSRedirectAndIndependentLifecycle","Elapsed":0.96}
+{"Time":"2026-10-17T10:36:08.633082Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestNetworkSecondSocketFailureRollsBackFirst"}
+{"Time":"2026-10-17T10:36:08.633082Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestNetworkSecondSocketFailureRollsBackFirst","Output":"=== RUN   TestNetworkSecondSocketFailureRollsBackFirst\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:08.8132179Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestNetworkSecondSocketFailureRollsBackFirst","Output":"    network_runtime_test.go:244: network fixture result: code=port_in_use details=map[]\n"}
+{"Time":"2026-10-17T10:36:08.8314925Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestNetworkSecondSocketFailureRollsBackFirst","Output":"--- PASS: TestNetworkSecondSocketFailureRollsBackFirst (0.20s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:08.8314925Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestNetworkSecondSocketFailureRollsBackFirst","Elapsed":0.2}
+{"Time":"2026-10-17T10:36:08.8314925Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI"}
+{"Time":"2026-10-17T10:36:08.8314925Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"=== RUN   TestTLSRejectsUnknownSNI\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:09.1192695Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"2026/10/17 10:36:09 http: TLS handshake error from 127.0.0.1:53939: inactive TLS route\n"}
+{"Time":"2026-10-17T10:36:09.1343762Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"--- PASS: TestTLSRejectsUnknownSNI (0.30s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:09.1350562Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Elapsed":0.3}
+{"Time":"2026-10-17T10:36:09.1368768Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestHandlerForwardsWebSocketUpgrade"}
+{"Time":"2026-10-17T10:36:09.1368768Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestHandlerForwardsWebSocketUpgrade","Output":"=== RUN   TestHandlerForwardsWebSocketUpgrade\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:09.1389322Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestHandlerForwardsWebSocketUpgrade","Output":"--- PASS: TestHandlerForwardsWebSocketUpgrade (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:09.1389322Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestHandlerForwardsWebSocketUpgrade","Elapsed":0}
+{"Time":"2026-10-17T10:36:09.1395099Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:09.1437529Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Output":"ok  \tgithub.com/jinyongp/devtools/internal/proxy\t1.501s\n"}
+{"Time":"2026-10-17T10:36:09.1437529Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Elapsed":1.501}

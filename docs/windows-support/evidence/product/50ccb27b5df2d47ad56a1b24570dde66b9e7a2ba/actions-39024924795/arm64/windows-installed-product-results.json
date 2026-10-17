@@ -1,0 +1,15 @@
+{
+  "commit": "50ccb27b5df2d47ad56a1b24570dde66b9e7a2ba",
+  "version": "0.0.0-windows-candidate",
+  "protocol": 7,
+  "exe_sha256": "6e34a6d667445c2a9cf5ccfcaca60b827849a1ec4e50db23f7ce17fbcba44a56",
+  "steps": {
+    "candidate_install_and_alias": "pass",
+    "values_secret_and_task_journal": "pass",
+    "managed_readiness_retry_restart_stop_and_verified_tls": "pass",
+    "encrypted_profile_transfer_preview_apply_retry": "pass"
+  },
+  "isolated": true,
+  "os_trust_modified": false,
+  "real_pc": "NOT RUN"
+}

@@ -1,0 +1,59 @@
+{
+  "run": "https://github.com/jinyongp/devtools/actions/runs/39024924795",
+  "artifacts": [
+    {
+      "id": 12098835305,
+      "name": "macos-agent-skill",
+      "size_in_bytes": 9701,
+      "digest": "sha256:f268b1ea647b71dfca23f25ac0b5892e9c647a2bd9982886fcd1eec719c8d70f",
+      "expired": false,
+      "created_at": "2026-10-17T10:34:12Z",
+      "expires_at": "2027-01-15T10:26:54Z"
+    },
+    {
+      "id": 12098656553,
+      "name": "windows-product-arm64",
+      "size_in_bytes": 4936215,
+      "digest": "sha256:207eca13c8d5e3cc14f4c1f2a5afe5c971c3b9bb8b0d066f611cafe17f0a0a70",
+      "expired": false,
+      "created_at": "2026-10-17T10:38:36Z",
+      "expires_at": "2026-10-24T10:38:34Z"
+    },
+    {
+      "id": 12098477173,
+      "name": "windows-platform-arm64",
+      "size_in_bytes": 5052543,
+      "digest": "sha256:e389f7bff43db7f45d914d9db37b671d345b845086b15dcbbcf353c88df819c8",
+      "expired": false,
+      "created_at": "2026-10-17T10:38:39Z",
+      "expires_at": "2026-10-24T10:38:37Z"
+    },
+    {
+      "id": 12098313007,
+      "name": "windows-product-amd64",
+      "size_in_bytes": 5591757,
+      "digest": "sha256:2b5033d05bc05ccbf748e991308d6d08ce5db7fd1ef049d5c1f76fa498bf3346",
+      "expired": false,
+      "created_at": "2026-10-17T10:40:59Z",
+      "expires_at": "2026-10-24T10:40:58Z"
+    },
+    {
+      "id": 12098223546,
+      "name": "windows-platform-amd64",
+      "size_in_bytes": 5727483,
+      "digest": "sha256:47633ae500625aaaa10e4a900357d0f2daf102848a728b79843fb5a58505c668",
+      "expired": false,
+      "created_at": "2026-10-17T10:41:01Z",
+      "expires_at": "2026-10-24T10:41:00Z"
+    },
+    {
+      "id": 12097914928,
+      "name": "release-assets",
+      "size_in_bytes": 30398939,
+      "digest": "sha256:16bf2163a87f11aff2781b2c013f36f71e5c3a60152a813754c4cd1733414164",
+      "expired": false,
+      "created_at": "2026-10-17T10:42:45Z",
+      "expires_at": "2026-11-16T10:42:43Z"
+    }
+  ]
+}

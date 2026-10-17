@@ -1,0 +1,10 @@
+{
+  "source": "50ccb27b5df2d47ad56a1b24570dde66b9e7a2ba",
+  "observed_checks": [
+    "go list -deps ./cmd/devtools",
+    "GOOS=windows GOARCH=arm64 go list -deps ./cmd/devtools"
+  ],
+  "testfixture_linked_into_cli": false,
+  "archive_structure": "Each Windows ZIP independently inspected: one regular devtools.exe only.",
+  "windows_images_executed_locally": false
+}

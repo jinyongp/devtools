@@ -1,0 +1,16 @@
+{"Time":"2026-10-17T03:32:18.2265385-07:00","Action":"start","Package":"github.com/jinyongp/devtools/internal/dashboard"}
+{"Time":"2026-10-17T03:32:18.2265385-07:00","Action":"start","Package":"github.com/jinyongp/devtools/internal/proxy"}
+{"Time":"2026-10-17T03:32:18.2576597-07:00","Action":"run","Package":"github.com/jinyongp/devtools/internal/dashboard","Test":"TestWindowsDetachedDashboardLifecycleAndAuthorization"}
+{"Time":"2026-10-17T03:32:18.2576597-07:00","Action":"output","Package":"github.com/jinyongp/devtools/internal/dashboard","Test":"TestWindowsDetachedDashboardLifecycleAndAuthorization","Output":"=== RUN   TestWindowsDetachedDashboardLifecycleAndAuthorization\n","OutputType":"frame"}
+{"Time":"2026-10-17T03:32:18.2849869-07:00","Action":"run","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestWindowsDetachedHTTPProxyLifecycleAndAuthorization"}
+{"Time":"2026-10-17T03:32:18.2849869-07:00","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestWindowsDetachedHTTPProxyLifecycleAndAuthorization","Output":"=== RUN   TestWindowsDetachedHTTPProxyLifecycleAndAuthorization\n","OutputType":"frame"}
+{"Time":"2026-10-17T03:32:18.5730659-07:00","Action":"output","Package":"github.com/jinyongp/devtools/internal/dashboard","Test":"TestWindowsDetachedDashboardLifecycleAndAuthorization","Output":"--- PASS: TestWindowsDetachedDashboardLifecycleAndAuthorization (0.31s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T03:32:18.5730659-07:00","Action":"pass","Package":"github.com/jinyongp/devtools/internal/dashboard","Test":"TestWindowsDetachedDashboardLifecycleAndAuthorization","Elapsed":0.31}
+{"Time":"2026-10-17T03:32:18.5730659-07:00","Action":"output","Package":"github.com/jinyongp/devtools/internal/dashboard","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-17T03:32:18.5845469-07:00","Action":"output","Package":"github.com/jinyongp/devtools/internal/dashboard","Output":"ok  \tgithub.com/jinyongp/devtools/internal/dashboard\t0.358s\n"}
+{"Time":"2026-10-17T03:32:18.5845469-07:00","Action":"pass","Package":"github.com/jinyongp/devtools/internal/dashboard","Elapsed":0.358}
+{"Time":"2026-10-17T03:32:19.0361357-07:00","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestWindowsDetachedHTTPProxyLifecycleAndAuthorization","Output":"--- PASS: TestWindowsDetachedHTTPProxyLifecycleAndAuthorization (0.75s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T03:32:19.0361357-07:00","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestWindowsDetachedHTTPProxyLifecycleAndAuthorization","Elapsed":0.75}
+{"Time":"2026-10-17T03:32:19.0361357-07:00","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-17T03:32:19.0409871-07:00","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Output":"ok  \tgithub.com/jinyongp/devtools/internal/proxy\t0.814s\n"}
+{"Time":"2026-10-17T03:32:19.0409871-07:00","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Elapsed":0.814}

@@ -1,0 +1,8 @@
+{
+  "arm64_race": "not_supported",
+  "architecture": "amd64",
+  "compiler": "C:\\mingw64\\bin\\gcc.exe",
+  "gorace": "halt_on_error=1 atexit_sleep_ms=0",
+  "synchronization_library": "C:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/lib/../lib/libsynchronization.a",
+  "target": "x86_64-w64-mingw32"
+}

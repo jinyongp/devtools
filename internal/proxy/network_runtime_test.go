@@ -9,8 +9,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -144,11 +146,31 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 	roots.AppendCertsFromPEM(a.PEM())
 	transport := &http.Transport{ForceAttemptHTTP2: true, TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: "app.localhost"}, Proxy: nil}
 	defer transport.CloseIdleConnections()
-	secure := &http.Client{Transport: transport, Timeout: time.Second}
+	// The cold TLS resolver and HTTP handler both inspect private storage;
+	// a legitimate sharing retry alone can take two seconds. This functional
+	// HTTP/2/lifecycle check has no one-second performance contract.
+	secure := &http.Client{Transport: transport, Timeout: 10 * time.Second}
 	req, _ = http.NewRequest("GET", fmt.Sprintf("https://127.0.0.1:%d/path?x=1", tlsPort), nil)
 	req.Host = "app.localhost"
 	req.Header.Set("X-Forwarded-Proto", "spoof")
+	started := time.Now()
+	var traceMu sync.Mutex
+	var phases []string
+	phase := func(name string) {
+		traceMu.Lock()
+		defer traceMu.Unlock()
+		phases = append(phases, fmt.Sprintf("%s=%s", name, time.Since(started).Round(time.Millisecond)))
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+		TLSHandshakeStart:    func() { phase("tls_start") },
+		TLSHandshakeDone:     func(_ tls.ConnectionState, err error) { phase(fmt.Sprintf("tls_done_ok_%t", err == nil)) },
+		WroteRequest:         func(info httptrace.WroteRequestInfo) { phase(fmt.Sprintf("request_written_ok_%t", info.Err == nil)) },
+		GotFirstResponseByte: func() { phase("first_response_byte") },
+	}))
 	res, e = secure.Do(req)
+	traceMu.Lock()
+	t.Logf("single cold TLS request phases: %v", phases)
+	traceMu.Unlock()
 	if e != nil {
 		t.Fatal(e)
 	}

@@ -116,6 +116,15 @@ jobs:
           & go vet ./internal/tasks ./internal/values ./internal/profilekey ./internal/maintenance
           if ($LASTEXITCODE -ne 0) { throw 'Native storage recovery vet failed' }
 
+      - name: Test native backup, transfer, cleanup, logs and registry storage
+        run: |
+          & go test -json -count=1 -timeout 8m ./internal/backup ./internal/profiletransfer ./internal/cleanup ./internal/archiveproof ./internal/services | Tee-Object -FilePath storage-integration-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native storage integration tests failed' }
+          & go test -json -count=1 -timeout 3m -run '^Test(Registry|Reservation|Persistent|RunLock|PrepareRollback|NetworkUpgrade|ListenerConfiguration|FixedBackend|PinnedAlias|GlobalRecreation|SelectedPeer|TypedBindings|PublicBindings|GlobalPeer|Windows)' ./internal/ports | Tee-Object -FilePath registry-integration-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native registry storage tests failed' }
+          & go vet ./internal/backup ./internal/profiletransfer ./internal/cleanup ./internal/archiveproof ./internal/services ./internal/ports
+          if ($LASTEXITCODE -ne 0) { throw 'Native storage integration vet failed' }
+
       - name: Test native console mode and redirected passphrase input
         run: |
           & go test -json -count=1 -run '^TestWindowsConsole|^TestWindowsPassphrase' ./internal/cli | Tee-Object -FilePath console-results.jsonl
@@ -189,6 +198,8 @@ jobs:
             port-lock-results.jsonl
             console-results.jsonl
             storage-recovery-results.jsonl
+            storage-integration-results.jsonl
+            registry-integration-results.jsonl
             project-release-results.tap
             build-identity-results.jsonl
             dist/*.zip

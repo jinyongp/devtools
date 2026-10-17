@@ -161,22 +161,6 @@ func (e Engine) executionIDFromProcessSource(path string) string {
 	return id
 }
 
-func removeAndSync(path string) error {
-	if err := os.Remove(path); err != nil {
-		return err
-	}
-	dir, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	syncErr := dir.Sync()
-	closeErr := dir.Close()
-	if syncErr != nil {
-		return syncErr
-	}
-	return closeErr
-}
-
 func (e Engine) archivePath(id, name string) string {
 	return filepath.Join(e.Data, "archives", id, name)
 }

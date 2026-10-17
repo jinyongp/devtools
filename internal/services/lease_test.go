@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
 	"testing"
 	"time"
 
@@ -99,7 +98,7 @@ func TestLaunchMarkerMissingLeaseIsStorageError(t *testing.T) {
 	if err := lease.unlockClose(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(s.path(id, "lease.lock")); err != nil {
+	if err := os.Remove(s.leasePath(id)); err != nil {
 		t.Fatal(err)
 	}
 	if _, failure := s.Status(context.Background(), id); failure == nil || failure.Code != "io_error" {
@@ -123,7 +122,7 @@ func TestCompletedReceiptReplaySkipsStagingCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	stale := filepath.Join(s.root(), launchStagingName(tasks.ID())+"abc")
-	if err := os.Mkdir(stale, 0700); err != nil {
+	if err := fixtureMkdir(stale, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(stale, 0755); err != nil {
@@ -153,11 +152,11 @@ func TestCleanupLaunchStagingUsesFixedPattern(t *testing.T) {
 	}
 	id := tasks.ID()
 	stale := filepath.Join(s.root(), launchStagingName(id)+"abc123")
-	if err := os.Mkdir(stale, 0700); err != nil {
+	if err := fixtureMkdir(stale, 0700); err != nil {
 		t.Fatal(err)
 	}
 	unrelated := filepath.Join(s.root(), ".launch-user-data")
-	if err := os.Mkdir(unrelated, 0700); err != nil {
+	if err := fixtureMkdir(unrelated, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.cleanupLaunchStaging(); err != nil {

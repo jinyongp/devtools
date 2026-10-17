@@ -2,7 +2,6 @@ package ports
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -15,8 +14,8 @@ import (
 
 func bindingProject(t *testing.T) project.Context {
 	t.Helper()
-	root := t.TempDir()
-	if e := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[ports.api]\n[proxies.api]\nhost='api.localhost'\nport='api'\n"), 0600); e != nil {
+	root := privateTestRoot(t)
+	if e := fixtureWriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[ports.api]\n[proxies.api]\nhost='api.localhost'\nport='api'\n"), 0600); e != nil {
 		t.Fatal(e)
 	}
 	p, e := project.Resolve(root, "")

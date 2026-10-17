@@ -18,7 +18,7 @@ import (
 )
 
 func TestPreviewConflictArchiveRestoreAndPurge(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	e := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
 	ctx := context.Background()
 	path := filepath.Join(e.Cache, "task-queries", tasks.ID()+".json")
@@ -80,7 +80,7 @@ func TestPreviewConflictArchiveRestoreAndPurge(t *testing.T) {
 	}
 }
 func TestActiveTaskProfileRetained(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	e := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache")}
 	s := tasks.Store{Directory: filepath.Join(e.Data, "tasks"), Profile: "test"}
 	_, err := s.Execute(context.Background(), tasks.Request{Action: "task.add", Options: map[string]string{"request-id": tasks.ID()}, Body: tasks.Object{"title": "active"}})
@@ -94,7 +94,7 @@ func TestActiveTaskProfileRetained(t *testing.T) {
 }
 
 func TestErrorExitCodes(t *testing.T) {
-	engine := Engine{Data: t.TempDir(), Cache: t.TempDir()}
+	engine := Engine{Data: privateTestRoot(t), Cache: privateTestRoot(t)}
 	if _, err := engine.Apply(context.Background(), "bad-id", []string{"bad-id"}, "bad-id"); err == nil || err.Code != "invalid_argument" || err.ExitCode != 2 {
 		t.Fatal("invalid cleanup input contract", err)
 	}
@@ -109,7 +109,7 @@ func TestErrorExitCodes(t *testing.T) {
 }
 
 func TestOldBackupRestoreSurvivesBackupDirectoryChange(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	e := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
 	oldDirectory := filepath.Join(root, "old-backups")
 	if err := write(filepath.Join(e.Config, "backup.json"), map[string]any{"directory": oldDirectory}); err != nil {
@@ -153,7 +153,7 @@ func TestOldBackupRestoreSurvivesBackupDirectoryChange(t *testing.T) {
 }
 
 func TestCompletedProcessCleanupPreservesProfileEnumeration(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
 	id := tasks.ID()
 	ended := time.Now().UTC().Add(-31 * 24 * time.Hour)
@@ -240,7 +240,7 @@ func TestCompletedProcessCleanupPreservesProfileEnumeration(t *testing.T) {
 }
 
 func TestApplyResumesDurableWorksetAfterProcessRetirement(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
 	ctx := context.Background()
 	executionID := tasks.ID()
@@ -345,7 +345,7 @@ func TestApplyResumesDurableWorksetAfterProcessRetirement(t *testing.T) {
 }
 
 func TestLegacyIncompleteReceiptIgnoresExpiredPreviewTTL(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
 	ctx := context.Background()
 	source := filepath.Join(engine.Cache, "task-queries", tasks.ID()+".json")
@@ -381,7 +381,7 @@ func TestLegacyIncompleteReceiptIgnoresExpiredPreviewTTL(t *testing.T) {
 	}
 }
 func TestLegacyArchivedProcessResidualLogIsCleanupCandidate(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
 	executionID := tasks.ID()
 	processDir := filepath.Join(engine.Data, "processes", executionID)
@@ -434,7 +434,7 @@ func TestLegacyArchivedProcessResidualLogIsCleanupCandidate(t *testing.T) {
 }
 
 func TestLegacyIncompleteReceiptWithoutSnapshotConflicts(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
 	ctx := context.Background()
 	source := filepath.Join(engine.Cache, "task-queries", tasks.ID()+".json")
@@ -464,7 +464,7 @@ func TestLegacyIncompleteReceiptWithoutSnapshotConflicts(t *testing.T) {
 }
 
 func TestExpiredLogCleanupUsesLogicalTailAcrossCompactionAndRestore(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
 	ctx := context.Background()
 	executionID := tasks.ID()
@@ -539,7 +539,7 @@ func TestExpiredLogCleanupUsesLogicalTailAcrossCompactionAndRestore(t *testing.T
 }
 
 func TestLegacyCompletedTaskArchiveRestoresIntoV3Storage(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	engine := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache"), Config: filepath.Join(root, "config")}
 	store := tasks.Store{Directory: filepath.Join(engine.Data, "tasks"), Profile: "legacy-task"}
 	created, err := store.Execute(context.Background(), tasks.Request{

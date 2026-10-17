@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
@@ -72,7 +71,7 @@ func privateLogFile(file *os.File) (os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+	if platformfs.CheckFile(file) != nil {
 		return nil, errors.New("private log file required")
 	}
 	return info, nil
@@ -83,14 +82,14 @@ func privateLogDirectory(path string) error {
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if !platformfs.DirectoryPrivate(path, info) {
 		return errors.New("private process directory required")
 	}
 	return nil
 }
 
 func readPhysicalLog(path string, stats *logIOStats) ([]byte, bool, error) {
-	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
+	file, err := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, false, nil
 	}
@@ -98,7 +97,7 @@ func readPhysicalLog(path string, stats *logIOStats) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	defer file.Close()
-	info, err := privateLogFile(file)
+	info, err := privateLogFile(file.File)
 	if err != nil {
 		return nil, false, err
 	}
@@ -117,7 +116,7 @@ func readPhysicalLog(path string, stats *logIOStats) ([]byte, bool, error) {
 }
 
 func physicalLogSize(path string) (int64, bool, error) {
-	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
+	file, err := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		return 0, false, nil
 	}
@@ -125,7 +124,7 @@ func physicalLogSize(path string) (int64, bool, error) {
 		return 0, false, err
 	}
 	defer file.Close()
-	info, err := privateLogFile(file)
+	info, err := privateLogFile(file.File)
 	if err != nil {
 		return 0, false, err
 	}
@@ -143,11 +142,11 @@ func logicalTail(body []byte) []byte {
 }
 
 func syncAppend(path string, payload []byte) error {
-	file, err := platformfs.OpenNoFollow(path, os.O_WRONLY|os.O_APPEND, 0)
+	file, err := platformfs.OpenPrivate(path, os.O_WRONLY|os.O_APPEND, 0)
 	if err != nil {
 		return err
 	}
-	info, err := privateLogFile(file)
+	info, err := privateLogFile(file.File)
 	if err != nil {
 		_ = file.Close()
 		return err
@@ -276,18 +275,10 @@ func (s boundedLogStore) retire(ctx context.Context, beforeRemove func([]byte) *
 			return true, apiErr
 		}
 	}
-	if err := os.Remove(s.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := removePrivateImage(ctx, s.path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return true, storageError()
 	}
-	dir, err := os.Open(filepath.Dir(s.path))
-	if err != nil {
-		return true, storageError()
-	}
-	syncErr := dir.Sync()
-	closeErr := dir.Close()
-	if syncErr != nil || closeErr != nil {
-		return true, storageError()
-	}
+
 	return true, nil
 }
 

@@ -15,10 +15,10 @@ func TestRegistryMigrationNormalizesAssignmentsAndJoinsMetadata(t *testing.T) {
 	for _, version := range []int{1, 2, 3} {
 		t.Run(string(rune('0'+version)), func(t *testing.T) {
 			s := testPortStore(t)
-			if err := os.MkdirAll(s.Directory, 0700); err != nil {
+			if err := fixtureMkdirAll(s.Directory, 0700); err != nil {
 				t.Fatal(err)
 			}
-			i := Instance{Profile: "test", ID: "0123456789abcdef0123456789abcdef", Directory: t.TempDir()}
+			i := Instance{Profile: "test", ID: "0123456789abcdef0123456789abcdef", Directory: privateTestRoot(t)}
 			legacy := empty()
 			legacy.Version = version
 			legacy.Instances = []Instance{i}
@@ -28,7 +28,7 @@ func TestRegistryMigrationNormalizesAssignmentsAndJoinsMetadata(t *testing.T) {
 			}
 			path := filepath.Join(s.Directory, "registry.json")
 			original, _ := json.Marshal(legacy)
-			if err := os.WriteFile(path, original, 0600); err != nil {
+			if err := fixtureWriteFile(path, original, 0600); err != nil {
 				t.Fatal(err)
 			}
 			if err := s.Update(context.Background(), func(st *State) (bool, *protocol.Error) { return false, nil }); err != nil {
@@ -102,7 +102,7 @@ func TestRegistrySizeLimitPreservesCommittedDocument(t *testing.T) {
 	}
 	// A valid JSON prefix must not hide bytes past the reader's limit.
 	oversize := append(append([]byte{}, before...), []byte(strings.Repeat(" ", registryDocumentLimit))...)
-	if err := os.WriteFile(path, oversize, 0600); err != nil {
+	if err := fixtureWriteFile(path, oversize, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Read(); err == nil || err.Code != "invalid_storage" {
@@ -111,7 +111,7 @@ func TestRegistrySizeLimitPreservesCommittedDocument(t *testing.T) {
 }
 
 func TestRegistryRejectsInconsistentLegacyAndMalformedNormalizedRelations(t *testing.T) {
-	i := Instance{Profile: "test", ID: "0123456789abcdef0123456789abcdef", Directory: t.TempDir()}
+	i := Instance{Profile: "test", ID: "0123456789abcdef0123456789abcdef", Directory: privateTestRoot(t)}
 	for _, test := range []struct {
 		name       string
 		version    int
@@ -123,9 +123,9 @@ func TestRegistryRejectsInconsistentLegacyAndMalformedNormalizedRelations(t *tes
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			s := testPortStore(t)
-			os.MkdirAll(s.Directory, 0700)
+			fixtureMkdirAll(s.Directory, 0700)
 			body, _ := json.Marshal(map[string]any{"version": test.version, "instances": []Instance{i}, "assignments": []any{test.assignment}, "reservations": []Reservation{}})
-			if err := os.WriteFile(filepath.Join(s.Directory, "registry.json"), body, 0600); err != nil {
+			if err := fixtureWriteFile(filepath.Join(s.Directory, "registry.json"), body, 0600); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := s.Read(); err == nil || err.Code != "invalid_storage" {

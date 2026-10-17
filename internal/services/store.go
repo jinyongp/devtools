@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/jinyongp/devtools/internal/process"
 	"io"
 	"net/http"
 	"net/url"
@@ -23,7 +22,9 @@ import (
 
 	"github.com/jinyongp/devtools/internal/archiveproof"
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/retention"
@@ -206,7 +207,7 @@ func (s Store) inspectLocal(id string) (storedExecution, *protocol.Error) {
 		stored.State = executionMissing
 		return stored, nil
 	}
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if err != nil || !platformfs.DirectoryPrivate(dir, info) {
 		return stored, storageError()
 	}
 
@@ -444,18 +445,10 @@ func (s Store) RemoveArchiveMarker(id, archiveID string) *protocol.Error {
 		return storageError()
 	}
 	path := s.path(id, "record.archive.json")
-	if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+	if removeErr := removePrivateImage(context.Background(), path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 		return storageError()
 	}
-	dir, openErr := os.Open(filepath.Dir(path))
-	if openErr != nil {
-		return storageError()
-	}
-	syncErr := dir.Sync()
-	closeErr := dir.Close()
-	if syncErr != nil || closeErr != nil {
-		return storageError()
-	}
+
 	return nil
 }
 func (s Store) rpc(ctx context.Context, id, action string) (Record, error) {

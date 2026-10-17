@@ -12,7 +12,7 @@ import (
 )
 
 func TestPassphraseArchiveCreateImportAndRecovery(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
 	target := Engine{Data: filepath.Join(root, "target", "data"), Config: filepath.Join(root, "target", "config"), Cache: filepath.Join(root, "target", "cache")}
 	const passphrase = "PASS-PHRASE-CANARY"
@@ -93,7 +93,7 @@ func TestPassphraseArchiveCreateImportAndRecovery(t *testing.T) {
 }
 
 func TestArchiveEncryptionModeRecognizesX25519(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	engine := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
 	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
 	if _, err := Keygen(identity, recipient); err != nil {
@@ -116,7 +116,7 @@ func TestArchiveEncryptionModeRecognizesX25519(t *testing.T) {
 }
 
 func TestPassphraseImportRejectsWrongPassphraseWithoutMutation(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
 	target := Engine{Data: filepath.Join(root, "target", "data"), Config: filepath.Join(root, "target", "config"), Cache: filepath.Join(root, "target", "cache")}
 

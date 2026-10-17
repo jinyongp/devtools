@@ -13,7 +13,7 @@ import (
 )
 
 func TestPortableSnapshotExcludesHostNetworkState(t *testing.T) {
-	e := Engine{Data: t.TempDir()}
+	e := Engine{Data: privateTestRoot(t)}
 	if err := os.Chmod(e.Data, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -25,10 +25,10 @@ func TestPortableSnapshotExcludesHostNetworkState(t *testing.T) {
 	}
 	for _, name := range []string{"ca", "exposure-auth", "exposures", "exposure-providers", "networkops", "hosts", "netsetup", "ports", "proxy"} {
 		dir := filepath.Join(e.Data, name)
-		if err := os.MkdirAll(dir, 0700); err != nil {
+		if err := fixtureMkdirAll(dir, 0700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "private.json"), []byte("NETWORK_PRIVATE_CANARY"), 0600); err != nil {
+		if err := fixtureWriteFile(filepath.Join(dir, "private.json"), []byte("NETWORK_PRIVATE_CANARY"), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}

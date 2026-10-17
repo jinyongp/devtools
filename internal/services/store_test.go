@@ -193,7 +193,7 @@ func TestStopPendingReturnsAcceptedMutation(t *testing.T) {
 func TestStartRunsFallbackPreflightBeforeCreatingExecution(t *testing.T) {
 	s := Store{Data: privateTempDir(t)}
 	root := privateTempDir(t)
-	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
+	if err := fixtureWriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	requestID := tasks.ID()
@@ -218,7 +218,7 @@ func TestStartRunsFallbackPreflightBeforeCreatingExecution(t *testing.T) {
 func TestStartReusesSingletonWithoutColdStartPreflight(t *testing.T) {
 	s := Store{Data: privateTempDir(t)}
 	root := privateTempDir(t)
-	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
+	if err := fixtureWriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	canonical, canonicalErr := filepath.EvalSymlinks(root)
@@ -301,7 +301,7 @@ func TestStartReusesSingletonWithoutColdStartPreflight(t *testing.T) {
 		recordMu.Unlock()
 		for _, configuredInject := range []bool{false, true} {
 			config := fmt.Sprintf("profile='app'\n[commands.web]\nexec=['/bin/true']\ninject=%t\n", configuredInject)
-			if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
+			if err := fixtureWriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
 				t.Fatal(err)
 			}
 			for _, override := range []*string{nil, &env} {
@@ -353,7 +353,7 @@ func TestBoundedRawLogs(t *testing.T) {
 		t.Fatal(len(b), exists, e)
 	}
 	i, _ := os.Stat(path)
-	if i.Mode().Perm() != 0600 || i.Size() > logPhysicalMax {
+	if !logPrivacy(path, i) || i.Size() > logPhysicalMax {
 		t.Fatal(i.Mode(), i.Size())
 	}
 }
@@ -402,7 +402,7 @@ func TestRestartBeforeStopFailurePreservesRunningExecution(t *testing.T) {
 func TestRestartPreservesStopMutationWhenColdStartPreflightFails(t *testing.T) {
 	s := Store{Data: privateTempDir(t)}
 	root := privateTempDir(t)
-	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
+	if err := fixtureWriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	canonical, err := filepath.EvalSymlinks(root)

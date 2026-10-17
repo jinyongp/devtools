@@ -50,19 +50,21 @@ func (r *Root) PublishDirectory(ctx context.Context, from, to string) error {
 		if err = ctx.Err(); err != nil {
 			return err
 		}
-		checked, err := guardDirectory(source, r.path, false)
-		if err != nil {
-			return err
+		checked, checkErr := guardDirectory(source, r.path, false)
+		err = checkErr
+		if err == nil {
+			err = checked.close()
 		}
-		if err = checked.close(); err != nil {
-			return err
+		if err == nil {
+			if _, statErr := os.Lstat(target); statErr == nil {
+				return &os.PathError{Op: "publish", Path: target, Err: os.ErrExist}
+			} else if !errors.Is(statErr, os.ErrNotExist) {
+				err = statErr
+			}
 		}
-		if _, err = os.Lstat(target); err == nil {
-			return &os.PathError{Op: "publish", Path: target, Err: os.ErrExist}
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return err
+		if err == nil {
+			err = windows.MoveFileEx(sourcePtr, targetPtr, windows.MOVEFILE_WRITE_THROUGH)
 		}
-		err = windows.MoveFileEx(sourcePtr, targetPtr, windows.MOVEFILE_WRITE_THROUGH)
 		if err == nil {
 			return nil
 		}
@@ -112,4 +114,59 @@ func (r *Root) PublishFile(ctx context.Context, from, to string, replace bool) e
 	}
 	defer targetParent.close()
 	return publish(ctx, source, target, replace)
+}
+
+// RemoveFile checks the private file and pins its parents through bounded deletion.
+func (r *Root) RemoveFile(ctx context.Context, name string) error {
+	path, err := r.child(name)
+	if err != nil {
+		return err
+	}
+	guard, err := guardDirectory(filepath.Dir(path), r.path, false)
+	if err != nil {
+		return err
+	}
+	defer guard.close()
+	return removeGuardedFile(ctx, path)
+}
+func removeGuardedFile(ctx context.Context, path string) error {
+	ptr, err := pathPtr(path)
+	if err != nil {
+		return err
+	}
+	deadline, delay := time.Now().Add(2*time.Second), 10*time.Millisecond
+	for {
+		if err = ctx.Err(); err != nil {
+			return err
+		}
+		f, e := openPrivateFile(path, os.O_RDONLY)
+		err = e
+		if err == nil {
+			err = f.Close()
+		}
+		if err == nil {
+			err = windows.DeleteFile(ptr)
+		}
+		if err == nil || (!errors.Is(err, windows.ERROR_SHARING_VIOLATION) && !errors.Is(err, windows.ERROR_ACCESS_DENIED)) {
+			return err
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return err
+		}
+		if delay > remaining {
+			delay = remaining
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+		delay *= 2
+		if delay > 200*time.Millisecond {
+			delay = 200 * time.Millisecond
+		}
+	}
 }

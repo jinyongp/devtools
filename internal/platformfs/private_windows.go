@@ -170,7 +170,7 @@ func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, er
 				return nil, e
 			}
 		}
-		h, e := windows.CreateFile(ptr, windows.FILE_READ_ATTRIBUTES|windows.READ_CONTROL, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
+		h, e := windows.CreateFile(ptr, windows.FILE_LIST_DIRECTORY|windows.FILE_READ_ATTRIBUTES|windows.READ_CONTROL, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
 		if e != nil {
 			return nil, e
 		}
@@ -276,21 +276,14 @@ func publish(ctx context.Context, from, to string, replace bool) error {
 		}
 		// Recheck file ACL/identity on every retry. Parent guards are held by the
 		// caller; file handles must close before MoveFileEx can replace the image.
-		source, e := openPrivateFile(from, os.O_RDONLY)
-		if e != nil {
-			return e
+		err = checkPublicationImages(from, to)
+		if err == nil {
+			flags := uint32(windows.MOVEFILE_WRITE_THROUGH)
+			if replace {
+				flags |= windows.MOVEFILE_REPLACE_EXISTING
+			}
+			err = windows.MoveFileEx(fromPtr, toPtr, flags)
 		}
-		_ = source.Close()
-		if target, e := openPrivateFile(to, os.O_RDONLY); e == nil {
-			_ = target.Close()
-		} else if !errors.Is(e, os.ErrNotExist) {
-			return e
-		}
-		flags := uint32(windows.MOVEFILE_WRITE_THROUGH)
-		if replace {
-			flags |= windows.MOVEFILE_REPLACE_EXISTING
-		}
-		err = windows.MoveFileEx(fromPtr, toPtr, flags)
 		if err == nil {
 			return nil
 		}
@@ -346,4 +339,22 @@ func containedFile(r *Root, f *os.File) error {
 		return ErrUnsafe
 	}
 	return nil
+}
+
+func checkPublicationImages(from, to string) error {
+	source, err := openPrivateFile(from, os.O_RDONLY)
+	if err != nil {
+		return err
+	}
+	if err = source.Close(); err != nil {
+		return err
+	}
+	target, err := openPrivateFile(to, os.O_RDONLY)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return target.Close()
 }

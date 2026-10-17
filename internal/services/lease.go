@@ -4,11 +4,10 @@ import (
 	"context"
 	"errors"
 	"os"
-
 	"strings"
-
 	"time"
 
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -40,21 +39,7 @@ func (l *lockedLease) closeReference() error {
 }
 
 func privateRegular(file *os.File) bool {
-	info, err := file.Stat()
-	return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0077 == 0
-}
-
-func syncDirectory(path string) error {
-	dir, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	syncErr := dir.Sync()
-	closeErr := dir.Close()
-	if syncErr != nil {
-		return syncErr
-	}
-	return closeErr
+	return platformfs.CheckFile(file) == nil
 }
 
 func validLaunchMarker(marker launchMarker) bool {

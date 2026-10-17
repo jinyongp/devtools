@@ -65,18 +65,17 @@ func empty() *State {
 	return &State{Version: 1, Instances: []Instance{}, Assignments: []Assignment{}, Reservations: []Reservation{}}
 }
 func private(f *os.File) bool {
-	i, e := f.Stat()
-	return e == nil && i.Mode().IsRegular() && i.Mode().Perm()&0077 == 0
+	return platformfs.CheckFile(f) == nil
 }
 func (s Store) Read() (*State, *protocol.Error) {
 	i, e := os.Lstat(s.Directory)
 	if errors.Is(e, os.ErrNotExist) {
 		return empty(), nil
 	}
-	if e != nil || !i.IsDir() || i.Mode().Perm()&0077 != 0 {
+	if e != nil || !platformfs.DirectoryPrivate(s.Directory, i) {
 		return nil, storageError()
 	}
-	f, e := platformfs.OpenNoFollow(filepath.Join(s.Directory, "registry.json"), os.O_RDONLY, 0)
+	f, e := platformfs.OpenPrivate(filepath.Join(s.Directory, "registry.json"), os.O_RDONLY, 0)
 	if errors.Is(e, os.ErrNotExist) {
 		return empty(), nil
 	}
@@ -84,7 +83,7 @@ func (s Store) Read() (*State, *protocol.Error) {
 		return nil, storageError()
 	}
 	defer f.Close()
-	if !private(f) {
+	if !private(f.File) {
 		return nil, storageError()
 	}
 	if info, err := f.Stat(); err != nil || info.Size() > registryDocumentLimit {
@@ -194,32 +193,9 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 	if len(b) > registryDocumentLimit {
 		return fail("invalid_storage")
 	}
-	f, err := os.CreateTemp(s.Directory, ".update-*")
-	if err != nil {
-		return storageError()
-	}
-	defer os.Remove(f.Name())
-	_, err = f.Write(b)
-	if err == nil {
-		err = f.Sync()
-	}
-	closeErr := f.Close()
-	if err != nil || closeErr != nil {
-		return storageError()
-	}
-	if os.Rename(f.Name(), filepath.Join(s.Directory, "registry.json")) != nil {
-		return storageError()
-	}
-	d, err := os.Open(s.Directory)
-	if err != nil {
-		return storageError()
-	}
-	defer d.Close()
-	if d.Sync() != nil {
-		return storageError()
-	}
-	return nil
+	return s.publishRegistry(b)
 }
+
 func (st *State) ByID(id string) *Instance {
 	if st.readIndex != nil {
 		if n, ok := st.readIndex.instances[id]; ok {

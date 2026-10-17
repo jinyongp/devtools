@@ -338,3 +338,21 @@ func TestWindowsConstrainedHelperRejectsDifferentSIDAndNoninteractiveElevation(t
 		t.Fatal("noninteractive standard token attempted elevation or did not return permission_required", err)
 	}
 }
+
+func TestWindowsConstrainedHelperIsolatedModeAndUnknownKindsDoNotLaunch(t *testing.T) {
+	if failure := Run(context.Background(), "shell", map[string]string{"command": "arbitrary"}, false); failure == nil || failure.Code != "invalid_argument" {
+		t.Fatal(failure)
+	}
+	t.Setenv("DEVTOOLS_ISOLATED_ROOT", t.TempDir())
+	for _, kind := range []string{"hosts", "trust", "netsetup"} {
+		if failure := Run(context.Background(), kind, map[string]string{}, true); failure == nil || failure.Code != "isolated_operation_not_allowed" {
+			t.Fatal(kind, failure)
+		}
+	}
+	if err := ServePipe(context.Background(), "invalid", func(context.Context, string, json.RawMessage) *protocol.Error {
+		t.Error("isolated dispatch reached")
+		return nil
+	}); err == nil {
+		t.Fatal("isolated pipe helper accepted")
+	}
+}

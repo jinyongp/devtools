@@ -1002,7 +1002,8 @@ func TestManagerExpiresStaleStartingAttemptAndAllowsNewRequest(t *testing.T) {
 	startedAt := time.Now()
 	started, err := manager.Apply(context.Background(), Request{Action: "start", RequestID: "62626262-6262-4262-8262-626262626262"})
 	if err != nil || !started.Running || !started.Changed || started.Port != port {
-		t.Fatalf("stale recovery = %+v %v", started, err)
+		record, readErr := manager.readRecord()
+		t.Fatalf("stale recovery: status=%+v error=%#v record=%+v read_error=%v", started, err, record, readErr)
 	}
 	record, readErr := manager.readRecord()
 	if readErr != nil || record.CreatedAt.Before(startedAt) {

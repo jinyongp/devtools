@@ -30,7 +30,11 @@ func hostsSecurity(t *testing.T, path string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return security.String()
+	value := security.String()
+	if value == "" {
+		t.Fatal("cannot serialize hosts security descriptor")
+	}
+	return value
 }
 func TestWindowsHostsExpectedDigestACLAndCRLFPreservation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hosts")
@@ -145,5 +149,21 @@ func TestWindowsSystemHostsRestoresDisposableRunner(t *testing.T) {
 	}
 	if hostsSecurity(t, system.path()) != security {
 		t.Fatal("system hosts owner/group/DACL/SACL changed")
+	}
+}
+
+func TestWindowsHostsRefusesOutputThatWouldBecomeUnreadable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hosts")
+	before := append(bytes.Repeat([]byte("#"), (1<<20)-2), '\n')
+	if err := os.WriteFile(path, before, 0644); err != nil {
+		t.Fatal(err)
+	}
+	failure := (System{Path: path}).Apply(context.Background(), Request{Expected: digest(before), Mappings: []Mapping{{Host: "native.localhost", Address: "127.0.0.1"}}})
+	if failure == nil || failure.Code != "invalid_argument" {
+		t.Fatalf("oversized output accepted: %v", failure)
+	}
+	actual, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(actual, before) {
+		t.Fatal("oversized hosts request changed original", err)
 	}
 }

@@ -85,6 +85,10 @@ func replaceHostsFile(ctx context.Context, original *platformfs.File, body []byt
 	if err != nil {
 		return err
 	}
+	expectedSecurity := security.String()
+	if expectedSecurity == "" {
+		return platformfs.ErrUnsafe
+	}
 	var info windows.ByHandleFileInformation
 	if err = windows.GetFileInformationByHandle(handle, &info); err != nil {
 		return err
@@ -117,7 +121,7 @@ func replaceHostsFile(ctx context.Context, original *platformfs.File, body []byt
 	if err != nil {
 		return err
 	}
-	if actual.String() != security.String() {
+	if actual.String() != expectedSecurity {
 		return platformfs.ErrUnsafe
 	}
 	if err = file.Sync(); err != nil {

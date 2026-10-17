@@ -63,6 +63,9 @@ func (s System) Apply(ctx context.Context, request Request) *protocol.Error {
 	if failureResult != nil {
 		return failureResult
 	}
+	if len(after) > 1<<20 {
+		return failure("invalid_argument")
+	}
 	if bytes.Equal(before, after) {
 		return nil
 	}

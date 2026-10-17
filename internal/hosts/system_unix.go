@@ -18,6 +18,29 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
+func (s System) path() string {
+	if s.Path != "" {
+		return s.Path
+	}
+	return "/etc/hosts"
+}
+func (s System) Read() ([]byte, *protocol.Error) {
+	f, e := platformfs.OpenNoFollow(s.path(), os.O_RDONLY, 0)
+	if e != nil {
+		return nil, failure("hosts_unavailable")
+	}
+	defer f.Close()
+	info, e := f.Stat()
+	if e != nil || !info.Mode().IsRegular() {
+		return nil, failure("hosts_unavailable")
+	}
+	b, e := io.ReadAll(io.LimitReader(f, 1<<20+1))
+	if e != nil || len(b) > 1<<20 {
+		return nil, failure("hosts_unavailable")
+	}
+	return b, nil
+}
+
 func (s System) Apply(ctx context.Context, q Request) *protocol.Error {
 	if ctx.Err() != nil {
 		return failure("canceled")

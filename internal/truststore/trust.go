@@ -60,6 +60,7 @@ func Trusted(authority *ca.Authority) bool {
 // System is injectable for tests; the helper command always uses its zero value
 // so untrusted stdin cannot select paths, executables, or keychains.
 type System struct {
+	after     func(string) error
 	GOOS      string
 	Directory string
 	Tool      string
@@ -99,6 +100,9 @@ func (s System) Apply(ctx context.Context, request Request) error {
 	goos := s.GOOS
 	if goos == "" {
 		goos = runtime.GOOS
+	}
+	if goos == "windows" {
+		return s.windows(ctx, request, fingerprint, cert)
 	}
 	if goos == "darwin" {
 		return s.darwin(ctx, request, fingerprint)

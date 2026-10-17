@@ -25,6 +25,9 @@ var version = "dev"
 var commit = "unknown"
 
 func main() {
+	if windowsNetworkHelperEntry() {
+		return
+	}
 	if windowsInstallerEntry() {
 		return
 	}

@@ -8,15 +8,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
-	"io"
 	"net/netip"
-	"os"
 
 	"sort"
 	"strings"
 
 	"github.com/jinyongp/devtools/internal/network"
-	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -37,28 +34,7 @@ func failure(code string) *protocol.Error {
 	return protocol.NewError(code, "Hosts preparation could not safely apply the selected mappings.", 3, nil)
 }
 func digest(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
-func (s System) path() string {
-	if s.Path != "" {
-		return s.Path
-	}
-	return "/etc/hosts"
-}
-func (s System) Read() ([]byte, *protocol.Error) {
-	f, e := platformfs.OpenNoFollow(s.path(), os.O_RDONLY, 0)
-	if e != nil {
-		return nil, failure("hosts_unavailable")
-	}
-	defer f.Close()
-	info, e := f.Stat()
-	if e != nil || !info.Mode().IsRegular() {
-		return nil, failure("hosts_unavailable")
-	}
-	b, e := io.ReadAll(io.LimitReader(f, 1<<20+1))
-	if e != nil || len(b) > 1<<20 {
-		return nil, failure("hosts_unavailable")
-	}
-	return b, nil
-}
+
 func split(b []byte) ([]byte, []byte, *protocol.Error) {
 	start, finish := bytes.Index(b, []byte(begin)), bytes.Index(b, []byte(end))
 	if start < 0 && finish < 0 {
@@ -152,14 +128,18 @@ func Render(before []byte, mappings []Mapping) ([]byte, *protocol.Error) {
 		names = append(names, host)
 	}
 	sort.Strings(names)
-	var block strings.Builder
-	block.WriteString(begin + "\n")
-	for _, host := range names {
-		block.WriteString(wanted[host] + "\t" + host + "\n")
+	newline := "\n"
+	if bytes.Contains(before, []byte("\r\n")) {
+		newline = "\r\n"
 	}
-	block.WriteString(end + "\n")
+	var block strings.Builder
+	block.WriteString(begin + newline)
+	for _, host := range names {
+		block.WriteString(wanted[host] + "\t" + host + newline)
+	}
+	block.WriteString(end + newline)
 	if len(outside) > 0 && outside[len(outside)-1] != '\n' {
-		outside = append(outside, '\n')
+		outside = append(outside, []byte(newline)...)
 	}
 	return append(outside, []byte(block.String())...), nil
 }

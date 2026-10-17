@@ -3,11 +3,9 @@
 package privilege
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -34,23 +32,5 @@ func Run(ctx context.Context, kind string, input any, terminal bool) *protocol.E
 	if e != nil {
 		return protocol.NewError("invalid_argument", "Invalid helper input.", 2, nil)
 	}
-	name, args := executable, []string{"__network-helper", kind}
-	if os.Geteuid() != 0 {
-		name = "sudo"
-		args = []string{"--", executable, "__network-helper", kind}
-		if !terminal {
-			// JSON stdin belongs to the helper, never to sudo authentication.
-			// A cached authorization or a configured policy can permit automation.
-			args = append([]string{"-n"}, args...)
-		}
-	}
-	command := exec.CommandContext(ctx, name, args...)
-	command.Stdin = bytes.NewReader(encoded)
-	var output bytes.Buffer
-	command.Stdout = &output
-	command.Stderr = os.Stderr
-	if e := command.Run(); e != nil {
-		return protocol.NewError("permission_required", "The limited OS helper did not complete. Noninteractive execution requires preauthorized sudo; inspect diagnostics before retrying.", 3, nil)
-	}
-	return nil
+	return runPlatform(ctx, kind, encoded, terminal, executable)
 }

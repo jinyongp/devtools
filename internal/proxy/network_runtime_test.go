@@ -113,7 +113,7 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 	}
 	roots := x509.NewCertPool()
 	roots.AppendCertsFromPEM(a.PEM())
-	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: "app.localhost"}, Proxy: nil}
+	transport := &http.Transport{ForceAttemptHTTP2: true, TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: "app.localhost"}, Proxy: nil}
 	defer transport.CloseIdleConnections()
 	secure := &http.Client{Transport: transport, Timeout: time.Second}
 	req, _ = http.NewRequest("GET", fmt.Sprintf("https://127.0.0.1:%d/path?x=1", tlsPort), nil)
@@ -125,6 +125,9 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 	}
 	body, _ := io.ReadAll(res.Body)
 	res.Body.Close()
+	if res.ProtoMajor != 2 {
+		t.Fatalf("TLS listener did not negotiate HTTP/2: %s", res.Proto)
+	}
 	if string(body) != "https /path?x=1" {
 		t.Fatal(string(body))
 	}

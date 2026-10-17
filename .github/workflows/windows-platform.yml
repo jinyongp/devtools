@@ -171,6 +171,17 @@ jobs:
           & python -B scripts/package.py
           if ($LASTEXITCODE -ne 0) { throw 'Native ZIP validation failed' }
 
+      - name: Test constrained native hosts and CurrentUser trust boundaries
+        env:
+          DEVTOOLS_TEST_SYSTEM_NETWORK: '1'
+        run: |
+          & go test -json -count=1 -timeout 4m -run '^TestWindows' ./internal/privilege ./internal/hosts ./internal/truststore | Tee-Object -FilePath windows-network-security-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native helper/hosts/trust contract failed' }
+          & go test -json -count=1 -timeout 3m -run '^TestLeafChainAndTLS|^TestNetworkListenersTLS|^TestNetworkSecondSocket|^TestTLSRejects|^TestHandlerForwardsWebSocket' ./internal/ca ./internal/proxy | Tee-Object -FilePath windows-network-runtime-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native TLS, HTTP2 and WebSocket contract failed' }
+          & go vet ./internal/privilege ./internal/hosts ./internal/truststore ./internal/winimage
+          if ($LASTEXITCODE -ne 0) { throw 'Native network security vet failed' }
+
       - name: Test native installer recovery and PS5/PS7 running-image updates
         run: |
           $archive = Get-ChildItem dist -Filter '*.zip' | Select-Object -First 1
@@ -238,6 +249,8 @@ jobs:
             listener-results.jsonl
             detached-daemon-results.jsonl
             project-lifecycle-results.jsonl
+            windows-network-security-results.jsonl
+            windows-network-runtime-results.jsonl
             windows-install-transaction-results.jsonl
             windows-install-results.json
             windows-install-diagnostic.txt

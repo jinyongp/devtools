@@ -1,0 +1,13 @@
+# W5H — fixed hosts target and CurrentUser certificate trust
+
+Validation authority is native GitHub Actions on both CPUs. Actual PC UAC dialogs, browser behavior and terminal closure remain NOT RUN, as agreed. No local Windows runtime is used.
+
+The one-shot helper uses a local, first-instance, remote-rejecting named pipe with a protected user/SYSTEM DACL. Only a random pipe name appears in argv. Both peers authenticate held process handles, the same user SID, process ID, and the pinned executable's NTFS identity and SHA-256 before exchanging a bounded, strict JSON frame. The image and its parents must deny modification by unrelated users. Client SQOS permits identification, not impersonation. Parent disconnection cancels received work; the existing operation receipt is reconciled on retry.
+
+The private entrypoint accepts only typed hosts, trust and setup requests. Hosts always means the WindowsDirectory API's System32/drivers/etc/hosts. No request chooses a file path or command. Hosts changes use same-user runas only when interactive and not already elevated. Noninteractive hosts changes require an elevated token. CurrentUser trust uses an ordinary same-user child. Isolated mode rejects shared OS changes before helper launch.
+
+Hosts compares the preview digest against the held original and preserves external bytes and existing newline style. A flushed, closed candidate carries the original owner, group, DACL and SACL, verified before one MoveFileEx replacement. Required metadata privileges are scoped and restored. Sharing conflicts are bounded; stale previews, cancellation, missing privileges, reparses and incompatible ACLs fail closed. No in-place rewrite or power-loss guarantee. A helper crash before publication may retain its unique completed temporary file; there is no broad prefix cleanup.
+
+Trust modifies only CurrentUser Root. A private versioned receipt and a random user-defined certificate property jointly establish ownership. Preexisting certificates are never adopted or removed. Prepared/owned/removing states reconcile lost responses without replacing CA keys. A certificate substituted externally fails ownership checks. The helper receives only public certificate material.
+
+Review ledger (pending until native evidence): IPC identity/SQOS/cancellation; fixed target and strict dispatch; hosts digest/atomic publication/security/newlines; certificate ownership and interrupted operations; private CA storage; isolated callers; native TLS, HTTP/2 and WebSocket; Unix compatibility. Native fixtures restore only their disposable hosts block and uniquely generated test certificates. Tests that mutate the OS require explicit disposable-runner opt-in.

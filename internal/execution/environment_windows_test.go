@@ -35,3 +35,15 @@ func TestWindowsCaseCollisionPreventsPortPreparation(t *testing.T) {
 		t.Fatal("case collision created registry storage")
 	}
 }
+
+func TestWindowsCaseCollisionPreventsLiveRestartValidation(t *testing.T) {
+	command := Command{Bind: map[string]project.Binding{"Path": {Port: "web"}, "PATH": {Port: "web"}}}
+	path := filepath.Join(t.TempDir(), "registry")
+	e := Validate(context.Background(), command, Dependencies{Ports: ports.Store{Directory: path}}, os.Environ())
+	if e == nil || e.Code != "invalid_argument" {
+		t.Fatalf("invalid replacement reached existing-process validation: %v", e)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("invalid replacement created registry storage")
+	}
+}

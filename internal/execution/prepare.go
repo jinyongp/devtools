@@ -97,16 +97,7 @@ func prepareResolved(ctx context.Context, command Command, state *values.State, 
 		}
 		out.Injected = injected
 	}
-	// Validate the complete injected key space before allocating ports. Keep
-	// values out of errors, including case collisions imported from Unix.
-	keys := make(map[string]string, len(out.Injected)+len(command.Bind))
-	for key, value := range out.Injected {
-		keys[key] = value
-	}
-	for key := range command.Bind {
-		keys[key] = ""
-	}
-	if err := process.ValidateEnvironment(keys); err != nil {
+	if err := validateInjectedKeyspace(command, out.Injected); err != nil {
 		return Prepared{}, err
 	}
 	if len(command.Bind)+len(command.Serve) == 0 {
@@ -217,11 +208,33 @@ func (p Prepared) Checks(ctx context.Context, parentEnvironment []string, forceE
 	})
 }
 
+// validateInjectedKeyspace is shared by cold start and live-process validation.
+// Invalid Windows bindings must not reach port preparation or tool probes, nor
+// cause an existing managed process to stop before a replacement is preflighted.
+func validateInjectedKeyspace(command Command, injected map[string]string) *protocol.Error {
+	keys := make(map[string]string, len(injected)+len(command.Bind))
+	for key, value := range injected {
+		keys[key] = value
+	}
+	for key := range command.Bind {
+		keys[key] = ""
+	}
+	if command.Network != nil {
+		for key := range command.Network.Bindings {
+			keys[key] = ""
+		}
+	}
+	return process.ValidateEnvironment(keys)
+}
+
 // Validate performs only checks that are safe while an existing managed
 // execution is still running. It does not claim ports or require served ports
 // to be free. Bindings backed by a new port served by this same command may be
 // deferred until the post-stop cold-start preflight.
 func Validate(ctx context.Context, command Command, dependencies Dependencies, parentEnvironment []string) *protocol.Error {
+	if err := validateInjectedKeyspace(command, nil); err != nil {
+		return err
+	}
 	var state *values.State
 	if command.NeedsValues() {
 		var err *protocol.Error
@@ -231,6 +244,16 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 		}
 		if envErr := state.CheckEnv(command.Env); envErr != nil {
 			return envErr
+		}
+	}
+
+	if command.Inject && state != nil {
+		injected, err := state.Environment(command.Env)
+		if err != nil {
+			return err
+		}
+		if err := validateInjectedKeyspace(command, injected); err != nil {
+			return err
 		}
 	}
 

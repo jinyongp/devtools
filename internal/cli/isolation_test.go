@@ -10,7 +10,10 @@ import (
 )
 
 func TestIsolationFlagPrecedesEnvironmentAndDoesNotCreateReadPaths(t *testing.T) {
-	parent := t.TempDir()
+	parent, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	fromEnv := filepath.Join(parent, "env")
 	fromFlag := filepath.Join(parent, "flag")
 	t.Setenv("DEVTOOLS_ISOLATED_ROOT", fromEnv)

@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -322,6 +323,8 @@ func TestWindowsOwnedLaunchFailureClosesHandles(t *testing.T) {
 		}
 		return
 	}
+	// Resource ownership must close immediately, without relying on file finalizers.
+	debug.SetGCPercent(-1)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "invalid.exe")
 	if err := os.WriteFile(path, []byte("invalid executable"), 0600); err != nil {

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -9,12 +10,12 @@ import (
 func TestRunCommandArgumentBoundary(t *testing.T) {
 	app := testApp(t)
 	t.Chdir(privateTempDir(t))
-	config := `profile = "app"
-[commands."dev:docs"]
-exec = ["/bin/sh", "-c", "printf '%s|' \"$LEVEL\"; printf '<%s>' \"$@\"", "label"]
-inject = true
-env = "local"
-`
+	executionArgs, err := json.Marshal(runBoundaryCommand(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := "profile = \"app\"\n[commands.\"dev:docs\"]\nexec = " + string(executionArgs) + "\ninject = true\nenv = \"local\"\n"
+
 	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}

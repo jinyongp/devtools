@@ -1,0 +1,615 @@
+{
+  "candidate": "50ccb27b5df2d47ad56a1b24570dde66b9e7a2ba",
+  "predecessors": [
+    {
+      "id": "172786e8-9523-48ae-8db6-6e50d2324e76",
+      "title": "W2S values·tasks·WAL·profile 저장소를 이식한다",
+      "definition_revision": 205,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "41dcf6d2-6a41-4d24-8352-ce966fbc9e9c",
+      "title": "W3C console 신호·passphrase·취소 복원을 구현한다",
+      "definition_revision": 219,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "481f792a-0096-466d-b993-ea2f136a8fe4",
+      "title": "W5N Winsock bind·충돌·예약 진단을 구현한다",
+      "definition_revision": 136,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "49365c7b-4422-4b10-b387-7a1bedbda94f",
+      "title": "W6 WSL2 interop·diagnostics·Windows client 안내를 구현한다",
+      "definition_revision": 183,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "4b07b24f-b2dc-4870-9396-01c5d02ccebc",
+      "title": "W0 구현 기준·사전검증 근거·병행 작업 경계를 인계한다",
+      "definition_revision": 184,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "63da5104-7caa-481c-92f3-ef9438cbf5d6",
+      "title": "W8R 지원 문서·Agent Skill·release 후보 수용을 마무리한다",
+      "definition_revision": 183,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "7b507754-102d-4c13-968b-b899f498e3c5",
+      "title": "W1L 일반 잠금과 상속 launch lease를 분리한다",
+      "definition_revision": 198,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "84a627b4-cc2a-43cf-b920-7d07b5b14732",
+      "title": "W8A native Windows CI와 packaged 제품 통합 검증을 통과시킨다",
+      "definition_revision": 136,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "ac6688f4-a71a-45a3-8fa8-c47020840516",
+      "title": "W5H hosts·동일 사용자 UAC helper·CurrentUser trust를 구현한다",
+      "definition_revision": 136,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "ada0f70c-2e8c-478b-9da6-42ad135131e0",
+      "title": "W4P Job at creation 기반 Windows process tree를 구현한다",
+      "definition_revision": 136,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "b220707b-ca42-4fae-8096-a9c452b0f636",
+      "title": "W2B backup·transfer·maintenance·ports·log 저장 호출자를 이식한다",
+      "definition_revision": 136,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "c043d1f1-72be-4653-a0ca-879e10f1358d",
+      "title": "W7P 공통 build/package runner와 Windows ZIP을 추가한다",
+      "definition_revision": 226,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "d3086904-f692-4402-a7f2-97abe80aa891",
+      "title": "W1 Windows compile 경계와 private filesystem을 구현한다",
+      "definition_revision": 191,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "d3941081-2279-4e9c-bf29-4f2a482cab17",
+      "title": "W8L Actions 근거와 실제 PC 미검증 한계를 확정한다",
+      "definition_revision": 183,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "eaa42f5c-fff0-420a-b25c-8852dc791543",
+      "title": "W5E Tailscale named pipe와 cloudflared Windows adapter를 구현한다",
+      "definition_revision": 136,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "f892b4d5-8454-410d-9345-e9f95439279a",
+      "title": "W7C PowerShell completion·공개 계약·사용자 문서를 완성한다",
+      "definition_revision": 136,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "f8b78e8c-47b4-4dae-b848-cce2808da630",
+      "title": "W4D detached supervisor와 managed 서비스 연결을 완성한다",
+      "definition_revision": 183,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "f96df5e6-25a9-4395-8e72-3140242f3358",
+      "title": "W3 Windows exe·batch·PATH/env 실행 계약을 구현한다",
+      "definition_revision": 212,
+      "state": "done",
+      "completion_status": "current"
+    },
+    {
+      "id": "fd10b17f-ff86-4876-8279-a2734ec9399d",
+      "title": "W7I PowerShell installer·dvt·journal updater를 구현한다",
+      "definition_revision": 136,
+      "state": "done",
+      "completion_status": "current"
+    }
+  ],
+  "validation_inventory_before_W9": {
+    "validations": [
+      {
+        "id": "05ad36c8-48a7-428c-8904-53412ad20fdc",
+        "title": "W2S 결과 검증",
+        "task_id": "172786e8-9523-48ae-8db6-6e50d2324e76",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "9d97b103-96dd-428e-962b-d6cef0163fe9",
+        "result": "pass",
+        "record_id": "6919dcb8-9953-4af6-9dc0-f35fc26d0dbb",
+        "applicable": true
+      },
+      {
+        "id": "18a7d191-62d3-4b4c-b4dd-6a5c708f935c",
+        "title": "W0 결과 검증",
+        "task_id": "4b07b24f-b2dc-4870-9396-01c5d02ccebc",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "54091bcd-06c8-4699-a87f-a60e55986f13",
+        "result": "pass",
+        "record_id": "59a285f6-73ba-42ac-9852-bceceb689ae6",
+        "applicable": true
+      },
+      {
+        "id": "21f14ce9-1336-4b96-85a9-848e0522462d",
+        "title": "W5N 결과 검증",
+        "task_id": "481f792a-0096-466d-b993-ea2f136a8fe4",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "3441e490-698b-4b8b-af49-ff5576a9c0e0",
+        "result": "pass",
+        "record_id": "4c2b85d9-fd0b-4fcd-9236-d6e5586b21a2",
+        "applicable": true
+      },
+      {
+        "id": "2410bcd1-1d67-4c3c-82bb-d730c412bfa3",
+        "title": "W3C 결과 검증",
+        "task_id": "41dcf6d2-6a41-4d24-8352-ce966fbc9e9c",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "41628f7f-03fb-4374-a92b-45e209463149",
+        "result": "pass",
+        "record_id": "f6a336ac-8a1b-4bf1-8b81-27520cdfecd4",
+        "applicable": true
+      },
+      {
+        "id": "2b4240b2-b537-4ce2-8813-a492cc00279b",
+        "title": "W6 결과 검증",
+        "task_id": "49365c7b-4422-4b10-b387-7a1bedbda94f",
+        "required": true,
+        "definition_revision": 183,
+        "current_basis": "5a10686e-a6f2-49a3-abb2-d18143335557",
+        "result": "pass",
+        "record_id": "f315cdaa-77d8-4f85-82ba-eac36ac584af",
+        "applicable": true
+      },
+      {
+        "id": "382656f0-3386-43ca-aa95-e7f4b3364dc8",
+        "title": "W2B 결과 검증",
+        "task_id": "b220707b-ca42-4fae-8096-a9c452b0f636",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "a51d3abd-cd6d-4f87-ba77-ef6994cb6fff",
+        "result": "pass",
+        "record_id": "f3ba45be-f67d-49b8-87bb-544e3e1341fb",
+        "applicable": true
+      },
+      {
+        "id": "3875b85e-4192-4d61-b665-5aa2e3d1e0a0",
+        "title": "W8R 결과 검증",
+        "task_id": "63da5104-7caa-481c-92f3-ef9438cbf5d6",
+        "required": true,
+        "definition_revision": 183,
+        "current_basis": "922b3e1f-28b0-4a27-b49f-2cb025ad2f7c",
+        "result": "pass",
+        "record_id": "a0c99cd0-343e-41ca-a9c0-f9ad00db0c57",
+        "applicable": true
+      },
+      {
+        "id": "3ae5510f-b5f9-46b8-9b0a-08bece183628",
+        "title": "W4D 결과 검증",
+        "task_id": "f8b78e8c-47b4-4dae-b848-cce2808da630",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "562e1dd9-1c48-4804-af45-df032b1196ba",
+        "result": "pass",
+        "record_id": "1a959c61-cfe8-47ea-b348-8ad2b2c68783",
+        "applicable": true
+      },
+      {
+        "id": "502afb71-370e-4f78-889b-8e84e91b812a",
+        "title": "W3 결과 검증",
+        "task_id": "f96df5e6-25a9-4395-8e72-3140242f3358",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "04110451-a44c-4cb2-b8bf-990bcd60b1dd",
+        "result": "pass",
+        "record_id": "20e124af-f730-499f-8b09-b36510c07ef2",
+        "applicable": true
+      },
+      {
+        "id": "51a7005a-c1a5-4557-ad86-c1dfd1f7f1bb",
+        "title": "통합: 공개 계약·지원 한계·비게시 release 검증",
+        "task_id": null,
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": null,
+        "result": null,
+        "record_id": null,
+        "applicable": false
+      },
+      {
+        "id": "5b864e15-975c-4973-85dd-ffd769b63f00",
+        "title": "W1 결과 검증",
+        "task_id": "d3086904-f692-4402-a7f2-97abe80aa891",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "e87c978c-27e6-4608-856c-f2f0b0e25ef4",
+        "result": "pass",
+        "record_id": "85f56377-97a2-4ebb-8145-ebf3662fc13c",
+        "applicable": true
+      },
+      {
+        "id": "659746cb-933b-4022-aaa2-1e8319ae938d",
+        "title": "W7C 결과 검증",
+        "task_id": "f892b4d5-8454-410d-9345-e9f95439279a",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "8e0d9282-9cbf-4104-ab6c-ed84e61651cf",
+        "result": "pass",
+        "record_id": "82e165cb-144e-44d7-b217-eb4c9ee93d0e",
+        "applicable": true
+      },
+      {
+        "id": "75db07f9-8127-4e27-bfd2-b3845db5ac21",
+        "title": "W7I 결과 검증",
+        "task_id": "fd10b17f-ff86-4876-8279-a2734ec9399d",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "9f1e348a-e35d-4948-b5d0-89f4df22c490",
+        "result": "pass",
+        "record_id": "0cea954f-533c-48ee-aa7b-c4c17dbd959c",
+        "applicable": true
+      },
+      {
+        "id": "87437540-b996-4b0f-bc37-29a53554e70e",
+        "title": "W8A 결과 검증",
+        "task_id": "84a627b4-cc2a-43cf-b920-7d07b5b14732",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "31de1d83-7f87-4767-972a-12a93c7910be",
+        "result": "pass",
+        "record_id": "ace3381a-a312-452a-b971-43746e19a03e",
+        "applicable": true
+      },
+      {
+        "id": "89bfa13e-c4b1-4711-9761-fe3f0db943f5",
+        "title": "통합: Actions 근거와 실제 PC·WSL2 미검증 한계 공개",
+        "task_id": null,
+        "required": true,
+        "definition_revision": 183,
+        "current_basis": null,
+        "result": null,
+        "record_id": null,
+        "applicable": false
+      },
+      {
+        "id": "8c9c90bf-9694-41fc-8394-2df88772e1c8",
+        "title": "W1L 결과 검증",
+        "task_id": "7b507754-102d-4c13-968b-b899f498e3c5",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "304469ca-bf8c-4e49-9538-2389752048cd",
+        "result": "pass",
+        "record_id": "842b5644-7012-49e9-8fdf-03a62943deb1",
+        "applicable": true
+      },
+      {
+        "id": "9e8b05b4-c4a3-4361-991b-9893c50d8a24",
+        "title": "W5H 결과 검증",
+        "task_id": "ac6688f4-a71a-45a3-8fa8-c47020840516",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "6fece82a-8790-4cb6-a0c3-438c34cb96a3",
+        "result": "pass",
+        "record_id": "f7872624-c177-45d0-bd21-6c41f2de6873",
+        "applicable": true
+      },
+      {
+        "id": "c73bdee4-c28b-4e24-b258-f34e84a43b1f",
+        "title": "W5E 결과 검증",
+        "task_id": "eaa42f5c-fff0-420a-b25c-8852dc791543",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "882e0717-2f29-4b21-8e79-798e5ffd1d9f",
+        "result": "pass",
+        "record_id": "83224f8f-74b8-4642-ad70-b2ce206b7965",
+        "applicable": true
+      },
+      {
+        "id": "d4978de0-6136-4d21-9cf9-890e3ac553bd",
+        "title": "W4P 결과 검증",
+        "task_id": "ada0f70c-2e8c-478b-9da6-42ad135131e0",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "251d9fe9-eb9e-4f5c-b127-90ee96a2403b",
+        "result": "pass",
+        "record_id": "ca1a5209-84b8-4b0c-8a58-15d7f415faae",
+        "applicable": true
+      },
+      {
+        "id": "d78bdc6b-18be-45a3-bffa-1bb2ed162de7",
+        "title": "통합: native x64·ARM64 제품 및 Unix 회귀",
+        "task_id": null,
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": null,
+        "result": null,
+        "record_id": null,
+        "applicable": false
+      },
+      {
+        "id": "dfff52b3-39c0-4093-83b4-61326a5aa64b",
+        "title": "W7P 결과 검증",
+        "task_id": "c043d1f1-72be-4653-a0ca-879e10f1358d",
+        "required": true,
+        "definition_revision": 132,
+        "current_basis": "dc0deebd-b9a8-4278-bd72-96ebaf16e4f3",
+        "result": "pass",
+        "record_id": "b1fa9a0a-7694-4e6f-a58f-42c621a2c979",
+        "applicable": true
+      },
+      {
+        "id": "ed94667a-6178-45e0-8468-4bbe8841c9ff",
+        "title": "W8L Actions 근거·실제 PC 미검증 한계 검증",
+        "task_id": "d3941081-2279-4e9c-bf29-4f2a482cab17",
+        "required": true,
+        "definition_revision": 183,
+        "current_basis": "2f34400f-741a-40fb-a163-8a4094725189",
+        "result": "pass",
+        "record_id": "8fa48ba3-fa9b-4d0b-9204-e65f2b3ec869",
+        "applicable": true
+      },
+      {
+        "id": "1903de23-4d6d-41e3-89b3-41fcb1d6e07e",
+        "title": "W0 마지막 필수 리뷰루프",
+        "task_id": "4b07b24f-b2dc-4870-9396-01c5d02ccebc",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "944d6d3d-9e05-4967-a1d1-c8735283960d",
+        "result": "pass",
+        "record_id": "807e093e-ab1e-4e77-8b82-dd8339facabf",
+        "applicable": true
+      },
+      {
+        "id": "1e05cf9c-8ffa-4953-8acd-1241fdc286a7",
+        "title": "W9 전체 범위 총 리뷰·수정·재검증 루프",
+        "task_id": "66d35159-7fb9-45c2-9bf5-ce5e4084d293",
+        "required": true,
+        "definition_revision": 183,
+        "current_basis": null,
+        "result": null,
+        "record_id": null,
+        "applicable": false
+      },
+      {
+        "id": "38a3e72f-1b98-4a17-af36-9c35b04370ec",
+        "title": "W8R 마지막 필수 리뷰루프",
+        "task_id": "63da5104-7caa-481c-92f3-ef9438cbf5d6",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "2b60faed-b579-42d3-b1e4-c59f90493543",
+        "result": "pass",
+        "record_id": "7330aa40-0bd1-432a-8c9f-c605b0d2c147",
+        "applicable": true
+      },
+      {
+        "id": "409cf790-4b27-4500-ac6b-27bf6cae0418",
+        "title": "W1 마지막 필수 리뷰루프",
+        "task_id": "d3086904-f692-4402-a7f2-97abe80aa891",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "4610a3d9-aed3-475e-8d0a-c4f227b71644",
+        "result": "pass",
+        "record_id": "3527fb2a-e58c-42bf-9835-c927cf60c1c4",
+        "applicable": true
+      },
+      {
+        "id": "4281b2ca-360f-42e7-9bea-a9f5f2633bb4",
+        "title": "W4P 마지막 필수 리뷰루프",
+        "task_id": "ada0f70c-2e8c-478b-9da6-42ad135131e0",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "960ba3cb-c765-4ba5-b6ad-ff843c7fab50",
+        "result": "pass",
+        "record_id": "f3f6e4f4-fa65-4cbb-8442-6d7f5c88e382",
+        "applicable": true
+      },
+      {
+        "id": "4c25b404-a5dc-4150-8177-9ee925948a5e",
+        "title": "W2B 마지막 필수 리뷰루프",
+        "task_id": "b220707b-ca42-4fae-8096-a9c452b0f636",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "80198e86-723c-49ac-a3ac-b21c27c557e1",
+        "result": "pass",
+        "record_id": "5902b80e-9295-4e99-8789-fb4a74e046af",
+        "applicable": true
+      },
+      {
+        "id": "58a85719-8527-4f3d-a002-34dd653023cc",
+        "title": "W8A 마지막 필수 리뷰루프",
+        "task_id": "84a627b4-cc2a-43cf-b920-7d07b5b14732",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "84ddc13b-1db7-444a-bda1-beb55713ec8c",
+        "result": "pass",
+        "record_id": "c495ec5b-07d7-4152-a3c7-1f10daa77dca",
+        "applicable": true
+      },
+      {
+        "id": "691f27c9-3e5f-4ed1-a301-d7dedaff1620",
+        "title": "W1L 마지막 필수 리뷰루프",
+        "task_id": "7b507754-102d-4c13-968b-b899f498e3c5",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "d5871924-b9e1-4bd6-9171-52613f04e48b",
+        "result": "pass",
+        "record_id": "27a2f3f0-c7d4-4192-92a5-6bde3918970f",
+        "applicable": true
+      },
+      {
+        "id": "91f8f267-515d-4722-a071-b67ed362da65",
+        "title": "W6 마지막 필수 리뷰루프",
+        "task_id": "49365c7b-4422-4b10-b387-7a1bedbda94f",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "17f36b7f-6450-4644-a33e-9e98226b955e",
+        "result": "pass",
+        "record_id": "51ce52d3-e8f3-44ed-af01-70066d98cb53",
+        "applicable": true
+      },
+      {
+        "id": "98d493d3-2844-48c5-9304-d7db047e14ac",
+        "title": "W7I 마지막 필수 리뷰루프",
+        "task_id": "fd10b17f-ff86-4876-8279-a2734ec9399d",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "9580df79-b1f8-4c72-973b-9b6c4941a5a5",
+        "result": "pass",
+        "record_id": "b8ceac07-34ef-463a-a10a-befbde179d6a",
+        "applicable": true
+      },
+      {
+        "id": "a0323a79-48e7-41cb-8abd-757ea2c82a3b",
+        "title": "W3C 마지막 필수 리뷰루프",
+        "task_id": "41dcf6d2-6a41-4d24-8352-ce966fbc9e9c",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "05bfeac3-2a86-456a-af85-6883f56b5ad3",
+        "result": "pass",
+        "record_id": "7c3d1736-fb66-4cc6-96fb-7854b9cf4e38",
+        "applicable": true
+      },
+      {
+        "id": "a5310805-55d2-406d-aae2-d71cf03858c9",
+        "title": "W3 마지막 필수 리뷰루프",
+        "task_id": "f96df5e6-25a9-4395-8e72-3140242f3358",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "7430b1ee-a2a0-4283-95cc-cdb33b5ad263",
+        "result": "pass",
+        "record_id": "510143bd-3624-4803-b30b-ba6661b25895",
+        "applicable": true
+      },
+      {
+        "id": "af6b2de1-6559-4a47-969b-9cae2e3498b2",
+        "title": "W2S 마지막 필수 리뷰루프",
+        "task_id": "172786e8-9523-48ae-8db6-6e50d2324e76",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "0ecfbfe7-f77d-4fdd-9390-e8d88018b9bb",
+        "result": "pass",
+        "record_id": "d6561d39-de1d-4a10-9f01-7cd5b84990e9",
+        "applicable": true
+      },
+      {
+        "id": "b0374439-0ece-43b6-98a3-3a2f4987ad0d",
+        "title": "W5E 마지막 필수 리뷰루프",
+        "task_id": "eaa42f5c-fff0-420a-b25c-8852dc791543",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "669a5800-68b2-4267-b6a2-a5a8a01ac68c",
+        "result": "pass",
+        "record_id": "6a8d101a-acb3-4646-9469-8b6c3e088c25",
+        "applicable": true
+      },
+      {
+        "id": "c2a1e96f-9d4e-485c-9d94-549e4d9a3fa6",
+        "title": "W5N 마지막 필수 리뷰루프",
+        "task_id": "481f792a-0096-466d-b993-ea2f136a8fe4",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "9145fe67-144e-4b18-a9e6-3b685e7fea77",
+        "result": "pass",
+        "record_id": "d2db7bf8-0b01-4d7b-94bf-b9206e615ddc",
+        "applicable": true
+      },
+      {
+        "id": "c40c665f-00d5-4c2d-8837-79c80e3affb2",
+        "title": "최종 필수 총 리뷰루프 수용 확인",
+        "task_id": null,
+        "required": true,
+        "definition_revision": 183,
+        "current_basis": null,
+        "result": null,
+        "record_id": null,
+        "applicable": false
+      },
+      {
+        "id": "d956986f-c1a8-4ac9-b988-6603130bf127",
+        "title": "W5H 마지막 필수 리뷰루프",
+        "task_id": "ac6688f4-a71a-45a3-8fa8-c47020840516",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "5dcdb7a2-38e8-48b3-acc3-a7c2b90c6433",
+        "result": "pass",
+        "record_id": "cc221f50-0c60-4fee-87fc-3f1ad5f32a85",
+        "applicable": true
+      },
+      {
+        "id": "daf7bdb3-dbfc-41e4-8ad1-143f8ac70004",
+        "title": "W8L 마지막 필수 리뷰루프",
+        "task_id": "d3941081-2279-4e9c-bf29-4f2a482cab17",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "3af166ea-667d-4d5e-bbf7-18ca17fbb42c",
+        "result": "pass",
+        "record_id": "90da5732-6adf-4d6c-a95a-0228ba1325a9",
+        "applicable": true
+      },
+      {
+        "id": "e28070be-0ce6-455a-98b0-209cb2eef20a",
+        "title": "W4D 마지막 필수 리뷰루프",
+        "task_id": "f8b78e8c-47b4-4dae-b848-cce2808da630",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "83791ae0-70d2-463d-be8b-ac67b3cea32e",
+        "result": "pass",
+        "record_id": "a581285a-1a73-4c9a-b9ad-01c68324b5f5",
+        "applicable": true
+      },
+      {
+        "id": "e4c5beec-3db9-475f-a1eb-b56c04955137",
+        "title": "W7P 마지막 필수 리뷰루프",
+        "task_id": "c043d1f1-72be-4653-a0ca-879e10f1358d",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "fb6533d1-4712-43ce-9537-0887148503ed",
+        "result": "pass",
+        "record_id": "b66ecbee-00d5-4fad-808d-70a8aa3ec8fa",
+        "applicable": true
+      },
+      {
+        "id": "fa4c9d08-1f83-435b-9ac7-36516eec8c2f",
+        "title": "W7C 마지막 필수 리뷰루프",
+        "task_id": "f892b4d5-8454-410d-9345-e9f95439279a",
+        "required": true,
+        "definition_revision": 136,
+        "current_basis": "fda2b20a-fee2-44ca-8873-299a867dd3a7",
+        "result": "pass",
+        "record_id": "4c6a0d14-550c-4a87-9aa4-53d3c24b03e2",
+        "applicable": true
+      }
+    ]
+  }
+}

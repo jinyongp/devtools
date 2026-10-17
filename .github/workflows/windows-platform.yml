@@ -203,6 +203,8 @@ jobs:
       - name: Diagnose repeated native project lifecycle
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.focus == 'lifecycle' }}
         run: |
+          & go test -json -count=50 -timeout 4m -run '^TestLegacyProxyStopClosesBackendPool$|^TestManagerExpiresStaleStartingAttemptAndAllowsNewRequest$' ./internal/proxy | Tee-Object -FilePath windows-legacy-start-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Repeated legacy proxy startup requires investigation' }
           & go test -json -count=20 -timeout 3m -run '^TestWindowsProjectReal' ./internal/lifecycle | Tee-Object -FilePath project-lifecycle-diagnostic-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Repeated native project lifecycle requires investigation' }
           & go test -json -count=3 -timeout 3m -run '^TestWindowsConcurrentRecordPublication' ./internal/services | Tee-Object -FilePath windows-record-publication-results.jsonl
@@ -429,6 +431,7 @@ jobs:
             windows-product-suite-results.jsonl
             project-lifecycle-repeat-results.jsonl
             project-lifecycle-diagnostic-results.jsonl
+            windows-legacy-start-results.jsonl
             windows-network-security-results.jsonl
             windows-network-runtime-results.jsonl
             windows-tls-repeat-results.jsonl

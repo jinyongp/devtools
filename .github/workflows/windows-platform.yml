@@ -280,8 +280,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native CLI build failed' }
           & pwsh -NoProfile -NonInteractive -File scripts/test-windows-completion.ps1 -Binary (Resolve-Path .\devtools.exe).Path
           if ($LASTEXITCODE -ne 0) { throw 'Public Windows CLI/completion contract failed' }
-          & go test -json -count=1 -run '^TestWindowsPublicPlatform|^TestOutputModeCatalog|^TestVersionReportsMachine|^TestProtocolV7|^TestGeneratedConfig|^TestDiagnostics|^TestDynamicCompletion|^TestRun' ./internal/cli | Tee-Object -FilePath windows-public-contract-results.jsonl
+          & go test -json -count=1 -run '^TestWindowsExposureAuth|^TestWindowsPublicPlatform|^TestOutputModeCatalog|^TestVersionReportsMachine|^TestProtocolV7|^TestGeneratedConfig|^TestDiagnostics|^TestDynamicCompletion|^TestRun' ./internal/cli | Tee-Object -FilePath windows-public-contract-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native public CLI contracts failed' }
+          & go test -json -count=1 ./internal/profiles | Tee-Object -FilePath windows-public-contract-results.jsonl -Append
+          if ($LASTEXITCODE -ne 0) { throw 'Native profile catalog contracts failed' }
       - name: Preserve boundary test results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -42,7 +42,9 @@ exec = ['cmd.exe', '/d', '/c', 'echo CANARY_NEVER_RUN']
     $null = & $main var set SAFE_NAME --value CANARY_VALUE
     Require ($LASTEXITCODE -eq 0) 'Public Windows value command failed'
     $diagnostics = & $main diagnostics | ConvertFrom-Json
-    Require ($LASTEXITCODE -eq 0 -and $diagnostics.data.platform.os -eq 'windows') 'Native diagnostics/platform unavailable'
+    Require ($LASTEXITCODE -eq 0 -and $diagnostics.data.platform.os -eq 'windows' -and $diagnostics.data.ready) 'Native diagnostics/platform unavailable'
+    $profiles = & $main profile list | ConvertFrom-Json
+    Require ($LASTEXITCODE -eq 0 -and [bool]($profiles.data.items | Where-Object { $_.profile -eq 'completion-fixture' -and $_.values })) 'Native profile catalog unavailable'
     $completion = (& $main completion powershell) -join "`n"
     Require ($LASTEXITCODE -eq 0 -and $completion.Contains('Register-ArgumentCompleter -Native')) 'Completion generation failed'
     $completionFile = Join-Path $root 'completion.ps1'

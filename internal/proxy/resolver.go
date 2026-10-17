@@ -12,6 +12,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/hosts"
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -83,8 +84,9 @@ func privateRegistryIdentity(path string) (fileIdentity, error) {
 	if err != nil {
 		return fileIdentity{}, err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-		return fileIdentity{}, errors.New("private regular file required")
+	info, err = platformfs.StatPrivate(path)
+	if err != nil {
+		return fileIdentity{}, err
 	}
 	return fileIdentity{exists: true, modified: info.ModTime().UnixNano(), size: info.Size(), mode: info.Mode(), info: info}, nil
 }
@@ -142,7 +144,7 @@ func (r Resolver) readPorts() (*ports.State, bool, *protocol.Error) {
 		return state, true, err
 	}
 	directory, directoryErr := os.Lstat(r.Ports.Directory)
-	if directoryErr != nil || !directory.IsDir() || directory.Mode().Perm()&0077 != 0 {
+	if directoryErr != nil || !platformfs.DirectoryPrivate(r.Ports.Directory, directory) {
 		state, err := r.Ports.Read()
 		return state, true, err
 	}

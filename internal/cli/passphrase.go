@@ -50,14 +50,21 @@ func normalizeTransferPassphrase(data []byte) (string, *protocol.Error) {
 }
 
 func readPassphraseReader(ctx context.Context, reader io.Reader) (string, *protocol.Error) {
+	if ctx.Err() != nil {
+		return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
+	}
 	type result struct {
 		body []byte
 		err  error
 	}
-	ch := make(chan result, 1)
+	ch := make(chan result)
 	go func() {
 		body, err := io.ReadAll(io.LimitReader(reader, transferPassphraseLimit+1))
-		ch <- result{body: body, err: err}
+		select {
+		case ch <- result{body: body, err: err}:
+		case <-ctx.Done():
+			clear(body)
+		}
 	}()
 	select {
 	case <-ctx.Done():
@@ -66,6 +73,11 @@ func readPassphraseReader(ctx context.Context, reader io.Reader) (string, *proto
 		}
 		return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
 	case read := <-ch:
+		defer clear(read.body)
+		if ctx.Err() != nil {
+			clear(read.body)
+			return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
+		}
 		if read.err != nil {
 			return "", protocol.NewError("io_error", "Cannot read passphrase input.", 1, nil)
 		}

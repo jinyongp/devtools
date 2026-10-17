@@ -9,6 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $stage = $null
 $candidateFailure = $null
+$phase = 'input'
 $previousTls = [Net.ServicePointManager]::SecurityProtocol
 
 function Write-Utf8Json([string]$Text, [bool]$ErrorStream = $false) {
@@ -100,6 +101,7 @@ function Invoke-Candidate([string]$Executable, [string]$Arguments, [string]$Inpu
 try {
     if ($env:DEVTOOLS_ISOLATED_ROOT) { throw 'Installation is unavailable in isolated mode.' }
     if ($Source -and -not $Version) { throw 'Source requires an explicit Version.' }
+    $phase = 'native_architecture'
     Add-Type -AssemblyName System.Net.Http
     Add-Type -AssemblyName System.IO.Compression
     if (-not ('DevtoolsInstallerNativeArchitecture' -as [type])) {
@@ -119,6 +121,7 @@ public static class DevtoolsInstallerNativeArchitecture {
     if (-not [DevtoolsInstallerNativeArchitecture]::IsWow64Process2([DevtoolsInstallerNativeArchitecture]::GetCurrentProcess(), [ref]$processMachine, [ref]$nativeMachine)) { throw 'Cannot resolve native OS architecture.' }
     switch ([int]$nativeMachine) { 34404 { $arch = 'amd64' }; 43620 { $arch = 'arm64' }; default { throw 'Unsupported native architecture.' } }
     [Net.ServicePointManager]::SecurityProtocol = $previousTls -bor [Net.SecurityProtocolType]::Tls12
+    $phase = 'release_metadata'
     if (-not $Source) {
         $releaseBase = $env:DEVTOOLS_RELEASE_URL
         if (-not $releaseBase) { $releaseBase = 'https://github.com/jinyongp/devtools/releases' }
@@ -134,6 +137,7 @@ public static class DevtoolsInstallerNativeArchitecture {
     }
     if ($Source -notmatch '://') { $Source = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Source) }
     if ($BinDir) { $BinDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($BinDir) }
+    $phase = 'artifact_checksum'
     $archiveName = 'devtools_' + $Version + '_windows_' + $arch + '.zip'
     $checksumText = [Text.Encoding]::UTF8.GetString((Read-Artifact $Source ($archiveName + '.sha256') 1024)).Trim()
     $fields = $checksumText -split '\s+'
@@ -142,6 +146,7 @@ public static class DevtoolsInstallerNativeArchitecture {
     $sha = [Security.Cryptography.SHA256]::Create()
     try { $actual = [BitConverter]::ToString($sha.ComputeHash($archive)).Replace('-', '').ToLowerInvariant() } finally { $sha.Dispose() }
     if ($actual -cne $fields[0].ToLowerInvariant()) { throw 'Artifact checksum mismatch.' }
+    $phase = 'archive'
     $memory = [IO.MemoryStream]::new($archive, $false)
     $zip = [IO.Compression.ZipArchive]::new($memory, [IO.Compression.ZipArchiveMode]::Read)
     try {
@@ -157,6 +162,7 @@ public static class DevtoolsInstallerNativeArchitecture {
             }
             $body = $image.ToArray() } finally { $stream.Dispose(); $image.Dispose() }
     } finally { $zip.Dispose(); $memory.Dispose() }
+    $phase = 'image_identity'
     if ($body.Length -lt 64 -or $body[0] -ne 77 -or $body[1] -ne 90) { throw 'Invalid PE executable.' }
     $pe = [BitConverter]::ToUInt32($body, 60)
     if ($pe -gt $body.Length - 26 -or [BitConverter]::ToUInt32($body, $pe) -ne 17744 -or [BitConverter]::ToUInt16($body, $pe + 4) -ne $nativeMachine -or [BitConverter]::ToUInt16($body, $pe + 24) -ne 523) { throw 'PE native architecture mismatch.' }
@@ -167,6 +173,7 @@ public static class DevtoolsInstallerNativeArchitecture {
     if ($matches.Count -ne 1) { throw 'Release linked version/commit identity mismatch.' }
     $commit = $matches[0].Groups[1].Value
     # Use a private user-owned staging directory; no installed path is mutated here.
+    $phase = 'private_staging'
     $stage = Join-Path ([IO.Path]::GetTempPath()) ('devtools-bootstrap-' + [Guid]::NewGuid().ToString('N'))
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
     $security = [Security.AccessControl.DirectorySecurity]::new()
@@ -183,16 +190,19 @@ public static class DevtoolsInstallerNativeArchitecture {
     }
     $candidate = Join-Path $stage 'devtools.exe'
     [IO.File]::WriteAllBytes($candidate, $body)
+    $phase = 'candidate_version'
     $versionOutput = Invoke-Candidate $candidate 'version' ''
     $reported = $versionOutput | ConvertFrom-Json
     if (-not $reported.ok -or $reported.data.version -cne $Version -or $reported.data.commit -cne $commit) { throw 'Release runtime version/commit mismatch.' }
     $externalAlias = [bool](Get-Command dvt -ErrorAction SilentlyContinue)
+    $phase = 'installation'
     $request = @{ action = 'install'; bin_dir = $BinDir; version = $Version; external_alias = $externalAlias } | ConvertTo-Json -Compress
     $output = Invoke-Candidate $candidate '__windows-install' $request
     $result = $output | ConvertFrom-Json
     if (-not $result.ok -or $result.data.action -ne 'install' -or $result.data.version -cne $Version) { throw 'Installation result mismatch.' }
     if (-not $BinDir) { $BinDir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\devtools\bin' }
     $BinDir = [IO.Path]::GetFullPath($BinDir)
+    $phase = 'user_path'
     if ($AddToPath) {
         $currentPath = [Environment]::GetEnvironmentVariable('Path', 'User')
         $entries = @($currentPath -split ';' | Where-Object { $_ })
@@ -205,7 +215,7 @@ public static class DevtoolsInstallerNativeArchitecture {
 } catch {
     $message = 'Windows installation failed. Check the selected release, installation ownership/lock and any retained recovery journal before retrying.'
     if ($candidateFailure) { $message = $candidateFailure }
-    Write-Utf8Json (@{ schema_version = 1; ok = $false; error = @{ code = 'install_failed'; message = $message } } | ConvertTo-Json -Compress) $true
+    Write-Utf8Json (@{ schema_version = 1; ok = $false; error = @{ code = 'install_failed'; message = $message; stage = $phase; exception = $_.Exception.GetType().Name; line = $_.InvocationInfo.ScriptLineNumber } } | ConvertTo-Json -Compress) $true
     exit 1
 } finally {
     [Net.ServicePointManager]::SecurityProtocol = $previousTls

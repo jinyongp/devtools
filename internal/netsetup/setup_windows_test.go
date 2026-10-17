@@ -9,6 +9,7 @@ import (
 	"github.com/jinyongp/devtools/internal/tasks"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -41,8 +42,9 @@ func TestWindowsNativeSetupReplayWithoutSystemMutation(t *testing.T) {
 	if _, e := m.Apply(context.Background(), id, true); e != nil {
 		t.Fatal(e)
 	}
+	m.Executable = strings.ToLower(path)
 	if _, e := m.Apply(context.Background(), id, true); e != nil {
-		t.Fatal(e)
+		t.Fatal("same-image path alias changed request identity", e)
 	}
 	report, e := m.Check()
 	if e != nil || report["mode"] != "native" || report["enabled"] != false || report["intent_enabled"] != true || report["recovery_required"] != false || report["bind_check"] != "performed_when_listener_starts" {

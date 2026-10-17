@@ -101,7 +101,7 @@ func (m Manager) Apply(ctx context.Context, id string, enable bool) (any, *proto
 	if m.Isolated {
 		return nil, netops.Failure("isolated_operation_not_allowed", "Shared executable permissions cannot be changed in isolated mode.")
 	}
-	path, e := filepath.EvalSymlinks(m.executable())
+	path, e := setupIdentityPath(m.executable())
 	if e != nil {
 		return nil, failure("executable_unavailable")
 	}

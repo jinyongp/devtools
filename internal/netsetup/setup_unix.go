@@ -50,3 +50,5 @@ func OpenIdentity(path string) (*os.File, Identity, *protocol.Error) {
 	_, _ = f.Seek(0, io.SeekStart)
 	return f, Identity{canonical, uint64(stat.Dev), uint64(stat.Ino), hex.EncodeToString(hash.Sum(nil))}, nil
 }
+
+func setupIdentityPath(path string) (string, error) { return filepath.EvalSymlinks(path) }

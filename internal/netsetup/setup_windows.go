@@ -66,3 +66,5 @@ func OpenIdentity(path string) (*os.File, Identity, *protocol.Error) {
 	}
 	return f, Identity{Path: canonical, Device: uint64(info.VolumeSerialNumber), Inode: uint64(info.FileIndexHigh)<<32 | uint64(info.FileIndexLow), Digest: hex.EncodeToString(hash.Sum(nil))}, nil
 }
+
+func setupIdentityPath(path string) (string, error) { return location.Canonical(path) }

@@ -82,7 +82,7 @@ func TestMain(m *testing.M) {
 			if os.Args[1] == "__w4d-probe-leaf" {
 				name = "probe-child.pid"
 			}
-			if os.WriteFile(filepath.Join(os.Args[2], name), []byte(strconv.Itoa(os.Getpid())), 0600) != nil {
+			if publishWindowsFixturePID(os.Args[2], name) != nil {
 				os.Exit(93)
 			}
 			if os.Args[1] == "__w4d-probe-tree" {
@@ -103,7 +103,7 @@ func TestMain(m *testing.M) {
 		case "__w4d-app", "__w4d-child":
 			signals := make(chan os.Signal, 1)
 			signal.Notify(signals, os.Interrupt)
-			if err := os.WriteFile(filepath.Join(os.Args[2], os.Args[1]+".pid"), []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {
+			if err := publishWindowsFixturePID(os.Args[2], os.Args[1]+".pid"); err != nil {
 				os.Exit(93)
 			}
 			if os.Args[1] == "__w4d-app" {
@@ -209,10 +209,11 @@ func TestWindowsSupervisorStopReadinessLogsAndAuthorization(t *testing.T) {
 	if failure != nil || checked.Readiness == nil || !checked.Readiness.Ready {
 		t.Fatalf("readiness: %+v %v", checked, failure)
 	}
-	logs, failure := store.Logs(context.Background(), record.ID)
-	if failure != nil || !strings.Contains(logs, "native supervisor output") {
-		t.Fatalf("logs: %q %v", logs, failure)
-	}
+	waitWindowsCondition(t, func() bool {
+		logs, failure := store.Logs(context.Background(), record.ID)
+		return failure == nil && strings.Contains(logs, "native supervisor output")
+	})
+
 	var control control
 	if err := tasks.ReadPrivate(store.path(record.ID, "control.json"), &control); err != nil {
 		t.Fatal(err)
@@ -426,4 +427,14 @@ func TestWindowsSupervisorReadinessTimeoutReapsProbeTreeOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertWindowsProcessExited(t, app)
+}
+
+// File existence is the readiness barrier; never expose a just-created empty PID file.
+func publishWindowsFixturePID(dir, name string) error {
+	path := filepath.Join(dir, name)
+	stage := path + ".writing"
+	if err := os.WriteFile(stage, []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {
+		return err
+	}
+	return os.Rename(stage, path)
 }

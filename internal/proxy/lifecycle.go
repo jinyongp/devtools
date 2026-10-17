@@ -716,7 +716,10 @@ func (m Manager) awaitStart(ctx context.Context, attemptID string, createdAt tim
 			}
 			record, readErr := m.readRecord()
 			m.traceStart("await_record", record, status, readErr)
-			if readErr == nil && record.AttemptID == attemptID && (record.State == "starting" || record.State == "running") && record.EndedAt == nil {
+			if readErr != nil {
+				return Status{}, proxyStorageError()
+			}
+			if record.AttemptID == attemptID && (record.State == "starting" || record.State == "running") && record.EndedAt == nil {
 				continue
 			}
 			return status, nil

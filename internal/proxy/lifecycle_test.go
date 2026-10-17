@@ -1249,6 +1249,44 @@ func TestManagerPreservesReservationWhenRecordCommitFails(t *testing.T) {
 	}
 }
 
+func TestManagerStartReportsRecordReadFailureAfterReadinessRPC(t *testing.T) {
+	manager := testManager(t)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		record, err := manager.readRecord()
+		if err != nil {
+			t.Error(err)
+			http.Error(response, "Unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		// The first status snapshot succeeded. Losing that file before the next
+		// readiness read must report storage failure, not a failed supervisor.
+		if err := os.Remove(manager.path("record.json")); err != nil {
+			t.Error(err)
+		}
+		if err := json.NewEncoder(response).Encode(record); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer server.Close()
+	spawned := 0
+	manager.Spawn = func(string, string) error {
+		spawned++
+		return manager.write("control.json", proxyControl{Address: server.URL, Token: strings.Repeat("a", 64)})
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	port := testPort()
+	request := Request{Action: "start", Port: &port, RequestID: tasks.ID()}
+	for i := 0; i < 2; i++ {
+		if status, err := manager.Apply(ctx, request); err == nil || err.Code != "io_error" {
+			t.Fatalf("read failure request %d: status=%+v error=%#v", i, status, err)
+		}
+	}
+	if spawned != 1 {
+		t.Fatalf("failed request replay spawned %d supervisors", spawned)
+	}
+}
+
 // traceLegacyStart records only public lifecycle state; control credentials and
 // arbitrary stored values are excluded. It is temporary failure instrumentation.
 func traceLegacyStart(t *testing.T, manager *Manager) func(string, Record, Status, error) {

@@ -202,9 +202,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Repeated native project lifecycle contract failed' }
       - name: Diagnose repeated native project lifecycle
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.focus == 'lifecycle' }}
+        env:
+          DEVTOOLS_LEGACY_START_TRACE: '1'
         run: |
-          & go test -json -count=50 -timeout 4m -run '^TestLegacyProxyStopClosesBackendPool$|^TestManagerExpiresStaleStartingAttemptAndAllowsNewRequest$' ./internal/proxy | Tee-Object -FilePath windows-legacy-start-results.jsonl
-          if ($LASTEXITCODE -ne 0) { throw 'Repeated legacy proxy startup requires investigation' }
+          $load = Start-Process -FilePath go -ArgumentList @('test', '-json', '-count=3', '-timeout=5m', './internal/tasks', './internal/values', './internal/backup', './internal/profiletransfer') -WorkingDirectory $PWD -NoNewWindow -PassThru -RedirectStandardOutput legacy-start-load-results.jsonl -RedirectStandardError legacy-start-load-stderr.log
+          try {
+            & go test -json -count=100 -timeout 5m -run '^TestLegacyProxyStopClosesBackendPool$|^TestManagerExpiresStaleStartingAttemptAndAllowsNewRequest$' ./internal/proxy | Tee-Object -FilePath windows-legacy-start-results.jsonl
+            $legacyExit = $LASTEXITCODE
+          } finally {
+            if (-not $load.WaitForExit(300000)) { $load.Kill($true); throw 'Legacy startup diagnostic load timed out' }
+          }
+          if ($load.ExitCode -ne 0) { throw 'Legacy startup diagnostic load failed' }
+          if ($legacyExit -ne 0) { throw 'Repeated legacy proxy startup requires investigation' }
           & go test -json -count=20 -timeout 3m -run '^TestWindowsProjectReal' ./internal/lifecycle | Tee-Object -FilePath project-lifecycle-diagnostic-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Repeated native project lifecycle requires investigation' }
           & go test -json -count=3 -timeout 3m -run '^TestWindowsConcurrentRecordPublication' ./internal/services | Tee-Object -FilePath windows-record-publication-results.jsonl
@@ -432,6 +441,8 @@ jobs:
             project-lifecycle-repeat-results.jsonl
             project-lifecycle-diagnostic-results.jsonl
             windows-legacy-start-results.jsonl
+            legacy-start-load-results.jsonl
+            legacy-start-load-stderr.log
             windows-network-security-results.jsonl
             windows-network-runtime-results.jsonl
             windows-tls-repeat-results.jsonl

@@ -1,0 +1,40 @@
+{
+  "amd64": {
+    "windows-install-transaction-results.jsonl": {
+      "run": 40,
+      "output": 80,
+      "pass": 40
+    },
+    "windows-update-contract-results.jsonl": {
+      "run": 2,
+      "output": 4,
+      "pass": 2
+    },
+    "package": {
+      "archive": "devtools_0.0.0-native-package_windows_amd64.zip",
+      "sha256": "0eb87b816bf360e9fac641dc75c57314c9013722e614a7a69c9fcc46bb29eb7e",
+      "version": "0.0.0-native-package",
+      "commit": "fd865a706f510319e848c5650a596e83074a2af4",
+      "runtime_execution": "Native Actions only; Linux inspection never executes this image"
+    }
+  },
+  "arm64": {
+    "windows-install-transaction-results.jsonl": {
+      "run": 40,
+      "output": 80,
+      "pass": 40
+    },
+    "windows-update-contract-results.jsonl": {
+      "run": 2,
+      "output": 4,
+      "pass": 2
+    },
+    "package": {
+      "archive": "devtools_0.0.0-native-package_windows_arm64.zip",
+      "sha256": "900af2dd50d164925a421d9357302d45282723f14753459ddbd6ac2901fdebbf",
+      "version": "0.0.0-native-package",
+      "commit": "fd865a706f510319e848c5650a596e83074a2af4",
+      "runtime_execution": "Native Actions only; Linux inspection never executes this image"
+    }
+  }
+}

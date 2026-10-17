@@ -2,6 +2,7 @@ package process
 
 import (
 	"os"
+	"runtime"
 	"testing"
 	"unsafe"
 
@@ -33,7 +34,7 @@ func ownedHandleTypes(t *testing.T, job windows.Handle, file *os.File) map[strin
 	freeMarker := dll.NewProc("PssWalkMarkerFree")
 	walk := dll.NewProc("PssWalkSnapshot")
 	var snapshot, marker windows.Handle
-	code, _, _ := capture.Call(uintptr(windows.CurrentProcess()), 0x4|0x8|0x10, 0, uintptr(unsafe.Pointer(&snapshot)))
+	code, _, _ := capture.Call(uintptr(windows.CurrentProcess()), 0x4, 0, uintptr(unsafe.Pointer(&snapshot)))
 	if code != 0 {
 		t.Fatal("PssCaptureSnapshot", windows.Errno(code))
 	}
@@ -54,13 +55,13 @@ func ownedHandleTypes(t *testing.T, job windows.Handle, file *os.File) map[strin
 		if code != 0 {
 			t.Fatal("PssWalkSnapshot", windows.Errno(code))
 		}
-		if entry.TypeNameLength == 0 || entry.TypeName == nil {
-			t.Fatal("snapshot did not expose handle type name")
+		// PSS need not provide names for every object type. Query only its type,
+		// never ObjectName; a concurrently closed runtime handle is not a leak.
+		kind, exists := snapshotObjectType(t, entry.Handle)
+		if !exists {
+			continue
 		}
-		if entry.TypeNameLength%2 != 0 || entry.TypeNameLength > 2048 {
-			t.Fatal("invalid snapshot type name")
-		}
-		kind := windows.UTF16ToString(unsafe.Slice(entry.TypeName, int(entry.TypeNameLength/2)))
+
 		counts[kind]++
 		if entry.Handle == job {
 			if kind != "Job" {
@@ -79,4 +80,25 @@ func ownedHandleTypes(t *testing.T, job windows.Handle, file *os.File) map[strin
 		t.Fatal("handle snapshot omitted reference resources")
 	}
 	return counts
+}
+
+func snapshotObjectType(t *testing.T, handle windows.Handle) (string, bool) {
+	t.Helper()
+	query := windows.NewLazySystemDLL("ntdll.dll").NewProc("NtQueryObject")
+	buffer := make([]byte, 4096)
+	var required uint32
+	status, _, _ := query.Call(uintptr(handle), 2, uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)), uintptr(unsafe.Pointer(&required)))
+	if uint32(status) == 0xc0000008 {
+		return "", false
+	} // snapshot handle closed in the meantime
+	if status != 0 {
+		t.Fatal("NtQueryObject(type)", windows.NTStatus(status))
+	}
+	name := (*windows.NTUnicodeString)(unsafe.Pointer(&buffer[0]))
+	if name.Length == 0 || name.Length%2 != 0 || name.Length > 2048 || name.Buffer == nil {
+		t.Fatal("invalid snapshot object type")
+	}
+	kind := name.String()
+	runtime.KeepAlive(buffer)
+	return kind, true
 }

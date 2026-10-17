@@ -274,7 +274,8 @@ jobs:
 
   homebrew:
     needs: [validate-release, release]
-    if: ${{ !contains(inputs.version, '-') }}
+    # An optional skipped ancestor must not suppress post-release publication.
+    if: ${{ !cancelled() && needs.validate-release.result == 'success' && needs.release.result == 'success' && !contains(inputs.version, '-') }}
     uses: releaseway/homebrew-actions/.github/workflows/publish.yml@5e6570fec2e5d16ad61868877da3a175fac99479 # v0.3.5
     with:
       commit: ${{ inputs.commit }}
@@ -285,7 +286,7 @@ jobs:
 
   installer-page:
     needs: [validate-release, release]
-    if: ${{ !contains(inputs.version, '-') }}
+    if: ${{ !cancelled() && needs.validate-release.result == 'success' && needs.release.result == 'success' && !contains(inputs.version, '-') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

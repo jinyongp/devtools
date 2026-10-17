@@ -19,15 +19,18 @@ ORIGINS = {'linux', 'macos', 'windows-amd64', 'windows-arm64'}
 def cli(binary, root, *args, input=None, error=None):
     env = dict(os.environ, DEVTOOLS_ISOLATED_ROOT=str(root))
     env.pop('DEVTOOLS_TASK_CONTEXT', None)
-    result = subprocess.run([str(binary), *args], cwd=root, env=env, input=input,
-                            capture_output=True, text=True, encoding="utf-8", timeout=60)
-    assert (result.returncode != 0) == bool(error), (args[:3], result.stderr)
-    envelope = json.loads(result.stderr if error else result.stdout)
+    # Binary stdin keeps fixture secret bytes identical on Windows and Unix.
+    result = subprocess.run([str(binary), *args], cwd=root, env=env,
+                            input=input.encode('utf-8') if input is not None else None,
+                            capture_output=True, timeout=60)
+    stdout, stderr = result.stdout.decode('utf-8'), result.stderr.decode('utf-8')
+    assert (result.returncode != 0) == bool(error), (args[:3], stderr)
+    envelope = json.loads(stderr if error else stdout)
     assert envelope['ok'] == (not error) and envelope['schema_version'] == 1
     if error:
         assert envelope['error']['code'] == error, envelope['error']
         return envelope['error']
-    assert SECRET.strip() not in result.stdout, 'secret disclosed in response'
+    assert SECRET.strip() not in stdout, 'secret disclosed in response'
     return envelope['data']
 
 
@@ -59,6 +62,29 @@ def export_fixture(binary, root, output, origin, commit):
     (output / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False), encoding='utf-8')
 
 
+def private_archive_copy(path, body):
+    """Actions artifacts discard private mode/ACL metadata; restore it on our copy."""
+    path.write_bytes(body)
+    if os.name != 'nt':
+        path.chmod(0o600)
+        return
+    script = r"""
+$ErrorActionPreference = 'Stop'
+$user = [Security.Principal.WindowsIdentity]::GetCurrent().User
+$system = [Security.Principal.SecurityIdentifier]::new('S-1-5-18')
+$acl = [Security.AccessControl.FileSecurity]::new()
+$acl.SetOwner($user)
+$acl.SetAccessRuleProtection($true, $false)
+foreach ($sid in @($user, $system)) {
+    $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'Allow'))
+}
+Set-Acl -LiteralPath $env:DEVTOOLS_EXCHANGE_ARCHIVE -AclObject $acl
+"""
+    subprocess.run(['pwsh', '-NoProfile', '-NonInteractive', '-Command', script],
+                   env=dict(os.environ, DEVTOOLS_EXCHANGE_ARCHIVE=str(path)),
+                   check=True, capture_output=True, text=True, encoding='utf-8', timeout=30)
+
+
 def import_fixtures(root, fixtures, origin, commit):
     own = fixtures / ('profile-exchange-' + origin)
     identity = json.loads((own / 'manifest.json').read_text(encoding='utf-8'))
@@ -73,10 +99,12 @@ def import_fixtures(root, fixtures, origin, commit):
         directory = fixtures / ('profile-exchange-' + source)
         manifest = json.loads((directory / 'manifest.json').read_text(encoding='utf-8'))
         assert manifest['commit'] == commit and manifest['origin'] == source
-        archive = directory / 'portable.age'
-        assert hashlib.sha256(archive.read_bytes()).hexdigest() == manifest['archive_sha256']
+        encrypted = (directory / 'portable.age').read_bytes()
+        assert hashlib.sha256(encrypted).hexdigest() == manifest['archive_sha256']
         target = root / source
         target.mkdir()
+        archive = target / 'portable.age'
+        private_archive_copy(archive, encrypted)
         def api(*args, **kwargs):
             return cli(binary, target, *args, '--profile', 'portable', **kwargs)
         base = ['profile', 'import', '--file', str(archive), '--passphrase-stdin']

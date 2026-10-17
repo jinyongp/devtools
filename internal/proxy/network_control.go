@@ -468,7 +468,11 @@ func (m Manager) networkRPC(ctx context.Context, q networkControlRequest) (Liste
 	response, e := client.Do(request)
 	if e != nil {
 		failure := proxyFailure("proxy_pending")
-		failure.Details = map[string]any{"transport_error": e.Error()}
+		message := e.Error()
+		if len(message) > 1024 {
+			message = message[:1024]
+		}
+		failure.Details = map[string]any{"transport_error": message}
 		return ListenerStatus{}, failure
 	}
 	defer response.Body.Close()

@@ -206,8 +206,27 @@ func TestTLSRejectsUnknownSNI(t *testing.T) {
 	if _, e := m.Configure(ctx, "tls", "", fmt.Sprintf("127.0.0.1:%d", port), false, tasks.ID()); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := m.NetworkApply(ctx, "start", "tls", false, tasks.ID()); e != nil {
-		t.Fatalf("TLS-only start: code=%s details=%v", e.Code, e.Details)
+	// A lost control response is explicitly resumable with the SAME request ID.
+	// Establish readiness before testing SNI; do not turn proxy_pending into a
+	// fresh start or retry unrelated errors.
+	requestID := tasks.ID()
+	ready, stop := context.WithTimeout(ctx, 10*time.Second)
+	defer stop()
+	for {
+		_, failure := m.NetworkApply(ready, "start", "tls", false, requestID)
+		if failure == nil {
+			break
+		}
+		if failure.Code != "proxy_pending" || ready.Err() != nil {
+			t.Fatalf("TLS-only start: code=%s details=%v", failure.Code, failure.Details)
+		}
+		timer := time.NewTimer(20 * time.Millisecond)
+		select {
+		case <-ready.Done():
+			timer.Stop()
+			t.Fatal("TLS-only start did not converge", failure)
+		case <-timer.C:
+		}
 	}
 	conn, e := tls.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port), &tls.Config{InsecureSkipVerify: true, ServerName: "unknown.localhost"})
 	if conn != nil {

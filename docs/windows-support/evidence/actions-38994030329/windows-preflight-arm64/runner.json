@@ -1,0 +1,11 @@
+{
+  "commit": "3bd08c78da3410e2ead01b53c72270daa6bc1256",
+  "runner": "windows-11-arm",
+  "image": "win11-vs2026-arm64",
+  "imageVersion": "20261013.183.4",
+  "architecture": "arm64",
+  "osVersion": "10.0.26200.0",
+  "powershell": "7.6.6",
+  "legacyPowershell": "5.1.26100.9457",
+  "go": "go version go1.27.1 windows/arm64"
+}

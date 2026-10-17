@@ -1,0 +1,11 @@
+{
+  "commit": "602eb51a968baff35cfe94d8085af8b3704efc54",
+  "runner": "windows-2025",
+  "image": "win25-vs2026",
+  "imageVersion": "20261007.264.1",
+  "architecture": "amd64",
+  "osVersion": "10.0.26100.0",
+  "powershell": "7.6.6",
+  "legacyPowershell": "5.1.26100.33438",
+  "go": "go version go1.27.1 windows/amd64"
+}

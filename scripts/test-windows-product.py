@@ -85,7 +85,7 @@ def main():
         install = subprocess.run([
             shutil.which("powershell.exe"), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
             "-File", str(repository / "scripts" / "install.ps1"), "-Version", args.version,
-            "-Source", str(args.release_dir.resolve()), "-BinDir", str(binary.parent),
+            "-Source", str(args.release_dir.resolve()), "-BinDir", str(binary.parent), "-NoPath",
         ], cwd=repository, env=base_env, text=True, encoding="utf-8", capture_output=True, timeout=180)
         assert install.returncode == 0, "Candidate installer did not complete (raw output withheld)"
         identity = api("version")

@@ -211,8 +211,24 @@ gh workflow run release.yml --ref main -f version=0.23.0 -f commit="$(git rev-pa
 
 로컬에서 스킬 배포물만 확인하려면
 `devtools run release:skill VERSION`을 실행한다.
-[배포 상세](install.md#github-releases-게시)와
 [설치된 release 검증](../verify/README.md)을 참고한다.
+
+### 로컬 배포물 만들기
+
+일반 사용자는 [설치 안내](install.md)를 따른다. 로컬 패키징에는 개발 환경의 Go와 Python 3가 필요하다.
+아래 `VERSION`은 게시할 버전 번호로 바꾸며 태그의 `v`는 제외한다.
+
+```sh
+devtools run release:cli VERSION
+TARGET_OS=linux TARGET_ARCH=amd64 devtools run release:cli VERSION
+devtools run release:skill VERSION
+```
+
+CLI 기본 대상은 빌드 환경의 OS/CPU다. `TARGET_OS`와 `TARGET_ARCH`로 다른 대상을 선택한다.
+`OUTPUT_DIR`로 기본 `dist/` 출력 위치를, `COMMIT`으로 빌드의 커밋 식별자를 지정할 수 있다.
+CLI archive에는 실행 파일 하나가 들어가며 `.sha256` 파일을 함께 만든다.
+Skill archive에는 `devtools/SKILL.md`가 들어가고 별도 checksum을 만든다.
+Skill 패키징 자체에는 `uvx`·`skills-ref`가 필요 없지만 게시 전 `check:all`은 공식 Skill 검증을 실행한다.
 
 ### Homebrew 배포
 

@@ -121,12 +121,11 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 
 ## protocol v7 마이그레이션
 
-현재 소스는 Windows 지원 후보의 protocol 7입니다. `version`/`schema`의
+CLI protocol v7은 Windows 지원과 함께 도입되었습니다. `version`/`schema`의
 `data.protocol_version`이 7이고 envelope `schema_version`은 1입니다.
 `diagnostics`에 필수 `platform` 객체가 추가되고 `completion`의 공개 shell 목록에
 `powershell`이 추가됩니다. 설치된 binary의 schema를 다시 조회하세요.
 `run`의 child 인자 경계·출력 모드와 버전 없는 `devtools.toml`은 v6와 같습니다.
-이 변경은 Windows release/tag를 게시했다는 뜻이 아닙니다.
 
 ## protocol v6 마이그레이션
 

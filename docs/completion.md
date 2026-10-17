@@ -42,7 +42,7 @@ devtools completion fish > ~/.config/fish/completions/devtools.fish
 
 ## PowerShell 5.1 / 7
 
-PowerShell 자동완성은 현재 소스의 protocol v7 후보에 포함됩니다. Windows 자산의 게시 상태와
+PowerShell 자동완성은 Windows에서도 사용할 수 있습니다.
 지원 범위는 [Windows 안내](windows.md)를 확인하세요. 설치본이 이 셸을 지원하는지는
 `devtools completion --help`로 확인할 수 있습니다.
 

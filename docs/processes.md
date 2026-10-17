@@ -4,7 +4,7 @@
 
 `devtools process`는 `devtools.toml`의 이름 명령을 백그라운드에서 실행하고 관리한다. 프로젝트 명령의 요구 사항 검사, var/sec/env 주입과 port binding은 `devtools command run`과 같다. agent나 dashboard 세션과 별도로 supervisor가 실행을 관리한다.
 Windows에서는 상위 host Job이 종료되면 함께 종료될 수 있다. 실제 PC의 터미널 닫기 동작은
-미검증이며 [Windows 안내](windows.md#저장소와-프로세스)의 수명 경계를 따른다.
+미검증이며 [Windows 안내](windows.md#storage-and-processes)의 수명 경계를 따른다.
 
 ```sh
 devtools process start web --request-id UUID

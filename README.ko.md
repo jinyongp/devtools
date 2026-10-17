@@ -6,54 +6,48 @@ devtools는 프로젝트의 개발환경과 작업을 한곳에서 관리하는 
 환경변수와 secret을 저장해 명령 실행에 사용하고, 개발 서버의 실행·포트·로컬 주소를
 관리할 수 있습니다. 작업과 진행 기록을 남겨 다른 세션이나 에이전트에서 이어갈 수도 있습니다.
 
-## 지원 환경
-
-- **macOS·Linux·WSL:** 아래 설치 방법을 사용합니다. WSL에는 Linux용 CLI를 설치하세요.
-- **Windows 네이티브:** v0.25.0에 x64·ARM64 지원을 제공할 예정입니다.
-  v0.25.0 게시 전에는 검증된 후보 자산을 사용하세요. 대상은 Windows 11 25H2·26H2입니다.
-  [Windows 안내](docs/windows.md)에서 후보 설치와 Actions 검증 범위·실제 PC 미검증 한계를 확인하세요.
-
-Windows와 WSL의 데이터·서버·CA는 별개입니다. 두 환경을 함께 사용한다면
-[WSL 안내](docs/wsl.md)를 먼저 확인하세요.
-
 ## 설치
 
-Homebrew를 사용한다면 다음 명령으로 설치하세요. 설치 후 바로 `devtools`로 실행할 수 있습니다.
+아래 명령은 최신 안정 버전을 설치합니다. 설치 스크립트를 사용하면 Go를 따로 설치할 필요가 없습니다.
+
+### Windows (PowerShell)
+
+```powershell
+irm https://jinyongp.dev/devtools/install.ps1 | iex
+```
+
+설치 후 새 터미널에서 `devtools version`을 실행하세요. 설치기가 PC에 맞는 x64·ARM64를
+선택하고 사용자 PATH에 등록합니다. 관리자 권한은 필요하지 않습니다.
+Windows 11 25H2·26H2를 지원합니다. 자세한 조건은 [Windows 안내](docs/windows.md)를 참고하세요.
+
+### macOS / Linux / WSL
+
+Homebrew를 사용한다면:
 
 ```sh
 brew install jinyongp/tap/devtools
 ```
 
-Homebrew는 zsh·bash·fish 자동완성 파일도 함께 설치합니다. 셸 자동완성이 활성화되어
-있으면 `devtools` 뒤에서 Tab으로 명령과 옵션을 고를 수 있습니다.
-[자동완성 설정](docs/completion.md)에서 셸별 설정 방법을 확인하세요.
-
-### 설치 스크립트 사용
-
-아래 명령을 터미널에 붙여 넣으세요. 설치기가 운영체제와 CPU를 확인해 최신 안정
-버전을 `~/.local/bin/devtools`에 설치하고 짧은 명령 `dvt`도 제공합니다. curl이 필요합니다.
+또는 curl로 설치하세요.
 
 ```sh
 curl -fsSL https://jinyongp.dev/devtools/install.sh | sh
-```
-
-설치한 명령을 어디서든 실행할 수 있도록 설치 경로를 PATH에 추가하세요.
-
-```sh
 export PATH="$HOME/.local/bin:$PATH"
 devtools version
-dvt version
 ```
 
-새 터미널에서도 사용하려면 위의 `export` 줄을 사용하는 셸의 설정 파일
-(예: zsh의 `~/.zshrc`)에 추가하세요.
-[설치 안내](docs/install.md)에서 버전 지정과 설치 위치 변경 방법을 확인할 수 있습니다.
+curl로 설치했다면 새 터미널에서도 사용할 수 있도록 `export` 줄을 셸 설정 파일
+(예: `~/.zshrc`)에 추가하세요. WSL 안에서도 이 Linux용 설치 방법을 사용합니다.
+
+짧은 명령 `dvt`도 제공합니다. 다른 프로그램이 이미 사용하는 이름이면 해당 파일을 보존합니다.
+설치 위치 변경은 [설치와 업데이트](docs/install.md), 셸 설정은 [자동완성](docs/completion.md)을 참고하세요.
+Windows와 WSL의 데이터·서버·CA는 별개입니다. 함께 사용할 때는 [WSL 안내](docs/wsl.md)를 확인하세요.
 
 ## 시작하기
 
 처음 사용할 프로젝트 디렉터리에서 실행하세요. `myapp`은 값을 저장할 profile 이름입니다.
 같은 이름의 profile이 있다면 기존 값을 공유하므로 새 예제에는 사용하지 않은 이름을 고르세요.
-아래 첫 예제는 macOS·Linux·WSL과 Windows 후보에서 같습니다.
+아래 첫 예제는 macOS·Linux·WSL과 Windows에서 같습니다.
 
 ```sh
 devtools init --profile myapp
@@ -72,7 +66,7 @@ macOS·Linux·WSL의 POSIX 셸:
 devtools run --env local -- sh -c 'echo "$LOG_LEVEL"'
 ```
 
-Windows 후보의 PowerShell 또는 cmd:
+Windows의 PowerShell 또는 cmd:
 
 ```powershell
 devtools run --env local -- cmd.exe /d /c set LOG_LEVEL

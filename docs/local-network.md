@@ -3,7 +3,7 @@
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
 devtools는 서버 실행, 포트, 로컬 도메인, HTTPS와 공유를 함께 관리한다.
-macOS·Linux와 Windows 네이티브 후보에서 실행하며 WSL은 Linux 환경으로 동작한다.
+macOS·Linux와 Windows 네이티브에서 실행하며 WSL은 Linux 환경으로 동작한다.
 Windows의 지원/검증 범위는 [Windows 안내](windows.md), 별도 client trust는 [WSL 안내](wsl.md)를 따른다.
 사용자 계정의 daemon 하나가 여러 named listener를 관리한다.
 아래 `UUID`는 새 요청 UUID로 바꾼다. 응답을 잃었으면 같은 입력과 UUID로 재시도한다.

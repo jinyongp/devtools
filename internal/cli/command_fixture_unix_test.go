@@ -4,6 +4,7 @@ package cli
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -13,7 +14,11 @@ func commandFixture(t *testing.T, kind string) []string {
 	script := ""
 	switch kind {
 	case "true":
-		return []string{"/bin/true"}
+		path, err := exec.LookPath("true")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return []string{path}
 	case "version", "version-bad":
 		version := "1.2.3"
 		if kind == "version-bad" {

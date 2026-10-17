@@ -82,10 +82,13 @@ zsh와 fish를 명시적으로 설치해 세 shell을 모두 확인한다.
 release workflow도 이를 필수 dependency로 호출한다. 이 작업의 최종 Windows 실행 근거는
 Actions이며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 절차를 대신 사용하지 않는다.
 
+- suite·boundaries·product lane을 x64/ARM64에서 병렬 실행하고 x64 race는 별도 lane으로 실행한다.
+  Go module/build cache를 복원하되 실제 테스트는 `-count=1`로 다시 실행한다.
 - 전체 native Go/복구/보안/console/프로세스 suite, 실제 PS5.1/7·npm/pnpm shim,
   installer/update 중단·원복, constrained hosts/trust/provider 검사를 실행한다.
 - x64는 호환 cgo/mingw-w64 race 검사를 실행하고 ARM64는 native contention으로 검증한다.
-  일반 suite의 대용량 maintenance 선택 항목은 별도 storage gate에서 명시 실행한다.
+  일반 suite의 대용량 maintenance 선택 항목, handle 누수 실패 주입, lifecycle/TLS 반복 검사는
+  boundaries lane에서 명시 실행한다. 일반 패키지별 테스트·vet은 전체 suite로 합친다.
 - scripts/test-windows-product.py는 같은 job의 실제 candidate ZIP을 설치해 alias,
   값·secret·task, project/proxy/restart/stop, CA 검증 TLS와 암호화 profile 전송을 확인한다.
   private state는 DEVTOOLS_ISOLATED_ROOT에 분리한다. typed pending만 같은 UUID로 재개한다.
@@ -93,6 +96,8 @@ Actions이며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 절차를 대
   CLI/Node/browser CPU를 구분하고 ARM64 위 x64 browser 에뮬레이션도 그대로 기록한다.
 - release-assets에는 해당 native job에서 검증한 Windows ZIP을 checksum 대조 후 그대로 포함한다.
   focused dispatch는 진단용이며 full 최종 gate를 대체하지 않는다.
+  결과는 `windows-platform-{amd64,arm64}-{suite,boundaries,product,race}` artifact에 보관한다.
+  새로운 push/PR은 이전 CI를 취소하지만 release 실행은 취소하지 않는다.
 
 실제 PC의 UAC·CurrentUser trust/browser 통합·터미널 닫기·설치/update 관찰과 최종 WSL2/Windows
 browser 연계는 NOT RUN이다. runner browser 성공이나 과거 standalone probe로 그 범위를

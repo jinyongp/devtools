@@ -117,7 +117,25 @@ func replaceHostsFile(ctx context.Context, original *platformfs.File, body []byt
 	if err = windows.SetFileTime(fileHandle, &info.CreationTime, &info.LastAccessTime, nil); err != nil {
 		return err
 	}
-	if err = windows.SetKernelObjectSecurity(fileHandle, windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.SACL_SECURITY_INFORMATION, security); err != nil {
+	control, _, err := security.Control()
+	if err != nil {
+		return err
+	}
+	information := windows.SECURITY_INFORMATION(windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION | windows.DACL_SECURITY_INFORMATION)
+	if control&windows.SE_DACL_PROTECTED != 0 {
+		information |= windows.PROTECTED_DACL_SECURITY_INFORMATION
+	} else {
+		information |= windows.UNPROTECTED_DACL_SECURITY_INFORMATION
+	}
+	if control&windows.SE_SACL_PRESENT != 0 {
+		information |= windows.SACL_SECURITY_INFORMATION
+		if control&windows.SE_SACL_PROTECTED != 0 {
+			information |= windows.PROTECTED_SACL_SECURITY_INFORMATION
+		} else {
+			information |= windows.UNPROTECTED_SACL_SECURITY_INFORMATION
+		}
+	}
+	if err = windows.SetKernelObjectSecurity(fileHandle, information, security); err != nil {
 		return err
 	}
 	actual, err := windows.GetSecurityInfo(fileHandle, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.SACL_SECURITY_INFORMATION)

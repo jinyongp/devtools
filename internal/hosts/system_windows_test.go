@@ -131,11 +131,11 @@ func TestWindowsSystemHostsRestoresDisposableRunner(t *testing.T) {
 	t.Cleanup(func() {
 		current, failure := system.Read()
 		if failure != nil {
-			t.Error(failure)
+			t.Errorf("%s: %v", failure.Code, failure.Details)
 			return
 		}
 		if failure = system.Apply(context.Background(), Request{Expected: digest(current)}); failure != nil {
-			t.Error(failure)
+			t.Errorf("%s: %v", failure.Code, failure.Details)
 			return
 		}
 		restored, failure := system.Read()

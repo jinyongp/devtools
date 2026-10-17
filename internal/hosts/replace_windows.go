@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/jinyongp/devtools/internal/platformfs"
@@ -187,11 +188,35 @@ func replaceHostsFile(ctx context.Context, original *platformfs.File, body []byt
 		return err
 	}
 	defer root.Close()
-	if err = ctx.Err(); err != nil {
-		return err
+	deadline, delay := time.Now().Add(2*time.Second), 10*time.Millisecond
+	for {
+		if err = ctx.Err(); err != nil {
+			return err
+		}
+		if err = sameHostsFile(handle, path); err != nil {
+			return err
+		}
+		err = root.Rename(filepath.Base(candidate), filepath.Base(path))
+		if err == nil || (!errors.Is(err, windows.ERROR_SHARING_VIOLATION) && !errors.Is(err, windows.ERROR_ACCESS_DENIED)) {
+			return err
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return err
+		}
+		if delay > remaining {
+			delay = remaining
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+		delay *= 2
+		if delay > 200*time.Millisecond {
+			delay = 200 * time.Millisecond
+		}
 	}
-	if err = sameHostsFile(handle, path); err != nil {
-		return err
-	}
-	return root.Rename(filepath.Base(candidate), filepath.Base(path))
 }

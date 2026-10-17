@@ -18,7 +18,7 @@ HTTPS·도메인·공유와 통합 시작의 확장 계약은
 
 ## 사용 목적
 
-devtools는 개인용 개발 도구를 하나의 CLI로 제공한다. macOS, Linux, WSL에서 에이전트가 비대화형 CLI로 사용하고, 사용자는 선택적으로 dashboard에서 같은 데이터를 관리한다.
+devtools는 개인용 개발 도구를 하나의 CLI로 제공한다. macOS, Linux, WSL 및 Windows 네이티브 후보에서 에이전트가 CLI로 사용하고, 사용자는 선택적으로 dashboard에서 같은 데이터를 관리한다. Windows OS trust/untrust는 대화형 확인이 필요하며 [Windows 지원 한계](windows.md)를 따른다.
 
 프로젝트는 일반 환경변수를 읽고 기존 실행 명령을 유지한다. devtools는 프로젝트 명령을 호출하는 앞단의 실행 진입점이다. `package.json`이나 기존 task runner의 명령은 독립적으로 실행할 수 있고, 에이전트는 `devtools.toml`에 정의한 이름 또는 직접 지정한 명령으로 실행한다.
 

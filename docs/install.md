@@ -1,6 +1,6 @@
 # 설치와 업데이트
 
-devtools는 운영체제와 CPU에 맞는 실행 파일을 설치해 사용한다. 설치된 프로그램은 Go 도구 없이 실행할 수 있다. 지원 배포물은 macOS와 Linux의 amd64·arm64이며, WSL은 Linux 배포물을 사용한다.
+devtools는 운영체제와 CPU에 맞는 실행 파일을 설치해 사용한다. 설치된 프로그램은 Go 도구 없이 실행할 수 있다. 현재 stable 배포물은 macOS와 Linux의 amd64·arm64이며, WSL은 Linux 배포물을 사용한다. 현재 소스의 다음 릴리스 후보는 Windows x64·ARM64 ZIP도 만든다. [Windows 안내](windows.md)의 미게시 상태와 검증 한계를 먼저 확인한다.
 
 ## 배포물 준비
 

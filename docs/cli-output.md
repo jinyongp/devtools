@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | `json` | 조회·변경·진단·schema 명령 | JSON 응답 한 개 |
 | `text` | `help`, 인자 없는 호출, `--help`·`-h` | 사람이 읽는 도움말 |
-| `artifact` | `completion bash`, `completion zsh`, `completion fish` | 생성한 셸 스크립트 원문 |
+| `artifact` | `completion bash`, `completion zsh`, `completion fish`, `completion powershell` | 생성한 셸 스크립트 원문 |
 | `passthrough` | `command run`, 별칭 `run` | 자식 프로그램의 출력 원문 |
 
 devtools 옵션 위치의 `--help`는 텍스트 도움말을 반환합니다. `devtools run --help`는

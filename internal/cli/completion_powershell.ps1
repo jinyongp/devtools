@@ -40,9 +40,10 @@ function __DevtoolsComplete {
         $words.Add($current)
         $candidates = [Collections.Generic.List[string]]::new()
         $application = Get-Command -Name $first[1] -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($application) {
+        if ($application -and (Get-Location).Provider.Name -eq 'FileSystem') {
             $start = [Diagnostics.ProcessStartInfo]::new($application.Source)
             $start.Arguments = '__complete'
+            $start.WorkingDirectory = (Get-Location).ProviderPath
             $start.UseShellExecute = $false
             $start.CreateNoWindow = $true
             $start.RedirectStandardInput = $true
@@ -63,6 +64,7 @@ function __DevtoolsComplete {
                     $diagnostic = $child.StandardError.ReadToEndAsync()
                     $bytes = $utf8.GetBytes(($words -join [string][char]0) + [char]0)
                     if ($bytes.Length -le 65536) { $child.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length) }
+                    $child.StandardInput.BaseStream.Flush()
                     $child.StandardInput.Close()
                     if (-not $child.WaitForExit(2000)) { $child.Kill(); $null = $child.WaitForExit(500) }
                     elseif ($child.ExitCode -eq 0 -and $output.Wait(500)) {

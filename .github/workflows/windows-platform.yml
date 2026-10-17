@@ -71,20 +71,41 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $false
           & go build -o devtools.exe ./cmd/devtools
           if ($LASTEXITCODE -ne 0) { throw 'Native CLI build failed' }
-          $version = (& .\devtools.exe version | ConvertFrom-Json)
-          if ($LASTEXITCODE -ne 0 -or -not $version.ok) { throw 'Native version failed' }
+          function Invoke-BoundaryCli([string[]] $CliArgs) {
+            $start = [Diagnostics.ProcessStartInfo]::new((Resolve-Path .\devtools.exe).Path)
+            $start.UseShellExecute = $false
+            $start.RedirectStandardOutput = $true
+            $start.RedirectStandardError = $true
+            foreach ($arg in $CliArgs) { $start.ArgumentList.Add($arg) }
+            $process = [Diagnostics.Process]::new()
+            $process.StartInfo = $start
+            try {
+              if (-not $process.Start()) { throw 'CLI did not start' }
+              $stdout = $process.StandardOutput.ReadToEndAsync()
+              $stderr = $process.StandardError.ReadToEndAsync()
+              $process.WaitForExit()
+              return [pscustomobject]@{ Code = $process.ExitCode; Out = $stdout.Result; Err = $stderr.Result }
+            } finally { $process.Dispose() }
+          }
+          $version = Invoke-BoundaryCli -CliArgs @('version')
+          Write-Host "Version exit: $($version.Code)"
+          if ($version.Code -ne 0 -or -not ($version.Out | ConvertFrom-Json).ok) { throw "Native version failed: $($version.Err)" }
           $isolation = Join-Path $env:TEMP ('devtools-unimplemented-' + [guid]::NewGuid().ToString('N'))
-          & .\devtools.exe var list --profile windows-boundary --isolated-root $isolation 2> unsupported.json
-          if ($LASTEXITCODE -ne 3) { throw 'Unimplemented command was not rejected' }
-          $failure = Get-Content unsupported.json -Raw | ConvertFrom-Json
-          if ($failure.error.code -ne 'unsupported_platform' -or (Test-Path $isolation)) { throw 'Unsafe intermediate command behavior' }
-          & .\devtools.exe __dashboard-serve $isolation $isolation 2> unsupported-internal.json
-          if ($LASTEXITCODE -ne 3 -or (Test-Path $isolation)) { throw 'Internal daemon entry point was not rejected safely' }
+          $result = Invoke-BoundaryCli -CliArgs @('var', 'list', '--profile', 'windows-boundary', '--isolated-root', $isolation)
+          Write-Host "Unsupported public command exit: $($result.Code)"
+          $result.Err | Set-Content unsupported.json
+          if ($result.Code -ne 3 -or ($result.Err | ConvertFrom-Json).error.code -ne 'unsupported_platform' -or (Test-Path $isolation)) { throw "Unsafe intermediate public command: $($result.Err)" }
+          $result = Invoke-BoundaryCli -CliArgs @('__dashboard-serve', $isolation, $isolation)
+          Write-Host "Unsupported internal command exit: $($result.Code)"
+          $result.Err | Set-Content unsupported-internal.json
+          if ($result.Code -ne 3 -or ($result.Err | ConvertFrom-Json).error.code -ne 'unsupported_platform' -or (Test-Path $isolation)) { throw "Unsafe intermediate internal command: $($result.Err)" }
       - name: Preserve boundary test results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-platform-${{ matrix.arch }}
-          path: platformfs-results.jsonl
+          path: |
+            platformfs-results.jsonl
+            unsupported*.json
           if-no-files-found: warn
           retention-days: 7

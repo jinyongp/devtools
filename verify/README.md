@@ -80,11 +80,13 @@ zsh와 fish를 명시적으로 설치해 세 shell을 모두 확인한다.
 
 `.github/workflows/windows-platform.yml`의 full gate는 x64와 ARM64에서 실행한다.
 release workflow도 이를 필수 dependency로 호출한다. 동일 main push SHA의 전체 성공 근거가 있으면
-소스 검사를 재사용하고 최종 버전의 product lane은 다시 실행한다. 누락·오류 시 전체 재실행한다.
+소스 검사를 재사용하고 installer·최종 버전의 product lane은 다시 실행한다. 누락·오류 시 전체 재실행한다.
 자세한 조건은 [개발 가이드](../docs/development.md#릴리스)를 따른다. 이 작업의 최종 Windows 실행 근거는
 Actions이며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 절차를 대신 사용하지 않는다.
 
 - suite·boundaries·product lane을 x64/ARM64에서 병렬 실행하고 x64 race는 별도 lane으로 실행한다.
+  PS5.1·native PS7·ARM64 위 x64 PS7 설치 검사는 각각 별도 runner에서 병렬 실행한다.
+  PATH와 기본 설치 경로를 사용하는 전체 시나리오를 엔진마다 그대로 유지한다.
   Go module/build cache를 복원하되 실제 테스트는 `-count=1`로 다시 실행한다.
 - 전체 native Go/복구/보안/console/프로세스 suite, 실제 PS5.1/7·npm/pnpm shim,
   installer/update 중단·원복, constrained hosts/trust/provider 검사를 실행한다.
@@ -98,7 +100,8 @@ Actions이며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 절차를 대
   CLI/Node/browser CPU를 구분하고 ARM64 위 x64 browser 에뮬레이션도 그대로 기록한다.
 - release-assets에는 해당 native job에서 검증한 Windows ZIP을 checksum 대조 후 그대로 포함한다.
   focused dispatch는 진단용이며 full 최종 gate를 대체하지 않는다.
-  결과는 `windows-platform-{amd64,arm64}-{suite,boundaries,product,race}` artifact에 보관한다.
+  결과는 `windows-platform-{arch}-{lane}` artifact에 보관한다. installer lane은
+  `installer-ps5`·`installer-ps7`·ARM64의 `installer-x64`로 구분한다.
   새로운 push/PR은 이전 CI를 취소하지만 release 실행은 취소하지 않는다.
 
 Release의 `profile-exchange`는 이미 빌드한 Linux·macOS·Windows x64/ARM64 CLI와 합성 데이터로

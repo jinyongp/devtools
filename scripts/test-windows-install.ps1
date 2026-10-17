@@ -1,4 +1,8 @@
-param([Parameter(Mandatory=$true)][string]$Arch, [Parameter(Mandatory=$true)][string]$Commit)
+param(
+    [Parameter(Mandatory=$true)][string]$Arch,
+    [Parameter(Mandatory=$true)][string]$Commit,
+    [ValidateSet('all', 'ps5', 'ps7', 'x64')][string]$Engine = 'all'
+)
 $ErrorActionPreference = 'Stop'
 $temporaryBase = $env:RUNNER_TEMP
 if (-not $temporaryBase) { $temporaryBase = [IO.Path]::GetTempPath() }
@@ -39,9 +43,12 @@ try {
         & python -B scripts/package.py
         Require ($LASTEXITCODE -eq 0) 'Cannot prepare native install release.'
     }
-    $shells = @((Get-Command powershell.exe).Source, (Get-Command pwsh.exe).Source)
+    $shells = @()
+    if ($Engine -in @('all', 'ps5')) { $shells += (Get-Command powershell.exe).Source }
+    if ($Engine -in @('all', 'ps7')) { $shells += (Get-Command pwsh.exe).Source }
+    if ($Engine -eq 'x64' -and $Arch -ne 'arm64') { throw 'x64 emulation requires an ARM64 runner.' }
     $emulatedShell = $null
-    if ($Arch -eq 'arm64') {
+    if ($Arch -eq 'arm64' -and $Engine -in @('all', 'x64')) {
         # Pinned official portable test fixture; no system installation or PATH change.
         $archive = Join-Path $root 'PowerShell-7.6.6-win-x64.zip'
         Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/PowerShell/PowerShell/releases/download/v7.6.6/PowerShell-7.6.6-win-x64.zip' -OutFile $archive -TimeoutSec 120
@@ -67,6 +74,7 @@ function Invoke-RestMethod([string]$Uri) {
 irm https://jinyongp.dev/devtools/install.ps1 | iex
 '@
     foreach ($shell in $shells) {
+        Write-Output ('Testing installer engine: ' + $shell)
         $shellVersion = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.ToString() | ConvertTo-Json')
         $bin = Join-Path $root ('설치 경로 ' + [Guid]::NewGuid().ToString('N') + '/bin')
         $beforePath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -152,12 +160,13 @@ irm https://jinyongp.dev/devtools/install.ps1 | iex
     $pathBefore = [Environment]::GetEnvironmentVariable('Path', 'User')
     $pathBin = Join-Path $root 'explicit PATH install/bin'
     try {
-        $installed = Invoke-Json $shells[1] @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Json', '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $pathBin, '-AddToPath')
+        $pathShell = if ($Engine -eq 'all') { $shells[1] } else { $shells[0] }
+        $installed = Invoke-Json $pathShell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Json', '-Version', '0.0.0-test.1', '-Source', $releases, '-BinDir', $pathBin, '-AddToPath')
         Require ($installed.ok) 'Explicit PATH installation failed.'
         $entries = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';'
         Require ([bool]($entries | Where-Object { $_ -ieq $pathBin })) 'Explicit AddToPath was not applied.'
     } finally { [Environment]::SetEnvironmentVariable('Path', $pathBefore, 'User') }
-    $results | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 windows-install-results.json
+    ConvertTo-Json -InputObject @($results) -Depth 6 | Set-Content -Encoding utf8 windows-install-results.json
 } catch {
     $diagnostic = Join-Path $root 'diagnostic.txt'
     if (Test-Path -LiteralPath $diagnostic) { Copy-Item -LiteralPath $diagnostic -Destination windows-install-diagnostic.txt -Force }

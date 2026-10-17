@@ -172,7 +172,8 @@ full 제품 검사를 필수 dependency로 실행한다. Windows 소스 검증�
 같은 저장소 main push의 전체 lane·필수 단계가 성공한 최신 attempt만 재사용한다. PR·fork·focused 실행,
 다른 SHA, 누락·실패·취소된 단계는 인정하지 않는다. API 오류나 근거 부재 시 전체 검사를 실행한다.
 Actions 요약에 재사용한 run/attempt를 남긴다. `reuse_validation=false`로 전체 재실행을 강제할 수 있다.
-재사용하더라도 최종 버전 Windows 패키지의 설치/update·completion·실제품·Chromium 검사는 다시 실행한다.
+재사용하더라도 Windows 설치/update·최종 버전 패키지의 completion·실제품·Chromium 검사는 다시 실행한다.
+PowerShell 엔진별 설치 검사는 PATH·기본 설치 경로를 격리하기 위해 각각 별도 runner에서 병렬 실행한다.
 이전 candidate ZIP을 이름만 바꿔 게시하지 않는다. 실제 게시인 `publish=true`는
 main ref와 main ancestry를 모두 확인한다. `publish=false`는 후보 branch에서도 실행할 수 있다.
 Linux는 Agent Skill local/public discovery와 Chromium dashboard smoke를 포함한다.

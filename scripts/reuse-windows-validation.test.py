@@ -21,7 +21,7 @@ def fixture():
     jobs = [dict(name=f'Windows {arch} / {lane}', status='completed', conclusion='success',
                  steps=[dict(name=name, status='completed', conclusion='success') for name in required])
             for arch in ('amd64', 'arm64') for lane, required in reuse.REQUIRED_STEPS.items()
-            if not (arch == 'arm64' and lane == 'race')]
+            if not ((arch == 'arm64' and lane == 'race') or (arch == 'amd64' and lane == 'installer-x64'))]
     return run, jobs
 
 

@@ -16,9 +16,12 @@ REQUIRED_STEPS = {
     'boundaries': {'Verify handle cleanup negative control', 'Test opt-in large storage recovery',
                    'Repeat native project lifecycle', 'Repeat native TLS-only startup'},
     'race': {'Native amd64 race detector'},
-    'product': {'Test native installer recovery and PS5/PS7 running-image updates',
+    'product': {'Test portable project and release tooling with native packages',
                 'Verify installed candidate and actual Chromium dashboard',
                 'Test public native CLI and PowerShell completion'},
+    'installer-ps5': {'Test selected native PowerShell installer and running-image updates'},
+    'installer-ps7': {'Test native installer recovery', 'Test selected native PowerShell installer and running-image updates'},
+    'installer-x64': {'Test selected native PowerShell installer and running-image updates'},
 }
 
 
@@ -34,7 +37,7 @@ def complete_jobs(jobs):
     by_name = {job['name']: job for job in jobs}
     for arch in ('amd64', 'arm64'):
         for lane, required in REQUIRED_STEPS.items():
-            if arch == 'arm64' and lane == 'race':
+            if (arch == 'arm64' and lane == 'race') or (arch == 'amd64' and lane == 'installer-x64'):
                 continue
             job = by_name.get(f'Windows {arch} / {lane}', {})
             if job.get('status') != 'completed' or job.get('conclusion') != 'success':

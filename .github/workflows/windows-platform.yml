@@ -18,7 +18,7 @@ on:
         description: Focused feedback; full remains the final completion gate
         type: choice
         default: full
-        options: [full, network, installer, providers, completion, lifecycle, suite]
+        options: [full, network, installer, providers, completion, lifecycle, suite, product, race]
   push:
     paths:
       - .github/workflows/windows-platform.yml
@@ -64,6 +64,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.commit || github.sha }}
+      - name: Verify checkout identity
+        run: |
+          $actualCommit = (& git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actualCommit -cne $env:DEVTOOLS_SOURCE_COMMIT) { throw 'Checkout/source commit mismatch' }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -201,6 +205,10 @@ jobs:
         run: |
           & go test -json -count=20 -timeout 3m -run '^TestWindowsProjectReal' ./internal/lifecycle | Tee-Object -FilePath project-lifecycle-diagnostic-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Repeated native project lifecycle requires investigation' }
+          & go test -json -count=3 -timeout 3m -run '^TestWindowsConcurrentRecordPublication' ./internal/services | Tee-Object -FilePath windows-record-publication-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Concurrent native record snapshots failed' }
+          & go test -json -count=1 -run '^TestWindowsReadWaitsForPublication' ./internal/platformfs | Tee-Object -FilePath windows-publication-read-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Publication sharing reader regression failed' }
 
       - name: Complete native Go product suite
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'suite' }}
@@ -326,6 +334,48 @@ jobs:
           & pwsh -NoProfile -NonInteractive -File scripts/test-windows-install.ps1 -Arch '${{ matrix.arch }}' -Commit $env:DEVTOOLS_SOURCE_COMMIT
           if ($LASTEXITCODE -ne 0) { throw 'Native PowerShell installer/update tests failed' }
 
+      - name: Native amd64 race detector
+        if: ${{ matrix.arch == 'amd64' && (github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'race') }}
+        run: |
+          $compiler = (Get-Command gcc.exe -ErrorAction Stop).Source
+          $library = (& $compiler --print-file-name libsynchronization.a).Trim()
+          if ($LASTEXITCODE -ne 0 -or $library -eq 'libsynchronization.a' -or -not (Test-Path -LiteralPath $library)) { throw 'A compatible mingw-w64 race toolchain is required' }
+          $target = (& $compiler -dumpmachine).Trim()
+          if ($LASTEXITCODE -ne 0 -or $target -notmatch '^x86_64-.*mingw32$') { throw 'Race compiler architecture mismatch' }
+          @{ architecture = 'amd64'; compiler = $compiler; target = $target; synchronization_library = $library; arm64_race = 'not_supported'; gorace = 'halt_on_error=1 atexit_sleep_ms=0' } | ConvertTo-Json | Set-Content -Encoding utf8 windows-race-toolchain.json
+          $env:CC = $compiler; $env:CGO_ENABLED = '1'; $env:GORACE = 'halt_on_error=1 atexit_sleep_ms=0'
+          try {
+            & go test -race -json -count=1 -timeout 8m ./internal/tasks ./internal/values ./internal/services ./internal/lifecycle ./internal/profiles ./internal/diagnostics | Tee-Object -FilePath windows-race-results.jsonl
+            if ($LASTEXITCODE -ne 0) { throw 'Native amd64 race contract failed' }
+          } finally { Remove-Item Env:CC; Remove-Item Env:CGO_ENABLED; Remove-Item Env:GORACE }
+
+      - name: Verify installed candidate and actual Chromium dashboard
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'product' }}
+        run: |
+          $env:VERSION = '${{ inputs.version || '0.0.0-windows-candidate' }}'
+          $env:COMMIT = $env:DEVTOOLS_SOURCE_COMMIT
+          $env:TARGET_OS = 'windows'; $env:TARGET_ARCH = '${{ matrix.arch }}'; $env:OUTPUT_DIR = 'dist-product'
+          & python -B scripts/package.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native product package failed' }
+          $archive = Get-ChildItem dist-product -Filter '*.zip' | Select-Object -First 1
+          $expanded = Join-Path $env:RUNNER_TEMP ('devtools-product-' + [guid]::NewGuid().ToString('N'))
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath $expanded
+          $env:DEVTOOLS_TEST_CLI_BINARY = Join-Path $expanded 'devtools.exe'
+          $env:DEVTOOLS_TEST_CLI_COMMIT = $env:DEVTOOLS_SOURCE_COMMIT
+          $identity = (& $env:DEVTOOLS_TEST_CLI_BINARY version | ConvertFrom-Json).data
+          if ($LASTEXITCODE -ne 0 -or $identity.commit -cne $env:DEVTOOLS_SOURCE_COMMIT -or $identity.version -cne $env:VERSION) { throw 'Packaged runtime identity mismatch' }
+          @{ commit = $identity.commit; version = $identity.version; architecture = '${{ matrix.arch }}'; zip = $archive.Name; zip_sha256 = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); exe_sha256 = (Get-FileHash -LiteralPath $env:DEVTOOLS_TEST_CLI_BINARY -Algorithm SHA256).Hash.ToLowerInvariant() } | ConvertTo-Json | Set-Content -Encoding utf8 windows-product-identity.json
+          & python -B scripts/test-windows-product.py --release-dir dist-product --version $env:VERSION --commit $env:DEVTOOLS_SOURCE_COMMIT
+          if ($LASTEXITCODE -ne 0) { throw 'Installed candidate journey failed' }
+          & corepack pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw 'Browser dependencies failed' }
+          & corepack pnpm exec playwright install chromium
+          if ($LASTEXITCODE -ne 0) { throw 'Native runner Chromium is unavailable' }
+          $env:DEVTOOLS_BROWSER_EXECUTABLE = (& node --input-type=module -e 'import {chromium} from "@playwright/test"; process.stdout.write(chromium.executablePath())').Trim()
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $env:DEVTOOLS_BROWSER_EXECUTABLE)) { throw 'Cannot locate actual Chromium image' }
+          & corepack pnpm exec playwright test scripts/dashboard-browser.spec.mjs --workers=1 --reporter=line | Tee-Object -FilePath windows-browser.log
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged native dashboard browser journey failed' }
+
       - name: Test public native CLI and PowerShell completion
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'completion' }}
         run: |
@@ -337,6 +387,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native public CLI contracts failed' }
           & go test -json -count=1 ./internal/profiles | Tee-Object -FilePath windows-public-contract-results.jsonl -Append
           if ($LASTEXITCODE -ne 0) { throw 'Native profile catalog contracts failed' }
+      - name: Preserve verified native product package
+        if: ${{ success() && (github.event_name != 'workflow_dispatch' || inputs.focus == 'full') }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-product-${{ matrix.arch }}
+          path: dist-product/*
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Preserve boundary test results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -344,6 +403,12 @@ jobs:
           name: windows-platform-${{ matrix.arch }}
           path: |
             runner.json
+            windows-race-toolchain.json
+            windows-race-results.jsonl
+            windows-product-identity.json
+            windows-installed-product-results.json
+            windows-browser-results.json
+            windows-browser.log
             platformfs-results.jsonl
             process-results.jsonl
             handle-cleanup-mutant.log
@@ -359,6 +424,8 @@ jobs:
             listener-results.jsonl
             detached-daemon-results.jsonl
             project-lifecycle-results.jsonl
+            windows-record-publication-results.jsonl
+            windows-publication-read-results.jsonl
             windows-product-suite-results.jsonl
             project-lifecycle-repeat-results.jsonl
             project-lifecycle-diagnostic-results.jsonl

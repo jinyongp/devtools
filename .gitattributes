@@ -3,3 +3,6 @@
 /scripts/project text eol=lf
 # Agent Skill archives use these exact canonical bytes on every host.
 /skills/devtools/SKILL.md text eol=lf
+
+# Embedded assets, including the checksum-pinned vendored bundle, keep exact bytes.
+/internal/dashboard/assets/* text eol=lf

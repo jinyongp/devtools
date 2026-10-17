@@ -205,7 +205,32 @@ func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, er
 }
 
 func openPrivateFile(path string, flags int) (*os.File, error) {
-	return openPrivateFileWithShare(path, flags, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE)
+	// A concurrent MoveFileEx holds DELETE access briefly. A reader that excludes
+	// share-delete must wait for that publisher, then validate the opened snapshot.
+	// Keep the file/parent pins and never retry an ACL or invalid-image failure.
+	if flags != os.O_RDONLY {
+		return openPrivateFileWithShare(path, flags, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	delay := 10 * time.Millisecond
+	for {
+		file, err := openPrivateFileWithShare(path, flags, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE)
+		if !errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
+			return file, err
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return nil, err
+		}
+		if delay > remaining {
+			delay = remaining
+		}
+		time.Sleep(delay)
+		delay *= 2
+		if delay > 200*time.Millisecond {
+			delay = 200 * time.Millisecond
+		}
+	}
 }
 
 func openPrivateFileWithShare(path string, flags int, share uint32) (*os.File, error) {
@@ -342,14 +367,14 @@ func containedFile(r *Root, f *os.File) error {
 }
 
 func checkPublicationImages(from, to string) error {
-	source, err := openPrivateFile(from, os.O_RDONLY)
+	source, err := openPrivateFileWithShare(from, os.O_RDONLY, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE)
 	if err != nil {
 		return err
 	}
 	if err = source.Close(); err != nil {
 		return err
 	}
-	target, err := openPrivateFile(to, os.O_RDONLY)
+	target, err := openPrivateFileWithShare(to, os.O_RDONLY, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}

@@ -79,7 +79,9 @@ zsh와 fish를 명시적으로 설치해 세 shell을 모두 확인한다.
 ## Windows native Actions
 
 `.github/workflows/windows-platform.yml`의 full gate는 x64와 ARM64에서 실행한다.
-release workflow도 이를 필수 dependency로 호출한다. 이 작업의 최종 Windows 실행 근거는
+release workflow도 이를 필수 dependency로 호출한다. 동일 main push SHA의 전체 성공 근거가 있으면
+소스 검사를 재사용하고 최종 버전의 product lane은 다시 실행한다. 누락·오류 시 전체 재실행한다.
+자세한 조건은 [개발 가이드](../docs/development.md#릴리스)를 따른다. 이 작업의 최종 Windows 실행 근거는
 Actions이며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 절차를 대신 사용하지 않는다.
 
 - suite·boundaries·product lane을 x64/ARM64에서 병렬 실행하고 x64 race는 별도 lane으로 실행한다.

@@ -56,6 +56,7 @@ concurrency:
 
 jobs:
   native:
+    name: Windows ${{ matrix.arch }} / ${{ matrix.lane }}
     strategy:
       fail-fast: false
       matrix:
@@ -198,6 +199,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native Python is unavailable' }
           & node --test scripts/project.test.mjs scripts/release.test.mjs | Tee-Object -FilePath project-release-results.tap
           if ($LASTEXITCODE -ne 0) { throw 'Portable project/release tests failed' }
+          & python -B scripts/reuse-windows-validation.test.py
+          if ($LASTEXITCODE -ne 0) { throw 'Release validation reuse contracts failed' }
           & python -B scripts/project.py skill-release-check
           if ($LASTEXITCODE -ne 0) { throw 'Portable skill release validation failed' }
           $env:VERSION = '0.0.0-native-package'

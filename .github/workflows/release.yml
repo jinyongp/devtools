@@ -17,6 +17,10 @@ on:
         required: true
         default: false
         type: boolean
+      reuse_validation:
+        description: Reuse successful full Windows main-push source checks at this exact SHA
+        type: boolean
+        default: true
       system_network_smoke:
         description: Run real hosts, trust and low-port checks on disposable runners
         required: true
@@ -32,10 +36,14 @@ concurrency:
 
 jobs:
   validate-release:
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       tag: ${{ steps.input.outputs.tag }}
+      windows-source-reused: ${{ steps.reuse.outputs.windows-source-reused }}
     steps:
       - name: Validate release input
         id: input
@@ -68,6 +76,18 @@ jobs:
               exit 1
             }
           fi
+      - name: Find trusted exact-SHA Windows source validation
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ inputs.commit }}
+          REUSE_VALIDATION: ${{ inputs.reuse_validation }}
+        run: |
+          if [ -f scripts/reuse-windows-validation.py ]; then
+            python3 -B scripts/reuse-windows-validation.py
+          else
+            echo 'windows-source-reused=false' >> "$GITHUB_OUTPUT"
+          fi
 
   ci-windows:
     needs: validate-release
@@ -76,6 +96,7 @@ jobs:
       commit: ${{ inputs.commit }}
       version: ${{ inputs.version }}
       focus: full
+      reuse-source: ${{ needs.validate-release.outputs.windows-source-reused == 'true' }}
 
   ci-macos:
     needs: validate-release

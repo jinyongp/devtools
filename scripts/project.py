@@ -89,6 +89,7 @@ def main(args):
             run(["sh", "-n", "scripts/project.sh"])
             run(["sh", "-n", "scripts/publish-release-tag.sh"])
         node_tests("release.test.mjs")
+        run([sys.executable, "-B", "scripts/reuse-windows-validation.test.py"])
         run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "verify", "-p", "test_run.py", *extra])
     elif action == "installer-check":
         if os.name == "nt":

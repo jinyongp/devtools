@@ -295,7 +295,7 @@ func (m Manager) serveNetwork(ctx context.Context, attemptID string) error {
 	runtime := &networkRuntime{manager: m, groups: map[string]*listenerGroup{}, resolver: NewResolver(m.portStore()), exposures: map[string]*exposureRuntime{}, attemptID: attemptID}
 	listen := m.ControlListen
 	if listen == nil {
-		listen = func() (net.Listener, error) { return net.Listen("tcp4", "127.0.0.1:0") }
+		listen = func() (net.Listener, error) { return ports.ListenTCP(ctx, "tcp4", "127.0.0.1:0") }
 	}
 	socket, e := listen()
 	if e != nil {

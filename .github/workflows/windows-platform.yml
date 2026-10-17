@@ -138,6 +138,10 @@ jobs:
           & go vet ./internal/netsetup ./internal/proxy ./internal/ports
           if ($LASTEXITCODE -ne 0) { throw 'Native listener vet failed' }
 
+      - name: Native detached dashboard and HTTP proxy
+        run: |
+          & go test -json -count=1 -timeout 3m -run '^TestWindowsDetached' ./internal/dashboard ./internal/proxy | Tee-Object -FilePath detached-daemon-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native detached daemon contract failed' }
       - name: Test native console mode and redirected passphrase input
         run: |
           & go test -json -count=1 -run '^TestWindowsConsole|^TestWindowsPassphrase' ./internal/cli | Tee-Object -FilePath console-results.jsonl
@@ -216,6 +220,7 @@ jobs:
             registry-integration-results.jsonl
             netsetup-results.jsonl
             listener-results.jsonl
+            detached-daemon-results.jsonl
             project-release-results.tap
             build-identity-results.jsonl
             dist/*.zip

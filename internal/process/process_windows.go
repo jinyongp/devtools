@@ -6,7 +6,6 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"io"
 	"os"
-	"os/exec"
 )
 
 func Execute(ctx context.Context, args []string, dir string, env []string, in io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
@@ -51,6 +50,3 @@ func ExecuteOwned(ctx context.Context, args []string, dir string, env []string, 
 	}
 	return code, nil
 }
-
-// Detached supervisors are connected by W4D; this never fakes a successful start.
-func StartDetached(command *exec.Cmd) error { return errors.ErrUnsupported }

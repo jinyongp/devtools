@@ -24,7 +24,6 @@ import (
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
-	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/retention"
@@ -881,8 +880,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 	}
 	cmd.Dir = p.Root
 
-	cmd.ExtraFiles = []*os.File{lease.file}
-	if err = process.StartDetached(cmd); err != nil {
+	if err = startSupervisor(cmd, lease.file); err != nil {
 		now := time.Now().UTC()
 		r.EndedAt = &now
 		r.State = "failed"

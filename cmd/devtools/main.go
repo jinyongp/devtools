@@ -16,6 +16,7 @@ import (
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/proxy"
+	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/truststore"
 	"golang.org/x/term"
 )
@@ -109,11 +110,11 @@ func main() {
 		}
 		return
 	}
-	if len(os.Args) == 5 && os.Args[1] == "__process-serve" && os.Args[4] == "3" {
+	if len(os.Args) == 5 && os.Args[1] == "__process-serve" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
-		lease := os.NewFile(3, "process-lease")
-		if lease == nil {
+		lease, leaseErr := services.OpenInheritedLease(os.Args[4])
+		if leaseErr != nil {
 			os.Exit(1)
 		}
 		defer lease.Close()

@@ -940,7 +940,7 @@ func (m Manager) Serve(ctx context.Context, attemptID string) error {
 	defer closeListeners()
 	controlListen := m.ControlListen
 	if controlListen == nil {
-		controlListen = func() (net.Listener, error) { return net.Listen("tcp4", "127.0.0.1:0") }
+		controlListen = func() (net.Listener, error) { return ports.ListenTCP(ctx, "tcp4", "127.0.0.1:0") }
 	}
 	controlListener, err := controlListen()
 	if err != nil {

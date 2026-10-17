@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"github.com/jinyongp/devtools/internal/process"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -223,7 +222,7 @@ func serve(ctx context.Context, dir, data string, assetRoot *os.Root, ready func
 		return e
 	}
 	defer unlock()
-	listener, e := net.Listen("tcp4", "127.0.0.1:0")
+	listener, e := ports.ListenTCP(ctx, "tcp4", "127.0.0.1:0")
 	if e != nil {
 		return e
 	}

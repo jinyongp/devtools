@@ -102,7 +102,7 @@ func TestStorageCorruptionAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(store.file(), []byte("CANARY invalid json"), 0600); err != nil {
+	if err := writePrivateFixture(store.file(), []byte("CANARY invalid json"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	_, err = store.Update(context.Background(), func(s *State) (bool, *protocol.Error) { return s.CreateEnv("local") })
@@ -258,7 +258,7 @@ func TestCompletionRetriesAcrossLegacyMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(profilekey.LegacyPath(directory, store.Profile), legacyBody, 0600); err != nil {
+	if err := writePrivateFixture(profilekey.LegacyPath(directory, store.Profile), legacyBody, 0600); err != nil {
 		t.Fatal(err)
 	}
 

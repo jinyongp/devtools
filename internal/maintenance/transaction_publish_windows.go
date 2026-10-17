@@ -51,7 +51,11 @@ func restorePrivateFile(source, target string) error {
 		return err
 	}
 	defer root.Close()
-	temp, err := os.CreateTemp(parent, ".restore-*")
+	tempID, err := transactionID()
+	if err != nil {
+		return err
+	}
+	temp, err := root.OpenFile(".restore-"+tempID, os.O_CREATE|os.O_EXCL|os.O_WRONLY)
 	if err != nil {
 		return err
 	}

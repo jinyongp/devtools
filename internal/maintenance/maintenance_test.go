@@ -306,7 +306,7 @@ func TestReplaceLargeBeforeImage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	file, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0600)
+	file, err := platformfs.OpenPrivate(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0600)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,7 +2,7 @@ package profilekey
 
 import (
 	"github.com/jinyongp/devtools/internal/platformfs"
-	"os"
+
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,7 +16,7 @@ func TestDirectIdentityReadRejectsSymlinkedDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(outside, CanonicalFilename(profile)), body, 0600); err != nil {
+	if err := writePrivateFixture(filepath.Join(outside, CanonicalFilename(profile)), body, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := directoryAlias(outside, filepath.Join(directory, ".identity")); err != nil {
@@ -33,7 +33,7 @@ func TestIdentityEnumerationIgnoresUnpublishedTemporaryFile(t *testing.T) {
 	if err := platformfs.MkdirPrivate(identityDirectory); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(identityDirectory, ".write-interrupted"), []byte("partial"), 0600); err != nil {
+	if err := writePrivateFixture(filepath.Join(identityDirectory, ".write-interrupted"), []byte("partial"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	items, err := EnumerateIdentities(directory, "tasks")

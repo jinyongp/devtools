@@ -640,7 +640,7 @@ func TestCurrentV3LoaderFallsBackWithoutRepairingCorruptSnapshot(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(resolution.Snapshot, []byte("{"), 0600); err != nil {
+	if err := writePrivateFixture(resolution.Snapshot, []byte("{"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	state, currentErr := loadCurrentV3(resolution)
@@ -751,7 +751,7 @@ func TestActiveV3MutationDoesNotReplayUnrelatedReceiptHistory(t *testing.T) {
 	if pathErr != nil {
 		t.Fatal(pathErr)
 	}
-	if err := os.WriteFile(path, []byte("{"), 0600); err != nil {
+	if err := writePrivateFixture(path, []byte("{"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, _, fullErr := s.loadResolved(); fullErr == nil {

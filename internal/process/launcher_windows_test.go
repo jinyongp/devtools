@@ -306,15 +306,6 @@ func TestWindowsJobParentCrashClosesOnlyJobHandle(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-func windowsHandleCount(t *testing.T) uint32 {
-	t.Helper()
-	var count uint32
-	result, _, err := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetProcessHandleCount").Call(uintptr(windows.CurrentProcess()), uintptr(unsafe.Pointer(&count)))
-	if result == 0 {
-		t.Fatal(err)
-	}
-	return count
-}
 func TestWindowsOwnedLaunchFailureClosesHandles(t *testing.T) {
 	if os.Getenv("DEVTOOLS_HANDLE_COUNT_CHILD") != "1" {
 		exe, err := os.Executable()
@@ -346,14 +337,28 @@ func TestWindowsOwnedLaunchFailureClosesHandles(t *testing.T) {
 	for range 20 {
 		attempt()
 	}
-	before := windowsHandleCount(t)
+	job, err := newNativeJob()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(job)
+	reference, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reference.Close()
+	before := ownedHandleTypes(t, job, reference)
 	for range 100 {
 		attempt()
 	}
-	after := windowsHandleCount(t)
-	if after > before+2 {
-		t.Fatalf("failed starts leaked handles: before=%d after=%d", before, after)
+	after := ownedHandleTypes(t, job, reference)
+	t.Logf("handle types before=%v after=%v", before, after)
+	for _, kind := range []string{"Job", "File", "Process", "Thread"} {
+		if after[kind] > before[kind] {
+			t.Fatalf("failed starts leaked handles: type=%s before=%v after=%v", kind, before, after)
+		}
 	}
+
 }
 func TestWindowsClosedStdioCannotInheritPseudoHandle(t *testing.T) {
 	dir, exe := windowsChild(t)

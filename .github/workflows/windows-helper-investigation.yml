@@ -2,6 +2,10 @@ name: Windows helper cancellation investigation
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/windows-helper-investigation.yml
+      - internal/privilege/**
 
 permissions:
   contents: read

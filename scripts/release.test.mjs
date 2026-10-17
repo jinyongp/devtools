@@ -1,15 +1,37 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, statSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import test from 'node:test';
+import test, { after } from 'node:test';
 
 const releaseScript = fileURLToPath(new URL('./release.mjs', import.meta.url));
-const tagScript = fileURLToPath(new URL('./publish-release-tag.sh', import.meta.url));
-const packageScript = fileURLToPath(new URL('./package.sh', import.meta.url));
+const tagScript = fileURLToPath(new URL('./publish_release_tag.py', import.meta.url));
+const packageScript = fileURLToPath(new URL('./package.py', import.meta.url));
+
+const sourceRepository = fileURLToPath(new URL('../', import.meta.url));
+const python = process.platform === 'win32' ? 'python' : 'python3';
+const suffix = process.platform === 'win32' ? '.exe' : '';
+let helper;
+let helperRoot;
+after(() => { if (helperRoot) rmSync(helperRoot, { recursive: true, force: true }); });
+function ghHelper() {
+  if (helper) return helper;
+  helperRoot = mkdtempSync(join(tmpdir(), 'devtools-release-helper-'));
+  const source = join(helperRoot, 'main.go');
+  helper = join(helperRoot, 'gh' + suffix);
+  writeFileSync(source, `package main
+import("os";"encoding/json";"fmt")
+func main(){
+ args:=os.Args[1:];f,e:=os.OpenFile(os.Getenv("GH_CALLS"),os.O_CREATE|os.O_APPEND|os.O_WRONLY,0600);if e!=nil{panic(e)};_=json.NewEncoder(f).Encode(args);_=f.Close()
+ if len(args)>0&&args[0]=="api"{if os.Getenv("GH_API_FAIL")!=""{os.Exit(1)};fmt.Println(os.Getenv("RELEASES_JSON"));return}
+ if len(args)>1&&args[0]=="workflow"&&args[1]=="run"{if os.Getenv("GH_DISPATCH_FAIL")!=""{os.Exit(1)};fmt.Println("https://github.com/example/test/actions/runs/1");return};os.Exit(2)
+}`);
+  execFileSync('go', ['build', '-o', helper, source], { encoding: 'utf8' });
+  return helper;
+}
 
 function fixture(t, inherited = {}) {
   const root = mkdtempSync(join(tmpdir(), 'devtools-release-test-'));
@@ -17,12 +39,14 @@ function fixture(t, inherited = {}) {
   const remote = join(root, 'remote.git');
   const repository = join(root, 'repository');
   const calls = join(root, 'gh-calls.jsonl');
-  const env = { ...process.env, ...inherited, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+  const emptyConfig = join(root, 'empty-git-config');
+  writeFileSync(emptyConfig, '');
+  const env = { ...process.env, ...inherited, GIT_CONFIG_GLOBAL: emptyConfig, GIT_CONFIG_NOSYSTEM: '1',
     GIT_AUTHOR_NAME: 'Release Test', GIT_AUTHOR_EMAIL: 'release@example.test',
     GIT_COMMITTER_NAME: 'Release Test', GIT_COMMITTER_EMAIL: 'release@example.test',
     GH_CALLS: calls, RELEASES_JSON: JSON.stringify([[{
       tag_name: 'v0.22.3', draft: false, prerelease: false, published_at: '2026-10-02T00:00:00Z',
-    }]]), PATH: root + ':' + process.env.PATH };
+    }]]), PATH: root + delimiter + process.env.PATH };
   for (const key of ['GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS',
     'GIT_CONFIG_COUNT', 'GIT_OBJECT_DIRECTORY', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_IMPLICIT_WORK_TREE',
     'GIT_GRAFT_FILE', 'GIT_INDEX_FILE', 'GIT_NO_REPLACE_OBJECTS', 'GIT_REPLACE_REF_BASE',
@@ -45,22 +69,11 @@ function fixture(t, inherited = {}) {
   git('tag', 'v0.99.0'); // A failed/unpublished release must not become the baseline.
   git('push', 'origin', 'main', 'v0.99.0');
   const head = commit('fix(cli): preserve completion quoting');
-  writeFileSync(join(root, 'gh'), `#!/usr/bin/env node
-import { appendFileSync } from 'node:fs';
-const args = process.argv.slice(2);
-appendFileSync(process.env.GH_CALLS, JSON.stringify(args) + '\\n');
-if (args[0] === 'api') {
-  if (process.env.GH_API_FAIL) process.exit(1);
-  console.log(process.env.RELEASES_JSON);
-} else if (args[0] === 'workflow' && args[1] === 'run') {
-  if (process.env.GH_DISPATCH_FAIL) process.exit(1);
-  console.log('https://github.com/example/test/actions/runs/1');
-} else process.exit(2);
-`);
-  chmodSync(join(root, 'gh'), 0o755);
+  copyFileSync(ghHelper(), join(root, 'gh' + suffix));
+  chmodSync(join(root, 'gh' + suffix), 0o755);
   const run = (args = [], extra = {}) => spawnSync(process.execPath, [releaseScript, ...args],
     { cwd: repository, env: { ...env, ...extra }, encoding: 'utf8' });
-  const publishTag = (extra = {}) => spawnSync('sh', [tagScript],
+  const publishTag = (extra = {}) => spawnSync(python, ['-B', tagScript],
     { cwd: repository, env: { ...env, TAG: 'v0.23.0', COMMIT: git('rev-parse', 'HEAD'), ...extra }, encoding: 'utf8' });
   const ghCalls = () => readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
   return { git, commit, feature, head, env, run, publishTag, ghCalls, remote, command, repository, root };
@@ -77,18 +90,19 @@ test('fixture setup cannot mutate an inherited caller repository or index', t =>
   assert.equal(caller.git('rev-parse', 'HEAD'), head);
   assert.deepEqual(readFileSync(index), before);
   assert.deepEqual(readFileSync(join(caller.repository, '.git', 'config')), config);
-  assert.equal(inner.git('rev-parse', '--show-toplevel'), realpathSync(inner.repository));
+  const reported = statSync(inner.git('rev-parse', '--show-toplevel'), { bigint: true });
+  const expected = statSync(inner.repository, { bigint: true });
+  assert.deepEqual({ dev: reported.dev, ino: reported.ino }, { dev: expected.dev, ino: expected.ino });
 });
 
 test('relative package output ignores inherited CDPATH when writing checksums', t => {
   const f = fixture(t);
   const elsewhere = join(f.root, 'elsewhere');
   mkdirSync(join(elsewhere, 'dist'), { recursive: true });
-  writeFileSync(join(f.root, 'go'), '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do\nif [ "$1" = -o ]; then printf fixture > "$2"; exit 0; fi\nshift\ndone\nexit 1\n');
-  chmodSync(join(f.root, 'go'), 0o755);
-  const result = spawnSync('sh', [packageScript], { cwd: f.repository, encoding: 'utf8',
-    env: { ...f.env, VERSION: '0.0.0-test', COMMIT: 'test', TARGET_OS: 'linux',
-      TARGET_ARCH: 'amd64', OUTPUT_DIR: 'dist', CDPATH: elsewhere } });
+  const output = relative(sourceRepository, join(f.repository, 'dist'));
+  const result = spawnSync(python, ['-B', packageScript], { cwd: sourceRepository, encoding: 'utf8',
+    env: { ...process.env, VERSION: '0.0.0-test', COMMIT: 'test', TARGET_OS: 'linux',
+      TARGET_ARCH: 'amd64', OUTPUT_DIR: output, CDPATH: elsewhere } });
   assert.equal(result.status, 0, result.stderr);
   const archive = 'devtools_0.0.0-test_linux_amd64.tar.gz';
   const digest = createHash('sha256').update(readFileSync(join(f.repository, 'dist', archive))).digest('hex');

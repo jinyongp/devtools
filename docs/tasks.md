@@ -1,5 +1,7 @@
 # Tasks, workstreams, and dashboard
 
+[Documentation index](README.md) · [Install and get started](../README.md)
+
 `devtools task` stores project work in the user's global profile store. A tracked
 `devtools.toml` selects the profile across checkouts and worktrees; `--profile NAME`
 selects it explicitly. Each successful mutation appends actions atomically and
@@ -260,6 +262,9 @@ official D3 7.9.0 bundle, with its license and SHA-256 in
 CI actions use immutable commit references. Project commands use the CLI built
 from the checked-out source and are declared in `devtools.toml`.
 
-`devtools run check:all` runs the Go race tests. `devtools run test:installed` runs installed-release scenarios for
-concurrent claims, takeover, retries, worktree sharing, and dashboard sessions.
-Each scenario installs the compiled release into an isolated temporary home.
+On macOS/Linux, `devtools run check:all` runs the Go race tests. Windows uses
+ordinary Go tests here; its required Actions gate adds x64 race and ARM64 native
+contention checks. `devtools run test:installed` is the Unix runner for concurrent
+claims, takeover, retries, worktree sharing, and dashboard sessions, using an
+isolated temporary home. Windows installed-product checks use
+[the dedicated native workflow](../verify/README.md#windows-native-actions).

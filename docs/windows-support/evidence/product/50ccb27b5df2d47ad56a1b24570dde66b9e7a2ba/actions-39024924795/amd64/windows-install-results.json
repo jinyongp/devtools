@@ -1,0 +1,24 @@
+[
+  {
+    "emulated_x64": false,
+    "runtime_path_empty": "pass",
+    "shell": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "install": "pass",
+    "main_update": "pass",
+    "shell_version": "5.1.26100.33438",
+    "arch": "amd64",
+    "alias_update": "pass",
+    "user_path_unchanged": true
+  },
+  {
+    "emulated_x64": false,
+    "runtime_path_empty": "pass",
+    "shell": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+    "install": "pass",
+    "main_update": "pass",
+    "shell_version": "7.6.6",
+    "arch": "amd64",
+    "alias_update": "pass",
+    "user_path_unchanged": true
+  }
+]

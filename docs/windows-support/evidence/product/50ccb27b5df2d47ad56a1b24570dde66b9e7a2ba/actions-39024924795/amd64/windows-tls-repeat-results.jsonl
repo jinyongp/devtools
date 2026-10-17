@@ -1,0 +1,29 @@
+{"Time":"2026-10-17T10:36:10.1230423Z","Action":"start","Package":"github.com/jinyongp/devtools/internal/proxy"}
+{"Time":"2026-10-17T10:36:10.1482224Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI"}
+{"Time":"2026-10-17T10:36:10.1487972Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"=== RUN   TestTLSRejectsUnknownSNI\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:10.4507645Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"2026/10/17 10:36:10 http: TLS handshake error from 127.0.0.1:53951: inactive TLS route\n"}
+{"Time":"2026-10-17T10:36:10.4591056Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"--- PASS: TestTLSRejectsUnknownSNI (0.31s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:10.4591056Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Elapsed":0.31}
+{"Time":"2026-10-17T10:36:10.4591056Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI"}
+{"Time":"2026-10-17T10:36:10.4591056Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"=== RUN   TestTLSRejectsUnknownSNI\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:12.7239236Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"2026/10/17 10:36:12 http: TLS handshake error from 127.0.0.1:53972: inactive TLS route\n"}
+{"Time":"2026-10-17T10:36:13.2439244Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"--- PASS: TestTLSRejectsUnknownSNI (2.78s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:13.2439244Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Elapsed":2.78}
+{"Time":"2026-10-17T10:36:13.2439244Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI"}
+{"Time":"2026-10-17T10:36:13.2439244Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"=== RUN   TestTLSRejectsUnknownSNI\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:16.8097409Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"2026/10/17 10:36:16 http: TLS handshake error from 127.0.0.1:54013: inactive TLS route\n"}
+{"Time":"2026-10-17T10:36:17.0148775Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"--- PASS: TestTLSRejectsUnknownSNI (3.77s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:17.0148775Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Elapsed":3.77}
+{"Time":"2026-10-17T10:36:17.0148775Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI"}
+{"Time":"2026-10-17T10:36:17.0148775Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"=== RUN   TestTLSRejectsUnknownSNI\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:18.3844521Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"2026/10/17 10:36:18 http: TLS handshake error from 127.0.0.1:54036: inactive TLS route\n"}
+{"Time":"2026-10-17T10:36:18.4789024Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"--- PASS: TestTLSRejectsUnknownSNI (1.46s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:18.4789024Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Elapsed":1.46}
+{"Time":"2026-10-17T10:36:18.4789024Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI"}
+{"Time":"2026-10-17T10:36:18.4789024Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"=== RUN   TestTLSRejectsUnknownSNI\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:19.0103776Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"2026/10/17 10:36:19 http: TLS handshake error from 127.0.0.1:54046: inactive TLS route\n"}
+{"Time":"2026-10-17T10:36:19.0906773Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Output":"--- PASS: TestTLSRejectsUnknownSNI (0.61s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:19.0906773Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Test":"TestTLSRejectsUnknownSNI","Elapsed":0.61}
+{"Time":"2026-10-17T10:36:19.0906773Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-17T10:36:19.0943112Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/proxy","Output":"ok  \tgithub.com/jinyongp/devtools/internal/proxy\t8.969s\n"}
+{"Time":"2026-10-17T10:36:19.0943112Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/proxy","Elapsed":8.971}

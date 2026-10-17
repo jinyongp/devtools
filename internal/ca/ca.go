@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -66,7 +67,7 @@ func (s Store) read(checkExpiry bool) (*Authority, *protocol.Error) {
 	if errors.Is(e, os.ErrNotExist) {
 		return nil, failure("ca_not_found")
 	}
-	if e != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if e != nil || !platformfs.DirectoryPrivate(s.root(), info) {
 		return nil, failure("invalid_ca")
 	}
 	var m material
@@ -116,15 +117,7 @@ func (s Store) Remove(ctx context.Context, fingerprint string) *protocol.Error {
 	if authority.Fingerprint() != fingerprint {
 		return failure("ca_changed")
 	}
-	if e := os.Remove(filepath.Join(s.root(), "material.json")); e != nil {
-		return failure("io_error")
-	}
-	d, e := os.Open(s.root())
-	if e != nil {
-		return failure("io_error")
-	}
-	defer d.Close()
-	if d.Sync() != nil {
+	if e := removeMaterial(ctx, s.root()); e != nil {
 		return failure("io_error")
 	}
 	return nil

@@ -1,0 +1,11 @@
+{
+  "archive": "devtools_0.0.0-native-package_windows_arm64.zip",
+  "sha256": "8fa0fdbffa53b4f5b39623d7b637d7e5b96793106156e828f5bf483fdb40acc5",
+  "members": [
+    "devtools.exe"
+  ],
+  "pe_machine": "0xaa64",
+  "commit": "bcd22ebe75c032b1a1933c8b3f30eb8dd1dc2983",
+  "version": "0.0.0-native-package",
+  "runtime_execution": "Executed by native Actions, never executed by this Linux inspection"
+}

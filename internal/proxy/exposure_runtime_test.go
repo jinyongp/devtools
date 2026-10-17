@@ -88,7 +88,7 @@ func TestExposureBridgeAuthPinsSourceRevocationAndSecretRedaction(t *testing.T) 
 	q := ExposureRequest{Route: ref, Provider: "cloudflared", Auth: "reader:private-canary", RequestID: tasks.ID()}
 	result, e := m.ExposeStart(ctx, q, p, nil, hosts.Manager{Data: m.Data, Isolated: true})
 	if e != nil {
-		t.Fatal(e)
+		t.Fatalf("exposure start: code=%s error=%v", e.Code, e)
 	}
 	b, _ := json.Marshal(result)
 	var decoded struct {

@@ -1,0 +1,9 @@
+{
+  "run": "https://github.com/jinyongp/devtools/actions/runs/39024170042",
+  "source": "0a7380fcf19ad08fa998eaead57fcf6ad4bdb292",
+  "architecture": "amd64",
+  "test": "TestNetworkListenersTLSRedirectAndIndependentLifecycle",
+  "observed": "Client.Timeout exceeded while awaiting headers; client bound was one second",
+  "unproven": "The exact delayed stage was not logged. No production TLS root-cause fix is claimed.",
+  "correction": "Functional single-request bound ten seconds, without retries or weakened TLS/HTTP2/body/lifecycle assertions; handshake/write/first-byte phase logs retained in final native Go JSON."
+}

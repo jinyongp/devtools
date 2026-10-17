@@ -66,3 +66,39 @@ func TestDiagnosticsSchemaExcludesSensitivePayloads(t *testing.T) {
 		}
 	}
 }
+
+func TestDiagnosticsPlatformMatchesPublishedSchema(t *testing.T) {
+	app := testApp(t)
+	data := outputData(t, app, []string{"diagnostics"})
+	platform := data["platform"].(map[string]any)
+	schema := platformDiagnosticsSchema()
+	properties := schema["properties"].(map[string]any)
+	for _, name := range schema["required"].([]string) {
+		if _, ok := platform[name]; !ok {
+			t.Fatal("required platform field missing", name)
+		}
+	}
+	for name, value := range platform {
+		field, ok := properties[name].(map[string]any)
+		if !ok {
+			t.Fatal("undocumented platform field", name)
+		}
+		if options, ok := field["enum"].([]string); ok {
+			found := false
+			for _, option := range options {
+				if value == option {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("platform enum mismatch", name, value)
+			}
+		}
+	}
+	if _, ok := platform["storage_supported"].(bool); !ok {
+		t.Fatal("storage flag type")
+	}
+	if _, ok := platform["limitations"].([]any); !ok {
+		t.Fatal("limits type")
+	}
+}

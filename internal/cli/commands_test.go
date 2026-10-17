@@ -33,6 +33,9 @@ version = "1.25.0"
 [commands.dev.ready]
 exec = ["/bin/true"]
 `
+	config = strings.ReplaceAll(config, `exec = ["/bin/sh", "-c", "printf zeta"]`, "exec = "+fixtureExec(t, "zeta"))
+	devExec := commandFixture(t, "dev")
+	config = strings.ReplaceAll(config, `exec = ["/bin/sh", "-c", "printf dev"]`, "exec = "+mustJSON(t, devExec))
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +60,7 @@ exec = ["/bin/true"]
 		t.Fatalf("cmd list: %d %s %s", aliasCode, aliasOut, aliasDiagnostic)
 	}
 	dev := listed.Data.Commands[0]
-	if strings.Join(dev.Exec, " ") != "/bin/sh -c printf dev" || !dev.Inject || dev.Env != "local" || len(dev.Serve) != 0 {
+	if mustJSON(t, dev.Exec) != mustJSON(t, devExec) || !dev.Inject || dev.Env != "local" || len(dev.Serve) != 0 {
 		t.Fatalf("unexpected command summary: %+v", dev)
 	}
 

@@ -1,0 +1,5 @@
+/tmp/devtools-verify-releases-z83ani8o/releases/devtools_0.0.0-test.1_linux_amd64.tar.gz
+/tmp/devtools-verify-releases-z83ani8o/releases/devtools_0.0.0-test.2_linux_amd64.tar.gz
+/tmp/devtools-verify-releases-z83ani8o/releases/devtools-skill_0.0.0-test.1.tar.gz
+Running scenario: install
+PASS: install, dvt alias and conflict preservation, PATH, profile values, mixed dotenv import, project commands, worktrees, permissions, failed-update preservation, update, repeat update, HTTPS delivery, latest and pinned releases, discovery failure preservation, and signals

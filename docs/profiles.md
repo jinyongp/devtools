@@ -1,9 +1,12 @@
 # Profile 조회, 비교와 환경 간 이동
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 Profile은 변수·secret·env와 task/workstream을 함께 관리하는 이름입니다. 프로젝트는
 `devtools.toml`의 `profile`로 이 데이터를 선택합니다. 같은 기기의 여러 worktree는 같은
 profile을 공유하지만, 다른 기기로 옮길 때는 암호화한 파일을 내보내고 가져와야 합니다.
-아래 profile 사용법은 v0.22.3의 CLI protocol v5와 v0.23.0의 protocol v6에서 같습니다.
+아래 전송 흐름은 v0.22.3의 CLI protocol v5에서 도입되었으며 v6와 현재 소스 후보 v7에서도 같습니다.
+Windows 네이티브와 WSL 사이에도 암호화 파일로 옮깁니다. 데이터 디렉터리를 직접 공유하지 마세요.
 
 ## 저장된 profile 찾기
 

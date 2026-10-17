@@ -1,6 +1,9 @@
 # 암호화 백업, 복구와 profile 이동
 
-`devtools backup`은 전역 var/sec/env와 task/workstream을 age X25519 recipient로 암호화해 보관한다. `devtools profile export/import`는 같은 snapshot payload를 다른 기기로 옮기며, protocol v5의 기본 transfer는 source-first age scrypt passphrase archive를 사용한다. 모든 명령은 JSON을 반환하며 passphrase·개인 identity·백업 값 원문은 출력하지 않는다.
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
+`devtools backup`은 전역 var/sec/env와 task/workstream을 age X25519 recipient로 암호화해 보관한다. `devtools profile export/import`는 같은 snapshot payload를 다른 기기로 옮기며, protocol v5부터 기본 transfer는 원본 기기에서 먼저 만드는 age scrypt passphrase archive를 사용한다.
+백업 보관은 아래 키 준비부터, 기기 간 이동은 [Profile 전송 가이드](profiles.md#다른-기기로-내보내기)부터 시작한다. 모든 명령은 JSON을 반환하며 passphrase·개인 identity·백업 값 원문은 출력하지 않는다.
 
 ## 키와 기본 위치 준비
 

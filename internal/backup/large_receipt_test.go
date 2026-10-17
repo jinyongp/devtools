@@ -14,7 +14,7 @@ import (
 )
 
 func TestLargeImportReceiptReplaysCompleteResult(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
 	target := Engine{Data: filepath.Join(root, "target", "data"), Config: filepath.Join(root, "target", "config"), Cache: filepath.Join(root, "target", "cache")}
 	ctx := context.Background()

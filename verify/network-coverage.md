@@ -1,12 +1,17 @@
 # 네트워크 수용 기준과 검증 경계
 
+[Documentation index](../docs/README.md) · [Development](../docs/development.md)
+
 로컬 네트워크 workstream의 수용 기준을 실제 검사에 연결한다. 전체 실행 결과는 해당
 commit의 Release workflow에서 확인한다. 이 문서는 검사 위치와 경계를 설명하며,
 실행하지 않은 실제 환경 검증을 통과로 대신하지 않는다.
 
-Go 검사는 `devtools run check:all`의 `go test -race ./...`에서 실행한다.
-설치 검사는 `devtools run test:installed`로 실행하며 시나리오마다 독립 HOME에 release를 설치한다.
-OS 변경은 disposable Linux/macOS runner의 `system-network` job에서 수행한다.
+이 표의 설치 시나리오와 OS 변경 항목은 macOS·Linux 기준이다.
+Go 검사는 Unix `check:all`의 race suite, 설치 검사는 `test:installed`의 격리 HOME에서 실행한다.
+표의 **native job**은 disposable Linux/macOS의 opt-in `system-network` OS 검사다.
+실행 결과가 있어야 통과로 인정하며 기본 false인 workflow 입력을 실행 완료로 간주하지 않는다.
+Windows native Actions는 [전용 검증 안내](README.md#windows-native-actions)를 따른다.
+Windows UAC·CurrentUser trust의 실제 사용자 확인 창을 아래 Unix 결과로 대신하지 않는다.
 
 | 기준 | 자동 검증 위치와 관찰 결과 |
 | --- | --- |

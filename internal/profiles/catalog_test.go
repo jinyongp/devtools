@@ -20,7 +20,7 @@ import (
 func writeStoredProfile(t *testing.T, data, domain, profile string) {
 	t.Helper()
 	directory := filepath.Join(data, domain)
-	if err := os.MkdirAll(directory, 0700); err != nil {
+	if err := tasks.PrivateDir(directory); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(directory, hex.EncodeToString([]byte(profile))+".json")
@@ -28,7 +28,7 @@ func writeStoredProfile(t *testing.T, data, domain, profile string) {
 	if domain == "tasks" {
 		body = []byte(`{"version":1,"profile":"` + profile + `","events":[],"receipts":{},"contexts":{}}`)
 	}
-	if err := os.WriteFile(path, body, 0600); err != nil {
+	if err := writeProfileFixture(path, body); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -37,7 +37,7 @@ func writeProcessRecord(t *testing.T, data, profile string) {
 	t.Helper()
 	id := tasks.ID()
 	directory := filepath.Join(data, "processes", id)
-	if err := os.MkdirAll(directory, 0700); err != nil {
+	if err := tasks.PrivateDir(directory); err != nil {
 		t.Fatal(err)
 	}
 	record := services.Record{ID: id, Profile: profile, Directory: filepath.Join(data, "project"), Command: "web", Env: "local", State: "running"}
@@ -45,7 +45,7 @@ func writeProcessRecord(t *testing.T, data, profile string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(directory, "record.json"), body, 0600); err != nil {
+	if err := writeProfileFixture(filepath.Join(directory, "record.json"), body); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -82,11 +82,11 @@ func TestCatalogListsAllProfileSourcesOnceInOrder(t *testing.T) {
 func TestCatalogListDoesNotMigrateLegacyState(t *testing.T) {
 	data := privateTempDir(t)
 	directory := filepath.Join(data, "profiles")
-	if err := os.MkdirAll(directory, 0700); err != nil {
+	if err := tasks.PrivateDir(directory); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(directory, hex.EncodeToString([]byte("passive"))+".json")
-	if err := os.WriteFile(path, []byte(`{"version":1,"profile":"passive","envs":{"local":true},"keys":{}}`), 0600); err != nil {
+	if err := writeProfileFixture(path, []byte(`{"version":1,"profile":"passive","envs":{"local":true},"keys":{}}`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -137,10 +137,10 @@ func TestInspectRuntimeMetadataForPartialProfile(t *testing.T) {
 func TestCatalogRejectsMalformedProfileStorage(t *testing.T) {
 	data := privateTempDir(t)
 	directory := filepath.Join(data, "profiles")
-	if err := os.MkdirAll(directory, 0700); err != nil {
+	if err := tasks.PrivateDir(directory); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(directory, "not-hex.json"), []byte("{}"), 0600); err != nil {
+	if err := writeProfileFixture(filepath.Join(directory, "not-hex.json"), []byte("{}")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := (Catalog{Data: data}).Names(context.Background()); err == nil || err.Code != "invalid_storage" {
@@ -151,11 +151,11 @@ func TestCatalogRejectsMalformedProfileStorage(t *testing.T) {
 func TestCatalogListRejectsCorruptTaskStorage(t *testing.T) {
 	data := privateTempDir(t)
 	directory := filepath.Join(data, "tasks")
-	if err := os.MkdirAll(directory, 0700); err != nil {
+	if err := tasks.PrivateDir(directory); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(directory, hex.EncodeToString([]byte("broken"))+".json")
-	if err := os.WriteFile(path, []byte("{"), 0600); err != nil {
+	if err := writeProfileFixture(path, []byte("{")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := (Catalog{Data: data}).List(context.Background()); err == nil {
@@ -166,10 +166,10 @@ func TestCatalogListRejectsCorruptTaskStorage(t *testing.T) {
 func TestCatalogRejectsNonPrivateProfileStorage(t *testing.T) {
 	data := privateTempDir(t)
 	directory := filepath.Join(data, "tasks")
-	if err := os.MkdirAll(directory, 0755); err != nil {
+	if err := tasks.PrivateDir(directory); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(directory, 0755); err != nil {
+	if err := makeProfileDirectoryPublic(directory); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := (Catalog{Data: data}).Names(context.Background()); err == nil || err.Code != "storage_error" {

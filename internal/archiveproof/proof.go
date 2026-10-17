@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/project"
 )
 
@@ -41,7 +42,7 @@ func privateDirectory(path string) error {
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if !platformfs.DirectoryPrivate(path, info) {
 		return errors.New("private archive directory required")
 	}
 	return nil

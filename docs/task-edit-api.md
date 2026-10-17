@@ -1,5 +1,7 @@
 # 계획 편집 API
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 계획 정의와 실행·완료 이력을 분리한다. draft/active/done/canceled 및 실행 중에도 삽입·변경·범위 제외·복원이 가능하다. 불완전한 coverage는 저장하고 issues로 반환하며 claim/sync/close에서 필요한 조건을 검사한다.
 
 ## 요청

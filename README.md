@@ -6,7 +6,17 @@ devtools is a CLI for managing your project's development environment and work.
 Store environment variables and secrets, pass them to commands, and manage
 development servers, ports, and local URLs. Track tasks and progress so you can
 pick up where you left off in another session or with a coding agent.
-It runs on macOS, Linux, and WSL.
+
+## Platforms
+
+- **macOS, Linux, WSL:** use the installation steps below. Install the Linux CLI inside WSL.
+- **Native Windows:** x64 and ARM64 support targets v0.25.0 and Windows 11 25H2/26H2.
+  Until v0.25.0 is published, use the validated candidate assets.
+  See the [Windows guide](docs/windows.md) for candidate installation, Actions
+  validation, and the limits of testing without a physical Windows PC.
+
+Windows and WSL have separate data, servers, and CAs. Read the
+[WSL guide](docs/wsl.md) when using both environments.
 
 ## Install
 
@@ -44,21 +54,36 @@ for choosing a version or a different install location.
 
 ## Get started
 
-Open your project directory and run the example below. `myapp` is the profile
-name that identifies your project; replace it with your own project name.
+Run this in a new project directory. `myapp` names the profile that stores your
+values. Choose an unused profile name for this example: an existing name shares
+its stored values. These first commands work on macOS, Linux, WSL, and the Windows candidate.
 
 ```sh
 devtools init --profile myapp
 devtools var set LOG_LEVEL --value info
 devtools env create local
 devtools var set LOG_LEVEL --env local --value debug
+devtools var get LOG_LEVEL --env local
+```
+
+The final JSON response contains `data.value: "debug"`, confirming the `local`
+override. To pass that value to a child command, choose the example for your shell.
+
+In a POSIX shell on macOS, Linux, or WSL:
+
+```sh
 devtools run --env local -- sh -c 'echo "$LOG_LEVEL"'
 ```
 
-This sets `LOG_LEVEL` to `info` by default and overrides it with `debug` in the
-`local` environment. The final command prints `debug`, showing that devtools
-passed the environment variable to the command. In your project, replace
-`sh -c ...` with your usual command, such as `pnpm dev` or `go run .`.
+In PowerShell or cmd with the Windows candidate:
+
+```powershell
+devtools run --env local -- cmd.exe /d /c set LOG_LEVEL
+```
+
+These print `debug` and `LOG_LEVEL=debug`, respectively. In your project, put
+an installed project tool's command after `--`, such as `pnpm dev` or `go run .`.
+Devtools data commands return JSON; child commands keep their own output.
 
 Commit the generated `devtools.toml` to Git. Projects and worktrees that use the
 same profile share stored values. Environment variables and secrets are stored
@@ -98,19 +123,19 @@ for the version requirements and both forms.
 
 ## Guides
 
-The detailed guides below are currently in Korean.
+The [documentation index](docs/README.md) separates user guides, API contracts,
+developer instructions, and historical design records. Most guides are in Korean;
+the [task and workstream guide](docs/tasks.md) is in English.
 
-| What you want to do | Guide |
-| --- | --- |
-| Store variables and secrets, import .env files, and run commands | [Values and command execution](docs/cli-contract.md) |
-| Check required tools, configuration, and installation status | [Environment diagnostics](docs/doctor.md) |
-| Avoid port conflicts and connect to other project URLs | [Ports](docs/ports.md) |
-| Start servers with local domains, HTTPS, named listeners and optional sharing | [Local network and sharing](docs/local-network.md) |
-| Run servers, check status and logs, and restart them | [Processes](docs/processes.md) · [Readiness checks](docs/process-readiness.md) |
-| Plan work, share tasks, and hand off between sessions | [Tasks and workstreams](docs/tasks.md) |
-| Manage environment variables and tasks in a browser | Run `devtools dashboard` and open the URL it prints |
-| Compare project settings or move to another computer | [Profiles](docs/profiles.md) |
-| Back up and restore data, or remove old data | [Backups](docs/backup.md) · [Cleanup](docs/cleanup.md) |
+- Values and configuration: [variables, secrets, and commands](docs/cli-contract.md),
+  [environment diagnostics](docs/doctor.md).
+- Servers and URLs: [ports](docs/ports.md), [server lifecycle](docs/processes.md),
+  [readiness](docs/process-readiness.md), [local domains, HTTPS, and sharing](docs/local-network.md).
+- Work coordination: [tasks, workstreams, and dashboard](docs/tasks.md). Run
+  `devtools dashboard` and open `data.item.url`. The login link is a credential; keep it private.
+- Data management: [profiles and transfer](docs/profiles.md),
+  [encrypted backups and recovery](docs/backup.md), [storage cleanup](docs/cleanup.md).
+- Shells and automation: [completion](docs/completion.md), [CLI output contract](docs/cli-output.md).
 
 ## Use with a coding agent
 

@@ -6,9 +6,9 @@ import (
 	"errors"
 	"io"
 	"os"
-	"syscall"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -40,27 +40,12 @@ func (s Store) file() string {
 	return profilekey.CanonicalPath(s.Directory, s.Profile)
 }
 
-func privateDirectory(path string) error {
-	if err := os.MkdirAll(path, 0700); err != nil {
-		return err
-	}
-	info, err := os.Lstat(path)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-		return errors.New("private directory required")
-	}
-	return nil
-}
-
-func privateFile(file *os.File) bool {
-	info, err := file.Stat()
-	return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0077 == 0
+func privateFile(file *platformfs.File) bool {
+	return platformfs.CheckFile(file.File) == nil
 }
 
 func (s Store) readPath(path string) (*State, *protocol.Error) {
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	file, err := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
 	if err != nil {
 		return nil, storageError()
 	}
@@ -166,7 +151,7 @@ func (s Store) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return newState(s.Profile), nil
 	}
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if err != nil || !platformfs.DirectoryPrivate(s.Directory, info) {
 		return nil, storageError()
 	}
 	return s.read()
@@ -182,7 +167,7 @@ func (s Store) CompletionNames(kind Kind, env string) ([]string, *protocol.Error
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if err != nil || !platformfs.DirectoryPrivate(s.Directory, info) {
 		return nil, storageError()
 	}
 	state, e := s.completionState()
@@ -239,7 +224,7 @@ func (s Store) update(ctx context.Context, change func(*State) (bool, *protocol.
 			releaseGate()
 			return false, storageError()
 		}
-	} else if dirErr != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	} else if dirErr != nil || !platformfs.DirectoryPrivate(s.Directory, info) {
 		releaseGate()
 		return false, storageError()
 	}

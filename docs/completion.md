@@ -1,5 +1,7 @@
 # 셸 자동완성
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 `devtools` 뒤에서 Tab을 누르면 현재 위치에 맞는 명령·하위 명령·별칭·옵션을
 완성합니다. zsh와 fish는 후보 옆에 설명도 표시합니다.
 
@@ -38,9 +40,29 @@ mkdir -p ~/.config/fish/completions
 devtools completion fish > ~/.config/fish/completions/devtools.fish
 ```
 
+## PowerShell 5.1 / 7
+
+PowerShell 자동완성은 현재 소스의 protocol v7 후보에 포함됩니다. Windows 자산의 게시 상태와
+지원 범위는 [Windows 안내](windows.md)를 확인하세요. 설치본이 이 셸을 지원하는지는
+`devtools completion --help`로 확인할 수 있습니다.
+
+다음 명령으로 생성한 파일을 직접 검토하고 현재 세션에 로드하세요. UTF-8을 명시해
+한글을 보존합니다. installer는 이 파일이나 shell profile을 자동으로 수정하지 않습니다.
+업데이트 후 다시 생성하면 새 metadata가 반영됩니다.
+
+```powershell
+devtools completion powershell | Set-Content -Encoding utf8 .\devtools-completion.ps1
+. .\devtools-completion.ps1
+```
+
+`devtools`/`dvt`와 `.exe` 이름에 native completer를 등록합니다. AST의 literal token만
+읽고 UTF-8 NUL-delimited stdin으로 이름을 조회합니다. `$()`·변수 등 동적 표현식이
+있으면 후보 조회를 생략하며 실행하지 않습니다. 공백·한글·single quote가 포함된 후보는
+PowerShell single quote 규칙으로 escape합니다. cmd에는 자동완성 engine을 제공하지 않습니다.
+
 ## 동작 범위
 
-`devtools completion zsh|bash|fish`는 선택한 셸의 스크립트를 표준 출력으로 반환합니다.
+`devtools completion zsh|bash|fish|powershell`는 선택한 셸의 스크립트를 표준 출력으로 반환합니다.
 명령과 옵션 후보는 CLI 명령 정의에서 생성됩니다. 데이터가 필요한 위치에서는
 로컬 devtools가 현재 저장된 이름과 ID를 조회합니다.
 

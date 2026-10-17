@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -48,7 +49,7 @@ func storedProfileNames(directory string) ([]string, *protocol.Error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return []string{}, nil
 	}
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if err != nil || !platformfs.DirectoryPrivate(directory, info) {
 		return nil, catalogError("storage_error")
 	}
 	domain := "tasks"

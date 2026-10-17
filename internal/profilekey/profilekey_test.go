@@ -1,6 +1,7 @@
 package profilekey
 
 import (
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,14 +16,14 @@ func TestCanonicalKeyAndIdentity(t *testing.T) {
 	}
 	dir := privateTempDir(t)
 	identityDir := filepath.Join(dir, ".identity")
-	if err := os.Mkdir(identityDir, 0700); err != nil {
+	if err := platformfs.MkdirPrivate(identityDir); err != nil {
 		t.Fatal(err)
 	}
 	body, err := IdentityBytes(profile, "values")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(IdentityPath(dir, profile), body, 0600); err != nil {
+	if err := writePrivateFixture(IdentityPath(dir, profile), body, 0600); err != nil {
 		t.Fatal(err)
 	}
 	ok, err := ReadIdentity(dir, profile, "values")
@@ -42,7 +43,7 @@ func TestLegacyPathStatusUsesFilesystemAddressability(t *testing.T) {
 	if err != nil || status != LegacyMissing {
 		t.Fatalf("125 status=%v err=%v", status, err)
 	}
-	if err := os.WriteFile(LegacyPath(dir, addressable), []byte("{}"), 0600); err != nil {
+	if err := writePrivateFixture(LegacyPath(dir, addressable), []byte("{}"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	status, err = LegacyPathStatus(dir, addressable)
@@ -65,7 +66,7 @@ func TestMarkerRecognitionIsFailClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, body, 0600); err != nil {
+	if err := writePrivateFixture(path, body, 0600); err != nil {
 		t.Fatal(err)
 	}
 	marker, err := ReadMarker(path, profile)
@@ -74,7 +75,7 @@ func TestMarkerRecognitionIsFailClosed(t *testing.T) {
 	}
 
 	bad, _ := MarkerBytes("other")
-	if err := os.WriteFile(path, bad, 0600); err != nil {
+	if err := writePrivateFixture(path, bad, 0600); err != nil {
 		t.Fatal(err)
 	}
 	marker, err = ReadMarker(path, profile)
@@ -87,7 +88,7 @@ func TestResolveLegacyCanonicalAndSplitBrain(t *testing.T) {
 	dir := privateTempDir(t)
 	profile := "app"
 	legacy := LegacyPath(dir, profile)
-	if err := os.WriteFile(legacy, []byte(`{"profile":"app"}`), 0600); err != nil {
+	if err := writePrivateFixture(legacy, []byte(`{"profile":"app"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	resolution, err := Resolve(dir, profile, "values")
@@ -98,28 +99,28 @@ func TestResolveLegacyCanonicalAndSplitBrain(t *testing.T) {
 	if err := os.Remove(legacy); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(dir, ".identity"), 0700); err != nil {
+	if err := platformfs.MkdirPrivate(filepath.Join(dir, ".identity")); err != nil {
 		t.Fatal(err)
 	}
 	identity, _ := IdentityBytes(profile, "values")
-	if err := os.WriteFile(IdentityPath(dir, profile), identity, 0600); err != nil {
+	if err := writePrivateFixture(IdentityPath(dir, profile), identity, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(CanonicalPath(dir, profile), []byte(`{"profile":"app"}`), 0600); err != nil {
+	if err := writePrivateFixture(CanonicalPath(dir, profile), []byte(`{"profile":"app"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Resolve(dir, profile, "values"); err == nil {
 		t.Fatal("canonical pair without addressable downgrade marker was accepted")
 	}
 	marker, _ := MarkerBytes(profile)
-	if err := os.WriteFile(legacy, marker, 0600); err != nil {
+	if err := writePrivateFixture(legacy, marker, 0600); err != nil {
 		t.Fatal(err)
 	}
 	resolution, err = Resolve(dir, profile, "values")
 	if err != nil || resolution.Mode != ModeCanonical || !resolution.Marker {
 		t.Fatalf("canonical resolution=%#v err=%v", resolution, err)
 	}
-	if err := os.WriteFile(legacy, []byte(`{"profile":"app"}`), 0600); err != nil {
+	if err := writePrivateFixture(legacy, []byte(`{"profile":"app"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Resolve(dir, profile, "values"); err == nil {

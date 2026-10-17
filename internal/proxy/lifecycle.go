@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jinyongp/devtools/internal/process"
 	"io"
 	"net"
 	"net/http"
@@ -19,10 +20,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/expose"
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -244,7 +245,7 @@ func (m Manager) Status(ctx context.Context) (Status, *protocol.Error) {
 	if record.EndedAt != nil {
 		return status, nil
 	}
-	if live, rpcErr := m.rpc(ctx, "status"); rpcErr == nil {
+	if live, err := m.rpc(ctx, "status"); err == nil {
 		status.State, status.StartedAt, status.Reason = live.State, live.StartedAt, live.Reason
 		status.Running = live.State == "running"
 		return status, nil
@@ -703,7 +704,10 @@ func (m Manager) awaitStart(ctx context.Context, attemptID string, createdAt tim
 				return status, nil
 			}
 			record, readErr := m.readRecord()
-			if readErr == nil && record.AttemptID == attemptID && (record.State == "starting" || record.State == "running") && record.EndedAt == nil {
+			if readErr != nil {
+				return Status{}, proxyStorageError()
+			}
+			if record.AttemptID == attemptID && (record.State == "starting" || record.State == "running") && record.EndedAt == nil {
 				continue
 			}
 			return status, nil
@@ -897,8 +901,8 @@ func spawnProxyWithRoot(data, attemptID, root string) error {
 	if root != "" {
 		command.Env = append(os.Environ(), "DEVTOOLS_ISOLATED_ROOT="+root)
 	}
-	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := command.Start(); err != nil {
+
+	if err := process.StartDetached(command); err != nil {
 		return err
 	}
 	go func() { _ = command.Wait() }()
@@ -940,7 +944,7 @@ func (m Manager) Serve(ctx context.Context, attemptID string) error {
 	defer closeListeners()
 	controlListen := m.ControlListen
 	if controlListen == nil {
-		controlListen = func() (net.Listener, error) { return net.Listen("tcp4", "127.0.0.1:0") }
+		controlListen = func() (net.Listener, error) { return ports.ListenTCP(ctx, "tcp4", "127.0.0.1:0") }
 	}
 	controlListener, err := controlListen()
 	if err != nil {
@@ -1118,10 +1122,8 @@ func (m Manager) rpc(ctx context.Context, action string) (Record, error) {
 }
 
 func (m Manager) leaseFree(ctx context.Context) bool {
-	wait, cancel := context.WithTimeout(ctx, 5*time.Millisecond)
-	defer cancel()
-	release, err := tasks.Lock(wait, m.path("lease.lock"))
-	if err != nil {
+	release, acquired, err := maintenance.TryLockExclusive(ctx, m.path("lease.lock"))
+	if err != nil || !acquired {
 		return false
 	}
 	release()

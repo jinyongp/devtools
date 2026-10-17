@@ -6,9 +6,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -134,13 +134,12 @@ func readExposureAuth(streams IO, r Request) (string, *protocol.Error) {
 	if stdin {
 		reader = streams.In
 	} else if path != "" {
-		f, e := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+		f, e := platformfs.OpenExternalPrivate(path, os.O_RDONLY, 0)
 		if e != nil {
 			return "", portFailure("invalid_authentication_file")
 		}
 		defer f.Close()
-		info, e := f.Stat()
-		if e != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+		if platformfs.CheckFile(f.File) != nil {
 			return "", portFailure("invalid_authentication_file")
 		}
 		reader = f

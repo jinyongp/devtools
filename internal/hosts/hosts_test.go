@@ -17,6 +17,7 @@ func testManager(t *testing.T) (Manager, *int) {
 	if e := os.WriteFile(path, []byte("127.0.0.1 localhost\n# external content\n"), 0640); e != nil {
 		t.Fatal(e)
 	}
+	prepareHostsTestFile(t, path)
 	calls := new(int)
 	m := Manager{Data: t.TempDir(), System: System{Path: path}}
 	m.Run = func(ctx context.Context, kind string, input any, _ bool) *protocol.Error {
@@ -54,10 +55,7 @@ func TestHostsSharedOwnershipAndNoOp(t *testing.T) {
 	if e != nil || string(b) != "127.0.0.1 localhost\n# external content\n" || *calls != 2 {
 		t.Fatal(string(b), e, *calls)
 	}
-	info, _ := os.Stat(m.System.Path)
-	if info.Mode().Perm() != 0640 {
-		t.Fatal(info.Mode())
-	}
+	assertHostsTestPermissions(t, m.System.Path)
 }
 
 func TestUnknownMarkedBlockIsPreservedBeforePrivilege(t *testing.T) {

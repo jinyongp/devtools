@@ -13,7 +13,7 @@ func TestCanonicalResolvesSymlinkAndMissingSuffix(t *testing.T) {
 		t.Fatal(err)
 	}
 	alias := filepath.Join(base, "alias")
-	if err := os.Symlink(actual, alias); err != nil {
+	if err := createDirectoryAlias(actual, alias); err != nil {
 		t.Fatal(err)
 	}
 

@@ -161,22 +161,6 @@ func (e Engine) executionIDFromProcessSource(path string) string {
 	return id
 }
 
-func removeAndSync(path string) error {
-	if err := os.Remove(path); err != nil {
-		return err
-	}
-	dir, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	syncErr := dir.Sync()
-	closeErr := dir.Close()
-	if syncErr != nil {
-		return syncErr
-	}
-	return closeErr
-}
-
 func (e Engine) archivePath(id, name string) string {
 	return filepath.Join(e.Data, "archives", id, name)
 }
@@ -356,7 +340,7 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 			if n < retention.MinimumBackupCopies || !f.at.Before(cutoff) {
 				continue
 			}
-			b, err := maintenance.Read(f.path, 128<<20)
+			b, err := readCleanupSource("old_backup", f.path, 128<<20)
 			if err == nil {
 				add("old_backup", "", f.path, b)
 			}
@@ -836,7 +820,7 @@ func (e Engine) retire(ctx context.Context, c candidate) (Archive, *protocol.Err
 		return archive, err
 	}
 
-	body, err := maintenance.Read(c.Source, 128<<20)
+	body, err := readCleanupSource(c.Kind, c.Source, 128<<20)
 	if errors.Is(err, os.ErrNotExist) && already {
 		return archive, nil
 	}
@@ -990,14 +974,14 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 			return a, false, cleanupProcessError(restoreErr)
 		}
 	default:
-		existing, readErr := maintenance.Read(a.Source, 128<<20)
+		existing, readErr := readCleanupSource(a.Kind, a.Source, 128<<20)
 		if readErr == nil && digest(existing) != digest(b) {
 			return a, false, fail("revision_conflict")
 		}
 		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
 			return a, false, fail("storage_error")
 		}
-		if readErr != nil && maintenance.Write(a.Source, b) != nil {
+		if readErr != nil && restoreCleanupSource(a.Kind, a.Source, b) != nil {
 			return a, false, fail("storage_error")
 		}
 	}

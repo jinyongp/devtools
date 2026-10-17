@@ -2,10 +2,8 @@ package ports
 
 import (
 	"context"
-	"errors"
 	"net"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/project"
@@ -24,13 +22,13 @@ func Available(port int) (bool, *protocol.Error) {
 	for _, target := range targets {
 		l, e := listenAvailability(target, strconv.Itoa(port))
 		if e != nil {
-			if errors.Is(e, syscall.EAFNOSUPPORT) || errors.Is(e, syscall.EPROTONOSUPPORT) || errors.Is(e, syscall.EADDRNOTAVAIL) {
+			if availabilityAddressUnavailable(e) {
 				continue
 			}
-			if errors.Is(e, syscall.EADDRINUSE) {
+			if BindAddressInUse(e) {
 				return false, nil
 			}
-			return false, storageError()
+			return false, availabilityError(e)
 		}
 		// Each probe closes before the next address is tested, so our own
 		// wildcard listener cannot make a subsequent specific probe conflict.

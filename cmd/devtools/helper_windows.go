@@ -1,0 +1,91 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"time"
+
+	"github.com/jinyongp/devtools/internal/hosts"
+	"github.com/jinyongp/devtools/internal/netsetup"
+	"github.com/jinyongp/devtools/internal/privilege"
+	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/truststore"
+)
+
+func decodeWindowsOperation(body []byte, value any) error {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(value); err != nil {
+		return err
+	}
+	if decoder.Decode(new(any)) != io.EOF {
+		return errors.New("trailing operation input")
+	}
+	return nil
+}
+func windowsNetworkHelperEntry() bool {
+	if len(os.Args) != 3 || os.Args[1] != "__windows-network-helper" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	err := privilege.ServePipe(ctx, os.Args[2], func(operationContext context.Context, kind string, body json.RawMessage) *protocol.Error {
+		return runWindowsHelperWithLifetime(operationContext, func() *protocol.Error { return windowsHelperOperation(operationContext, kind, body) })
+	})
+	if err != nil {
+		os.Exit(1)
+	}
+	return true
+}
+
+func windowsHelperOperation(ctx context.Context, kind string, body json.RawMessage) *protocol.Error {
+	invalid := func() *protocol.Error {
+		return protocol.NewError("invalid_argument", "Invalid constrained Windows helper request.", 2, nil)
+	}
+	switch kind {
+	case "hosts":
+		var request hosts.Request
+		if decodeWindowsOperation(body, &request) != nil {
+			return invalid()
+		}
+		return (hosts.System{}).Apply(ctx, request)
+	case "trust":
+		var request truststore.Request
+		if decodeWindowsOperation(body, &request) != nil {
+			return invalid()
+		}
+		if (truststore.System{}).Apply(ctx, request) != nil {
+			return protocol.NewError("trust_failed", "Cannot reconcile the selected CurrentUser Root certificate and its private ownership receipt; external certificates and CA keys are preserved.", 3, nil)
+		}
+		return nil
+	case "netsetup":
+		var request netsetup.Request
+		if decodeWindowsOperation(body, &request) != nil {
+			return invalid()
+		}
+		exe, err := os.Executable()
+		if err != nil {
+			return invalid()
+		}
+		return netsetup.SystemApply(ctx, request, exe)
+	}
+	return invalid()
+
+}
+
+// A native OS dialog can block inside an uncancelable API. This executable is a
+// one-shot helper: parent disconnect or its deadline must also end blocked work.
+// Hosts publication is atomic and trust receipts precede OS mutation, so abrupt
+// exit leaves a result that the parent can reconcile using the same operation.
+func runWindowsHelperWithLifetime(ctx context.Context, operation func() *protocol.Error) *protocol.Error {
+	stop := context.AfterFunc(ctx, func() { os.Exit(130) })
+	defer stop()
+	if ctx.Err() != nil {
+		return protocol.NewError("canceled", "Windows helper canceled.", 130, nil)
+	}
+	return operation()
+}

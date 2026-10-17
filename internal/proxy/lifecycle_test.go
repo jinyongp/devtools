@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jinyongp/devtools/internal/testfixture"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -213,10 +214,7 @@ func TestManagerPreservesReservationAfterSpawnFailure(t *testing.T) {
 	if portErr != nil || state.Reservation("proxy") == nil || state.Reservation("proxy").Port != port {
 		t.Fatalf("failed reservation = %+v %v", state, portErr)
 	}
-	info, statErr := os.Stat(filepath.Join(manager.Data, "proxy"))
-	if statErr != nil || info.Mode().Perm()&0077 != 0 {
-		t.Fatalf("proxy directory permissions = %v %v", info, statErr)
-	}
+	testfixture.AssertPrivate(t, filepath.Join(manager.Data, "proxy"), os.ModeDir|0700)
 }
 
 func TestManagerDoesNotOverwriteLateSupervisorAfterSpawnError(t *testing.T) {
@@ -833,7 +831,18 @@ func TestManagerClosesHijackedConnectionsBeforeStopReturns(t *testing.T) {
 
 func TestManagerStartsWithFreshDeadlineAfterTransitionLockContention(t *testing.T) {
 	manager := testManager(t)
-	manager.readyTimeout = 100 * time.Millisecond
+	// This checks the persisted deadline anchor, not whether real storage/RPC
+	// startup completes within 100 ms on a loaded host.
+	manager.readyTimeout = 5 * time.Second
+	requestPersisted := make(chan struct{})
+	var persistedOnce sync.Once
+	manager.commit = func(path string, value any) error {
+		err := tasks.WritePrivate(path, value)
+		if entry, ok := value.(receipt); err == nil && ok && !entry.Done && entry.AttemptID == "" {
+			persistedOnce.Do(func() { close(requestPersisted) })
+		}
+		return err
+	}
 	manager.Spawn = func(_ string, attemptID string) error {
 		go func() { _ = manager.Serve(context.Background(), attemptID) }()
 		return nil
@@ -842,23 +851,41 @@ func TestManagerStartsWithFreshDeadlineAfterTransitionLockContention(t *testing.
 	if lockErr != nil {
 		t.Fatal(lockErr)
 	}
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(release)
 	port := testPort()
 	result := make(chan struct {
 		status Status
 		err    *protocol.Error
 	}, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	go func() {
-		status, err := manager.Apply(context.Background(), Request{Action: "start", Port: &port, RequestID: "81818181-8181-4181-8181-818181818181"})
+		status, err := manager.Apply(ctx, Request{Action: "start", Port: &port, RequestID: "81818181-8181-4181-8181-818181818181"})
 		result <- struct {
 			status Status
 			err    *protocol.Error
 		}{status, err}
 	}()
-	time.Sleep(150 * time.Millisecond)
-	release()
+	select {
+	case <-requestPersisted:
+	case <-ctx.Done():
+		t.Fatal("start request never persisted")
+	}
+	select {
+	case started := <-result:
+		t.Fatalf("start returned while transition lock was held: %+v %v", started.status, started.err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	releasedAt := time.Now()
+	releaseOnce.Do(release)
 	started := <-result
 	if started.err != nil || !started.status.Running {
-		t.Fatalf("contended start = %+v %v", started.status, started.err)
+		t.Fatalf("contended start = %+v error=%#v", started.status, started.err)
+	}
+	record, readErr := manager.readRecord()
+	if readErr != nil || record.CreatedAt.Before(releasedAt) {
+		t.Fatalf("startup deadline includes transition lock wait: record=%+v releasedAt=%s error=%v", record, releasedAt, readErr)
 	}
 	if _, err := manager.Apply(context.Background(), Request{Action: "stop", RequestID: "82828282-8282-4282-8282-828282828282"}); err != nil {
 		t.Fatal(err)
@@ -968,14 +995,35 @@ func TestManagerExpiresStaleStartingAttemptAndAllowsNewRequest(t *testing.T) {
 	if err := manager.write("record.json", Record{CreatedAt: time.Now().Add(-time.Minute), AttemptID: "stale", State: "starting"}); err != nil {
 		t.Fatal(err)
 	}
+	serveContext, cancelServe := context.WithCancel(context.Background())
+	serveDone := make(chan error, 1)
+	spawned := false
+	t.Cleanup(func() {
+		cancelServe()
+		if spawned {
+			select {
+			case err := <-serveDone:
+				if t.Failed() {
+					t.Logf("stale recovery daemon exit: error=%#v message=%v", err, err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Error("stale recovery daemon did not stop")
+			}
+		}
+	})
 	manager.Spawn = func(_ string, attemptID string) error {
-		go func() { _ = manager.Serve(context.Background(), attemptID) }()
+		if spawned {
+			return errors.New("stale recovery spawned a second supervisor")
+		}
+		spawned = true
+		go func() { serveDone <- manager.Serve(serveContext, attemptID) }()
 		return nil
 	}
 	startedAt := time.Now()
-	started, err := manager.Apply(context.Background(), Request{Action: "start", RequestID: "62626262-6262-4262-8262-626262626262"})
+	started, err := settledLegacyApply(t, context.Background(), manager, Request{Action: "start", RequestID: "62626262-6262-4262-8262-626262626262"})
 	if err != nil || !started.Running || !started.Changed || started.Port != port {
-		t.Fatalf("stale recovery = %+v %v", started, err)
+		record, readErr := manager.readRecord()
+		t.Fatalf("stale recovery: status=%+v error=%#v record=%+v read_error=%v", started, err, record, readErr)
 	}
 	record, readErr := manager.readRecord()
 	if readErr != nil || record.CreatedAt.Before(startedAt) {
@@ -1197,5 +1245,136 @@ func TestManagerPreservesReservationWhenRecordCommitFails(t *testing.T) {
 	state, portErr := manager.portStore().Read()
 	if portErr != nil || state.Reservation("proxy") == nil || state.Reservation("proxy").Port != port {
 		t.Fatalf("record failure reservation = %+v %v", state, portErr)
+	}
+}
+
+func TestManagerStartReportsRecordReadFailureAfterReadinessRPC(t *testing.T) {
+	manager := testManager(t)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		record, err := manager.readRecord()
+		if err != nil {
+			t.Error(err)
+			http.Error(response, "Unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		// The first status snapshot succeeded. Losing that file before the next
+		// readiness read must report storage failure, not a failed supervisor.
+		if err := os.Remove(manager.path("record.json")); err != nil {
+			t.Error(err)
+		}
+		if err := json.NewEncoder(response).Encode(record); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer server.Close()
+	spawned := 0
+	manager.Spawn = func(string, string) error {
+		spawned++
+		return manager.write("control.json", proxyControl{Address: server.URL, Token: strings.Repeat("a", 64)})
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	port := testPort()
+	request := Request{Action: "start", Port: &port, RequestID: tasks.ID()}
+	for i := 0; i < 2; i++ {
+		if status, err := manager.Apply(ctx, request); err == nil || err.Code != "io_error" {
+			t.Fatalf("read failure request %d: status=%+v error=%#v", i, status, err)
+		}
+	}
+	if spawned != 1 {
+		t.Fatalf("failed request replay spawned %d supervisors", spawned)
+	}
+}
+
+// A pending reply leaves the same operation live. Reconcile only that typed
+// result with its original request ID; terminal/storage errors remain failures.
+func settledLegacyApply(t *testing.T, ctx context.Context, manager Manager, request Request) (Status, *protocol.Error) {
+	t.Helper()
+	ready, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	for {
+		result, failure := manager.Apply(ready, request)
+		if failure == nil || failure.Code != "proxy_pending" || ready.Err() != nil {
+			return result, failure
+		}
+		t.Log("resume same legacy operation after proxy_pending")
+		timer := time.NewTimer(20 * time.Millisecond)
+		select {
+		case <-ready.Done():
+			timer.Stop()
+			return result, failure
+		case <-timer.C:
+		}
+	}
+}
+
+func TestManagerResumesPendingStaleRecoveryWithoutRespawn(t *testing.T) {
+	manager := testManager(t)
+	manager.readyTimeout = 50 * time.Millisecond
+	port := testPort()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, _, err := manager.portStore().Reserve(ctx, "proxy", port); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.write("record.json", Record{CreatedAt: time.Now().Add(-time.Minute), AttemptID: "stale", State: "starting"}); err != nil {
+		t.Fatal(err)
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	releaseListen := func() { releaseOnce.Do(func() { close(release) }) }
+	manager.Listen = func(port int) ([]net.Listener, error) {
+		close(entered)
+		select {
+		case <-release:
+			return []net.Listener{newIdleListener(port)}, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	spawns := 0
+	done := make(chan error, 1)
+	t.Cleanup(func() {
+		releaseListen()
+		cancel()
+		if spawns > 0 {
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Errorf("pending recovery daemon: %v", err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Error("pending recovery daemon did not stop")
+			}
+		}
+	})
+	manager.Spawn = func(_ string, attemptID string) error {
+		spawns++
+		if spawns > 1 {
+			return errors.New("pending recovery spawned a second supervisor")
+		}
+		go func() { done <- manager.Serve(ctx, attemptID) }()
+		// Establish a real held supervisor lease before allowing the bounded start
+		// wait to expire; no sleep guesses the scheduler's progress.
+		select {
+		case <-entered:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	request := Request{Action: "start", RequestID: tasks.ID()}
+	startedAt := time.Now()
+	if status, err := manager.Apply(ctx, request); err == nil || err.Code != "proxy_pending" || status.Running {
+		t.Fatalf("unready leased supervisor: status=%+v error=%#v", status, err)
+	}
+	releaseListen()
+	status, err := settledLegacyApply(t, ctx, manager, request)
+	if err != nil || !status.Running || !status.Changed || status.Port != port || spawns != 1 {
+		t.Fatalf("same pending request: status=%+v error=%#v spawns=%d", status, err, spawns)
+	}
+	record, readErr := manager.readRecord()
+	if readErr != nil || record.AttemptID != "stale" || record.CreatedAt.Before(startedAt) {
+		t.Fatalf("pending recovery attempt changed or retained stale anchor: %+v %v", record, readErr)
 	}
 }

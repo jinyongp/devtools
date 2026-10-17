@@ -23,6 +23,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/archiveproof"
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -154,6 +155,18 @@ func failure(code string) *protocol.Error {
 func storageError() *protocol.Error {
 	return protocol.NewError("io_error", "Cannot access private process storage.", 1, nil)
 }
+
+// Safe failure metadata retains the operation and numeric OS error without
+// exposing a path, record, argv, or control credential.
+func storageErrorAt(operation string, cause error) *protocol.Error {
+	failure := storageError()
+	failure.Details = map[string]any{"operation": operation}
+	var code syscall.Errno
+	if errors.As(cause, &code) {
+		failure.Details["os_error"] = uint64(code)
+	}
+	return failure
+}
 func validID(s string) bool {
 	b, e := hex.DecodeString(strings.ReplaceAll(s, "-", ""))
 	return e == nil && len(b) == 16 && len(s) == 36 && s[8] == '-' && s[13] == '-' && s[18] == '-' && s[23] == '-'
@@ -190,7 +203,7 @@ func (s Store) readMarker(id string) (archiveMarker, bool, *protocol.Error) {
 		return marker, false, nil
 	}
 	if err != nil || !validMarker(marker) {
-		return marker, false, storageError()
+		return marker, false, storageErrorAt("read_archive_marker", err)
 	}
 	return marker, true, nil
 }
@@ -206,14 +219,14 @@ func (s Store) inspectLocal(id string) (storedExecution, *protocol.Error) {
 		stored.State = executionMissing
 		return stored, nil
 	}
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-		return stored, storageError()
+	if err != nil || !platformfs.DirectoryPrivate(dir, info) {
+		return stored, storageErrorAt("inspect_execution_directory", err)
 	}
 
 	var record Record
 	recordErr := tasks.ReadPrivate(s.path(id, "record.json"), &record)
 	if recordErr != nil && !errors.Is(recordErr, os.ErrNotExist) {
-		return stored, storageError()
+		return stored, storageErrorAt("read_execution_record", recordErr)
 	}
 	marker, hasMarker, markerErr := s.readMarker(id)
 	if markerErr != nil {
@@ -344,7 +357,7 @@ func (s Store) ArchivedExecutions(profile string) ([]ArchivedExecution, *protoco
 		return items, nil
 	}
 	if err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("enumerate_execution_records", err)
 	}
 	holes := []string{}
 	for _, entry := range entries {
@@ -444,18 +457,10 @@ func (s Store) RemoveArchiveMarker(id, archiveID string) *protocol.Error {
 		return storageError()
 	}
 	path := s.path(id, "record.archive.json")
-	if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+	if removeErr := removePrivateImage(context.Background(), path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 		return storageError()
 	}
-	dir, openErr := os.Open(filepath.Dir(path))
-	if openErr != nil {
-		return storageError()
-	}
-	syncErr := dir.Sync()
-	closeErr := dir.Close()
-	if syncErr != nil || closeErr != nil {
-		return storageError()
-	}
+
 	return nil
 }
 func (s Store) rpc(ctx context.Context, id, action string) (Record, error) {
@@ -547,7 +552,7 @@ func (s Store) storedRecords() ([]Record, *protocol.Error) {
 		return items, nil
 	}
 	if err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("enumerate_execution_records", err)
 	}
 	holes := []string{}
 	for _, entry := range entries {
@@ -661,7 +666,7 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 		if ctx.Err() != nil {
 			return out, failure("canceled")
 		}
-		return out, storageError()
+		return out, storageErrorAt("lock_process_operation", e)
 	}
 	defer unlock()
 	b, _ := json.Marshal(q)
@@ -679,14 +684,14 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 			return old.Result, nil
 		}
 	} else if !errors.Is(e, os.ErrNotExist) {
-		return out, storageError()
+		return out, storageErrorAt("read_operation_receipt", e)
 	}
 	if cleanupErr := s.cleanupLaunchStaging(); cleanupErr != nil {
 		return out, cleanupErr
 	}
 	if !receiptExists {
-		if writePrivate(receiptPath, receipt{Fingerprint: fingerprint}) != nil {
-			return out, storageError()
+		if err := writePrivate(receiptPath, receipt{Fingerprint: fingerprint}); err != nil {
+			return out, storageErrorAt("prepare_operation_receipt", err)
 		}
 	}
 	var err *protocol.Error
@@ -758,14 +763,14 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	stored := out
 	stored.Replayed = false
 	if err != nil {
-		if writePrivate(receiptPath, receipt{Fingerprint: fingerprint, Result: stored}) != nil {
-			return out, storageError()
+		if writeErr := writePrivate(receiptPath, receipt{Fingerprint: fingerprint, Result: stored}); writeErr != nil {
+			return out, storageErrorAt("save_pending_receipt", writeErr)
 		}
 		out.Replayed = receiptExists
 		return out, err
 	}
-	if writePrivate(receiptPath, receipt{Fingerprint: fingerprint, Result: stored, Done: true}) != nil {
-		return out, storageError()
+	if writeErr := writePrivate(receiptPath, receipt{Fingerprint: fingerprint, Result: stored, Done: true}); writeErr != nil {
+		return out, storageErrorAt("commit_operation_receipt", writeErr)
 	}
 	out.Replayed = receiptExists
 	return out, nil
@@ -887,9 +892,8 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		cmd.Env = append(os.Environ(), "DEVTOOLS_ISOLATED_ROOT="+r.IsolatedRoot)
 	}
 	cmd.Dir = p.Root
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	cmd.ExtraFiles = []*os.File{lease.file}
-	if err = cmd.Start(); err != nil {
+
+	if err = startSupervisor(cmd, lease.file); err != nil {
 		now := time.Now().UTC()
 		r.EndedAt = &now
 		r.State = "failed"

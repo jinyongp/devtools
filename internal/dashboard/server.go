@@ -11,8 +11,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jinyongp/devtools/internal/process"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,7 +20,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/ports"
@@ -164,8 +163,8 @@ func ManageWithRoot(ctx context.Context, action, cache, data, profile, isolatedR
 		if isolatedRoot != "" {
 			cmd.Env = append(os.Environ(), "DEVTOOLS_ISOLATED_ROOT="+isolatedRoot)
 		}
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-		if e = cmd.Start(); e != nil {
+
+		if e = process.StartDetached(cmd); e != nil {
 			return nil, fail()
 		}
 		go func() { _ = cmd.Wait() }()
@@ -223,7 +222,7 @@ func serve(ctx context.Context, dir, data string, assetRoot *os.Root, ready func
 		return e
 	}
 	defer unlock()
-	listener, e := net.Listen("tcp4", "127.0.0.1:0")
+	listener, e := ports.ListenTCP(ctx, "tcp4", "127.0.0.1:0")
 	if e != nil {
 		return e
 	}

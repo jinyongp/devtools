@@ -16,7 +16,7 @@ import (
 func TestOutputModeCatalog(t *testing.T) {
 	app := New("test", "test")
 	catalog := app.catalog()
-	if catalog["protocol_version"] != protocol.ProtocolVersion || protocol.ProtocolVersion != 6 {
+	if catalog["protocol_version"] != protocol.ProtocolVersion || protocol.ProtocolVersion != 7 {
 		t.Fatalf("unexpected CLI protocol version: %v", catalog["protocol_version"])
 	}
 	responseSchema := catalog["response_schema"].(map[string]any)
@@ -55,7 +55,7 @@ func TestOutputModeCatalog(t *testing.T) {
 	}
 	for _, args := range [][]string{{"schema", "command", "run"}, {"schema", "run"}} {
 		code, out, diagnostic := invoke(t, app, "", args...)
-		if code != 0 || diagnostic != "" || !strings.Contains(out, `"protocol_version":6`) || !strings.Contains(out, `"output_mode":"passthrough"`) || strings.Contains(out, `"output_schema"`) {
+		if code != 0 || diagnostic != "" || !strings.Contains(out, `"protocol_version":7`) || !strings.Contains(out, `"output_mode":"passthrough"`) || strings.Contains(out, `"output_schema"`) {
 			t.Fatalf("%v: %d %s %s", args, code, out, diagnostic)
 		}
 	}
@@ -147,7 +147,7 @@ func outputData(t *testing.T, app *App, args []string) map[string]any {
 
 func TestNonJSONOutputBoundaries(t *testing.T) {
 	t.Chdir(privateTempDir(t))
-	config := "profile='app'\n[commands.fail]\nexec=['/bin/sh','-c','printf output; printf diagnostic >&2; exit 17']\n"
+	config := "profile='app'\n[commands.fail]\nexec=" + fixtureExec(t, "output-fail") + "\n"
 	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}

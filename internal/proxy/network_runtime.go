@@ -13,11 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/ca"
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -164,20 +164,15 @@ func (r *networkRuntime) start(ctx context.Context, t listenerTarget) (ListenerS
 			opened, err = ListenLoopback(port)
 		} else {
 			var socket net.Listener
-			socket, err = net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+			socket, err = ports.ListenTCP(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 			if err == nil {
 				opened = []net.Listener{socket}
 			}
 		}
 		if err != nil {
-			if errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM) {
-				return proxyFailure("permission_required")
-			}
-			if errors.Is(err, syscall.EADDRINUSE) {
-				return proxyFailure("port_in_use")
-			}
-			return proxyFailure("proxy_start_failed")
+			return listenerBindFailure(err)
 		}
+
 		for _, socket := range opened {
 			sockets = append(sockets, socket)
 			server := &http.Server{Handler: frontend, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: time.Minute}
@@ -300,7 +295,7 @@ func (m Manager) serveNetwork(ctx context.Context, attemptID string) error {
 	runtime := &networkRuntime{manager: m, groups: map[string]*listenerGroup{}, resolver: NewResolver(m.portStore()), exposures: map[string]*exposureRuntime{}, attemptID: attemptID}
 	listen := m.ControlListen
 	if listen == nil {
-		listen = func() (net.Listener, error) { return net.Listen("tcp4", "127.0.0.1:0") }
+		listen = func() (net.Listener, error) { return ports.ListenTCP(ctx, "tcp4", "127.0.0.1:0") }
 	}
 	socket, e := listen()
 	if e != nil {
@@ -424,4 +419,14 @@ func (m Manager) serveNetwork(ctx context.Context, attemptID string) error {
 		return true
 	})
 	return e
+}
+
+func listenerBindFailure(err error) *protocol.Error {
+	if ports.BindPermissionDenied(err) {
+		return proxyFailure("permission_required")
+	}
+	if ports.BindAddressInUse(err) {
+		return proxyFailure("port_in_use")
+	}
+	return proxyFailure("proxy_start_failed")
 }

@@ -1,16 +1,19 @@
 package proxy
 
 import (
-	"errors"
+	"context"
 	"net"
 	"strconv"
-	"syscall"
+
+	"github.com/jinyongp/devtools/internal/ports"
 )
 
 type listenFunc func(network, address string) (net.Listener, error)
 
 func ListenLoopback(port int) ([]net.Listener, error) {
-	return listenLoopback(port, net.Listen)
+	return listenLoopback(port, func(network, address string) (net.Listener, error) {
+		return ports.ListenTCP(context.Background(), network, address)
+	})
 }
 
 func listenLoopback(port int, listen listenFunc) ([]net.Listener, error) {
@@ -23,7 +26,7 @@ func listenLoopback(port int, listen listenFunc) ([]net.Listener, error) {
 	if err == nil {
 		return []net.Listener{ipv4, ipv6}, nil
 	}
-	if errors.Is(err, syscall.EAFNOSUPPORT) || errors.Is(err, syscall.EPROTONOSUPPORT) {
+	if ports.BindFamilyUnavailable(err) {
 		return []net.Listener{ipv4}, nil
 	}
 	_ = ipv4.Close()

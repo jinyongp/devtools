@@ -243,7 +243,7 @@ func TestValidatePendingPathStillChecksAbsoluteToolRequirements(t *testing.T) {
 		Serve:     []string{"web"},
 		Bind:      map[string]project.Binding{"PATH": {Port: "web"}},
 		Requirements: project.Requirements{Tools: map[string]project.Tool{
-			"absolute": {Executable: "/definitely-not-an-installed-absolute-tool"},
+			"absolute": {Executable: filepath.Join(root, "definitely-not-an-installed-absolute-tool.exe")},
 		}},
 	}
 	failure := Validate(context.Background(), command, dependencies, nil)

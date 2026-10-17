@@ -1,0 +1,83 @@
+name: Windows support preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: amd64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Record actual native runner
+        run: |
+          New-Item -ItemType Directory -Force preflight-evidence | Out-Null
+          $actual = (& go env GOHOSTARCH).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne '${{ matrix.arch }}') { throw 'Native architecture mismatch' }
+          $data = [ordered]@{
+            commit = '${{ github.sha }}'
+            runner = '${{ matrix.runner }}'
+            image = $env:ImageOS
+            imageVersion = $env:ImageVersion
+            architecture = $actual
+            osVersion = [Environment]::OSVersion.Version.ToString()
+            powershell = $PSVersionTable.PSVersion.ToString()
+            legacyPowershell = (& powershell.exe -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()')
+            go = (& go version)
+          }
+          [IO.File]::WriteAllText("$PWD/preflight-evidence/runner.json", ($data | ConvertTo-Json))
+      - name: Build and run isolated Windows API probes
+        run: |
+          $env:CGO_ENABLED = '0'
+          & go build -o "$env:RUNNER_TEMP/native-probe.exe" docs/windows-support/probes/native_windows.go
+          if ($LASTEXITCODE -ne 0) { throw 'Probe build failed' }
+          $result = & "$env:RUNNER_TEMP/native-probe.exe"
+          $status = $LASTEXITCODE
+          [IO.File]::WriteAllText("$PWD/preflight-evidence/native.json", ($result -join "`n"))
+          if ($status -ne 0) { throw 'A native preflight assertion failed' }
+      - name: Record current product build blockers
+        run: |
+          $env:CGO_ENABLED = '0'
+          $env:GOOS = 'windows'
+          $env:GOARCH = '${{ matrix.arch }}'
+          & go build -gcflags=all=-e -o "$env:RUNNER_TEMP/devtools.exe" ./cmd/devtools *> preflight-evidence/product-build.log
+          $status = $LASTEXITCODE
+          [IO.File]::WriteAllText("$PWD/preflight-evidence/product-build-status.json", "{`"exit_code`":$status}")
+          # Product build failure is expected before implementation. Preserve it;
+          # a passing preflight is never a claim that devtools supports Windows.
+          $global:LASTEXITCODE = 0
+      - name: Record WSL capability without installing or restarting a distribution
+        run: |
+          $command = Get-Command wsl.exe -ErrorAction SilentlyContinue
+          $result = [ordered]@{ available = [bool]$command; nestedWsl2Tested = $false }
+          if ($command) {
+            $result.versionOutput = ((& wsl.exe --version 2>&1) | Out-String)
+            $result.versionExitCode = $LASTEXITCODE
+          }
+          [IO.File]::WriteAllText("$PWD/preflight-evidence/wsl-capability.json", ($result | ConvertTo-Json))
+          $global:LASTEXITCODE = 0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: windows-preflight-${{ matrix.arch }}
+          path: preflight-evidence/
+          if-no-files-found: error
+          retention-days: 30

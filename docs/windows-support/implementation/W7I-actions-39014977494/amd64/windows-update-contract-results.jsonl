@@ -1,0 +1,12 @@
+{"Time":"2026-10-17T07:49:52.3318814Z","Action":"start","Package":"github.com/jinyongp/devtools/internal/cli"}
+{"Time":"2026-10-17T07:49:52.3546278Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/cli","Test":"TestHomebrewUpdatePreservesInstallation"}
+{"Time":"2026-10-17T07:49:52.3552091Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/cli","Test":"TestHomebrewUpdatePreservesInstallation","Output":"=== RUN   TestHomebrewUpdatePreservesInstallation\n","OutputType":"frame"}
+{"Time":"2026-10-17T07:49:52.3552091Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/cli","Test":"TestHomebrewUpdatePreservesInstallation","Output":"--- PASS: TestHomebrewUpdatePreservesInstallation (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T07:49:52.3552091Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/cli","Test":"TestHomebrewUpdatePreservesInstallation","Elapsed":0}
+{"Time":"2026-10-17T07:49:52.3552091Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/cli","Test":"TestNoninteractiveUpdateFailureKeepsDiagnosticStreamJSONOnly"}
+{"Time":"2026-10-17T07:49:52.3552091Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/cli","Test":"TestNoninteractiveUpdateFailureKeepsDiagnosticStreamJSONOnly","Output":"=== RUN   TestNoninteractiveUpdateFailureKeepsDiagnosticStreamJSONOnly\n","OutputType":"frame"}
+{"Time":"2026-10-17T07:49:52.3591803Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/cli","Test":"TestNoninteractiveUpdateFailureKeepsDiagnosticStreamJSONOnly","Output":"--- PASS: TestNoninteractiveUpdateFailureKeepsDiagnosticStreamJSONOnly (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T07:49:52.3591803Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/cli","Test":"TestNoninteractiveUpdateFailureKeepsDiagnosticStreamJSONOnly","Elapsed":0}
+{"Time":"2026-10-17T07:49:52.3591803Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/cli","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-17T07:49:52.3618043Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/cli","Output":"ok  \tgithub.com/jinyongp/devtools/internal/cli\t0.030s\n"}
+{"Time":"2026-10-17T07:49:52.3618043Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/cli","Elapsed":0.03}

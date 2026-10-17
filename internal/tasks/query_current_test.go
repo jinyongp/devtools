@@ -79,7 +79,7 @@ func TestRunDirectoryIdentityCanonicalizesAliases(t *testing.T) {
 		t.Fatal(err)
 	}
 	alias := filepath.Join(base, "project-alias")
-	if err := os.Symlink(actual, alias); err != nil {
+	if err := directoryAlias(actual, alias); err != nil {
 		t.Fatal(err)
 	}
 	canonical, err := filepath.EvalSymlinks(actual)

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Extensionless Unix entry; Windows PATHEXT selects project.cmd.
+exec python3 "$(dirname "$0")/project.py" "$@"

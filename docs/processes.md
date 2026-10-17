@@ -1,6 +1,10 @@
 # 개발 프로세스 관리
 
-`devtools process`는 `devtools.toml`의 이름 명령을 백그라운드에서 실행하고 관리한다. 프로젝트 명령의 요구 사항 검사, var/sec/env 주입과 port binding은 `devtools command run`과 같다. agent나 dashboard 세션을 종료해도 실행은 유지된다.
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
+`devtools process`는 `devtools.toml`의 이름 명령을 백그라운드에서 실행하고 관리한다. 프로젝트 명령의 요구 사항 검사, var/sec/env 주입과 port binding은 `devtools command run`과 같다. agent나 dashboard 세션과 별도로 supervisor가 실행을 관리한다.
+Windows에서는 상위 host Job이 종료되면 함께 종료될 수 있다. 실제 PC의 터미널 닫기 동작은
+미검증이며 [Windows 안내](windows.md#저장소와-프로세스)의 수명 경계를 따른다.
 
 ```sh
 devtools process start web --request-id UUID
@@ -21,7 +25,12 @@ list는 `data.items`, status는 `data.item`에 실행 정보를 반환한다. st
 
 일반 종료는 `exited`, 명시적 종료는 `stopped`, 시작 준비 실패는 `failed`다. 종료 코드와 원인 코드를 메타데이터에 기록한다. 재부팅이나 supervisor 손실은 `interrupted`, 살아 있는 supervisor에 접근할 수 없는 상황은 `unknown`으로 조회한다. 다시 시작하려면 명시적으로 start 또는 restart를 실행한다.
 
-종료는 살아 있는 supervisor의 인증 채널을 통해 요청한다. supervisor는 자신이 소유한 프로세스 그룹에 TERM을 보내고 3초 후 남은 자식을 정리한다. 같은 그룹의 자식 프로세스는 직접 자식이 먼저 종료된 경우에도 정리한다. 자체적으로 새 OS 세션을 만드는 명령은 별도 수명 관리가 필요하다. supervisor가 강제 종료된 경우 잔여 프로세스는 실제 port 점유와 진단 결과로 확인한다. 저장된 PID를 사용해 다른 프로세스를 종료하지 않는다.
+종료는 살아 있는 supervisor의 인증 채널을 통해 요청한다.
+Unix에서는 소유한 프로세스 그룹에 TERM을 보내고 3초 후 남은 자식을 정리한다.
+같은 그룹의 자식은 직접 자식이 먼저 종료돼도 정리하지만 새 OS 세션으로 빠져나간 명령에는
+별도 수명 관리가 필요하다. Windows에서는 생성 시점에 Job으로 묶은 소유 프로세스에
+CTRL_BREAK를 요청하고 3초 후 남은 트리를 종료한다. Job에서의 breakaway는 허용하지 않는다.
+종료가 불확실하면 상태·실제 포트 점유·진단을 확인한다. 저장된 PID만으로 외부 프로세스를 종료하지 않는다.
 
 ## 대상과 요청 ID 선택
 

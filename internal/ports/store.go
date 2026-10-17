@@ -11,10 +11,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
-	"time"
 
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -66,18 +65,17 @@ func empty() *State {
 	return &State{Version: 1, Instances: []Instance{}, Assignments: []Assignment{}, Reservations: []Reservation{}}
 }
 func private(f *os.File) bool {
-	i, e := f.Stat()
-	return e == nil && i.Mode().IsRegular() && i.Mode().Perm()&0077 == 0
+	return platformfs.CheckFile(f) == nil
 }
 func (s Store) Read() (*State, *protocol.Error) {
 	i, e := os.Lstat(s.Directory)
 	if errors.Is(e, os.ErrNotExist) {
 		return empty(), nil
 	}
-	if e != nil || !i.IsDir() || i.Mode().Perm()&0077 != 0 {
+	if e != nil || !platformfs.DirectoryPrivate(s.Directory, i) {
 		return nil, storageError()
 	}
-	f, e := os.OpenFile(filepath.Join(s.Directory, "registry.json"), os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	f, e := platformfs.OpenPrivate(filepath.Join(s.Directory, "registry.json"), os.O_RDONLY, 0)
 	if errors.Is(e, os.ErrNotExist) {
 		return empty(), nil
 	}
@@ -85,7 +83,7 @@ func (s Store) Read() (*State, *protocol.Error) {
 		return nil, storageError()
 	}
 	defer f.Close()
-	if !private(f) {
+	if !private(f.File) {
 		return nil, storageError()
 	}
 	if info, err := f.Stat(); err != nil || info.Size() > registryDocumentLimit {
@@ -155,57 +153,7 @@ func (state *State) validatedIndex() (*registryReadIndex, bool) {
 	return index, true
 }
 func sameAlias(a, b *string) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
-func (s Store) lock(ctx context.Context, name string, wait bool, create bool) (*os.File, *protocol.Error) {
-	if create {
-		if os.MkdirAll(s.Directory, 0700) != nil {
-			return nil, storageError()
-		}
-	}
-	i, e := os.Lstat(s.Directory)
-	if errors.Is(e, os.ErrNotExist) && !create {
-		return nil, nil
-	}
-	if e != nil || !i.IsDir() || i.Mode().Perm()&0077 != 0 {
-		return nil, storageError()
-	}
-	flags := os.O_RDWR | syscall.O_NOFOLLOW | syscall.O_NONBLOCK
-	if create {
-		flags |= os.O_CREATE
-	}
-	f, e := os.OpenFile(filepath.Join(s.Directory, name), flags, 0600)
-	if errors.Is(e, os.ErrNotExist) && !create {
-		return nil, nil
-	}
-	if e != nil {
-		return nil, storageError()
-	}
-	if !private(f) {
-		f.Close()
-		return nil, storageError()
-	}
-	for {
-		if ctx.Err() != nil {
-			f.Close()
-			return nil, protocol.NewError("canceled", "Execution canceled.", 130, nil)
-		}
-		e = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
-		if e == nil {
-			return f, nil
-		}
-		if !errors.Is(e, syscall.EWOULDBLOCK) && !errors.Is(e, syscall.EINTR) {
-			f.Close()
-			return nil, storageError()
-		}
-		if !wait {
-			f.Close()
-			return nil, fail("port_run_active")
-		}
-		select {
-		case <-ctx.Done():
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-}
+
 func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Error)) *protocol.Error {
 	l, e := s.lock(ctx, "registry.lock", true, true)
 	if e != nil {
@@ -245,32 +193,9 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 	if len(b) > registryDocumentLimit {
 		return fail("invalid_storage")
 	}
-	f, err := os.CreateTemp(s.Directory, ".update-*")
-	if err != nil {
-		return storageError()
-	}
-	defer os.Remove(f.Name())
-	_, err = f.Write(b)
-	if err == nil {
-		err = f.Sync()
-	}
-	closeErr := f.Close()
-	if err != nil || closeErr != nil {
-		return storageError()
-	}
-	if os.Rename(f.Name(), filepath.Join(s.Directory, "registry.json")) != nil {
-		return storageError()
-	}
-	d, err := os.Open(s.Directory)
-	if err != nil {
-		return storageError()
-	}
-	defer d.Close()
-	if d.Sync() != nil {
-		return storageError()
-	}
-	return nil
+	return s.publishRegistry(b)
 }
+
 func (st *State) ByID(id string) *Instance {
 	if st.readIndex != nil {
 		if n, ok := st.readIndex.instances[id]; ok {
@@ -367,7 +292,7 @@ func (s Store) Active(ctx context.Context, id, name string) *protocol.Error {
 	return e
 }
 func (s Store) Claim(ctx context.Context, id string, names []string) (func(), *protocol.Error) {
-	files := []*os.File{}
+	files := []io.Closer{}
 	release := func() {
 		for _, f := range files {
 			f.Close()

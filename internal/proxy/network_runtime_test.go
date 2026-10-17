@@ -9,8 +9,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/jinyongp/devtools/internal/hosts"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/project"
+	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
@@ -54,6 +57,34 @@ func liveNetworkManager(t *testing.T) Manager {
 	}
 	return m
 }
+
+// Network control returns proxy_pending while its bounded lease probe or a
+// control response is uncertain.
+// Keep the operation identity frozen while establishing a definitive fixture
+// state. Other errors (including bind refusal) remain visible to the caller.
+func settledNetworkApply(t *testing.T, ctx context.Context, m Manager, action, name string, all bool, id string) (any, *protocol.Error) {
+	t.Helper()
+	ready, stop := context.WithTimeout(ctx, 10*time.Second)
+	defer stop()
+	for {
+		result, failure := m.NetworkApply(ready, action, name, all, id)
+		if failure == nil || failure.Code != "proxy_pending" || ready.Err() != nil {
+			if failure != nil {
+				t.Logf("network fixture result: code=%s details=%v", failure.Code, failure.Details)
+			}
+			return result, failure
+		}
+		t.Logf("resume same network operation after pending: %v", failure.Details)
+		timer := time.NewTimer(20 * time.Millisecond)
+		select {
+		case <-ready.Done():
+			timer.Stop()
+			return result, failure
+		case <-timer.C:
+		}
+	}
+}
+
 func networkRoute(t *testing.T, m Manager, host, listener string, backend int) (project.Context, network.RouteRef) {
 	t.Helper()
 	dir := t.TempDir()
@@ -90,7 +121,7 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 	networkRoute(t, m, "app.localhost", "default", port)
 	otherProject, otherRef := networkRoute(t, m, "other.localhost", "other", otherBackendPort)
 	id := tasks.ID()
-	if _, e := m.NetworkApply(ctx, "start", "", true, id); e != nil {
+	if _, e := settledNetworkApply(t, ctx, m, "start", "", true, id); e != nil {
 		t.Fatal(e)
 	}
 	if _, e := m.RouteUp(ctx, otherRef, otherProject, nil, hosts.Manager{Data: m.Data, Isolated: true}, tasks.ID()); e != nil {
@@ -113,18 +144,41 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 	}
 	roots := x509.NewCertPool()
 	roots.AppendCertsFromPEM(a.PEM())
-	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: "app.localhost"}, Proxy: nil}
+	transport := &http.Transport{ForceAttemptHTTP2: true, TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: "app.localhost"}, Proxy: nil}
 	defer transport.CloseIdleConnections()
-	secure := &http.Client{Transport: transport, Timeout: time.Second}
+	// The cold TLS resolver and HTTP handler both inspect private storage;
+	// a legitimate sharing retry alone can take two seconds. This functional
+	// HTTP/2/lifecycle check has no one-second performance contract.
+	secure := &http.Client{Transport: transport, Timeout: 10 * time.Second}
 	req, _ = http.NewRequest("GET", fmt.Sprintf("https://127.0.0.1:%d/path?x=1", tlsPort), nil)
 	req.Host = "app.localhost"
 	req.Header.Set("X-Forwarded-Proto", "spoof")
+	started := time.Now()
+	var traceMu sync.Mutex
+	var phases []string
+	phase := func(name string) {
+		traceMu.Lock()
+		defer traceMu.Unlock()
+		phases = append(phases, fmt.Sprintf("%s=%s", name, time.Since(started).Round(time.Millisecond)))
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+		TLSHandshakeStart:    func() { phase("tls_start") },
+		TLSHandshakeDone:     func(_ tls.ConnectionState, err error) { phase(fmt.Sprintf("tls_done_ok_%t", err == nil)) },
+		WroteRequest:         func(info httptrace.WroteRequestInfo) { phase(fmt.Sprintf("request_written_ok_%t", info.Err == nil)) },
+		GotFirstResponseByte: func() { phase("first_response_byte") },
+	}))
 	res, e = secure.Do(req)
+	traceMu.Lock()
+	t.Logf("single cold TLS request phases: %v", phases)
+	traceMu.Unlock()
 	if e != nil {
 		t.Fatal(e)
 	}
 	body, _ := io.ReadAll(res.Body)
 	res.Body.Close()
+	if res.ProtoMajor != 2 {
+		t.Fatalf("TLS listener did not negotiate HTTP/2: %s", res.Proto)
+	}
 	if string(body) != "https /path?x=1" {
 		t.Fatal(string(body))
 	}
@@ -132,7 +186,7 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 	if e2 != nil {
 		t.Fatal(e2)
 	}
-	if _, e := m.NetworkApply(ctx, "stop", "default", false, tasks.ID()); e != nil {
+	if _, e := settledNetworkApply(t, ctx, m, "stop", "default", false, tasks.ID()); e != nil {
 		t.Fatal(e)
 	}
 	if _, e := secure.Do(req); e == nil {
@@ -154,7 +208,7 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 		t.Fatal(otherResponse.StatusCode, string(otherBody))
 	}
 	// A completed receipt reports history without starting the stopped listener.
-	if _, e := m.NetworkApply(ctx, "start", "", true, id); e != nil {
+	if _, e := settledNetworkApply(t, ctx, m, "start", "", true, id); e != nil {
 		t.Fatal(e)
 	}
 	status, e2 := m.NetworkStatus(ctx, "default")
@@ -168,10 +222,10 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 	if e2 != nil || len(logs) != 2 || logs[0].Listener != "default" || logs[1].State != "stopped" {
 		t.Fatal(logs, e2)
 	}
-	if _, e := m.NetworkApply(ctx, "restart", "default", false, tasks.ID()); e != nil {
+	if _, e := settledNetworkApply(t, ctx, m, "restart", "default", false, tasks.ID()); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := m.NetworkApply(ctx, "stop", "", true, tasks.ID()); e != nil {
+	if _, e := settledNetworkApply(t, ctx, m, "stop", "", true, tasks.ID()); e != nil {
 		t.Fatal(e)
 	}
 }
@@ -187,7 +241,7 @@ func TestNetworkSecondSocketFailureRollsBackFirst(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer occupied.Close()
-	if _, e := m.NetworkApply(ctx, "start", "default", false, tasks.ID()); e == nil || e.Code != "port_in_use" {
+	if _, e := settledNetworkApply(t, ctx, m, "start", "default", false, tasks.ID()); e == nil || e.Code != "port_in_use" {
 		t.Fatal(e)
 	}
 	probe, e := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", httpPort))
@@ -203,8 +257,8 @@ func TestTLSRejectsUnknownSNI(t *testing.T) {
 	if _, e := m.Configure(ctx, "tls", "", fmt.Sprintf("127.0.0.1:%d", port), false, tasks.ID()); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := m.NetworkApply(ctx, "start", "tls", false, tasks.ID()); e != nil {
-		t.Fatal(e)
+	if _, failure := settledNetworkApply(t, ctx, m, "start", "tls", false, tasks.ID()); failure != nil {
+		t.Fatalf("TLS-only start: code=%s details=%v", failure.Code, failure.Details)
 	}
 	conn, e := tls.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port), &tls.Config{InsecureSkipVerify: true, ServerName: "unknown.localhost"})
 	if conn != nil {

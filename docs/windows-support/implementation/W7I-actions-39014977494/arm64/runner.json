@@ -1,0 +1,10 @@
+{
+  "build": "26200",
+  "powershell": "7.6.6",
+  "commit": "fd865a706f510319e848c5650a596e83074a2af4",
+  "focus": "installer",
+  "version": "10.0.26200",
+  "architecture": "arm64",
+  "display_version": "25H2",
+  "os": "Microsoft Windows 11 Enterprise"
+}

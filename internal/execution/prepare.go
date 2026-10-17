@@ -59,6 +59,10 @@ func (c Command) NeedsValues() bool {
 // Prepare loads values, applies the selected environment, resolves bindings,
 // and optionally claims served ports.
 func Prepare(ctx context.Context, command Command, dependencies Dependencies, preview bool) (Prepared, *protocol.Error) {
+	return prepare(ctx, command, dependencies, preview, nil)
+}
+
+func prepare(ctx context.Context, command Command, dependencies Dependencies, preview bool, managedParentEnvironment *[]string) (Prepared, *protocol.Error) {
 	var state *values.State
 	if command.NeedsValues() {
 		var err *protocol.Error
@@ -72,17 +76,23 @@ func Prepare(ctx context.Context, command Command, dependencies Dependencies, pr
 			}
 		}
 	}
-	return prepareResolved(ctx, command, state, dependencies, preview, !preview)
+	return prepareResolved(ctx, command, state, dependencies, preparationOptions{preview: preview, injectValues: !preview, managedParentEnvironment: managedParentEnvironment})
 }
 
 // Preview resolves diagnostic bindings and ports from an already observed value
 // snapshot without injecting that snapshot into a child environment. A nil state
 // is valid so doctor can continue after reporting unreadable value storage.
 func Preview(ctx context.Context, command Command, state *values.State, dependencies Dependencies) (Prepared, *protocol.Error) {
-	return prepareResolved(ctx, command, state, dependencies, true, false)
+	return prepareResolved(ctx, command, state, dependencies, preparationOptions{preview: true})
 }
 
-func prepareResolved(ctx context.Context, command Command, state *values.State, dependencies Dependencies, preview, injectValues bool) (Prepared, *protocol.Error) {
+type preparationOptions struct {
+	preview                  bool
+	injectValues             bool
+	managedParentEnvironment *[]string
+}
+
+func prepareResolved(ctx context.Context, command Command, state *values.State, dependencies Dependencies, options preparationOptions) (Prepared, *protocol.Error) {
 	out := Prepared{
 		Command:  command,
 		Args:     command.Arguments(),
@@ -90,12 +100,24 @@ func prepareResolved(ctx context.Context, command Command, state *values.State, 
 		State:    state,
 		Release:  func() {},
 	}
-	if injectValues && command.Inject && state != nil {
+	if options.injectValues && command.Inject && state != nil {
 		injected, envErr := state.Environment(command.Env)
 		if envErr != nil {
 			return Prepared{}, envErr
 		}
 		out.Injected = injected
+	}
+	if err := validateInjectedKeyspace(command, out.Injected); err != nil {
+		return Prepared{}, err
+	}
+	if options.managedParentEnvironment != nil {
+		environment, err := managedEnvironment(command, state, *options.managedParentEnvironment, nil)
+		if err != nil {
+			return Prepared{}, err
+		}
+		if err = checkManagedArguments(command, out.Args, environment); err != nil {
+			return Prepared{}, err
+		}
 	}
 	if len(command.Bind)+len(command.Serve) == 0 {
 		return out, nil
@@ -116,7 +138,7 @@ func prepareResolved(ctx context.Context, command Command, state *values.State, 
 		}
 		command.Project.Ports = definitions
 	}
-	prepared, release, err := dependencies.Ports.Prepare(ctx, command.Project, command.projectCommand(), command.Env, state, dependencies.PortDefaults, preview)
+	prepared, release, err := dependencies.Ports.Prepare(ctx, command.Project, command.projectCommand(), command.Env, state, dependencies.PortDefaults, options.preview)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -136,7 +158,7 @@ func prepareResolved(ctx context.Context, command Command, state *values.State, 
 			out.Injected["DEVTOOLS_ISOLATED_ROOT"] = root
 		}
 	}
-	if path, ok := prepared.Bind["PATH"]; ok {
+	if path, ok := process.EnvironmentValue(prepared.Bind, "PATH"); ok {
 		path := path
 		out.PathOverride = &path
 	}
@@ -205,11 +227,33 @@ func (p Prepared) Checks(ctx context.Context, parentEnvironment []string, forceE
 	})
 }
 
+// validateInjectedKeyspace is shared by cold start and live-process validation.
+// Invalid Windows bindings must not reach port preparation or tool probes, nor
+// cause an existing managed process to stop before a replacement is preflighted.
+func validateInjectedKeyspace(command Command, injected map[string]string) *protocol.Error {
+	keys := make(map[string]string, len(injected)+len(command.Bind))
+	for key, value := range injected {
+		keys[key] = value
+	}
+	for key := range command.Bind {
+		keys[key] = ""
+	}
+	if command.Network != nil {
+		for key := range command.Network.Bindings {
+			keys[key] = ""
+		}
+	}
+	return process.ValidateEnvironment(keys)
+}
+
 // Validate performs only checks that are safe while an existing managed
 // execution is still running. It does not claim ports or require served ports
 // to be free. Bindings backed by a new port served by this same command may be
 // deferred until the post-stop cold-start preflight.
 func Validate(ctx context.Context, command Command, dependencies Dependencies, parentEnvironment []string) *protocol.Error {
+	if err := validateInjectedKeyspace(command, nil); err != nil {
+		return err
+	}
 	var state *values.State
 	if command.NeedsValues() {
 		var err *protocol.Error
@@ -219,6 +263,16 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 		}
 		if envErr := state.CheckEnv(command.Env); envErr != nil {
 			return envErr
+		}
+	}
+
+	if command.Inject && state != nil {
+		injected, err := state.Environment(command.Env)
+		if err != nil {
+			return err
+		}
+		if err := validateInjectedKeyspace(command, injected); err != nil {
+			return err
 		}
 	}
 
@@ -264,7 +318,7 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 			}
 		}
 		args = append(resolvedExec, command.ExtraArgs...)
-		if path, ok := bindings["PATH"]; ok {
+		if path, ok := process.EnvironmentValue(bindings, "PATH"); ok {
 			path := path
 			pathOverride = &path
 		}
@@ -288,6 +342,16 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 		}
 		pathOverride = nil
 	}
+	if executable != "" {
+		environment, err := managedEnvironment(command, state, parentEnvironment, pathOverride)
+		if err != nil {
+			return err
+		}
+		if err = checkManagedArguments(command, []string{executable}, environment); err != nil {
+			return err
+		}
+	}
+
 	checks := doctor.CheckRequirements(ctx, doctor.Input{
 		Profile:        command.Project.Profile,
 		Directory:      command.Directory,
@@ -311,11 +375,19 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 
 // Preflight performs the non-mutating checks used before a managed cold start.
 func Preflight(ctx context.Context, command Command, dependencies Dependencies, parentEnvironment []string) *protocol.Error {
-	prepared, err := Prepare(ctx, command, dependencies, true)
+	prepared, err := prepare(ctx, command, dependencies, true, &parentEnvironment)
 	if err != nil {
 		return err
 	}
 	defer prepared.Release()
+	environment, environmentErr := managedEnvironment(command, prepared.State, parentEnvironment, prepared.PathOverride)
+	if environmentErr != nil {
+		return environmentErr
+	}
+	if err := checkManagedArguments(command, prepared.Args, environment); err != nil {
+		return err
+	}
+
 	checks := prepared.Checks(ctx, parentEnvironment, true)
 	if !ChecksPassed(checks) {
 		return protocol.NewError("requirements_failed", "Command prerequisites are not satisfied.", 3, map[string]any{
@@ -335,8 +407,14 @@ func (p Prepared) Environment(parent []string) []string {
 // Execute runs a prepared command using either the regular foreground process
 // path or a caller-provided managed-process runner.
 func (p Prepared) Execute(ctx context.Context, parentEnvironment []string, runner process.Runner, in io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
+	if err := process.ValidateEnvironment(p.Injected); err != nil {
+		return 0, err
+	}
 	ctx = process.WithReadyProbe(ctx, p.Command.Ready)
 	if runner != nil {
+		if err := process.ValidateManaged(p.Args, p.Command.Directory, p.Environment(parentEnvironment)); err != nil {
+			return 0, err
+		}
 		ctx = process.WithRunner(ctx, runner)
 	}
 	return process.Execute(ctx, p.Args, p.Command.Directory, p.Environment(parentEnvironment), in, out, diagnostic)
@@ -350,4 +428,30 @@ func ChecksPassed(checks []doctor.Check) bool {
 		}
 	}
 	return true
+}
+
+// Managed preflight checks run before port probes and repeat after binding
+// expansion. Only the selected execution environment determines PATH.
+func managedEnvironment(command Command, state *values.State, parent []string, pathOverride *string) ([]string, *protocol.Error) {
+	environment := parent
+	if command.Inject && state != nil {
+		injected, err := state.Environment(command.Env)
+		if err != nil {
+			return nil, err
+		}
+		environment = process.Environment(environment, injected)
+	}
+	if pathOverride != nil {
+		environment = process.Environment(environment, map[string]string{"PATH": *pathOverride})
+	}
+	return environment, nil
+}
+func checkManagedArguments(command Command, args, environment []string) *protocol.Error {
+	if err := process.ValidateManaged(args, command.Directory, environment); err != nil {
+		return err
+	}
+	if command.Ready != nil {
+		return process.ValidateManaged(command.Ready.Exec, command.Directory, environment)
+	}
+	return nil
 }

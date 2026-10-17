@@ -1,0 +1,29 @@
+{
+  "source_commit": "2ca5161b4c4b0dc25689603885e6d7f1028ae83a",
+  "matching_unix_sources_through": "088a1da1ff058214cc5ad8f21736581e8d064a6a",
+  "subsequent_go_changes": [
+    "internal/lifecycle/native_windows_test.go",
+    "internal/process/handles_windows_test.go",
+    "internal/process/launcher_windows_test.go",
+    "internal/services/supervisor_windows_test.go"
+  ],
+  "checks": [
+    {
+      "command": "go test ./...",
+      "exit_code": 0
+    },
+    {
+      "command": "go vet ./...",
+      "exit_code": 0
+    },
+    {
+      "command": "go test -race ./internal/process ./internal/services ./internal/proxy ./internal/dashboard",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 -B verify/run.py processes project_lifecycle",
+      "exit_code": 0
+    }
+  ],
+  "scope": "Unix checks at W4D implementation; subsequent Go changes through native basis are Windows test files only. W7I excluded."
+}

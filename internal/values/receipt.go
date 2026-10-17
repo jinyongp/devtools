@@ -4,10 +4,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"os"
 	"path/filepath"
 	"reflect"
-	"syscall"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/profilekey"
@@ -26,7 +26,7 @@ func (s Store) readReceipt(requestID string) (changeReceipt, bool, error) {
 	found := false
 	for index, relative := range []string{canonical, legacy} {
 		body, err := maintenance.Read(filepath.Join(maintenance.Root(s.Directory), relative), 1<<20)
-		if errors.Is(err, os.ErrNotExist) || index == 1 && errors.Is(err, syscall.ENAMETOOLONG) {
+		if errors.Is(err, os.ErrNotExist) || index == 1 && platformfs.NameTooLong(filepath.Join(maintenance.Root(s.Directory), relative), err) {
 			continue
 		}
 		if err != nil {

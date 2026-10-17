@@ -1,11 +1,14 @@
 import { test, expect } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const repository = process.cwd();
-const binary = join(repository, "bin", "devtools");
+const binary = process.env.DEVTOOLS_TEST_CLI_BINARY || join(repository, "bin", process.platform === "win32" ? "devtools.exe" : "devtools");
+if (process.env.DEVTOOLS_BROWSER_EXECUTABLE) {
+  test.use({ launchOptions: { executablePath: process.env.DEVTOOLS_BROWSER_EXECUTABLE } });
+}
 
 function runCLI(args, cwd, env, input = "") {
   return execFileSync(binary, args, {
@@ -30,12 +33,16 @@ test("dashboard login, value mutation and navigation survive reload", async ({ p
   const env = {
     ...process.env,
     HOME: home,
+    DEVTOOLS_ISOLATED_ROOT: join(root, "isolation"),
     XDG_DATA_HOME: join(home, "data"),
     XDG_CONFIG_HOME: join(home, "config"),
     XDG_CACHE_HOME: join(home, "cache"),
   };
 
   try {
+    const identity = JSON.parse(runCLI(["version"], project, env));
+    expect(identity.data.protocol_version).toBe(7);
+    if (process.env.DEVTOOLS_TEST_CLI_COMMIT) expect(identity.data.commit).toBe(process.env.DEVTOOLS_TEST_CLI_COMMIT);
     runCLI(["var", "set", "MESSAGE", "--value", "before"], project, env);
     const started = JSON.parse(runCLI(["dashboard"], project, env));
     const url = started.data.item.url;
@@ -67,12 +74,34 @@ test("dashboard login, value mutation and navigation survive reload", async ({ p
 
     const value = JSON.parse(runCLI(["var", "get", "MESSAGE"], project, env));
     expect(value.data.value).toBe("after");
+    const origin = new URL(page.url()).origin;
+    const unauthorized = await page.request.get(origin + "/api/profiles");
+    expect(unauthorized.status()).toBe(401);
+    const foreign = await page.request.post(origin + "/api/actions", { headers: { Origin: "http://outside.invalid" }, data: {} });
+    expect(foreign.status()).toBe(403);
+    if (process.env.DEVTOOLS_TEST_CLI_BINARY) {
+      let browserArch = "unknown";
+      const browserPath = process.env.DEVTOOLS_BROWSER_EXECUTABLE;
+      if (process.platform === "win32" && browserPath) {
+        const image = readFileSync(browserPath);
+        const machine = image.readUInt16LE(image.readUInt32LE(60) + 4);
+        browserArch = ({ [0x8664]: "amd64", [0xaa64]: "arm64" })[machine] || "unknown";
+        expect(browserArch).not.toBe("unknown");
+      }
+      writeFileSync("windows-browser-results.json", JSON.stringify({
+        cli_commit: identity.data.commit, protocol: identity.data.protocol_version,
+        node_arch: process.arch, browser_arch: browserArch,
+        browser_version: page.context().browser().version(),
+        login: "pass", mutation: "pass", reload: "pass", cli_confirmation: "pass",
+        missing_session: "401", foreign_origin: "403", real_pc: "NOT RUN",
+      }, null, 2) + "\n");
+    }
   } finally {
     try {
       runCLI(["dashboard", "stop"], project, env);
     } catch {
       // Cleanup should not hide the primary smoke failure.
     }
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 });

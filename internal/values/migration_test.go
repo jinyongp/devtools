@@ -106,7 +106,7 @@ func TestLegacyReceiptReplaysAfterNewerMutation(t *testing.T) {
 func TestLegacyUpdateRestartsBeforeInvokingChange(t *testing.T) {
 	ctx := context.Background()
 	store := Store{Directory: filepath.Join(privateTempDir(t), "profiles"), Profile: "legacy-once"}
-	if err := os.MkdirAll(store.Directory, 0700); err != nil {
+	if err := privateDirectory(store.Directory); err != nil {
 		t.Fatal(err)
 	}
 	state := newState(store.Profile)

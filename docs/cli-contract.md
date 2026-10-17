@@ -1,5 +1,7 @@
 # 사용법과 CLI 계약
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 HTTPS·도메인·공유와 통합 시작의 확장 계약은
 [local network contract](network-design.md)를 따른다.
 
@@ -9,7 +11,8 @@ HTTPS·도메인·공유와 통합 시작의 확장 계약은
 [포트 관리 계약](port-design.md)을 따른다. worktree별 `.localhost` route는
 [로컬 reverse proxy](proxy.md)를 참고한다. 저장된 profile의 조회·비교·환경 간 이동은
 [Profile 관리](profiles.md), `project up/status/logs/restart/down`은 [프로세스 관리](processes.md#프로젝트-서버를-함께-관리하기)를 따른다.
-v0.23.0부터 CLI protocol v6를 사용하며, `run`의 인자 구분 규칙이 바뀐다.
+현재 소스는 Windows 후보를 위한 CLI protocol v7이다. v0.23.0의 v6에서 도입한 `run` 인자 구분 규칙을 유지한다.
+새 platform 진단·PowerShell shell과 버전 경계는 [v7 마이그레이션](cli-output.md#protocol-v7-마이그레이션)을 따른다.
 이전 v0.22.3은 protocol v5를 사용한다. 버전별 사용법은 아래 명령 실행 절에,
 전환 규칙은 [CLI 출력 계약](cli-output.md#protocol-v6-마이그레이션)에 정리했다.
 
@@ -17,7 +20,7 @@ v0.23.0부터 CLI protocol v6를 사용하며, `run`의 인자 구분 규칙이 
 
 ## 사용 목적
 
-devtools는 개인용 개발 도구를 하나의 CLI로 제공한다. macOS, Linux, WSL에서 에이전트가 비대화형 CLI로 사용하고, 사용자는 선택적으로 dashboard에서 같은 데이터를 관리한다.
+devtools는 개인용 개발 도구를 하나의 CLI로 제공한다. macOS, Linux, WSL 및 Windows 네이티브 후보에서 에이전트가 CLI로 사용하고, 사용자는 선택적으로 dashboard에서 같은 데이터를 관리한다. Windows OS trust/untrust는 대화형 확인이 필요하며 [Windows 지원 한계](windows.md)를 따른다.
 
 프로젝트는 일반 환경변수를 읽고 기존 실행 명령을 유지한다. devtools는 프로젝트 명령을 호출하는 앞단의 실행 진입점이다. `package.json`이나 기존 task runner의 명령은 독립적으로 실행할 수 있고, 에이전트는 `devtools.toml`에 정의한 이름 또는 직접 지정한 명령으로 실행한다.
 
@@ -423,7 +426,8 @@ inject = true
 env = "test"
 ```
 
-이 예시에서는 셸이 앞 명령의 성공 여부에 따라 다음 명령을 실행한다. 선택한 환경변수는 두 명령에 상속된다.
+이 POSIX 셸 예시에서는 앞 명령이 성공해야 다음 명령을 실행한다. 선택한 환경변수는 두 명령에 상속된다.
+Windows에서는 설치한 task runner나 명시 PowerShell 검사 스크립트로 같은 순서를 구성한다.
 
 ### 환경변수와 프로세스 동작
 
@@ -437,7 +441,12 @@ env = "test"
 
 `command run`은 자식 프로세스의 입출력과 신호를 전달하고 종료 코드를 보존한다. 자식 출력은 JSON으로 감싸거나 마스킹하지 않는다. 따라서 `true`, `3000` 같은 변수값 때문에 정상 출력이 변형되지 않는다.
 
-실행 파일은 선택한 실행 디렉터리와 최종 환경의 PATH를 기준으로 찾는다. `SIGINT`, `SIGTERM`, `SIGHUP`을 받으면 실행한 프로세스 그룹에 같은 신호를 전달한다. 종료 신호 전달 후 3초 동안 명령이 계속 실행되면 프로세스 그룹을 강제 종료한다. 신호로 종료한 자식의 종료 코드는 `128 + 신호 번호`다.
+실행 파일은 선택한 실행 디렉터리와 최종 환경의 PATH를 기준으로 찾는다.
+Unix에서는 `SIGINT`, `SIGTERM`, `SIGHUP`을 자식 프로세스 그룹에 전달하고 3초 후 남은
+프로세스를 정리한다. 신호 종료 코드는 `128 + 신호 번호`다. Windows에서는 소유 Job의
+CTRL_BREAK·종료 경계를 사용한다. batch 인수 제한과 PowerShell 5.1의 인수 전달 한계는
+[Windows 실행 안내](windows.md#저장소와-프로세스), WSL의 명시 `.exe` 실행은
+[WSL 안내](wsl.md#프로젝트와-저장소)를 따른다.
 
 ## 출력과 비대화형 사용
 
@@ -446,7 +455,10 @@ env = "test"
 
 조회·변경 명령은 항상 JSON을 반환한다. 성공은 stdout, Devtools 오류는 stderr로 분리하고, 오류에는 에이전트가 분기할 수 있는 고정된 코드가 포함된다. 도움말은 text, completion은 artifact, 명령 실행은 passthrough로 구분한다. `devtools schema COMMAND`의 `output_mode`에서 출력 종류를 확인한다. 공통 필드와 이전 버전의 JSON 경로 변경은 [CLI 출력 계약](cli-output.md)을 따른다. 응답의 `schema_version`은 도구가 제공하는 envelope 버전이며 사용자 설정값이 아니다.
 
-일반 명령은 입력을 요구하는 프롬프트를 띄우지 않는다. 명시적으로 지정한 stdin 입력은 데이터 입력 경로이며 대화형 질의가 아니다.
+값 조회·등록 등 일반 데이터 명령은 대화형 질의를 요구하지 않는다. 명시 stdin은 데이터 입력 경로다.
+다만 대화형 profile 전송은 passphrase를 입력받으며 자동화에서는 파일·stdin 옵션을 명시해야 한다.
+Windows의 hosts 승격·OS 인증서 신뢰는 별도의 사용자 확인이 필요하다.
+[Profile 이동](profiles.md)과 [Windows 권한 안내](windows.md#로컬-https와-권한)를 따른다.
 
 `command run`은 데이터 조회 명령과 출력 계약이 다르다. 실행 준비 중의 실패는 devtools의 오류로 반환하고, 자식 프로세스가 실행된 뒤에는 그 프로세스의 출력과 종료 상태를 전달한다.
 
@@ -479,7 +491,11 @@ var·sec 목록의 `items`와 var 조회의 `metadata`에는 `key`, `kind`, `sou
 
 ## 로컬 저장과 secret 보호 범위
 
-활성 값 저장소는 사용자 전용 로컬 파일에 평문으로 보관한다. 저장 디렉터리는 `0700`, 파일은 `0600` 권한을 사용한다. 별도로 생성하는 [백업](backup.md)은 공개키로 암호화한다.
+활성 값 저장소는 사용자 전용 로컬 파일에 평문으로 보관한다. Unix에서는 디렉터리 `0700`,
+파일 `0600` 권한을 사용한다. Windows에서는 Known Folder LocalAppData 아래 local NTFS에
+현재 사용자와 SYSTEM만 허용하는 보호 DACL을 사용한다. 경로·파일시스템 제한은
+[Windows 저장소 안내](windows.md#저장소와-프로세스)를 따른다.
+별도로 생성하는 [백업](backup.md)은 공개키로 암호화하고 profile 전송은 passphrase도 지원한다.
 
 devtools의 기본 목록, 오류, 로그에는 secret 값을 포함하지 않는다. secret은 실행할 프로세스에 직접 주입한다. 보호 목표는 에이전트가 정상적인 CLI 사용 중 실수로 값을 읽어 대화나 로그에 남기지 않게 하는 것이다.
 

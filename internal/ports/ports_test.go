@@ -18,7 +18,7 @@ import (
 func testPortStore(t *testing.T) Store {
 	t.Helper()
 	return Store{
-		Directory: filepath.Join(t.TempDir(), "ports"),
+		Directory: filepath.Join(privateTestRoot(t), "ports"),
 		Probe: func(int) (bool, *protocol.Error) {
 			return true, nil
 		},
@@ -27,10 +27,10 @@ func testPortStore(t *testing.T) Store {
 
 func TestRegistryV1ReadAndFirstWriteMigration(t *testing.T) {
 	s := testPortStore(t)
-	if err := os.MkdirAll(s.Directory, 0700); err != nil {
+	if err := fixtureMkdirAll(s.Directory, 0700); err != nil {
 		t.Fatal(err)
 	}
-	directory := t.TempDir()
+	directory := privateTestRoot(t)
 	instance := Instance{Profile: "test", ID: "0123456789abcdef0123456789abcdef", Alias: nil, Directory: directory}
 	assignment := Assignment{Instance: instance, Name: "web", Port: 32100}
 	v1, marshalErr := json.Marshal(struct {
@@ -42,7 +42,7 @@ func TestRegistryV1ReadAndFirstWriteMigration(t *testing.T) {
 		t.Fatal(marshalErr)
 	}
 	registry := filepath.Join(s.Directory, "registry.json")
-	if err := os.WriteFile(registry, v1, 0600); err != nil {
+	if err := fixtureWriteFile(registry, v1, 0600); err != nil {
 		t.Fatal(err)
 	}
 	state, err := s.Read()
@@ -77,7 +77,7 @@ func TestReservationPersistsAndExcludesAllocator(t *testing.T) {
 		t.Fatalf("repeat = %d %v %v", port, changed, err)
 	}
 	err := s.Update(ctx, func(state *State) (bool, *protocol.Error) {
-		instance, err := state.Register("test", t.TempDir())
+		instance, err := state.Register("test", privateTestRoot(t))
 		if err != nil {
 			return false, err
 		}
@@ -106,7 +106,7 @@ func TestReservationAndAssignmentRaceKeepsPortUnique(t *testing.T) {
 	s := testPortStore(t)
 	ctx := context.Background()
 	port := 32104
-	directory := t.TempDir()
+	directory := privateTestRoot(t)
 	start := make(chan struct{})
 	results := make(chan *protocol.Error, 2)
 	go func() {
@@ -168,7 +168,7 @@ func TestPersistentAllocationAndConcurrency(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			errs <- s.Update(ctx, func(st *State) (bool, *protocol.Error) {
-				i, e := st.Register("test", t.TempDir())
+				i, e := st.Register("test", privateTestRoot(t))
 				if e != nil {
 					return false, e
 				}
@@ -236,7 +236,7 @@ func TestRunLockSupportsFullValidPortNameRange(t *testing.T) {
 }
 
 func TestPrepareRollbackPreviewAndOccupied(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	s := testPortStore(t)
 	ctx := context.Background()
 	busy := 21999

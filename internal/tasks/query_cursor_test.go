@@ -3,7 +3,7 @@ package tasks
 import (
 	"bytes"
 	"context"
-	"os"
+
 	"path/filepath"
 	"testing"
 	"time"
@@ -127,7 +127,7 @@ func TestPageCursorDoesNotReadActiveTaskStorage(t *testing.T) {
 	if resolveErr != nil || !ok {
 		t.Fatal(resolveErr)
 	}
-	if err := os.WriteFile(resolution.WAL, bytes.Repeat([]byte{'x'}, 64), 0600); err != nil {
+	if err := writePrivateFixture(resolution.WAL, bytes.Repeat([]byte{'x'}, 64), 0600); err != nil {
 		t.Fatal(err)
 	}
 

@@ -1,0 +1,10 @@
+{
+  "display_version": "25H2",
+  "architecture": "arm64",
+  "commit": "140b49f9756fe0cb4e1e5d775e05daf9d35403fb",
+  "powershell": "7.6.6",
+  "os": "Microsoft Windows 11 Enterprise",
+  "build": "26200",
+  "version": "10.0.26200",
+  "elevated": true
+}

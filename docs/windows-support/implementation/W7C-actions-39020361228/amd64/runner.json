@@ -1,0 +1,10 @@
+{
+  "display_version": "24H2",
+  "version": "10.0.26100",
+  "architecture": "amd64",
+  "powershell": "7.6.6",
+  "focus": "completion",
+  "commit": "aecadca1f32edae512d4d6c74dc2f06d460b561e",
+  "os": "Microsoft Windows Server 2025 Datacenter",
+  "build": "26100"
+}

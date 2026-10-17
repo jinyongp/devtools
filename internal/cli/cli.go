@@ -52,6 +52,7 @@ type Command struct {
 }
 
 type App struct {
+	userPaths        func() (paths.Directories, error)
 	commands         []Command
 	passphrasePrompt func(context.Context, IO, string) (string, *protocol.Error)
 	dataDirectory    func() (string, *protocol.Error)
@@ -268,6 +269,9 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 			return fail(protocol.NewError("io_error", "Cannot write output.", 1, nil))
 		}
 		return 0
+	}
+	if err := platformCommand(selected.Name); err != nil {
+		return fail(err)
 	}
 	if rootPrefix != "" && request.Options["isolated-root"] != "" {
 		return fail(argumentError("Specify the isolation root once.", "isolated-root"))

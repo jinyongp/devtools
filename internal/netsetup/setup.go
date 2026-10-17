@@ -4,16 +4,15 @@ package netsetup
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+
 	"errors"
-	"io"
+
 	"os"
 	"path/filepath"
 	"runtime"
-	"syscall"
 
 	"github.com/jinyongp/devtools/internal/netops"
+
 	"github.com/jinyongp/devtools/internal/privilege"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -42,39 +41,13 @@ type Manager struct {
 }
 
 func failure(code string) *protocol.Error {
-	return protocol.NewError(code, "Cannot prepare low-port access safely. Linux binaries need a filesystem supporting security capabilities; install on the Linux filesystem instead of a Windows mount, or use high ports.", 3, nil)
+	message := "Cannot prepare low-port access safely. Linux binaries need a filesystem supporting security capabilities; install on the Linux filesystem instead of a Windows mount, or use high ports."
+	if runtime.GOOS == "windows" {
+		message = "Cannot inspect native listener setup safely. No firewall, port reservation or portproxy setting was changed; the listener must pass its actual bind check."
+	}
+	return protocol.NewError(code, message, 3, nil)
 }
-func OpenIdentity(path string) (*os.File, Identity, *protocol.Error) {
-	canonical, e := filepath.EvalSymlinks(path)
-	if e != nil {
-		return nil, Identity{}, failure("executable_unavailable")
-	}
-	canonical, e = filepath.Abs(canonical)
-	if e != nil {
-		return nil, Identity{}, failure("executable_unavailable")
-	}
-	f, e := os.OpenFile(canonical, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
-	if e != nil {
-		return nil, Identity{}, failure("executable_unavailable")
-	}
-	info, e := f.Stat()
-	if e != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0002 != 0 {
-		f.Close()
-		return nil, Identity{}, failure("unsafe_executable")
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		f.Close()
-		return nil, Identity{}, failure("unsafe_executable")
-	}
-	hash := sha256.New()
-	if _, e := io.Copy(hash, f); e != nil {
-		f.Close()
-		return nil, Identity{}, failure("executable_unavailable")
-	}
-	_, _ = f.Seek(0, io.SeekStart)
-	return f, Identity{canonical, uint64(stat.Dev), uint64(stat.Ino), hex.EncodeToString(hash.Sum(nil))}, nil
-}
+
 func (m Manager) executable() string {
 	if m.Executable != "" {
 		return m.Executable
@@ -128,7 +101,7 @@ func (m Manager) Apply(ctx context.Context, id string, enable bool) (any, *proto
 	if m.Isolated {
 		return nil, netops.Failure("isolated_operation_not_allowed", "Shared executable permissions cannot be changed in isolated mode.")
 	}
-	path, e := filepath.EvalSymlinks(m.executable())
+	path, e := setupIdentityPath(m.executable())
 	if e != nil {
 		return nil, failure("executable_unavailable")
 	}

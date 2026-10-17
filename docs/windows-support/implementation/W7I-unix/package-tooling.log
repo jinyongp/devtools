@@ -1,0 +1,7 @@
+...inspect canonical skill: lstat /tmp/tmpk064kw4w/missing.md: no such file or directory
+exit status 1
+....
+----------------------------------------------------------------------
+Ran 7 tests in 0.929s
+
+OK

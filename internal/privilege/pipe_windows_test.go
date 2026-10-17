@@ -1,0 +1,444 @@
+package privilege
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+	"unsafe"
+
+	"github.com/jinyongp/devtools/internal/protocol"
+	"golang.org/x/sys/windows"
+)
+
+func TestMain(m *testing.M) {
+	if len(os.Args) == 2 && os.Args[1] == "__windows-helper-noninteractive" {
+		if windows.GetCurrentProcessToken().IsElevated() {
+			os.Exit(91)
+		}
+		for _, kind := range []string{"hosts", "trust"} {
+			failure := runPlatform(context.Background(), kind, []byte(`{}`), false, "must-not-be-opened.exe")
+			if failure == nil || failure.Code != "permission_required" {
+				os.Exit(92)
+			}
+		}
+		os.Exit(0)
+	}
+
+	if len(os.Args) == 3 && os.Args[1] == "__windows-network-helper" {
+		err := ServePipe(context.Background(), os.Args[2], func(ctx context.Context, kind string, body json.RawMessage) *protocol.Error {
+			var input struct {
+				Value string `json:"value"`
+			}
+			if strictHelperJSON(body, &input) != nil {
+				return protocol.NewError("invalid_argument", "Invalid fixture body.", 2, nil)
+			}
+			if input.Value == "reject" {
+				return protocol.NewError("request_conflict", "Explicit fixture rejection.", 3, nil)
+			}
+			if input.Value == "decline" {
+				return protocol.NewError("canceled", "Explicit fixture cancellation.", 130, nil)
+			}
+			if input.Value == "wait" {
+				<-ctx.Done()
+				return helperCanceled(ctx)
+			}
+			if kind != "trust" || input.Value != "한글 🧪" {
+				return protocol.NewError("invalid_argument", "Unexpected fixture request.", 2, nil)
+			}
+			return nil
+		})
+		if err != nil {
+			os.Exit(90)
+		}
+		os.Exit(0)
+	}
+	if len(os.Args) == 2 && os.Args[1] == "__windows-helper-sleep" {
+		time.Sleep(30 * time.Second)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+func TestWindowsConstrainedPipeRoundtripAndOperationError(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if failure := runPlatform(ctx, "trust", []byte(`{"value":"한글 🧪"}`), true, exe); failure != nil {
+		t.Fatalf("authenticated one-shot helper: %v", failure)
+	}
+	if failure := runPlatform(ctx, "trust", []byte(`{"value":"reject"}`), true, exe); failure == nil || failure.Code != "request_conflict" || failure.ExitCode != 3 {
+		t.Fatalf("operation error lost: %v", failure)
+	}
+	if failure := runPlatform(ctx, "trust", []byte(`{"value":"decline"}`), true, exe); failure == nil || failure.Code != "canceled" || failure.ExitCode != 130 {
+		t.Fatalf("operation cancellation exit lost: %+v", failure)
+	}
+}
+func TestWindowsConstrainedHelperCancellationAndBounds(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	canceled, stop := context.WithCancel(context.Background())
+	stop()
+	if failure := runPlatform(canceled, "trust", []byte(`{}`), true, exe); failure == nil || failure.Code != "canceled" {
+		t.Fatal(failure)
+	}
+	if failure := runPlatform(context.Background(), "trust", make([]byte, helperLimit), true, exe); failure == nil || failure.Code != "invalid_argument" {
+		t.Fatal(failure)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	if failure := runPlatform(ctx, "trust", []byte(`{"value":"wait"}`), true, exe); failure == nil {
+		t.Fatal("canceled helper succeeded")
+	}
+}
+func TestWindowsConstrainedHelperImagePinsRejectRenameAndForeignProcess(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard, identity, err := openHelperImage(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	if err = verifyHelperProcess(windows.CurrentProcess(), identity); err != nil {
+		t.Fatal(err)
+	}
+	// The live image can be read, but cannot be substituted during authorization.
+	if err = os.Rename(exe, exe+".unexpected"); err == nil {
+		os.Rename(exe+".unexpected", exe)
+		t.Fatal("held helper image was renamed")
+	}
+	system, err := windows.GetSystemDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(filepath.Join(system, "ping.exe"), "-n", "10", "127.0.0.1")
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { cmd.Process.Kill(); cmd.Wait() }()
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.SYNCHRONIZE, false, uint32(cmd.Process.Pid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(handle)
+	if err = verifyHelperProcess(handle, identity); err == nil {
+		t.Fatal("foreign process image authenticated")
+	}
+}
+func TestWindowsConstrainedHelperPipeNamesAndShellABI(t *testing.T) {
+	if unsafe.Sizeof(shellExecuteInfo{}) != 112 {
+		t.Fatalf("ShellExecuteEx ABI size=%d", unsafe.Sizeof(shellExecuteInfo{}))
+	}
+	for _, name := range []string{"", `\\server\pipe\devtools-helper-1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`, helperPrefix + "0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", helperPrefix + "1-../../outside", helperPrefix + "1-gggggggggggggggggggggggggggggggg"} {
+		if _, err := helperPipeParent(name); err == nil {
+			t.Fatal("invalid helper pipe accepted")
+		}
+	}
+	if _, err := helperPipeParent(helperPrefix + "1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err != nil {
+		t.Fatal(err)
+	}
+	if err := strictHelperJSON([]byte(`{"version":1,"command":"arbitrary"}`), &helperRequest{}); err == nil {
+		t.Fatal("unknown helper field accepted")
+	}
+	if err := strictHelperJSON([]byte(`{} {}`), &helperRequest{}); err == nil {
+		t.Fatal("second helper value accepted")
+	}
+}
+func TestWindowsConstrainedPipeMissingEndpointDoesNotFallback(t *testing.T) {
+	// An invalid pipe name never becomes a file target or network fallback.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if file, err := clientHelperPipe(ctx, helperPrefix+"1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err == nil {
+		file.Close()
+		t.Fatal("missing pipe unexpectedly connected")
+	} else if errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("missing pipe was retried as busy")
+	}
+}
+
+func TestWindowsConstrainedPipeClientUsesIdentificationToken(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	name := helperPrefix + strconv.Itoa(os.Getpid()) + "-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := windows.SecurityDescriptorFromString("O:" + user.User.Sid.String() + "D:P(A;;GA;;;" + user.User.Sid.String() + ")(A;;GA;;;SY)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	attributes := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: descriptor}
+	ptr, _ := windows.UTF16PtrFromString(name)
+	pipe, err := windows.CreateNamedPipe(ptr, windows.PIPE_ACCESS_DUPLEX|windows.FILE_FLAG_FIRST_PIPE_INSTANCE|windows.FILE_FLAG_OVERLAPPED, windows.PIPE_TYPE_BYTE|windows.PIPE_REJECT_REMOTE_CLIENTS, 1, 4096, 4096, 0, &attributes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(pipe)
+	type opened struct {
+		file *os.File
+		err  error
+	}
+	done := make(chan opened, 1)
+	go func() { file, err := clientHelperPipe(ctx, name); done <- opened{file, err} }()
+	if err = connectHelperPipe(ctx, pipe); err != nil {
+		t.Fatal(err)
+	}
+	client := <-done
+	if client.err != nil {
+		t.Fatal(client.err)
+	}
+	defer client.file.Close()
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	ok, _, err := windows.NewLazySystemDLL("advapi32.dll").NewProc("ImpersonateNamedPipeClient").Call(uintptr(pipe))
+	if ok == 0 {
+		t.Fatal(err)
+	}
+	defer windows.RevertToSelf()
+	var token windows.Token
+	if err = windows.OpenThreadToken(windows.CurrentThread(), windows.TOKEN_QUERY, true, &token); err != nil {
+		t.Fatal(err)
+	}
+	defer token.Close()
+	var level uint32
+	var size uint32
+	if err = windows.GetTokenInformation(token, windows.TokenImpersonationLevel, (*byte)(unsafe.Pointer(&level)), uint32(unsafe.Sizeof(level)), &size); err != nil {
+		t.Fatal(err)
+	}
+	if level != windows.SecurityIdentification {
+		t.Fatalf("pipe exposed impersonation-capable token: level=%d", level)
+	}
+}
+
+func TestWindowsConstrainedPipeRejectsWrongPIDWithSameImage(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard, identity, err := openHelperImage(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	child := exec.Command(exe, "__windows-helper-sleep")
+	if err = child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { child.Process.Kill(); child.Wait() }()
+	process, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.SYNCHRONIZE, false, uint32(child.Process.Pid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(process)
+	if err = verifyHelperProcess(process, identity); err != nil {
+		t.Fatal(err)
+	}
+	name := helperPrefix + strconv.Itoa(os.Getpid()) + "-cccccccccccccccccccccccccccccccc"
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := windows.SecurityDescriptorFromString("O:" + user.User.Sid.String() + "D:P(A;;GA;;;" + user.User.Sid.String() + ")(A;;GA;;;SY)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	attributes := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: descriptor}
+	ptr, _ := windows.UTF16PtrFromString(name)
+	pipe, err := windows.CreateNamedPipe(ptr, windows.PIPE_ACCESS_DUPLEX|windows.FILE_FLAG_FIRST_PIPE_INSTANCE|windows.FILE_FLAG_OVERLAPPED, windows.PIPE_TYPE_BYTE|windows.PIPE_REJECT_REMOTE_CLIENTS, 1, 4096, 4096, 0, &attributes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(pipe)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	connected := make(chan error, 1)
+	go func() {
+		file, err := clientHelperPipe(ctx, name)
+		if err == nil {
+			defer file.Close()
+			var b [1]byte
+			_, _ = file.Read(b[:])
+		}
+		connected <- err
+	}()
+	if err = acceptHelperPipe(ctx, pipe, process, identity); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("wrong PID authenticated or failed unexpectedly: %v", err)
+	}
+	if err = <-connected; err != nil {
+		t.Fatal("wrong-PID fixture did not actually connect", err)
+	}
+}
+
+func TestWindowsConstrainedHelperRejectsDifferentSIDAndNoninteractiveElevation(t *testing.T) {
+	user, password := os.Getenv("DEVTOOLS_TEST_USER"), os.Getenv("DEVTOOLS_TEST_PASSWORD")
+	if user == "" || password == "" {
+		if os.Getenv("CI") == "true" {
+			t.Fatal("standard identity fixture required")
+		}
+		t.Skip("requires disposable standard identity")
+	}
+	userPtr, _ := windows.UTF16PtrFromString(user)
+	domainPtr, _ := windows.UTF16PtrFromString(".")
+	passwordPtr, _ := windows.UTF16PtrFromString(password)
+	var token windows.Token
+	ok, _, err := windows.NewLazySystemDLL("advapi32.dll").NewProc("LogonUserW").Call(uintptr(unsafe.Pointer(userPtr)), uintptr(unsafe.Pointer(domainPtr)), uintptr(unsafe.Pointer(passwordPtr)), 2, 0, uintptr(unsafe.Pointer(&token)))
+	if ok == 0 {
+		t.Fatal("standard account logon failed", err)
+	}
+	defer token.Close()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory, err := os.MkdirTemp(os.Getenv("PUBLIC"), "devtools-helper-public-fixture-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(directory)
+	candidate := filepath.Join(directory, "helper.test.exe")
+	if err = os.WriteFile(candidate, body, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	launch := func(argument string) windows.Handle {
+		t.Helper()
+		app, _ := windows.UTF16PtrFromString(candidate)
+		command, _ := windows.UTF16PtrFromString(`"` + candidate + `" ` + argument)
+		directoryPtr, _ := windows.UTF16PtrFromString(directory)
+		startup := windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfo{}))}
+		var info windows.ProcessInformation
+		ok, _, failure := windows.NewLazySystemDLL("advapi32.dll").NewProc("CreateProcessWithTokenW").Call(uintptr(token), 0, uintptr(unsafe.Pointer(app)), uintptr(unsafe.Pointer(command)), windows.CREATE_NO_WINDOW, 0, uintptr(unsafe.Pointer(directoryPtr)), uintptr(unsafe.Pointer(&startup)), uintptr(unsafe.Pointer(&info)))
+		if ok == 0 {
+			t.Fatal("standard child launch failed", failure)
+		}
+		windows.CloseHandle(info.Thread)
+		return info.Process
+	}
+	handle := launch("__windows-helper-sleep")
+	defer func() {
+		windows.TerminateProcess(handle, 0)
+		windows.WaitForSingleObject(handle, 5000)
+		windows.CloseHandle(handle)
+	}()
+	guard, identity, err := openHelperImage(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	if err = verifyHelperProcess(handle, identity); err == nil || !strings.Contains(err.Error(), "SID differs") {
+		t.Fatalf("different SID not rejected at identity boundary: %v", err)
+	}
+	check := launch("__windows-helper-noninteractive")
+	defer windows.CloseHandle(check)
+	state, err := windows.WaitForSingleObject(check, 10000)
+	if err != nil || state != windows.WAIT_OBJECT_0 {
+		windows.TerminateProcess(check, 97)
+		t.Fatal("noninteractive standard token did not return promptly", err)
+	}
+	var code uint32
+	if err = windows.GetExitCodeProcess(check, &code); err != nil || code != 0 {
+		t.Fatal("noninteractive standard token attempted elevation or missed permission_required", code, err)
+	}
+
+}
+
+func TestWindowsConstrainedHelperIsolatedModeAndUnknownKindsDoNotLaunch(t *testing.T) {
+	if failure := Run(context.Background(), "shell", map[string]string{"command": "arbitrary"}, false); failure == nil || failure.Code != "invalid_argument" {
+		t.Fatal(failure)
+	}
+	t.Setenv("DEVTOOLS_ISOLATED_ROOT", t.TempDir())
+	for _, kind := range []string{"hosts", "trust", "netsetup"} {
+		if failure := Run(context.Background(), kind, map[string]string{}, true); failure == nil || failure.Code != "isolated_operation_not_allowed" {
+			t.Fatal(kind, failure)
+		}
+	}
+	if err := ServePipe(context.Background(), "invalid", func(context.Context, string, json.RawMessage) *protocol.Error {
+		t.Error("isolated dispatch reached")
+		return nil
+	}); err == nil {
+		t.Fatal("isolated pipe helper accepted")
+	}
+}
+
+// The kernel retains OVERLAPPED after ConnectNamedPipe returns. Grow the Go
+// stack only after that call, before cancellation attempts to find the request.
+type helperStackGrowthContext struct{ context.Context }
+
+func (c helperStackGrowthContext) Err() error {
+	growHelperCancellationStack(64)
+	return c.Context.Err()
+}
+
+//go:noinline
+func growHelperCancellationStack(depth int) byte {
+	var frame [4096]byte
+	frame[0] = byte(depth)
+	if depth > 0 {
+		frame[len(frame)-1] = growHelperCancellationStack(depth - 1)
+	}
+	runtime.KeepAlive(&frame)
+	return frame[0] ^ frame[len(frame)-1]
+}
+
+func TestWindowsHelperConnectCancellationSurvivesStackGrowth(t *testing.T) {
+	const childFlag = "DEVTOOLS_TEST_HELPER_STACK_CHILD"
+	if os.Getenv(childFlag) != "1" {
+		exe, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Isolate the invalid native pointer in the unfixed implementation and
+		// bound a blocked kernel wait without leaking an owned goroutine.
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		command := exec.CommandContext(ctx, exe, "-test.run=^TestWindowsHelperConnectCancellationSurvivesStackGrowth$", "-test.count=1")
+		command.Env = append(os.Environ(), childFlag+"=1")
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("connect cancellation after stack growth: %v (deadline=%v)\n%s", err, ctx.Err(), output)
+		}
+		return
+	}
+	name := helperPrefix + strconv.Itoa(os.Getpid()) + "-dddddddddddddddddddddddddddddddd"
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := windows.SecurityDescriptorFromString("O:" + user.User.Sid.String() + "D:P(A;;GA;;;" + user.User.Sid.String() + ")(A;;GA;;;SY)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	attributes := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: descriptor}
+	ptr, err := windows.UTF16PtrFromString(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pipe, err := windows.CreateNamedPipe(ptr, windows.PIPE_ACCESS_DUPLEX|windows.FILE_FLAG_FIRST_PIPE_INSTANCE|windows.FILE_FLAG_OVERLAPPED, windows.PIPE_TYPE_BYTE|windows.PIPE_REJECT_REMOTE_CLIENTS, 1, 4096, 4096, 0, &attributes)
+	runtime.KeepAlive(descriptor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(pipe)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := connectHelperPipe(helperStackGrowthContext{ctx}, pipe); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("connect cancellation = %v", err)
+	}
+}

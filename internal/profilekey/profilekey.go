@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/project"
 )
 
@@ -93,19 +93,18 @@ func privateDirectory(path string) error {
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if !platformfs.DirectoryPrivate(path, info) {
 		return errors.New("private directory required")
 	}
 	return nil
 }
 
-func privateFile(path string) (*os.File, error) {
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+func privateFile(path string) (*platformfs.File, error) {
+	file, err := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
 	if err != nil {
 		return nil, err
 	}
-	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+	if err := platformfs.CheckFile(file.File); err != nil {
 		_ = file.Close()
 		return nil, errors.New("private file required")
 	}
@@ -126,7 +125,7 @@ func LegacyPathStatus(directory, profile string) (LegacyStatus, error) {
 		return LegacyExisting, nil
 	case errors.Is(err, os.ErrNotExist):
 		return LegacyMissing, nil
-	case errors.Is(err, syscall.ENAMETOOLONG):
+	case platformfs.NameTooLong(path, err):
 		return LegacyUnaddressable, nil
 	default:
 		return 0, err
@@ -191,7 +190,7 @@ func EnumerateIdentities(directory, domain string) ([]string, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return []string{}, nil
 	}
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if err != nil || !platformfs.DirectoryPrivate(identityDir, info) {
 		return nil, errors.New("invalid identity directory")
 	}
 	entries, err := os.ReadDir(identityDir)
@@ -356,7 +355,7 @@ func Enumerate(directory, domain string) ([]string, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return []string{}, nil
 	}
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if err != nil || !platformfs.DirectoryPrivate(directory, info) {
 		return nil, errors.New("private directory required")
 	}
 	identityProfiles, err := EnumerateIdentities(directory, domain)

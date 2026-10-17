@@ -19,6 +19,7 @@ func testApp(t *testing.T) *App {
 	app := New("test", "test")
 	directory := filepath.Join(privateTempDir(t), "profiles")
 	app.dataDirectory = func() (string, *protocol.Error) { return directory, nil }
+	platformTestPaths(app, filepath.Dir(directory))
 	app.portProbe = func(int) (bool, *protocol.Error) { return true, nil }
 	return app
 }
@@ -78,16 +79,8 @@ func TestNamedAndDirectRun(t *testing.T) {
 	root := privateTempDir(t)
 	t.Chdir(root)
 	t.Setenv("LEVEL", "parent")
-	config := `profile = "app"
-[commands.check]
-exec = ["/bin/sh", "-c", "printf '%s|%s|%s' \"$PWD\" \"$LEVEL\" \"$1\"", "label"]
-inject = true
-env = "local"
-[commands.plain]
-exec = ["/bin/sh", "-c", "printf '%s' \"$LEVEL\""]
-[commands.fail]
-exec = ["/bin/sh", "-c", "printf raw; printf diagnostic >&2; exit 23"]
-`
+	config := "profile=\"app\"\n[commands.check]\nexec=" + fixtureExec(t, "cwd-level-first") + "\ninject=true\nenv=\"local\"\n[commands.plain]\nexec=" + fixtureExec(t, "level") + "\n[commands.fail]\nexec=" + fixtureExec(t, "raw-fail") + "\n"
+
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -110,6 +103,10 @@ exec = ["/bin/sh", "-c", "printf raw; printf diagnostic >&2; exit 23"]
 	if cwdErr != nil {
 		t.Fatal(cwdErr)
 	}
+	current, cwdErr = filepath.EvalSymlinks(current)
+	if cwdErr != nil {
+		t.Fatal(cwdErr)
+	}
 	canonical, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		t.Fatal(err)
@@ -124,8 +121,8 @@ exec = ["/bin/sh", "-c", "printf raw; printf diagnostic >&2; exit 23"]
 		{[]string{"run", "--env", "staging", "check", "--", "--watch"}, canonical + "|staging|--watch", 0, ""},
 		{[]string{"run", "plain"}, "parent", 0, ""},
 		{[]string{"run", "--env", "staging", "plain"}, "staging", 0, ""},
-		{[]string{"command", "run", "--", "/bin/sh", "-c", "printf '%s|%s' \"$PWD\" \"$LEVEL\""}, current + "|common", 0, ""},
-		{[]string{"run", "--", "/bin/sh", "-c", "printf '%s|%s' \"$PWD\" \"$LEVEL\""}, current + "|common", 0, ""},
+		{append([]string{"command", "run", "--"}, commandFixture(t, "cwd-level")...), current + "|common", 0, ""},
+		{append([]string{"run", "--"}, commandFixture(t, "cwd-level")...), current + "|common", 0, ""},
 		{[]string{"run", "fail"}, "raw", 23, "diagnostic"},
 	} {
 		code, out, diagnostic := invoke(t, app, "", tc.args...)
@@ -151,7 +148,7 @@ func TestSecretFileAndRawOutput(t *testing.T) {
 	if code, _, diagnostic := invoke(t, app, "", "sec", "set", "TOKEN", "--file", file, "--profile", "app"); code != 0 {
 		t.Fatal(diagnostic)
 	}
-	code, out, diagnostic := invoke(t, app, "", "run", "--profile", "app", "--", "/bin/sh", "-c", "printf '%s' \"$TOKEN\"; printf true")
+	code, out, diagnostic := invoke(t, app, "", append([]string{"run", "--profile", "app", "--"}, commandFixture(t, "secret-and-true")...)...)
 	if code != 0 || out != "true\ntrue" || diagnostic != "" {
 		t.Fatalf("%d %q %s", code, out, diagnostic)
 	}
@@ -211,7 +208,8 @@ func TestNamedProfileOverrideAndNoInjection(t *testing.T) {
 	app := testApp(t)
 	root := privateTempDir(t)
 	t.Chdir(root)
-	config := "profile='base'\n[commands.show]\nexec=['/bin/sh','-c','printf %s \"$MARKER\"']\ninject=true\n[commands.plain]\nexec=['/bin/sh','-c','printf plain']\ninject=false\n"
+	config := "profile='base'\n[commands.show]\nexec=" + fixtureExec(t, "marker") + "\ninject=true\n[commands.plain]\nexec=" + fixtureExec(t, "plain") + "\ninject=false\n"
+
 	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}

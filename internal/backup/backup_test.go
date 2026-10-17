@@ -16,7 +16,7 @@ import (
 )
 
 func TestEncryptedRestoreAndReplay(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	e := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
 	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
 	if _, err := Keygen(identity, recipient); err != nil {
@@ -111,14 +111,14 @@ func TestEncryptedRestoreAndReplay(t *testing.T) {
 	}
 	ciphertext[len(ciphertext)-1] ^= 1
 	bad := filepath.Join(root, "bad.age")
-	os.WriteFile(bad, ciphertext, 0600)
+	fixtureWriteFile(bad, ciphertext, 0600)
 	if _, err = e.Restore(context.Background(), bad, identity, "source", "copy", "", "", true); err == nil {
 		t.Fatal("tampered backup accepted")
 	}
 }
 
 func TestConcurrentImportReplaysSameRequest(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
 	destination := Engine{Data: filepath.Join(root, "destination", "data"), Config: filepath.Join(root, "destination", "config"), Cache: filepath.Join(root, "destination", "cache")}
 	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
@@ -176,7 +176,7 @@ func TestConcurrentImportReplaysSameRequest(t *testing.T) {
 }
 
 func TestImportPreviewApplyAndStaleProtection(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
 	destination := Engine{Data: filepath.Join(root, "destination", "data"), Config: filepath.Join(root, "destination", "config"), Cache: filepath.Join(root, "destination", "cache")}
 	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
@@ -273,7 +273,7 @@ func TestImportPreviewApplyAndStaleProtection(t *testing.T) {
 }
 
 func TestImportRejectsWrongIdentityAndTamperedArchive(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
 	destination := Engine{Data: filepath.Join(root, "destination", "data"), Config: filepath.Join(root, "destination", "config"), Cache: filepath.Join(root, "destination", "cache")}
 	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
@@ -303,7 +303,7 @@ func TestImportRejectsWrongIdentityAndTamperedArchive(t *testing.T) {
 	}
 	ciphertext[len(ciphertext)-1] ^= 1
 	tampered := filepath.Join(root, "tampered.age")
-	if err := os.WriteFile(tampered, ciphertext, 0600); err != nil {
+	if err := fixtureWriteFile(tampered, ciphertext, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := destination.Import(context.Background(), ImportRequest{Path: tampered, IdentityPath: identity}); err == nil || err.Code != "invalid_backup" {
@@ -312,7 +312,7 @@ func TestImportRejectsWrongIdentityAndTamperedArchive(t *testing.T) {
 }
 
 func TestStalePreviewPreservesTarget(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	e := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
 	key, pub := filepath.Join(root, "key"), filepath.Join(root, "pub")
 	Keygen(key, pub)
@@ -336,7 +336,7 @@ func TestStalePreviewPreservesTarget(t *testing.T) {
 }
 
 func TestBackupStatusAndDirectRecipient(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	e := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
 	status, statusErr := e.Status()
 	if statusErr != nil || status.Configured || status.Directory != "" || status.Recipient != "" {
@@ -387,7 +387,7 @@ func TestBackupStatusAndDirectRecipient(t *testing.T) {
 }
 
 func TestErrorExitCodes(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "same-key-file")
+	path := filepath.Join(privateTestRoot(t), "same-key-file")
 	if _, err := Keygen(path, path); err == nil || err.Code != "invalid_argument" || err.ExitCode != 2 {
 		t.Fatal("invalid backup input contract", err)
 	}
@@ -399,7 +399,7 @@ func TestErrorExitCodes(t *testing.T) {
 }
 
 func TestRestoreDeletesTaskDomainAbsentFromBackup(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
 	destination := Engine{Data: filepath.Join(root, "destination", "data"), Config: filepath.Join(root, "destination", "config"), Cache: filepath.Join(root, "destination", "cache")}
 	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
@@ -462,7 +462,7 @@ func TestRestoreDeletesTaskDomainAbsentFromBackup(t *testing.T) {
 }
 
 func TestSnapshotExcludesProfileTransferIdentityState(t *testing.T) {
-	root := t.TempDir()
+	root := privateTestRoot(t)
 	engine := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
 	store := values.Store{Directory: filepath.Join(engine.Data, "profiles"), Profile: "app"}
 	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
@@ -471,11 +471,11 @@ func TestSnapshotExcludesProfileTransferIdentityState(t *testing.T) {
 		t.Fatal(err)
 	}
 	transferDir := filepath.Join(engine.Data, "profile-transfer")
-	if err := os.MkdirAll(transferDir, 0700); err != nil {
+	if err := fixtureMkdirAll(transferDir, 0700); err != nil {
 		t.Fatal(err)
 	}
 	const identityCanary = "AGE-SECRET-KEY-TRANSFER-IDENTITY-CANARY"
-	if err := os.WriteFile(filepath.Join(transferDir, "identity.txt"), []byte(identityCanary+"\n"), 0600); err != nil {
+	if err := fixtureWriteFile(filepath.Join(transferDir, "identity.txt"), []byte(identityCanary+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 

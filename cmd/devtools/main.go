@@ -16,6 +16,7 @@ import (
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/proxy"
+	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/truststore"
 	"golang.org/x/term"
 )
@@ -24,6 +25,15 @@ var version = "dev"
 var commit = "unknown"
 
 func main() {
+	if windowsNetworkHelperEntry() {
+		return
+	}
+	if windowsInstallerEntry() {
+		return
+	}
+	if code := cli.InternalPlatformPreflight(os.Args[1:], os.Stderr); code != 0 {
+		os.Exit(code)
+	}
 	if len(os.Args) == 2 && os.Args[1] == "__trust-check" {
 		data, e := io.ReadAll(io.LimitReader(os.Stdin, 65536))
 		if e != nil {
@@ -106,11 +116,11 @@ func main() {
 		}
 		return
 	}
-	if len(os.Args) == 5 && os.Args[1] == "__process-serve" && os.Args[4] == "3" {
+	if len(os.Args) == 5 && os.Args[1] == "__process-serve" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
-		lease := os.NewFile(3, "process-lease")
-		if lease == nil {
+		lease, leaseErr := services.OpenInheritedLease(os.Args[4])
+		if leaseErr != nil {
 			os.Exit(1)
 		}
 		defer lease.Close()
@@ -145,7 +155,8 @@ func main() {
 		case <-ctx.Done():
 		}
 	}()
-	code := cli.New(version, commit).Run(ctx, os.Args[1:], cli.IO{In: os.Stdin, Out: os.Stdout, Err: os.Stderr})
+	releaseVersion, releaseCommit := buildVersion()
+	code := cli.New(releaseVersion, releaseCommit).Run(ctx, os.Args[1:], cli.IO{In: os.Stdin, Out: os.Stdout, Err: os.Stderr})
 	signal.Stop(signals)
 	cancel(nil)
 	os.Exit(code)

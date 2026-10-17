@@ -1,0 +1,10 @@
+{
+  "build": "26100",
+  "architecture": "amd64",
+  "version": "10.0.26100",
+  "focus": "network",
+  "os": "Microsoft Windows Server 2025 Datacenter",
+  "commit": "fd865a706f510319e848c5650a596e83074a2af4",
+  "display_version": "24H2",
+  "powershell": "7.6.6"
+}

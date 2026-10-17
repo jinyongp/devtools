@@ -15,10 +15,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
+
 	"time"
 
 	"github.com/jinyongp/devtools/internal/ca"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/privilege"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -59,6 +60,7 @@ func Trusted(authority *ca.Authority) bool {
 // System is injectable for tests; the helper command always uses its zero value
 // so untrusted stdin cannot select paths, executables, or keychains.
 type System struct {
+	after     func(string) error
 	GOOS      string
 	Directory string
 	Tool      string
@@ -99,6 +101,9 @@ func (s System) Apply(ctx context.Context, request Request) error {
 	if goos == "" {
 		goos = runtime.GOOS
 	}
+	if goos == "windows" {
+		return s.windows(ctx, request, fingerprint, cert)
+	}
 	if goos == "darwin" {
 		return s.darwin(ctx, request, fingerprint)
 	}
@@ -136,7 +141,7 @@ func (s System) Apply(ctx context.Context, request Request) error {
 	} else if !errors.Is(e, os.ErrNotExist) {
 		return e
 	} else if request.Action == "trust" {
-		file, e := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0644)
+		file, e := platformfs.OpenNoFollow(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
 		if e != nil {
 			return e
 		}
@@ -163,7 +168,7 @@ func (s System) Apply(ctx context.Context, request Request) error {
 }
 
 func readRegular(path string) ([]byte, error) {
-	f, e := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	f, e := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
 	if e != nil {
 		return nil, e
 	}

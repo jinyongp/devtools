@@ -16,11 +16,11 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"filippo.io/age"
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
 	"github.com/jinyongp/devtools/internal/project"
@@ -179,96 +179,10 @@ func file(domain, profile string) string {
 	return profilekey.StateRelative(domain, profile)
 }
 
-func ensurePrivateDirectoryChain(root, directory string) error {
-	if !filepath.IsAbs(root) || !filepath.IsAbs(directory) {
-		return errors.New("absolute private directory required")
-	}
-	relative, err := filepath.Rel(root, directory)
-	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) || filepath.IsAbs(relative) {
-		return errors.New("private directory must be below data root")
-	}
-	if err := os.MkdirAll(root, 0700); err != nil {
-		return err
-	}
-	current := root
-	components := append([]string{"."}, strings.Split(relative, string(os.PathSeparator))...)
-	for index, component := range components {
-		created := false
-		parent := current
-		if index > 0 {
-			current = filepath.Join(current, component)
-			if err := os.Mkdir(current, 0700); err != nil {
-				if !errors.Is(err, os.ErrExist) {
-					return err
-				}
-			} else {
-				created = true
-			}
-		}
-		info, err := os.Lstat(current)
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-			return errors.New("private directory required")
-		}
-		if created {
-			dir, err := os.Open(parent)
-			if err != nil {
-				return err
-			}
-			syncErr := dir.Sync()
-			closeErr := dir.Close()
-			if syncErr != nil {
-				return syncErr
-			}
-			if closeErr != nil {
-				return closeErr
-			}
-		}
-	}
-	return nil
-}
-
 func exclusive(path string, b []byte) error {
 	return exclusiveContext(context.Background(), path, b)
 }
 
-func exclusiveContext(ctx context.Context, path string, b []byte) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	// Publish a complete file through a hard link, refusing any existing target.
-	dir := filepath.Dir(path)
-	f, e := os.CreateTemp(dir, ".backup-*")
-	if e != nil {
-		return e
-	}
-	defer os.Remove(f.Name())
-	_, e = f.Write(b)
-	if e == nil {
-		e = f.Sync()
-	}
-	c := f.Close()
-	if e != nil {
-		return e
-	}
-	if c != nil {
-		return c
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if e = os.Link(f.Name(), path); e != nil {
-		return e
-	}
-	d, e := os.Open(dir)
-	if e != nil {
-		return e
-	}
-	defer d.Close()
-	return d.Sync()
-}
 func Keygen(identityPath, recipientPath string) (any, *protocol.Error) {
 	if filepath.Clean(identityPath) == filepath.Clean(recipientPath) {
 		return nil, failure("invalid_argument")
@@ -294,7 +208,7 @@ func canonicalRecipient(value string) (string, error) {
 	return r.String(), nil
 }
 func recipient(path string) (string, error) {
-	b, err := maintenance.Read(path, 4096)
+	b, err := platformfs.ReadExternalPrivate(path, 4096)
 	if err != nil {
 		return "", err
 	}
@@ -309,7 +223,7 @@ func (e Engine) Configure(directory, recipientPath string) (any, *protocol.Error
 	if err != nil {
 		return nil, failure("invalid_recipient")
 	}
-	if err = os.MkdirAll(e.Config, 0700); err != nil {
+	if err = ensureConfigDirectory(e.Config); err != nil {
 		return nil, failure("backup_error")
 	}
 	c := Config{d, r}
@@ -491,7 +405,7 @@ func (e Engine) CreateWithRecipient(ctx context.Context, request CreateOptions) 
 		if failure := loadConfig(); failure != nil {
 			return CreateResult{}, failure
 		}
-		if os.MkdirAll(c.Directory, 0700) != nil {
+		if platformfs.EnsureExternalDirectory(c.Directory) != nil {
 			return CreateResult{}, failure("backup_error")
 		}
 		output = filepath.Join(c.Directory, "devtools-"+tasks.ID()+".age")
@@ -541,7 +455,7 @@ func (e Engine) createArchive(ctx context.Context, profile, output string, encod
 
 func decodeWithIdentity(path string, identity age.Identity) (Snapshot, []byte, error) {
 	var snapshot Snapshot
-	cipher, err := maintenance.Read(path, limit+1<<20)
+	cipher, err := platformfs.ReadExternalPrivate(path, limit+1<<20)
 	if err != nil {
 		return snapshot, nil, err
 	}
@@ -581,7 +495,7 @@ func decodeWithIdentity(path string, identity age.Identity) (Snapshot, []byte, e
 
 func decode(path, identityPath string) (Snapshot, []byte, string, error) {
 	var snapshot Snapshot
-	key, err := maintenance.Read(identityPath, 4096)
+	key, err := platformfs.ReadExternalPrivate(identityPath, 4096)
 	if err != nil {
 		return snapshot, nil, "", err
 	}
@@ -620,13 +534,13 @@ func (archiveProbeIdentity) Unwrap([]*age.Stanza) ([]byte, error) {
 }
 
 func ArchiveEncryptionMode(path string) (string, error) {
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	file, err := platformfs.OpenExternalPrivate(path, os.O_RDONLY, 0)
 	if err != nil {
 		return "", err
 	}
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > limit+1<<20 {
+	if err != nil || platformfs.CheckFile(file.File) != nil || info.Size() > limit+1<<20 {
 		return "", errors.New("invalid private archive")
 	}
 	// age.Decrypt parses the header and asks the probe identity to unwrap the
@@ -900,7 +814,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 				return plan, failure("backup_not_configured")
 			}
 			directory, recoveryRecipient = c.Directory, c.Recipient
-			if os.MkdirAll(directory, 0700) != nil {
+			if platformfs.EnsureExternalDirectory(directory) != nil {
 				return plan, failure("backup_error")
 			}
 		}

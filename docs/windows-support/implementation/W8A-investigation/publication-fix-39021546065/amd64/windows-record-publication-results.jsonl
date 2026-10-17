@@ -1,0 +1,16 @@
+{"Time":"2026-10-17T09:35:16.0315177Z","Action":"start","Package":"github.com/jinyongp/devtools/internal/services"}
+{"Time":"2026-10-17T09:35:16.0516639Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/services","Test":"TestWindowsConcurrentRecordPublication"}
+{"Time":"2026-10-17T09:35:16.0521975Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/services","Test":"TestWindowsConcurrentRecordPublication","Output":"=== RUN   TestWindowsConcurrentRecordPublication\n","OutputType":"frame"}
+{"Time":"2026-10-17T09:35:20.0050986Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/services","Test":"TestWindowsConcurrentRecordPublication","Output":"--- PASS: TestWindowsConcurrentRecordPublication (3.95s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T09:35:20.0058621Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/services","Test":"TestWindowsConcurrentRecordPublication","Elapsed":3.95}
+{"Time":"2026-10-17T09:35:20.0058621Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/services","Test":"TestWindowsConcurrentRecordPublication"}
+{"Time":"2026-10-17T09:35:20.0058621Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/services","Test":"TestWindowsConcurrentRecordPublication","Output":"=== RUN   TestWindowsConcurrentRecordPublication\n","OutputType":"frame"}
+{"Time":"2026-10-17T09:35:23.9059489Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/services","Test":"TestWindowsConcurrentRecordPublication","Output":"--- PASS: TestWindowsConcurrentRecordPublication (3.90s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T09:35:23.9063478Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/services","Test":"TestWindowsConcurrentRecordPublication","Elapsed":3.9}
+{"Time":"2026-10-17T09:35:23.9063478Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/services","Test":"TestWindowsConcurrentRecordPublication"}
+{"Time":"2026-10-17T09:35:23.9063478Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/services","Test":"TestWindowsConcurrentRecordPublication","Output":"=== RUN   TestWindowsConcurrentRecordPublication\n","OutputType":"frame"}
+{"Time":"2026-10-17T09:35:27.8841674Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/services","Test":"TestWindowsConcurrentRecordPublication","Output":"--- PASS: TestWindowsConcurrentRecordPublication (3.98s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T09:35:27.8847385Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/services","Test":"TestWindowsConcurrentRecordPublication","Elapsed":3.98}
+{"Time":"2026-10-17T09:35:27.8847385Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/services","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-17T09:35:27.888082Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/services","Output":"ok  \tgithub.com/jinyongp/devtools/internal/services\t11.857s\n"}
+{"Time":"2026-10-17T09:35:27.888082Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/services","Elapsed":11.857}

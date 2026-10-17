@@ -1,0 +1,27 @@
+{
+  "ca_init_ok": true,
+  "public_export_ok": true,
+  "fingerprint_matches": true,
+  "public_only": true,
+  "diagnostics_ready": true,
+  "platform": {
+    "os": "linux",
+    "arch": "amd64",
+    "runtime": "wsl",
+    "storage_filesystem": "ext",
+    "storage_supported": true,
+    "interop": "unknown",
+    "client_trust": "separate_windows_store",
+    "limitations": [
+      "wsl_windows_browser_not_verified",
+      "wsl_network_mode_unknown",
+      "wsl_ipv6_reverse_lan_not_verified",
+      "wsl_arm64_not_verified",
+      "wsl_managed_win32_unsupported"
+    ]
+  },
+  "schema_platform_fields_match": true,
+  "windows_child_executed": false,
+  "windows_browser_network": "NOT RUN",
+  "windows_powershell_import_example": "NOT RUN"
+}

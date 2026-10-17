@@ -96,15 +96,23 @@ func TestLegacyProxyStopClosesBackendPool(t *testing.T) {
 		cancel()
 		if started {
 			select {
-			case <-done:
+			case err := <-done:
+				if t.Failed() {
+					t.Logf("legacy daemon exit: error=%#v message=%v", err, err)
+				}
 			case <-time.After(3 * time.Second):
 				t.Error("legacy daemon did not stop")
 			}
 		}
 	})
-	m.Spawn = func(_ string, id string) error { started = true; go func() { done <- m.Serve(ctx, id) }(); return nil }
-	if _, e := m.Apply(ctx, Request{Action: "start", Port: &port, RequestID: tasks.ID()}); e != nil {
-		t.Fatal(e)
+	m.Spawn = func(_ string, id string) error {
+		started = true
+		go func() { done <- m.Serve(ctx, id) }()
+		return nil
+	}
+	if status, e := m.Apply(ctx, Request{Action: "start", Port: &port, RequestID: tasks.ID()}); e != nil {
+		record, readErr := m.readRecord()
+		t.Fatalf("legacy start: status=%+v error=%#v record=%+v read_error=%v", status, e, record, readErr)
 	}
 	transport := &http.Transport{Proxy: nil}
 	defer transport.CloseIdleConnections()

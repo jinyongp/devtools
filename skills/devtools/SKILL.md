@@ -26,7 +26,7 @@ expose `data.replayed`, including false values. A replay preserves the original
 changed result and must not be counted as another mutation.
 Schema metadata declares `output_mode`: json, text, artifact, or passthrough.
 Only json commands have `output_schema`, describing the envelope's data.
-Use `version` for build metadata and `protocol_version` (6 for this source).
+Use `version` for build metadata and `protocol_version` (7 for this source).
 Every JSON response exposes envelope `schema_version: 1` at the top level;
 all `schema` responses also report the CLI protocol version. Keep `devtools.toml`
 versionless: do not add `version` or `schema_version` fields to project configuration.
@@ -64,8 +64,8 @@ shell arguments containing spaces or shell syntax. Profile, env, port, and proxy
 names keep their separate identifier rules. Check `devtools schema command run`
 for the installed command-name contract; CLI and Skill updates are separate.
 On older protocol v5 builds such as v0.22.3, pass child arguments after an explicit separator:
-`devtools run --env local dev:docs -- --port 3000`. This form also works on v6.
-For CLI protocol v6 (devtools v0.23.0 and newer), put all devtools options before the configured command name:
+`devtools run --env local dev:docs -- --port 3000`. This form also works on v6/v7.
+For CLI protocol v6/v7 (v6 begins at devtools v0.23.0), put all devtools options before the configured command name:
 `devtools run --env local dev:docs --port 3000`. Every token after the name is a
 child argument, including `--env`, `--profile`, `--dir`, `--help`, and `-h`.
 Use `devtools run --help` for devtools help and `devtools run dev:docs --help`
@@ -266,3 +266,49 @@ refreshing stale previews. Keep backup identities separate from project files.
 Provide a dashboard link when the user needs visual management; its session can
 modify all of the user's profiles. Creating a plan does not authorize unrelated
 publishing, deletion, or changes to external systems.
+
+
+## Windows native and WSL boundaries
+
+This source implements a Windows candidate; do not infer that stable Windows
+assets have already been published. Target Windows 11 25H2/26H2 x64/ARM64.
+Actions validates native x64 on Server 2025 (test host, not product support) and
+ARM64 on Windows 11; the full CPU/OS matrix and actual-PC UAC/browser/terminal
+behavior are unverified. Windows 10 and self-hosted operations are excluded.
+Standalone exe needs no Go/Python/Git Bash/WSL runtime. Project tools are separate.
+
+Use a matching install.ps1, ZIP and checksum. Installer inputs are -Version,
+-Source, -BinDir, -AddToPath; user PATH changes only with explicit AddToPath.
+Native OS architecture selects the package even under x64 PowerShell on ARM64.
+Do not change execution policy or shell profiles automatically. dvt.exe is an
+owned binary copy. Native update journals old/main/alias replacement and keeps
+mapped old images for later cleanup. It never automatically stops active daemons.
+
+Windows private config/data/cache/runtime use Known Folder LocalAppData/devtools,
+local NTFS, current-user+SYSTEM protected ACLs. Do not repair foreign ACLs or use
+UNC/SMB/reparse/cloud-sync active private storage. Native and WSL stores, daemons,
+CAs and ownership are separate. Use encrypted profile transfer; no active process
+ownership migrates. WSL uses Linux tools/storage, including appendWindowsPath=false.
+Only explicit .exe lookup selects Windows tools. Never modify WSLENV, WSL config,
+firewall or portproxy automatically; managed Win32 servers in WSL are unsupported.
+
+Read diagnostics.platform and its schema. Unknown interop does not imply failure
+or availability; diagnosis never executes Windows children. Linux trust does not
+establish Windows browser trust. Export only the public CA, verify its fingerprint,
+then deliberately import into the client's CurrentUser Root; preserve existing
+certificates. Actual WSL2-to-Windows browser networking remains unverified.
+
+Native custom hosts changes use a constrained same-SID UAC helper; noninteractive
+hosts changes need an already elevated token. CurrentUser trust/untrust requires
+an interactive terminal and OS root-certificate consent; noninteractive calls
+return permission_required. Never automate approval or move CA private keys.
+Tailscale requires user-installed/logged-in >=1.104.1 and its fixed protected pipe;
+never run debug local-creds on Windows. ARM64 cloudflared uses the user-installed
+amd64 provider via Windows emulation. Live accounts/public connectivity are unverified.
+
+Batch arguments reject NUL/newline/double-quote/percent. Run .ps1 with an explicit
+PowerShell interpreter. PS5.1 may lose native empty/quote argv before devtools sees
+it. completion powershell registers devtools/dvt using literal AST and UTF-8 NUL
+stdin; never evaluate dynamic expressions. cmd supports execution only.
+Protocol 7 adds diagnostics.platform and the powershell shell; envelope remains
+1, TOML remains versionless, and the v6 run/child argument boundary remains intact.

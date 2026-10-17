@@ -1,0 +1,20 @@
+✔ aggregate checks use the checkout CLI and stop after a failed gate (1243.7475ms)
+✔ package commands require one version and preserve explicit environment inputs (25482.6503ms)
+✔ native compatibility entry forwards Python exit status (116.8748ms)
+✔ fixture setup cannot mutate an inherited caller repository or index (4441.3393ms)
+✔ relative package output ignores inherited CDPATH when writing checksums (22300.0333ms)
+✔ version baseline uses published stable releases, excluding failed tags and drafts (2176.1269ms)
+✔ publish dispatches the exact commit and version without creating a tag (2743.3156ms)
+✔ failed dispatch can retry the same version without consuming a tag (3423.2607ms)
+✔ unpublished conflicting tag is reported without advancing or rewriting it (2508.6285ms)
+✔ release API failure fails planning without falling back to tags (1863.086ms)
+✔ publication creates the tag once, reuses it on retry, and rejects a different commit (3989.9811ms)
+✔ publication rejects a commit outside main without creating a tag (2155.8458ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45828.8576

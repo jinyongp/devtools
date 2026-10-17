@@ -28,7 +28,7 @@ func TestExclusiveContextCancellationBeforePublication(t *testing.T) {
 			name = "after_preflight"
 		}
 		t.Run(name, func(t *testing.T) {
-			directory := t.TempDir()
+			directory := privateTestRoot(t)
 			path := filepath.Join(directory, "transfer.age")
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

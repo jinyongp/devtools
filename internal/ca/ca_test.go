@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -44,8 +46,8 @@ func TestReadDoesNotInitializeAndConcurrentInitHasOneRoot(t *testing.T) {
 			t.Fatal("multiple roots")
 		}
 	}
-	info, e := os.Stat(filepath.Join(s.root(), "material.json"))
-	if e != nil || info.Mode().Perm() != 0600 {
+	info, e := platformfs.StatPrivate(filepath.Join(s.root(), "material.json"))
+	if e != nil || !info.Mode().IsRegular() || runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatal(info, e)
 	}
 }

@@ -1,0 +1,10 @@
+{
+  "focus": "network",
+  "os": "Microsoft Windows 11 Enterprise",
+  "commit": "aafed1a17d3385f0ec77f33619893925c8dfcebc",
+  "display_version": "25H2",
+  "architecture": "arm64",
+  "build": "26200",
+  "powershell": "7.6.6",
+  "version": "10.0.26200"
+}

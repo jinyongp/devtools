@@ -3,7 +3,7 @@ package tasks
 import (
 	"context"
 	"fmt"
-	"os"
+	"github.com/jinyongp/devtools/internal/platformfs"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/profilekey"
@@ -32,8 +32,8 @@ func (s Store) CacheStamp(ctx context.Context) (string, *protocol.Error) {
 		return "", nil
 	}
 	if storage.V3 != nil {
-		info, err := os.Lstat(storage.V3.WAL)
-		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+		info, err := platformfs.StatPrivate(storage.V3.WAL)
+		if err != nil || !info.Mode().IsRegular() {
 			return "", storageError()
 		}
 		return fmt.Sprintf("v3:%s:%d:%d", storage.V3.Generation, info.ModTime().UnixNano(), info.Size()), nil
@@ -42,8 +42,8 @@ func (s Store) CacheStamp(ctx context.Context) (string, *protocol.Error) {
 	if storage.Profile.Mode == profilekey.ModeLegacy {
 		path = storage.Profile.LegacyPath
 	}
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+	info, err := platformfs.StatPrivate(path)
+	if err != nil || !info.Mode().IsRegular() {
 		return "", storageError()
 	}
 	return fmt.Sprintf("v2:%s:%d:%d", path, info.ModTime().UnixNano(), info.Size()), nil

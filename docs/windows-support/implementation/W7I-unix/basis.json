@@ -1,0 +1,6 @@
+{
+  "full_go_and_vet": "50afcaaf1285a2150dbbd64f50790d5f8c486d8c",
+  "cli_race": "1f73cd1b1943ff66604f19dd6e74bc50ce24bed7",
+  "reuse": "Subsequent Go changes affect Windows-only files/tests and native workflow. W7I shared updater/Unix implementation unchanged. UTF-8 developer tooling rerun separately.",
+  "final_native_commit": "fd865a706f510319e848c5650a596e83074a2af4"
+}

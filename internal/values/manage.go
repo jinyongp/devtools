@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -106,7 +107,7 @@ func (s Store) inspect(ctx context.Context, env string, exclusive bool) (Managed
 			release()
 			return out, storageError()
 		}
-	} else if statErr != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	} else if statErr != nil || !platformfs.DirectoryPrivate(s.Directory, info) {
 		release()
 		return out, storageError()
 	}

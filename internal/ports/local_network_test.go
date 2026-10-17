@@ -81,7 +81,7 @@ func TestPinnedAliasAndPortMutationPreserveStorage(t *testing.T) {
 		t.Fatal(e)
 	}
 	e = s.Update(ctx, func(st *State) (bool, *protocol.Error) {
-		i, e := st.Register("app", t.TempDir())
+		i, e := st.Register("app", privateTestRoot(t))
 		if e != nil {
 			return false, e
 		}
@@ -154,7 +154,7 @@ func TestRegistryRejectsMalformedNetworkAndFutureVersion(t *testing.T) {
 		}
 		edit(v)
 		b, _ := json.Marshal(v)
-		if e := os.WriteFile(path, b, 0600); e != nil {
+		if e := fixtureWriteFile(path, b, 0600); e != nil {
 			t.Fatal(e)
 		}
 		if _, e := s.Read(); e == nil || e.Code != "invalid_storage" {
@@ -165,7 +165,7 @@ func TestRegistryRejectsMalformedNetworkAndFutureVersion(t *testing.T) {
 
 func TestSelectedPeerUnionResolvesFreshBindingsAndFailureSavesNothing(t *testing.T) {
 	s := testPortStore(t)
-	p := project.Context{Profile: "app", Root: t.TempDir(), Ports: map[string]project.Port{"web": {}, "api": {}}}
+	p := project.Context{Profile: "app", Root: privateTestRoot(t), Ports: map[string]project.Port{"web": {}, "api": {}}}
 	web := project.Command{Serve: []string{"web"}, Bind: map[string]project.Binding{"API_PORT": {Port: "api"}}}
 	api := project.Command{Serve: []string{"api"}}
 	check := func(st *State) *protocol.Error { _, e := st.Bind(p, web, "", nil); return e }

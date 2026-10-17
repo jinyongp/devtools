@@ -1,11 +1,20 @@
 # 로컬 네트워크와 공유
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
 devtools는 서버 실행, 포트, 로컬 도메인, HTTPS와 공유를 함께 관리한다.
-macOS와 Linux에서 실행하며 WSL은 Linux 환경으로 동작한다.
+macOS·Linux와 Windows 네이티브 후보에서 실행하며 WSL은 Linux 환경으로 동작한다.
+Windows의 지원/검증 범위는 [Windows 안내](windows.md), 별도 client trust는 [WSL 안내](wsl.md)를 따른다.
 사용자 계정의 daemon 하나가 여러 named listener를 관리한다.
 아래 `UUID`는 새 요청 UUID로 바꾼다. 응답을 잃었으면 같은 입력과 UUID로 재시도한다.
 
 ## 프로젝트 설정과 일상 실행
+
+아래 예시는 루트의 frontend와 `api` 하위 프로젝트에 각각 `pnpm dev`가 준비되어 있고,
+두 서버가 환경변수 `PORT`를 읽는 프로젝트를 기준으로 한다. 실행 도구와 서버는 devtools가 설치하지 않는다.
+`shop.test` custom host는 OS hosts 변경 권한이 필요하다. OS 변경 없이 먼저 확인하려면
+api의 host를 `api.${instance.alias}.${profile}.localhost`로 바꾸고 고포트 listener를 사용한다.
+WSL에서 Windows 브라우저로 접속할 때는 별도의 DNS·신뢰 경계를 확인한다.
 
 ```toml
 profile = "shop"
@@ -106,7 +115,9 @@ custom host는 `proxy up` 또는 `--proxy` 시작 안에서 devtools 소유 host
 wildcard listener의 로컬 hosts mapping은 IPv4의 `127.0.0.1`, IPv6의 `::1`을 사용하며
 `0.0.0.0`이나 `::`를 hosts에 기록하지 않는다.
 변경이 필요하면 initiating CLI가 내용을 보여 주고 필요한 OS 인증을 요청한다.
-비대화형 실행은 사전 승인된 sudo 권한으로 `sudo -n`을 사용한다. 권한 부족은
+Unix 비대화형 실행은 사전 승인된 sudo 권한으로 `sudo -n`을 사용한다.
+Windows hosts는 같은 SID의 UAC helper를 사용하며 비대화형이면 이미 승격된 token이 필요하다.
+Windows trust/untrust는 대화형 터미널과 OS 인증서 확인이 필요하다. 권한 부족은
 암호 입력 없이 `permission_required`다. daemon과 조회 명령은 OS를 수정하지 않는다.
 `dns = "external"`은 사용자가 준비한 DNS, `dns = "hosts"`는 명시 hosts 준비다.
 외부 mapping과 충돌하면 덮어쓰지 않는다. 공유 mapping은 마지막 소유 참조 해제 시 제거한다.

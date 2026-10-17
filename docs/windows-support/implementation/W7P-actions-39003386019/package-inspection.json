@@ -1,0 +1,20 @@
+[
+  {
+    "artifact": "devtools_0.0.0-native-package_windows_arm64.zip",
+    "entries": [
+      "devtools.exe"
+    ],
+    "sha256": "2a2db12f99697b6f4b8522a34b89aa1c0f3b253a8a434f73bc379f988b226264",
+    "pe_machine": "0xaa64",
+    "reviewed_commit": "1a5f34cdaa9470ef53ce002b9bd0c8a0495659dc"
+  },
+  {
+    "artifact": "devtools_0.0.0-native-package_windows_amd64.zip",
+    "entries": [
+      "devtools.exe"
+    ],
+    "sha256": "2026d84b8d9e7377cd13fa69a19722958f135ab26d915d8d2618e669717d1246",
+    "pe_machine": "0x8664",
+    "reviewed_commit": "1a5f34cdaa9470ef53ce002b9bd0c8a0495659dc"
+  }
+]

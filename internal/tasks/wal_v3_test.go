@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,7 +36,7 @@ func TestWALRejectsTrailingBodyData(t *testing.T) {
 		PreviousRevision: 0,
 		FinalRevision:    0,
 	}, []byte{0x01})
-	if err := os.WriteFile(path, body, 0600); err != nil {
+	if err := writePrivateFixture(path, body, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := scanWAL(path, 0, true); err == nil {
@@ -51,7 +52,7 @@ func TestWALAbsurdCountFailsWithoutPreallocation(t *testing.T) {
 		FinalRevision:    1 << 30,
 		EventCount:       1 << 30,
 	}, nil)
-	if err := os.WriteFile(path, body, 0600); err != nil {
+	if err := writePrivateFixture(path, body, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := scanWAL(path, 0, true); err == nil {
@@ -71,7 +72,7 @@ func TestActiveV3MutationTruncatesIncompleteTail(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatal(err)
 	}
-	file, err := os.OpenFile(resolution.WAL, os.O_WRONLY|os.O_APPEND, 0)
+	file, err := platformfs.OpenPrivate(resolution.WAL, os.O_WRONLY|os.O_APPEND, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +153,7 @@ func TestPendingRecoveryDoesNotRescanCheckpointedPrefix(t *testing.T) {
 	if snapshotErr != nil || snapshot.WALOffset <= 0 {
 		t.Fatalf("missing checkpointed prefix: %#v %v", snapshot, snapshotErr)
 	}
-	file, openErr := os.OpenFile(resolution.WAL, os.O_RDWR, 0)
+	file, openErr := platformfs.OpenPrivate(resolution.WAL, os.O_RDWR, 0)
 	if openErr != nil {
 		t.Fatal(openErr)
 	}
@@ -219,7 +220,7 @@ func TestActiveV3MutationDoesNotRescanCheckpointedPrefix(t *testing.T) {
 	if snapshotErr != nil || snapshot.WALOffset <= 0 {
 		t.Fatalf("missing checkpointed prefix: %#v %v", snapshot, snapshotErr)
 	}
-	file, openErr := os.OpenFile(resolution.WAL, os.O_RDWR, 0)
+	file, openErr := platformfs.OpenPrivate(resolution.WAL, os.O_RDWR, 0)
 	if openErr != nil {
 		t.Fatal(openErr)
 	}

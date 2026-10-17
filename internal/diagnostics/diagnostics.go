@@ -85,6 +85,7 @@ type Issue struct {
 }
 
 type Report struct {
+	Platform  Platform  `json:"platform"`
 	Network   Network   `json:"network"`
 	Ready     bool      "json:\"ready\""
 	Paths     Paths     "json:\"paths\""
@@ -134,6 +135,12 @@ func Inspect(ctx context.Context, input Input) (Report, *protocol.Error) {
 	}
 	if err := canceled(ctx); err != nil {
 		return Report{}, err
+	}
+
+	var unsupported bool
+	report.Platform, unsupported = inspectPlatform(input)
+	if unsupported {
+		report.issue("platform", protocol.NewError("unsupported_storage", "Private storage requires a supported local filesystem.", 3, nil))
 	}
 
 	profiles, err := (profilecatalog.Catalog{Data: input.Data}).List(ctx)

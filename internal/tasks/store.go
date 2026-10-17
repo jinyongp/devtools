@@ -8,11 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"syscall"
 
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -56,30 +55,14 @@ func gateError(ctx context.Context) *protocol.Error {
 	}
 	return storageError()
 }
-func PrivateDir(path string) error {
-	if e := os.MkdirAll(path, 0700); e != nil {
-		return e
-	}
-	i, e := os.Lstat(path)
-	if e != nil {
-		return e
-	}
-	if !i.IsDir() || i.Mode().Perm()&0077 != 0 {
-		return errors.New("private directory required")
-	}
-	return nil
-}
+
 func ReadPrivate(path string, v any) error {
-	f, e := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	f, e := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
 	if e != nil {
 		return e
 	}
 	defer f.Close()
-	i, e := f.Stat()
-	if e != nil {
-		return e
-	}
-	if !i.Mode().IsRegular() || i.Mode().Perm()&0077 != 0 {
+	if platformfs.CheckFile(f.File) != nil {
 		return errors.New("private file required")
 	}
 	d := json.NewDecoder(f)
@@ -92,36 +75,7 @@ func ReadPrivate(path string, v any) error {
 	}
 	return nil
 }
-func WritePrivate(path string, v any) error {
-	b, e := json.Marshal(v)
-	if e != nil {
-		return e
-	}
-	f, e := os.CreateTemp(filepath.Dir(path), ".write-*")
-	if e != nil {
-		return e
-	}
-	defer os.Remove(f.Name())
-	if _, e = f.Write(b); e == nil {
-		e = f.Sync()
-	}
-	c := f.Close()
-	if e != nil {
-		return e
-	}
-	if c != nil {
-		return c
-	}
-	if e = os.Rename(f.Name(), path); e != nil {
-		return e
-	}
-	dir, e := os.Open(filepath.Dir(path))
-	if e != nil {
-		return e
-	}
-	defer dir.Close()
-	return dir.Sync()
-}
+
 func Lock(ctx context.Context, path string) (func(), error) {
 	return maintenance.LockExclusive(ctx, path)
 }

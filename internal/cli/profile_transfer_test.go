@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"github.com/jinyongp/devtools/internal/testfixture"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,10 +43,7 @@ func TestProfileTransferPrepareCreatesAndReusesLocalIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	identity := filepath.Join(filepath.Dir(profiles), "profile-transfer", "identity.txt")
-	info, statErr := os.Lstat(identity)
-	if statErr != nil || info.Mode().Perm() != 0600 {
-		t.Fatalf("identity mode: %#v %v", info, statErr)
-	}
+	testfixture.AssertPrivate(t, identity, 0600)
 }
 
 func TestProfileTransferPrepareRejectsUnsafeIdentity(t *testing.T) {
@@ -105,10 +103,7 @@ func TestProfileExportUsesExplicitRecipientWithoutBackupConfiguration(t *testing
 	if item["path"] != "./app.age" || exported["changed"] != true {
 		t.Fatalf("unexpected export: %#v", exported)
 	}
-	info, err := os.Lstat(filepath.Join(root, "app.age"))
-	if err != nil || info.Mode().Perm() != 0600 {
-		t.Fatalf("archive mode: %#v %v", info, err)
-	}
+	testfixture.AssertPrivate(t, filepath.Join(root, "app.age"), 0600)
 
 	before, err := os.ReadFile(filepath.Join(root, "app.age"))
 	if err != nil {
@@ -148,12 +143,10 @@ func TestProfileExportDirectoryOutputUsesProfileFilename(t *testing.T) {
 	if exported["item"].(map[string]any)["path"] != want {
 		t.Fatalf("directory output did not resolve profile filename: %#v", exported)
 	}
-	if info, err := os.Lstat(want); err != nil || info.Mode().Perm() != 0600 {
-		t.Fatalf("directory export missing/private mode: %#v %v", info, err)
-	}
+	testfixture.AssertPrivate(t, want, 0600)
 
 	code, out, diagnostic := invoke(t, app, "", "profile", "export", "--recipient", recipient, "--output", directory)
-	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"output_exists\"") || !strings.Contains(diagnostic, want) {
+	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"output_exists\"") || !strings.Contains(diagnostic, strings.Trim(mustJSON(t, want), "\"")) {
 		t.Fatalf("directory collision did not fail fast with resolved path: code=%d out=%s err=%s", code, out, diagnostic)
 	}
 }
@@ -180,7 +173,7 @@ func TestProfileExportExistingOutputFailsBeforeSnapshot(t *testing.T) {
 	}
 
 	code, out, diagnostic := invoke(t, app, "", "profile", "export", "--output", output)
-	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"output_exists\"") || !strings.Contains(diagnostic, output) || prompted {
+	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"output_exists\"") || !strings.Contains(diagnostic, strings.Trim(mustJSON(t, output), "\"")) || prompted {
 		t.Fatalf("existing output did not fail before missing-profile snapshot: code=%d out=%s err=%s", code, out, diagnostic)
 	}
 	body, err := os.ReadFile(output)
@@ -354,10 +347,7 @@ func TestProfileImportUsesLocalTransferIdentityAndRecoveryArchive(t *testing.T) 
 	if !strings.Contains(filepath.ToSlash(safety), "/profile-transfer/recovery/before-import-") {
 		t.Fatalf("unexpected safety archive path: %s", safety)
 	}
-	info, err := os.Lstat(safety)
-	if err != nil || info.Mode().Perm() != 0600 {
-		t.Fatalf("safety archive mode: %#v %v", info, err)
-	}
+	testfixture.AssertPrivate(t, safety, 0600)
 
 	recoveryBase := []string{"profile", "import", "--file", safety, "--as", "recovered"}
 	recoveryPreview := outputData(t, target, recoveryBase)

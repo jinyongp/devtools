@@ -1,0 +1,8 @@
+{"Time":"2026-10-17T02:36:37.4889389-07:00","Action":"start","Package":"github.com/jinyongp/devtools/internal/platformfs"}
+{"Time":"2026-10-17T02:36:37.5182807-07:00","Action":"run","Package":"github.com/jinyongp/devtools/internal/platformfs","Test":"TestWindowsReadWaitsForPublicationDeleteHandle"}
+{"Time":"2026-10-17T02:36:37.5182807-07:00","Action":"output","Package":"github.com/jinyongp/devtools/internal/platformfs","Test":"TestWindowsReadWaitsForPublicationDeleteHandle","Output":"=== RUN   TestWindowsReadWaitsForPublicationDeleteHandle\n","OutputType":"frame"}
+{"Time":"2026-10-17T02:36:37.7250775-07:00","Action":"output","Package":"github.com/jinyongp/devtools/internal/platformfs","Test":"TestWindowsReadWaitsForPublicationDeleteHandle","Output":"--- PASS: TestWindowsReadWaitsForPublicationDeleteHandle (0.21s)\n","OutputType":"frame"}
+{"Time":"2026-10-17T02:36:37.7250775-07:00","Action":"pass","Package":"github.com/jinyongp/devtools/internal/platformfs","Test":"TestWindowsReadWaitsForPublicationDeleteHandle","Elapsed":0.21}
+{"Time":"2026-10-17T02:36:37.7250775-07:00","Action":"output","Package":"github.com/jinyongp/devtools/internal/platformfs","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-17T02:36:37.7277769-07:00","Action":"output","Package":"github.com/jinyongp/devtools/internal/platformfs","Output":"ok  \tgithub.com/jinyongp/devtools/internal/platformfs\t0.239s\n"}
+{"Time":"2026-10-17T02:36:37.7277769-07:00","Action":"pass","Package":"github.com/jinyongp/devtools/internal/platformfs","Elapsed":0.239}

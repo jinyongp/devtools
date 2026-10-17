@@ -1,5 +1,83 @@
 # devtools 개발
 
+[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+
+저장소에서 devtools 자체를 수정하는 개발자를 위한 안내다. 사용자 설치와 첫 실행은
+[README](../README.ko.md), 설치된 배포물의 통합 검증은 [검증 안내](../verify/README.md)를 따른다.
+
+## 개발 도구와 첫 빌드
+
+Go 1.27.x(`go.mod`의 정확한 버전은 1.27.1), Node.js 24.x, Python 3, Git과
+`uvx`를 포함한 uv가 필요하다. macOS·Linux·WSL의 설치 시나리오는 curl·OpenSSL·tar·POSIX sh도 사용한다.
+프로젝트 명령은 `devtools.toml`에 `{목적}:{명령}` 이름으로 선언되어 있다.
+먼저 이 checkout의 CLI를 빌드해 PATH 앞에 둔다.
+
+macOS·Linux·WSL:
+
+```sh
+go build -o bin/devtools ./cmd/devtools
+export PATH="$PWD/bin:$PATH"
+devtools version
+devtools command list
+devtools run check:all
+```
+
+Windows 네이티브 PowerShell:
+
+```powershell
+go build -o bin/devtools.exe ./cmd/devtools
+$env:PATH = "$(Get-Location)\bin;" + $env:PATH
+devtools version
+devtools command list
+devtools run check:all
+```
+
+`version`으로 선택된 실행 파일을 확인하고, `check:all`이 종료 코드 0으로 끝나는지 확인한다.
+다시 빌드할 때는 `devtools run build:cli`, 입력·출력 계약은 `devtools schema COMMAND`로 조회한다.
+사용자용 실행 파일에는 이 개발 도구들이 필요하지 않다.
+
+## 변경에 맞는 검사 선택
+
+`devtools run check:all`은 Skill·dashboard JavaScript·설치기·릴리스·프로젝트 명령·성능 runner의
+회귀 검사, Go 형식·vet·테스트를 실행한다. 플랫폼별 Go 검사 범위는 다음과 같다.
+
+| 환경 | 일반 검사 | 추가 제품 검증 |
+| --- | --- | --- |
+| macOS·Linux | Go race 포함 | 설치된 release 전체 시나리오, Linux Chromium smoke |
+| Windows x64 | 일반 Go 테스트 | 필수 Actions의 cgo·호환 mingw-w64 race와 native 제품 검사 |
+| Windows ARM64 | 일반 Go 테스트 | 필수 Actions의 native 프로세스·잠금 경쟁 검사; Go race detector 없음 |
+| WSL | Linux 빌드와 검사 | 실제 WSL2/Windows 네트워크는 별도 미검증 범위 |
+
+로컬 `check:all`은 disposable Actions의 사용자·ACL·OS 경계 검사를 대체하지 않는다.
+Release 검증은 macOS, Ubuntu 24.04, Windows Server 2025 x64(테스트 호스트),
+Windows 11 ARM64와 Go 1.27.1을 사용한다. 현재 runner와 실행 근거·실제 PC 미검증 한계는
+[Windows 안내](windows.md)와 [최종 리뷰](windows-support/implementation/W9.md)를 따른다.
+Windows 구현 결정의 배경은 [지원 계획](windows-support-plan.md)과
+[사전 조사](windows-support/research.md)에 보존한다. 이 기록이 Windows 출시를 의미하지는 않는다.
+
+변경 영역만 먼저 확인할 때는 다음 검사를 사용한다.
+
+- `devtools run check:dashboard`: DOM 없는 Node JavaScript 회귀 검사.
+- `devtools run check:project`: 집계 검사의 실패 전파와 release packaging 입력.
+- `devtools run check:skill`: `skills-ref==0.1.1` 공식 형식 검증.
+- `devtools run check:skill-release`: 공식 검증, archive 구성·checksum·소스 일치·잘못된 fixture 거절.
+- `devtools run test:installed proxies`: Unix에서 실제 배포 archive를 설치해 HTTP·WebSocket·동적 port·daemon 재시작·reservation 검증.
+
+저장소는 `skills` 1.6.0을 정확히 고정한다. `pnpm install --frozen-lockfile` 후
+`devtools run check:skill-discovery`로 로컬 발견을 확인한다.
+`check:skill-discovery-public`은 공개 `jinyongp/devtools`를 확인하므로 현재 checkout 검증과 구분한다.
+CI의 uv는 공식 Skill 검증에만 사용하며 Python dependency manifest가 없어 setup-uv cache는 비활성화한다.
+
+Go 단위 테스트는 OS가 고른 포트를 먼저 닫은 뒤 재사용하지 않는다. 실제 bind가 대상이 아니면
+주입 가능한 probe/listener로 상태와 저장 동작을 검증한다. TCP bind·occupied/free·IPv4/IPv6와
+설치된 CLI의 동작은 `devtools run test:installed ports proxies`로 확인한다.
+
+반복 가능한 성능 측정은 `devtools run perf:all`(hyperfine end-to-end) 또는
+`devtools run perf:go`(Go benchmark)를 사용한다. 격리 fixture·크기·이력·baseline 비교는
+[성능 안내](../perf/README.md)를 따른다. end-to-end runner는 Linux·WSL용이다.
+
+## 네트워크 검증과 OS 변경
+
 로컬 네트워크 기능의 사용자 흐름은 [가이드](local-network.md), 저장·복구 계약은
 [network design](network-design.md)을 따른다. `test:installed network`는 패키징된 실행 파일로
 fresh batch·HTTPS·전역 route·격리·listener 정리를 검증한다. Linux/macOS release matrix는
@@ -28,57 +106,6 @@ workflow는 시스템 동작 검증을 독립된 job으로 실행해 일반 검�
 게시도 차단한다.
 실제 결과 파일이 없으면 해당 platform 수용 검증은 pending이다.
 
-저장소에서 devtools 자체를 수정하는 개발자를 위한 안내다.
-사용자 설치와 실행은 [README](../README.md)를 참고한다.
-
-
-Requires Go 1.27.x, Node.js 24.x, Python 3, Git, curl, OpenSSL, tar, and uv with `uvx`.
-Bootstrap the CLI from this checkout and put it first on PATH. All subsequent
-project commands come from `devtools.toml` and use `{purpose}:{command}` names.
-
-```sh
-go build -o bin/devtools ./cmd/devtools
-export PATH="$PWD/bin:$PATH"
-devtools command list
-devtools run build:cli
-devtools run check:all
-devtools run test:installed proxies
-./bin/devtools version
-./bin/devtools schema
-devtools project inspect
-```
-
-For repeatable performance measurements, use `devtools run perf:all` (hyperfine end-to-end
-suite) or `devtools run perf:go` (internal Go benchmarks). See the
-[performance guide](../perf/README.md) for isolated fixtures, group filters,
-data-size/history matrices and baseline comparison.
-
-`devtools run check:all` validates the Agent Skill and its release archive with
-`skills-ref==0.1.1`, runs the Dashboard JavaScript regression tests with Node's
-built-in test runner, checks `scripts/install.sh` syntax, checks formatting, runs
-`go vet`, and runs Go tests with the race detector. `devtools run check:dashboard` runs only
-the Dashboard JavaScript tests.
-`devtools run check:project` verifies aggregate-check failure propagation and
-release packaging inputs.
-`devtools run check:skill` runs only the official format validator, while
-`devtools run check:skill-release` also tests archive structure, checksums, source identity,
-and invalid fixtures. The repository also exact-pins `skills` 1.6.0; after `pnpm install`,
-`devtools run check:skill-discovery` verifies local repository discovery and
-`devtools run check:skill-discovery-public` verifies the public `jinyongp/devtools` source.
-Release workflow validation runs on macOS and Ubuntu 24.04 with
-Go 1.27.1. The workflow disables setup-uv caching because uv is used only to run
-the Agent Skills validator and this repository has no Python dependency manifest.
-WSL uses the Linux build; testing in an actual WSL environment is a separate check.
-`devtools run test:installed proxies`는 배포 아카이브를 설치한 격리 환경에서 HTTP route,
-WebSocket, 동적 port 변경, daemon 재시작과 listener reservation을 검증한다.
-
-Go 단위 테스트는 OS가 관리하는 비어 있는 port 번호를 미리 골라 닫은 뒤 재사용하지 않는다.
-port 가용성이나 proxy listener가 테스트의 직접 대상이 아니면 주입 가능한 probe/listener를
-사용해 상태 전이와 저장소 동작을 결정적으로 검증한다. 실제 TCP bind, occupied/free 판정,
-IPv4/IPv6 listener, 설치된 바이너리의 proxy 동작은 `devtools run test:installed ports proxies`에서 검증한다.
-이 경계를 유지해 호스트의 포트 사용 상태나 병렬 프로세스 때문에 단위 테스트가 흔들리지 않게 한다.
-
-
 ## Dashboard 화면 개발
 
 저장소에서 다음 명령을 실행하고 출력된 링크를 연다.
@@ -95,12 +122,14 @@ Go 코드를 수정했을 때는 `Ctrl+C`로 종료하고 `devtools run dev:dash
 현재 사용자의 devtools 데이터와 저장소의 profile을 사용한다. 개발 서버는
 별도의 임시 registry와 포트를 사용하며 종료할 때 임시 파일을 정리한다.
 기존 dashboard와 개발 서버를 동시에 열어둘 수 있다.
-격리 데이터로 확인하려면 별도의 HOME을 사용한다. Linux와 WSL에서는
-XDG_DATA_HOME·XDG_CONFIG_HOME·XDG_CACHE_HOME도 격리 디렉터리로 지정한다.
+격리 데이터로 확인하려면 자식 프로세스에도 전달되는 `DEVTOOLS_ISOLATED_ROOT`를
+새 임시 경로로 지정한다. Windows Known Folder는 HOME/XDG 재정의로 격리되지 않는다.
+이 값은 private config/data/cache/runtime을 한 root 아래 분리한다.
 
 일반 `devtools dashboard`는 실행 파일에 내장된 화면을 제공한다.
 DOM 없이 실행하는 빠른 JavaScript 회귀 테스트는 `devtools run check:dashboard`로 확인한다.
-실제 Chromium smoke는 빌드된 CLI와 격리한 HOME/XDG 경로를 사용한다.
+실제 Chromium smoke는 빌드된 CLI와 DEVTOOLS_ISOLATED_ROOT를 사용한다.
+HOME/XDG도 테스트 라이브러리의 호환성을 위해 별도 임시 경로로 지정한다.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -116,17 +145,14 @@ CLI에서 확인한 최종 값을 한 흐름으로 검증한다. Release의 Linu
 
 ## 도구 추가
 
-- Add the tool's behavior in its own `internal/` package.
-- Register commands in `internal/cli`. Options generate flag parsing, validation,
-  help, and schema discovery from the same definition.
-- Return data or a `protocol.Error` from handlers. The runner serializes results.
-- Resolve project context only for commands that need it. Use `paths` for user
-  storage locations. Handlers receive context and injectable input/output.
-- Test valid input, failure behavior, and command-specific risks.
-- Update the public guide and Agent Skill when the command changes how
-  users or agents should prepare, retry, or coordinate work.
-- Add an installed-release scenario when packaging, storage compatibility,
-  or detached process behavior is part of the feature.
+- 기능을 별도 `internal/` package에 두고 `internal/cli`에 명령을 등록한다.
+  같은 옵션 정의에서 parsing·검증·help·schema를 생성한다.
+- handler는 데이터 또는 `protocol.Error`를 반환하고 runner가 직렬화한다.
+- 필요한 명령에서만 project context를 선택한다. 사용자 경로는 `paths`를 사용하고
+  handler에는 context와 주입 가능한 입출력을 전달한다.
+- 정상 입력·실패 경로·해당 기능의 위험을 검사한다.
+- 준비·재시도·작업 조정 방식이 바뀌면 사용자 가이드와 Agent Skill을 함께 갱신한다.
+- packaging·저장 호환성·분리된 프로세스 수명이 기능에 포함되면 installed-release 검증을 추가한다.
 
 
 ## 릴리스
@@ -141,11 +167,20 @@ devtools run release:publish
 깨끗한 main을 올린 뒤 버전과 정확한 커밋 SHA로 Release 워크플로를 요청한다.
 로컬에서 릴리즈 태그를 만들지 않는다. Node.js와 인증된 GitHub CLI(`gh`)가 필요하다.
 
-워크플로는 대상 커밋이 main에 포함됐는지 확인하고 macOS와 Linux 검사를 병렬로
-실행한다. Linux는 Agent Skill의 local/public discovery와 Chromium dashboard smoke를
-포함한다. 두 OS 모두 `devtools run test:installed`를 통과해야 하며, 각 설치 시나리오는 180초를
-넘기면 이름을 출력하고 실패한다. 검사가 끝나면 네 플랫폼의 CLI와 Agent Skill을
-패키징하고 체크섬·바이너리 버전·커밋·양쪽 OS의 Skill 일치를 확인한다.
+워크플로는 요청한 전체 commit SHA를 checkout하고 macOS·Linux 검사와 Windows x64·ARM64의
+재사용 가능한 full 제품 검사를 필수 dependency로 실행한다. 실제 게시인 `publish=true`는
+main ref와 main ancestry를 모두 확인한다. `publish=false`는 후보 branch에서도 실행할 수 있다.
+Linux는 Agent Skill local/public discovery와 Chromium dashboard smoke를 포함한다.
+macOS와 Linux의 `devtools run test:installed`는 시나리오별 180초 제한을 유지한다.
+
+Windows의 필수 검사는 저장소/복구·argv/shim·프로세스/Job·console·네트워크·설치/업데이트·
+PowerShell completion·전체 Go suite와 실제 candidate ZIP의 설치·Chromium dashboard를 포함한다.
+x64 race와 ARM64 native contention은 구분하며 browser/Node의 실제 CPU도 따로 기록한다.
+Windows의 실행 근거는 Actions이며 실제 PC·WSL2 연계 한계는 [Windows 안내](windows.md)를 따른다.
+
+모든 필수 job이 통과하면 macOS/Linux의 네 archive를 만들고 Windows native job이 실제 검증한
+두 ZIP을 checksum 확인 후 그대로 포함한다. 여섯 OS/CPU 배포물, Agent Skill과 checksum,
+설치기·버전 파일의 identity를 확인한다. 양쪽 Unix OS의 Skill도 byte 단위로 대조한다.
 이 단계까지 실패하면 새 태그와 GitHub Release는 만들어지지 않는다.
 
 게시 job은 준비된 `release-assets` artifact를 내려받아 태그를 생성하고,
@@ -159,12 +194,16 @@ devtools run release:publish
 artifact는 30일간 보관한다. GitHub Release 게시 이후 Homebrew와 installer 배포는
 독립적으로 실행한다. installer job은 `.github/workflows/pages.yml`에 게시된 태그를
 전달하고, 해당 workflow가 릴리스의
-`install.sh`를 `jinyongp.dev/devtools/install.sh`에 배포한다. Pages source는 저장소
+`install.sh`와 해당 태그에 존재하는 `install.ps1`을 각각
+`jinyongp.dev/devtools/install.sh`, `jinyongp.dev/devtools/install.ps1`에 배포한다.
+각 파일은 선택한 태그의 소스와 정확히 대조하며 과거 Unix-only 태그에는 Windows 파일을 요구하지 않는다.
+Pages source는 저장소
 설정에서 GitHub Actions로 한 번 활성화해야 하며, workflow를 수동 실행하면 최신 안정
 릴리스를 바로 게시할 수 있다.
 
-태그 생성과 게시 없이 모든 검증·패키징을 실행하려면 다음 명령을 사용한다.
-이 경우 `release-assets` artifact에서 준비된 배포물을 확인할 수 있다.
+태그 생성과 게시 없이 모든 필수 검증·패키징을 실행하려면 다음 명령을 사용한다.
+후보 branch는 --ref에 해당 branch를 지정하고 같은 후보의 전체 SHA를 commit에 전달한다.
+Homebrew·Pages도 게시하지 않는다. 이 경우 `release-assets` artifact에서 준비된 배포물을 확인할 수 있다.
 
 ```sh
 gh workflow run release.yml --ref main -f version=0.23.0 -f commit="$(git rev-parse HEAD)" -f publish=false

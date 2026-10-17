@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 
-from package import package, package_skill, verify_skill
+from package import configure_output, package, package_skill, verify_skill
 
 
 def run(args, **kwargs):
@@ -49,6 +49,7 @@ def check_skill_release():
 
 
 def main(args):
+    configure_output()
     if not args:
         raise ValueError("Project action required")
     action, extra = args[0], args[1:]

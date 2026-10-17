@@ -125,7 +125,16 @@ def package(version=None, env=None):
     return output / name
 
 
+def configure_output():
+    # Windows redirected streams can default to an ANSI codec even when paths
+    # contain Unicode. Developer command output is UTF-8 on every host.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
+
 def main():
+    configure_output()
     try:
         if len(sys.argv) != 1:
             raise ValueError("Usage: package.py (VERSION is required in the environment)")

@@ -2,6 +2,12 @@ name: Windows platform boundaries
 
 on:
   workflow_dispatch:
+    inputs:
+      focus:
+        description: Focused feedback; full remains the final completion gate
+        type: choice
+        default: full
+        options: [full, network, installer]
   push:
     paths:
       - .github/workflows/windows-platform.yml
@@ -53,7 +59,27 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: false
+      - name: Record focused native runner
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.focus != 'full' }}
+        run: |
+          $actual = (& go env GOHOSTARCH).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne '${{ matrix.arch }}') { throw 'Native architecture mismatch' }
+          $os = Get-CimInstance Win32_OperatingSystem
+          $release = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+          @{ commit = $env:GITHUB_SHA; os = $os.Caption; version = $os.Version; build = $os.BuildNumber; display_version = $release.DisplayVersion; architecture = $actual; focus = '${{ inputs.focus }}'; powershell = $PSVersionTable.PSVersion.ToString() } | ConvertTo-Json | Set-Content -Encoding utf8 runner.json
+      - name: Prepare focused installer package
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.focus == 'installer' }}
+        run: |
+          $env:VERSION = '0.0.0-native-package'
+          $env:COMMIT = $env:GITHUB_SHA
+          $env:TARGET_OS = 'windows'
+          $env:TARGET_ARCH = '${{ matrix.arch }}'
+          $env:OUTPUT_DIR = 'dist'
+          & python -B scripts/package.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native focused ZIP validation failed' }
+
       - name: Prepare actual package-manager shims
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
         run: |
           $ErrorActionPreference = 'Stop'
           $shims = Join-Path $env:RUNNER_TEMP 'devtools-package-shims'
@@ -64,6 +90,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot activate the pinned pnpm version' }
           $shims | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Test native private storage with a separate standard identity
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
         run: |
           $ErrorActionPreference = 'Stop'
           $actual = (& go env GOHOSTARCH).Trim()
@@ -92,6 +119,7 @@ jobs:
             if ($created) { Remove-LocalUser -Name $account }
           }
       - name: Test native argv, actual shells and package-manager shims
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
         env:
           DEVTOOLS_TEST_PACKAGE_SHIMS: '1'
         run: |
@@ -105,6 +133,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native execution preflight tests failed' }
 
       - name: Test native storage locks and launch leases
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
         run: |
           & go test -json -count=1 -run 'TestWindows|TestWriterIntentBlocksNewReaders|TestSharedMaintenanceGateAllowsConcurrentReaders' ./internal/maintenance | Tee-Object -FilePath maintenance-lock-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native lock tests failed' }
@@ -114,6 +143,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native port lock tests failed' }
 
       - name: Test complete native task, value and profile storage recovery
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
         run: |
           & go test -json -count=1 -timeout 8m ./internal/tasks ./internal/values ./internal/profilekey | Tee-Object -FilePath storage-recovery-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native storage recovery tests failed' }
@@ -123,6 +153,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native storage recovery vet failed' }
 
       - name: Test native backup, transfer, cleanup, logs and complete ports
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
         run: |
           & go test -json -count=1 -timeout 8m ./internal/backup ./internal/profiletransfer ./internal/cleanup ./internal/archiveproof ./internal/services | Tee-Object -FilePath storage-integration-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native storage integration tests failed' }
@@ -132,6 +163,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native storage integration vet failed' }
 
       - name: Test native listener diagnostics and nonmutating setup
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
         run: |
           & go test -json -count=1 ./internal/netsetup | Tee-Object -FilePath netsetup-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native setup tests failed' }
@@ -141,6 +173,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native listener vet failed' }
 
       - name: Native detached dashboard and HTTP proxy
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
         run: |
           & go test -json -count=1 -timeout 3m -run '^TestWindowsDetached' ./internal/dashboard ./internal/proxy | Tee-Object -FilePath detached-daemon-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native detached daemon contract failed' }
@@ -149,6 +182,7 @@ jobs:
           & go test -json -count=5 -timeout 4m -run '^TestWindowsProjectReal' ./internal/lifecycle | Tee-Object -FilePath project-lifecycle-repeat-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Repeated native project lifecycle contract failed' }
       - name: Test native console mode and redirected passphrase input
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
         run: |
           & go test -json -count=1 -run '^TestWindowsConsole|^TestWindowsPassphrase' ./internal/cli | Tee-Object -FilePath console-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native console tests failed' }
@@ -156,6 +190,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native CLI vet failed' }
 
       - name: Test portable project and release tooling with native packages
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
         run: |
           & python -B --version
           if ($LASTEXITCODE -ne 0) { throw 'Native Python is unavailable' }
@@ -174,6 +209,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native ZIP validation failed' }
 
       - name: Test constrained native hosts and CurrentUser trust boundaries
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus != 'installer' }}
         env:
           DEVTOOLS_TEST_SYSTEM_NETWORK: '1'
         run: |
@@ -200,6 +236,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native network security vet failed' }
 
       - name: Test native installer recovery and PS5/PS7 running-image updates
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus != 'network' }}
         run: |
           $archive = Get-ChildItem dist -Filter '*.zip' | Select-Object -First 1
           $env:DEVTOOLS_INSTALL_TEST_ZIP = $archive.FullName
@@ -213,6 +250,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native PowerShell installer/update tests failed' }
 
       - name: Build native CLI and check explicit intermediate failures
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.focus == 'full' }}
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $false

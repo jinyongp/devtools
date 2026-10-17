@@ -75,7 +75,14 @@ function Invoke-Candidate([string]$Executable, [string]$Arguments, [string]$Inpu
     $process = [Diagnostics.Process]::new()
     $process.StartInfo = $start
     try {
-        if (-not $process.Start()) { throw 'Cannot start verified candidate.' }
+        # .NET Framework creates its stdin StreamWriter with Console.InputEncoding
+        # and immediately AutoFlushes its preamble, before BaseStream is exposed.
+        # Scope a BOM-free encoding around Start, then restore the caller's console.
+        $savedInputEncoding = [Console]::InputEncoding
+        try {
+            [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
+            if (-not $process.Start()) { throw 'Cannot start verified candidate.' }
+        } finally { [Console]::InputEncoding = $savedInputEncoding }
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
         $inputBytes = [Text.UTF8Encoding]::new($false).GetBytes($InputText)

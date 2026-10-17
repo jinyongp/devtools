@@ -203,6 +203,8 @@ jobs:
           $env:DEVTOOLS_INSTALL_TEST_ZIP = $archive.FullName
           & go test -json -count=1 -timeout 4m ./internal/windowsinstall | Tee-Object -FilePath windows-install-transaction-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native installer transaction tests failed' }
+          & go test -json -count=1 -run '^TestHomebrewUpdate|^TestNoninteractiveUpdate' ./internal/cli | Tee-Object -FilePath windows-update-contract-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native updater ownership/error contract failed' }
           & go vet ./internal/windowsinstall
           if ($LASTEXITCODE -ne 0) { throw 'Native installer vet failed' }
           & pwsh -NoProfile -NonInteractive -File scripts/test-windows-install.ps1 -Arch '${{ matrix.arch }}' -Commit $env:GITHUB_SHA
@@ -266,6 +268,7 @@ jobs:
             project-lifecycle-results.jsonl
             windows-network-security-results.jsonl
             windows-network-runtime-results.jsonl
+            windows-update-contract-results.jsonl
             windows-install-transaction-results.jsonl
             windows-install-results.json
             windows-install-diagnostic.txt

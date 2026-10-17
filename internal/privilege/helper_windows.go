@@ -104,6 +104,14 @@ func runPlatform(ctx context.Context, kind string, encoded []byte, terminal bool
 	if err = readHelperFrame(file, &response); err != nil || response.Version != 1 {
 		return helperCanceled(ctx)
 	}
+	if response.Error != nil {
+		response.Error.ExitCode = response.ExitCode
+		if response.Error.ExitCode <= 0 {
+			response.Error.ExitCode = 3
+		}
+	} else if response.ExitCode != 0 {
+		return helperFailure()
+	}
 	return response.Error
 }
 

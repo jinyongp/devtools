@@ -26,8 +26,9 @@ type helperRequest struct {
 	Body    json.RawMessage `json:"body"`
 }
 type helperResponse struct {
-	Version int             `json:"version"`
-	Error   *protocol.Error `json:"error,omitempty"`
+	Version  int             `json:"version"`
+	Error    *protocol.Error `json:"error,omitempty"`
+	ExitCode int             `json:"error_exit_code,omitempty"`
 }
 type HelperOperation func(context.Context, string, json.RawMessage) *protocol.Error
 
@@ -303,7 +304,14 @@ func ServePipe(ctx context.Context, name string, operation HelperOperation) erro
 	go func() { defer close(watchDone); var extra [1]byte; _, _ = file.Read(extra[:]); cancel() }()
 	defer func() { file.Close(); <-watchDone }()
 	failure := operation(ctx, request.Kind, request.Body)
-	return writeHelperFrame(file, helperResponse{Version: 1, Error: failure})
+	exit := 0
+	if failure != nil {
+		exit = failure.ExitCode
+		if exit == 0 {
+			exit = 3
+		}
+	}
+	return writeHelperFrame(file, helperResponse{Version: 1, Error: failure, ExitCode: exit})
 }
 
 func acceptHelperPipe(ctx context.Context, pipe, process windows.Handle, identity winimage.Identity) error {

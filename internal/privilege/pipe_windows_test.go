@@ -43,6 +43,9 @@ func TestMain(m *testing.M) {
 			if input.Value == "reject" {
 				return protocol.NewError("request_conflict", "Explicit fixture rejection.", 3, nil)
 			}
+			if input.Value == "decline" {
+				return protocol.NewError("canceled", "Explicit fixture cancellation.", 130, nil)
+			}
 			if input.Value == "wait" {
 				<-ctx.Done()
 				return helperCanceled(ctx)
@@ -73,8 +76,11 @@ func TestWindowsConstrainedPipeRoundtripAndOperationError(t *testing.T) {
 	if failure := runPlatform(ctx, "trust", []byte(`{"value":"한글 🧪"}`), true, exe); failure != nil {
 		t.Fatalf("authenticated one-shot helper: %v", failure)
 	}
-	if failure := runPlatform(ctx, "trust", []byte(`{"value":"reject"}`), true, exe); failure == nil || failure.Code != "request_conflict" {
+	if failure := runPlatform(ctx, "trust", []byte(`{"value":"reject"}`), true, exe); failure == nil || failure.Code != "request_conflict" || failure.ExitCode != 3 {
 		t.Fatalf("operation error lost: %v", failure)
+	}
+	if failure := runPlatform(ctx, "trust", []byte(`{"value":"decline"}`), true, exe); failure == nil || failure.Code != "canceled" || failure.ExitCode != 130 {
+		t.Fatalf("operation cancellation exit lost: %+v", failure)
 	}
 }
 func TestWindowsConstrainedHelperCancellationAndBounds(t *testing.T) {

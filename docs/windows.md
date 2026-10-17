@@ -18,6 +18,8 @@ devtools version
 ```
 
 The installer picks x64 or ARM64 for your PC and adds devtools to your user PATH.
+Run the same command again to update an existing installation. Repeating it when
+the latest stable release is already installed also succeeds.
 No administrator access, Go, Python, Git Bash, or WSL required. Install your project's
 tools separately. Inside WSL, use the [Linux installation](install.md#macos-linux-and-wsl).
 

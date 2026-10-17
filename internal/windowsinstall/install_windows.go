@@ -98,9 +98,9 @@ func apply(ctx context.Context, options Options, invoked string, load func(conte
 		return nil, errors.New("invalid installation manifest")
 	}
 	var previous *manifest
-	if options.Action == "install" {
-		if exists {
-			return nil, errors.New("installation already exists; use devtools update")
+	if !exists {
+		if options.Action == "update" {
+			return nil, errors.New("update requires a standalone installation manifest")
 		}
 		if _, err := os.Lstat(filepath.Join(directory, "devtools.exe")); err == nil {
 			return nil, errors.New("foreign main executable already exists")
@@ -108,9 +108,6 @@ func apply(ctx context.Context, options Options, invoked string, load func(conte
 			return nil, err
 		}
 	} else {
-		if !exists {
-			return nil, errors.New("update requires a standalone installation manifest")
-		}
 		if err = e.require("devtools.exe", before.Main); err != nil {
 			return nil, err
 		}
@@ -119,21 +116,26 @@ func apply(ctx context.Context, options Options, invoked string, load func(conte
 				return nil, err
 			}
 		}
-		base := strings.ToLower(filepath.Base(invoked))
-		if base != "devtools.exe" && base != "dvt.exe" {
-			return nil, errors.New("update requires an owned installed executable")
+		// A bootstrap runs the verified staged candidate. Explicit CLI updates
+		// must still originate from an owned installed executable.
+		if options.Action == "update" {
+			base := strings.ToLower(filepath.Base(invoked))
+			if base != "devtools.exe" && base != "dvt.exe" {
+				return nil, errors.New("update requires an owned installed executable")
+			}
+			if base == "dvt.exe" && before.Alias == nil {
+				return nil, errors.New("alias is not owned by this installation")
+			}
+			actual, err := location.Canonical(invoked)
+			if err != nil {
+				return nil, err
+			}
+			expected, err := location.Canonical(filepath.Join(directory, base))
+			if err != nil || actual != expected {
+				return nil, errors.New("update invocation identity differs from installation")
+			}
 		}
-		if base == "dvt.exe" && before.Alias == nil {
-			return nil, errors.New("alias is not owned by this installation")
-		}
-		actual, err := location.Canonical(invoked)
-		if err != nil {
-			return nil, err
-		}
-		expected, err := location.Canonical(filepath.Join(directory, base))
-		if err != nil || actual != expected {
-			return nil, errors.New("update invocation identity differs from installation")
-		}
+		options.Action = "update"
 		previous = &before
 		if err = e.cleanupRetired(ctx, previous); err != nil {
 			return nil, err

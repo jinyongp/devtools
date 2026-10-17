@@ -215,6 +215,56 @@ func TestWindowsInstallCorruptJournalPreservesArtifacts(t *testing.T) {
 		assertOriginal(t, e, before)
 	}
 }
+
+func TestWindowsBootstrapRefusesModifiedOwnedImages(t *testing.T) {
+	for _, name := range []string{"devtools.exe", "dvt.exe"} {
+		t.Run(name, func(t *testing.T) {
+			e := fixtureEngine(t, filepath.Join(t.TempDir(), "bin"))
+			before := fixtureInstallation(t, e, true)
+			if err := e.root.WriteFile(context.Background(), name, []byte("foreign replacement"), true); err != nil {
+				t.Fatal(err)
+			}
+			_, err := apply(context.Background(), Options{Action: "install", BinDir: e.directory}, "", func(context.Context, string) ([]byte, string, error) {
+				t.Fatal("bootstrap loaded a replacement before verifying existing ownership")
+				return nil, "", nil
+			})
+			if err == nil {
+				t.Fatal("bootstrap accepted a modified owned image")
+			}
+			body, err := e.root.ReadFile(name, 1024)
+			if err != nil || string(body) != "foreign replacement" {
+				t.Fatal("bootstrap replaced a modified image", err)
+			}
+			var got manifest
+			if exists, err := e.readJSON(manifestName, &got); err != nil || !exists || !bytes.Equal(encode(got), encode(before)) {
+				t.Fatal("rejected bootstrap changed the manifest", err)
+			}
+		})
+	}
+}
+
+func TestWindowsExplicitUpdateRequiresOwnedInvocation(t *testing.T) {
+	for _, kind := range []string{"different name", "different directory", "unowned alias"} {
+		t.Run(kind, func(t *testing.T) {
+			e := fixtureEngine(t, filepath.Join(t.TempDir(), "bin"))
+			before := fixtureInstallation(t, e, kind != "unowned alias")
+			invoked := filepath.Join(e.directory, "copied.exe")
+			if kind == "different directory" {
+				invoked = filepath.Join(t.TempDir(), "devtools.exe")
+			} else if kind == "unowned alias" {
+				invoked = filepath.Join(e.directory, "dvt.exe")
+			}
+			_, err := apply(context.Background(), Options{Action: "update", BinDir: e.directory}, invoked, func(context.Context, string) ([]byte, string, error) {
+				t.Fatal("explicit update loaded a replacement from an unowned invocation")
+				return nil, "", nil
+			})
+			if err == nil {
+				t.Fatal("explicit update accepted an unowned invocation")
+			}
+			assertOriginal(t, e, before)
+		})
+	}
+}
 func TestWindowsInstallLockInteroperatesWithDotNetFileShareNone(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "bin")
 	e := fixtureEngine(t, directory)
@@ -258,12 +308,14 @@ func TestWindowsInstallConcurrentAndUnownedRootsFailBeforeDownload(t *testing.T)
 			t.Fatal(err)
 		}
 		defer lock.Close()
-		_, err = apply(context.Background(), Options{Action: "update", BinDir: directory}, filepath.Join(directory, "devtools.exe"), func(context.Context, string) ([]byte, string, error) {
-			t.Fatal("concurrent install downloaded")
-			return nil, "", nil
-		})
-		if err == nil {
-			t.Fatal("concurrent install acquired lock")
+		for _, action := range []string{"install", "update"} {
+			_, err = apply(context.Background(), Options{Action: action, BinDir: directory}, filepath.Join(directory, "devtools.exe"), func(context.Context, string) ([]byte, string, error) {
+				t.Fatal("concurrent install downloaded")
+				return nil, "", nil
+			})
+			if err == nil {
+				t.Fatal("concurrent install acquired lock", action)
+			}
 		}
 		assertOriginal(t, e, before)
 	})
@@ -287,12 +339,14 @@ func TestWindowsInstallConcurrentAndUnownedRootsFailBeforeDownload(t *testing.T)
 		if err := e.root.WriteFile(context.Background(), "devtools.exe", []byte("package managed"), false); err != nil {
 			t.Fatal(err)
 		}
-		_, err := apply(context.Background(), Options{Action: "update", BinDir: directory}, filepath.Join(directory, "devtools.exe"), func(context.Context, string) ([]byte, string, error) {
-			t.Fatal("unowned image downloaded")
-			return nil, "", nil
-		})
-		if err == nil {
-			t.Fatal("unowned package image adopted")
+		for _, action := range []string{"install", "update"} {
+			_, err := apply(context.Background(), Options{Action: action, BinDir: directory}, filepath.Join(directory, "devtools.exe"), func(context.Context, string) ([]byte, string, error) {
+				t.Fatal("unowned image downloaded")
+				return nil, "", nil
+			})
+			if err == nil {
+				t.Fatal("unowned package image adopted", action)
+			}
 		}
 		body, _ := e.root.ReadFile("devtools.exe", 100)
 		if string(body) != "package managed" {

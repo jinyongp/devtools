@@ -256,6 +256,9 @@ private data, 원자적 publish, corruption detection 계약을 보존한다. �
   설치 manifest에서 소유 hash/identity를 기록하며 외부 `dvt`가 있으면 기존 `skipped_conflict` 동작을 유지한다.
 - Windows updater는 Go 내부 구현으로 실행한다. `/bin/sh`를 호출하지 않는다. Unix installer 기반 update는 유지한다.
   Windows에서 실행 중인 image를 직접 덮어쓰지 않고 같은 volume의 고유 `.old.exe`로 rename 후 verified candidate를 publish한다.
+- Windows 설치 명령 재실행은 기존 standalone manifest와 main/alias 소유권을 확인한 뒤 같은 transaction으로
+  업데이트한다. 같은 버전 재실행도 성공한다. bootstrap은 검증한 staging candidate를 사용하고,
+  명시 CLI update의 installed executable 호출 정체 검증은 유지한다. 성공 action/안내는 install/update를 구분한다.
 - update 순서: install lock → manifest/identity 확인 → 다운로드·checksum/PE/version 검증 → private journal에
   `prepared` 기록 → devtools/dvt의 old backup 보존 → 각 새 이름 publish → 새 binary smoke → `committed` 기록 →
   응답. 일부 실패 시 기록한 old 파일로 복구한다. 복구 실패는 retained artifact와 `update_failed`를 반환한다.

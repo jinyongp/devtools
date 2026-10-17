@@ -18,6 +18,7 @@ irm https://jinyongp.dev/devtools/install.ps1 | iex
 
 설치 후 새 터미널에서 `devtools version`을 실행하세요. 설치기가 PC에 맞는 x64·ARM64를
 선택하고 사용자 PATH에 등록합니다. 관리자 권한은 필요하지 않습니다.
+이미 설치되어 있어도 같은 설치 명령을 다시 실행하면 업데이트됩니다.
 Windows 11 25H2·26H2를 지원합니다. 자세한 조건은 [Windows 안내](docs/windows.md)를 참고하세요.
 
 ### macOS / Linux / WSL

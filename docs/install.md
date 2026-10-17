@@ -25,6 +25,9 @@ LocalAppData in `Programs\devtools\bin`, and adds that directory to your user PA
 It runs as your normal user. See the [Windows guide](windows.md) for supported
 Windows editions, storage requirements, and troubleshooting.
 
+Run the same command again to update an existing installation to the latest stable
+release. Repeating it when that release is already installed also succeeds.
+
 ## macOS, Linux, and WSL
 
 With Homebrew:
@@ -121,7 +124,8 @@ For scripts that need machine-readable output, download the installer and pass `
 
 Success writes one JSON response to stdout. Failure writes a JSON error to stderr
 and exits with a nonzero status. Progress and getting-started messages are omitted
-in this mode. Regular devtools data commands continue to return JSON.
+in this mode. The response reports `data.action` as `install` for a new installation
+or `update` for an existing one. Regular devtools data commands continue to return JSON.
 
 ### Choose a release or use offline assets
 

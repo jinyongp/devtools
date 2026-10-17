@@ -107,19 +107,28 @@ irm https://jinyongp.dev/devtools/install.ps1 | iex
         Require (-not ((Get-Item -LiteralPath $alias).Attributes -band [IO.FileAttributes]::ReparsePoint)) 'Alias requires a symlink.'
         $manifest = Get-Content -LiteralPath (Join-Path $bin '.devtools-install.json') -Raw | ConvertFrom-Json
         Require ($manifest.main.index_low -ne $manifest.alias.index_low -or $manifest.main.index_high -ne $manifest.alias.index_high) 'Alias shares the main file identity.'
-        # Both invocations replace an image that is currently running.
-        $updated = Invoke-Json $alias @('update', '--version', '0.0.0-test.2', '--source', $releases)
-        Require ($updated.ok -and $updated.data.version -ceq '0.0.0-test.2' -and $updated.data.alias.status -eq 'unchanged') 'Alias-invoked native update failed.'
+        $bootstrapUpdate = Invoke-Text $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.2', '-Source', $releases, '-BinDir', $bin)
+        Require-HumanGuidance $bootstrapUpdate $bin
+        Require ($bootstrapUpdate.Contains('Updated devtools ')) 'Repeated installer did not explain the update.'
         $reported = Invoke-Json $main @('version')
-        Require ($reported.data.version -ceq '0.0.0-test.2' -and $reported.data.commit -ceq $Commit) 'Updated main identity mismatch.'
+        Require ($reported.data.version -ceq '0.0.0-test.2' -and $reported.data.commit -ceq $Commit) 'Repeated installer did not update the installed executable.'
+        $repeated = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Json', '-Version', '0.0.0-test.2', '-Source', $releases, '-BinDir', $bin)
+        Require ($repeated.ok -and $repeated.data.action -eq 'update' -and $repeated.data.version -ceq '0.0.0-test.2' -and $repeated.data.alias.status -eq 'unchanged') 'Same-version installer rerun failed or changed its owned alias.'
+        Require ([Environment]::GetEnvironmentVariable('Path', 'User') -ceq $registeredPath) 'Repeated installer duplicated or rewrote user PATH.'
+        Require ((Get-FileHash -Algorithm SHA256 -LiteralPath $main).Hash -ceq (Get-FileHash -Algorithm SHA256 -LiteralPath $alias).Hash) 'Repeated installer left different main and alias versions.'
+        # Both invocations replace an image that is currently running.
+        $updated = Invoke-Json $alias @('update', '--version', '0.0.0-test.1', '--source', $releases)
+        Require ($updated.ok -and $updated.data.version -ceq '0.0.0-test.1' -and $updated.data.alias.status -eq 'unchanged') 'Alias-invoked native update failed.'
+        $reported = Invoke-Json $main @('version')
+        Require ($reported.data.version -ceq '0.0.0-test.1' -and $reported.data.commit -ceq $Commit) 'Updated main identity mismatch.'
         $reported = Invoke-Json $alias @('version')
-        Require ($reported.data.version -ceq '0.0.0-test.2' -and $reported.data.commit -ceq $Commit) 'Updated alias identity mismatch.'
-        $updated = Invoke-Json $main @('update', '--version', '0.0.0-test.1', '--source', $releases)
-        Require ($updated.ok -and $updated.data.version -ceq '0.0.0-test.1') 'Main-invoked running-image update failed.'
+        Require ($reported.data.version -ceq '0.0.0-test.1' -and $reported.data.commit -ceq $Commit) 'Updated alias identity mismatch.'
+        $updated = Invoke-Json $main @('update', '--version', '0.0.0-test.2', '--source', $releases)
+        Require ($updated.ok -and $updated.data.version -ceq '0.0.0-test.2') 'Main-invoked running-image update failed.'
         # No runtime package manager or Unix shell is needed.
         $savedPath = $env:PATH
         try { $env:PATH = ''; $reported = Invoke-Json $alias @('version') } finally { $env:PATH = $savedPath }
-        Require ($reported.ok -and $reported.data.version -ceq '0.0.0-test.1') 'Standalone alias requires PATH dependencies.'
+        Require ($reported.ok -and $reported.data.version -ceq '0.0.0-test.2') 'Standalone alias requires PATH dependencies.'
         Require (-not [IO.File]::Exists((Join-Path $bin '.devtools-install-journal.json'))) 'Successful update left incomplete journal.'
         Require ([IO.File]::Exists((Join-Path $bin '.devtools-install.lock'))) 'Stable empty install lock was removed.'
         $bootstrapOwned = $true
@@ -127,12 +136,18 @@ irm https://jinyongp.dev/devtools/install.ps1 | iex
         Require-HumanGuidance $inline $bootstrapBin
         $inlineVersion = Invoke-Json (Join-Path $bootstrapBin 'devtools.exe') @('version')
         Require ($inlineVersion.ok -and $inline.Contains($inlineVersion.data.version)) 'Human bootstrap did not describe the installed release.'
+        # Upgrade an actual public stable installation with the candidate engine.
+        $legacyUpdate = Invoke-Text $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.2', '-Source', $releases)
+        Require-HumanGuidance $legacyUpdate $bootstrapBin
+        Require ($legacyUpdate.Contains('Updated devtools ')) 'Installer rejected or misreported an existing public stable installation.'
+        $legacyVersion = Invoke-Json (Join-Path $bootstrapBin 'devtools.exe') @('version')
+        Require ($legacyVersion.data.version -ceq '0.0.0-test.2' -and $legacyVersion.data.commit -ceq $Commit) 'Installer did not replace the public stable installation with the candidate.'
         $inlineEntries = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';'
         Require (@($inlineEntries | Where-Object { $_.TrimEnd('\') -ieq $bootstrapBin.TrimEnd('\') }).Count -eq 1) 'Inline bootstrap did not register its default directory.'
         Remove-Item -LiteralPath $bootstrapBin -Recurse -Force
         $bootstrapOwned = $false
         [Environment]::SetEnvironmentVariable('Path', $beforePath, 'User')
-        $results += @{ shell = $shell; shell_version = $shellVersion; arch = $Arch; emulated_x64 = ($shell -eq $emulatedShell); install = 'pass'; alias_update = 'pass'; main_update = 'pass'; default_user_path = 'pass'; path_idempotency = 'pass'; no_path_opt_out = 'pass'; inline_bootstrap = 'pass'; inline_release = $inlineVersion.data.version; human_output = $inline; no_path_output = $optOut; human_error = 'pass'; json_error = 'pass'; json_success = 'pass'; human_failure_output = $humanFailure; inline_installer_source = 'candidate download fixture'; inline_artifacts = 'public latest stable'; runtime_path_empty = 'pass' }
+        $results += @{ shell = $shell; shell_version = $shellVersion; arch = $Arch; emulated_x64 = ($shell -eq $emulatedShell); install = 'pass'; alias_update = 'pass'; main_update = 'pass'; default_user_path = 'pass'; path_idempotency = 'pass'; no_path_opt_out = 'pass'; inline_bootstrap = 'pass'; inline_release = $inlineVersion.data.version; human_output = $inline; no_path_output = $optOut; human_error = 'pass'; json_error = 'pass'; json_success = 'pass'; human_failure_output = $humanFailure; inline_installer_source = 'candidate download fixture'; inline_artifacts = 'public latest stable'; runtime_path_empty = 'pass'; bootstrap_update = 'pass'; same_version_reinstall = 'pass'; legacy_install_update = 'pass'; bootstrap_update_output = $bootstrapUpdate; legacy_update_output = $legacyUpdate }
     }
     $pathBefore = [Environment]::GetEnvironmentVariable('Path', 'User')
     $pathBin = Join-Path $root 'explicit PATH install/bin'

@@ -213,7 +213,7 @@ public static class DevtoolsInstallerNativeArchitecture {
     $request = @{ action = 'install'; bin_dir = $BinDir; version = $Version; external_alias = $externalAlias } | ConvertTo-Json -Compress
     $output = Invoke-Candidate $candidate '__windows-install' $request
     $result = $output | ConvertFrom-Json
-    if (-not $result.ok -or $result.data.action -ne 'install' -or $result.data.version -cne $Version) { throw 'Installation result mismatch.' }
+    if (-not $result.ok -or $result.data.action -notin @('install', 'update') -or $result.data.version -cne $Version) { throw 'Installation result mismatch.' }
     if (-not $BinDir) { $BinDir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\devtools\bin' }
     $BinDir = [IO.Path]::GetFullPath($BinDir)
     $phase = 'user_path'
@@ -228,7 +228,9 @@ public static class DevtoolsInstallerNativeArchitecture {
         Write-Utf8Json $output
     } else {
         Write-InstallerMessage ''
-        Write-InstallerMessage ('Installed devtools ' + $Version + '.')
+        $verb = 'Installed'
+        if ($result.data.action -eq 'update') { $verb = 'Updated' }
+        Write-InstallerMessage ($verb + ' devtools ' + $Version + '.')
         Write-InstallerMessage 'Manage environment variables, project commands, and development servers.'
         Write-InstallerMessage ''
         Write-InstallerMessage ('Location: ' + $BinDir)
@@ -240,7 +242,7 @@ public static class DevtoolsInstallerNativeArchitecture {
         }
         Write-InstallerMessage ''
         if ($AddToPath -and -not $NoPath) {
-            Write-InstallerMessage 'Added to your user PATH. Open a new PowerShell window, then run:'
+            Write-InstallerMessage 'Your user PATH is set. Open a new PowerShell window, then run:'
             Write-InstallerMessage '  devtools --help'
         } else {
             Write-InstallerMessage 'PATH was left unchanged. Run devtools directly:'

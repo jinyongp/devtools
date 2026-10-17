@@ -19,6 +19,7 @@ irm https://jinyongp.dev/devtools/install.ps1 | iex
 
 Open a new terminal, then run `devtools version`. The installer selects x64 or
 ARM64 for your PC and adds devtools to your user PATH. No administrator access needed.
+Run the same install command again to update an existing installation.
 Supports Windows 11 25H2/26H2; see the [Windows guide](docs/windows.md) for details.
 
 ### macOS / Linux / WSL

@@ -59,7 +59,11 @@ func TestMain(m *testing.M) {
 				func(ctx context.Context, r Record, runner process.Runner, output io.Writer) *protocol.Error {
 					exe, _ := os.Executable()
 					ctx = WithEnvironmentSelection(ctx, "actual", true)
-					ctx = process.WithReadyProbe(ctx, &project.ReadyProbe{Exec: []string{exe, "__w4d-probe"}, Timeout: "5s"})
+					probe := &project.ReadyProbe{Exec: []string{exe, "__w4d-probe"}, Timeout: "5s"}
+					if r.Command == "probe-tree" {
+						probe = &project.ReadyProbe{Exec: []string{exe, "__w4d-probe-tree", r.Directory}, Timeout: "1s"}
+					}
+					ctx = process.WithReadyProbe(ctx, probe)
 					args := []string{exe, "__w4d-app", r.Directory, r.Command}
 					if r.Command == "missing" {
 						args = []string{filepath.Join(r.Directory, "absent.exe")}
@@ -72,6 +76,28 @@ func TestMain(m *testing.M) {
 				os.Exit(92)
 			}
 			os.Exit(0)
+		case "__w4d-probe-tree", "__w4d-probe-leaf":
+			signal.Ignore(os.Interrupt)
+			name := "probe-root.pid"
+			if os.Args[1] == "__w4d-probe-leaf" {
+				name = "probe-child.pid"
+			}
+			if os.WriteFile(filepath.Join(os.Args[2], name), []byte(strconv.Itoa(os.Getpid())), 0600) != nil {
+				os.Exit(93)
+			}
+			if os.Args[1] == "__w4d-probe-tree" {
+				exe, _ := os.Executable()
+				child := exec.Command(exe, "__w4d-probe-leaf", os.Args[2])
+				child.Stdout = os.Stdout
+				child.Stderr = os.Stderr
+				if child.Start() != nil {
+					os.Exit(94)
+				}
+				go child.Wait()
+			}
+			for {
+				time.Sleep(time.Hour)
+			}
 		case "__w4d-probe":
 			os.Exit(0)
 		case "__w4d-app", "__w4d-child":
@@ -362,4 +388,42 @@ func TestWindowsSupervisorHandoffRejectsClosedFile(t *testing.T) {
 			t.Fatalf("invalid handoff %q accepted", argument)
 		}
 	}
+}
+
+func TestWindowsSupervisorReadinessTimeoutReapsProbeTreeOnly(t *testing.T) {
+	store, record, cmd := launchWindowsSupervisor(t, "probe-tree")
+	app := windowsObservedProcess(t, filepath.Join(record.Directory, "__w4d-app.pid"))
+	waitWindowsCondition(t, func() bool {
+		r, e := store.Status(context.Background(), record.ID)
+		return e == nil && r.State == "running"
+	})
+	type result struct {
+		record  Record
+		failure *protocol.Error
+	}
+	done := make(chan result, 1)
+	go func() { r, e := store.Check(context.Background(), record.ID); done <- result{r, e} }()
+	root := windowsObservedProcess(t, filepath.Join(record.Directory, "probe-root.pid"))
+	child := windowsObservedProcess(t, filepath.Join(record.Directory, "probe-child.pid"))
+	select {
+	case result := <-done:
+		if result.failure != nil || result.record.Readiness == nil || result.record.Readiness.Ready || result.record.Readiness.Reason != "probe_timeout" {
+			t.Fatalf("probe timeout: %+v %v", result.record, result.failure)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("probe timeout did not finish")
+	}
+	assertWindowsProcessExited(t, root)
+	assertWindowsProcessExited(t, child)
+	state, err := windows.WaitForSingleObject(app, 0)
+	if err != nil || state != uint32(windows.WAIT_TIMEOUT) {
+		t.Fatalf("probe timeout stopped application: %d %v", state, err)
+	}
+	if _, err := store.rpc(context.Background(), record.ID, "stop"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	assertWindowsProcessExited(t, app)
 }

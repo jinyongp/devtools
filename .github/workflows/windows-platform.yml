@@ -140,7 +140,7 @@ jobs:
 
       - name: Native detached dashboard and HTTP proxy
         run: |
-          & go test -json -count=1 -timeout 3m -run '^TestWindowsDetached' ./internal/dashboard ./internal/proxy | Tee-Object -FilePath detached-daemon-results.jsonl
+          & go test -json -count=1 -timeout 3m -run '^TestWindowsDetached|^TestWindowsProject' ./internal/dashboard ./internal/proxy ./internal/lifecycle | Tee-Object -FilePath detached-daemon-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native detached daemon contract failed' }
       - name: Test native console mode and redirected passphrase input
         run: |

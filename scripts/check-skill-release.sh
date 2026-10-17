@@ -45,9 +45,9 @@ if uvx --from skills-ref==0.1.1 agentskills validate "$scratch/invalid/devtools"
   exit 1
 fi
 
-mkdir -p "$scratch/tampered/devtools" "$scratch/tampered-release"
-cp skills/devtools/SKILL.md "$scratch/tampered/devtools/SKILL.md"
-printf '\n<!-- tampered -->\n' >> "$scratch/tampered/devtools/SKILL.md"
+mkdir -p "$scratch/tampered" "$scratch/tampered-release"
+cp -R skills/devtools "$scratch/tampered/devtools"
+printf '\n<!-- tampered -->\n' >> "$scratch/tampered/devtools/references/execution.md"
 tar -czf "$scratch/tampered-release/devtools-skill_0.0.0-test.tar.gz" -C "$scratch/tampered" devtools
 (
   cd "$scratch/tampered-release"
@@ -59,13 +59,16 @@ tar -czf "$scratch/tampered-release/devtools-skill_0.0.0-test.tar.gz" -C "$scrat
 )
 if sh scripts/verify-skill-package.sh \
   "$scratch/tampered-release/devtools-skill_0.0.0-test.tar.gz" \
-  "$scratch/tampered-release/devtools-skill_0.0.0-test.tar.gz.sha256" >/dev/null 2>&1; then
+  "$scratch/tampered-release/devtools-skill_0.0.0-test.tar.gz.sha256" >"$scratch/tampered-result" 2>&1; then
   echo 'Package verification accepted content that differs from the canonical skill.' >&2
   exit 1
 fi
+grep -F 'Packaged skill differs from the canonical source.' "$scratch/tampered-result" >/dev/null
 
-mkdir -p "$scratch/symlink/devtools" "$scratch/symlink-release"
-ln -s skills/devtools/SKILL.md "$scratch/symlink/devtools/SKILL.md"
+mkdir -p "$scratch/symlink" "$scratch/symlink-release"
+cp -R skills/devtools "$scratch/symlink/devtools"
+rm "$scratch/symlink/devtools/SKILL.md"
+ln -s /nonexistent/devtools/SKILL.md "$scratch/symlink/devtools/SKILL.md"
 tar -czf "$scratch/symlink-release/devtools-skill_0.0.0-test.tar.gz" -C "$scratch/symlink" devtools
 (
   cd "$scratch/symlink-release"
@@ -77,7 +80,8 @@ tar -czf "$scratch/symlink-release/devtools-skill_0.0.0-test.tar.gz" -C "$scratc
 )
 if sh scripts/verify-skill-package.sh \
   "$scratch/symlink-release/devtools-skill_0.0.0-test.tar.gz" \
-  "$scratch/symlink-release/devtools-skill_0.0.0-test.tar.gz.sha256" >/dev/null 2>&1; then
+  "$scratch/symlink-release/devtools-skill_0.0.0-test.tar.gz.sha256" >"$scratch/symlink-result" 2>&1; then
   echo 'Package verification accepted a symlink member.' >&2
   exit 1
 fi
+grep -F 'Skill archive contains a non-regular member.' "$scratch/symlink-result" >/dev/null

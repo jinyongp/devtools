@@ -7,7 +7,8 @@ Windows 네이티브 CLI를 추가하고 WSL 사용 환경을 개선한다. 구�
 이 문서는 **구현 전 설계**이며 Windows 지원이 출시됐다는 안내가 아니다.
 
 - 사용자 결정: 네이티브와 WSL 모두 개선한다. Windows ARM64를 첫 배포에 포함한다.
-- 검증 기준: GitHub Actions 실제 x64·ARM64 runner. Windows 10은 검증·지원 주장에 포함하지 않는다.
+- 지원 목표: Windows 11 25H2·26H2의 x64·ARM64와 WSL2. 최소 버전은 25H2이며 각 버전의 최신 누적 업데이트를 전제로 한다.
+- 검증 기준: GitHub Actions 실제 x64·ARM64 runner + 아래 Windows 11 x64 로컬 제품 gate. Windows 10은 공식 지원에서 제외하며 별도 self-hosted runner를 운영하지 않는다.
 - 소스 기준: `28601633c67483e187084ce65527ebac1b8716f3`.
 - 조사일: 2026-10-17. 실행 근거와 외부 자료는 [사전 조사 기록](windows-support/research.md)에 분리한다.
 - 제품 구현은 하지 않았다. standalone probe와 사전검증 workflow만 추가했다.
@@ -21,10 +22,29 @@ Windows 네이티브 CLI를 추가하고 WSL 사용 환경을 개선한다. 구�
 
 | 구분 | 첫 배포 계약 | 검증 환경 |
 | --- | --- | --- |
-| Windows x64 | Windows용 `devtools.exe`, 기존 CLI 기능, PowerShell 5.1/7 및 cmd 호출 | `windows-2025`의 실제 OS/image 기록. Server 검증을 모든 Windows 11 버전 검증으로 표현하지 않음 |
-| Windows ARM64 | 네이티브 ARM64 실행 파일. x64 에뮬레이션으로 대체하지 않음 | `windows-11-arm`, `GOHOSTARCH=arm64` 확인 |
+| Windows 11 x64 | 25H2·26H2, Windows용 `devtools.exe`, 기존 CLI 기능, PowerShell 5.1/7 및 cmd 호출 | `windows-2025` 자동 검증 + 실제 Windows 11 x64 로컬 제품 gate. Server와 client 결과를 별도로 기록 |
+| Windows 11 ARM64 | 25H2·26H2, 네이티브 ARM64 실행 파일. x64 에뮬레이션으로 대체하지 않음 | `windows-11-arm`, `GOHOSTARCH=arm64` 확인. runner의 실제 버전·build에 한정한 실행 근거 |
 | WSL2 | Linux 실행 파일·Linux 저장소 유지. Windows 브라우저 접근과 interop 진단 개선 | 실제 WSL2 보조 검증 + 기존 Linux CI. Linux CI를 WSL 네트워크 검증으로 표시하지 않음 |
 | 기존 OS | macOS·Linux 기능 및 저장 계약 보존 | 기존 release matrix |
+
+### 버전과 지원 주장의 경계
+
+최소 지원 버전은 **Windows 11 25H2 (build family 26200)**로 고정한다. 첫 배포의 지원 목표는
+25H2·26H2의 일반 배포판이며 최신 누적 업데이트를 전제로 한다. Microsoft의
+[버전 정보](https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information)에 따르면
+25H2는 build 26200, 26H2는 build 26300이다. 2026-10-17 기준 24H2 Home·Pro는 업데이트가 종료됐다.
+24H2와 그 이전 버전, LTSC·IoT 특수 배포판, Insider 및 26H1 전용 신규 장치 계열은 첫 지원 범위에 포함하지 않는다.
+이 최소 버전은 제품 지원 정책이며 필요한 Win32 API가 25H2에서 처음 생겼다는 뜻은 아니다.
+향후 Windows feature update는 자동으로 지원 목록에 추가하지 않고 제품 검증 근거와 함께 목록을 갱신한다.
+
+지원 목표와 실제 검증 조합을 구분한다. ARM64 Actions는 현재 25H2 build 26200,
+x64 로컬은 26H2 build 26300이며 x64 Actions는 Server 2025다.
+Windows Server는 자동 회귀 검증 환경으로만 사용하고 별도 제품 지원 대상으로 광고하지 않는다.
+CPU × Windows 버전의 모든 조합을 직접 실행했다는 보장은 하지 않는다. Windows 11 x64의
+25H2 호환성은 Server x64·Windows 11 ARM64·로컬 client 검증을 조합한 호환성 목표이며
+25H2 x64 직접 검증으로 표시하지 않는다. 이 경계를 release 지원 표에도 그대로 공개한다.
+Windows 10은 실행을 일부러 차단하는 기능을 추가하지 않되 공식 지원·검증 범위에서 제외한다.
+GitHub-hosted Windows 10 runner가 없으므로 Windows 10 PC·VM 및 self-hosted runner는 마련하지 않는다.
 
 Windows 10·WSL1·32비트 Windows·Windows 서비스 등록·로그인 시 자동 실행·다른 사용자로
 실행하는 UAC·SMB/UNC/OneDrive의 활성 private storage는 범위 밖이다. WSL 네트워크 모드나
@@ -285,7 +305,7 @@ fake provider로 소유권·충돌·종료를 검증하며 실제 외부 접속�
 | W5 | Winsock·hosts/trust·helper·HTTPS·provider adapter | W2,W4 | disposable runner OS trust/hosts 원복·오류·TLS/WS/H2 종료 통과 |
 | W6 | WSL interop 진단·Windows client trust/DNS 안내·경계 회귀 | W3,W5 | 실제 가능한 WSL 행과 문서 예제 검증. 미검증 행 명시 |
 | W7 | installer/updater·ZIP·dvt·project runner·PowerShell completion | W2,W3 | 두 architecture 설치→업데이트→rollback와 셸 completion 통과 |
-| W8 | release matrix·사용자 문서·Agent Skill·공개 schema 통합 | W4,W5,W6,W7 | 아래 최종 통합 gate, release publish=false artifact 검증 |
+| W8 | release matrix·사용자 문서·Agent Skill·공개 schema 통합 | W4,W5,W6,W7 | 아래 최종 통합 gate·Windows 11 x64 로컬 제품 gate, release publish=false artifact 검증 |
 
 W1과 W3는 독립 진행 가능하다. W7의 package runner는 W4와 병행 가능하다.
 W3의 독립 검증은 process package/fixture 기준이며 전체 CLI 통합에는 W1/W2의 결과를 함께 사용한다.
@@ -327,9 +347,52 @@ WSL NAT↔mirrored 전환은 현재 사용 중인 distro를 강제 shutdown하�
 전환 가능한 disposable 환경이 없으면 그 행은 미검증이다. GHA의 `wsl.exe` 존재나 WSL1 설치를
 WSL2 nested virtualization·실제 networking 검증으로 대신하지 않는다.
 
+### Windows 11 x64 로컬 제품 gate
+
+아래 검증은 **Windows를 처음 지원하는 release candidate의 필수 조건**이다. W8에서 최종 commit의
+packaged amd64 ZIP으로 실행한다. 이후 Windows installer/updater·console/process·권한/helper·trust·
+WSL 경계에 영향을 준 release candidate에서도 반복한다. 문서만 변경하거나 해당 경계가 바뀌지 않은
+릴리스는 이전 근거를 참조할 수 있으며, 재사용 시 기준 commit과 변경 영향 확인을 기록한다.
+별도 VM·self-hosted runner는 요구하지 않는다. 기존 Windows 11 x64 호스트(현재 26H2)를 사용한다.
+
+전제: 지원 목록에 있는 일반 배포판, NTFS의 disposable 사용자 작업 디렉터리,
+PowerShell 5.1·7과 cmd, 실제 console·browser, 실제 WSL2 NAT 환경을 준비한다.
+일반 CLI는 비상승 token으로 실행한다. 관리자 계정의 비상승 token도 이 검사에 사용할 수 있으며
+그 결과를 별도 표준 사용자 계정 검증으로 표현하지 않는다. UAC 검증만 같은 사용자의 상승에 동의한다.
+PS7이 없으면 제품 gate 실행 전에 설치해야 하며 PS5.1 결과로 대체하지 않는다.
+
+| 검사 | 동작 | 필수 결과 |
+| --- | --- | --- |
+| 설치·private data | 새 임시 설치 경로에 ZIP/installer 설치, `dvt`와 CLI 실행, 값·시크릿·profile round trip | 관리자 권한 없이 사용자 경로에 설치·저장, owner/SYSTEM private ACL, 기존 사용자 데이터 보존 |
+| 실제 셸·console | PS5.1/7/cmd 각각 공백·한글 경로, 빈 인자·metachar 및 batch 허용/거부 사례 실행; 비밀번호 입력 취소 | 문서의 argv 계약과 exit code 일치, 입력 echo·시크릿 log 없음, 취소 후 console mode 복원 |
+| process·daemon | managed process/project 시작 후 터미널 닫기, 새 터미널에서 조회·stop; supervisor 강제 종료 후 재시작 | 정상 managed 유지, crash 자손 정리, 중복 시작 없음, port·lease 회수 |
+| UAC·hosts | 기존 hosts 백업 후 전용 테스트 block 추가 요청에서 UAC 취소, 이어 같은 사용자 승인·제거 | 취소 시 변경 없음, 승인 시 지정 block만 변경, 종료 시 기존 내용 복구 |
+| trust·browser | 임시 CA를 CurrentUser에 추가해 browser에서 로컬 HTTPS와 dashboard 사용 후 제거 | 인증서 경고 없이 접속·값 수정 반영, 다른 인증서 보존, 테스트 fingerprint만 제거 |
+| update·rollback | packaged 이전/후보 artifact로 실행 중 업데이트, 기존 failure fixture로 중단·retry·rollback | 새 실행 파일·`dvt` 정상 실행, 실패 후 이전 실행 파일 복구, 데이터 보존·임시 backup/journal 수렴 |
+| WSL2 경계 | `/home`·`/mnt/c` 프로젝트, 공개 WSLENV canary opt-in, Windows browser→WSL IPv4·별도 trust 안내 확인 | Linux private data 유지, opt-in 변수만 전달, localhost 응답, Windows/WSL daemon·CA 독립; NAT 결과로 기록 |
+| 원복 | 테스트 process·설치·hosts block·CA·생성 파일 정리 후 비교 | 사용자 기존 hosts·trust·데이터 보존, 테스트 process/port 누수 없음 |
+
+각 행은 PASS/FAIL/NOT RUN과 실제 관찰을 기록한다. 첫 배포에서 FAIL·NOT RUN이 있으면
+Windows 지원 릴리스를 게시하지 않는다. 실패를 Linux/Server 또는 primitive 성공으로 대체하지 않는다.
+로컬 검증은 사람이 실행할 수 있는 절차이며 UAC 승인·browser 조작을 무인 CI 성공으로 표현하지 않는다.
+자동화 가능한 하위 검사는 기존 installed/fault fixture를 재사용하고 실제 desktop 관찰만 별도로 남긴다.
+
+근거는 `docs/windows-support/evidence/product/<full-commit>/windows11-amd64/`에 보관한다.
+`metadata.json`에 commit·ZIP SHA-256·OS edition/display version/build·CPU·token 상승 여부·
+셸/Go/WSL/browser 버전과 WSL networking mode를 기록하고, `results.md`에 행별 실행·예상/실제 결과와
+원복 결과를 남긴다. log에는 테스트용 공개 데이터만 사용하고 시크릿·private key를 포함하지 않는다.
+서로 다른 artifact의 검증을 합쳐 단일 후보가 통과했다고 표시하지 않는다.
+
+ARM64의 필수 제품 검증은 native Actions의 두 architecture gate 중 ARM64 행으로 고정한다.
+실제 ARM64 desktop UAC·browser 수동 검증은 추가 근거이며 첫 배포의 필수 장비 요건으로 늘리지 않는다.
+다른 사용자 ACL 거부는 disposable Actions fixture에서 별도 identity로 검사하고 로컬 비상승 검사와 구분한다.
+WSL mirrored·ARM64 WSL2·다른 사용자 UAC·실제 provider 계정 접속은 기존의 별도 검증 범위를 유지한다.
+
 ## 11. 배포·복구
 
 첫 배포 전 Windows installed suite와 두 architecture gate를 release job의 필수 dependency로 추가한다.
+Windows 11 x64 로컬 제품 gate의 동일 후보 artifact 근거도 게시 전에 확인한다.
+Actions green만으로 이 로컬 필수 조건을 충족했다고 판단하지 않는다.
 기존 macOS/Linux gate를 제거하지 않는다. artifact가 생성돼도 어느 필수 gate가 실패하면 태그·Release를
 게시하지 않는다. 기존 release의 `publish=false`로 installer·ZIP·metadata·Pages 파일을 먼저 확인한다.
 
@@ -344,7 +407,8 @@ Windows 최초 설치는 기존 Linux/WSL data를 찾거나 자동 migration하�
 
 설계와 OS primitive 검증은 별도 상태로 기록한다. 진행 상황은 다음과 같다.
 
-- [x] 네이티브·WSL·ARM64·GHA 기준 및 Windows 10 제외 범위 결정.
+- [x] Windows 11 25H2·26H2 x64/ARM64·WSL2 지원 목표, 최소 버전 25H2, Windows 10·self-hosted 운영 제외 결정.
+- [x] Server CI와 client 검증 구분, x64 로컬 제품 필수 항목·실행 시점·근거·실패 시 게시 금지 확정.
 - [x] 현재 소스·기존 계약·이식 대상 조사.
 - [x] 로컬 Windows x64 비상승 token에서 standalone primitive 검증.
 - [x] 실제 WSL2에서 기존 핵심 Go 테스트와 Windows interop/IPv4 loopback 보조 검증.
@@ -356,4 +420,6 @@ GitHub Actions [최종 실행](https://github.com/jinyongp/devtools/actions/runs
 두 architecture에서 16개 probe 기록을 확인했다. 근거는 저장소에도 보관했다.
 구현 후 제품 검증 gate는 별도이며 사전검증이 대체하지 않는다. 실제 UAC 대화상자·다른 사용자 ACL·
 전원 손실·WSL NAT/mirrored 전체 조합·외부 provider 계정 접속은 현재 primitive probe의 보장 범위가 아니다.
-이를 첫 배포 지원 주장에 포함하려면 해당 검증 근거를 별도로 추가한다.
+이 중 실제 x64 UAC·browser·WSL2 NAT는 위 로컬 제품 gate의 필수 완료조건이다.
+다른 미검증 조합은 지원 근거로 확대하지 않는다. 현재 남은 제품 검증은 실행할 완료조건이며
+지원 버전·검증 방식에 관한 미결 정책 선택은 없다. 구현이 계약을 반증하면 목적과 상태에 정한 재조사 절차를 따른다.

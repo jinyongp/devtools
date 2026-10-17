@@ -184,3 +184,25 @@ interactive UAC, 다른 사용자 접근, secret prompt, 실제 packaged updater
 WSL mirrored·WSL2 ARM64·물리 LAN peer·기업 VPN/보안 정책·Windows 10·전원 손실은
 이번 실행으로 검증하지 않았다. GHA의 WSL 설치 여부나 Linux native test 결과로 대신하지 않는다.
 Windows 10은 범위 밖이며 다른 미검증 조합을 광고 문구에 추가하려면 별도 근거가 필요하다.
+
+## 7. 지원 버전·검증 정책 확정 (2026-10-17)
+
+첫 배포 목표는 Windows 11 25H2·26H2 x64/ARM64이며 최소 버전은 25H2다.
+Microsoft의 [Windows 11 버전 정보](https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information)에서
+25H2/build 26200과 26H2/build 26300의 일반 배포 및 24H2 Home·Pro 업데이트 종료를 확인했다.
+ARM64 runner의 관찰 build 26200이 25H2, 로컬 x64 build 26300.9711이 26H2인 점과 맞는다.
+최소 버전 선택은 유지할 지원 범위에 관한 정책이며 특정 API의 최소 요구 버전으로부터 유도한 값은 아니다.
+Windows 11 24H2·그 이전 버전·26H1 전용 장치 계열·LTSC/IoT·Insider·향후 feature update를 자동 포함하지 않는다.
+
+[GitHub-hosted runner 목록](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)에는
+Windows 10이 없고 x64 Windows Server와 Windows 11 ARM64가 있다.
+[Self-hosted runner](https://docs.github.com/en/actions/reference/runners/self-hosted-runners)는 Windows 10을
+지원하지만 별도 PC/VM의 준비·운영이 필요하다. 이번 계획에서는 그 운영을 추가하지 않는다.
+Server 2025는 x64 자동 검증 환경이며 별도 제품 지원 약속은 아니다.
+
+Windows 11 x64 25H2 자체를 실행한 근거는 없으며 x64 26H2·Server x64·ARM64 25H2의
+조합으로 지원 목표를 검증하는 한계를 공개한다. 모든 CPU × OS 버전을 직접 검증했다는 주장은 하지 않는다.
+첫 배포의 실제 x64 client 검증은 계획의 [로컬 제품 gate](../windows-support-plan.md#windows-11-x64-로컬-제품-gate)로 고정했다.
+8개 필수 행, 동일 후보 commit/ZIP 근거, 원복과 실패 시 게시 금지를 규정했다.
+이 gate는 제품 구현 후 실행하며 현재 primitive 결과로 PASS 처리하지 않는다.
+현재 로컬에는 PS7도 없어 gate 실행 전 준비가 필요하다. 새 VM·self-hosted runner나 ARM64 물리 장비는 요구하지 않는다.

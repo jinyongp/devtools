@@ -1,0 +1,10 @@
+{
+  "powershell": "7.6.6",
+  "display_version": "25H2",
+  "version": "10.0.26200",
+  "commit": "30576fb05d9cdb7290630b70bddd4c06e06e0b5d",
+  "os": "Microsoft Windows 11 Enterprise",
+  "elevated": true,
+  "architecture": "arm64",
+  "build": "26200"
+}

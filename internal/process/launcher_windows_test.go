@@ -316,6 +316,21 @@ func windowsHandleCount(t *testing.T) uint32 {
 	return count
 }
 func TestWindowsOwnedLaunchFailureClosesHandles(t *testing.T) {
+	if os.Getenv("DEVTOOLS_HANDLE_COUNT_CHILD") != "1" {
+		exe, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, exe, "-test.run=^TestWindowsOwnedLaunchFailureClosesHandles$")
+		cmd.Env = Environment(os.Environ(), map[string]string{"DEVTOOLS_HANDLE_COUNT_CHILD": "1", "GOMAXPROCS": "1"})
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("isolated handle cleanup: %s %v", output, err)
+		}
+		return
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "invalid.exe")
 	if err := os.WriteFile(path, []byte("invalid executable"), 0600); err != nil {
@@ -327,9 +342,12 @@ func TestWindowsOwnedLaunchFailureClosesHandles(t *testing.T) {
 			t.Fatalf("invalid image: %d %v", code, e)
 		}
 	}
-	attempt()
-	before := windowsHandleCount(t)
+	// Warm process/pipe and runtime thread resources before measuring growth.
 	for range 20 {
+		attempt()
+	}
+	before := windowsHandleCount(t)
+	for range 100 {
 		attempt()
 	}
 	after := windowsHandleCount(t)

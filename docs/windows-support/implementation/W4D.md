@@ -20,3 +20,9 @@ Only successful actual application start and durable private record publication 
 | Dashboard and HTTP proxy | pending | Actual detached lifecycle, singleton/replay, listeners, auth and released sockets |
 | Unix callers and compatibility | pending | First affected Unix test suites pass; final checks pending |
 | Native x64/ARM64 evidence and limits | pending | Both native Actions runs required; no local Windows execution |
+
+## Review findings under verification
+
+The first ARM64 fixture read a PID file after creation but before its content write. Fixture PID publication now renames a completed file, so existence is a meaningful barrier; live logs also use an observable bounded readiness check. The next run passed all service/tree/readiness and daemon cases on both CPUs. Its real project scenario then exposed a fixture contract error: the partial retry omitted the initial capture=true option, correctly producing process_conflict for the reused peer. The scenario now preserves capture and diagnoses missing result items before dereferencing them. Product singleton option checks remain intact. The corrected scenario and whole native lifecycle suite require a final run.
+
+Unix full Go/vet, affected race and installed processes/project_lifecycle scenarios passed on the W4D implementation. W7I source work is separate and excluded from that evidence.

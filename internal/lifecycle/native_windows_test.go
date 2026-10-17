@@ -109,9 +109,9 @@ func TestWindowsProjectRealSupervisorsRetryRestartDownAndReadiness(t *testing.T)
 	if failure != nil || alive.State != "running" {
 		t.Fatalf("down touched peer: %+v %v", alive, failure)
 	}
-	delayed := lifecycle.Request{Action: lifecycle.ActionUp, Project: p, Commands: []string{"peer", "delayed"}, Timeout: 2 * time.Second, RequestID: tasks.ID()}
+	delayed := lifecycle.Request{Action: lifecycle.ActionUp, Project: p, Commands: []string{"peer", "delayed"}, Capture: &capture, Timeout: 2 * time.Second, RequestID: tasks.ID()}
 	partial, failure := manager.Apply(ctx, delayed)
-	if failure == nil || len(partial.Items) != 2 || partial.Items[0].Item.ID != peer || partial.Items[1].Item == nil {
+	if failure == nil || len(partial.Items) != 2 || partial.Items[0].Item == nil || partial.Items[0].Item.ID != peer || partial.Items[1].Item == nil {
 		t.Fatalf("partial readiness: %+v %v", partial, failure)
 	}
 	delayedID := partial.Items[1].Item.ID
@@ -123,7 +123,7 @@ func TestWindowsProjectRealSupervisorsRetryRestartDownAndReadiness(t *testing.T)
 		t.Fatal(err)
 	}
 	converged, failure := manager.Apply(ctx, delayed)
-	if failure != nil || !converged.Replayed || converged.Items[0].Item.ID != peer || converged.Items[1].Item.ID != delayedID || converged.Items[1].Status != "ready" {
+	if failure != nil || !converged.Replayed || len(converged.Items) != 2 || converged.Items[0].Item == nil || converged.Items[1].Item == nil || converged.Items[0].Item.ID != peer || converged.Items[1].Item.ID != delayedID || converged.Items[1].Status != "ready" {
 		t.Fatalf("partial retry: %+v %v", converged, failure)
 	}
 }

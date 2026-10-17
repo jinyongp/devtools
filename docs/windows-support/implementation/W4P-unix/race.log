@@ -1,0 +1,5 @@
+ok  	github.com/jinyongp/devtools/internal/process	1.024s
+ok  	github.com/jinyongp/devtools/internal/execution	1.122s
+ok  	github.com/jinyongp/devtools/internal/services	5.653s
+ok  	github.com/jinyongp/devtools/internal/cli	28.477s
+ok  	github.com/jinyongp/devtools/internal/proxy	15.262s

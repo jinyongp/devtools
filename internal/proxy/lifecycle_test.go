@@ -833,7 +833,18 @@ func TestManagerClosesHijackedConnectionsBeforeStopReturns(t *testing.T) {
 
 func TestManagerStartsWithFreshDeadlineAfterTransitionLockContention(t *testing.T) {
 	manager := testManager(t)
-	manager.readyTimeout = 100 * time.Millisecond
+	// This checks the persisted deadline anchor, not whether real storage/RPC
+	// startup completes within 100 ms on a loaded host.
+	manager.readyTimeout = 5 * time.Second
+	requestPersisted := make(chan struct{})
+	var persistedOnce sync.Once
+	manager.commit = func(path string, value any) error {
+		err := tasks.WritePrivate(path, value)
+		if entry, ok := value.(receipt); err == nil && ok && !entry.Done && entry.AttemptID == "" {
+			persistedOnce.Do(func() { close(requestPersisted) })
+		}
+		return err
+	}
 	manager.Spawn = func(_ string, attemptID string) error {
 		go func() { _ = manager.Serve(context.Background(), attemptID) }()
 		return nil
@@ -842,23 +853,41 @@ func TestManagerStartsWithFreshDeadlineAfterTransitionLockContention(t *testing.
 	if lockErr != nil {
 		t.Fatal(lockErr)
 	}
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(release)
 	port := testPort()
 	result := make(chan struct {
 		status Status
 		err    *protocol.Error
 	}, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	go func() {
-		status, err := manager.Apply(context.Background(), Request{Action: "start", Port: &port, RequestID: "81818181-8181-4181-8181-818181818181"})
+		status, err := manager.Apply(ctx, Request{Action: "start", Port: &port, RequestID: "81818181-8181-4181-8181-818181818181"})
 		result <- struct {
 			status Status
 			err    *protocol.Error
 		}{status, err}
 	}()
-	time.Sleep(150 * time.Millisecond)
-	release()
+	select {
+	case <-requestPersisted:
+	case <-ctx.Done():
+		t.Fatal("start request never persisted")
+	}
+	select {
+	case started := <-result:
+		t.Fatalf("start returned while transition lock was held: %+v %v", started.status, started.err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	releasedAt := time.Now()
+	releaseOnce.Do(release)
 	started := <-result
 	if started.err != nil || !started.status.Running {
-		t.Fatalf("contended start = %+v %v", started.status, started.err)
+		t.Fatalf("contended start = %+v error=%#v", started.status, started.err)
+	}
+	record, readErr := manager.readRecord()
+	if readErr != nil || record.CreatedAt.Before(releasedAt) {
+		t.Fatalf("startup deadline includes transition lock wait: record=%+v releasedAt=%s error=%v", record, releasedAt, readErr)
 	}
 	if _, err := manager.Apply(context.Background(), Request{Action: "stop", RequestID: "82828282-8282-4282-8282-828282828282"}); err != nil {
 		t.Fatal(err)

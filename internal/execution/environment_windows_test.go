@@ -27,7 +27,7 @@ func TestWindowsCaseCollisionPreventsSpawn(t *testing.T) {
 func TestWindowsCaseCollisionPreventsPortPreparation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "registry")
 	command := Command{Bind: map[string]project.Binding{"Path": {}, "PATH": {}}}
-	_, e := prepareResolved(context.Background(), command, nil, Dependencies{Ports: ports.Store{Directory: path}}, false, true)
+	_, e := prepareResolved(context.Background(), command, nil, Dependencies{Ports: ports.Store{Directory: path}}, preparationOptions{injectValues: true})
 	if e == nil || e.Code != "invalid_argument" {
 		t.Fatalf("case collision was not diagnosed before port preparation: %v", e)
 	}

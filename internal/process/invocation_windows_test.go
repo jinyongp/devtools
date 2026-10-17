@@ -174,11 +174,11 @@ func TestWindowsExplicitPowerShellAndStreams(t *testing.T) {
 		t.Fatalf("streams/exit: %d %v %q %q", code, e, &out, &diagnostic)
 	}
 }
-func TestWindowsCancelledDirectChild(t *testing.T) {
+func TestWindowsCancelledBeforeCreateProcess(t *testing.T) {
 	dir, child := windowsChild(t)
 	env := Environment(os.Environ(), map[string]string{"DEVTOOLS_ARGV_CHILD": "sleep"})
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 	code, e := Execute(ctx, []string{child, "-test.run=TestWindowsArgvChild"}, dir, env, nil, io.Discard, io.Discard)
 	if e != nil || code != 130 {
 		t.Fatalf("cancel: %d %v", code, e)

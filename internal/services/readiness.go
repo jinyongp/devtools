@@ -20,6 +20,16 @@ type Readiness struct {
 func runProbe(ctx context.Context, p project.ReadyProbe, dir string, env []string) Readiness {
 	ctx, cancel := context.WithTimeout(ctx, p.Duration())
 	defer cancel()
+	if ctx.Err() != nil {
+		return Readiness{CheckedAt: time.Now().UTC(), Reason: "probe_timeout"}
+	}
+	if err := process.ValidateManaged(p.Exec, dir, env); err != nil {
+		reason := "probe_execution_failed"
+		if ctx.Err() != nil {
+			reason = "probe_timeout"
+		}
+		return Readiness{CheckedAt: time.Now().UTC(), Reason: reason}
+	}
 	code, err := process.Execute(ctx, p.Exec, dir, env, nil, io.Discard, io.Discard)
 	r := Readiness{CheckedAt: time.Now().UTC(), Reason: "probe_failed"}
 	if ctx.Err() != nil {

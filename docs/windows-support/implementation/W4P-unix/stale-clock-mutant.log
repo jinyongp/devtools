@@ -1,0 +1,5 @@
+--- FAIL: TestManagerStartsWithFreshDeadlineAfterTransitionLockContention (0.61s)
+    lifecycle_test.go:890: startup deadline includes transition lock wait: record={CreatedAt:2026-10-17 06:06:20.6197298 +0000 UTC AttemptID:64e5fc55681afdd0ed6246b0f7497373 RequestID:81818181-8181-4181-8181-818181818181 State:running StartedAt:2026-10-17 06:06:21.058117721 +0000 UTC EndedAt:<nil> Reason:} releasedAt=2026-10-17 15:06:20.769930864 +0900 KST m=+0.215711487 error=<nil>
+FAIL
+FAIL	github.com/jinyongp/devtools/internal/proxy	0.619s
+FAIL

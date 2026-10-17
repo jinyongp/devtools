@@ -7,10 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
+
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 )
@@ -91,7 +92,7 @@ func taskHeadBytes(profile, generation string) ([]byte, error) {
 }
 
 func decodeOnePrivate(path string, value any) error {
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}
@@ -113,7 +114,7 @@ func decodeOnePrivate(path string, value any) error {
 
 func readV3Marker(path, profile string) (taskV3Marker, bool, error) {
 	var marker taskV3Marker
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
 	if err != nil {
 		return marker, false, err
 	}

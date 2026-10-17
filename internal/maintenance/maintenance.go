@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 // Root supports domain stores as well as standalone stores used by callers.
@@ -26,7 +26,7 @@ func Acquire(ctx context.Context, root string) (func(), error) {
 
 // Read accepts only private regular files and bounds allocation.
 func Read(path string, limit int64) ([]byte, error) {
-	f, e := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	f, e := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
 	if e != nil {
 		return nil, e
 	}

@@ -8,10 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"syscall"
-	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -90,52 +89,8 @@ func privateLogDirectory(path string) error {
 	return nil
 }
 
-func acquireLogLock(ctx context.Context, logPath string, exclusive bool) (func(), error) {
-	dir := filepath.Dir(logPath)
-	if err := privateLogDirectory(dir); err != nil {
-		return nil, err
-	}
-	lockPath := logPath + ".lock"
-	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := privateLogFile(file); err != nil {
-		_ = file.Close()
-		return nil, err
-	}
-	mode := syscall.LOCK_SH | syscall.LOCK_NB
-	if exclusive {
-		mode = syscall.LOCK_EX | syscall.LOCK_NB
-	}
-	for {
-		if ctx.Err() != nil {
-			_ = file.Close()
-			return nil, ctx.Err()
-		}
-		err = syscall.Flock(int(file.Fd()), mode)
-		if err == nil {
-			break
-		}
-		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EINTR) {
-			_ = file.Close()
-			return nil, err
-		}
-		select {
-		case <-ctx.Done():
-			_ = file.Close()
-			return nil, ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-	return func() {
-		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
-		_ = file.Close()
-	}, nil
-}
-
 func readPhysicalLog(path string, stats *logIOStats) ([]byte, bool, error) {
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, false, nil
 	}
@@ -162,7 +117,7 @@ func readPhysicalLog(path string, stats *logIOStats) ([]byte, bool, error) {
 }
 
 func physicalLogSize(path string) (int64, bool, error) {
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		return 0, false, nil
 	}
@@ -188,7 +143,7 @@ func logicalTail(body []byte) []byte {
 }
 
 func syncAppend(path string, payload []byte) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	file, err := platformfs.OpenNoFollow(path, os.O_WRONLY|os.O_APPEND, 0)
 	if err != nil {
 		return err
 	}

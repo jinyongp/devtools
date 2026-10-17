@@ -24,6 +24,9 @@ var version = "dev"
 var commit = "unknown"
 
 func main() {
+	if code := cli.InternalPlatformPreflight(os.Args[1:], os.Stderr); code != 0 {
+		os.Exit(code)
+	}
 	if len(os.Args) == 2 && os.Args[1] == "__trust-check" {
 		data, e := io.ReadAll(io.LimitReader(os.Stdin, 65536))
 		if e != nil {

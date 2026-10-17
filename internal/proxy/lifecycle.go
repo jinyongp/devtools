@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jinyongp/devtools/internal/process"
 	"io"
 	"net"
 	"net/http"
@@ -19,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/expose"
@@ -897,8 +897,8 @@ func spawnProxyWithRoot(data, attemptID, root string) error {
 	if root != "" {
 		command.Env = append(os.Environ(), "DEVTOOLS_ISOLATED_ROOT="+root)
 	}
-	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := command.Start(); err != nil {
+
+	if err := process.StartDetached(command); err != nil {
 		return err
 	}
 	go func() { _ = command.Wait() }()

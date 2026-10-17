@@ -111,6 +111,54 @@ func TestWindowsOpenFilePinsParentAfterRootClose(t *testing.T) {
 	}
 }
 
+func TestWindowsUnsafeTargetIsNotTruncatedOrReplaced(t *testing.T) {
+	root := testRoot(t)
+	if err := root.WriteFile(context.Background(), "state", []byte("old"), false); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root.path, "state")
+	sd, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;WD)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	acl, _, err := sd.DACL()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := root.OpenFile("state", os.O_WRONLY|os.O_TRUNC); err == nil {
+		f.Close()
+		t.Fatal("insecure target truncated")
+	}
+	if err = root.WriteFile(context.Background(), "state", []byte("new"), true); err == nil {
+		t.Fatal("insecure target replaced")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "old" {
+		t.Fatalf("insecure original was changed: %q %v", data, err)
+	}
+}
+func TestWindowsHardLinkCannotBypassPrivateFileCheck(t *testing.T) {
+	root := testRoot(t)
+	if err := root.WriteFile(context.Background(), "state", []byte("old"), false); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(t.TempDir(), "outside")
+	if err := os.Link(filepath.Join(root.path, "state"), alias); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := root.OpenFile("state", os.O_WRONLY|os.O_TRUNC); err == nil {
+		f.Close()
+		t.Fatal("multi-link private file accepted")
+	}
+	data, err := os.ReadFile(alias)
+	if err != nil || string(data) != "old" {
+		t.Fatalf("outside link changed: %q %v", data, err)
+	}
+}
+
 // The hosted disposable runner supplies a temporary standard account. Local
 // non-admin runs can omit it; the Windows boundary CI always requires this check.
 func TestWindowsOtherIdentityDenied(t *testing.T) {

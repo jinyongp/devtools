@@ -6,9 +6,9 @@ import (
 	"errors"
 	"io"
 	"os"
-	"syscall"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -60,7 +60,7 @@ func privateFile(file *os.File) bool {
 }
 
 func (s Store) readPath(path string) (*State, *protocol.Error) {
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
 	if err != nil {
 		return nil, storageError()
 	}

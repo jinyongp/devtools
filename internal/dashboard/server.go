@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jinyongp/devtools/internal/process"
 	"io"
 	"net"
 	"net/http"
@@ -20,7 +21,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/ports"
@@ -164,8 +164,8 @@ func ManageWithRoot(ctx context.Context, action, cache, data, profile, isolatedR
 		if isolatedRoot != "" {
 			cmd.Env = append(os.Environ(), "DEVTOOLS_ISOLATED_ROOT="+isolatedRoot)
 		}
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-		if e = cmd.Start(); e != nil {
+
+		if e = process.StartDetached(cmd); e != nil {
 			return nil, fail()
 		}
 		go func() { _ = cmd.Wait() }()

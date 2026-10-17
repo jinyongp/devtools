@@ -9,10 +9,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -70,7 +70,7 @@ func PrivateDir(path string) error {
 	return nil
 }
 func ReadPrivate(path string, v any) error {
-	f, e := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	f, e := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
 	if e != nil {
 		return e
 	}

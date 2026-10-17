@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jinyongp/devtools/internal/process"
 	"io"
 	"net/http"
 	"net/url"
@@ -18,7 +19,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/archiveproof"
@@ -887,9 +887,9 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		cmd.Env = append(os.Environ(), "DEVTOOLS_ISOLATED_ROOT="+r.IsolatedRoot)
 	}
 	cmd.Dir = p.Root
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+
 	cmd.ExtraFiles = []*os.File{lease.file}
-	if err = cmd.Start(); err != nil {
+	if err = process.StartDetached(cmd); err != nil {
 		now := time.Now().UTC()
 		r.EndedAt = &now
 		r.State = "failed"

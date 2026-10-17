@@ -269,6 +269,9 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		}
 		return 0
 	}
+	if err := platformCommand(selected.Name); err != nil {
+		return fail(err)
+	}
 	if rootPrefix != "" && request.Options["isolated-root"] != "" {
 		return fail(argumentError("Specify the isolation root once.", "isolated-root"))
 	}

@@ -7,11 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 const transactionVersion = 2
@@ -174,7 +174,7 @@ func createTransactionDirectories(root, id string) (string, string, error) {
 }
 
 func copyPrivateFile(source, destination string) (int64, string, error) {
-	src, err := os.OpenFile(source, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	src, err := platformfs.OpenNoFollow(source, os.O_RDONLY, 0)
 	if err != nil {
 		return 0, "", err
 	}
@@ -182,7 +182,7 @@ func copyPrivateFile(source, destination string) (int64, string, error) {
 	if _, err := privateFileInfo(src); err != nil {
 		return 0, "", err
 	}
-	dst, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
+	dst, err := platformfs.OpenNoFollow(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return 0, "", err
 	}
@@ -215,7 +215,7 @@ func verifyBeforeImage(transactionDir string, entry transactionEntry) error {
 		return errors.New("invalid before image path")
 	}
 	path := filepath.Join(transactionDir, "before", entry.BeforePath)
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}
@@ -240,7 +240,7 @@ func restorePrivateFile(source, target string) error {
 	}
 	tempPath := temp.Name()
 	defer os.Remove(tempPath)
-	src, err := os.OpenFile(source, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	src, err := platformfs.OpenNoFollow(source, os.O_RDONLY, 0)
 	if err != nil {
 		_ = temp.Close()
 		return err

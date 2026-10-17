@@ -7,10 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"filippo.io/age"
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/platformfs"
 )
 
 const (
@@ -112,7 +112,7 @@ func syncDirectory(path string) error {
 }
 
 func stageIdentity(path string, identity *age.X25519Identity) error {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
+	file, err := platformfs.OpenNoFollow(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}

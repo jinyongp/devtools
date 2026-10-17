@@ -5,17 +5,15 @@ on:
   push:
     paths:
       - .github/workflows/windows-platform.yml
-      - internal/platformfs/**
-      - internal/paths/**
-      - internal/location/**
+      - internal/**
+      - cmd/devtools/**
       - go.mod
       - go.sum
   pull_request:
     paths:
       - .github/workflows/windows-platform.yml
-      - internal/platformfs/**
-      - internal/paths/**
-      - internal/location/**
+      - internal/**
+      - cmd/devtools/**
       - go.mod
       - go.sum
 
@@ -67,6 +65,21 @@ jobs:
             Remove-Item Env:DEVTOOLS_TEST_PASSWORD -ErrorAction SilentlyContinue
             if ($created) { Remove-LocalUser -Name $account }
           }
+      - name: Build native CLI and check explicit intermediate failures
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          & go build -o devtools.exe ./cmd/devtools
+          if ($LASTEXITCODE -ne 0) { throw 'Native CLI build failed' }
+          $version = (& .\devtools.exe version | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0 -or -not $version.ok) { throw 'Native version failed' }
+          $isolation = Join-Path $env:TEMP ('devtools-unimplemented-' + [guid]::NewGuid().ToString('N'))
+          & .\devtools.exe var list --profile windows-boundary --isolated-root $isolation 2> unsupported.json
+          if ($LASTEXITCODE -ne 3) { throw 'Unimplemented command was not rejected' }
+          $failure = Get-Content unsupported.json -Raw | ConvertFrom-Json
+          if ($failure.error.code -ne 'unsupported_platform' -or (Test-Path $isolation)) { throw 'Unsafe intermediate command behavior' }
+          & .\devtools.exe __dashboard-serve $isolation $isolation 2> unsupported-internal.json
+          if ($LASTEXITCODE -ne 3 -or (Test-Path $isolation)) { throw 'Internal daemon entry point was not rejected safely' }
       - name: Preserve boundary test results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

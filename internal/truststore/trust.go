@@ -15,10 +15,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
+
 	"time"
 
 	"github.com/jinyongp/devtools/internal/ca"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/privilege"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -136,7 +137,7 @@ func (s System) Apply(ctx context.Context, request Request) error {
 	} else if !errors.Is(e, os.ErrNotExist) {
 		return e
 	} else if request.Action == "trust" {
-		file, e := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0644)
+		file, e := platformfs.OpenNoFollow(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
 		if e != nil {
 			return e
 		}
@@ -163,7 +164,7 @@ func (s System) Apply(ctx context.Context, request Request) error {
 }
 
 func readRegular(path string) ([]byte, error) {
-	f, e := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	f, e := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
 	if e != nil {
 		return nil, e
 	}

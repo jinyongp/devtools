@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/jinyongp/devtools/internal/location"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,7 +30,7 @@ func TestIsolationFlagPrecedesEnvironmentAndDoesNotCreateReadPaths(t *testing.T)
 		t.Fatal(e)
 	}
 	p := envelope.Data.Paths
-	canonicalParent, e := filepath.EvalSymlinks(parent)
+	canonicalParent, e := location.Canonical(parent)
 	if e != nil {
 		t.Fatal(e)
 	}

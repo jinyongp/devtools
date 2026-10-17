@@ -52,6 +52,7 @@ type Command struct {
 }
 
 type App struct {
+	userPaths        func() (paths.Directories, error)
 	commands         []Command
 	passphrasePrompt func(context.Context, IO, string) (string, *protocol.Error)
 	dataDirectory    func() (string, *protocol.Error)

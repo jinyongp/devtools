@@ -1,25 +1,20 @@
 package execution
 
 import (
-	"os"
-	"os/exec"
+	"github.com/jinyongp/devtools/internal/platformfs"
+	"path/filepath"
 	"testing"
 )
 
 func privateTempDir(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	if err := os.Chmod(dir, 0700); err != nil {
-		t.Fatal(err)
-	}
-	return dir
-}
-
-func trueExecutable(t *testing.T) string {
-	t.Helper()
-	path, err := exec.LookPath("true")
+	dir := filepath.Join(t.TempDir(), "private")
+	root, err := platformfs.OpenRoot(dir, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return path
+	if err := root.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }

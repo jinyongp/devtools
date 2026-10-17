@@ -16,10 +16,7 @@ import (
 
 func TestMetadataAndVersionChecks(t *testing.T) {
 	dir := privateTempDir(t)
-	tool := filepath.Join(dir, "tool")
-	if e := os.WriteFile(tool, []byte("#!/bin/sh\necho 'tool 1.2.3 fixture-secret'\n"), 0700); e != nil {
-		t.Fatal(e)
-	}
+	tool := doctorVersionFixture(t, dir)
 	store := values.Store{Directory: filepath.Join(dir, "profiles"), Profile: "test"}
 	_, e := store.Update(context.Background(), func(s *values.State) (bool, *protocol.Error) {
 		if _, e := s.CreateEnv("dev"); e != nil {
@@ -37,7 +34,7 @@ func TestMetadataAndVersionChecks(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	in := Input{Directory: dir, Env: "dev", State: state, Inject: true, Requirements: project.Requirements{Tools: map[string]project.Tool{"tool": {Executable: "./tool", Version: "1.2.3"}}, Vars: []string{"PORT"}, Secs: []string{"TOKEN"}}}
+	in := Input{Directory: dir, Env: "dev", State: state, Inject: true, Requirements: project.Requirements{Tools: map[string]project.Tool{"tool": {Executable: "./" + filepath.Base(tool), Version: "1.2.3"}}, Vars: []string{"PORT"}, Secs: []string{"TOKEN"}}}
 	checks := CheckRequirements(context.Background(), in)
 	for _, c := range checks {
 		if c.Status != "pass" {
@@ -53,7 +50,7 @@ func TestMetadataAndVersionChecks(t *testing.T) {
 	if checks[len(checks)-1].Status != "fail" {
 		t.Fatal("env-only secret treated as common")
 	}
-	in.Requirements.Tools["tool"] = project.Tool{Executable: "./tool", Version: "1.2.30"}
+	in.Requirements.Tools["tool"] = project.Tool{Executable: "./" + filepath.Base(tool), Version: "1.2.30"}
 	checks = CheckRequirements(context.Background(), in)
 	if checks[0].Status != "fail" {
 		t.Fatal("prefix version accepted")

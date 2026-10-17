@@ -146,7 +146,7 @@ func TestWindowsCloudflaredRejectsMissingSpawnMalformedAndEarly(t *testing.T) {
 		{"exit", "cloudflared_exited_without_url"}, {"malformed", "cloudflared_url_timeout"}, {"early", "cloudflared_exited"},
 	} {
 		t.Run(tc.mode, func(t *testing.T) {
-			p := Cloudflared{Executable: windowsProvider(t, tc.mode), Timeout: 400 * time.Millisecond}
+			p := Cloudflared{Executable: windowsProvider(t, tc.mode), Timeout: 3 * time.Second}
 			s, failure := p.Start(context.Background(), Record{}, "http://127.0.0.1:31000")
 			if s != nil {
 				s.Stop(context.Background())

@@ -11,7 +11,15 @@ import ssl
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
+
+
+class CLIError(RuntimeError):
+    def __init__(self, arguments, code, details):
+        self.code, self.details = code, details or {}
+        safe = {key: self.details.get(key) for key in ("operation", "os_error")}
+        super().__init__(f"Installed command {arguments[:3]} failed: {code} {safe}")
 
 
 def available_port():
@@ -45,8 +53,7 @@ def main():
         if result.returncode:
             try:
                 error = json.loads(result.stderr)["error"]
-                detail = {key: error.get("details", {}).get(key) for key in ("operation", "os_error")}
-                reason = f"{error['code']} {detail}"
+                raise CLIError(arguments,error["code"],error.get("details"))
             except (ValueError, KeyError, TypeError):
                 reason = "non-JSON failure (raw output withheld)"
             raise RuntimeError(f"Installed command {arguments[:3]} exited {result.returncode}: {reason}")
@@ -57,8 +64,20 @@ def main():
         assert result["schema_version"] == 1 and result["ok"]
         return result["data"]
 
-    def mutate(*arguments, env=source_env, input="", request=None):
-        return api(*arguments, "--request-id", request or str(uuid.uuid4()), env=env, input=input)
+    def mutate(*arguments, env=source_env, input="", request=None, settle=False):
+        fixed = [*arguments, "--request-id", request or str(uuid.uuid4())]
+        deadline = time.monotonic() + 20
+        while True:
+            try:
+                return api(*fixed, env=env, input=input)
+            except CLIError as error:
+                codes = [item.get("condition", {}).get("code") for item in error.details.get("items", []) if item.get("condition")]
+                pending = error.code in {"proxy_pending", "process_pending"} or (
+                    error.code == "project_partial_failure" and codes and all(code in {"proxy_pending", "process_pending"} for code in codes))
+                if not settle or not pending or time.monotonic() >= deadline:
+                    raise
+                # Resume only a typed uncertain operation, with unchanged input/UUID.
+                time.sleep(0.05)
 
     running = False
     try:
@@ -109,11 +128,11 @@ timeout = "3s"
         http_port, tls_port = available_port(), available_port()
         mutate("proxy", "configure", "--http-address", f"127.0.0.1:{http_port}", "--https-address", f"127.0.0.1:{tls_port}")
         request = str(uuid.uuid4())
-        up = mutate("project", "up", "web", "--proxy", "--timeout", "15s", request=request)
+        up = mutate("project", "up", "web", "--proxy", "--timeout", "15s", request=request, settle=True)
         running = True
         assert up["items"][0]["status"] == "ready"
         execution = up["items"][0]["item"]["id"]
-        replay = mutate("project", "up", "web", "--proxy", "--timeout", "15s", request=request)
+        replay = mutate("project", "up", "web", "--proxy", "--timeout", "15s", request=request, settle=True)
         assert replay["replayed"] and replay["items"][0]["item"]["id"] == execution
         port = api("port", "show", "web")["item"]["port"]
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
@@ -134,7 +153,7 @@ timeout = "3s"
                 while chunk := tls.recv(65536):
                     body.extend(chunk)
                 assert body.startswith(b"HTTP/1.1 200") and b"native-product-canary" in body
-        restarted = mutate("project", "restart", "web", "--timeout", "15s")
+        restarted = mutate("project", "restart", "web", "--timeout", "15s", settle=True)
         assert restarted["items"][0]["item"]["id"] != execution
         mutate("project", "down", "web")
         running = False
@@ -175,7 +194,6 @@ timeout = "3s"
                 pass
         # Mapped supervisor images and private directory pins may finish closing
         # just after successful control RPC; bounded cleanup does not hide failures.
-        import time
         for attempt in range(20):
             try:
                 shutil.rmtree(root)

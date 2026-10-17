@@ -375,6 +375,9 @@ func (a *App) registerTasks() {
 	}
 }
 func taskInput(ctx context.Context, streams IO, r Request) (string, *protocol.Error) {
+	if ctx.Err() != nil {
+		return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
+	}
 	if r.Options["file"] != "" && r.Options["stdin"] == "true" {
 		return "", argumentError("Choose file or stdin.", "")
 	}
@@ -400,6 +403,17 @@ func taskInput(ctx context.Context, streams IO, r Request) (string, *protocol.Er
 		}
 		if info.Mode()&os.ModeNamedPipe != 0 {
 			cancelablePipe = input
+		}
+	}
+	if cancelablePipe != nil {
+		if body, err, handled := readTaskPipe(ctx, cancelablePipe, (2<<20)+1); handled {
+			if ctx.Err() != nil {
+				return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
+			}
+			if err != nil {
+				return "", argumentError("Cannot read JSON input.", "")
+			}
+			return string(body), nil
 		}
 	}
 	type readResult struct {

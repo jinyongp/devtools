@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 import uuid
+from urllib.parse import urlsplit
 
 
 class CLIError(RuntimeError):
@@ -48,8 +49,8 @@ def main():
     steps = []
 
     def raw(arguments, env=source_env, input="", timeout=40):
-        result = subprocess.run([str(binary), *arguments], cwd=project, env=env, input=input,
-                                text=True, encoding="utf-8", capture_output=True, timeout=timeout)
+        result = subprocess.run([str(binary), *arguments], cwd=project, env=env, input=input.encode("utf-8"),
+                                capture_output=True, timeout=timeout)
         if result.returncode:
             try:
                 error = json.loads(result.stderr)["error"]
@@ -57,7 +58,7 @@ def main():
             except (ValueError, KeyError, TypeError):
                 reason = "non-JSON failure (raw output withheld)"
             raise RuntimeError(f"Installed command {arguments[:3]} exited {result.returncode}: {reason}")
-        return result.stdout
+        return result.stdout.decode("utf-8")
 
     def api(*arguments, env=source_env, input=""):
         result = json.loads(raw(list(arguments), env=env, input=input))
@@ -71,7 +72,7 @@ def main():
             try:
                 return api(*fixed, env=env, input=input)
             except CLIError as error:
-                codes = [item.get("condition", {}).get("code") for item in error.details.get("items", []) if item.get("condition")]
+                codes = [item.get("condition", {}).get("code") for item in (error.details.get("items") or []) if item.get("condition")]
                 pending = error.code in {"proxy_pending", "process_pending"} or (
                     error.code == "project_partial_failure" and codes and all(code in {"proxy_pending", "process_pending"} for code in codes))
                 if not settle or not pending or time.monotonic() >= deadline:
@@ -173,7 +174,8 @@ timeout = "3s"
         assert mutate(*base, "--apply", preview["digest"], env=target_env, input=passphrase, request=request)["replayed"]
         assert api("var", "get", "MESSAGE", env=target_env)["value"] == "portable-public-canary"
         assert api("task", "show", task, env=target_env)["item"]["id"] == task
-        raw(["run", "--", node, "-e", "process.exit(process.env.TOKEN==='synthetic-secret-canary'?0:1)"], env=target_env)
+        raw(["run", "--", node, "-e", "process.exit(process.env.TOKEN===process.env.DEVTOOLS_TEST_EXPECTED_TOKEN?0:1)"],
+            env=dict(target_env, DEVTOOLS_TEST_EXPECTED_TOKEN="synthetic-secret-canary\n"))
         assert api("backup", "status", env=target_env)["item"]["configured"] is False
         assert api("diagnostics")["ready"]
         steps.append("encrypted_profile_transfer_preview_apply_retry")
@@ -192,6 +194,24 @@ timeout = "3s"
                 mutate("proxy", "stop")
             except Exception:
                 pass
+        # Listener stop intentionally leaves the per-user controller alive. End
+        # only this owned isolation's daemon via its authenticated private RPC;
+        # never enumerate/kill PIDs or infer ownership from executable names.
+        control_path = root / "source" / "data" / "proxy" / "control.json"
+        if control_path.is_file():
+            control = json.loads(control_path.read_text(encoding="utf-8"))
+            address = urlsplit(control.get("address", ""))
+            token = control.get("token", "")
+            if address.scheme != "http" or address.hostname != "127.0.0.1" or not address.port or address.username or len(token) != 64:
+                raise RuntimeError("Owned controller cleanup metadata is invalid")
+            connection = http.client.HTTPConnection("127.0.0.1", address.port, timeout=5)
+            try:
+                connection.request("POST", "/stop", headers={"Authorization": "Bearer " + token})
+                connection.getresponse().read()
+            except (OSError, http.client.HTTPException):
+                pass  # A concurrent orderly shutdown can close its response.
+            finally:
+                connection.close()
         # Mapped supervisor images and private directory pins may finish closing
         # just after successful control RPC; bounded cleanup does not hide failures.
         for attempt in range(20):

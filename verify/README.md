@@ -1,7 +1,8 @@
 # 설치된 release 검증
 
 devtools의 설치 후 공개 CLI 흐름을 실제 패키징된 실행 파일로 검증한다.
-runner는 테스트용 release를 만들고, 각 시나리오를 독립적인 HOME·XDG 경로·작업 디렉터리에서 실행한다.
+아래 Unix runner는 macOS/Linux/WSL용 테스트 release를 만들고, 각 시나리오를 독립적인
+HOME·XDG 경로·작업 디렉터리에서 실행한다. Windows native는 아래 전용 Actions 검사를 사용한다.
 
 GitHub Actions에서는 fresh hosted runner가 OS 환경 격리를 담당한다. 로컬 실행도 사용자 데이터와
 Git 전역 설정을 별도 임시 경로로 분리하므로 현재 devtools 상태를 건드리지 않는다.
@@ -72,6 +73,28 @@ zsh와 fish를 명시적으로 설치해 세 shell을 모두 확인한다.
 각 시나리오는 임시 HOME의 `.local/bin/devtools`에 release를 설치한다. macOS 데이터는
 해당 HOME 아래 `Library/Application Support/devtools`, Linux 데이터는 격리된 XDG 경로에
 저장한다. `GIT_CONFIG_GLOBAL=/dev/null`과 `GIT_CONFIG_NOSYSTEM=1`도 적용한다.
+
+## Windows native Actions
+
+`.github/workflows/windows-platform.yml`의 full gate는 x64와 ARM64에서 실행한다.
+release workflow도 이를 필수 dependency로 호출한다. 이 작업의 최종 Windows 실행 근거는
+Actions이며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 절차를 대신 사용하지 않는다.
+
+- 전체 native Go/복구/보안/console/프로세스 suite, 실제 PS5.1/7·npm/pnpm shim,
+  installer/update 중단·원복, constrained hosts/trust/provider 검사를 실행한다.
+- x64는 호환 cgo/mingw-w64 race 검사를 실행하고 ARM64는 native contention으로 검증한다.
+  일반 suite의 대용량 maintenance 선택 항목은 별도 storage gate에서 명시 실행한다.
+- scripts/test-windows-product.py는 같은 job의 실제 candidate ZIP을 설치해 alias,
+  값·secret·task, project/proxy/restart/stop, CA 검증 TLS와 암호화 profile 전송을 확인한다.
+  private state는 DEVTOOLS_ISOLATED_ROOT에 분리한다. typed pending만 같은 UUID로 재개한다.
+- 실제 packaged CLI와 Chromium으로 로그인·값 수정·reload·CLI 확인·401/403을 검증한다.
+  CLI/Node/browser CPU를 구분하고 ARM64 위 x64 browser 에뮬레이션도 그대로 기록한다.
+- release-assets에는 해당 native job에서 검증한 Windows ZIP을 checksum 대조 후 그대로 포함한다.
+  focused dispatch는 진단용이며 full 최종 gate를 대체하지 않는다.
+
+실제 PC의 UAC·CurrentUser trust/browser 통합·터미널 닫기·설치/update 관찰과 최종 WSL2/Windows
+browser 연계는 NOT RUN이다. runner browser 성공이나 과거 standalone probe로 그 범위를
+확대하지 않는다. [지원 범위와 한계](../docs/windows.md)를 함께 확인한다.
 
 ## 기존 release 검증
 

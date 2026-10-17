@@ -160,20 +160,24 @@ origin에서 태그를 가져오고 GitHub의 게시된 릴리즈를 조회한 �
 추천 버전의 태그가 다른 커밋에 이미 있으면 교체하지 않고 오류를 반환한다.
 배포 결과는 GitHub Actions의 Release 실행에서 확인한다.
 
-Release 워크플로는 `workflow_dispatch`로 요청한 커밋이 main에 포함됐는지 확인한 뒤
-macOS와 Linux 검사를 병렬로 실행한다. 버전은 `v` 없이 전달하고 커밋은 전체 SHA로 고정한다.
-Linux 검사는 실제 Chromium Dashboard smoke와 설치된 release 시나리오를 포함하고,
-macOS도 같은 release 시나리오를 실행한다. 두 운영체제의 검증이 모두 성공하면 네 플랫폼 배포물을 생성한다. 이후
-플랫폼별 CLI 아카이브·체크섬, 플랫폼 독립 Agent Skill 아카이브·체크섬,
-설치기와 버전 파일을 GitHub Releases에 함께 게시한다.
+Release 워크플로는 요청한 전체 commit SHA를 checkout하고 macOS·Linux 및 Windows native
+x64·ARM64 검사를 필수로 실행한다. 버전은 `v` 없이 전달한다. `publish=true`는 main ref와
+main ancestry를 확인하며, `publish=false`는 후보 branch에서도 검증할 수 있다.
+Linux는 실제 Chromium dashboard와 설치된 release 시나리오를 포함하고 macOS도 같은 설치
+시나리오를 실행한다. Windows 두 job은 전체 native suite, 설치/업데이트, 패키지 설치·실제
+Chromium을 검증한다. 모든 필수 job 통과 후 macOS/Linux 네 archive를 만들고 native job에서
+검증한 Windows 두 ZIP을 checksum 확인 후 그대로 포함한다. 여섯 대상 CLI archive·checksum,
+독립 Agent Skill archive·checksum, 설치기와 버전 파일을 준비한다. `publish=false`는
+`release-assets`를 보관하고 태그·GitHub Release·Homebrew·Pages를 게시하지 않는다.
 빌드에는 요청한 버전과 커밋 식별자를 기록한다. 테스트와 배포물 검증이 모두 성공한 뒤에만
 태그를 생성하고 Releaseway로 게시한다. 테스트가 실패하면 버전은 소모되지 않는다.
 게시가 실패하면 같은 실행의 실패한 job을 재실행해 동일 태그·커밋·배포물로 재시도한다.
 검증만 실행하려면 `publish=false`로 요청한다. 자세한 명령은 [개발 가이드](development.md#릴리스)에 있다.
 
 안정 릴리스 게시가 성공하면 installer job이 `.github/workflows/pages.yml`을
-게시된 태그로 요청한다. 이 workflow는 해당 릴리스의 `install.sh`를 내려받아 태그의
-`scripts/install.sh`와 일치하는지 확인한 뒤 GitHub Pages에 게시한다.
+게시된 태그로 요청한다. 이 workflow는 해당 릴리스의 `install.sh`와 태그에 Windows 설치기가 존재하면 `install.ps1`도
+내려받아 해당 태그의 scripts 파일과 일치하는지 확인한 뒤 GitHub Pages에 게시한다.
+과거 Unix-only 태그에 Windows 자산을 추가하거나 main의 설치기를 섞지 않는다.
 devtools 프로젝트 Pages에는 별도 custom domain을 설정하지 않고 사용자 사이트의
 `jinyongp.dev`를 상속해 `/devtools/install.sh` 경로를 사용한다.
 사전 릴리스는 Pages installer를 갱신하지 않는다.
@@ -187,6 +191,10 @@ installer workflow 요청도 기본 브랜치 ref에서 실행된다. **Publish 
 기본 설치는 GitHub가 최신으로 선택한 안정 릴리스를 사용하고, 사전 릴리스는 버전을 지정해 설치한다.
 
 ## 설치 환경 검증하기
+
+아래 runner는 macOS/Linux/WSL의 Unix 설치 시나리오다. Windows native Actions는
+[검증 안내](../verify/README.md#windows-native-actions)의 전용 설치·업데이트·제품·브라우저
+검사를 사용한다. 사용자 실행 파일에는 이 개발 도구들이 필요하지 않다.
 
 ```sh
 devtools run test:installed install

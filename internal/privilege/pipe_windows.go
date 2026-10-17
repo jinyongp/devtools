@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -181,6 +182,11 @@ func connectHelperPipe(ctx context.Context, pipe windows.Handle) error {
 	}
 	defer windows.CloseHandle(event)
 	overlapped := windows.Overlapped{HEvent: event}
+	// The kernel retains this address until completion. SyscallN keeps Go
+	// pointers alive only during the call, so a movable stack slot is unsafe.
+	var pin runtime.Pinner
+	pin.Pin(&overlapped)
+	defer pin.Unpin()
 	err = windows.ConnectNamedPipe(pipe, &overlapped)
 	if err == nil || errors.Is(err, windows.ERROR_PIPE_CONNECTED) {
 		return nil

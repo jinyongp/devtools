@@ -2,13 +2,6 @@ name: Windows support preflight
 
 on:
   workflow_dispatch:
-  push:
-    branches: [codex/windows-support-preflight]
-    paths:
-      - .github/workflows/windows-preflight.yml
-      - docs/windows-support/probes/**
-      - go.mod
-      - go.sum
 
 permissions:
   contents: read

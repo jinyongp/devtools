@@ -60,8 +60,10 @@ go build -o "$env:TEMP\devtools-native-probe.exe" docs/windows-support/probes/na
 ## 3. GitHub Actions 검증
 
 워크플로: [windows-preflight.yml](../../.github/workflows/windows-preflight.yml).
-사용자가 승인한 `codex/windows-support-preflight` 브랜치에서만 push로 실행한다.
-main·release를 변경하거나 외부 계정에 로그인하지 않는다.
+사전 조사 당시에는 승인된 `codex/windows-support-preflight` 브랜치의 push로 아래 검증을 실행했다.
+조사 후 임시 push 트리거를 제거하고 `workflow_dispatch`만 유지한다.
+기본 브랜치에 워크플로가 통합된 뒤 필요할 때 수동 실행한다.
+이 사전검증은 제품의 상시 Windows CI를 대신하지 않으며, main·release 변경이나 외부 계정 로그인을 수행하지 않는다.
 
 | 실행 | commit | 결과·해석 |
 | --- | --- | --- |
@@ -84,8 +86,9 @@ artifact는 `runner.json`, `native.json`, 예상 실패한 `product-build.log`/s
 [arm64](evidence/actions-38994030329/windows-preflight-arm64/runner.json) 디렉터리에 보관했다.
 이전 15개 probe 실행의 artifact도 별도 디렉터리에 유지한다.
 Git 텍스트 정책에 따라 파일 줄바꿈은 LF로 정규화될 수 있으며 artifact ZIP의 byte 단위 복제본은 아니다.
-source commit·probe/workflow checksum은 [manifest](evidence/manifest.json)에 기록했다.
-이후 문서·근거 파일만 추가한 커밋은 같은 probe 코드의 실행 근거를 재사용한다.
+검증 당시 source commit·probe/workflow checksum은 [manifest](evidence/manifest.json)에 기록했다.
+manifest의 workflow checksum은 실행 당시 버전이며, 이후 임시 push 트리거를 제거한 현재 버전의 checksum은 아니다.
+probe 코드와 job 내용은 바꾸지 않았으므로 문서·근거 추가와 트리거 제거 이후에도 위 실행 근거를 재사용한다.
 
 WSL capability 수집에서는 x64에 WSL 3.0.1.0이 설치돼 있었고 ARM64의 `wsl.exe --version`은
 미설치 안내와 exit 1을 반환했다. 양쪽 모두 `wsl.exe` 파일은 존재했다. 따라서 executable 존재만으로

@@ -2,6 +2,8 @@ name: devtools
 desc: Agent-first developer environment and task management
 homepage: https://github.com/jinyongp/devtools
 license: MIT
+command_aliases:
+  dvt: devtools
 dependencies:
   build:
     - go
@@ -16,6 +18,7 @@ test: |
   assert_path_exists zsh_completion/"_devtools"
   assert_path_exists fish_completion/"devtools.fish"
   assert_match version.to_s, shell_output("#{bin}/devtools version")
+  assert_match version.to_s, shell_output("#{bin}/dvt version")
   system bin/"devtools", "init", "--profile", "homebrew-test"
   system bin/"devtools", "var", "set", "LEVEL", "--value", "debug"
   assert_match "debug", shell_output("#{bin}/devtools var get LEVEL")

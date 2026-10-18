@@ -29,6 +29,9 @@ Homebrew를 사용한다면:
 brew install jinyongp/tap/devtools
 ```
 
+Homebrew는 `devtools`를 가리키는 `dvt` 심볼릭 링크와 bash·zsh·fish 자동완성 파일도
+함께 설치합니다. 셸 설정은 [자동완성 가이드](docs/completion.md)를 참고하세요.
+
 또는 curl로 설치하세요.
 
 ```sh

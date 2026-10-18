@@ -36,7 +36,10 @@ With Homebrew:
 brew install jinyongp/tap/devtools
 ```
 
-Homebrew also installs completion files for bash, zsh, and fish.
+Homebrew also installs `dvt` as a symlink to `devtools` and completion files for
+bash, zsh, and fish. Both command names work without editing shell configuration.
+The Formula declares the link through `command_aliases`; Homebrew manages its
+updates and removal.
 
 Or install with curl:
 

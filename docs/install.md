@@ -50,6 +50,8 @@ Agent Skill의 한 줄 설치, 전역 설치, 업데이트와 수동 설치 방�
 
 Homebrew에서는 `brew install jinyongp/tap/devtools`로 설치할 수 있습니다.
 이 경로는 태그 커밋의 소스를 내려받아 Go로 빌드하며 필요한 Go 도구는 Homebrew가 준비합니다.
+Formula의 `command_aliases` 설정으로 `dvt → devtools` 심볼릭 링크도 함께 설치하므로
+두 명령을 사용할 수 있습니다. 링크의 갱신·제거는 Homebrew가 관리하며 셸 설정 파일은 수정하지 않습니다.
 업데이트는 `brew upgrade jinyongp/tap/devtools`로 수행합니다.
 
 공개 설치 진입점은 devtools 프로젝트의 GitHub Pages에 둔다. 안정 릴리스가 성공하면 그 릴리스에 게시된 `install.sh`와 동일한 파일을 Pages에 배포한다.

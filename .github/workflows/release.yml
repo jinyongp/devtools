@@ -276,7 +276,7 @@ jobs:
     needs: [validate-release, release]
     # An optional skipped ancestor must not suppress post-release publication.
     if: ${{ !cancelled() && needs.validate-release.result == 'success' && needs.release.result == 'success' && !contains(inputs.version, '-') }}
-    uses: releaseway/homebrew-actions/.github/workflows/publish.yml@5e6570fec2e5d16ad61868877da3a175fac99479 # v0.3.5
+    uses: releaseway/homebrew-actions/.github/workflows/publish.yml@5ff7e261e32542dde8902ef16483405c2bf4ca12 # v0.4.0
     with:
       commit: ${{ inputs.commit }}
       version: ${{ needs.validate-release.outputs.tag }}

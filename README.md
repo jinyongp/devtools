@@ -16,8 +16,9 @@ If you use Homebrew, install devtools with:
 brew install jinyongp/tap/devtools
 ```
 
-Homebrew also installs completion files for zsh, bash, and fish. Once shell
-completion is enabled, press Tab after `devtools` to explore commands and options.
+Homebrew also installs `dvt` as a symlink to `devtools` and completion files for
+zsh, bash, and fish. Once shell completion is enabled, press Tab after `devtools`
+to explore commands and options.
 See the [completion guide](docs/completion.md) for shell setup.
 
 ### Install script

@@ -15,8 +15,9 @@ Homebrew를 사용한다면 다음 명령으로 설치하세요. 설치 후 바�
 brew install jinyongp/tap/devtools
 ```
 
-Homebrew는 zsh·bash·fish 자동완성 파일도 함께 설치합니다. 셸 자동완성이 활성화되어
-있으면 `devtools` 뒤에서 Tab으로 명령과 옵션을 고를 수 있습니다.
+Homebrew는 `devtools`를 가리키는 `dvt` 심볼릭 링크와 zsh·bash·fish 자동완성 파일도
+함께 설치합니다. 셸 자동완성이 활성화되어 있으면 `devtools` 뒤에서 Tab으로 명령과
+옵션을 고를 수 있습니다.
 [자동완성 설정](docs/completion.md)에서 셸별 설정 방법을 확인하세요.
 
 ### 설치 스크립트 사용

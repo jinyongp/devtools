@@ -67,29 +67,58 @@ class ArchiveContracts(unittest.TestCase):
                     package.package("0.0.0-test", dict(OUTPUT_DIR=str(output)))
             self.assertEqual(list(output.iterdir()), [])
 
-    def test_skill_rejects_tampered_or_symlink_members_with_matching_checksum(self):
+    def test_skill_roundtrip_includes_nested_resources(self):
         with tempfile.TemporaryDirectory() as scratch:
+            source = Path(scratch) / "canonical"
+            (source / "references" / "nested").mkdir(parents=True)
+            (source / "SKILL.md").write_bytes(b"Standalone entrypoint\n")
+            (source / "references" / "nested" / "guide.md").write_bytes(b"Independent nested instructions\n")
+            output = dict(os.environ, OUTPUT_DIR=str(Path(scratch) / "output"))
+            artifact = package.package_skill("0.0.0-test", output, source=source / "SKILL.md")
+            package.verify_skill(artifact, artifact.with_name(artifact.name + ".sha256"), source=source / "SKILL.md")
+            with tarfile.open(artifact) as archive:
+                self.assertEqual({member.name.rstrip("/") for member in archive}, {
+                    "devtools", "devtools/SKILL.md", "devtools/references",
+                    "devtools/references/nested", "devtools/references/nested/guide.md",
+                })
+                self.assertEqual(archive.extractfile("devtools/references/nested/guide.md").read(), b"Independent nested instructions\n")
+
+    def test_skill_rejects_tampered_or_unsafe_members_with_matching_checksum(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            source = Path(scratch) / "canonical"
+            (source / "references").mkdir(parents=True)
+            (source / "SKILL.md").write_bytes(b"Standalone entrypoint\n")
+            (source / "references" / "guide.md").write_bytes(b"Canonical guide\n")
             path = Path(scratch) / "skill.tar.gz"
             checksum = path.with_name(path.name + ".sha256")
-            for kind in ("tampered", "symlink", "duplicate"):
+            for kind in ("tampered", "symlink", "hardlink", "duplicate", "missing", "extra", "traversal"):
                 with self.subTest(kind=kind):
                     with tarfile.open(path, "w:gz") as archive:
-                        directory = tarfile.TarInfo("devtools/")
-                        directory.type = tarfile.DIRTYPE
-                        archive.addfile(directory)
-                        member = tarfile.TarInfo("devtools/SKILL.md")
-                        if kind == "symlink":
-                            member.type, member.linkname = tarfile.SYMTYPE, "outside"
-                            archive.addfile(member)
-                        else:
-                            body = b"tampered canonical skill"
+                        for name in ("devtools", "devtools/references"):
+                            directory = tarfile.TarInfo(name)
+                            directory.type = tarfile.DIRTYPE
+                            archive.addfile(directory)
+                        for name, body in (("devtools/SKILL.md", b"Standalone entrypoint\n"),
+                                           ("devtools/references/guide.md", b"Canonical guide\n")):
+                            if kind == "missing" and name.endswith("guide.md"):
+                                continue
+                            member = tarfile.TarInfo(name)
+                            if name.endswith("guide.md") and kind in ("symlink", "hardlink"):
+                                member.type = tarfile.SYMTYPE if kind == "symlink" else tarfile.LNKTYPE
+                                member.linkname = "outside"
+                                archive.addfile(member)
+                                continue
+                            if name.endswith("guide.md") and kind == "tampered":
+                                body = b"Different guide\n"
                             member.size = len(body)
                             archive.addfile(member, io.BytesIO(body))
-                            if kind == "duplicate":
+                            if kind == "duplicate" and name.endswith("guide.md"):
                                 archive.addfile(member, io.BytesIO(body))
+                        if kind in ("extra", "traversal"):
+                            archive.addfile(tarfile.TarInfo("devtools/unexpected" if kind == "extra" else "../outside"))
                     checksum.write_text(hashlib.sha256(path.read_bytes()).hexdigest() + "  " + path.name + "\n", encoding="ascii")
                     with self.assertRaises(ValueError):
-                        package.verify_skill(path, checksum)
+                        package.verify_skill(path, checksum, source=source / "SKILL.md")
 
     def test_skill_archive_writer_failure_publishes_no_partial_output(self):
         with tempfile.TemporaryDirectory() as scratch:

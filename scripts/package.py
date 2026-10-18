@@ -148,19 +148,41 @@ def main():
     return 0
 
 
-def verify_skill(archive, checksum):
+def skill_resources(source="skills/devtools/SKILL.md"):
+    entrypoint = Path(source)
+    if entrypoint.is_symlink() or not entrypoint.is_file():
+        raise ValueError("Canonical skill entrypoint must be a regular file")
+    root = entrypoint.parent
+    resources = {"devtools": root}
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink() or not (path.is_dir() or path.is_file()):
+            raise ValueError("Canonical skill resource must be a regular file or directory")
+        resources["devtools/" + path.relative_to(root).as_posix()] = path
+    return resources
+
+
+def verify_skill(archive, checksum, source="skills/devtools/SKILL.md"):
     archive, checksum = Path(archive), Path(checksum)
     if archive.is_symlink() or checksum.is_symlink() or not archive.is_file() or not checksum.is_file():
         raise ValueError("Skill artifact must be a regular file")
     fields = checksum.read_text(encoding="ascii").split()
     if len(fields) != 2 or fields[1] != archive.name or not re.fullmatch(r"[0-9a-fA-F]{64}", fields[0]) or hashlib.sha256(archive.read_bytes()).hexdigest() != fields[0].lower():
         raise ValueError("Skill checksum mismatch")
+    resources = skill_resources(source)
     with tarfile.open(archive, "r:gz") as package_file:
         members = package_file.getmembers()
-        if len(members) != 2 or [m.name.rstrip("/") for m in members] != ["devtools", "devtools/SKILL.md"] or not members[0].isdir() or not members[1].isreg():
+        names = [member.name.rstrip("/") for member in members]
+        if len(names) != len(resources) or set(names) != resources.keys():
             raise ValueError("Invalid skill archive entries")
-        if package_file.extractfile(members[1]).read() != Path("skills/devtools/SKILL.md").read_bytes():
-            raise ValueError("Skill artifact differs from canonical source")
+        for name, member in zip(names, members):
+            path = resources[name]
+            if path.is_dir():
+                if not member.isdir() or member.size != 0:
+                    raise ValueError("Invalid skill archive entries")
+            elif not member.isreg():
+                raise ValueError("Invalid skill archive entries")
+            elif member.size != path.stat().st_size or package_file.extractfile(member).read() != path.read_bytes():
+                raise ValueError("Skill artifact differs from canonical source")
 
 
 def package_skill(version, env=None, source="skills/devtools/SKILL.md"):
@@ -174,7 +196,7 @@ def package_skill(version, env=None, source="skills/devtools/SKILL.md"):
         subprocess.run(["go", "run", "./scripts/package-skill", "--source", str(source), "--output", str(artifact)], env=env, check=True)
         checksum = artifact.with_name(name + ".sha256")
         checksum.write_bytes((hashlib.sha256(artifact.read_bytes()).hexdigest() + "  " + name + "\n").encode("ascii"))
-        verify_skill(artifact, checksum)
+        verify_skill(artifact, checksum, source=source)
         os.replace(artifact, output / name)
         os.replace(checksum, output / checksum.name)
     return output / name

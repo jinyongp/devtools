@@ -92,10 +92,18 @@ Skill 디렉터리는 Agent Skills 규약의 기본 구조를 그대로 사용�
 ```text
 skills/
 └── devtools/
-    └── SKILL.md
+    ├── SKILL.md
+    └── references/
+        ├── execution.md
+        ├── network.md
+        ├── platforms.md
+        ├── storage.md
+        └── tasks.md
 ```
 
 `SKILL.md`에는 필수 `name`·`description` frontmatter와 실행 지침이 들어 있습니다.
+목적별 상세 지침은 `references/`에서 필요한 파일만 읽습니다. 릴리스 아카이브에도
+이 참조 파일을 함께 포함하며, 검증 시 원본 디렉터리 전체와 비교합니다.
 공식 reference validator로 원본을 확인할 수 있습니다.
 
 ```sh

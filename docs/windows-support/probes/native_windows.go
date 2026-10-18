@@ -171,6 +171,25 @@ func main() {
 		must(windows.CloseHandle(other))
 		return strings.TrimSpace(line) == "ready" && errors.Is(busy, windows.ERROR_SHARING_VIOLATION), "parent closed; child retained exclusive open; released on child exit"
 	})
+	check("lease_staging_directory_publish", func() (bool, string) {
+		hidden, visible := filepath.Join(root, ".launch-fixture"), filepath.Join(root, "execution-fixture")
+		must(os.Mkdir(hidden, 0700))
+		must(os.WriteFile(filepath.Join(hidden, "record.json"), []byte("{}"), 0600))
+		// Windows leases live outside the directory being atomically published.
+		// An open descendant handle can prevent directory rename on NTFS.
+		path := filepath.Join(root, "stable-execution-lease.lock")
+		h, err := exclusive(path, false)
+		must(err)
+		defer windows.CloseHandle(h)
+		must(windows.MoveFileEx(ptr(hidden), ptr(visible), windows.MOVEFILE_WRITE_THROUGH))
+		other, busy := exclusive(path, false)
+		if busy == nil {
+			windows.CloseHandle(other)
+		}
+		var info windows.ByHandleFileInformation
+		must(windows.GetFileInformationByHandle(h, &info))
+		return errors.Is(busy, windows.ERROR_SHARING_VIOLATION), "stable lease outside staging: directory rename succeeds while share-mode-0 lease stays held"
+	})
 	check("private_acl_creation", func() (bool, string) {
 		u, err := windows.GetCurrentProcessToken().GetTokenUser()
 		must(err)

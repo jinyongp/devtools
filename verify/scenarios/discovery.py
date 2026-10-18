@@ -42,19 +42,29 @@ checksum_path = Path(str(archive_path) + '.sha256')
 checksum, checksum_name = checksum_path.read_text().split()
 assert checksum_name == archive_path.name
 assert hashlib.sha256(archive_path.read_bytes()).hexdigest() == checksum
+canonical_root = Path(os.environ['DEVTOOLS_TEST_CANONICAL_SKILL']).parent
+resources = {path.relative_to(canonical_root).as_posix(): path
+             for path in canonical_root.rglob('*')}
+expected_names = ['devtools'] + ['devtools/' + name for name in sorted(resources)]
+destination = Path.home() / '.agents/skills/devtools'
 with tarfile.open(archive_path, 'r:gz') as archive:
-    assert archive.getnames() == ['devtools', 'devtools/SKILL.md']
-    skill_member = archive.getmember('devtools/SKILL.md')
-    assert skill_member.isfile()
-    skill_file = archive.extractfile(skill_member)
-    assert skill_file is not None
-    skill = skill_file.read()
-destination = Path.home() / '.agents/skills/devtools/SKILL.md'
-destination.parent.mkdir(parents=True)
-destination.write_bytes(skill)
-canonical_skill = Path(os.environ['DEVTOOLS_TEST_CANONICAL_SKILL'])
-assert destination.read_bytes() == canonical_skill.read_bytes()
-print('Independent Agent Skill release artifact installed and matched its canonical source')
+    assert archive.getnames() == expected_names
+    assert archive.getmember('devtools').isdir()
+    for name, source in sorted(resources.items()):
+        member = archive.getmember('devtools/' + name)
+        target = destination / name
+        if source.is_dir():
+            assert member.isdir()
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            assert member.isfile() and not source.is_symlink()
+            skill_file = archive.extractfile(member)
+            assert skill_file is not None
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(skill_file.read())
+            assert target.read_bytes() == source.read_bytes()
+assert {path.relative_to(destination).as_posix() for path in destination.rglob('*')} == set(resources)
+print('Independent Agent Skill release artifact and all resources installed and matched canonical source')
 
 completion = Path.home() / 'devtools.fish'
 completion.write_text(call('completion', 'fish'))

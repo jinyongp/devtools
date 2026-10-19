@@ -228,6 +228,10 @@ jobs:
         env:
           SOURCE_COMMIT: ${{ inputs.commit }}
         run: python3 -B scripts/check-profile-exchange.py export --binary bin/devtools --origin macos --commit "$SOURCE_COMMIT" --directory profile-exchange-macos
+      - name: Verify actual legacy CLI protection barrier
+        run: |
+          git fetch --no-tags --depth=1 origin 89100eb98888895a450b2ebd403e4e1c9b5f52d2
+          python3 -B scripts/check-legacy-vault.py --current bin/devtools --evidence profile-exchange-macos/legacy-vault.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: profile-exchange-macos
@@ -273,6 +277,10 @@ jobs:
         env:
           SOURCE_COMMIT: ${{ inputs.commit }}
         run: python3 -B scripts/check-profile-exchange.py export --binary bin/devtools --origin linux --commit "$SOURCE_COMMIT" --directory profile-exchange-linux
+      - name: Verify actual legacy CLI protection barrier
+        run: |
+          git fetch --no-tags --depth=1 origin 89100eb98888895a450b2ebd403e4e1c9b5f52d2
+          python3 -B scripts/check-legacy-vault.py --current bin/devtools --evidence profile-exchange-linux/legacy-vault.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: profile-exchange-linux

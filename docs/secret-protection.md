@@ -1,8 +1,9 @@
 # 로컬 secret 보호
 
-이 문서는 var/sec workstream의 **현재 소스** 기준이다. 아직 이 변경의 native·설치물
-배포 검증을 완료했다는 뜻은 아니다. 설치한 CLI에서 `devtools schema vault status`와
-`devtools schema vault init`이 제공되는지 먼저 확인한다. 이전 빌드의 평문 자료는
+이 문서는 var/sec workstream의 **현재 소스** 기준이다. 실제 native·설치물 검증은
+[A12 수용 기록](var-sec/A12-final-review.md)에 있으며, 릴리스 게시·설치된 CLI의 지원과는
+구분한다. 설치한 CLI에서 `devtools schema vault status`와 `devtools schema vault init`이
+제공되는지 먼저 확인한다. 이전 빌드의 평문 자료는
 업데이트나 이 문서만으로 전환되지 않는다.
 
 profile/env를 한 번 선택하면 그 범위의 값을 실행에 전달한다. 명령마다 키 이름이나

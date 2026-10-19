@@ -2,8 +2,10 @@
 
 기준: `89100eb98888895a450b2ebd403e4e1c9b5f52d2`.
 Workstream: `1888bdf7-3f14-4eeb-8782-329795103204`.
-이 문서는 구현 계약이다. 현재 저장 형식과 신규 명령의 제품 통합은 진행 중이며
-OS별 최종 검증은 별도 gate에서 수행한다. 기존 사용자 저장소를 이 문서 추가만으로 전환하지 않는다.
+이 문서는 현재 소스의 구현 계약이다. 저장·실행 보호의 실제 OS 수용 근거는
+[A12](var-sec/A12-final-review.md), bundle·사용처는 [B03](var-sec/B03-final-review.md),
+자동 반영은 [C03](var-sec/C03-final-review.md)에 기록한다. 이 검증과 릴리스 게시,
+설치한 CLI의 기능 지원, 기존 사용자 저장소의 실제 전환은 별도다.
 
 ## 호환성과 공개 경계
 
@@ -46,7 +48,8 @@ Backend는 macOS Keychain, Windows user DPAPI,
 기존 Linux Secret Service, keyring 없는 환경의 명시 암호 세션이다.
 
 저장 문서의 최대 표현은 기존 backup plaintext 한도와 같은 128MiB다.
-RPC frame은 16MiB를 상한으로 하고 allocation 전에 길이를 검사한다.
+키 세션 IPC frame은 128KiB, 실행 입력 frame은 16MiB를 상한으로 하고
+allocation 전에 frame 길이를 검사한다. supervisor JSON 응답은 16MiB로 읽기를 제한한다.
 이는 메모리 방어 상한이며 OS 환경 블록으로 그만큼 전달 가능하다는 뜻이 아니다.
 환경·argv·패턴 총량은 실제 플랫폼 한도를 먼저 검사하고 초과 시 원문 없는
 오류를 반환한다. 임의 파일/argv/raw 경로로 조용히 우회하지 않는다.

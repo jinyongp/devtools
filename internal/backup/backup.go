@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +32,11 @@ import (
 )
 
 const limit int64 = 128 << 20
+
+// Pin the existing age export preset and bound received archive cost to it.
+// scrypt r=8 uses about 256 MiB at logN=18; age's broader import default permits
+// logN=22 (about 4 GiB), before it can authenticate an untrusted file header.
+const passphraseArchiveWorkFactor = 18
 
 // Import receipts include the complete metadata diff. Keep reads and writes
 // bounded by the same limit so every committed result can be replayed.
@@ -370,6 +376,7 @@ func encodePassphrase(s Snapshot, passphrase string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	recipient.SetWorkFactor(passphraseArchiveWorkFactor)
 	return encodeTo(s, recipient)
 }
 func summaries(s Snapshot) []Summary {
@@ -559,10 +566,17 @@ func decodePassphrase(path, passphrase string) (Snapshot, []byte, error) {
 	if passphrase == "" {
 		return snapshot, nil, errors.New("empty passphrase")
 	}
+	mode, err := ArchiveEncryptionMode(path)
+	if err != nil || mode != ArchiveEncryptionPassphrase {
+		return snapshot, nil, errors.New("invalid passphrase archive")
+	}
 	identity, err := age.NewScryptIdentity(passphrase)
 	if err != nil {
 		return snapshot, nil, err
 	}
+	// Recheck inside the crypto identity: the input file can change after
+	// the cheap password-selection probe and before this decode opens it.
+	identity.SetMaxWorkFactor(passphraseArchiveWorkFactor)
 	return decodeWithIdentity(path, identity)
 }
 
@@ -573,7 +587,19 @@ const (
 
 type archiveProbeIdentity struct{}
 
-func (archiveProbeIdentity) Unwrap([]*age.Stanza) ([]byte, error) {
+func (archiveProbeIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
+	for _, stanza := range stanzas {
+		if stanza.Type != "scrypt" {
+			continue
+		}
+		if len(stanza.Args) != 2 {
+			return nil, errors.New("invalid passphrase archive KDF")
+		}
+		factor, err := strconv.Atoi(stanza.Args[1])
+		if err != nil || factor < 1 || factor > passphraseArchiveWorkFactor || strconv.Itoa(factor) != stanza.Args[1] {
+			return nil, errors.New("unsupported passphrase archive KDF")
+		}
+	}
 	return nil, age.ErrIncorrectIdentity
 }
 

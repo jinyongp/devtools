@@ -33,6 +33,12 @@ devtools backup configure --directory /backups/devtools --recipient-file /secure
 
 `profile export`는 기본적으로 recipient 없이 실행하며 터미널에서 passphrase를 두 번 입력받아 age scrypt archive를 만든다. non-interactive 환경에서는 `--passphrase-file` 또는 `--passphrase-stdin`을 사용한다. 기존 X25519 자동화는 `--recipient`/`--recipient-file` advanced mode로 유지한다. output을 생략하면 `./<profile>.age`를 사용하며 `backup configure`를 사용하지 않는다.
 
+Passphrase archive는 기존과 같은 scrypt `logN=18`로 생성한다. 가져오기는
+외부 파일의 헤더를 비밀번호 입력 전에 검사하고 `logN>18`이나 잘못된 비용 표기를
+거절한다. 이 제한은 인증 전 KDF 메모리 사용을 약 256 MiB로 제한하며,
+devtools가 생성한 기존 archive와 X25519 recipient 전송에는 영향을 주지 않는다.
+별도 도구로 더 높은 비용을 지정한 age archive는 지원하지 않는다.
+
 ## 백업 생성과 확인
 
 ```sh

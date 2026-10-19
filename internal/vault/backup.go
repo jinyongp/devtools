@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"path/filepath"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/profilekey"
 )
@@ -31,28 +32,12 @@ func BackupFingerprint(master *Material, vaultID, target string, payload []byte)
 // acquired root key. Unsigned public profiles outside the sealed catalog remain
 // public-only; a missing/damaged sealed catalog entry is never an empty profile.
 func (s FileStore) LogicalSnapshotHeld(ctx context.Context, name string) ([]byte, error) {
-	p, key, err := s.ReadWithMasterHeld(ctx, name, s.CatalogKey)
+	p, key, err := s.ReadAnyWithMasterHeld(ctx, name, s.CatalogKey)
 	if err != nil {
-		if err.Error() != "profile_not_found" {
-			return nil, err
-		}
-		raw, readErr := profilekey.Snapshot(filepath.Join(s.Root, "profiles"), name, "values", MaxDocumentBytes)
-		if readErr != nil {
-			return nil, ErrRecovery
-		}
-		if raw == nil {
+		if err.Error() == "profile_not_found" {
 			return nil, nil
 		}
-		p, err = DecodeProfile(raw)
-		if err != nil {
-			return nil, err
-		}
-		if p.Sealed {
-			return nil, ErrIntegrity
-		}
-		if err = p.Verify(nil); err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 	defer key.Destroy()
 	portable, err := p.ExportLogical(key)
@@ -81,6 +66,18 @@ func (s FileStore) LogicalReplacementHeld(ctx context.Context, name string, inpu
 			index = i
 			sealed = entry.Sealed
 			break
+		}
+	}
+	historyFiles := map[string][]byte{}
+	if sealed {
+		old, oldKey, readErr := s.ReadWithMasterHeld(ctx, name, s.CatalogKey)
+		if readErr != nil {
+			return nil, readErr
+		}
+		historyFiles, err = s.receiptHistoryFiles(ctx, old, oldKey, time.Now())
+		oldKey.Destroy()
+		if err != nil {
+			return nil, err
 		}
 	}
 	if input == nil {
@@ -139,6 +136,9 @@ func (s FileStore) LogicalReplacementHeld(ctx context.Context, name string, inpu
 		return nil, ErrRecovery
 	}
 	files[catalogRelative] = cb
+	for path, data := range historyFiles {
+		files[path] = data
+	}
 	return files, nil
 }
 

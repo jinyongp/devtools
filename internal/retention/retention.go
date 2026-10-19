@@ -4,6 +4,7 @@ package retention
 import "time"
 
 const (
+	ValueReceiptAge     = 30 * 24 * time.Hour
 	RawProcessLogAge    = 7 * 24 * time.Hour
 	CleanupCandidateAge = 30 * 24 * time.Hour
 	ArchivePurgeAge     = 30 * 24 * time.Hour

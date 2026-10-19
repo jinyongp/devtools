@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/jinyongp/devtools/internal/project"
@@ -30,10 +31,12 @@ type entry struct {
 
 // State is a private-storage snapshot. CLI responses use Metadata instead.
 type State struct {
-	Version int               `json:"version"`
-	Profile string            `json:"profile"`
-	Envs    map[string]bool   `json:"envs"`
-	Keys    map[string]*entry `json:"keys"`
+	sealedUnverified bool
+	expiries         map[string]map[string]int64
+	Version          int               `json:"version"`
+	Profile          string            `json:"profile"`
+	Envs             map[string]bool   `json:"envs"`
+	Keys             map[string]*entry `json:"keys"`
 }
 
 type Metadata struct {
@@ -209,17 +212,34 @@ func (s *State) GetVariable(key, env string) (string, Metadata, *protocol.Error)
 	if !ok {
 		return "", Metadata{}, failure("key_not_found", "The variable has no value in the selected scope.")
 	}
+	scope := env
+	if source == "common" {
+		scope = ""
+	}
+	if expiry, exists := s.expiries[key][scope]; exists && time.Now().Unix() >= expiry {
+		return "", Metadata{}, failure("value_expired", "The selected variable slot has expired.")
+	}
 	return value, Metadata{Key: key, Kind: e.Kind, Source: source, Overrides: source == "env" && e.Common != nil}, nil
 }
 
 // Environment returns values only to the process-execution boundary.
 func (s *State) Environment(env string) (map[string]string, *protocol.Error) {
+	if s.sealedUnverified {
+		return nil, failure("vault_locked", "Use an authenticated value snapshot for execution.")
+	}
 	if err := s.CheckEnv(env); err != nil {
 		return nil, err
 	}
 	result := map[string]string{}
 	for key, e := range s.Keys {
-		if value, _, ok := effective(e, env); ok {
+		if value, source, ok := effective(e, env); ok {
+			scope := env
+			if source == "common" {
+				scope = ""
+			}
+			if expiry, exists := s.expiries[key][scope]; exists && time.Now().Unix() >= expiry {
+				return nil, failure("value_expired", "The selected value slot has expired.")
+			}
 			result[key] = value
 		}
 	}

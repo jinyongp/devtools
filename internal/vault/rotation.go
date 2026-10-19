@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"io"
 	"path/filepath"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -122,6 +123,10 @@ func (s FileStore) RotateProfile(ctx context.Context, name string, master *Mater
 		return nil, err
 	}
 	defer oldKey.Destroy()
+	historyFiles, err := s.receiptHistoryFiles(ctx, p, oldKey, time.Now())
+	if err != nil {
+		return nil, err
+	}
 	newKey, err := NewKey()
 	if err != nil {
 		return nil, err
@@ -132,7 +137,7 @@ func (s FileStore) RotateProfile(ctx context.Context, name string, master *Mater
 		return nil, err
 	}
 	catalog.Entries[index] = entryFor(q)
-	if err = s.publish(ctx, catalog, q, newKey); err != nil {
+	if err = s.publishWithFiles(ctx, catalog, q, newKey, historyFiles); err != nil {
 		return nil, err
 	}
 	return q, nil

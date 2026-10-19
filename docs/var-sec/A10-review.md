@@ -139,3 +139,36 @@ key-slot write 잠금을 보유하지 않는다. 동일 native backend 재선택
 Linux 전체 Go 회귀와 관련 race/vet, 선택한 Windows/macOS test compile을 수행했다.
 CLI/profiletransfer factory가 provider를 선택하는 연결, 값 mutation/replay·retention 통합,
 설치물 및 native producer/consumer 실기 검증은 남아 있다. A10 완료로 기록하지 않는다.
+
+## 현재 profile 저장·관리 요청·검증 키 수명
+
+- ModernStore는 공개 전용 root에서 키 설정 없이 논리 ID/slot version을 저장한다.
+  첫 secret은 실제 새 profile key 개봉 검증 뒤 sealed로 승격하며, 기존 공개 ID/version과
+  generation을 보존한다. 마지막 secret 제거 후에도 sealed 이력은 유지한다. 첫 승격의
+  물리 실행 barrier는 disk gate 밖에서 얻고, 재진입 뒤 profile 및 UUID 영수증을 재검사한다.
+- metadata/public read는 세션을 열거나 idle 시간을 연장하지 않는다. secret placeholder는
+  실행용 State/CaptureLegacy에 전달할 수 없다. 만료 override는 common으로 fallback하지 않는다.
+  기존 public 논리 profile을 포함한 migration도 ID/version을 바꾸지 않는다.
+- 관리 변경은 revision 확인, 변경, profile/catalog, UUID receipt를 같은 maintenance
+  transaction으로 저장한다. 같은 UUID/입력은 원래 결과를 반환하고 현재 값을 되돌리지
+  않는다. 다른 입력과 오래된 revision은 거절한다. 공개 전용 128자 profile도 지원한다.
+- sealed receipt는 root로 인증·암호화하며 요청 원문을 넣지 않는다. 요청 fingerprint는
+  profile key에서 용도 분리한 MAC 키로 계산한다. 회전·복원 때 살아 있는 영수증에 필요한
+  파생 검증 키만 root 암호화 상태로 보존하며 이전 데이터 복호화 키를 보관하지 않는다.
+  새 값 변경 영수증의 재시도 기간은 30일이다. 만료 UUID는 request_expired로 거절하고,
+  다음 관리 변경 시 더 이상 필요한 영수증이 없는 검증 키를 원자적으로 정리한다.
+  새 요청이 없는 저장소에서 달력 시간만으로 파일이 삭제된다는 보장은 하지 않는다.
+- 기존 shared-MAC 영수증은 migration 뒤에도 검증한다. 공개 전용 root의 MAC 키는 비밀
+  값을 보호하는 키가 아니며, root 보호 도입 뒤에는 암호화한 verification 자료를 쓴다.
+- 검토 중 scope 획득과 disk gate 사이에 보호 상태가 바뀌는 경합을 확인했다. gate 안에서
+  다시 확인해 오래된 unsigned scope는 input_changed로 거절한다.
+
+공개 저장/첫 승격/수동 조회, 같은 값의 version 보존, 긴 profile 이름, UUID 충돌/재시도,
+회전과 새 incarnation 복원 후 재시도, 후속 값 비회귀, 만료/검증 키 정리, legacy 영수증
+migration을 실제 파일로 검증한다. CLI/dashboard 연결, public-only 실행 admission,
+설치물/native matrix 및 최종 통합 리뷰는 여전히 미완료다. 이 단위만으로 A10을 완료하지 않는다.
+
+검증: 이 단위의 전체 `go test ./... -count=1` 통과. values/vault/backup/maintenance
+전체 race 검사 통과(각 68.516s/25.188s/44.449s/2.315s), 관련 package vet 통과.
+values의 Windows ARM64 및 macOS ARM64 test binary 교차 빌드 통과. 교차 빌드는
+실제 native 실행 근거로 사용하지 않는다. 이 단위 리뷰에서 남은 확인된 결함은 없다.

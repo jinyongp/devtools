@@ -33,6 +33,7 @@ type LegacyInventory struct {
 type legacyMigrationState struct {
 	inventory      LegacyInventory
 	profiles       []*State
+	publicProfiles []*vault.Profile
 	mac            []byte
 	previewKey     []byte
 	backupReceipts map[string][]byte
@@ -44,6 +45,7 @@ func (s *legacyMigrationState) destroy() {
 	s.previewKey = nil
 	s.mac = nil
 	s.profiles = nil
+	s.publicProfiles = nil
 	for _, b := range s.backupReceipts {
 		clear(b)
 	}
@@ -86,6 +88,32 @@ func inspectLegacyHeld(root string, master *vault.Material) (*legacyMigrationSta
 		if totalBytes > vault.MaxProtectedPlainBytes {
 			clear(b)
 			return nil, vault.ErrTooLarge
+		}
+		var header map[string]json.RawMessage
+		if json.Unmarshal(b, &header) != nil {
+			clear(b)
+			return nil, vault.ErrInvalid
+		}
+		if _, modern := header["vault_format"]; modern {
+			public, decodeErr := vault.DecodeProfile(b)
+			clear(b)
+			if decodeErr != nil {
+				return nil, decodeErr
+			}
+			if public.Sealed {
+				return nil, vault.ErrKeyMissing
+			}
+			if err = public.Verify(nil); err != nil {
+				return nil, err
+			}
+			if public.Name != name {
+				return nil, vault.ErrIntegrity
+			}
+			if err = encoder.Encode(public); err != nil {
+				return nil, vault.ErrInvalid
+			}
+			result.publicProfiles = append(result.publicProfiles, public)
+			continue
 		}
 		var state State
 		err = vault.StrictDecode(b, &state)
@@ -382,6 +410,19 @@ func MigrateLegacy(ctx context.Context, root, vaultID string, master *vault.Mate
 		}
 		if p.Sealed {
 			catalog.Entries = append(catalog.Entries, vault.CatalogEntry{Name: p.Name, ID: p.ID, Generation: p.Generation, Revision: p.Revision, KeyEpoch: p.KeyEpoch, Sealed: true, Tag: append([]byte(nil), p.Tag...)})
+		}
+	}
+	for _, public := range legacy.publicProfiles {
+		b, err := public.Encode()
+		if err != nil {
+			return vault.ForwardResult{}, err
+		}
+		files, err := profilekey.Replacement(filepath.Join(root, "profiles"), public.Name, "values", b)
+		if err != nil {
+			return vault.ForwardResult{}, vault.ErrRecovery
+		}
+		for name, data := range files {
+			after[name] = data
 		}
 	}
 	if err = catalog.Sign(master); err != nil {

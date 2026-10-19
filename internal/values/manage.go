@@ -50,6 +50,10 @@ type ChangeResult struct {
 type changeReceipt struct {
 	Fingerprint string       `json:"fingerprint"`
 	Result      ChangeResult `json:"result"`
+	ProfileID   string       `json:"profile_id,omitempty"`
+	KeyEpoch    uint64       `json:"key_epoch,omitempty"`
+	CreatedAt   int64        `json:"created_at,omitempty"`
+	ExpiresAt   int64        `json:"expires_at,omitempty"`
 }
 
 func (s Store) managementKey(create bool) ([]byte, error) {
@@ -255,7 +259,7 @@ func (s Store) Apply(ctx context.Context, c Change) (ChangeResult, *protocol.Err
 	if e != nil {
 		return out, storageError()
 	}
-	receipt, e := json.Marshal(changeReceipt{fingerprint, out})
+	receipt, e := json.Marshal(changeReceipt{Fingerprint: fingerprint, Result: out})
 	if e != nil {
 		return out, storageError()
 	}

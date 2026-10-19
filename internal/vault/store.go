@@ -275,6 +275,9 @@ func (s FileStore) Read(ctx context.Context, name string, key *Material) (*Profi
 	return p, err
 }
 func (s FileStore) publish(ctx context.Context, c *Catalog, p *Profile, key *Material) error {
+	return s.publishWithFiles(ctx, c, p, key, nil)
+}
+func (s FileStore) publishWithFiles(ctx context.Context, c *Catalog, p *Profile, key *Material, extra map[string][]byte) error {
 	if p.Sealed && p.VaultID != s.VaultID {
 		return ErrIntegrity
 	}
@@ -305,6 +308,12 @@ func (s FileStore) publish(ctx context.Context, c *Catalog, p *Profile, key *Mat
 		return ErrRecovery
 	}
 	files[catalogRelative] = cb
+	for path, data := range extra {
+		if _, exists := files[path]; exists {
+			return ErrInvalid
+		}
+		files[path] = data
+	}
 	return maintenance.Replace(s.Root, files)
 }
 func (s FileStore) Create(ctx context.Context, p *Profile, key *Material) error {

@@ -44,6 +44,17 @@ func (s *State) Clone() *State {
 	}
 	out := newState(s.Profile)
 	out.Version = s.Version
+	out.sealedUnverified = s.sealedUnverified
+	if s.expiries != nil {
+		out.expiries = map[string]map[string]int64{}
+		for key, entries := range s.expiries {
+			out.expiries[key] = map[string]int64{}
+			for env, expiry := range entries {
+				out.expiries[key][env] = expiry
+			}
+		}
+	}
+
 	for env, exists := range s.Envs {
 		out.Envs[env] = exists
 	}
@@ -104,6 +115,9 @@ func (s *Snapshot) Destroy() {
 func CaptureLegacy(state *State, env string, inject bool) (*Snapshot, *protocol.Error) {
 	if state == nil || !state.valid(state.Profile) {
 		return nil, storageError()
+	}
+	if inject && state.sealedUnverified {
+		return nil, VaultError(context.Background(), vault.ErrLocked)
 	}
 	if err := state.CheckEnv(env); err != nil {
 		return nil, err

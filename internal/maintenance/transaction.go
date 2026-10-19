@@ -70,6 +70,13 @@ func validReplacementPath(path string) bool {
 		return false
 	}
 	parts := strings.Split(path, "/")
+	if len(parts) == 2 && parts[0] == "vault" {
+		if parts[1] == "legacy-verification.json" {
+			return true
+		}
+		name := strings.TrimSuffix(strings.TrimPrefix(parts[1], "receipt-keys-"), ".json")
+		return strings.HasPrefix(parts[1], "receipt-keys-") && strings.HasSuffix(parts[1], ".json") && validVaultID(name)
+	}
 	if len(parts) == 2 {
 		if parts[0] != "profiles" && parts[0] != "tasks" && parts[0] != "backup-receipts" {
 			return false

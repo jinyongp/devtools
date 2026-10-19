@@ -209,3 +209,48 @@ func TestVaultInitializationRequiresLegacyMigration(t *testing.T) {
 		t.Fatal("failed initialization blocked legacy recovery", e)
 	}
 }
+
+func TestVaultMigrationKeepsExistingPublicLogicalIdentities(t *testing.T) {
+	ctx := context.Background()
+	root := privateTempDir(t)
+	p, err := vault.NewProfile("public")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Set("URL", vault.Public, "", "https://example.invalid", nil)
+	body, err := p.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := maintenance.AcquireExclusive(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := profilekey.Replacement(filepath.Join(root, "profiles"), p.Name, "values", body)
+	if err == nil {
+		err = maintenance.Replace(root, files)
+	}
+	release()
+	if err != nil {
+		t.Fatal(err)
+	}
+	master, _ := vault.NewKey()
+	defer master.Destroy()
+	vid, _ := vault.NewID()
+	id, _ := vault.NewID()
+	preview, err := InspectLegacyMigration(ctx, root, master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = MigrateLegacy(ctx, root, vid, master, id, preview.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	actualBytes, err := os.ReadFile(filepath.Join(root, "profiles", profilekey.CanonicalFilename(p.Name)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := vault.DecodeProfile(actualBytes)
+	if err != nil || after.Sealed || after.ID != p.ID || after.Generation != p.Generation || after.Values[0].Slots[0].Version != p.Values[0].Slots[0].Version {
+		t.Fatal("public logical identity changed during root setup", err)
+	}
+}

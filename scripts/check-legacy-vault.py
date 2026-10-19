@@ -8,12 +8,52 @@ import subprocess
 import sys
 import tempfile
 import tarfile
+import urllib.error
+import urllib.parse
+import urllib.request
 
 from vault_test_support import retire_vaults
 
 BASELINE = '89100eb98888895a450b2ebd403e4e1c9b5f52d2'
 SECRET = 'synthetic-actual-legacy-migration-token'
 PASSWORD = 'synthetic-actual-legacy-vault-password'
+
+
+def dashboard_request(origin, path, credential=None, body=None):
+    headers = {'Origin': origin}
+    if credential is not None:
+        headers['Authorization'] = 'Bearer ' + credential
+    encoded = None
+    if body is not None:
+        headers['Content-Type'] = 'application/json'
+        encoded = json.dumps(body).encode()
+    request = urllib.request.Request(origin + path, data=encoded, headers=headers)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        response = opener.open(request, timeout=10)
+    except urllib.error.HTTPError as error:
+        response = error
+    with response:
+        content = response.read(2 * 1024 * 1024 + 1)
+        status = response.code
+    if len(content) > 2 * 1024 * 1024 or SECRET.encode() in content or PASSWORD.encode() in content:
+        raise RuntimeError('Unsafe response from owned dashboard fixture')
+    if status == 401:
+        # The authentication boundary deliberately uses a plain HTTP denial.
+        return status, {}
+    return status, json.loads(content)
+
+
+def dashboard_session(started):
+    url = urllib.parse.urlsplit(started['url'])
+    if url.scheme != 'http' or url.hostname not in ('127.0.0.1', 'localhost', '::1'):
+        raise RuntimeError('Dashboard fixture must use a loopback address')
+    origin = urllib.parse.urlunsplit((url.scheme, url.netloc, '', '', ''))
+    token = urllib.parse.parse_qs(url.fragment)['token'][0]
+    status, result = dashboard_request(origin, '/session', body={'token': token})
+    if status != 200 or not result.get('ok'):
+        raise RuntimeError('Owned dashboard session creation failed')
+    return origin, result['token']
 
 
 def build_baseline(directory):
@@ -74,6 +114,7 @@ def main():
         if old_version['commit'] != BASELINE:
             raise RuntimeError('Actual baseline source identity mismatch')
         directory = None
+        dashboard_started = False
         try:
             api(legacy, 'init', '--profile', 'compatibility')
             api(legacy, 'sec', 'set', 'TOKEN', '--profile', 'compatibility', '--stdin', input=SECRET)
@@ -84,6 +125,12 @@ def main():
             source.write_text('TOKEN=' + SECRET + '\n'); source.chmod(0o600)
             data = Path(api(current, 'project', 'inspect', '--profile', 'compatibility')['paths']['data'])
             directory = data / 'vault'
+            old_dashboard = api(legacy, 'dashboard')
+            dashboard_started = True
+            old_origin, old_session = dashboard_session(old_dashboard['item'])
+            status, old_view = dashboard_request(old_origin, '/api/values?profile=compatibility', old_session)
+            if status != 200 or len(old_view.get('items', [])) != 2:
+                raise RuntimeError('Actual old dashboard positive control failed')
             api(current, 'vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input=PASSWORD + '\n')
             data = Path(api(current, 'project', 'inspect', '--profile', 'compatibility')['paths']['data'])
             directory = data / 'vault'
@@ -97,8 +144,31 @@ def main():
                                        ('new-profile', ['sec', 'set', 'TOKEN', '--stdin'])]:
                 denials.append(api(legacy, *operation, '--profile', profile,
                                    input=SECRET if '--stdin' in operation else None, denied=True))
+            dashboard_denials = []
+            for path, body in [('/api/values?profile=compatibility', None),
+                               ('/api/actions', {'domain': 'values', 'profile': 'compatibility', 'change': {
+                                   'action': 'variable.set', 'key': 'URL', 'env': '', 'value': 'changed',
+                                   'revision': old_view['revision'],
+                                   'request_id': '00000000-0000-4000-8000-000000008001'}})]:
+                status, result = dashboard_request(old_origin, path, old_session, body)
+                code = result.get('error', {}).get('code')
+                if status < 400 or code != 'storage_error':
+                    raise RuntimeError('Actual old dashboard accepted protected-root access')
+                dashboard_denials.append(code)
             if disk_state() != before:
                 raise RuntimeError('Old CLI changed protected data or created a plaintext profile')
+            new_dashboard = api(current, 'dashboard')['item']
+            if new_dashboard['server_id'] == old_dashboard['item']['server_id']:
+                raise RuntimeError('Current CLI reused an incompatible old dashboard')
+            new_origin, new_session = dashboard_session(new_dashboard)
+            status, _ = dashboard_request(new_origin, '/api/values?profile=compatibility', old_session)
+            if status != 401:
+                raise RuntimeError('Old dashboard session crossed server replacement')
+            status, _ = dashboard_request(new_origin, '/api/values?profile=compatibility', new_session)
+            if status != 200:
+                raise RuntimeError('New dashboard cannot inspect migrated metadata')
+            api(current, 'dashboard', 'stop')
+            dashboard_started = False
             if source.read_text() != 'TOKEN=' + SECRET + '\n':
                 raise RuntimeError('Migration changed original user input')
             result = subprocess.run([str(current), 'run', '--profile', 'compatibility', '--', sys.executable,
@@ -121,12 +191,19 @@ def main():
                     raise RuntimeError('Plaintext canary remains in migrated data')
 
         finally:
-            if directory is not None:
-                retire_vaults(directory)
+            try:
+                if dashboard_started:
+                    api(current, 'dashboard', 'stop')
+            finally:
+                if directory is not None:
+                    retire_vaults(directory)
     evidence = {'result': 'pass', 'baseline_commit': BASELINE, 'candidate': new_version,
                 'baseline_sha256': legacy_digest,
                 'candidate_sha256': hashlib.sha256(current.read_bytes()).hexdigest(),
-                'denials': denials, 'protected_json_unchanged': True, 'migrated_data_canary_scan': 'pass',
+                'denials': denials, 'dashboard_denials': dashboard_denials,
+                'old_dashboard_positive_control': True, 'incompatible_dashboard_replaced': True,
+                'old_session_rejected_after_replacement': True,
+                'protected_json_unchanged': True, 'migrated_data_canary_scan': 'pass',
                 'original_input_preserved_and_still_sensitive': True, 'owned_root_removed': True}
     args.evidence.write_text(json.dumps(evidence, indent=2) + '\n')
     print(json.dumps({'result': 'pass', 'actual_baseline': BASELINE, 'owned_root_removed': True}))

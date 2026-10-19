@@ -18,3 +18,22 @@ array의 용량(5×longest + 32KiB)이며 automaton·sink·전체 RSS가 아니�
 리뷰: workload 구분·setup/timing 경계·실제 작업 소비·선행 기대값·패턴 한계·EOF/Destroy·
 통계적 한계·메모리 지표 명칭을 확인했다. 기존 redact suite pass. 기준 SHA와 새 harness
 commit을 고정한 뒤 5회 반복하며 최적화나 임의의 성능 합격선을 추가하지 않는다.
+
+## 실제 측정
+
+clean da65ef7, Go 1.27.2, 같은 WSL2/Ryzen 9800X3D에서 count=5·benchtime=100ms로
+18 cases/90 batch estimates를 완료했다. 무거운 로컬 검사를 동시에 실행하지 않았다.
+[전체 raw stdout과 반복별 metrics](evidence/A12-redactor-da65ef7.json)를 보존한다. 선택 결과는 다음과
+같으며 throughput은 5개 calibrated estimate의 median이다.
+
+| 입력 조건 | MB/s median | stream B/op median | backing capacity |
+| --- | ---: | ---: | ---: |
+| patterns=10 / 4KiB chunk | 145.17 | 33120 | 32928B |
+| patterns=1000 / 4KiB chunk | 150.03 | 33120 | 32928B |
+| max-pattern / 4KiB chunk | 182.70 | 360640 | 360448B |
+
+90 batch estimates는 90개의 단일 stream latency samples를 뜻하지 않는다. Go의
+calibration이 고른 iteration 수를 raw에 보존했고 이 결과로 p95/p99나 유의성을
+주장하지 않는다. 최대 패턴에서 capacity가 크더라도 총 출력량에 따라 증가하지
+않는지 각 write 뒤 검사했다. process peak RSS·민감 메모리 보유 시간·cold key API
+호출 등 A12의 다른 측정은 별도로 남는다.

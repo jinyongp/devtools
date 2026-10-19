@@ -1,0 +1,727 @@
+{
+  "source_commit": "da65ef77a8c45f1c2ac54c665bcac43de98fecc2",
+  "go": "go1.27.2",
+  "cpu": "AMD Ryzen 7 9800X3D",
+  "platform": "WSL2 Linux x86_64",
+  "command": "GOCACHE=/tmp/devtools-values-go-cache go test ./internal/redact -run ^$ -bench Benchmark(MatcherConstruction|ProtectedStream)$ -benchmem -benchtime=100ms -count=5",
+  "cases": {
+    "BenchmarkMatcherConstruction/patterns=10": [
+      {
+        "ns/op": 58164.0,
+        "B/op": 71655.0,
+        "allocs/op": 806.0
+      },
+      {
+        "ns/op": 50216.0,
+        "B/op": 71655.0,
+        "allocs/op": 806.0
+      },
+      {
+        "ns/op": 55349.0,
+        "B/op": 71655.0,
+        "allocs/op": 806.0
+      },
+      {
+        "ns/op": 50722.0,
+        "B/op": 71654.0,
+        "allocs/op": 806.0
+      },
+      {
+        "ns/op": 51003.0,
+        "B/op": 71654.0,
+        "allocs/op": 806.0
+      }
+    ],
+    "BenchmarkMatcherConstruction/patterns=100": [
+      {
+        "ns/op": 508683.0,
+        "B/op": 701507.0,
+        "allocs/op": 7634.0
+      },
+      {
+        "ns/op": 519327.0,
+        "B/op": 701512.0,
+        "allocs/op": 7634.0
+      },
+      {
+        "ns/op": 478116.0,
+        "B/op": 701504.0,
+        "allocs/op": 7634.0
+      },
+      {
+        "ns/op": 512823.0,
+        "B/op": 701509.0,
+        "allocs/op": 7633.0
+      },
+      {
+        "ns/op": 462751.0,
+        "B/op": 701504.0,
+        "allocs/op": 7633.0
+      }
+    ],
+    "BenchmarkMatcherConstruction/patterns=1000": [
+      {
+        "ns/op": 6187471.0,
+        "B/op": 8588861.0,
+        "allocs/op": 75855.0
+      },
+      {
+        "ns/op": 6326091.0,
+        "B/op": 8588602.0,
+        "allocs/op": 75854.0
+      },
+      {
+        "ns/op": 5978618.0,
+        "B/op": 8589009.0,
+        "allocs/op": 75855.0
+      },
+      {
+        "ns/op": 5916977.0,
+        "B/op": 8588978.0,
+        "allocs/op": 75855.0
+      },
+      {
+        "ns/op": 5748488.0,
+        "B/op": 8588941.0,
+        "allocs/op": 75855.0
+      }
+    ],
+    "BenchmarkProtectedStream/unprotected-control/chunk=1": [
+      {
+        "ns/op": 11321400.0,
+        "MB/s": 92.62,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 11577738.0,
+        "MB/s": 90.57,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 11892613.0,
+        "MB/s": 88.17,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 11781439.0,
+        "MB/s": 89.0,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 11379857.0,
+        "MB/s": 92.14,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/unprotected-control/chunk=4096": [
+      {
+        "ns/op": 8208.0,
+        "MB/s": 127747.49,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 8423.0,
+        "MB/s": 124488.59,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 8330.0,
+        "MB/s": 125881.07,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 8185.0,
+        "MB/s": 128116.31,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 7785.0,
+        "MB/s": 134697.73,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/unprotected-control/chunk=32768": [
+      {
+        "ns/op": 4298.0,
+        "MB/s": 243985.34,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 4567.0,
+        "MB/s": 229620.29,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 4651.0,
+        "MB/s": 225453.42,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 4616.0,
+        "MB/s": 227155.18,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 4594.0,
+        "MB/s": 228231.56,
+        "buffer-cap-B": 32773.0,
+        "withheld-max-B": 0.0,
+        "B/op": 32968.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/patterns=10/chunk=1": [
+      {
+        "ns/op": 20910213.0,
+        "MB/s": 50.15,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 20082912.0,
+        "MB/s": 52.21,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 22754249.0,
+        "MB/s": 46.08,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 21716347.0,
+        "MB/s": 48.29,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 20058559.0,
+        "MB/s": 52.28,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/patterns=10/chunk=4096": [
+      {
+        "ns/op": 8553819.0,
+        "MB/s": 122.59,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 7222997.0,
+        "MB/s": 145.17,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33128.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 7134684.0,
+        "MB/s": 146.97,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 6712596.0,
+        "MB/s": 156.21,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 8051800.0,
+        "MB/s": 130.23,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/patterns=10/chunk=32768": [
+      {
+        "ns/op": 7087780.0,
+        "MB/s": 147.94,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 7497768.0,
+        "MB/s": 139.85,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33127.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 7171856.0,
+        "MB/s": 146.21,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33127.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 8396174.0,
+        "MB/s": 124.89,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 6984213.0,
+        "MB/s": 150.14,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/patterns=100/chunk=1": [
+      {
+        "ns/op": 20036340.0,
+        "MB/s": 52.33,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 20696820.0,
+        "MB/s": 50.66,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 20406513.0,
+        "MB/s": 51.38,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 19523820.0,
+        "MB/s": 53.71,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 19434180.0,
+        "MB/s": 53.96,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/patterns=100/chunk=4096": [
+      {
+        "ns/op": 6938275.0,
+        "MB/s": 151.13,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 7209982.0,
+        "MB/s": 145.43,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 7193942.0,
+        "MB/s": 145.76,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 6785125.0,
+        "MB/s": 154.54,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 6842978.0,
+        "MB/s": 153.23,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/patterns=100/chunk=32768": [
+      {
+        "ns/op": 6750084.0,
+        "MB/s": 155.34,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 6786072.0,
+        "MB/s": 154.52,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 6920023.0,
+        "MB/s": 151.53,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 8145246.0,
+        "MB/s": 128.73,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 7389847.0,
+        "MB/s": 141.89,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/patterns=1000/chunk=1": [
+      {
+        "ns/op": 19336757.0,
+        "MB/s": 54.23,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33138.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 19655209.0,
+        "MB/s": 53.35,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 19437971.0,
+        "MB/s": 53.94,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 19430891.0,
+        "MB/s": 53.96,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33138.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 21390814.0,
+        "MB/s": 49.02,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/patterns=1000/chunk=4096": [
+      {
+        "ns/op": 6988916.0,
+        "MB/s": 150.03,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 7051247.0,
+        "MB/s": 148.71,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 6992684.0,
+        "MB/s": 149.95,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 6800248.0,
+        "MB/s": 154.2,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33127.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 6608594.0,
+        "MB/s": 158.67,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/patterns=1000/chunk=32768": [
+      {
+        "ns/op": 6750526.0,
+        "MB/s": 155.33,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 7451754.0,
+        "MB/s": 140.72,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 6725165.0,
+        "MB/s": 155.92,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33127.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 7534250.0,
+        "MB/s": 139.17,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 6714182.0,
+        "MB/s": 156.17,
+        "buffer-cap-B": 32928.0,
+        "withheld-max-B": 31.0,
+        "B/op": 33120.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/max-pattern/chunk=1": [
+      {
+        "ns/op": 16151595.0,
+        "MB/s": 60.86,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 16095384.0,
+        "MB/s": 61.08,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 16084115.0,
+        "MB/s": 61.12,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 16107256.0,
+        "MB/s": 61.03,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 16083717.0,
+        "MB/s": 61.12,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/max-pattern/chunk=4096": [
+      {
+        "ns/op": 5359295.0,
+        "MB/s": 183.43,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 5505930.0,
+        "MB/s": 178.54,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 5404791.0,
+        "MB/s": 181.89,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 5380797.0,
+        "MB/s": 182.7,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 5366006.0,
+        "MB/s": 183.2,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      }
+    ],
+    "BenchmarkProtectedStream/max-pattern/chunk=32768": [
+      {
+        "ns/op": 5314717.0,
+        "MB/s": 184.97,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 5274491.0,
+        "MB/s": 186.38,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 5263358.0,
+        "MB/s": 186.77,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 5325688.0,
+        "MB/s": 184.59,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360645.0,
+        "allocs/op": 6.0
+      },
+      {
+        "ns/op": 5329713.0,
+        "MB/s": 184.45,
+        "buffer-cap-B": 360448.0,
+        "withheld-max-B": 65535.0,
+        "B/op": 360640.0,
+        "allocs/op": 6.0
+      }
+    ]
+  },
+  "limits": [
+    "Five calibrated batch estimates, not individual-operation p95/p99",
+    "buffer-cap-B is array capacity, not RSS",
+    "No equivalent protected baseline in 89100eb",
+    "Source test harness excludes matcher setup from stream timing"
+  ],
+  "raw_stdout": "goos: linux\ngoarch: amd64\npkg: github.com/jinyongp/devtools/internal/redact\ncpu: AMD Ryzen 7 9800X3D 8-Core Processor           \nBenchmarkMatcherConstruction/patterns=10-16         \t    2016\t     58164 ns/op\t   71655 B/op\t     806 allocs/op\nBenchmarkMatcherConstruction/patterns=10-16         \t    2359\t     50216 ns/op\t   71655 B/op\t     806 allocs/op\nBenchmarkMatcherConstruction/patterns=10-16         \t    2138\t     55349 ns/op\t   71655 B/op\t     806 allocs/op\nBenchmarkMatcherConstruction/patterns=10-16         \t    2344\t     50722 ns/op\t   71654 B/op\t     806 allocs/op\nBenchmarkMatcherConstruction/patterns=10-16         \t    2136\t     51003 ns/op\t   71654 B/op\t     806 allocs/op\nBenchmarkMatcherConstruction/patterns=100-16        \t     236\t    508683 ns/op\t  701507 B/op\t    7634 allocs/op\nBenchmarkMatcherConstruction/patterns=100-16        \t     228\t    519327 ns/op\t  701512 B/op\t    7634 allocs/op\nBenchmarkMatcherConstruction/patterns=100-16        \t     255\t    478116 ns/op\t  701504 B/op\t    7634 allocs/op\nBenchmarkMatcherConstruction/patterns=100-16        \t     228\t    512823 ns/op\t  701509 B/op\t    7633 allocs/op\nBenchmarkMatcherConstruction/patterns=100-16        \t     250\t    462751 ns/op\t  701504 B/op\t    7633 allocs/op\nBenchmarkMatcherConstruction/patterns=1000-16       \t      18\t   6187471 ns/op\t 8588861 B/op\t   75855 allocs/op\nBenchmarkMatcherConstruction/patterns=1000-16       \t      18\t   6326091 ns/op\t 8588602 B/op\t   75854 allocs/op\nBenchmarkMatcherConstruction/patterns=1000-16       \t      21\t   5978618 ns/op\t 8589009 B/op\t   75855 allocs/op\nBenchmarkMatcherConstruction/patterns=1000-16       \t      21\t   5916977 ns/op\t 8588978 B/op\t   75855 allocs/op\nBenchmarkMatcherConstruction/patterns=1000-16       \t      19\t   5748488 ns/op\t 8588941 B/op\t   75855 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=1-16         \t       9\t  11321400 ns/op\t  92.62 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=1-16         \t       9\t  11577738 ns/op\t  90.57 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=1-16         \t       9\t  11892613 ns/op\t  88.17 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=1-16         \t       9\t  11781439 ns/op\t  89.00 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=1-16         \t       9\t  11379857 ns/op\t  92.14 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=4096-16      \t   14647\t      8208 ns/op\t127747.49 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=4096-16      \t   14384\t      8423 ns/op\t124488.59 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=4096-16      \t   14350\t      8330 ns/op\t125881.07 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=4096-16      \t   14463\t      8185 ns/op\t128116.31 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=4096-16      \t   15802\t      7785 ns/op\t134697.73 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=32768-16     \t   26858\t      4298 ns/op\t243985.34 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=32768-16     \t   25581\t      4567 ns/op\t229620.29 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=32768-16     \t   27373\t      4651 ns/op\t225453.42 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=32768-16     \t   25819\t      4616 ns/op\t227155.18 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/unprotected-control/chunk=32768-16     \t   25770\t      4594 ns/op\t228231.56 MB/s\t     32773 buffer-cap-B\t         0 withheld-max-B\t   32968 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=1-16                 \t       6\t  20910213 ns/op\t  50.15 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=1-16                 \t       5\t  20082912 ns/op\t  52.21 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=1-16                 \t       6\t  22754249 ns/op\t  46.08 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=1-16                 \t       5\t  21716347 ns/op\t  48.29 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=1-16                 \t       5\t  20058559 ns/op\t  52.28 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=4096-16              \t      16\t   8553819 ns/op\t 122.59 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=4096-16              \t      14\t   7222997 ns/op\t 145.17 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33128 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=4096-16              \t      18\t   7134684 ns/op\t 146.97 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=4096-16              \t      16\t   6712596 ns/op\t 156.21 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=4096-16              \t      18\t   8051800 ns/op\t 130.23 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=32768-16             \t      18\t   7087780 ns/op\t 147.94 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=32768-16             \t      16\t   7497768 ns/op\t 139.85 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33127 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=32768-16             \t      15\t   7171856 ns/op\t 146.21 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33127 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=32768-16             \t      15\t   8396174 ns/op\t 124.89 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=10/chunk=32768-16             \t      15\t   6984213 ns/op\t 150.14 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=1-16                \t       6\t  20036340 ns/op\t  52.33 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=1-16                \t       6\t  20696820 ns/op\t  50.66 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=1-16                \t       6\t  20406513 ns/op\t  51.38 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=1-16                \t       6\t  19523820 ns/op\t  53.71 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=1-16                \t       6\t  19434180 ns/op\t  53.96 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=4096-16             \t      16\t   6938275 ns/op\t 151.13 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=4096-16             \t      16\t   7209982 ns/op\t 145.43 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=4096-16             \t      16\t   7193942 ns/op\t 145.76 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=4096-16             \t      18\t   6785125 ns/op\t 154.54 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=4096-16             \t      16\t   6842978 ns/op\t 153.23 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=32768-16            \t      16\t   6750084 ns/op\t 155.34 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=32768-16            \t      18\t   6786072 ns/op\t 154.52 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=32768-16            \t      16\t   6920023 ns/op\t 151.53 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=32768-16            \t      13\t   8145246 ns/op\t 128.73 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=100/chunk=32768-16            \t      15\t   7389847 ns/op\t 141.89 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=1-16               \t       6\t  19336757 ns/op\t  54.23 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33138 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=1-16               \t       6\t  19655209 ns/op\t  53.35 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=1-16               \t       6\t  19437971 ns/op\t  53.94 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=1-16               \t       6\t  19430891 ns/op\t  53.96 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33138 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=1-16               \t       6\t  21390814 ns/op\t  49.02 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=4096-16            \t      16\t   6988916 ns/op\t 150.03 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=4096-16            \t      18\t   7051247 ns/op\t 148.71 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=4096-16            \t      18\t   6992684 ns/op\t 149.95 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=4096-16            \t      16\t   6800248 ns/op\t 154.20 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33127 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=4096-16            \t      16\t   6608594 ns/op\t 158.67 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=32768-16           \t      16\t   6750526 ns/op\t 155.33 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=32768-16           \t      16\t   7451754 ns/op\t 140.72 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=32768-16           \t      16\t   6725165 ns/op\t 155.92 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33127 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=32768-16           \t      16\t   7534250 ns/op\t 139.17 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/patterns=1000/chunk=32768-16           \t      16\t   6714182 ns/op\t 156.17 MB/s\t     32928 buffer-cap-B\t        31.00 withheld-max-B\t   33120 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=1-16                 \t       7\t  16151595 ns/op\t  60.86 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=1-16                 \t       7\t  16095384 ns/op\t  61.08 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=1-16                 \t       7\t  16084115 ns/op\t  61.12 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=1-16                 \t       7\t  16107256 ns/op\t  61.03 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=1-16                 \t       7\t  16083717 ns/op\t  61.12 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=4096-16              \t      21\t   5359295 ns/op\t 183.43 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=4096-16              \t      22\t   5505930 ns/op\t 178.54 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=4096-16              \t      21\t   5404791 ns/op\t 181.89 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=4096-16              \t      21\t   5380797 ns/op\t 182.70 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=4096-16              \t      22\t   5366006 ns/op\t 183.20 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=32768-16             \t      22\t   5314717 ns/op\t 184.97 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=32768-16             \t      22\t   5274491 ns/op\t 186.38 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=32768-16             \t      22\t   5263358 ns/op\t 186.77 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=32768-16             \t      22\t   5325688 ns/op\t 184.59 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360645 B/op\t       6 allocs/op\nBenchmarkProtectedStream/max-pattern/chunk=32768-16             \t      22\t   5329713 ns/op\t 184.45 MB/s\t    360448 buffer-cap-B\t     65535 withheld-max-B\t  360640 B/op\t       6 allocs/op\nPASS\nok  \tgithub.com/jinyongp/devtools/internal/redact\t11.287s\n"
+}

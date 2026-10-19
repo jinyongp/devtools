@@ -40,3 +40,12 @@ concurrent launch, 변경→재시작 수렴 지연은 이 결과에 포함하�
 경고는 `/tmp/devtools-values-plan/A12-{values,execution}-{baseline,candidate}/`에 보존했다.
 리뷰: 두 binary identity, 같은 case key/크기/반복 수, 누락 case 없음, timing 경계와 불안정 사례,
 원문 없는 결과 schema를 대조했다. 본 기록을 A12 완료 근거로 제출하지 않는다.
+
+## 10-key 실행 재측정
+
+같은 binary와 fixture를 사용해 baseline 후 candidate를 각각 3 warmup·20회 실행했다.
+원래 noisy 10회 결과는 보존했다. harness source는 clean 1c0b22c이며 baseline
+binary 89100eb와 candidate 33c9c56의 digest도 원시 자료에 포함했다. 기준 평균
+8.439±0.840ms·median 8.223ms, 후보 19.493±0.774ms·median 19.236ms였다.
+이 재측정에서도 보호된 실행 준비 비용이 관측되며 앞선 큰 변동의 원인은 확정하지
+않는다. [20회 개별 samples](evidence/A12-injected-run-repeat10.json)를 보존한다.

@@ -538,14 +538,24 @@ func (p *Profile) Environment(env string, key *Material, now time.Time) (map[str
 // ResolveValues keeps source identity/expiry beside effective values. A metadata
 // or binding-only read verifies the manifest but never decrypts secret slots.
 func (p *Profile) ResolveValues(env string, key *Material, now time.Time, includeSecrets bool) ([]EffectiveValue, error) {
+	return p.resolveValues(env, key, now, includeSecrets, "all")
+}
+func (p *Profile) resolveValues(env string, key *Material, now time.Time, includeSecrets bool, selection string) ([]EffectiveValue, error) {
 	if err := p.Verify(key); err != nil {
 		return nil, err
 	}
 	if err := p.checkEnv(env); err != nil {
 		return nil, err
 	}
+	ids, err := p.selectionIDs(selection)
+	if err != nil {
+		return nil, err
+	}
 	out := []EffectiveValue{}
 	for _, v := range p.Values {
+		if ids != nil && !ids[v.ID] {
+			continue
+		}
 		var chosen *Slot
 		for i := range v.Slots {
 			s := &v.Slots[i]

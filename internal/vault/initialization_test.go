@@ -67,3 +67,21 @@ func TestVaultProfileDiscoveryUsesIdentityWithoutTreatingCatalogAsProfile(t *tes
 		t.Fatal("vault profile not discoverable", err)
 	}
 }
+
+func TestMissingRootSlotCannotBeInitializedOverProtectedProfiles(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "data")
+	master, _ := NewKey()
+	defer master.Destroy()
+	vid, _ := NewID()
+	ctx := context.Background()
+	if err := (FileStore{Root: root, VaultID: vid, CatalogKey: master}).Initialize(ctx); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := NewID()
+	if _, err := (KeyFileStore{Directory: filepath.Join(root, "vault")}).Initialize(ctx, other, "passphrase", PassphraseProtector{VaultID: other}); !errors.Is(err, ErrKeyMissing) {
+		t.Fatal("lost root became a new unrelated keyset", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "vault", keyFilename)); !os.IsNotExist(err) {
+		t.Fatal("replacement root slot written")
+	}
+}

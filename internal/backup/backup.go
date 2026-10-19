@@ -27,6 +27,7 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 const limit int64 = 128 << 20
@@ -35,7 +36,14 @@ const limit int64 = 128 << 20
 // bounded by the same limit so every committed result can be replayed.
 const restoreReceiptLimit int64 = 128 << 20
 
-type Engine struct{ Data, Config, Cache string }
+type Engine struct {
+	Data, Config, Cache string
+	// VaultMaster is called once per operation, before all disk/launch gates.
+	// Nil preserves the legacy reader/writer for roots not yet migrated.
+	VaultMaster func(context.Context) (*vault.Material, error)
+	vaultMaster *vault.Material
+	vaultID     string
+}
 type Config struct {
 	Directory string `json:"directory"`
 	Recipient string `json:"recipient"`
@@ -267,6 +275,12 @@ func logicalDomain(directory string) string {
 
 func (e Engine) snapshot(selected string) (Snapshot, error) {
 	s := Snapshot{Version: 1, Created: time.Now().UTC().Format(time.RFC3339Nano), Profiles: []Profile{}}
+	valid := false
+	defer func() {
+		if !valid {
+			destroySnapshot(&s)
+		}
+	}()
 	names := map[string]bool{}
 	if selected != "" {
 		names[selected] = true
@@ -288,18 +302,22 @@ func (e Engine) snapshot(selected string) (Snapshot, error) {
 	sort.Strings(ordered)
 	for _, name := range ordered {
 		p := Profile{Name: name}
-		valuesData, err := profilekey.Snapshot(filepath.Join(e.Data, "profiles"), name, "values", limit)
+		valuesData, err := e.valueSnapshotHeld(context.Background(), name)
 		if err != nil {
 			return s, err
 		}
 		if valuesData != nil {
-			if _, err := values.RestoreSnapshot(valuesData, name, name); err != nil {
+			checked, err := values.RestoreSnapshot(valuesData, name, name)
+			clear(checked)
+			if err != nil {
+				clear(valuesData)
 				return s, err
 			}
 			p.Values = valuesData
 		}
 		taskSnapshot, err := (tasks.Store{Directory: filepath.Join(e.Data, "tasks"), Profile: name}).ExportSnapshotHeld(limit)
 		if err != nil {
+			clear(p.Values)
 			return s, err
 		}
 		if taskSnapshot.Data != nil {
@@ -312,6 +330,7 @@ func (e Engine) snapshot(selected string) (Snapshot, error) {
 		}
 		s.Profiles = append(s.Profiles, p)
 	}
+	valid = true
 	return s, nil
 }
 func encodeTo(s Snapshot, recipient age.Recipient) ([]byte, error) {
@@ -319,6 +338,7 @@ func encodeTo(s Snapshot, recipient age.Recipient) ([]byte, error) {
 	if err != nil || int64(len(b)) > limit {
 		return nil, errors.New("backup too large")
 	}
+	defer clear(b)
 	var out bytes.Buffer
 	w, err := age.Encrypt(&out, recipient)
 	if err != nil {
@@ -425,15 +445,25 @@ func (e Engine) CreateWithPassphrase(ctx context.Context, request CreateOptions)
 }
 
 func (e Engine) createArchive(ctx context.Context, profile, output string, encoder func(Snapshot) ([]byte, error)) (CreateResult, *protocol.Error) {
+	scoped, closeScope, scopeErr := e.withVault(ctx)
+	if scopeErr != nil {
+		return CreateResult{}, scopeErr
+	}
+	defer closeScope()
+	e = scoped
 	release, err := maintenance.Acquire(ctx, e.Data)
 	if err != nil {
 		return CreateResult{}, failure("storage_error")
 	}
 	defer release()
+	if err := e.checkVaultRootHeld(); err != nil {
+		return CreateResult{}, values.VaultError(ctx, err)
+	}
 	s, err := e.snapshot(profile)
 	if err != nil {
 		return CreateResult{}, failure("backup_error")
 	}
+	defer destroySnapshot(&s)
 	if ctx.Err() != nil {
 		return CreateResult{}, failure("canceled")
 	}
@@ -455,6 +485,12 @@ func (e Engine) createArchive(ctx context.Context, profile, output string, encod
 
 func decodeWithIdentity(path string, identity age.Identity) (Snapshot, []byte, error) {
 	var snapshot Snapshot
+	valid := false
+	defer func() {
+		if !valid {
+			destroySnapshot(&snapshot)
+		}
+	}()
 	cipher, err := platformfs.ReadExternalPrivate(path, limit+1<<20)
 	if err != nil {
 		return snapshot, nil, err
@@ -465,6 +501,7 @@ func decodeWithIdentity(path string, identity age.Identity) (Snapshot, []byte, e
 	}
 	// Read to authenticated EOF before any parsing or mutation.
 	plain, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	defer clear(plain)
 	if err != nil || int64(len(plain)) > limit {
 		return snapshot, nil, errors.New("invalid encrypted backup")
 	}
@@ -480,22 +517,28 @@ func decodeWithIdentity(path string, identity age.Identity) (Snapshot, []byte, e
 		}
 		seen[p.Name] = true
 		if p.Values != nil {
-			if _, err = values.RestoreSnapshot(p.Values, p.Name, p.Name); err != nil {
-				return snapshot, nil, err
+			checked, checkErr := values.RestoreSnapshot(p.Values, p.Name, p.Name)
+			clear(checked)
+			if checkErr != nil {
+				return snapshot, nil, checkErr
 			}
 		}
 		if p.Tasks != nil {
-			if _, err = tasks.RestoreSnapshot(p.Tasks, p.Name, p.Name); err != nil {
-				return snapshot, nil, err
+			checked, checkErr := tasks.RestoreSnapshot(p.Tasks, p.Name, p.Name)
+			clear(checked)
+			if checkErr != nil {
+				return snapshot, nil, checkErr
 			}
 		}
 	}
+	valid = true
 	return snapshot, cipher, nil
 }
 
 func decode(path, identityPath string) (Snapshot, []byte, string, error) {
 	var snapshot Snapshot
 	key, err := platformfs.ReadExternalPrivate(identityPath, 4096)
+	defer clear(key)
 	if err != nil {
 		return snapshot, nil, "", err
 	}
@@ -573,6 +616,7 @@ func Inspect(path, identityPath string) (Metadata, *protocol.Error) {
 	if err != nil {
 		return Metadata{}, failure("invalid_backup")
 	}
+	defer destroySnapshot(&snapshot)
 	return Metadata{CreatedAt: snapshot.Created, Profiles: summaries(snapshot)}, nil
 }
 
@@ -624,6 +668,7 @@ func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult
 	if err != nil {
 		return result, failure("invalid_backup")
 	}
+	defer destroySnapshot(&snapshot)
 	source, selectionErr := selectImportSummary(snapshot, request.Source)
 	if selectionErr != nil {
 		return result, selectionErr
@@ -673,6 +718,7 @@ func (e Engine) Restore(ctx context.Context, path, identityPath, source, target,
 	if err != nil {
 		return plan, failure("invalid_backup")
 	}
+	defer destroySnapshot(&snapshot)
 	return e.restore(ctx, restoreRequest{Snapshot: snapshot, Cipher: cipher, Source: source, Target: target, Expected: expected, RequestID: requestID, Replace: replace})
 }
 
@@ -699,8 +745,21 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	if selected == nil {
 		return plan, failure("not_found")
 	}
-	if values.IsLogicalSnapshot(selected.Values) {
+	if values.IsLogicalSnapshot(selected.Values) && e.VaultMaster == nil {
 		return plan, failure("unsupported_storage")
+	}
+	scoped, closeScope, scopeErr := e.withVault(ctx)
+	if scopeErr != nil {
+		return plan, scopeErr
+	}
+	defer closeScope()
+	e = scoped
+	if e.vaultMaster != nil && expected != "" {
+		releaseLaunch, err := vault.AcquireLaunchMutation(ctx, filepath.Join(e.Data, "vault"))
+		if err != nil {
+			return plan, values.VaultError(ctx, err)
+		}
+		defer releaseLaunch()
 	}
 	release, err := maintenance.Acquire(ctx, e.Data)
 	if err != nil {
@@ -710,10 +769,11 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	// The legacy restore writer must not recreate plaintext values, including
 	// a previously absent target profile, inside a protected root. The keyed
 	// logical restore adapter will own this path once configured.
-	if _, protected, markerErr := maintenance.ProtectedRootHeld(e.Data); markerErr != nil {
-		return plan, failure("storage_error")
-	} else if protected {
-		return plan, failure("unsupported_storage")
+	if err := e.checkVaultRootHeld(); err != nil {
+		if err.Error() == "unsupported_storage" {
+			return plan, failure("unsupported_storage")
+		}
+		return plan, values.VaultError(ctx, err)
 	}
 	targetTasks := tasks.Store{Directory: filepath.Join(e.Data, "tasks"), Profile: target}
 	if err := targetTasks.CollectOrphanGenerationsHeld(); err != nil {
@@ -727,6 +787,12 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		}
 		b, err := maintenance.Read(filepath.Join(e.Data, receiptPath), restoreReceiptLimit)
 		if err == nil {
+			decoded, decodeErr := e.decodeReceipt(ctx, requestID, b)
+			if decodeErr != nil {
+				return plan, failure("storage_error")
+			}
+			defer clear(decoded)
+			b = decoded
 			var previous restoreReceipt
 			if json.Unmarshal(b, &previous) != nil {
 				return plan, failure("storage_error")
@@ -748,11 +814,17 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	}
 	exists := false
 	targetData := map[string][]byte{}
+	defer func() {
+		for _, body := range targetData {
+			clear(body)
+		}
+	}()
 	hashInput := []byte(digest(cipher) + "\n" + source + "\n" + target)
-	valuesData, snapshotErr := profilekey.Snapshot(filepath.Join(e.Data, "profiles"), target, "values", limit)
+	valuesData, snapshotErr := e.valueSnapshotHeld(ctx, target)
 	if snapshotErr != nil {
 		return plan, failure("storage_error")
 	}
+	defer clear(valuesData)
 	if valuesData != nil {
 		exists = true
 		targetData["profiles"] = append([]byte{}, valuesData...)
@@ -767,20 +839,32 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		targetData["tasks"] = append([]byte{}, taskSnapshot.Data...)
 	}
 	hashInput = append(hashInput, []byte("\ntasks:"+digest(taskSnapshot.Data))...)
-	keyPath := filepath.Join(e.Data, ".maintenance", "preview-key")
-	key, keyErr := maintenance.Read(keyPath, 32)
-	if errors.Is(keyErr, os.ErrNotExist) {
-		key = make([]byte, 32)
-		if _, keyErr = rand.Read(key); keyErr == nil {
-			keyErr = maintenance.Write(keyPath, key)
+	if e.vaultMaster != nil {
+		identity, identityErr := e.vaultStore().SnapshotIdentityHeld(ctx, target)
+		if identityErr != nil {
+			return plan, values.VaultError(ctx, identityErr)
 		}
+		hashInput = append(hashInput, []byte("\nidentity:"+identity.ProfileID+":"+identity.StorageGeneration)...)
+		plan.Digest, err = vault.BackupFingerprint(e.vaultMaster, e.vaultID, target, hashInput)
+		if err != nil {
+			return plan, values.VaultError(ctx, err)
+		}
+	} else {
+		keyPath := filepath.Join(e.Data, ".maintenance", "preview-key")
+		key, keyErr := maintenance.Read(keyPath, 32)
+		if errors.Is(keyErr, os.ErrNotExist) {
+			key = make([]byte, 32)
+			if _, keyErr = rand.Read(key); keyErr == nil {
+				keyErr = maintenance.Write(keyPath, key)
+			}
+		}
+		if keyErr != nil || len(key) != 32 {
+			return plan, failure("storage_error")
+		}
+		mac := hmac.New(sha256.New, key)
+		mac.Write(hashInput)
+		plan.Digest = hex.EncodeToString(mac.Sum(nil))
 	}
-	if keyErr != nil || len(key) != 32 {
-		return plan, failure("storage_error")
-	}
-	mac := hmac.New(sha256.New, key)
-	mac.Write(hashInput)
-	plan.Digest = hex.EncodeToString(mac.Sum(nil))
 	plan.Targets = append(plan.Targets, Target{source, target, exists})
 	if request.Import != nil {
 		targetCanonical, canonicalErr := profilecatalog.CanonicalSnapshot(target, targetData["profiles"], targetData["tasks"])
@@ -833,6 +917,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		if err != nil {
 			return plan, failure("backup_error")
 		}
+		defer destroySnapshot(&before)
 		var b []byte
 		if recoveryPassphrase != "" {
 			b, err = encodePassphrase(before, recoveryPassphrase)
@@ -859,15 +944,23 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	if int64(len(receipt)) > restoreReceiptLimit {
 		return plan, protocol.NewError("result_too_large", "Restore result exceeds the replay receipt size limit.", 3, map[string]any{"limit_bytes": restoreReceiptLimit})
 	}
-	files := map[string][]byte{receiptPath: receipt}
+	protectedReceipt, receiptErr := e.encodeReceipt(ctx, requestID, receipt)
+	if receiptErr != nil {
+		return plan, values.VaultError(ctx, receiptErr)
+	}
+	if e.vaultMaster != nil {
+		clear(receipt)
+	}
+	files := map[string][]byte{receiptPath: protectedReceipt}
 	var valuesPayload []byte
+	defer func() { clear(valuesPayload) }()
 	if selected.Values != nil {
 		valuesPayload, err = values.RestoreSnapshot(selected.Values, source, target)
 		if err != nil {
 			return plan, failure("invalid_backup")
 		}
 	}
-	valueFiles, replacementErr := profilekey.Replacement(filepath.Join(e.Data, "profiles"), target, "values", valuesPayload)
+	valueFiles, replacementErr := e.restoreValueFilesHeld(ctx, target, valuesPayload)
 	if replacementErr != nil {
 		return plan, failure("storage_error")
 	}

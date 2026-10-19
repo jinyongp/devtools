@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
 )
 
@@ -67,6 +68,22 @@ func (s KeyFileStore) Initialize(ctx context.Context, vaultID, backend string, p
 		return nil, errorsNamed("vault_already_initialized")
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, ErrRecovery
+	}
+	// A lost slot beside protected profile data is recovery, not a new vault.
+	// Check before RNG/native item creation so setup cannot strand existing
+	// encrypted profiles behind an unrelated replacement root key.
+	if filepath.Base(s.Directory) == "vault" {
+		dataRoot := filepath.Dir(s.Directory)
+		if _, err := os.Lstat(filepath.Join(dataRoot, catalogRelative)); err == nil {
+			return nil, ErrKeyMissing
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, ErrRecovery
+		}
+		if _, protected, err := maintenance.ProtectedRootHeld(dataRoot); err != nil {
+			return nil, ErrRecovery
+		} else if protected {
+			return nil, ErrKeyMissing
+		}
 	}
 	if protector == nil || !validID(vaultID) || protector.Identity() != (ProtectionIdentity{Backend: backend, VaultID: vaultID}) {
 		return nil, ErrInvalid

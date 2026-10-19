@@ -92,7 +92,7 @@ func validForwardPath(path string) bool {
 	if !filepath.IsLocal(path) || strings.Contains(path, "\\") {
 		return false
 	}
-	if path == ".maintenance/values-key" || path == "vault/legacy-verification.json" || path == "profiles/vault-catalog.json" {
+	if path == ".maintenance/values-key" || path == ".maintenance/preview-key" || path == "vault/legacy-verification.json" || path == "profiles/vault-catalog.json" {
 		return true
 	}
 	parts := strings.Split(path, "/")

@@ -77,11 +77,18 @@ func (p *Profile) ExportLogical(key *Material) (*Material, error) {
 // session, launch handle, process record, or source vault identity. It prepares
 // an in-memory candidate; publication still needs the launch mutation barrier.
 func ImportLogical(encoded *Material, target, vaultID string, master *Material) (*Profile, *Material, error) {
+	return importLogical(encoded, target, vaultID, master, false)
+}
+func importLogical(encoded *Material, target, vaultID string, master *Material, forceSealed bool) (*Profile, *Material, error) {
 	decoded, err := decodeLogical(encoded)
 	if err != nil {
 		return nil, nil, err
 	}
 	wire := *decoded
+	if forceSealed {
+		sealed := true
+		wire.Sealed = &sealed
+	}
 	p, err := NewProfile(target)
 	if err != nil {
 		return nil, nil, err
@@ -158,7 +165,19 @@ func ImportLogical(encoded *Material, target, vaultID string, master *Material) 
 	}
 	// Independently reopen all layers and compare logical contents, rather than
 	// treating successful serialization as successful restore.
-	check, err := p.ExportLogical(key)
+	verifiedKey := key
+	if p.Sealed {
+		actual, unwrapErr := UnwrapKeyset(master, p.VaultID, p.ID, p.KeyEpoch, p.WrappedKey)
+		if unwrapErr != nil {
+			return nil, nil, unwrapErr
+		}
+		defer actual.Destroy()
+		if !bytes.Equal(actual.data, key.data) {
+			return nil, nil, ErrIntegrity
+		}
+		verifiedKey = actual
+	}
+	check, err := p.ExportLogical(verifiedKey)
 	if err != nil {
 		return nil, nil, err
 	}

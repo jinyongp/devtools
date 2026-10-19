@@ -111,3 +111,31 @@ key-slot write 잠금을 보유하지 않는다. 동일 native backend 재선택
 
 관련 package 회귀·race·vet 및 선택한 Windows/macOS test compile을 확인했다.
 실제 keyed backup engine adapter와 CLI 연결은 계속 미완료 상태다.
+
+## 암호화 저장소용 backup engine 연결
+
+- Engine의 root-key provider는 작업마다 한 번, 모든 disk/launch gate 전에 호출한다.
+  전체 profile snapshot은 gate 안에서 인증하고, archive에는 논리 payload만 넣는다.
+  복원은 대상의 새 profile ID/generation/keyset으로 만든 after-image를 task 상태와
+  영수증에 묶어 기존 encrypted-only maintenance transaction으로 커밋한다.
+- 실제 age 파일로 export → metadata inspect → preview → apply → replay를 검증했다.
+  원본 OS 키는 옮기지 않으며 slot version·bundle·만료 override를 보존한다.
+  공개 값만 있는 archive로 기존 sealed profile을 덮어써도 sealed 이력은 유지한다.
+- 새 preview는 root에서 용도 분리한 키로 HMAC을 계산하며 raw preview-key를 만들지
+  않는다. 논리 payload에 포함되지 않는 대상 profile ID/storage generation도 검증에
+  넣는다. 동일한 논리 값을 복원한 뒤 옛 preview가 다시 통과하는 반례를 수정했다.
+- 새 backup receipt는 root로 인증·암호화한다. 이전 UUID backup receipt도 migration
+  시 같은 형식으로 감싸 과거 완료 결과를 보존한다. values용 옛 shared-MAC receipt는
+  기존 방식대로 보존한다. 필요 없어진 managed legacy preview-key는 암호화 복구
+  archive에 포함한 뒤 raw 파일을 제거한다. 사용자 원본 dotenv/age 파일은 지우지 않는다.
+- 실제 공유 launch lease를 보유하면 restore가 데이터 변경 전에 중단되는지, 같은
+  UUID로 안전하게 재시도되는지, 변경된 목표는 conflict인지 확인했다. 이후 값 변경과
+  profile key rotation 뒤에도 과거 receipt replay가 옛 값을 다시 적용하지 않는다.
+- key slot이 사라져도 catalog/보호 root가 남아 있으면 새 난수 root로 초기화하지 않는다.
+  이 경우는 명시적인 recovery 오류다. 새 profile keyset도 실제 재개봉 후 검증한다.
+- JSON/age 경계의 소유 byte buffer와 snapshot view를 작업 종료/오류 때 폐기한다.
+  런타임 문자열·OS 사본까지 지워진다는 보장은 하지 않는다.
+
+Linux 전체 Go 회귀와 관련 race/vet, 선택한 Windows/macOS test compile을 수행했다.
+CLI/profiletransfer factory가 provider를 선택하는 연결, 값 mutation/replay·retention 통합,
+설치물 및 native producer/consumer 실기 검증은 남아 있다. A10 완료로 기록하지 않는다.

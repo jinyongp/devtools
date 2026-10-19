@@ -16,6 +16,7 @@ const (
 	MaterialLegacyVerification = "legacy-verification"
 	MaterialReceipt            = "receipt"
 	MaterialRewrap             = "key-rewrap"
+	MaterialBackupReceipt      = "backup-receipt"
 	MaxProtectedPlainBytes     = 64 << 20
 )
 
@@ -29,7 +30,7 @@ type protectedMaterial struct {
 }
 
 func validMaterialPurpose(purpose string) bool {
-	return purpose == MaterialRecovery || purpose == MaterialLegacyVerification || purpose == MaterialReceipt || purpose == MaterialRewrap
+	return purpose == MaterialRecovery || purpose == MaterialLegacyVerification || purpose == MaterialReceipt || purpose == MaterialRewrap || purpose == MaterialBackupReceipt
 }
 func (p protectedMaterial) aad() ([]byte, error) {
 	if p.Format != StorageVersion || !validID(p.VaultID) || !validID(p.Scope) || !validMaterialPurpose(p.Purpose) {

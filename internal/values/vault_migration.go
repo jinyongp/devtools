@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
@@ -22,19 +23,32 @@ import (
 // LegacyInventory contains identifiers and an opaque revision, never values.
 // The root/session key must be obtained before entering any maintenance gate.
 type LegacyInventory struct {
-	Profiles           []string `json:"profiles"`
-	SecretProfiles     []string `json:"secret_profiles"`
-	LegacyReceiptCount int      `json:"legacy_receipt_count"`
-	Fingerprint        string   `json:"fingerprint"`
+	Profiles                 []string `json:"profiles"`
+	SecretProfiles           []string `json:"secret_profiles"`
+	LegacyReceiptCount       int      `json:"legacy_receipt_count"`
+	LegacyBackupReceiptCount int      `json:"legacy_backup_receipt_count"`
+	Fingerprint              string   `json:"fingerprint"`
 }
 
 type legacyMigrationState struct {
-	inventory LegacyInventory
-	profiles  []*State
-	mac       []byte
+	inventory      LegacyInventory
+	profiles       []*State
+	mac            []byte
+	previewKey     []byte
+	backupReceipts map[string][]byte
 }
 
-func (s *legacyMigrationState) destroy() { clear(s.mac); s.mac = nil; s.profiles = nil }
+func (s *legacyMigrationState) destroy() {
+	clear(s.mac)
+	clear(s.previewKey)
+	s.previewKey = nil
+	s.mac = nil
+	s.profiles = nil
+	for _, b := range s.backupReceipts {
+		clear(b)
+	}
+	s.backupReceipts = nil
+}
 
 func inspectLegacyHeld(root string, master *vault.Material) (*legacyMigrationState, error) {
 	if master == nil {
@@ -45,7 +59,7 @@ func inspectLegacyHeld(root string, master *vault.Material) (*legacyMigrationSta
 	if err != nil {
 		return nil, vault.ErrRecovery
 	}
-	result := &legacyMigrationState{inventory: LegacyInventory{Profiles: names, SecretProfiles: []string{}}}
+	result := &legacyMigrationState{inventory: LegacyInventory{Profiles: names, SecretProfiles: []string{}}, backupReceipts: map[string][]byte{}}
 	ok := false
 	defer func() {
 		if !ok {
@@ -100,6 +114,16 @@ func inspectLegacyHeld(root string, master *vault.Material) (*legacyMigrationSta
 	if err := encoder.Encode(result.mac); err != nil {
 		return nil, vault.ErrInvalid
 	}
+	result.previewKey, err = maintenance.Read(filepath.Join(root, ".maintenance", "preview-key"), 32)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, vault.ErrRecovery
+	}
+	if err == nil && len(result.previewKey) != 32 {
+		return nil, vault.ErrInvalid
+	}
+	if err = encoder.Encode(result.previewKey); err != nil {
+		return nil, vault.ErrInvalid
+	}
 	receipts, err := os.ReadDir(filepath.Join(root, "backup-receipts"))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, vault.ErrRecovery
@@ -108,7 +132,42 @@ func inspectLegacyHeld(root string, master *vault.Material) (*legacyMigrationSta
 		if entry.IsDir() || !entry.Type().IsRegular() {
 			return nil, vault.ErrRecovery
 		}
-		if len(entry.Name()) < 7 || entry.Name()[:7] != "values-" {
+		if !strings.HasPrefix(entry.Name(), "values-") {
+			id := strings.TrimSuffix(entry.Name(), ".json")
+			compact := strings.ToLower(strings.ReplaceAll(id, "-", ""))
+			decoded, decodeErr := hex.DecodeString(compact)
+			if len(id) != 36 || len(decoded) != 16 || decodeErr != nil || id[8] != '-' || id[13] != '-' || id[18] != '-' || id[23] != '-' || !strings.HasSuffix(entry.Name(), ".json") {
+				return nil, vault.ErrInvalid
+			}
+			body, err := maintenance.Read(filepath.Join(root, "backup-receipts", entry.Name()), vault.MaxProtectedPlainBytes)
+			if err != nil {
+				return nil, vault.ErrRecovery
+			}
+			totalBytes += len(body)
+			if totalBytes > vault.MaxProtectedPlainBytes {
+				clear(body)
+				return nil, vault.ErrTooLarge
+			}
+			var receipt struct {
+				Fingerprint          string          `json:"fingerprint"`
+				OperationFingerprint string          `json:"operation_fingerprint,omitempty"`
+				Plan                 json.RawMessage `json:"plan"`
+				Import               json.RawMessage `json:"import,omitempty"`
+			}
+			if vault.StrictDecode(body, &receipt) != nil || len(receipt.Fingerprint) != 64 || len(receipt.Plan) == 0 {
+				clear(body)
+				return nil, vault.ErrInvalid
+			}
+			if err = encoder.Encode(entry.Name()); err != nil {
+				clear(body)
+				return nil, vault.ErrInvalid
+			}
+			if err = encoder.Encode(body); err != nil {
+				clear(body)
+				return nil, vault.ErrInvalid
+			}
+			result.backupReceipts[entry.Name()] = body
+			result.inventory.LegacyBackupReceiptCount++
 			continue
 		}
 		body, err := maintenance.Read(filepath.Join(root, "backup-receipts", entry.Name()), vault.MaxDocumentBytes)
@@ -353,6 +412,22 @@ func MigrateLegacy(ctx context.Context, root, vaultID string, master *vault.Mate
 		}
 		after["vault/legacy-verification.json"] = encrypted
 		after[".maintenance/values-key"] = []byte(`{"vault_material":1}`)
+	}
+	// Legacy backup preview keys are not needed for replay: the committed
+	// receipt is retained under root authentication. The encrypted recovery
+	// archive captures this managed key before its raw file is removed.
+	if len(legacy.previewKey) > 0 {
+		after[".maintenance/preview-key"] = nil
+	}
+	for name, body := range legacy.backupReceipts {
+		scope := strings.ToLower(strings.ReplaceAll(strings.TrimSuffix(name, ".json"), "-", ""))
+		plain := vault.NewMaterial(body)
+		encrypted, err := vault.SealProtected(ctx, master, vaultID, scope, vault.MaterialBackupReceipt, plain)
+		plain.Destroy()
+		if err != nil {
+			return vault.ForwardResult{}, err
+		}
+		after["backup-receipts/"+name] = encrypted
 	}
 	return forward.ReplaceHeld(ctx, id, fingerprint, after)
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/proxy"
 	"github.com/jinyongp/devtools/internal/services"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 const uuidPattern = `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
@@ -52,6 +53,7 @@ type Command struct {
 }
 
 type App struct {
+	vaultClient      func(context.Context, string) (*vault.SessionClient, error)
 	userPaths        func() (paths.Directories, error)
 	commands         []Command
 	passphrasePrompt func(context.Context, IO, string) (string, *protocol.Error)
@@ -119,6 +121,7 @@ func New(version, commit string) *App {
 			"paths": object(map[string]any{"config": stringSchema(), "data": stringSchema(), "cache": stringSchema(), "runtime": stringSchema()}, "config", "data", "cache"),
 		}, "item", "paths"), Run: a.inspect},
 	}
+	a.registerVault()
 	a.registerTools()
 	a.registerCommands()
 	a.registerImport()

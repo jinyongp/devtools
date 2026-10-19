@@ -29,7 +29,7 @@ func (s FileStore) ReadAnyWithMasterHeld(ctx context.Context, name string, maste
 	if err != nil {
 		return nil, nil, err
 	}
-	if p.Sealed {
+	if p.Sealed || p.Name != name {
 		return nil, nil, ErrIntegrity
 	}
 	if err = p.Verify(nil); err != nil {

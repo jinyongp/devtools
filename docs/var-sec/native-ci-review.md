@@ -145,3 +145,16 @@ helper만 Unix canonical/Windows 기존 절대 표기로 구분한다. Windows 8
 확인했다. 실제 Linux producer를 symlink TMPDIR로 실행하여 export·정리 완료를 확인했다.
 Python syntax pass. 원래 Mac 실패의 원시 경로와 같은 alias 조건을 사용했으며 macOS
 전체 job과 12방향 import는 후속 native CI까지 pending이다.
+
+## publish=false 후보 검증 queue 분리
+
+서로 다른 검증 commit이 전역 release concurrency group에서 대기하여 새 native 수정의
+실기를 확인하기 전에 이미 실패 원인이 알려진 전체 suite를 기다렸다. publish=true는
+기존 전역 release group을 유지하고, typed boolean false인 검증만 commit별 group으로
+분리한다. 동일 후보 중복은 여전히 직렬화하고 자동 취소하지 않는다.
+
+검토: dispatch의 typed publish 입력, tag mutation의 publish 조건·main ancestry·exact
+SHA reuse·package required dependencies·실제 release jobs 조건은 그대로다. 공유 외부
+publish 대상은 여전히 전역 직렬화한다. OS 검증 실패를 skip/pass로 바꾸지 않는다.
+workflow YAML과 release contract suite로 검증한다. 오래된 자체 run 452317f는 실패
+증거를 보존하고 superseded로 취소 요청했으며 완료 성공으로 기록하지 않는다.

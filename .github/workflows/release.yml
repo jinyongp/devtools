@@ -30,8 +30,10 @@ on:
 permissions:
   contents: read
 
+# Publication remains globally serialized. Nonpublishing validation candidates
+# cannot mutate tags/releases and should not block a newer native investigation.
 concurrency:
-  group: release
+  group: ${{ inputs.publish && 'release' || format('release-validation-{0}', inputs.commit) }}
   cancel-in-progress: false
 
 jobs:

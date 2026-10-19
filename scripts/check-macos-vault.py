@@ -32,10 +32,10 @@ def main():
             security('list-keychains', '-d', 'user', '-s', keychain)
             security('default-keychain', '-d', 'user', '-s', keychain)
             env = dict(os.environ, DEVTOOLS_TEST_NATIVE_KEYCHAIN='1', DEVTOOLS_TEST_KEYCHAIN=keychain)
-            with open('vault-keychain-results.jsonl', 'w') as output:
+            with open('vault-keychain-results.jsonl', 'w') as output, open('vault-keychain-results.stderr', 'w') as diagnostics:
                 result = subprocess.run(['go', 'test', '-json', '-count=1', '-timeout', '3m',
                                          './internal/vault', '-run', '^TestNativeKeychain'],
-                                        env=env, stdout=output, stderr=subprocess.STDOUT, timeout=210)
+                                        env=env, stdout=output, stderr=diagnostics, timeout=210)
             if result.returncode:
                 raise RuntimeError('Native Keychain tests failed; inspect value-free JSON test evidence')
             events = [json.loads(line) for line in Path('vault-keychain-results.jsonl').read_text().splitlines()]

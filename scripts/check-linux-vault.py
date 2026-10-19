@@ -31,10 +31,12 @@ def main():
     env = dict(os.environ)
 
     def tests(pattern, log, expected, **flags):
-        with open(log, 'w') as output:
+        # go -json describes stdout only; dependency downloads go to stderr.
+        # Preserve both streams without treating tool diagnostics as test events.
+        with open(log, 'w') as output, open(log + '.stderr', 'w') as diagnostics:
             result = subprocess.run(['go', 'test', '-json', '-count=1', '-timeout', '90s',
                                      './internal/vault', '-run', pattern], env=dict(env, **flags),
-                                    stdout=output, stderr=subprocess.STDOUT, timeout=110)
+                                    stdout=output, stderr=diagnostics, timeout=110)
         if result.returncode:
             raise RuntimeError('Native Secret Service tests failed; inspect JSON evidence')
         events = [json.loads(line) for line in Path(log).read_text().splitlines()]

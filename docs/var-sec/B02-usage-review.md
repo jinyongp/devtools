@@ -58,3 +58,16 @@ No app getenv or external credential success observation is claimed. Parent env
 is independent. Returned metadata is an observation, not a launch admission or a
 promise to revoke a previously delivered environment. C01 adds durable convergence;
 C02 adds only explicitly selected managed auto-restarts.
+
+## macOS native fixture follow-up
+
+4ed2083 run 39262719472 failed only ci-macos at
+TestValueUsesSeparatesDeclarationsDeliveriesAndUnknown's first public write
+(job 118094376647). The new services fixture used that package's literal /var
+TempDir path; unlike the values/CLI helpers it had not resolved macOS's /var
+symlink. platformfs.guardDirectory intentionally opens each component with
+O_NOFOLLOW, so the fixture did not reach its intended store setup. Canonicalize
+only this fixture's private data path with filepath.EvalSymlinks, matching the
+existing values/CLI fixture contract. Product symlink protections are unchanged.
+The exact failed log is `/tmp/devtools-values-plan/4ed-macos-failed.log`.
+Local focused race passes after correction; fresh macOS CI remains required.

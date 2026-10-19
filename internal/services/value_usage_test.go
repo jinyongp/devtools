@@ -16,7 +16,10 @@ import (
 
 func TestValueUsesSeparatesDeclarationsDeliveriesAndUnknown(t *testing.T) {
 	ctx := context.Background()
-	data := privateTempDir(t)
+	data, err := filepath.EvalSymlinks(privateTempDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
 	directory := privateTempDir(t)
 	config := filepath.Join(directory, "devtools.toml")
 	writeConfig := func(bundle string) {

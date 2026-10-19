@@ -53,3 +53,10 @@ Python 내부 오류를 얻지 못할 수 있다. scope 전체 journal을 확대
 `aaf5fd0`의 private error file로 첫 session의 vault API 실패까지 좁혔다. 아직
 logout 이전이다. init/status 등 subcommand와 원문 없는 제한된 API error code를
 함께 남기도록 보완한다. raw stderr·native key·환경 원문을 수집하지 않는다.
+
+`3200682`의 typed 오류로 vault/init의 invalid_argument를 확인했다. fixture가
+profile 대상 명령의 helper를 root 전체 vault/version/update에도 적용하여 지원하지
+않는 --profile을 붙인 원인이었다. 로컬 isolated root에서도 같은 오류를 재현했다.
+helper는 실제 profile 명령에만 profile을 붙이며 root 명령은 자신의 vault root를
+그대로 선택한다. 제품 schema나 native fallback을 바꾸지 않는다. 올바른 root 명령이
+isolated native mutation을 계속 거절하는 것도 확인한다.

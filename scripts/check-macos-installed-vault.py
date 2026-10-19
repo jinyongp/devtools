@@ -74,7 +74,8 @@ def main():
         binary = home / '.local/bin/devtools'
         directory = None
         def api(*args, input=None, denied=False):
-            result = subprocess.run([str(binary), *args, '--profile', 'native-keychain-fixture'], env=env,
+            selected = [*args, '--profile', 'native-keychain-fixture'] if args[0] in ('init', 'sec', 'var', 'project') else list(args)
+            result = subprocess.run([str(binary), *selected], env=env,
                                     cwd=home, input=input, capture_output=True, timeout=40)
             if SECRET.encode() in result.stdout + result.stderr:
                 raise RuntimeError('Synthetic secret reached CLI output')

@@ -65,7 +65,8 @@ def phase(root, name):
         wait_for(available, 'Native service did not become ready')
         binary = str(root / 'devtools')
         def api(*args, input=None, error=None):
-            result = subprocess.run([binary, *args, '--profile', 'logout-fixture'], env=env,
+            selected = [*args, '--profile', 'logout-fixture'] if args[0] in ('init', 'sec', 'var', 'project') else list(args)
+            result = subprocess.run([binary, *selected], env=env,
                                     cwd=home, input=input, capture_output=True, text=True, timeout=20)
             if SECRET in result.stdout + result.stderr:
                 raise RuntimeError('Synthetic secret reached API output')

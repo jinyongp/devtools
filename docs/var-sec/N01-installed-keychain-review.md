@@ -32,3 +32,10 @@ default가 wrapper-owned keychain인지 먼저 확인한 뒤, 새 private HOME�
 search/default도 그 한 keychain으로 명시한다. 다른 keychain을 생성하거나 선택하지
 않으며 부모 wrapper의 원래 selection 복원은 유지한다. 제품 Keychain ACL은 변경하지
 않는다. 이후 CLI 실패는 원문 대신 제한된 error code와 command 이름만 기록한다.
+
+`3200682`의 typed 오류로 vault/init의 invalid_argument를 확인했다. fixture가
+profile 대상 명령의 helper를 root 전체 vault/version/update에도 적용하여 지원하지
+않는 --profile을 붙인 원인이었다. 로컬 isolated root에서도 같은 오류를 재현했다.
+helper는 실제 profile 명령에만 profile을 붙이며 root 명령은 자신의 vault root를
+그대로 선택한다. 제품 schema나 native fallback을 바꾸지 않는다. 올바른 root 명령이
+isolated native mutation을 계속 거절하는 것도 확인한다.

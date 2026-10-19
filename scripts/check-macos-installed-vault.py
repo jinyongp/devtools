@@ -112,6 +112,13 @@ def main():
             if original['backend'] != 'keychain':
                 raise RuntimeError('Native Keychain was not selected')
             run()
+            old_session = json.loads((directory / 'session.json').read_text())['session_id']
+            retire_vaults(directory)
+            # No vault unlock or UI input: native access must reopen a cold
+            # session automatically while the OS collection remains unlocked.
+            run()
+            if json.loads((directory / 'session.json').read_text())['session_id'] == old_session:
+                raise RuntimeError('Implicit native reopen reused the retired session')
             api('vault', 'lock')
             checked('/usr/bin/security', 'lock-keychain', str(keychain))
             denial = api('vault', 'unlock', denied=True)
@@ -146,6 +153,7 @@ def main():
                 retire_vaults(directory)
     evidence = dict(native_installed_keychain='pass', signed_test_packages='adhoc',
                     signatures_differ=signatures[0] != signatures[1], locked_denial=denial,
+                    silent_native_reopen_after_session_retirement=True,
                     old_key_session_retired_before_update=True, synthetic_home_removed=True,
                     changed_signature_authorization_required=update_denial,
                     explicit_previous_version_recovery='pass', existing_creator_app_policy_preserved=True)

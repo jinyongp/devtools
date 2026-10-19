@@ -114,6 +114,9 @@ def phase(root, name):
                     reply.extend(part)
                 if bytes(reply) != struct.pack('>II', 8, 0):
                     raise RuntimeError('Explicit native unlock failed')
+            # OS collection unlock alone is sufficient: the cold session must
+            # reopen through ordinary use, without a devtools unlock operation.
+            run()
             api('vault', 'unlock')
             run()
         data = Path(api('project', 'inspect')['paths']['data'])
@@ -243,7 +246,8 @@ def privileged(binary):
     if success:
         print(json.dumps({'real_pam_logout': 'pass', 'native_backend': 'secret-service',
                           'warm_session_lost': True, 'locked_native_access_denied': True,
-                          'explicit_unlock_preserved_values': True, 'owned_account_and_home_removed': True}))
+                          'explicit_unlock_preserved_values': True, 'silent_native_reopen_after_os_unlock': True,
+                          'owned_account_and_home_removed': True}))
 
 
 def main():

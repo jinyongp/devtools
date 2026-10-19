@@ -151,6 +151,14 @@ timeout = "3s"
         api("sec", "set", "NATIVE_TOKEN", "--stdin", env=native_env, input="synthetic-native-dpapi-canary")
         native_command = ["run", "--", node, "-e", "process.stdout.write(process.env.NATIVE_TOKEN)"]
         assert raw(native_command, env=native_env) == "[REDACTED]"
+        native_directory = native_root / "data" / "vault"
+        old_session = json.loads((native_directory / "session.json").read_text())["session_id"]
+        retire_vaults(native_directory)
+        # A new worker must use DPAPI automatically, without explicit unlock or
+        # a passphrase; an old cached key cannot satisfy this assertion.
+        assert raw(native_command, env=native_env) == "[REDACTED]"
+        assert json.loads((native_directory / "session.json").read_text())["session_id"] != old_session
+        steps.append("default_dpapi_silent_native_reopen_after_session_retirement")
         api("vault", "lock", env=native_env)
         try:
             raw(native_command, env=native_env)

@@ -36,3 +36,17 @@ SystemRoot/WINDIR만 담은 명시 environment block을 전달한다. 자식의 
 막으며 token/process/thread/pipe handle을 닫는다. 원래 소유한 live process handle로
 종료하고 context 만료 시 kill한다. 세 native assertion과 SID 대조는 유지한다.
 양 architecture compile/vet pass. 실제 생성과 pipe 거절은 후속 CI에서 확인한다.
+
+## CreateProcessWithTokenW 실제 후속 결과와 stdio 제거
+
+`59c1188`은 process 생성 권한 오류를 넘었으나 두 Windows suite가 8분 timeout으로
+실패했다. 원시 stack은 첫 readiness의 anonymous stdout ReadFile에서 대기하고 있었다.
+이 channel에 실제 read deadline이 없었으며 process 종료만으로 EOF를 얻는 가정이
+성립하지 않았다. 내부 handle 전달이 어디에 남았는지는 이 stack만으로 단정하지 않는다.
+
+fixture는 inherited stdio에 의존하지 않고 새 공개 named pipe로 SID readiness만 보낸다.
+연결 10초·읽기/쓰기 5초, 256-byte 상한을 적용한다. 실제 생성 API의 process handle을
+직접 유지하여 token SID를 부모에서도 대조하며 같은 handle로 wait/kill/close한다.
+PID로 process를 다시 열지 않는다. 각 subtest 소유 cleanup과 handle 단일 소유권을
+다시 검토했고 같은 세 pipe 방어 assertion을 유지한다. source compile/vet와 실제
+native 결과를 구분하며 후속 결과까지 N04는 pending이다.

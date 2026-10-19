@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -50,7 +50,10 @@ func runWindowsPeerFixture(mode, endpoint string) int {
 		if err != nil {
 			return 3
 		}
-		fmt.Println(user.User.Sid.String())
+		if reportWindowsPeerSID(endpoint, user.User.Sid.String()) != 0 {
+			windows.CloseHandle(handle)
+			return 11
+		}
 		if err := connectSessionPipe(ctx, handle); err != nil {
 			windows.CloseHandle(handle)
 			return 4
@@ -70,15 +73,17 @@ func runWindowsPeerFixture(mode, endpoint string) int {
 			if !errors.Is(err, windows.ERROR_ACCESS_DENIED) {
 				return 10
 			}
-			fmt.Println(user.User.Sid.String())
-			return 0
+			return reportWindowsPeerSID(endpoint, user.User.Sid.String())
 		}
 		if err != nil {
 			return 6
 		}
-		fmt.Println(user.User.Sid.String())
 	default:
 		return 7
+	}
+	if mode == "client" && reportWindowsPeerSID(endpoint, user.User.Sid.String()) != 0 {
+		windows.CloseHandle(handle)
+		return 11
 	}
 	file := os.NewFile(uintptr(handle), endpoint)
 	defer file.Close()
@@ -126,24 +131,63 @@ func TestNativeWindowsPipePeersRejectOtherSID(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	child := func(mode, endpoint string) (*os.Process, *bufio.Reader) {
+	child := func(t *testing.T, mode, endpoint string) windows.Handle {
 		t.Helper()
-		process, output, err := startNativeWindowsPeer(token, binary, directory, mode, endpoint)
+		identity, err := nativePeerTestPipe(endpoint + "-identity")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if identity != 0 {
+				windows.CloseHandle(identity)
+			}
+		}()
+		process, err := startNativeWindowsPeer(token, binary, directory, mode, endpoint)
 		if err != nil {
 			t.Fatal("cannot start different-SID fixture", err)
 		}
-		t.Cleanup(func() { process.Kill(); process.Wait(); output.Close() })
-		go func() {
-			<-ctx.Done()
-			process.Kill()
-		}()
-		return process, bufio.NewReader(output)
-	}
-	identity := func(output *bufio.Reader) {
-		t.Helper()
-		line, err := output.ReadString('\n')
+		t.Cleanup(func() {
+			windows.TerminateProcess(process, 1)
+			windows.WaitForSingleObject(process, 5000)
+			windows.CloseHandle(process)
+		})
+		var processToken windows.Token
+		if err := windows.OpenProcessToken(process, windows.TOKEN_QUERY, &processToken); err != nil {
+			t.Fatal("cannot inspect created process token", err)
+		}
+		actual, err := processToken.GetTokenUser()
+		processToken.Close()
+		if err != nil || actual.User.Sid.String() != expectedSID {
+			t.Fatal("created process has unexpected SID", err)
+		}
+		ready, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		if err := connectSessionPipe(ready, identity); err != nil {
+			t.Fatal("different-SID readiness did not connect", err)
+		}
+		// Transfer handle ownership to os.File and use an overlapped pipe with
+		// a real deadline, rather than an unbounded inherited stdout read.
+		output := os.NewFile(uintptr(identity), endpoint+"-identity")
+		identity = 0
+		defer output.Close()
+		if err := output.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		line, err := bufio.NewReader(io.LimitReader(output, 256)).ReadString('\n')
 		if err != nil || line != expectedSID+"\n" {
-			t.Fatal("fixture process did not use the alternate SID")
+			t.Fatal("fixture process did not use the alternate SID", err)
+		}
+		return process
+	}
+	wait := func(t *testing.T, process windows.Handle) {
+		t.Helper()
+		result, err := windows.WaitForSingleObject(process, 10000)
+		if err != nil || result != windows.WAIT_OBJECT_0 {
+			t.Fatal("different-SID fixture did not finish", err)
+		}
+		var code uint32
+		if err := windows.GetExitCodeProcess(process, &code); err != nil || code != 0 {
+			t.Fatal("different-SID fixture failed", err)
 		}
 	}
 	endpoint := func() string {
@@ -155,8 +199,7 @@ func TestNativeWindowsPipePeersRejectOtherSID(t *testing.T) {
 	}
 	t.Run("client rejects other-user server", func(t *testing.T) {
 		name := endpoint()
-		_, output := child("server", name)
-		identity(output)
+		child(t, "server", name)
 		connection, err := dialSession(ctx, name)
 		if connection != nil {
 			connection.Close()
@@ -172,19 +215,16 @@ func TestNativeWindowsPipePeersRejectOtherSID(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer windows.CloseHandle(handle)
-		process, output := child("client", name)
+		process := child(t, "client", name)
 		if err := connectSessionPipe(ctx, handle); err != nil {
 			t.Fatal(err)
 		}
 		if err := verifySessionPipePeer(handle, false); !errors.Is(err, ErrDenied) {
 			t.Fatal("server did not reject the foreign client SID", err)
 		}
-		// Complete the client's read before asserting its reported process SID.
+		// Close the application fixture stream and require successful child exit.
 		windows.DisconnectNamedPipe(handle)
-		identity(output)
-		if state, err := process.Wait(); err != nil || !state.Success() {
-			t.Fatal("different-SID client did not complete", err)
-		}
+		wait(t, process)
 	})
 	t.Run("private pipe ACL rejects other-user client", func(t *testing.T) {
 		name := endpoint()
@@ -193,55 +233,47 @@ func TestNativeWindowsPipePeersRejectOtherSID(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer windows.CloseHandle(handle)
-		process, output := child("denied-client", name)
-		identity(output)
-		if state, err := process.Wait(); err != nil || !state.Success() {
-			t.Fatal("production pipe ACL did not deny the different-SID process", err)
-		}
+		process := child(t, "denied-client", name)
+		wait(t, process)
 	})
 }
 
-// CreateProcessWithTokenW uses the runner's impersonation privilege instead of
-// CreateProcessAsUser's primary-token assignment privilege. Only public fixture
-// code and endpoint names enter the child; no credential environment is inherited.
-func startNativeWindowsPeer(token windows.Token, binary, directory, mode, endpoint string) (*os.Process, *os.File, error) {
-	read, write, err := os.Pipe()
+// Report only a public SID over an owned, bounded fixture channel. No inherited
+// standard handles are needed by CreateProcessWithTokenW.
+func reportWindowsPeerSID(endpoint, sid string) int {
+	name, _ := windows.UTF16PtrFromString(endpoint + "-identity")
+	handle, err := windows.CreateFile(name, windows.GENERIC_WRITE, 0, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OVERLAPPED, 0)
 	if err != nil {
-		return nil, nil, err
+		return 12
 	}
-	defer write.Close()
-	fail := func(err error) (*os.Process, *os.File, error) { read.Close(); return nil, nil, err }
-	if err := windows.SetHandleInformation(windows.Handle(write.Fd()), windows.HANDLE_FLAG_INHERIT, windows.HANDLE_FLAG_INHERIT); err != nil {
-		return fail(err)
+	output := os.NewFile(uintptr(handle), endpoint+"-identity")
+	defer output.Close()
+	if err := output.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return 13
 	}
-	nullName, _ := windows.UTF16PtrFromString("NUL")
-	attrs := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), InheritHandle: 1}
-	null, err := windows.CreateFile(nullName, windows.GENERIC_READ|windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, &attrs, windows.OPEN_EXISTING, 0, 0)
-	if err != nil {
-		return fail(err)
+	if err := writeAll(output, []byte(sid+"\n")); err != nil {
+		return 14
 	}
-	defer windows.CloseHandle(null)
+	return 0
+}
+
+// This test-only launcher requires impersonation, not primary-token assignment.
+// Keep the original owned process handle; never recover its identity from a PID.
+func startNativeWindowsPeer(token windows.Token, binary, directory, mode, endpoint string) (windows.Handle, error) {
 	application, _ := windows.UTF16PtrFromString(binary)
 	command, _ := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{binary, "__vault-peer-fixture", mode, endpoint}))
 	cwd, _ := windows.UTF16PtrFromString(directory)
 	environment := utf16.Encode([]rune(strings.Join([]string{"SystemRoot=" + os.Getenv("SystemRoot"), "WINDIR=" + os.Getenv("WINDIR"), ""}, "\x00") + "\x00"))
-	startup := windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfo{})), Flags: windows.STARTF_USESTDHANDLES, StdInput: null, StdOutput: windows.Handle(write.Fd()), StdErr: null}
+	startup := windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfo{}))}
 	var info windows.ProcessInformation
 	ok, _, callErr := windows.NewLazySystemDLL("advapi32.dll").NewProc("CreateProcessWithTokenW").Call(uintptr(token), 0, uintptr(unsafe.Pointer(application)), uintptr(unsafe.Pointer(command)), windows.CREATE_UNICODE_ENVIRONMENT, uintptr(unsafe.Pointer(&environment[0])), uintptr(unsafe.Pointer(cwd)), uintptr(unsafe.Pointer(&startup)), uintptr(unsafe.Pointer(&info)))
 	runtime.KeepAlive(application)
 	runtime.KeepAlive(command)
 	runtime.KeepAlive(cwd)
 	runtime.KeepAlive(environment)
-	runtime.KeepAlive(write)
 	if ok == 0 {
-		return fail(callErr)
+		return 0, callErr
 	}
-	defer windows.CloseHandle(info.Thread)
-	defer windows.CloseHandle(info.Process)
-	process, err := os.FindProcess(int(info.ProcessId))
-	if err != nil {
-		windows.TerminateProcess(info.Process, 1)
-		return fail(err)
-	}
-	return process, read, nil
+	windows.CloseHandle(info.Thread)
+	return info.Process, nil
 }

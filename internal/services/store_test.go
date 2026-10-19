@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -400,6 +401,16 @@ func TestRestartBeforeStopFailurePreservesRunningExecution(t *testing.T) {
 }
 
 func TestRestartPreservesStopMutationWhenColdStartPreflightFails(t *testing.T) {
+	for _, lostResponse := range []bool{false, true} {
+		name := "acknowledged"
+		if lostResponse {
+			name = "accepted stop response lost"
+		}
+		t.Run(name, func(t *testing.T) { testRestartPreservesStopMutation(t, lostResponse) })
+	}
+}
+
+func testRestartPreservesStopMutation(t *testing.T, lostResponse bool) {
 	s := Store{Data: privateTempDir(t)}
 	root := privateTempDir(t)
 	if err := fixtureWriteFile(filepath.Join(root, "devtools.toml"), []byte("profile='app'\n[commands.web]\nexec=['/bin/true']\n"), 0600); err != nil {
@@ -417,6 +428,7 @@ func TestRestartPreservesStopMutationWhenColdStartPreflightFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	token := strings.Repeat("c", 64)
+	var stops atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("Authorization") != "Bearer "+token {
 			http.Error(w, "unexpected request", http.StatusForbidden)
@@ -424,6 +436,7 @@ func TestRestartPreservesStopMutationWhenColdStartPreflightFails(t *testing.T) {
 		}
 		switch request.URL.Path {
 		case "/stop":
+			stops.Add(1)
 			ended := time.Now().UTC()
 			stopped := old
 			stopped.EndedAt = &ended
@@ -431,6 +444,12 @@ func TestRestartPreservesStopMutationWhenColdStartPreflightFails(t *testing.T) {
 			stopped.Reason = "stop_requested"
 			if err := writePrivate(s.path(old.ID, "record.json"), stopped); err != nil {
 				t.Fatal(err)
+			}
+			if lostResponse {
+				// The supervisor durably accepted stop, but its reply is lost.
+				// Let the real RPC deadline cancel the client's connection.
+				<-request.Context().Done()
+				return
 			}
 			_ = json.NewEncoder(w).Encode(old)
 		case "/status":
@@ -469,6 +488,10 @@ func TestRestartPreservesStopMutationWhenColdStartPreflightFails(t *testing.T) {
 	}
 	if len(phases) != 2 || phases[0] != RestartBeforeStop || phases[1] != RestartBeforeStart {
 		t.Fatalf("unexpected restart phase order: %#v", phases)
+	}
+	replayed, failure := s.Apply(context.Background(), request)
+	if failure == nil || failure.Code != "requirements_failed" || !replayed.Changed || !replayed.Replayed || replayed.Item.State != "stopped" || stops.Load() != 1 {
+		t.Fatal("retry lost the accepted stop or repeated its side effect")
 	}
 }
 

@@ -1070,7 +1070,10 @@ func (s Store) stop(ctx context.Context, r Record) (Result, *protocol.Error) {
 			return Result{}, reconcileErr
 		}
 		if changed || current.EndedAt != nil {
-			return Result{Item: current, Changed: changed}, nil
+			// r was active when this stop began. A terminal record observed
+			// after a lost reply is still a known transition, even when the
+			// supervisor persisted it before reconciliation read it.
+			return Result{Item: current, Changed: true}, nil
 		}
 		return Result{}, failure("process_unavailable")
 	}

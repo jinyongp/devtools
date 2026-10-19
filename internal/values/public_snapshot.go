@@ -17,7 +17,7 @@ import (
 // CapturePublic pins actual values and opaque logical identities on a root
 // without vault protection. Legacy public-only profiles are converted once;
 // legacy secrets require explicit protected migration. No key session is opened.
-func CapturePublic(ctx context.Context, root, profile, env string, inject bool, now time.Time) (*Snapshot, *protocol.Error) {
+func CapturePublic(ctx context.Context, root, profile, env string, inject bool, now time.Time, selection ...string) (*Snapshot, *protocol.Error) {
 	if !project.ValidProfile(profile) {
 		return nil, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
@@ -51,7 +51,7 @@ func CapturePublic(ctx context.Context, root, profile, env string, inject bool, 
 			}
 		}
 	}
-	snapshot, e := captureProfile(p, nil, env, inject, now)
+	snapshot, e := captureProfile(p, nil, env, inject, now, selection...)
 	if e != nil {
 		return nil, e
 	}
@@ -65,6 +65,7 @@ func CapturePublic(ctx context.Context, root, profile, env string, inject bool, 
 		encoded := vault.NewEncoder("absent-effective-value-revision")
 		encoded.String(profile)
 		encoded.String(env)
+		encoded.String(snapshot.metadata.Selection)
 		metadata, e := encoded.Finish()
 		if e != nil {
 			snapshot.Destroy()

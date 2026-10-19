@@ -31,14 +31,14 @@ func CurrentStore(directory, profile string) ModernStore {
 
 // CaptureCurrent selects the storage/session flow before preparing one actual
 // execution. It never initializes protection or prompts from an agent command.
-func CaptureCurrent(ctx context.Context, root, profile, env string, inject bool, now time.Time) (*Snapshot, *protocol.Error) {
+func CaptureCurrent(ctx context.Context, root, profile, env string, inject bool, now time.Time, selection ...string) (*Snapshot, *protocol.Error) {
 	if !project.ValidProfile(profile) {
 		return nil, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
 	directory := filepath.Join(root, "vault")
 	if _, err := (vault.KeyFileStore{Directory: directory}).Read(); err != nil {
 		if errors.Is(err, vault.ErrKeyMissing) {
-			return CapturePublic(ctx, root, profile, env, inject, now)
+			return CapturePublic(ctx, root, profile, env, inject, now, selection...)
 		}
 		return nil, VaultError(ctx, err)
 	}
@@ -46,7 +46,7 @@ func CaptureCurrent(ctx context.Context, root, profile, env string, inject bool,
 	if err != nil {
 		return nil, VaultError(ctx, err)
 	}
-	return CaptureVaultSession(ctx, root, profile, env, inject, now, client)
+	return CaptureVaultSession(ctx, root, profile, env, inject, now, client, selection...)
 }
 func (s ModernStore) PlanImport(ctx context.Context, input map[string]string, variables []string, env string, overwrite bool) ([]ImportItem, bool, *protocol.Error) {
 	if !project.ValidProfile(s.Profile) {

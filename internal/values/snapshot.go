@@ -16,6 +16,7 @@ import (
 )
 
 type SnapshotMetadata struct {
+	Selection         string                    `json:"selection"`
 	Public            *vault.PublicLaunchTicket `json:"public,omitempty"`
 	Launch            *vault.LaunchTicket       `json:"launch,omitempty"`
 	KeyEpoch          uint64                    `json:"key_epoch,omitempty"`
@@ -152,7 +153,7 @@ func CaptureLegacy(state *State, env string, inject bool) (*Snapshot, *protocol.
 
 // CaptureVault obtains a root key once per snapshot, before the disk gate. All
 // selected slots resolve from the one authenticated catalog/profile read.
-func CaptureVault(ctx context.Context, root, profile, env string, inject bool, now time.Time, master func(context.Context) (*vault.Material, error)) (*Snapshot, *protocol.Error) {
+func CaptureVault(ctx context.Context, root, profile, env string, inject bool, now time.Time, master func(context.Context) (*vault.Material, error), selection ...string) (*Snapshot, *protocol.Error) {
 	if master == nil {
 		return nil, VaultError(ctx, vault.ErrLocked)
 	}
@@ -182,17 +183,24 @@ func CaptureVault(ctx context.Context, root, profile, env string, inject bool, n
 		return nil, VaultError(ctx, err)
 	}
 	defer profileKey.Destroy()
-	return captureProfile(p, profileKey, env, inject, now)
+	return captureProfile(p, profileKey, env, inject, now, selection...)
 }
 
-func captureProfile(p *vault.Profile, profileKey *vault.Material, env string, inject bool, now time.Time) (*Snapshot, *protocol.Error) {
+func captureProfile(p *vault.Profile, profileKey *vault.Material, env string, inject bool, now time.Time, selection ...string) (*Snapshot, *protocol.Error) {
 	ctx := context.Background()
 	profile := p.Name
-	effective, err := p.ResolveValues(env, profileKey, now, inject)
+	chosen := "all"
+	if len(selection) > 1 {
+		return nil, VaultError(ctx, vault.ErrInvalid)
+	}
+	if len(selection) == 1 && selection[0] != "" {
+		chosen = selection[0]
+	}
+	effective, err := p.ResolveSelectedValues(env, profileKey, now, inject, chosen)
 	if err != nil {
 		return nil, VaultError(ctx, err)
 	}
-	s := &Snapshot{state: newState(profile), canInject: inject, metadata: SnapshotMetadata{Identity: vault.InputIdentity{ProfileID: p.ID, StorageGeneration: p.Generation}, KeyEpoch: p.KeyEpoch, IntegrityVerified: p.Sealed, Slots: []vault.SlotReference{}}}
+	s := &Snapshot{state: newState(profile), canInject: inject, metadata: SnapshotMetadata{Selection: chosen, Identity: vault.InputIdentity{ProfileID: p.ID, StorageGeneration: p.Generation}, KeyEpoch: p.KeyEpoch, IntegrityVerified: p.Sealed, Slots: []vault.SlotReference{}}}
 	if env != "" {
 		s.state.Envs[env] = true
 	}
@@ -215,7 +223,7 @@ func captureProfile(p *vault.Profile, profileKey *vault.Material, env string, in
 	e.String(p.ID)
 	e.String(p.Generation)
 	e.String(env)
-	e.String("all")
+	e.String(chosen)
 	for _, slot := range s.metadata.Slots {
 		e.String(slot.ValueID)
 		e.String(slot.SlotID)
@@ -244,7 +252,7 @@ func VaultError(ctx context.Context, err error) *protocol.Error {
 	}
 	if err != nil {
 		switch err.Error() {
-		case "value_expired", "env_not_found", "profile_not_found", "key_not_found", "kind_conflict":
+		case "value_expired", "env_not_found", "profile_not_found", "key_not_found", "kind_conflict", "bundle_not_found", "bundle_exists":
 			code = err.Error()
 		}
 	}
@@ -261,13 +269,13 @@ func VaultError(ctx context.Context, err error) *protocol.Error {
 // CaptureVaultSession preserves the admission ticket from the same key delivery
 // used to authenticate the input. A later unlocked session cannot refresh an old
 // prepared input's authority silently.
-func CaptureVaultSession(ctx context.Context, root, profile, env string, inject bool, now time.Time, client *vault.SessionClient) (*Snapshot, *protocol.Error) {
+func CaptureVaultSession(ctx context.Context, root, profile, env string, inject bool, now time.Time, client *vault.SessionClient, selection ...string) (*Snapshot, *protocol.Error) {
 	var ticket *vault.LaunchTicket
 	snapshot, err := CaptureVault(ctx, root, profile, env, inject, now, func(ctx context.Context) (*vault.Material, error) {
 		key, t, e := client.UseWithTicket(ctx)
 		ticket = t
 		return key, e
-	})
+	}, selection...)
 	if err != nil {
 		return nil, err
 	}

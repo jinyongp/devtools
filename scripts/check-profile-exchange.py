@@ -48,6 +48,12 @@ def export_fixture(binary, root, output, origin, commit):
     api('var', 'set', 'MESSAGE', '--env', 'local', '--value', 'environment override')
     cli(binary, root, 'vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input='synthetic-local-vault-unlock\n')
     api('sec', 'set', 'TOKEN', '--stdin', input=SECRET)
+    source_vault = cli(binary, root, 'vault', 'status')['item']['vault_id']
+    def input_identity(*options):
+        current = api('values', 'inspect', *options)['values']['current']
+        assert current is not None and current['integrity_verified'] is True
+        return dict(identity=current['identity'], slots=current['slots'])
+    source_inputs = dict(common=input_identity(), local=input_identity('--env', 'local'))
     task = mutate('add', body={'title': 'Cross-platform task 한글'})['item']['id']
     workstream = mutate('workstream', 'create', body={'title': 'Portable workstream'})['item']['id']
     validation = mutate('validation', 'add', body={'task_id': task, 'title': 'Portable validation',
@@ -60,6 +66,7 @@ def export_fixture(binary, root, output, origin, commit):
     shutil.copyfile(binary, output / 'cli.bin')
     manifest = dict(commit=commit, origin=origin, task=task, workstream=workstream,
                     validation=validation, expected_workstream=expected,
+                    source_vault_id=source_vault, source_inputs=source_inputs,
                     archive_sha256=hashlib.sha256(encrypted).hexdigest(),
                     binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest())
     (output / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False), encoding='utf-8')
@@ -117,6 +124,15 @@ def import_fixtures(root, fixtures, origin, commit):
         apply = [*base, '--apply', preview['digest'], '--request-id', request]
         assert api(*apply, input=PASSPHRASE)['changed']
         assert api(*apply, input=PASSPHRASE)['replayed']
+        local_vault = cli(binary, target, 'vault', 'status')['item']['vault_id']
+        assert local_vault != manifest['source_vault_id'], 'source vault identity was transferred'
+        for env, options in [('common', []), ('local', ['--env', 'local'])]:
+            current = api('values', 'inspect', *options)['values']['current']
+            assert current is not None and current['integrity_verified'] is True
+            original = manifest['source_inputs'][env]
+            assert current['identity']['profile_id'] != original['identity']['profile_id']
+            assert current['identity']['storage_generation'] != original['identity']['storage_generation']
+            assert current['slots'] == original['slots'], 'logical value/slot/version/source changed in transfer'
         assert api('var', 'get', 'MESSAGE')['value'] == VALUE, 'path strings must remain literal'
         assert api('var', 'get', 'MESSAGE', '--env', 'local')['value'] == 'environment override'
         assert api('task', 'show', manifest['task'])['item']['title'] == 'Cross-platform task 한글'
@@ -125,12 +141,14 @@ def import_fixtures(root, fixtures, origin, commit):
         assert cli(binary, target, 'backup', 'status')['item']['configured'] is False
         # The CLI injects the restored secret into a child; no secret-reveal API is used.
         result = subprocess.run([str(binary), 'run', '--profile', 'portable', '--', sys.executable,
-                                 '-c', 'import os; assert os.environ["TOKEN"] == ' + repr(SECRET)],
+                                 '-c', 'import os,sys; assert os.environ["TOKEN"].encode("utf-8") == sys.stdin.buffer.read()'],
                                 cwd=target, env=dict(os.environ, DEVTOOLS_ISOLATED_ROOT=str(target)),
-                                capture_output=True, text=True, encoding="utf-8", timeout=60)
+                                input=SECRET.encode('utf-8'),
+                                capture_output=True, timeout=60)
         assert result.returncode == 0, result.stderr
         passed.append(source + ' -> ' + origin)
-    return dict(commit=commit, target=origin, passed=passed)
+    return dict(commit=commit, target=origin, passed=passed,
+                fresh_target_vault_profile_generation=True, logical_slot_versions_preserved=True)
 
 
 def main():

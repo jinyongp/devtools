@@ -25,6 +25,13 @@ func valueWatchSchema() map[string]any {
 		"integrity_verified": map[string]any{"type": "boolean"},
 	}, "state", "reason", "updated_at", "integrity_verified")
 }
+func valueApplySchema() map[string]any {
+	return object(map[string]any{
+		"state":  map[string]any{"enum": []string{"requested", "applied", "failed", "paused"}},
+		"reason": stringSchema(), "updated_at": stringSchema(), "execution_id": stringSchema(), "request_id": stringSchema(), "next_id": stringSchema(),
+		"goal": object(map[string]any{"profile_id": stringSchema(), "storage_generation": stringSchema(), "effective_input_revision": stringSchema()}, "profile_id", "storage_generation", "effective_input_revision"),
+	}, "state", "reason", "updated_at", "execution_id")
+}
 func inputObservationSchema() map[string]any {
 	return object(map[string]any{"state": map[string]any{"enum": []string{"current", "pending", "failed", "unknown", "verification_pending"}}, "reason": stringSchema(), "delivered": inputVersionSchema(), "current": inputVersionSchema()}, "state", "reason", "delivered", "current")
 }

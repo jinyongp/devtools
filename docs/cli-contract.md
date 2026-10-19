@@ -556,3 +556,15 @@ unavailable verification clears the goal; polling never unlocks or renews the ke
 session. The original `input_version` continues to describe recorded delivery.
 The timestamp also applies when the last observation is retained in terminal
 history. Notifications alone do not restart an application.
+
+Configured command list/inspect expose `values_update` (`notify` by default,
+`restart` only by explicit per-command opt-in). Managed records may include
+`value_apply` with `state` (`requested`, `applied`, `failed`, `paused`), safe
+`reason`, `updated_at`, original `execution_id`, optional operation `request_id`,
+replacement `next_id` and opaque `goal`. `auto_origin` and bounded `auto_restarts`
+track automatic replacement ancestry and burst timestamps. No secret bytes or
+launcher authority enter these fields. Failed/abandoned attempts do not resubmit;
+a manual restart with a new request UUID is explicit retry. A successor retains
+its own upstream completion, so retention of old history does not disable future
+updates. A `requested` operation with no completion for 90 seconds is reported as
+paused with unknown outcome; the original request identity remains fixed.

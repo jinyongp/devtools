@@ -42,7 +42,7 @@ func managedProcessSchema() map[string]any {
 		"state":         stringSchema(),
 		"previous_id":   stringSchema(),
 		"output":        outputPlanSchema(),
-		"input_version": inputVersionSchema(), "value_watch": valueWatchSchema(),
+		"input_version": inputVersionSchema(), "value_watch": valueWatchSchema(), "value_apply": valueApplySchema(), "auto_origin": stringSchema(), "auto_restarts": arraySchema(stringSchema()),
 		"input_snapshot_id": stringSchema(), "launch_phase": stringSchema(), "outage": map[string]any{"type": "boolean"},
 		"proxy_mode": map[string]any{"type": "boolean"}, "network_snapshot_id": stringSchema(), "isolated_root": stringSchema(),
 	}, "ready_configured", "id", "profile", "instance_id", "directory", "command", "env", "env_override", "capture_logs", "created_at", "started_at", "ended_at", "exit_code", "reason", "state")

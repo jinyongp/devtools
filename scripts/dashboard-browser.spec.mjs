@@ -266,3 +266,35 @@ test("process value delivery shows changes and locked verification without readi
     }
   }
 });
+
+test("automatic value replacement reports delivery and pauses after preparation failure",async({page})=>{
+  test.setTimeout(60000);
+  const root=mkdtempSync(join(tmpdir(),"devtools-auto-browser-"));
+  const project=join(root,"project"),isolation=join(root,"isolation");mkdirSync(project,{recursive:true});
+  const config=join(project,"devtools.toml");
+  const write=(missing=false)=>writeFileSync(config,`profile = "auto-browser"\n[commands.web]\nexec = ${missing?'["missing-auto-browser-executable"]':`[${JSON.stringify(process.execPath)}, "-e", "setInterval(()=>{},1000)"]`}\ninject = true\nvalues_update = "restart"\n`);
+  write();
+  const env={...process.env,DEVTOOLS_ISOLATED_ROOT:isolation};
+  try {
+    runCLI(["vault","init","--backend","passphrase","--passphrase-stdin"],project,env,"synthetic-auto-browser-passphrase\n");
+    runCLI(["sec","set","TOKEN","--stdin"],project,env,"synthetic-auto-browser-before");
+    const first=JSON.parse(runCLI(["process","start","web","--request-id","00000000-0000-4000-8000-000000007101"],project,env)).data.item;
+    const dashboard=JSON.parse(runCLI(["dashboard"],project,env));
+    await page.goto(dashboard.data.item.url,{waitUntil:"domcontentloaded"});
+    await page.locator("#processes-nav").click();
+    await page.locator(".process-details summary").click();
+    runCLI(["sec","set","TOKEN","--stdin"],project,env,"synthetic-auto-browser-after");
+    await expect(page.locator("#values-panel")).toContainText("Automatic value update: applied",{timeout:15000});
+    const prior=JSON.parse(runCLI(["process","status",first.id],project,env)).data.item;
+    expect(prior.value_apply.next_id).toBeTruthy();expect(prior.ended_at).not.toBeNull();
+    write(true);runCLI(["sec","set","TOKEN","--stdin"],project,env,"synthetic-auto-browser-third");
+    await expect.poll(()=>JSON.parse(runCLI(["process","status",prior.value_apply.next_id],project,env)).data.item.value_apply?.state).toBe("failed");
+    for(const details of await page.locator(".process-details").all())if(await details.getAttribute("open")===null)await details.locator("summary").click();
+    await expect(page.locator("#values-panel")).toContainText("Automatic updates paused. Fix the cause and use Restart to retry explicitly.",{timeout:15000});
+    for(const secret of ["synthetic-auto-browser-before","synthetic-auto-browser-after","synthetic-auto-browser-third"])await expect(page.locator("#values-panel")).not.toContainText(secret);
+  } finally {
+    try {runCLI(["project","down","--request-id","00000000-0000-4000-8000-000000007102"],project,env);}catch{}
+    try {runCLI(["dashboard","stop"],project,env);}catch{}
+    try {await retireTestVault(isolation);}finally {rmSync(root,{recursive:true,force:true,maxRetries:20,retryDelay:100});}
+  }
+});

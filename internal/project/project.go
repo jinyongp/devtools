@@ -42,6 +42,14 @@ type Command struct {
 	Env          string             `toml:"env,omitempty"`
 }
 
+// ValueUpdatePolicy defaults to notification and never affects foreground runs.
+func (c Command) ValueUpdatePolicy() string {
+	if c.ValuesUpdate == "restart" {
+		return "restart"
+	}
+	return "notify"
+}
+
 type Context struct {
 	Bundle       string             `json:"-"`
 	EnvFiles     []string           `json:"-"`

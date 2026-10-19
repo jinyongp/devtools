@@ -12,13 +12,14 @@ import (
 )
 
 type projectCommandSummary struct {
-	Selection string        `json:"selection"`
-	Output    redact.Policy `json:"output"`
-	Name      string        `json:"name"`
-	Exec      []string      `json:"exec"`
-	Inject    bool          `json:"inject"`
-	Env       string        `json:"env"`
-	Serve     []string      `json:"serve"`
+	ValuesUpdate string        `json:"values_update"`
+	Selection    string        `json:"selection"`
+	Output       redact.Policy `json:"output"`
+	Name         string        `json:"name"`
+	Exec         []string      `json:"exec"`
+	Inject       bool          `json:"inject"`
+	Env          string        `json:"env"`
+	Serve        []string      `json:"serve"`
 }
 
 type projectCommandBinding struct {
@@ -48,6 +49,7 @@ type projectCommandRequirements struct {
 }
 
 type projectCommandDetails struct {
+	ValuesUpdate string                           `json:"values_update"`
 	Selection    string                           `json:"selection"`
 	Output       redact.Policy                    `json:"output"`
 	Name         string                           `json:"name"`
@@ -62,13 +64,14 @@ type projectCommandDetails struct {
 
 func projectCommandSummarySchema() map[string]any {
 	return object(map[string]any{
-		"output":    outputPolicySchema(),
-		"selection": stringSchema(),
-		"name":      stringSchema(),
-		"exec":      map[string]any{"type": "array", "items": stringSchema()},
-		"inject":    map[string]any{"type": "boolean"},
-		"env":       stringSchema(),
-		"serve":     map[string]any{"type": "array", "items": stringSchema()},
+		"values_update": map[string]any{"enum": []string{"notify", "restart"}},
+		"output":        outputPolicySchema(),
+		"selection":     stringSchema(),
+		"name":          stringSchema(),
+		"exec":          map[string]any{"type": "array", "items": stringSchema()},
+		"inject":        map[string]any{"type": "boolean"},
+		"env":           stringSchema(),
+		"serve":         map[string]any{"type": "array", "items": stringSchema()},
 	}, "name", "exec", "inject", "env", "serve")
 }
 
@@ -207,12 +210,13 @@ func (a *App) inspectProjectCommand(ctx context.Context, _ IO, request Request) 
 
 func summarizeProjectCommand(name string, command project.Command) projectCommandSummary {
 	return projectCommandSummary{
-		Output: redact.Policy{Mode: command.Output, Stdout: command.Stdout, Stderr: command.Stderr}.Normalize(),
-		Name:   name,
-		Exec:   append([]string{}, command.Exec...),
-		Inject: command.Inject,
-		Env:    command.Env,
-		Serve:  append([]string{}, command.Serve...),
+		ValuesUpdate: command.ValueUpdatePolicy(),
+		Output:       redact.Policy{Mode: command.Output, Stdout: command.Stdout, Stderr: command.Stderr}.Normalize(),
+		Name:         name,
+		Exec:         append([]string{}, command.Exec...),
+		Inject:       command.Inject,
+		Env:          command.Env,
+		Serve:        append([]string{}, command.Serve...),
 	}
 }
 
@@ -232,6 +236,7 @@ func describeProjectCommand(name string, command project.Command, requirements p
 		ready = &projectCommandReady{Exec: append([]string{}, command.Ready.Exec...), Timeout: command.Ready.Duration().String()}
 	}
 	return projectCommandDetails{
+		ValuesUpdate: command.ValueUpdatePolicy(),
 		Output:       redact.Policy{Mode: command.Output, Stdout: command.Stdout, Stderr: command.Stderr}.Normalize(),
 		Name:         name,
 		Exec:         append([]string{}, command.Exec...),

@@ -23,7 +23,12 @@ func (s Store) startValueWatch(ctx context.Context, read func() Record, publish 
 		return func() {}
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	updates := values.WatchInputChanges(ctx, func(context.Context) (*vault.CommitHint, error) { return vault.ReadCommitHint(s.Data) }, func(ctx context.Context) values.InputObservation { return s.InspectRecordValues(ctx, read()) })
+	updates := values.WatchInputChanges(ctx, func(context.Context) (*vault.CommitHint, error) { return vault.ReadCommitHint(s.Data) }, func(ctx context.Context) values.InputObservation {
+		r := read()
+		observation := s.InspectRecordValues(ctx, r)
+		s.considerValueRestart(ctx, r, observation)
+		return observation
+	})
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

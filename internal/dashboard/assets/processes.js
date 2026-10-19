@@ -56,6 +56,11 @@ async function loadProcesses(version) {
         }
         text("p","Delivery records do not show which values the application read.",section);
       }
+      if(item.value_apply){
+        text("p",`Automatic value update: ${item.value_apply.state} · ${item.value_apply.reason.replaceAll("_"," ")}`,section);
+        if(item.value_apply.state==="failed"||item.value_apply.state==="paused")text("p","Automatic updates paused. Fix the cause and use Restart to retry explicitly.",section);
+        if(item.value_apply.next_id)text("p",`Replacement execution: ${item.value_apply.next_id}`,section);
+      }
       if(item.value_watch)text("p",`Background value check: ${item.value_watch.state.replaceAll("_"," ")} · ${item.value_watch.reason.replaceAll("_"," ")}`,section);
       if(item.output)text("p",`Output: stdout ${item.output.stdout}, stderr ${item.output.stderr}`,section);
 

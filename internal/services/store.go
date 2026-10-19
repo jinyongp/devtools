@@ -50,6 +50,9 @@ func writePrivate(path string, v any) error {
 }
 
 type Record struct {
+	ValueApply        *ValueApplyStatus    `json:"value_apply,omitempty"`
+	AutoOrigin        string               `json:"auto_origin,omitempty"`
+	AutoRestarts      []time.Time          `json:"auto_restarts,omitempty"`
 	ValueWatch        *ValueWatchStatus    `json:"value_watch,omitempty"`
 	InputVersion      *values.InputVersion `json:"input_version,omitempty"`
 	Selection         string               `json:"selection,omitempty"`
@@ -524,14 +527,14 @@ func (s Store) rpc(ctx context.Context, id, action string) (Record, error) {
 func (s Store) statusRecord(ctx context.Context, r Record) (Record, *protocol.Error) {
 	s.finishInputPhase(&r)
 	if r.EndedAt != nil {
-		return r, nil
+		return s.withValueApply(r), nil
 	}
 	if live, err := s.rpc(ctx, r.ID, "status"); err == nil {
 		if live.StartedAt == nil && live.InputSnapshotID == r.InputSnapshotID {
 			live.LaunchPhase = r.LaunchPhase
 			live.Outage = r.Outage
 		}
-		return live, nil
+		return s.withValueApply(live), nil
 	}
 	lost, err := s.supervisorLost(ctx, r, true)
 	if err != nil {
@@ -540,16 +543,16 @@ func (s Store) statusRecord(ctx context.Context, r Record) (Record, *protocol.Er
 	if lost {
 		r.State = "interrupted"
 		r.Reason = "supervisor_lost"
-		return r, nil
+		return s.withValueApply(r), nil
 	}
 	if r.StartedAt == nil {
 		r.State = "starting"
 		r.Reason = ""
-		return r, nil
+		return s.withValueApply(r), nil
 	}
 	r.State = "unknown"
 	r.Reason = "supervisor_unavailable"
-	return r, nil
+	return s.withValueApply(r), nil
 }
 
 func (s Store) Status(ctx context.Context, id string) (Record, *protocol.Error) {
@@ -749,6 +752,17 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 			if e != nil || live.State != "running" || live.EndedAt != nil {
 				err = failure("process_not_running")
 				break
+			}
+			if len(recentAutoRestarts(r.AutoRestarts, time.Now())) >= AutoRestartLimit {
+				err = failure("restart_storm")
+				break
+			}
+			if r.AutoOrigin != "" {
+				parent, e := s.parentValueApply(r)
+				if e != nil || parent.State != "applied" || parent.NextID != r.ID {
+					err = failure("previous_apply_incomplete")
+					break
+				}
 			}
 			p, e := project.Resolve(r.Directory, "")
 			if e != nil || p.Profile != r.Profile || p.Root != r.Directory || p.Commands[r.Command].ValuesUpdate != "restart" {
@@ -962,6 +976,14 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		}
 	}
 	r := Record{ID: q.RequestID, Profile: p.Profile, Instance: instance.ID, Directory: p.Root, Command: q.Command, Env: env, EnvOverride: q.Env, Selection: selection, BundleOverride: q.Bundle, Capture: capture, CreatedAt: time.Now().UTC(), State: "starting", Previous: previous}
+	if q.AutoGoal != nil {
+		parent, e := s.read(previous)
+		if e != nil {
+			return out, e
+		}
+		r.AutoOrigin = parent.ID
+		r.AutoRestarts = append(recentAutoRestarts(parent.AutoRestarts, r.CreatedAt), r.CreatedAt)
+	}
 	r.ProxyMode = q.ProxyMode
 	r.IsolatedRoot = s.IsolatedRoot
 	if q.ProxyMode {

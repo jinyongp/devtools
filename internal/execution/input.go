@@ -165,8 +165,17 @@ func validateInputWire(wire inputWire) *protocol.Error {
 	if wire.Metadata.PrepareDeadline.After(wire.Metadata.PreparedAt.Add(DefaultPreparationTimeout)) {
 		return snapshotError("invalid_input_snapshot")
 	}
-	if wire.Metadata.Selection != "all" {
+	if !vault.ValidSelection(wire.Metadata.Selection) || wire.Metadata.Selection == "" {
 		return snapshotError("invalid_input_snapshot")
+	}
+	if wire.Metadata.Values.Identity.Revision != "" {
+		selected := wire.Metadata.Values.Selection
+		if selected == "" {
+			selected = "all"
+		}
+		if selected != wire.Metadata.Selection {
+			return snapshotError("invalid_input_snapshot")
+		}
 	}
 	if e := process.ValidateExecInput(wire.Args, wire.Environment); e != nil {
 		return e

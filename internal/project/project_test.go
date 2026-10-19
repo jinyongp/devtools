@@ -169,3 +169,19 @@ func TestCommandNameConfiguration(t *testing.T) {
 		}
 	}
 }
+
+func TestBundleConfigValidatesProjectAndCommandSelections(t *testing.T) {
+	config := "profile='app'\nbundle='frontend'\n[commands.web]\nexec=['true']\nbundle='none'\n"
+	p, e := parse([]byte(config), "", t.TempDir())
+	if e != nil || p.Bundle != "frontend" || p.Commands["web"].Bundle != "none" {
+		t.Fatal("bundle config", e)
+	}
+	for _, invalid := range []string{"bundle=['web']", "bundle='bad/name'"} {
+		if _, e := parse([]byte("profile='app'\n"+invalid), "", t.TempDir()); e == nil {
+			t.Fatal("invalid project selection")
+		}
+		if _, e := parse([]byte("profile='app'\n[commands.web]\nexec=['true']\n"+invalid), "", t.TempDir()); e == nil {
+			t.Fatal("invalid command selection")
+		}
+	}
+}

@@ -45,10 +45,15 @@ assert invoke('var', 'get', 'PUBLIC')['integrity_verified'] is False
 assert invoke('sec', 'list')['items'][0]['key'] == 'TOKEN'
 invoke('schema', 'vault', 'unlock')
 invoke('schema', 'sec', 'set')
-for unavailable in [('sec', 'get', 'TOKEN'), ('run', '--bundle', 'unimplemented')]:
+for unavailable in [('sec', 'get', 'TOKEN')]:
     result = subprocess.run([binary, *unavailable], cwd=project, env=env,
                             text=True, capture_output=True, timeout=10)
     assert result.returncode == 2 and secret not in result.stdout + result.stderr
+# Bundle selection is a separate option from env; no per-command key list is needed.
+result = subprocess.run([binary, 'run', '--bundle', 'none', '--', 'true'], cwd=project,
+                        env=env, text=True, capture_output=True, timeout=20)
+assert result.returncode == 0 and not result.stdout and not result.stderr
+invoke('run', '--bundle', 'missing', '--', 'true', error='bundle_not_found')
 invoke('vault', 'lock')
 locked = invoke('vault', 'status')['item']
 assert locked['state'] == 'locked_manual'

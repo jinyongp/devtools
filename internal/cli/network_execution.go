@@ -32,7 +32,7 @@ type networkCandidateFields struct {
 	SnapshotIDs                                map[string]string
 }
 
-func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names []string, originals []services.Record, overrides map[string]*string, streams IO, id string) (map[string]*network.ExecutionSnapshot, *protocol.Error) {
+func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names []string, originals []services.Record, overrides map[string]*string, streams IO, id string, selections ...map[string]string) (map[string]*network.ExecutionSnapshot, *protocol.Error) {
 	m, e := a.proxyStore()
 	if e != nil {
 		return nil, e
@@ -156,13 +156,18 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 				if e != nil {
 					return nil, e
 				}
+				if len(selections) > 0 {
+					if selected, ok := selections[0][name]; ok {
+						command.Selection = selected
+					}
+				}
 				effective[name] = command
 				if command.NeedsValues() {
 					directory, e := a.dataDirectory()
 					if e != nil {
 						return nil, e
 					}
-					observed, e := values.CaptureCurrent(ctx, filepath.Dir(directory), p.Profile, command.Env, false, time.Now())
+					observed, e := values.CaptureCurrent(ctx, filepath.Dir(directory), p.Profile, command.Env, false, time.Now(), command.Selection)
 					if e != nil {
 						return nil, e
 					}

@@ -38,6 +38,7 @@ func TestRunCommandArgumentBoundary(t *testing.T) {
 			{[]string{"--env", "staging", "dev:docs", "--watch"}, "staging|<--watch>"},
 			{[]string{"--env=staging", "dev:docs", "file"}, "staging|<file>"},
 			{[]string{"dev:docs", "--help"}, "local|<--help>"},
+			{[]string{"--bundle", "all", "dev:docs", "--bundle", "none"}, "local|<--bundle><none>"},
 			{[]string{"dev:docs", "-h"}, "local|<-h>"},
 			{[]string{"dev:docs", "--", "--watch"}, "local|<--watch>"},
 			{[]string{"dev:docs", "--", "--", "--help"}, "local|<--><--help>"},

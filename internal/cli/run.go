@@ -42,6 +42,9 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 			return nil, err
 		}
 	}
+	if selection, explicit := request.Options["bundle"]; explicit {
+		command.Selection = selection
+	}
 	if mode := request.Options["output"]; mode != "" {
 		command.Output.Mode = redact.Mode(mode)
 	}
@@ -59,7 +62,7 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 		if env, explicit := request.Options["env"]; explicit {
 			override = &env
 		}
-		snapshots, e := a.prepareProxyNetwork(ctx, command.Project, []string{command.Name}, nil, map[string]*string{command.Name: override}, streams, tasks.ID())
+		snapshots, e := a.prepareProxyNetwork(ctx, command.Project, []string{command.Name}, nil, map[string]*string{command.Name: override}, streams, tasks.ID(), map[string]string{command.Name: command.Selection})
 		if e != nil {
 			return nil, e
 		}

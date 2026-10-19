@@ -78,11 +78,15 @@ func ResolvePlan(command Command, parent []string, options PlanOptions) (*Plan, 
 	}
 	command.Directory = directory
 	if options.Selection == "" {
-		options.Selection = "all"
+		options.Selection = command.Selection
+		if options.Selection == "" {
+			options.Selection = "all"
+		}
 	}
-	if options.Selection != "all" {
-		return nil, protocol.NewError("value_selection_not_supported", "This execution format currently selects the full profile and env.", 2, nil)
+	if !vault.ValidSelection(options.Selection) {
+		return nil, protocol.NewError("invalid_argument", "Invalid value bundle selection.", 2, nil)
 	}
+	command.Selection = options.Selection
 	selected, e := process.SelectParent(parent, options.Parent)
 	if e != nil {
 		return nil, e
@@ -96,6 +100,12 @@ func ResolvePlan(command Command, parent []string, options PlanOptions) (*Plan, 
 func loadSnapshot(ctx context.Context, command Command, dependencies Dependencies, includeSecrets bool) (*values.Snapshot, *protocol.Error) {
 	if !command.NeedsValues() {
 		return nil, nil
+	}
+	if dependencies.SelectedSnapshot != nil {
+		return dependencies.SelectedSnapshot(ctx, command.Project.Profile, command.Env, includeSecrets, command.Selection)
+	}
+	if command.Selection != "" && command.Selection != "all" {
+		return nil, protocol.NewError("value_selection_not_supported", "This snapshot provider does not support bundle selection.", 3, nil)
 	}
 	if dependencies.ValueSnapshot != nil {
 		return dependencies.ValueSnapshot(ctx, command.Project.Profile, command.Env, includeSecrets)
@@ -112,6 +122,17 @@ func snapshotState(command Command, snapshot *values.Snapshot) (*values.State, *
 			return nil, protocol.NewError("storage_error", "Value snapshot provider returned no snapshot.", 1, nil)
 		}
 		return nil, nil
+	}
+	want := command.Selection
+	if want == "" {
+		want = "all"
+	}
+	got := snapshot.Metadata().Selection
+	if got == "" {
+		got = "all"
+	}
+	if got != want {
+		return nil, protocol.NewError("invalid_input_snapshot", "Value snapshot selection does not match the execution.", 3, nil)
 	}
 	state := snapshot.StateCopy()
 	if state == nil || state.Profile != command.Project.Profile || (command.Inject && !snapshot.CanInject()) {

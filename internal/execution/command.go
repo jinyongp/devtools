@@ -11,6 +11,7 @@ import (
 // Command is the immutable command-level input shared by foreground and managed
 // execution paths before storage, ports, or process lifetime are involved.
 type Command struct {
+	Selection    string
 	Output       redact.Policy
 	Network      *network.ExecutionSnapshot
 	Project      project.Context
@@ -40,7 +41,15 @@ func ResolveConfigured(p project.Context, name string, envOverride *string, extr
 		env = *envOverride
 		inject = true
 	}
+	selection := definition.Bundle
+	if selection == "" {
+		selection = p.Bundle
+	}
+	if selection == "" {
+		selection = "all"
+	}
 	return Command{
+		Selection:    selection,
 		Output:       redact.Policy{Mode: definition.Output, Stdout: definition.Stdout, Stderr: definition.Stderr},
 		Project:      p,
 		Name:         name,
@@ -63,6 +72,7 @@ func ResolveDirect(p project.Context, args []string, directory, env string) (Com
 		return Command{}, protocol.NewError("invalid_argument", "Supply an executable after --.", 2, map[string]any{"field": "command"})
 	}
 	return Command{
+		Selection: p.Bundle,
 		Project:   p,
 		Exec:      append([]string{}, args...),
 		Directory: directory,
@@ -79,6 +89,7 @@ func (c Command) Arguments() []string {
 
 func (c Command) projectCommand() project.Command {
 	return project.Command{
+		Bundle: c.Selection,
 		Output: c.Output.Mode, Stdout: c.Output.Stdout, Stderr: c.Output.Stderr,
 		Ready:        cloneReady(c.Ready),
 		Serve:        append([]string{}, c.Serve...),

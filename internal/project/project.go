@@ -18,6 +18,7 @@ import (
 const Filename = "devtools.toml"
 
 type Config struct {
+	Bundle       string             `toml:"bundle,omitempty"`
 	EnvFiles     []string           `toml:"env_files,omitempty"`
 	Ports        map[string]Port    `toml:"ports,omitempty"`
 	Proxies      map[string]Proxy   `toml:"proxies,omitempty"`
@@ -27,6 +28,7 @@ type Config struct {
 }
 
 type Command struct {
+	Bundle       string             `toml:"bundle,omitempty"`
 	Output       redact.Mode        `toml:"output,omitempty"`
 	Stdout       redact.Mode        `toml:"stdout,omitempty"`
 	Stderr       redact.Mode        `toml:"stderr,omitempty"`
@@ -40,6 +42,7 @@ type Command struct {
 }
 
 type Context struct {
+	Bundle       string             `json:"-"`
 	EnvFiles     []string           `json:"-"`
 	Ports        map[string]Port    `json:"-"`
 	Proxies      map[string]Proxy   `json:"-"`
@@ -113,7 +116,7 @@ func parse(data []byte, path, root string) (Context, *protocol.Error) {
 	if err := decoder.Decode(&config); err != nil {
 		return Context{}, protocol.NewError("invalid_config", "Invalid TOML or unknown configuration fields.", 3, map[string]any{"path": path})
 	}
-	if !ValidProfile(config.Profile) {
+	if !ValidProfile(config.Profile) || (config.Bundle != "" && !ValidProfile(config.Bundle)) {
 		return Context{}, protocol.NewError("invalid_config", "A valid profile identifier is required.", 3, map[string]any{"path": path, "field": "profile"})
 	}
 	for _, path := range config.EnvFiles {
@@ -122,6 +125,9 @@ func parse(data []byte, path, root string) (Context, *protocol.Error) {
 		}
 	}
 	for name, command := range config.Commands {
+		if command.Bundle != "" && !ValidProfile(command.Bundle) {
+			return Context{}, protocol.NewError("invalid_config", "Invalid value bundle selection.", 3, nil)
+		}
 		if !(redact.Policy{Mode: command.Output, Stdout: command.Stdout, Stderr: command.Stderr}).Valid() {
 			return Context{}, protocol.NewError("invalid_config", "Invalid command output mode.", 3, nil)
 		}
@@ -156,7 +162,7 @@ func parse(data []byte, path, root string) (Context, *protocol.Error) {
 			return Context{}, protocol.NewError("invalid_config", "Invalid proxy declaration.", 3, map[string]any{"path": path, "field": "proxies"})
 		}
 	}
-	return Context{Profile: config.Profile, Source: "file", ConfigPath: path, Root: root, Commands: config.Commands, Requirements: config.Requirements, Ports: config.Ports, Proxies: config.Proxies, EnvFiles: config.EnvFiles}, nil
+	return Context{Bundle: config.Bundle, Profile: config.Profile, Source: "file", ConfigPath: path, Root: root, Commands: config.Commands, Requirements: config.Requirements, Ports: config.Ports, Proxies: config.Proxies, EnvFiles: config.EnvFiles}, nil
 }
 
 func ioError(path string) *protocol.Error {

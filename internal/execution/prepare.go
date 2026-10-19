@@ -19,16 +19,17 @@ import (
 // Dependencies supplies user-global stores needed to prepare one command.
 // Callers keep ownership of user path/config discovery.
 type Dependencies struct {
-	StdoutTTY       bool
-	StderrTTY       bool
-	CaptureOutput   bool
-	IsolatedRoot    string
-	VaultDirectory  string
-	DeferServing    bool
-	ValueSnapshot   func(context.Context, string, string, bool) (*values.Snapshot, *protocol.Error)
-	ValuesDirectory string
-	Ports           ports.Store
-	PortDefaults    []int
+	SelectedSnapshot func(context.Context, string, string, bool, string) (*values.Snapshot, *protocol.Error)
+	StdoutTTY        bool
+	StderrTTY        bool
+	CaptureOutput    bool
+	IsolatedRoot     string
+	VaultDirectory   string
+	DeferServing     bool
+	ValueSnapshot    func(context.Context, string, string, bool) (*values.Snapshot, *protocol.Error)
+	ValuesDirectory  string
+	Ports            ports.Store
+	PortDefaults     []int
 }
 
 // DependenciesFor derives the stores required by one effective command from the
@@ -37,8 +38,8 @@ func DependenciesFor(command Command, dataRoot, configRoot string) (Dependencies
 	dependencies := Dependencies{VaultDirectory: filepath.Join(dataRoot, "vault")}
 	if command.NeedsValues() {
 		dependencies.ValuesDirectory = filepath.Join(dataRoot, "profiles")
-		dependencies.ValueSnapshot = func(ctx context.Context, profile, env string, inject bool) (*values.Snapshot, *protocol.Error) {
-			return values.CaptureCurrent(ctx, dataRoot, profile, env, inject, time.Now())
+		dependencies.SelectedSnapshot = func(ctx context.Context, profile, env string, inject bool, selection string) (*values.Snapshot, *protocol.Error) {
+			return values.CaptureCurrent(ctx, dataRoot, profile, env, inject, time.Now(), selection)
 		}
 	}
 	if len(command.Bind)+len(command.Serve) > 0 {

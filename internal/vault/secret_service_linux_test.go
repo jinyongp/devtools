@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -364,9 +367,47 @@ func TestNativeSecretServiceLockedCollection(t *testing.T) {
 	unlock := func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		command := exec.CommandContext(ctx, "gnome-keyring-daemon", "--unlock", "--components=secrets", "--control-directory", os.Getenv("GNOME_KEYRING_CONTROL"))
-		command.Stdin = strings.NewReader("synthetic-gnome-keyring-test-password")
-		return command.Run()
+		// gnome-keyring-daemon --unlock starts a daemon; it does not send an
+		// unlock request to an already running one. Use GNOME's existing control
+		// socket protocol, only for this disposable synthetic fixture.
+		directory := os.Getenv("GNOME_KEYRING_CONTROL")
+		if directory != filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "keyring") || !filepath.IsAbs(directory) {
+			return errors.New("unexpected synthetic control directory")
+		}
+		connection, err := (&net.Dialer{}).DialContext(ctx, "unix", filepath.Join(directory, "control"))
+		if err != nil {
+			return errors.New("cannot connect to synthetic GNOME control")
+		}
+		defer connection.Close()
+		if err := verifySessionPeer(connection.(*net.UnixConn)); err != nil {
+			return err
+		}
+		if err := connection.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+			return err
+		}
+		password := []byte("synthetic-gnome-keyring-test-password")
+		defer clear(password)
+		packet := make([]byte, 12+len(password))
+		defer clear(packet)
+		binary.BigEndian.PutUint32(packet, uint32(len(packet)))
+		binary.BigEndian.PutUint32(packet[4:], 1) // GKD_CONTROL_OP_UNLOCK
+		binary.BigEndian.PutUint32(packet[8:], uint32(len(password)))
+		copy(packet[12:], password)
+		// Linux GNOME receives the NUL credentials byte and reads SO_PEERCRED.
+		if err := writeAll(connection, []byte{0}); err != nil {
+			return err
+		}
+		if err := writeAll(connection, packet); err != nil {
+			return err
+		}
+		var reply [8]byte
+		if _, err := io.ReadFull(connection, reply[:]); err != nil {
+			return err
+		}
+		if binary.BigEndian.Uint32(reply[:4]) != 8 || binary.BigEndian.Uint32(reply[4:]) != 0 {
+			return errors.New("synthetic GNOME control rejected unlock")
+		}
+		return nil
 	}
 	id, err := NewID()
 	if err != nil {

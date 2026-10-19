@@ -102,3 +102,22 @@ alias가 남아 있었다. backup의 기존 Unix privateTestRoot와 diagnostics�
 읽는 test root를 실제 경로로 선택한다. 저장소와 read-only 진단의 제품 검사는 유지한다.
 기존 fixture caller와 cleanup, missing/corruption/restore/canary 검사의 조건을 재검토했다.
 Linux backup/diagnostics 전체 race pass(34.533s/1.126s). 실제 macOS 결과는 후속 CI에 남는다.
+
+## GNOME 기존 daemon의 명시 collection unlock
+
+`de6fd4b`의 실제 GNOME roundtrip은 pass했으나 collection 재해제는 계속 실패했다.
+control directory 고정만으로 해결되지 않았다. GNOME main/control 원본을 확인하니
+`gnome-keyring-daemon --unlock`은 기존 daemon에 unlock 요청을 보내는 CLI가 아니며,
+control socket bind 실패도 성공 exit처럼 반환될 수 있다. 이에 해당 실행 가정을 폐기한다.
+
+실제 OS 검사 안에서만 [GNOME control client의 공개 소스에 명시된 프로토콜](https://github.com/GNOME/gnome-keyring/blob/main/daemon/control/gkd-control-client.c)로
+현재 synthetic daemon에 unlock을 요청한다. 전용 디렉터리 확인·양쪽 Linux UID 중 client의
+peer 확인·10초 deadline 뒤 NUL credentials byte, length/op/password frame을 보내고
+성공 result를 확인한다. 암호는 합성 상수이며 argv/env/파일/로그에 전달하지 않는다.
+daemon은 새로 만들지 않고 동일한 collection·item을 유지한다. Locked property와 실제
+원래 키의 unwrap 비교는 그대로 유지한다. 제품 backend에는 이 GNOME 전용 경로를
+추가하지 않는다.
+
+리뷰: native opt-in/임시 HOME guard, frame 경계·응답 크기·UID·timeout·cleanup/wipe,
+같은 item 검증을 재검토했다. 영향 private D-Bus/helper race pass(2.151s). native 해제
+전체 pass는 수정 Actions 결과 전까지 pending이다.

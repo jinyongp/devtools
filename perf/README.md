@@ -189,3 +189,32 @@ The `project/run-injected-noop` case runs `true` through direct execution with t
 fixture's full profile injected. Unlike configured `noop` (`inject=false`), this
 includes value snapshot preparation, admission and output-filter setup even though
 the child produces no output. Select it with `project --case run-injected-noop`.
+
+## Measure process memory separately
+
+On Linux/WSL with GNU `/usr/bin/time` and `/proc`, compare the original plaintext
+CLI with a protected candidate using independent disposable profiles:
+
+```sh
+python3 -B perf/memory.py --baseline /tmp/devtools-baseline \
+  --candidate /tmp/devtools-candidate --sizes 10,100,1000 --repeats 3 \
+  --output /tmp/devtools-process-memory.json
+```
+
+Both binaries must already be built with matched flags. Every profile contains
+synthetic secret values. Each size has three independent roots per arm, five warm
+CLI runs per root and four concurrent CLI runs. The protected arm also performs
+three cold explicit unlock cycles in one owned daemon. Root order alternates per
+repeat. Creation, import and cleanup are outside measured runs. The output retains
+binary identities, all raw samples and incomplete results after a failure; an
+existing output file is never overwritten. Failed retirement retains private data.
+
+GNU time gives the maximum RSS of the CLI and its waited children, not their
+summed simultaneous memory. The separate owned daemon's `/proc` VmHWM is its
+process high-water mark; three cold cycles do not create three independent peaks.
+The recorded wall time includes GNU time startup and cannot be substituted for
+the hyperfine CLI boundary. Concurrent CLI peaks are not aggregate RSS. Idle
+expiry/manual-lock state and lock acknowledgement time describe cache policy;
+RSS after lock cannot establish secret erasure, sensitive-copy lifetime, or the
+amount of live secret material. Native unwrap counts are measured by separate
+native session tests, and no RSS acceptance threshold is assumed.

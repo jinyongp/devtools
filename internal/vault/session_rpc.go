@@ -47,9 +47,58 @@ type sessionResponse struct {
 }
 
 type sessionAdmissions struct {
-	gate    sync.RWMutex
-	epoch   atomic.Uint64
+	mu      sync.Mutex
+	active  int
+	changed chan struct{}
 	pending atomic.Int32
+}
+
+func (a *sessionAdmissions) beginUse() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.pending.Load() > 0 {
+		return ErrLockPending
+	}
+	a.active++
+	return nil
+}
+func (a *sessionAdmissions) finishUse() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.active--
+	if a.changed != nil {
+		close(a.changed)
+		a.changed = nil
+	}
+}
+func (a *sessionAdmissions) beginLock() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.pending.Add(1)
+}
+func (a *sessionAdmissions) finishLock() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.pending.Add(-1)
+}
+func (a *sessionAdmissions) drain(ctx context.Context) error {
+	for {
+		a.mu.Lock()
+		if a.active == 0 {
+			a.mu.Unlock()
+			return nil
+		}
+		if a.changed == nil {
+			a.changed = make(chan struct{})
+		}
+		changed := a.changed
+		a.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return ErrLockPending
+		case <-changed:
+		}
+	}
 }
 
 func sessionCode(err error) string {
@@ -173,7 +222,7 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 	if err != nil {
 		return
 	}
-	if writeSessionFrame(c, sessionHello{SessionEndpoint: endpoint, ControlProtocol: 1, LockEpoch: admissions.epoch.Load(), Challenge: challenge}) != nil {
+	if writeSessionFrame(c, sessionHello{SessionEndpoint: endpoint, ControlProtocol: 1, LockEpoch: s.lockEpoch(), Challenge: challenge}) != nil {
 		return
 	}
 	var req sessionRequest
@@ -185,37 +234,41 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 		writeSessionFrame(c, sessionResponse{Error: ErrSessionProtocol.Error()})
 		return
 	}
+	// One-shot clients send no further input. EOF/extra input cancels native
+	// work promptly instead of leaving an abandoned OS authentication prompt.
+	watchDone := make(chan struct{})
+	go func() { defer close(watchDone); var extra [1]byte; c.Read(extra[:]); cancel() }()
+	defer func() { c.Close(); <-watchDone }()
 	var response sessionResponse
 	if req.Operation != "unlock" && (len(req.Passphrase) > 0 || req.Interactive) {
 		writeSessionFrame(c, sessionResponse{Status: s.Status(), Error: ErrInvalid.Error()})
 		return
 	}
-	// Hold a read admission until the entire key response is written. A lock
-	// closes new admissions and drains those writes before acknowledging.
+	// Count admitted deliveries, but never hold the state mutex while waiting
+	// for native IPC or response writes. Lock drains that count outside mu.
 	switch req.Operation {
 	case "use":
-		admissions.gate.RLock()
-		defer admissions.gate.RUnlock()
+		err = admissions.beginUse()
+		if err == nil {
+			defer admissions.finishUse()
+		}
+	case "unlock":
 		if admissions.pending.Load() > 0 {
 			err = ErrLockPending
 		}
-	case "unlock":
-		admissions.gate.Lock()
-		defer admissions.gate.Unlock()
-		if admissions.pending.Load() > 0 || req.LockEpoch != admissions.epoch.Load() {
-			err = ErrLockPending
-		}
 	case "lock", "retire":
-		admissions.pending.Add(1)
-		admissions.epoch.Add(1)
-		defer admissions.pending.Add(-1)
+		admissions.beginLock()
+		defer admissions.finishLock()
 		if req.Operation == "lock" {
 			// Persist manual intent before waiting for an already admitted
 			// response. A daemon crash while draining must not lose the latch.
 			err = s.Lock(ctx)
+		} else {
+			s.Close()
 		}
-		admissions.gate.Lock()
-		defer admissions.gate.Unlock()
+		if err == nil {
+			err = admissions.drain(ctx)
+		}
 	}
 	if err != nil {
 		writeSessionFrame(c, sessionResponse{Status: s.Status(), Error: sessionCode(err)})
@@ -229,11 +282,11 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 			break
 		}
 		pass := NewMaterial(req.Passphrase)
-		err = s.Unlock(ctx, pass, req.Interactive)
+		err = s.unlockAtEpoch(ctx, pass, req.Interactive, req.LockEpoch)
 		pass.Destroy()
 	case "use":
 		var key *Material
-		key, err = s.Use(ctx)
+		key, err = s.useAtEpoch(ctx, req.LockEpoch)
 		if err == nil {
 			response.Key = key.CopyBytes()
 			key.Destroy()
@@ -242,8 +295,7 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 	case "lock":
 		// Intent and cache lock were committed before draining admissions.
 	case "retire":
-		// Retire clears only volatile state. A durable manual latch survives.
-		s.Close()
+		// Volatile state was cleared before draining; manual intent survives.
 	default:
 		err = ErrInvalid
 	}

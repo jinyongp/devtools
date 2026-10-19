@@ -58,6 +58,7 @@ func TestSessionLockDrainsResponseAndRejectsOldUnlock(t *testing.T) {
 	a := &sessionAdmissions{}
 	// This unlock connection was established before the later manual lock.
 	old, oldHello, _ := testSessionConnection(t, ctx, e, s, a, false)
+	oldUse, oldUseHello, _ := testSessionConnection(t, ctx, e, s, a, false)
 	use, useHello, blocked := testSessionConnection(t, ctx, e, s, a, true)
 	if err := writeSessionFrame(use, testSessionRequest(e, useHello, "use")); err != nil {
 		t.Fatal(err)
@@ -118,6 +119,19 @@ func TestSessionLockDrainsResponseAndRejectsOldUnlock(t *testing.T) {
 	}
 	if !errors.Is(sessionError(response.Error), ErrLockPending) || s.Status().State != LockedManual {
 		t.Fatal("old unlock cleared manual lock")
+	}
+	if err := s.Unlock(ctx, p.Passphrase, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSessionFrame(oldUse, testSessionRequest(e, oldUseHello, "use")); err != nil {
+		t.Fatal(err)
+	}
+	response = sessionResponse{}
+	if err := readSessionFrame(oldUse, &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Key) > 0 || !errors.Is(sessionError(response.Error), ErrLockPending) {
+		t.Fatal("old use survived lock and fresh unlock")
 	}
 }
 

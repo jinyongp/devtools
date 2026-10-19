@@ -13,8 +13,8 @@ A07/A08/A11 후속이다. 이 단계의 잠금은 key cache와 IPC 전달을 보
 | Unix peer·endpoint | reviewed | private pathname socket, client/server UID 확인, daemon OS lease 뒤에만 stale socket 정리 |
 | Windows pipe | reviewed source/compile | local-only·현재 SID/SYSTEM DACL·first-instance·양쪽 process SID·client identification SQOS, overlapped connect pin/cancel/drain |
 | daemon lifecycle | reviewed | on-demand detached same binary, 시작/daemon OS lease, private endpoint, stable control retirement 뒤 OS lease 확인, key cache 재사용 없음 |
-| 잠금·IPC 순서 | reviewed | 새 admission 닫기→manual intent 저장→기존 key response write drain→ack; 기존 unlock challenge epoch 무효화 |
-| native 대기·KDF | reviewed | single key/KDF mutex, 고정 KDF, native unwrap 별도 동일 binary child와 anonymous pipe, 취소 시 kill/WaitDelay로 daemon 무한 대기 방지 |
+| 잠금·IPC 순서 | reviewed | 새 admission 닫기→manual intent 저장→기존 key response count drain→ack; 상태 mutex 없이 완료 대기, 기존 use/unlock challenge epoch 무효화 |
+| native 대기·KDF | reviewed | 단일 unwrap semaphore·고정 KDF, native unwrap 별도 동일 binary child와 anonymous pipe, state mutex 밖에서 대기·취소 시 kill/WaitDelay |
 | 민감 출력·상속 | reviewed | root/passphrase는 private frame에만, owned buffers 정리, 원시 backend 오류 미출력, task context/주입 secret env·터미널 stdin 미상속 |
 | 실제 경계 검사 | reviewed Linux | 별도 daemon 프로세스 재사용·정상 retirement·강제 kill 후 latch 유지, private real D-Bus와 별도 helper pipe/cancel |
 | 실제 다른 사용자·macOS·Windows·WSL | pending N04 | cross-compile이나 fixture로 이 항목을 통과 처리하지 않음 |
@@ -33,6 +33,12 @@ A07/A08/A11 후속이다. 이 단계의 잠금은 key cache와 IPC 전달을 보
 - 복구 오류 뒤 일반 Use가 OS backend를 자동 재해제하던 경로를 막았다. key file을
   복구해도 explicit unlock 전에는 recovery 상태를 유지한다.
 - parser가 부분 decode 뒤 실패해도 passphrase/key buffer를 정리하도록 했다.
+- A07의 resource-order 계약 대조에서 발견한 장기 대기 결함을 보완했다. state mutex를
+  놓고 unwrap/KDF를 수행하며, Lock/Close가 in-flight 작업을 취소하고 epoch로 늦은
+  결과 설치를 막는다. 전송 admission도 count/channel로 바꿔 mutex를 놓고 drain한다.
+  응답하지 않는 OS fixture 중에도 status/lock이 완료되며 늦은 키는 거절됨을 검사했다.
+- client EOF/추가 입력이 native 작업을 즉시 취소하도록 one-shot reader를 연결했다.
+  새 unlock 뒤에도 잠금 전의 use 요청은 epoch mismatch로 키를 받지 못한다.
 
 검증: `go test -race ./internal/vault ./internal/values ./internal/execution ./cmd/devtools`,
 해당 vet, Windows amd64/arm64·Darwin amd64/arm64·Linux arm64 compile/vet.

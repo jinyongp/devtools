@@ -28,19 +28,22 @@ type manualLock struct {
 // admission and launcher draining belong to the execution layer (A08); clearing
 // this cache cannot revoke bytes already delivered to a caller or application.
 type KeySession struct {
-	mu          sync.Mutex
-	directory   string
-	key         *Material
-	fingerprint [sha256.Size]byte
-	status      SessionStatus
-	lastUse     time.Time
-	idleTimer   *time.Timer
-	now         func() time.Time
-	protector   func(KeyFile, *Material, bool) (Protector, error)
+	mu           sync.Mutex
+	directory    string
+	key          *Material
+	fingerprint  [sha256.Size]byte
+	status       SessionStatus
+	lastUse      time.Time
+	idleTimer    *time.Timer
+	unwrapGate   chan struct{}
+	unwrapCancel context.CancelFunc
+	epoch        uint64
+	now          func() time.Time
+	protector    func(KeyFile, *Material, bool) (Protector, error)
 }
 
 func NewKeySession(directory string) *KeySession {
-	return &KeySession{directory: directory, status: SessionStatus{State: Locked}, now: time.Now, protector: sessionProtector}
+	return &KeySession{directory: directory, status: SessionStatus{State: Locked}, now: time.Now, protector: sessionProtector, unwrapGate: make(chan struct{}, 1)}
 }
 func sessionProtector(k KeyFile, passphrase *Material, interactive bool) (Protector, error) {
 	if k.Backend == "passphrase" {
@@ -129,33 +132,16 @@ func (s *KeySession) Status() SessionStatus {
 	return status
 }
 func (s *KeySession) Unlock(ctx context.Context, passphrase *Material, interactive bool) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	k, err := s.read()
-	if err != nil {
-		return err
-	}
-	p, err := s.protector(*k, passphrase, interactive)
-	if err != nil {
-		return err
-	}
-	key, err := k.Unlock(ctx, k.Backend, p)
-	if err != nil {
-		return err
-	}
-	// Only an explicit, successful unlock clears the durable manual latch.
-	if err = s.latch(ctx, k, false); err != nil {
-		key.Destroy()
-		s.destroy(RecoveryRequired)
-		return err
-	}
-	s.key.Destroy()
-	s.key = key
-	s.touch()
-	return nil
+	_, err := s.obtain(ctx, passphrase, interactive, true, nil)
+	return err
+}
+func (s *KeySession) unlockAtEpoch(ctx context.Context, passphrase *Material, interactive bool, epoch uint64) error {
+	_, err := s.obtain(ctx, passphrase, interactive, true, &epoch)
+	return err
+}
+func (s *KeySession) lockEpoch() uint64 { s.mu.Lock(); defer s.mu.Unlock(); return s.epoch }
+func (s *KeySession) useAtEpoch(ctx context.Context, epoch uint64) (*Material, error) {
+	return s.obtain(ctx, nil, false, false, &epoch)
 }
 func (s *KeySession) touch() {
 	s.lastUse = s.now()
@@ -189,35 +175,99 @@ func (s *KeySession) scheduleExpiry() {
 // Use returns an owned key only to an authenticated internal operation. Polling
 // Status never calls Use. Callers destroy the result after their bounded work.
 func (s *KeySession) Use(ctx context.Context) (*Material, error) {
+	return s.obtain(ctx, nil, false, false, nil)
+}
+
+// Serialize derivation with a bounded semaphore, never the state mutex. Native
+// IPC/KDF waits run outside mu; Lock can cancel them and invalidate the result.
+func (s *KeySession) obtain(ctx context.Context, passphrase *Material, interactive, explicit bool, expectedEpoch *uint64) (*Material, error) {
+	select {
+	case s.unwrapGate <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-s.unwrapGate }()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if err := ctx.Err(); err != nil {
+		s.mu.Unlock()
 		return nil, err
+	}
+	if expectedEpoch != nil && *expectedEpoch != s.epoch {
+		s.mu.Unlock()
+		return nil, ErrLockPending
 	}
 	k, err := s.read()
 	if err != nil {
+		s.mu.Unlock()
 		return nil, err
 	}
-	if s.status.State == LockedManual {
-		return nil, ErrLocked
-	}
-	if s.status.State == RecoveryRequired {
-		return nil, ErrRecovery
-	}
-	if s.key == nil {
-		if k.Backend == "passphrase" {
+	if !explicit {
+		if s.status.State == LockedManual {
+			s.mu.Unlock()
 			return nil, ErrLocked
 		}
-		p, err := s.protector(*k, nil, false)
-		if err != nil {
-			return nil, err
+		if s.status.State == RecoveryRequired {
+			s.mu.Unlock()
+			return nil, ErrRecovery
 		}
-		key, err := k.Unlock(ctx, k.Backend, p)
-		if err != nil {
-			return nil, err
+		if s.key != nil {
+			defer s.mu.Unlock()
+			return s.copyForUse()
 		}
-		s.key = key
+		if k.Backend == "passphrase" {
+			s.mu.Unlock()
+			return nil, ErrLocked
+		}
 	}
+	epoch, fingerprint := s.epoch, s.fingerprint
+	work, cancel := context.WithCancel(ctx)
+	defer cancel()
+	s.unwrapCancel = cancel
+	s.mu.Unlock()
+	p, err := s.protector(*k, passphrase, interactive)
+	var candidate *Material
+	if err == nil {
+		candidate, err = k.Unlock(work, k.Backend, p)
+	}
+	defer func() { candidate.Destroy() }()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.unwrapCancel = nil
+	if epoch != s.epoch {
+		return nil, ErrLockPending
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err = ctx.Err(); err != nil {
+		return nil, err
+	}
+	if _, err = s.read(); err != nil {
+		return nil, err
+	}
+	if fingerprint != s.fingerprint {
+		return nil, ErrRecovery
+	}
+	if !explicit && s.status.State == LockedManual {
+		return nil, ErrLocked
+	}
+	if explicit {
+		// Only a successful explicit unlock at the observed epoch clears intent.
+		if err = s.latch(ctx, k, false); err != nil {
+			s.destroy(RecoveryRequired)
+			return nil, err
+		}
+	}
+	s.key.Destroy()
+	s.key = candidate
+	candidate = nil
+	if explicit {
+		s.touch()
+		return nil, nil
+	}
+	return s.copyForUse()
+}
+func (s *KeySession) copyForUse() (*Material, error) {
 	b := s.key.CopyBytes()
 	defer clear(b)
 	if len(b) != 32 {
@@ -233,6 +283,10 @@ func (s *KeySession) Lock(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	s.epoch++
+	if s.unwrapCancel != nil {
+		s.unwrapCancel()
+	}
 	k, err := s.read()
 	if err != nil {
 		return err
@@ -247,4 +301,12 @@ func (s *KeySession) Lock(ctx context.Context) error {
 	s.destroy(LockedManual)
 	return nil
 }
-func (s *KeySession) Close() { s.mu.Lock(); defer s.mu.Unlock(); s.destroy(Locked) }
+func (s *KeySession) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.epoch++
+	if s.unwrapCancel != nil {
+		s.unwrapCancel()
+	}
+	s.destroy(Locked)
+}

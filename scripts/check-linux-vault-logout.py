@@ -183,7 +183,15 @@ def privileged(binary):
                     '/usr/bin/python3', '-B', str(root / 'fixture.py'), '--phase', str(root), name)
             units.append(unit)
             ready = home / (name + '.json')
-            wait_for(ready.exists, 'Actual PAM session phase did not finish')
+            try:
+                wait_for(ready.exists, 'Actual PAM session phase did not finish')
+            except RuntimeError:
+                # Only this successfully created unit, never system-wide logs.
+                journal = subprocess.run(['journalctl', '--unit', unit, '--no-pager', '-n', '40', '-o', 'cat'],
+                                         capture_output=True, timeout=10)
+                diagnostics = journal.stdout[-12000:].replace(PASSWORD, b'[redacted fixture password]').replace(SECRET.encode(), b'[redacted fixture secret]')
+                sys.stderr.buffer.write(b'Owned PAM fixture phase ' + name.encode() + b' failed:\n' + diagnostics)
+                raise
             record = json.loads(ready.read_text())
             sid = record['login_session']
             properties = command('loginctl', 'show-session', sid, '--property=User', '--property=Service',

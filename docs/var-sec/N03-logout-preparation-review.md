@@ -35,3 +35,10 @@ schema를 검토했다. 비 disposable/non-root guard를 mock으로 검사하여
 해당 runtime의 bus 준비를 최대 20초 기다린다. 준비 실패를 정상 로그아웃 결과로
 해석하지 않는다. release-check 전체 pass와 PyYAML을 통한 workflow parse pass.
 실제 root/PAM 실행은 disposable Actions 전용이며 로컬 guard 검사로 대체하지 않는다.
+
+`452317f`의 첫 actual PAM fixture는 readiness file을 만들지 못해 실패했다. 해당
+artifact에는 parent timeout만 있어 어느 phase 내부 조건이 실패했는지 확정할 수 없다.
+bus readiness를 기다리는 후속 수정과 함께, 실패 시 성공적으로 생성한 자기 unit의
+마지막 40개 journal entry(최대 12KiB)만 별도 stderr로 보존한다. 알려진 synthetic
+암호/secret을 제거하며 시스템 전체 journal이나 다른 사용자의 unit은 읽지 않는다.
+이 실패를 logout 통과나 특정 backend 결함으로 해석하지 않는다.

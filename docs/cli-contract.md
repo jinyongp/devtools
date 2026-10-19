@@ -238,6 +238,45 @@ devtools import --file .env --profile myapp
 
 중복 키·잘못된 키·닫히지 않은 따옴표·NUL·잘못된 UTF-8은 `invalid_dotenv`와 종료 코드 2로 처리한다. 문법 오류에는 `error.details.line`과 고정된 원인 설명을 제공한다. 파일 내용과 값은 진단에 포함하지 않는다.
 
+## 재사용할 값 묶음: bundle
+
+profile/env 전체 선택이 기본이다. frontend·backend·deploy처럼 일부 값만 반복해서
+사용할 때 bundle에 var/sec 키를 한 번 등록하고 실행마다 그 이름을 선택한다.
+같은 ValueID를 공유하므로 값을 복사하거나 명령마다 키 목록을 입력하지 않는다.
+먼저 `bundle list`에서 현재 `revision`을 조회한다. 기존 `API_URL`과 `TOKEN`,
+이미 만든 `local` env와 설치된 명령을 사용하는 예시다. `REVISION`과 `UUID`는
+조회한 revision과 새 요청 ID로, `my-installed-command`는 사용할 프로그램으로 바꾼다.
+
+```sh
+devtools bundle set backend --key API_URL --key TOKEN --revision REVISION --request-id UUID
+devtools values inspect --bundle backend --env local
+devtools run --bundle backend --env local -- my-installed-command
+```
+
+반복해서 사용하는 선택은 프로젝트의 명령 설정에 저장할 수 있다.
+아래 설정을 기존 `devtools.toml`에 추가하면 이후에는 `devtools run api`만 실행한다.
+`my-installed-command`는 앞 예시와 같은 설치된 프로그램이다.
+
+```toml
+[commands.api]
+exec = ["my-installed-command"]
+inject = true
+env = "local"
+bundle = "backend"
+```
+
+선택 우선순위는 CLI `--bundle` → command `bundle` → project `bundle` → `all`이다.
+env는 선택한 값의 슬롯을 정한다. `none`은 profile 값을 선택하지 않으며 `--env`만으로
+해제되지 않는다. 부모 환경 상속은 별도이므로 부모에 있던 credential까지 제거하지 않는다.
+없는 bundle과 선택 밖 var binding은 오류다. 자동으로 전체 선택으로 바꾸지 않는다.
+
+`bundle set`은 전체 membership을 원자적으로 교체한다. `rename`은 ID를 유지하고
+`remove`는 묶음만 제거한다. `import --bundle NAME`은 가져온 키를 같은 transaction에서
+묶음에 추가하며 기존 kind/overwrite 규칙을 유지한다. 멤버 변경은 이후 실행에 적용하고
+이미 전달한 값을 회수하지 않는다. 수정 충돌은 최신 revision을 조회해 새 요청으로 처리한다.
+암호화 profile 전송은 bundle ID와 공유 ValueID membership을 보존하면서 대상 기기의
+profile ID·저장 세대·keyset을 새로 만든다. bundle은 동일 사용자 앱의 권한 경계가 아니다.
+
 ## 값 메타데이터와 사용처: values
 
 `values inspect --profile NAME [--env ENV] [--bundle all|none|NAME]`은 선택한

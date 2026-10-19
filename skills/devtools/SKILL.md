@@ -15,7 +15,7 @@ unrelated profiles, system settings, or external services.
 
 Read only the relevant reference, then discover the specific command contract:
 
-- Configure a project, values or commands; run a command; manage ports or servers:
+- Configure a project, values/bundles or commands; inspect value usage; run a command; manage ports or servers:
   [references/execution.md](references/execution.md).
 - Prepare proxy routes, DNS, HTTPS, LAN/public sharing or network teardown:
   [references/network.md](references/network.md). For managed backends also read

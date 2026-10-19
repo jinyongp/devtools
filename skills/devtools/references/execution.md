@@ -42,6 +42,38 @@ key/catalog/recovery files or infer execution completion from a PID. Unknown adm
 stays unresolved until trustworthy recovery evidence is available. Lock cannot revoke
 values already delivered to applications. Original dotenv files remain after import.
 
+## Reusable value selection and usage
+
+Profile/env remains the default whole-profile selection. Discover `schema bundle set`
+before using optional named bundles on a supporting build. A bundle selects shared
+var/sec ValueIDs; it does not copy values or encode an env. Register membership once,
+then select it on later runs rather than enumerating keys for every command.
+Use the revision from `bundle list` and a request UUID for atomic bundle edits.
+`import --bundle NAME` adds imported keys to that reusable selection in the same
+transaction; keep the import's existing kind and overwrite rules.
+
+Selection precedence is explicit CLI `--bundle`, command `bundle`, project `bundle`,
+then `all`. `none` selects no profile values; explicit `--env` does not undo it.
+An unknown bundle fails instead of falling back to all. Bindings must be inside
+the selected bundle. Parent environment inheritance is a separate policy: none
+does not remove a credential already in the parent. Bundles are not an app sandbox.
+Renaming preserves a bundle ID; removing membership does not delete the value.
+Changes affect later executions, including a new member added after registration.
+
+Use `values inspect` for selected slot/version/incarnation metadata and `values uses`
+for the current project's declared selections versus actual recorded deliveries.
+These reports contain no values and do not observe application reads or external
+authentication. `command inspect` reports configured selection; a running execution
+can retain a different explicit override. Query its execution ID before acting.
+Passive inspection neither unlocks nor extends the key session. Locked protection
+reports verification_pending; an old execution without delivery metadata is unknown.
+Public-only profile bodies remain integrity_verified:false, even in a protected root.
+
+Changed effective input reports pending; the default policy is notification only.
+Unselected values, hidden common overrides and same-value writes do not change a
+delivery. Use an explicit managed restart when the user wants to apply new input;
+old applications keep their original environment and output patterns until exit.
+
 ## Diagnose preparation
 
 Use `doctor COMMAND` before a configured command when setup is uncertain.

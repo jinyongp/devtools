@@ -64,7 +64,7 @@ For builds with vault support, protected exports require the existing reusable l
 key session. Logical value archives exclude device keys, vault sessions and launch
 handles. A sealed import needs an initialized/unlocked destination vault; restoration
 creates fresh local profile IDs, storage generations and keysets while preserving
-logical values/versions. Transfer passphrases and vault passphrases are independent.
+logical ValueIDs, slot versions and bundle IDs/membership. Transfer passphrases and vault passphrases are independent.
 A preview can become stale even when a replacement restores identical values.
 
 ## Cleanup and archives

@@ -83,8 +83,10 @@ passphrase backend는 만료 뒤에도 명시 해제한다. 비대화형 명령�
 
 공개 var와 secret 이름은 잠긴 상태에서도 조회할 수 있으며 `integrity_verified:false`
 메타데이터는 인증 완료를 의미하지 않는다. 보호 root가 만들어진 뒤에는 별도 공개
-profile도 변경과 검증된 실행에 같은 키 세션을 사용한다. secret을 전부 unset해도
-한번 sealed가 된 profile을 자동으로 평문으로 되돌리지 않는다.
+profile도 변경과 실행에 같은 키 세션을 사용한다. 이때 root catalog의 인증과
+profile 본문의 인증은 다르다. public-only profile 본문은 서명하지 않으며
+`integrity_verified:false`를 유지한다. secret을 전부 unset해도 한번 sealed가 된
+profile을 자동으로 평문으로 되돌리지 않는다.
 
 잠금 성공 뒤에는 이전 준비가 새 secret 전달을 시작하지 않는다. 이미 실행된 앱의
 환경과 자식 프로세스까지 회수되지는 않는다. 실행은 실제 전달 값을 미리 고정하며,
@@ -127,8 +129,9 @@ vault를 설정하고 해제한다. 복원은 새 로컬 profile ID·storage gen
 
 ## 보호 범위
 
-secret 값은 로컬 암호화하고 공개 값과 메타데이터도 인증 대상에 포함한다. 공개 var나
-이름 자체를 숨기지는 않는다. private 파일 권한도 유지한다. 동일 사용자 권한을 가진
+sealed profile의 secret 값은 로컬 암호화하고, 그 profile의 공개 값과 메타데이터도
+전체 manifest 인증에 포함한다. public-only profile 본문에는 이 인증이 없다.
+공개 var나 이름 자체를 숨기지는 않는다. private 파일 권한도 유지한다. 동일 사용자 권한을 가진
 악성 프로그램·agent로부터 앱 사용을 격리하는 sandbox는 아니다. 유효한 이전 자료
 전체를 되돌리는 rollback 방지도 외부 신뢰 anchor 없이 보장하지 않는다.
 

@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"os"
 	"runtime"
 	"testing"
-	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -48,13 +46,7 @@ func TestNativeDPAPIUserRoundtrip(t *testing.T) {
 // ACL denial alone cannot establish DPAPI's identity binding: the other user
 // receives the already-wrapped bytes in memory and must still fail to decrypt.
 func TestNativeDPAPIRejectsDifferentWindowsIdentity(t *testing.T) {
-	user, password := os.Getenv("DEVTOOLS_TEST_USER"), os.Getenv("DEVTOOLS_TEST_PASSWORD")
-	if user == "" || password == "" {
-		if os.Getenv("CI") == "true" {
-			t.Fatal("disposable standard-account fixture required in CI")
-		}
-		t.Skip("requires disposable standard-account fixture")
-	}
+	token := nativeOtherWindowsUserToken(t)
 	ctx := context.Background()
 	id, err := NewID()
 	if err != nil {
@@ -66,23 +58,9 @@ func TestNativeDPAPIRejectsDifferentWindowsIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal("owner protection failed", err)
 	}
-	owner, err := windows.GetCurrentProcessToken().GetTokenUser()
-	if err != nil {
-		t.Fatal("cannot resolve owner identity")
-	}
-	userPtr, _ := windows.UTF16PtrFromString(user)
-	domainPtr, _ := windows.UTF16PtrFromString(".")
-	passwordPtr, _ := windows.UTF16PtrFromString(password)
-	var token windows.Token
-	ok, _, _ := windows.NewLazySystemDLL("advapi32.dll").NewProc("LogonUserW").Call(uintptr(unsafe.Pointer(userPtr)), uintptr(unsafe.Pointer(domainPtr)), uintptr(unsafe.Pointer(passwordPtr)), 2, 0, uintptr(unsafe.Pointer(&token)))
-	runtime.KeepAlive(passwordPtr)
-	if ok == 0 {
-		t.Fatal("cannot create disposable standard-account token")
-	}
-	defer token.Close()
 	other, err := token.GetTokenUser()
-	if err != nil || owner.User.Sid.Equals(other.User.Sid) {
-		t.Fatal("fixture did not select a different SID")
+	if err != nil {
+		t.Fatal("cannot inspect alternate identity")
 	}
 	var impersonation windows.Token
 	if err = windows.DuplicateTokenEx(token, windows.TOKEN_QUERY|windows.TOKEN_IMPERSONATE|windows.TOKEN_DUPLICATE, nil, windows.SecurityImpersonation, windows.TokenImpersonation, &impersonation); err != nil {

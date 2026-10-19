@@ -169,3 +169,18 @@ client invocation, so Python orchestration is outside the measurement. Extend th
 fixture with synthetic data and run a small end-to-end check before comparing
 performance. Session credentials belong only to the private fixture manifest;
 exported command names identify workloads without recording those credentials.
+
+## Protected value fixtures (current var/sec source)
+
+When the measured binary advertises `vault init`, fixture setup explicitly migrates
+the synthetic legacy values into a passphrase-protected vault. Older baseline
+binaries keep their legacy fixture. Both contain the same logical public values and
+secret. The harness records the selected mode in `metadata.vault_measurement`.
+
+Before copying or replacing fixture storage, the harness stops its services and
+retires its own key daemon through the value-free control helper, waiting for the
+real daemon lease. It then restores the snapshot and explicitly unlocks a reusable
+session before timing the command. Initialization, migration, Argon2 unlock, helper
+build and daemon retirement are outside timed work. These samples measure ordinary
+commands with an available key session; they do not measure cold unlock latency,
+native key-store API calls or the daemon's retained memory.

@@ -129,6 +129,8 @@ class Fixture:
             active = [item for item in self.cli("process", "list").get("items", [])
                       if item["state"] in ("running", "starting", "unknown")]
             if not active and not self.cli("proxy", "status")["item"]["running"] and not self.cli("dashboard", "status")["item"]["running"]:
+                if self.info.get("vault_control"):
+                    execute([self.info["vault_control"], str(self.root / "data" / "devtools" / "vault")], env=self.env, timeout=15)
                 return
             time.sleep(0.1)
         raise RuntimeError(f"Fixture services did not stop; retained {self.root}")
@@ -142,6 +144,8 @@ class Fixture:
             shutil.copytree(self.root / "baseline" / name, target)
         for name in ("new.age", "new.identity", "new.recipient"):
             (self.root / name).unlink(missing_ok=True)
+        if self.info.get("vault_control"):
+            self.cli("vault", "unlock", "--passphrase-file", self.root / "vault-passphrase")
 
     def service(self, name):
         if name in ("process", "proxy"):
@@ -179,7 +183,7 @@ def free_port():
         return listener.getsockname()[1]
 
 
-def make_fixture(root, binary, seed_binary, size, history, body_kib, completed=0, attach_tasks=False):
+def make_fixture(root, binary, seed_binary, size, history, body_kib, completed=0, attach_tasks=False, vault_control=None):
     env = isolated_env(root)
     for name in ("config", "data", "cache", "runtime", "project"):
         (root / name).mkdir(mode=0o700)
@@ -224,6 +228,13 @@ timeout = "2s"
                                *(["--attach-tasks"] if attach_tasks else [])], env=env, cwd=REPO))
     info["proxy_port"] = free_port()
     fixture = Fixture(root, binary, env, info)
+    if vault_control is not None:
+        info["vault_control"] = str(vault_control)
+        passphrase = root / "vault-passphrase"
+        passphrase.write_text("synthetic-performance-vault-passphrase\n")
+        passphrase.chmod(0o600)
+        # Legacy seed -> authenticated migration happens outside timed work.
+        fixture.cli("vault", "init", "--backend", "passphrase", "--passphrase-file", passphrase)
     fixture.cli("instance", "name", "bench")
     fixture.cli("port", "allocate", "web")
     fixture.cli("backup", "keygen", "--identity-file", root / "identity", "--recipient-file", root / "recipient")
@@ -546,6 +557,13 @@ def main():
                                    source_dirty=bool(execute(["git", "status", "--porcelain"], cwd=REPO).strip()))
         catalog = json.loads(execute([str(binary), "schema", "--all"]))["data"]
         write_json(output / "catalog.json", catalog)
+        vault_control = None
+        if any(command["name"] == "vault init" for command in catalog["commands"]):
+            vault_control = scratch / "vault-control"
+            execute(["go", "build", "-trimpath", "-o", str(vault_control), "./scripts/vault-fixture"], cwd=REPO)
+            summary["metadata"]["vault_measurement"] = "explicit-passphrase-init; warm-session; setup/unlock/retirement-excluded"
+        else:
+            summary["metadata"]["vault_measurement"] = "legacy-values; no-key-session"
         selected_commands = set()
         discovered_commands = set()
         http_cases = set()
@@ -555,8 +573,8 @@ def main():
                     root = scratch / f"fixture-{size}-{history}-{body_kib}-{completed}"
                     root.mkdir(mode=0o700)
                     # Set fixture before setup so failed setup still has a cleanup path.
-                    fixture = Fixture(root, binary, isolated_env(root))
-                    fixture = make_fixture(root, binary, seed_binary, size, history, body_kib, completed, args.attach_tasks)
+                    fixture = Fixture(root, binary, isolated_env(root), {"vault_control": str(vault_control)} if vault_control is not None else None)
+                    fixture = make_fixture(root, binary, seed_binary, size, history, body_kib, completed, args.attach_tasks, vault_control)
                     selected = [case for case in cases_for(fixture, catalog) if case.group in groups
                                 and (not args.case or args.case in case.name)]
                     if not selected:

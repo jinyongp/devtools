@@ -262,6 +262,45 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  wsl-vault:
+    needs: validate-release
+    runs-on: windows-2025
+    timeout-minutes: 20
+    env:
+      DEVTOOLS_SOURCE_COMMIT: ${{ inputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+          cache: true
+      - name: Build candidate for actual WSL2 execution
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force bin | Out-Null
+          $env:GOOS = 'linux'
+          $env:GOARCH = 'amd64'
+          $env:CGO_ENABLED = '0'
+          go build -trimpath -ldflags "-X main.commit=$env:DEVTOOLS_SOURCE_COMMIT -X main.version=0.0.0-wsl-validation" -o bin/devtools-wsl ./cmd/devtools
+          if ($LASTEXITCODE -ne 0) { throw 'WSL candidate build failed' }
+      - name: Verify owned distro termination and explicit unlock after restart
+        shell: pwsh
+        env:
+          DEVTOOLS_DISPOSABLE_HOST: '1'
+        run: |
+          python -B verify/wsl_vault.py --binary bin/devtools-wsl --commit $env:DEVTOOLS_SOURCE_COMMIT --evidence vault-wsl-restart.json
+          if ($LASTEXITCODE -ne 0) { throw 'Actual WSL2 restart validation failed' }
+      - name: Preserve actual WSL2 evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vault-wsl-restart
+          path: vault-wsl-restart.json
+          if-no-files-found: error
+          retention-days: 7
+
   system-network:
     needs: validate-release
     if: inputs.system_network_smoke
@@ -344,7 +383,7 @@ jobs:
           retention-days: 7
 
   package:
-    needs: [validate-release, ci-macos, ci-linux, ci-windows, vault-macos, vault-linux]
+    needs: [validate-release, ci-macos, ci-linux, ci-windows, vault-macos, vault-linux, wsl-vault]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:

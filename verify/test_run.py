@@ -1,14 +1,82 @@
 import contextlib
 import io
+import json
 import os
 from pathlib import Path
 import tempfile
 import subprocess
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import run
+import wsl_vault
+
+
+class WSLFixtureOwnershipTest(unittest.TestCase):
+    def attempt(self, *, preexisting=False, unregister_fails=False):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scratch = root / 'import'
+            scratch.mkdir()
+            binary = root / 'binary'
+            binary.write_bytes(b'synthetic-candidate')
+            evidence = root / 'evidence.json'
+            name = 'devtools-vault-test-fixed-owned-id'
+            calls = []
+            registered = preexisting
+
+            def process(argv, **kwargs):
+                nonlocal registered
+                words = argv[1:]
+                calls.append(words)
+                code, output = 0, b''
+                if words[0] == '--version':
+                    output = b'WSL fixture'
+                elif words[0] == '--list':
+                    output = ('User-Ubuntu\n' + (name + '\n' if registered else '')).encode()
+                elif words[0] == '--import':
+                    registered = True
+                    code = 1  # Registration partially succeeded before failure.
+                elif words[0] == '--unregister':
+                    code = int(unregister_fails)
+                    registered = bool(code)
+                return subprocess.CompletedProcess(argv, code, stdout=output, stderr=b'')
+
+            digest = SimpleNamespace(update=lambda data: None, hexdigest=lambda:
+                                     '2a790896740b14d637dbdc583cce1ba081ac53b9e9cdb46dc09a2f73abbd9934')
+            with patch.object(wsl_vault, 'os', SimpleNamespace(name='nt', environ={'DEVTOOLS_DISPOSABLE_HOST': '1'})), \
+                    patch.object(wsl_vault.uuid, 'uuid4', return_value=SimpleNamespace(hex='fixed-owned-id')), \
+                    patch.object(wsl_vault.tempfile, 'mkdtemp', return_value=str(scratch)), \
+                    patch.object(wsl_vault.hashlib, 'sha256', return_value=digest), \
+                    patch.object(wsl_vault.urllib.request, 'urlopen', return_value=io.BytesIO(b'fixture-image')), \
+                    patch.object(wsl_vault.subprocess, 'run', side_effect=process), \
+                    patch('sys.argv', ['wsl_vault.py', '--binary', str(binary), '--commit', 'fixture', '--evidence', str(evidence)]):
+                with self.assertRaises(RuntimeError):
+                    wsl_vault.main()
+            return calls, json.loads(evidence.read_text()), scratch.exists()
+
+    def test_existing_distribution_is_never_imported_terminated_or_removed(self):
+        calls, report, retained = self.attempt(preexisting=True)
+        self.assertTrue(all(words[0] in ('--version', '--list') for words in calls))
+        self.assertEqual(report['result'], 'fail')
+        self.assertFalse(retained)
+
+    def test_partial_import_failure_unregisters_only_its_owned_distribution(self):
+        calls, report, retained = self.attempt()
+        targets = [words for words in calls if words[0] in ('--terminate', '--unregister')]
+        self.assertEqual(targets, [['--terminate', 'devtools-vault-test-fixed-owned-id'],
+                                   ['--unregister', 'devtools-vault-test-fixed-owned-id']])
+        self.assertEqual(report['result'], 'fail')
+        self.assertTrue(report['owned_distribution_removed'])
+        self.assertFalse(retained)
+
+    def test_failed_unregister_retains_recovery_root_and_failed_evidence(self):
+        _, report, retained = self.attempt(unregister_fails=True)
+        self.assertEqual(report['result'], 'fail')
+        self.assertNotIn('owned_distribution_removed', report)
+        self.assertTrue(retained)
 
 
 class ScenarioTimeoutTest(unittest.TestCase):

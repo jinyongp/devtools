@@ -17,9 +17,24 @@ $oldInstallerFixture = $env:DEVTOOLS_INSTALLER_FIXTURE
 $bootstrapBin = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\devtools\bin'
 $bootstrapOwned = $false
 function Require([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
+function Save-InvocationFailure([string]$Executable, [string[]]$Arguments, [int]$ExitCode) {
+    $caller = Get-PSCallStack | Select-Object -Skip 2 -First 1
+    $diagnostic = Join-Path $root 'diagnostic.txt'
+    $bytes = if (Test-Path -LiteralPath $diagnostic) { (Get-Item -LiteralPath $diagnostic).Length } else { 0 }
+    $context = [ordered]@{
+        engine = [IO.Path]::GetFileName($Executable)
+        exit_code = $ExitCode
+        script_line = $caller.ScriptLineNumber
+        argument_flags = @($Arguments | Where-Object { $_ -match '^--?[A-Za-z][A-Za-z0-9-]*$' } | Select-Object -First 16)
+        stderr_bytes = $bytes
+    }
+    [IO.File]::WriteAllText((Join-Path $PWD 'windows-install-context.json'), ($context | ConvertTo-Json -Depth 3), [Text.UTF8Encoding]::new($false))
+}
 function Invoke-Json([string]$Executable, [string[]]$Arguments) {
     $text = & $Executable @Arguments 2> (Join-Path $root 'diagnostic.txt')
-    Require ($LASTEXITCODE -eq 0) ('Command failed; see disposable diagnostic file: ' + $Executable)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) { Save-InvocationFailure $Executable $Arguments $exitCode }
+    Require ($exitCode -eq 0) ('Command failed; see disposable diagnostic file: ' + $Executable)
     if ($Arguments -contains '-Json') {
         Require (-not (Get-Content -LiteralPath (Join-Path $root 'diagnostic.txt') -Raw)) 'Successful JSON installer wrote human text to stderr.'
     }
@@ -27,7 +42,9 @@ function Invoke-Json([string]$Executable, [string[]]$Arguments) {
 }
 function Invoke-Text([string]$Executable, [string[]]$Arguments) {
     $text = & $Executable @Arguments 2> (Join-Path $root 'diagnostic.txt')
-    Require ($LASTEXITCODE -eq 0) ('Human installer failed; see disposable diagnostic file: ' + $Executable)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) { Save-InvocationFailure $Executable $Arguments $exitCode }
+    Require ($exitCode -eq 0) ('Human installer failed; see disposable diagnostic file: ' + $Executable)
     Require (-not (Get-Content -LiteralPath (Join-Path $root 'diagnostic.txt') -Raw)) 'Successful human installer wrote its guidance to stderr.'
     return ($text -join "`n")
 }

@@ -405,6 +405,7 @@ jobs:
             windows-install-transaction-results.jsonl
             windows-install-results.json
             windows-install-diagnostic.txt
+            windows-install-context.json
             project-release-results.tap
             dist/*.zip
             dist/*.zip.sha256

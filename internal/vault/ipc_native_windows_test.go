@@ -268,7 +268,7 @@ func startNativeWindowsPeer(token windows.Token, binary, directory, mode, endpoi
 	environment := utf16.Encode([]rune(strings.Join([]string{"SystemRoot=" + os.Getenv("SystemRoot"), "WINDIR=" + os.Getenv("WINDIR"), ""}, "\x00") + "\x00"))
 	startup := windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfo{}))}
 	var info windows.ProcessInformation
-	ok, _, callErr := windows.NewLazySystemDLL("advapi32.dll").NewProc("CreateProcessWithTokenW").Call(uintptr(token), 0, uintptr(unsafe.Pointer(application)), uintptr(unsafe.Pointer(command)), windows.CREATE_UNICODE_ENVIRONMENT, uintptr(unsafe.Pointer(&environment[0])), uintptr(unsafe.Pointer(cwd)), uintptr(unsafe.Pointer(&startup)), uintptr(unsafe.Pointer(&info)))
+	ok, _, callErr := windows.NewLazySystemDLL("advapi32.dll").NewProc("CreateProcessWithTokenW").Call(uintptr(token), 0, uintptr(unsafe.Pointer(application)), uintptr(unsafe.Pointer(command)), windows.CREATE_UNICODE_ENVIRONMENT|windows.CREATE_NO_WINDOW, uintptr(unsafe.Pointer(&environment[0])), uintptr(unsafe.Pointer(cwd)), uintptr(unsafe.Pointer(&startup)), uintptr(unsafe.Pointer(&info)))
 	runtime.KeepAlive(application)
 	runtime.KeepAlive(command)
 	runtime.KeepAlive(cwd)

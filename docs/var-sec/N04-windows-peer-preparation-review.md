@@ -63,3 +63,10 @@ GetExitCodeProcess 숫자만 기록한다. SIG/PID 추정이나 같은 사용자
 아니며, 뒤의 검사는 미수행으로 남는다. raw JSON을 별도 artifact로 보존하고 같은
 임시 credential 제거 규칙을 적용한다. native 실패를 찾기 위해 관계없는 전체
 package를 몇 분 기다리는 진단 지연을 줄이며 전체 검사를 대체하지 않는다.
+
+`3200682`의 두 architecture에서 원래 owned process의 exit code는 259(STILL_ACTIVE)였다.
+readiness 이전에 종료된 DLL/entry 오류로 단정할 수 없다. console이 필요 없는 IPC 전용
+fixture를 [CREATE_NO_WINDOW](https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags)로
+실행하여 새 사용자 console 준비에 의존하지 않도록 한 변수만 바꾼다. console 대기가
+실제 원인이었는지는 후속 native 결과로 판단하며 현재는 가설이다. 다른 SID token·
+실제 process token 대조·세 거절 assertion·deadline·owned handle cleanup은 유지한다.

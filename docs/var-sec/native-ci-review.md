@@ -121,3 +121,14 @@ daemon은 새로 만들지 않고 동일한 collection·item을 유지한다. Lo
 리뷰: native opt-in/임시 HOME guard, frame 경계·응답 크기·UID·timeout·cleanup/wipe,
 같은 item 검증을 재검토했다. 영향 private D-Bus/helper race pass(2.151s). native 해제
 전체 pass는 수정 Actions 결과 전까지 pending이다.
+
+## macOS installed doctor 경로 검토
+
+`9aa1bc5`의 macOS source check는 통과했으나 installed doctor fixture가 Linux의
+`/bin/true`를 고정하여 실행 준비에서 127을 반환했다. fixture 목적은 secret 요구조건이
+없는 명령의 preflight 성공 여부다. `true`를 PATH로 찾도록 바꾸어 macOS의 실행 위치에도
+동일 조건을 적용한다. 제품 실행 준비·오류 코드 검사는 유지한다.
+
+리뷰: plain 명령의 requirements 부재와 뒤따르는 doctor/run assertion을 다시 확인했다.
+실제 Linux package/install doctor 시나리오 pass. macOS 설치 검증은 후속 Actions에서
+확인하며 Linux 결과를 macOS 통과로 기록하지 않는다.

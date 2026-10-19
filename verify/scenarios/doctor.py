@@ -43,7 +43,7 @@ env = "dev"
 [commands.check.requirements]
 secs = ["TOKEN"]
 [commands.plain]
-exec = ["/bin/true"]
+exec = ["true"]
 '''
 (project / "devtools.toml").write_text(config)
 tool = project / "fixture-tool"

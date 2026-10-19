@@ -98,6 +98,33 @@ jobs:
       focus: full
       reuse-source: ${{ needs.validate-release.outputs.windows-source-reused == 'true' }}
 
+  vault-linux:
+    needs: validate-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+          cache: true
+      - name: Prepare disposable native Secret Service fixture
+        run: sudo apt-get update && sudo apt-get install -y gnome-keyring dbus
+      - name: Verify real Secret Service absent, unlocked, locked and stopped
+        env:
+          DEVTOOLS_DISPOSABLE_HOST: '1'
+        run: python3 -B scripts/check-linux-vault.py
+      - name: Preserve native Secret Service evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vault-secret-service-linux
+          path: vault-secret-service-*.jsonl
+          if-no-files-found: error
+          retention-days: 7
+
   vault-macos:
     needs: validate-release
     strategy:
@@ -313,7 +340,7 @@ jobs:
           retention-days: 7
 
   package:
-    needs: [validate-release, ci-macos, ci-linux, ci-windows, vault-macos]
+    needs: [validate-release, ci-macos, ci-linux, ci-windows, vault-macos, vault-linux]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:

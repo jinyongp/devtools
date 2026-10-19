@@ -38,6 +38,10 @@ def main():
                                         env=env, stdout=output, stderr=subprocess.STDOUT, timeout=210)
             if result.returncode:
                 raise RuntimeError('Native Keychain tests failed; inspect value-free JSON test evidence')
+            events = [json.loads(line) for line in Path('vault-keychain-results.jsonl').read_text().splitlines()]
+            passed = {event.get('Test') for event in events if event.get('Action') == 'pass'}
+            if not {'TestNativeKeychainSyntheticVault', 'TestNativeKeychainLockedCollectionRefusesSilentAccess'} <= passed:
+                raise RuntimeError('Required native Keychain tests did not actually pass')
         finally:
             try:
                 security('default-keychain', '-d', 'user', '-s', original_default[0])

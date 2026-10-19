@@ -332,3 +332,97 @@ func TestSessionNativeHelperRealPipeAndCancellation(t *testing.T) {
 		t.Fatal("failed native operation opened session")
 	}
 }
+
+func TestNativeSecretServiceLockedCollection(t *testing.T) {
+	if os.Getenv("DEVTOOLS_DISPOSABLE_HOST") != "1" || os.Getenv("DEVTOOLS_TEST_NATIVE_SECRET_SERVICE") != "1" || !strings.HasPrefix(filepath.Base(os.Getenv("HOME")), "devtools-native-secret-") {
+		t.Skip("requires dedicated native Secret Service fixture")
+	}
+	unlock := func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		command := exec.CommandContext(ctx, "gnome-keyring-daemon", "--unlock", "--components=secrets")
+		command.Stdin = strings.NewReader("synthetic-gnome-keyring-test-password")
+		return command.Run()
+	}
+	id, err := NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := SecretServiceProtector{VaultID: id}
+	key := bytes.Repeat([]byte{0x75}, 32)
+	wrapped, err := p.Wrap(context.Background(), key)
+	if err != nil {
+		t.Fatal("native setup", err)
+	}
+	t.Cleanup(func() {
+		if err := unlock(); err != nil {
+			t.Error("cannot unlock synthetic collection for cleanup")
+			return
+		}
+		if err := p.Remove(context.Background()); err != nil {
+			t.Error("synthetic item cleanup", err)
+		}
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s, err := p.connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.conn.Close()
+	var collection dbus.ObjectPath
+	if err = s.call(ctx, secretRoot, "Service.ReadAlias", "default").Store(&collection); err != nil || collection == "/" {
+		t.Fatal("native default collection unavailable")
+	}
+	var locked []dbus.ObjectPath
+	var prompt dbus.ObjectPath
+	if err = s.call(ctx, secretRoot, "Service.Lock", []dbus.ObjectPath{collection}).Store(&locked, &prompt); err != nil || prompt != "/" {
+		t.Fatal("native collection did not lock synchronously", err)
+	}
+	var state dbus.Variant
+	if err = s.conn.Object(s.owner, collection).CallWithContext(ctx, "org.freedesktop.DBus.Properties.Get", dbus.FlagNoAutoStart, secretInterface+"Collection", "Locked").Store(&state); err != nil || state.Value() != true {
+		t.Fatal("native collection was not locked", err)
+	}
+	got, err := p.Unwrap(ctx, wrapped)
+	leaked := len(got) > 0
+	clear(got)
+	if leaked || !errors.Is(err, ErrBackendLocked) {
+		t.Fatal("locked native collection allowed silent access", err)
+	}
+	if err = unlock(); err != nil {
+		t.Fatal("native synthetic unlock failed")
+	}
+	got, err = p.Unwrap(context.Background(), wrapped)
+	if err != nil || !bytes.Equal(got, key) {
+		t.Fatal("native unlock did not preserve key", err)
+	}
+	clear(got)
+}
+
+func TestNativeSecretServiceUnavailableDoesNotActivate(t *testing.T) {
+	if os.Getenv("DEVTOOLS_TEST_NATIVE_SECRET_SERVICE_ABSENT") != "1" {
+		t.Skip("requires stopped native service on a dedicated bus")
+	}
+	id, err := NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := SecretServiceProtector{VaultID: id}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	got, err := p.Unwrap(ctx, []byte("secret-service/v1/"+id))
+	leaked := len(got) > 0
+	clear(got)
+	if leaked || !errors.Is(err, ErrUnavailable) {
+		t.Fatal("absent service did not fail without fallback", err)
+	}
+	connection, err := dialUserBus(ctx, os.Getenv("DBUS_SESSION_BUS_ADDRESS"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	var hasOwner bool
+	if err = connection.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.NameHasOwner", dbus.FlagNoAutoStart, secretService).Store(&hasOwner); err != nil || hasOwner {
+		t.Fatal("absent service was activated", err)
+	}
+}

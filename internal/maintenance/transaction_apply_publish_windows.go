@@ -11,6 +11,10 @@ import (
 
 func prepareTransaction(root string, files map[string][]byte) (transactionPointer, error) {
 	var pointer transactionPointer
+	vaultID, protected, err := ProtectedRootHeld(root)
+	if err != nil {
+		return pointer, err
+	}
 	id, err := transactionID()
 	if err != nil {
 		return pointer, err
@@ -67,6 +71,10 @@ func prepareTransaction(root string, files map[string][]byte) (transactionPointe
 		return pointer, err
 	}
 	pointer = transactionPointer{Version: transactionVersion, TransactionID: id, Phase: "applying"}
+	if protected {
+		pointer.Version = 4
+		pointer.VaultID = vaultID
+	}
 	body, err = json.Marshal(pointer)
 	if err != nil {
 		return transactionPointer{}, err

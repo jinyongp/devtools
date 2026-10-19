@@ -137,3 +137,40 @@ func TestLegacyUpdateRestartsBeforeInvokingChange(t *testing.T) {
 		t.Fatalf("legacy update did not migrate: %#v %v", resolved, err)
 	}
 }
+
+func TestProtectedRootRejectsLegacyNewProfileAndMACCreation(t *testing.T) {
+	ctx := context.Background()
+	root := privateTempDir(t)
+	release, err := maintenance.AcquireExclusive(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := []byte(`{"version":3,"transaction_id":"","phase":"ready","vault_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`)
+	if err := maintenance.Write(filepath.Join(root, ".maintenance", "restore-pending.json"), marker); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	s := Store{Directory: filepath.Join(root, "profiles"), Profile: "brand-new"}
+	invoked := false
+	if _, e := s.Update(ctx, func(state *State) (bool, *protocol.Error) {
+		invoked = true
+		return state.Set(Secret, "TOKEN", "", "owned-test-canary")
+	}); e == nil || invoked {
+		t.Fatal("legacy writer admitted on protected root")
+	}
+	if _, e := s.Inspect(ctx, ""); e == nil {
+		t.Fatal("legacy management initialized")
+	}
+	if _, e := os.Stat(filepath.Join(root, ".maintenance", "values-key")); !os.IsNotExist(e) {
+		t.Fatal("legacy MAC key created")
+	}
+	files, e := os.ReadDir(s.Directory)
+	if e != nil && !os.IsNotExist(e) {
+		t.Fatal(e)
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f.Name(), ".json") {
+			t.Fatal("legacy profile created")
+		}
+	}
+}

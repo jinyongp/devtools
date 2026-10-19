@@ -62,7 +62,13 @@ func LockExclusive(ctx context.Context, path string) (func(), error) {
 
 func recoveryNeeded(root string) (bool, error) {
 	if _, err := os.Lstat(pendingPath(root)); err == nil {
-		return true, nil
+		p, legacy, _, readErr := readPointer(root)
+		if readErr != nil {
+			return false, readErr
+		}
+		if legacy || p.Version != 3 || p.Phase != "ready" {
+			return true, nil
+		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}

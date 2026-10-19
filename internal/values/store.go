@@ -66,6 +66,9 @@ func (s Store) readPath(path string) (*State, *protocol.Error) {
 }
 
 func (s Store) readResolved() (*State, profilekey.Resolution, *protocol.Error) {
+	if _, protected, err := maintenance.ProtectedRootHeld(maintenance.Root(s.Directory)); err != nil || protected {
+		return nil, profilekey.Resolution{}, failure("unsupported_storage", "Legacy values access is disabled for this protected storage root.")
+	}
 	resolution, err := profilekey.Resolve(s.Directory, s.Profile, "values")
 	if err != nil {
 		return nil, resolution, storageError()

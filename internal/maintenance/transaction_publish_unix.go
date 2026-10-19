@@ -108,10 +108,14 @@ func cleanupTransaction(root string, pointer transactionPointer) error {
 		return err
 	}
 	if raw != nil {
-		if legacy || observed.TransactionID != pointer.TransactionID || observed.Phase != pointer.Phase {
+		if legacy || observed.Version != pointer.Version || observed.VaultID != pointer.VaultID || observed.TransactionID != pointer.TransactionID || observed.Phase != pointer.Phase {
 			return errors.New("unexpected recovery pointer")
 		}
-		if err := os.Remove(pending); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if pointer.Version == 4 {
+			if err := writeProtectedRoot(root, pointer.VaultID); err != nil {
+				return err
+			}
+		} else if err := os.Remove(pending); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 		if err := syncDir(filepath.Dir(pending)); err != nil {

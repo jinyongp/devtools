@@ -64,6 +64,9 @@ func recoverPending(root string) error {
 	if body == nil {
 		return cleanupOrphanTransactions(root, "")
 	}
+	if !legacy && pointer.Version == 3 && pointer.Phase == "ready" {
+		return cleanupOrphanTransactions(root, "")
+	}
 	if legacy {
 		if err := recoverLegacy(root, body); err != nil {
 			return err
@@ -105,6 +108,7 @@ func Replace(root string, files map[string][]byte) error {
 	// The durable committed pointer is the logical success boundary. Scratch
 	// cleanup is best-effort here; a later Acquire will finish it before allowing
 	// another operation to proceed.
-	_ = postCommitCleanup(root, transactionPointer{Version: transactionVersion, TransactionID: pointer.TransactionID, Phase: "committed"})
+	pointer.Phase = "committed"
+	_ = postCommitCleanup(root, pointer)
 	return nil
 }

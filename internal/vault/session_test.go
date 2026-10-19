@@ -18,6 +18,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) == 3 && os.Args[1] == "__vault-forward-fixture" {
+		runForwardFixture()
+		os.Exit(0)
+	}
 	if len(os.Args) == 4 && os.Args[1] == "__vault-launch-fixture" {
 		runLaunchFixture()
 		os.Exit(0)

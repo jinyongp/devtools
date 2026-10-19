@@ -53,6 +53,9 @@ type changeReceipt struct {
 }
 
 func (s Store) managementKey(create bool) ([]byte, error) {
+	if _, protected, err := maintenance.ProtectedRootHeld(maintenance.Root(s.Directory)); err != nil || protected {
+		return nil, errors.New("legacy values access disabled")
+	}
 	path := filepath.Join(maintenance.Root(s.Directory), ".maintenance", "values-key")
 	b, e := maintenance.Read(path, 32)
 	if errors.Is(e, os.ErrNotExist) && create {

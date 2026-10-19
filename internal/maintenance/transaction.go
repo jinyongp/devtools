@@ -20,6 +20,7 @@ type transactionPointer struct {
 	Version       int    `json:"version"`
 	TransactionID string `json:"transaction_id"`
 	Phase         string `json:"phase"`
+	VaultID       string `json:"vault_id,omitempty"`
 }
 
 type transactionEntry struct {
@@ -217,7 +218,13 @@ func readPointer(root string) (transactionPointer, bool, []byte, error) {
 	if strings.HasPrefix(trimmed, "[") {
 		return pointer, true, body, nil
 	}
-	if json.Unmarshal(body, &pointer) != nil || pointer.Version != transactionVersion || !validTransactionID(pointer.TransactionID) || pointer.Phase != "applying" && pointer.Phase != "committed" {
+	if json.Unmarshal(body, &pointer) != nil {
+		return pointer, false, nil, errors.New("invalid recovery journal")
+	}
+	if pointer.Version == 3 && pointer.Phase == "ready" && pointer.TransactionID == "" && validVaultID(pointer.VaultID) {
+		return pointer, false, body, nil
+	}
+	if (pointer.Version != transactionVersion && pointer.Version != 4) || (pointer.Version == 4 && !validVaultID(pointer.VaultID)) || !validTransactionID(pointer.TransactionID) || pointer.Phase != "applying" && pointer.Phase != "committed" {
 		return pointer, false, nil, errors.New("invalid recovery journal")
 	}
 	return pointer, false, body, nil

@@ -42,6 +42,7 @@ def main():
             passed = {event.get('Test') for event in events if event.get('Action') == 'pass'}
             if not {'TestNativeKeychainSyntheticVault', 'TestNativeKeychainLockedCollectionRefusesSilentAccess'} <= passed:
                 raise RuntimeError('Required native Keychain tests did not actually pass')
+            subprocess.run([sys.executable, '-B', 'scripts/check-macos-installed-vault.py'], env=env, check=True, timeout=300)
         finally:
             try:
                 security('default-keychain', '-d', 'user', '-s', original_default[0])

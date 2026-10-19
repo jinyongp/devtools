@@ -175,6 +175,7 @@ jobs:
           path: |
             vault-keychain-results.jsonl
             vault-keychain-results.stderr
+            vault-keychain-installed.json
             vault-peers-*
           if-no-files-found: error
           retention-days: 7

@@ -117,7 +117,7 @@ def main():
         dashboard_started = False
         try:
             api(legacy, 'init', '--profile', 'compatibility')
-            api(legacy, 'sec', 'set', 'TOKEN', '--profile', 'compatibility', '--stdin', input=SECRET)
+            api(legacy, 'sec', 'set', 'TOKEN', '--profile', 'compatibility', '--stdin', input=SECRET + '-initial')
             api(legacy, 'var', 'set', 'URL', '--profile', 'compatibility', '--value', 'https://example.invalid')
             # A user-owned input file remains outside the protected data tree.
             # Migration must not silently delete or claim to protect this copy.
@@ -131,6 +131,16 @@ def main():
             status, old_view = dashboard_request(old_origin, '/api/values?profile=compatibility', old_session)
             if status != 200 or len(old_view.get('items', [])) != 2:
                 raise RuntimeError('Actual old dashboard positive control failed')
+            old_change = {'domain': 'values', 'profile': 'compatibility', 'change': {
+                'action': 'secret.set', 'key': 'TOKEN', 'env': '', 'value': SECRET,
+                'revision': old_view['revision'],
+                'request_id': '00000000-0000-4000-8000-000000008002'}}
+            status, old_changed = dashboard_request(old_origin, '/api/actions', old_session, old_change)
+            if status != 200 or old_changed.get('data', {}).get('changed') is not True:
+                raise RuntimeError('Actual legacy managed receipt positive control failed')
+            legacy_mac = (data / '.maintenance' / 'values-key').read_bytes()
+            if len(legacy_mac) != 32:
+                raise RuntimeError('Actual legacy management MAC key missing')
             api(current, 'vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input=PASSWORD + '\n')
             data = Path(api(current, 'project', 'inspect', '--profile', 'compatibility')['paths']['data'])
             directory = data / 'vault'
@@ -167,13 +177,20 @@ def main():
             status, _ = dashboard_request(new_origin, '/api/values?profile=compatibility', new_session)
             if status != 200:
                 raise RuntimeError('New dashboard cannot inspect migrated metadata')
+            # A migrated legacy receipt must retain its original result without
+            # overwriting a later secret. Neither secret is placed in argv.
+            expected_secret = SECRET + '-newer'
+            api(current, 'sec', 'set', 'TOKEN', '--profile', 'compatibility', '--stdin', input=expected_secret)
+            status, replay = dashboard_request(new_origin, '/api/actions', new_session, old_change)
+            if status != 200 or replay.get('data', {}).get('replayed') is not True or replay['data'].get('changed') is not True:
+                raise RuntimeError('Actual legacy receipt did not replay after migration and later mutation')
             api(current, 'dashboard', 'stop')
             dashboard_started = False
             if source.read_text() != 'TOKEN=' + SECRET + '\n':
                 raise RuntimeError('Migration changed original user input')
             result = subprocess.run([str(current), 'run', '--profile', 'compatibility', '--', sys.executable,
-                                     '-c', 'import os,sys;sys.stdout.write(os.environ["TOKEN"])'],
-                                    cwd=root, env=env, capture_output=True, timeout=30)
+                                     '-c', 'import os,sys;expected=sys.stdin.read();sys.exit(9) if os.environ["TOKEN"] != expected else None;sys.stdout.write(os.environ["TOKEN"])'],
+                                    cwd=root, env=env, input=expected_secret.encode(), capture_output=True, timeout=30)
             if result.returncode or result.stdout != b'[REDACTED]' or result.stderr:
                 raise RuntimeError('Actual migrated secret did not execute safely')
             # Windows byte-range leases can forbid even read-only scans while
@@ -189,6 +206,8 @@ def main():
                     raise RuntimeError('Cannot scan owned fixture file: ' + str(path.relative_to(data))) from error
                 if SECRET.encode() in content:
                     raise RuntimeError('Plaintext canary remains in migrated data')
+                if legacy_mac in content:
+                    raise RuntimeError('Plaintext legacy MAC remains in migrated data')
 
         finally:
             try:
@@ -203,6 +222,8 @@ def main():
                 'denials': denials, 'dashboard_denials': dashboard_denials,
                 'old_dashboard_positive_control': True, 'incompatible_dashboard_replaced': True,
                 'old_session_rejected_after_replacement': True,
+                'actual_legacy_receipt_replay_without_rollback': True,
+                'legacy_mac_plaintext_scan': 'pass',
                 'protected_json_unchanged': True, 'migrated_data_canary_scan': 'pass',
                 'original_input_preserved_and_still_sensitive': True, 'owned_root_removed': True}
     args.evidence.write_text(json.dumps(evidence, indent=2) + '\n')

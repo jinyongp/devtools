@@ -49,3 +49,19 @@ vault retirement이며, dashboard stop 오류에도 vault retirement를 시도�
 workflow의 네 native 경로에서 같은 script를 실행하므로 별도 action이나 권한은
 추가하지 않는다. 이 새 검사의 macOS/Windows native 결과와 N05 전체 fault
 matrix 최종 근거는 아직 pending이다.
+
+## 실제 옛 MAC 영수증과 이후 secret의 비회귀
+
+추가로 실제 구버전 dashboard에서 secret.set을 완료하여 옛 공유 MAC 키와
+영수증을 생성한다. 이행 후 현재 CLI로 secret을 다시 변경한 다음 새 dashboard에서
+옛 revision·원문·UUID를 그대로 재시도한다. 원래 changed 결과와 replayed=true를
+반환해야 한다. 실제 자식은 stdin으로 받은 최신 기대값과 전달 환경을 비교하고,
+일치할 때만 값을 출력한다. 출력은 여전히 [REDACTED]여야 한다. 최신 secret이나
+암호를 argv에 넣지 않는다.
+
+새 데이터 전체 scan은 옛 실제 32-byte MAC 키도 검사하며, 그 키는 evidence에
+저장하지 않는다. Linux 실제 old-source/old-server/current CLI 여정 전체 pass:
+`/tmp/devtools-values-plan/N05-actual-old-receipt-linux.json`.
+변경 범위는 기존 fixture의 native 통합 수용 보강이다. 실제 옛 영수증과 이후
+secret 비회귀, 원문 없는 응답/증거, 추가 데이터 전체 scan과 자기 자원 정리를
+리뷰했다. 이 새 부분의 네 native 결과는 아직 pending이다.

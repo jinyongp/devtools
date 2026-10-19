@@ -56,9 +56,11 @@ func TestAutomaticCoordinatorRealDeathDuringOldStopDoesNotRepeat(t *testing.T) {
 	statusPath := filepath.Join(store.Data, "processes", first.Item.ID, "value-apply.json")
 	writeStatus := func(status services.ValueApplyStatus) {
 		t.Helper()
-		body, _ := json.Marshal(status)
-		if err := os.WriteFile(statusPath, body, 0600); err != nil {
+		if err := tasks.WritePrivate(statusPath, status); err != nil {
 			t.Fatal(err)
+		}
+		if _, err := store.ReadValueApply(first.Item.ID); err != nil {
+			t.Fatal("owned private apply status unreadable", err)
 		}
 	}
 	writeStatus(services.ValueApplyStatus{State: "paused", ExecutionID: first.Item.ID})

@@ -55,8 +55,8 @@ func TestAutomaticGoalGuardRejectsChangedInputBeforeStoppingOldExecution(t *test
 		}
 	})
 	// Isolate guard/replay checks from the separately tested automatic watcher.
-	paused, _ := json.Marshal(services.ValueApplyStatus{State: "paused", Reason: "guard_fixture", ExecutionID: first.Item.ID})
-	if err := os.WriteFile(filepath.Join(store.Data, "processes", first.Item.ID, "value-apply.json"), paused, 0600); err != nil {
+	paused := services.ValueApplyStatus{State: "paused", Reason: "guard_fixture", ExecutionID: first.Item.ID}
+	if err := tasks.WritePrivate(filepath.Join(store.Data, "processes", first.Item.ID, "value-apply.json"), paused); err != nil {
 		t.Fatal(err)
 	}
 	original := first.Item

@@ -163,7 +163,9 @@ func TestNativeWindowsPipePeersRejectOtherSID(t *testing.T) {
 		ready, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		if err := connectSessionPipe(ready, identity); err != nil {
-			t.Fatal("different-SID readiness did not connect", err)
+			var exit uint32
+			windows.GetExitCodeProcess(process, &exit)
+			t.Fatalf("different-SID readiness did not connect (exit_code=%d): %v", exit, err)
 		}
 		// Transfer handle ownership to os.File and use an overlapped pipe with
 		// a real deadline, rather than an unbounded inherited stdout read.

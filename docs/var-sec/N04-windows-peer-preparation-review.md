@@ -50,3 +50,9 @@ fixture는 inherited stdio에 의존하지 않고 새 공개 named pipe로 SID r
 PID로 process를 다시 열지 않는다. 각 subtest 소유 cleanup과 handle 단일 소유권을
 다시 검토했고 같은 세 pipe 방어 assertion을 유지한다. source compile/vet와 실제
 native 결과를 구분하며 후속 결과까지 N04는 pending이다.
+
+`0f2bb92`의 실제 x64에서 새 bounded readiness가 10초 안에 연결되지 않아 세 subtest가
+명시 실패했다. 같은 source의 새 frame IPC 검사는 별개로 실행된다. 생성된 process
+신원 대조와 readiness 연결 사이를 좁히기 위해 실패 시 그 원래 owned handle의
+GetExitCodeProcess 숫자만 기록한다. SIG/PID 추정이나 같은 사용자 대체는 하지 않는다.
+초기 DLL 실패·fixture entry 실패·아직 실행 중인 경우를 현재 근거로 단정하지 않는다.

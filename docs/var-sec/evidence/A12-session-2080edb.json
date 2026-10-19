@@ -1,0 +1,104 @@
+{
+  "source_commit": "2080edb63291aa9a05c875d95933ddda45fa8dc6",
+  "runtime": "go1.27.2",
+  "platform": "WSL2 Linux x86_64; Ryzen 7 9800X3D",
+  "command": "GOCACHE=/tmp/devtools-values-go-cache go test ./internal/vault -run ^$ -bench ^BenchmarkPassphraseKeySession$ -benchmem -benchtime=100ms -count=5",
+  "raw_stdout": "goos: linux\ngoarch: amd64\npkg: github.com/jinyongp/devtools/internal/vault\ncpu: AMD Ryzen 7 9800X3D 8-Core Processor           \nBenchmarkPassphraseKeySession/cold-explicit-unlock-16         \t       4\t  25705874 ns/op\t         1.000 kdf-calls/op\t67205128 B/op\t     917 allocs/op\nBenchmarkPassphraseKeySession/cold-explicit-unlock-16         \t       4\t  25352309 ns/op\t         1.000 kdf-calls/op\t67203226 B/op\t     912 allocs/op\nBenchmarkPassphraseKeySession/cold-explicit-unlock-16         \t       4\t  26197194 ns/op\t         1.000 kdf-calls/op\t67203730 B/op\t     913 allocs/op\nBenchmarkPassphraseKeySession/cold-explicit-unlock-16         \t       4\t  25364064 ns/op\t         1.000 kdf-calls/op\t67202852 B/op\t     912 allocs/op\nBenchmarkPassphraseKeySession/cold-explicit-unlock-16         \t       4\t  25682330 ns/op\t         1.000 kdf-calls/op\t67202544 B/op\t     910 allocs/op\nBenchmarkPassphraseKeySession/warm-use-16                     \t    1026\t    118972 ns/op\t         0 kdf-calls/op\t   28262 B/op\t     288 allocs/op\nBenchmarkPassphraseKeySession/warm-use-16                     \t     988\t    125447 ns/op\t         0 kdf-calls/op\t   28256 B/op\t     288 allocs/op\nBenchmarkPassphraseKeySession/warm-use-16                     \t    1032\t    122544 ns/op\t         0 kdf-calls/op\t   28256 B/op\t     288 allocs/op\nBenchmarkPassphraseKeySession/warm-use-16                     \t    1033\t    132158 ns/op\t         0 kdf-calls/op\t   28160 B/op\t     288 allocs/op\nBenchmarkPassphraseKeySession/warm-use-16                     \t     986\t    134185 ns/op\t         0 kdf-calls/op\t   28256 B/op\t     288 allocs/op\nPASS\nok  \tgithub.com/jinyongp/devtools/internal/vault\t4.000s\n",
+  "cases": {
+    "BenchmarkPassphraseKeySession/cold-explicit-unlock": [
+      {
+        "iterations": 4,
+        "metrics": {
+          "ns/op": 25705874.0,
+          "kdf-calls/op": 1.0,
+          "B/op": 67205128.0,
+          "allocs/op": 917.0
+        }
+      },
+      {
+        "iterations": 4,
+        "metrics": {
+          "ns/op": 25352309.0,
+          "kdf-calls/op": 1.0,
+          "B/op": 67203226.0,
+          "allocs/op": 912.0
+        }
+      },
+      {
+        "iterations": 4,
+        "metrics": {
+          "ns/op": 26197194.0,
+          "kdf-calls/op": 1.0,
+          "B/op": 67203730.0,
+          "allocs/op": 913.0
+        }
+      },
+      {
+        "iterations": 4,
+        "metrics": {
+          "ns/op": 25364064.0,
+          "kdf-calls/op": 1.0,
+          "B/op": 67202852.0,
+          "allocs/op": 912.0
+        }
+      },
+      {
+        "iterations": 4,
+        "metrics": {
+          "ns/op": 25682330.0,
+          "kdf-calls/op": 1.0,
+          "B/op": 67202544.0,
+          "allocs/op": 910.0
+        }
+      }
+    ],
+    "BenchmarkPassphraseKeySession/warm-use": [
+      {
+        "iterations": 1026,
+        "metrics": {
+          "ns/op": 118972.0,
+          "kdf-calls/op": 0.0,
+          "B/op": 28262.0,
+          "allocs/op": 288.0
+        }
+      },
+      {
+        "iterations": 988,
+        "metrics": {
+          "ns/op": 125447.0,
+          "kdf-calls/op": 0.0,
+          "B/op": 28256.0,
+          "allocs/op": 288.0
+        }
+      },
+      {
+        "iterations": 1032,
+        "metrics": {
+          "ns/op": 122544.0,
+          "kdf-calls/op": 0.0,
+          "B/op": 28256.0,
+          "allocs/op": 288.0
+        }
+      },
+      {
+        "iterations": 1033,
+        "metrics": {
+          "ns/op": 132158.0,
+          "kdf-calls/op": 0.0,
+          "B/op": 28160.0,
+          "allocs/op": 288.0
+        }
+      },
+      {
+        "iterations": 986,
+        "metrics": {
+          "ns/op": 134185.0,
+          "kdf-calls/op": 0.0,
+          "B/op": 28256.0,
+          "allocs/op": 288.0
+        }
+      }
+    ]
+  },
+  "scope": "In-process real passphrase KDF and key cache; not CLI/IPC/native key API; not peak RSS or zeroization/retention timing"
+}

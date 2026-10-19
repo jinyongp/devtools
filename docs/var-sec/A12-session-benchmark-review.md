@@ -16,3 +16,20 @@ private root를 canonical path로 만들고 각 세션·합성 passphrase/key ma
 메모리 지표와 한계·local/native 구분을 확인했다. 실제 preset 회귀와 두 case 1회 smoke
 pass. 본 smoke 수치를 성능 결과로 채택하지 않는다. clean commit에서 5회 calibrated
 반복을 실행하여 raw stdout을 보존하고 A12의 다른 축은 별도로 유지한다.
+
+## 실제 결과
+
+clean 2080edb / Go 1.27.2 / WSL2 Linux x86_64 / Ryzen 9800X3D에서
+각 case count=5·benchtime=100ms를 완료했다. 다른 무거운 로컬 검사와 겹치지 않았다.
+값은 5개 calibrated batch estimate의 median이며 단일 요청의 p95/p99가 아니다.
+
+| 범위 | 시간 median | Go allocated B/op median | 실제 KDF 호출/op |
+| --- | ---: | ---: | ---: |
+| cold-explicit-unlock | 25.682ms | 67203226 | 1 |
+| warm-use | 0.125ms | 28256 | 0 |
+
+[모든 반복·iteration 수·raw stdout](evidence/A12-session-2080edb.json)을 보존한다.
+정상 출력과 같은 키 확인·KDF 호출 기대가 모두 충족됐다. cold와 warm은 수행하는
+보안 작업이 다르므로 같은 기능의 구현 속도 개선으로 부르지 않는다. cold case의
+약 64MiB allocation은 실제 KDF 비용이며 OS/native API나 별도 daemon RSS 측정이
+아니다. A12의 native call/peak memory·민감 보유 시간 등 남은 축은 별도다.

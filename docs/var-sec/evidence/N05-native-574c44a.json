@@ -1,0 +1,1006 @@
+{
+  "source_commit": "574c44a798c379e1b2c406fb3375aba2f8ea2385",
+  "run_id": 39272297952,
+  "run_url": "https://github.com/jinyongp/devtools/actions/runs/39272297952",
+  "publish": false,
+  "jobs": [
+    {
+      "name": "validate-release",
+      "id": 118127494162,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127494162"
+    },
+    {
+      "name": "wsl-vault",
+      "id": 118127581458,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127581458"
+    },
+    {
+      "name": "vault-macos (macos-15, arm64)",
+      "id": 118127581538,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127581538"
+    },
+    {
+      "name": "vault-linux",
+      "id": 118127581587,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127581587"
+    },
+    {
+      "name": "system-network (macos, macos-latest)",
+      "id": 118127581645,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127581645"
+    },
+    {
+      "name": "ci-macos",
+      "id": 118127581715,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127581715"
+    },
+    {
+      "name": "ci-linux",
+      "id": 118127581731,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127581731"
+    },
+    {
+      "name": "system-network (linux, ubuntu-24.04)",
+      "id": 118127581816,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127581816"
+    },
+    {
+      "name": "vault-macos (macos-15-intel, amd64)",
+      "id": 118127581848,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127581848"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / race",
+      "id": 118127582853,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127582853"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / installer-ps7",
+      "id": 118127582862,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127582862"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / suite",
+      "id": 118127582882,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127582882"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / boundaries",
+      "id": 118127582902,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127582902"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / suite",
+      "id": 118127582931,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127582931"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / installer-x64",
+      "id": 118127582934,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127582934"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / installer-ps5",
+      "id": 118127582998,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127582998"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / installer-ps7",
+      "id": 118127583017,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127583017"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / installer-ps5",
+      "id": 118127583033,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127583033"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / boundaries",
+      "id": 118127583154,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127583154"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / product",
+      "id": 118127583230,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127583230"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / product",
+      "id": 118127583480,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118127583480"
+    },
+    {
+      "name": "profile-exchange (windows-2025, windows-amd64)",
+      "id": 118135843099,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118135843099"
+    },
+    {
+      "name": "profile-exchange (windows-11-arm, windows-arm64)",
+      "id": 118135843202,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118135843202"
+    },
+    {
+      "name": "package",
+      "id": 118135843234,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118135843234"
+    },
+    {
+      "name": "profile-exchange (macos-latest, macos)",
+      "id": 118135843282,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118135843282"
+    },
+    {
+      "name": "profile-exchange (ubuntu-24.04, linux)",
+      "id": 118135843485,
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118135843485"
+    },
+    {
+      "name": "homebrew",
+      "id": 118138922755,
+      "conclusion": "skipped",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118138922755"
+    },
+    {
+      "name": "release",
+      "id": 118138923790,
+      "conclusion": "skipped",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118138923790"
+    },
+    {
+      "name": "installer-page",
+      "id": 118138924177,
+      "conclusion": "skipped",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39272297952/job/118138924177"
+    }
+  ],
+  "windows": {
+    "amd64": {
+      "required_test_count": 20,
+      "suite_sha256": "ddf693171341ab21e69c4f1d713d7c395ed6c01ce88dff5c634b4566c7203c93",
+      "test_events": [
+        {
+          "Time": "2026-10-19T14:49:45.838789Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI/current",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T14:49:45.838789Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI/previous_task_protocol",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T14:49:45.838789Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI/previous_UI",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T14:49:45.838789Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI/legacy",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T14:49:45.838789Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI/previous_protocol",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T14:49:45.838789Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T14:49:55.1511532Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestConcurrentImportReplaysSameRequest",
+          "Elapsed": 4.87
+        },
+        {
+          "Time": "2026-10-19T14:50:01.1813777Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop/prepared",
+          "Elapsed": 11.84
+        },
+        {
+          "Time": "2026-10-19T14:50:04.102886Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestImportPreviewApplyAndStaleProtection",
+          "Elapsed": 8.95
+        },
+        {
+          "Time": "2026-10-19T14:50:04.9131483Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestImportRejectsWrongIdentityAndTamperedArchive",
+          "Elapsed": 0.81
+        },
+        {
+          "Time": "2026-10-19T14:50:07.5839511Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop/old-stop",
+          "Elapsed": 6.4
+        },
+        {
+          "Time": "2026-10-19T14:50:07.5839511Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop",
+          "Elapsed": 18.24
+        },
+        {
+          "Time": "2026-10-19T14:50:23.5739004Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestPublicRestoreCannotDowngradeExistingSealedProfile",
+          "Elapsed": 2.16
+        },
+        {
+          "Time": "2026-10-19T14:50:25.3598813Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestLegacyBackupReceiptReplaysAfterProtectedMigration",
+          "Elapsed": 1.79
+        },
+        {
+          "Time": "2026-10-19T14:50:26.1017956Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestFrozenLauncherRealProcessRestartAndLock",
+          "Elapsed": 6.52
+        },
+        {
+          "Time": "2026-10-19T14:50:27.5034414Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestPublicManagedRestartRejectsReplacedGenerationBeforeOldStop",
+          "Elapsed": 1.41
+        },
+        {
+          "Time": "2026-10-19T14:50:28.1932461Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestProtectedRestoreDrainsLaunchLeaseAndRejectsStalePreview",
+          "Elapsed": 2.83
+        },
+        {
+          "Time": "2026-10-19T14:51:03.7390312Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/services",
+          "Test": "TestRestartPreservesStopMutationWhenColdStartPreflightFails/acknowledged",
+          "Elapsed": 0.3
+        },
+        {
+          "Time": "2026-10-19T14:51:04.9916556Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/services",
+          "Test": "TestRestartPreservesStopMutationWhenColdStartPreflightFails/accepted_stop_response_lost",
+          "Elapsed": 1.25
+        },
+        {
+          "Time": "2026-10-19T14:51:04.9916556Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/services",
+          "Test": "TestRestartPreservesStopMutationWhenColdStartPreflightFails",
+          "Elapsed": 1.55
+        },
+        {
+          "Time": "2026-10-19T14:51:33.2696073Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestPassiveProtectedInspectionUsesOnlyCachedKeyAndRespectsLock",
+          "Elapsed": 1.83
+        },
+        {
+          "Time": "2026-10-19T14:51:34.0388902Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/recovery-written",
+          "Elapsed": 0.64
+        },
+        {
+          "Time": "2026-10-19T14:51:34.6981383Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/intent-published",
+          "Elapsed": 0.66
+        },
+        {
+          "Time": "2026-10-19T14:51:35.242031Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/file:.maintenance/values-key",
+          "Elapsed": 0.54
+        },
+        {
+          "Time": "2026-10-19T14:51:36.0858588Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/file:profiles/p1-a172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333.json",
+          "Elapsed": 0.84
+        },
+        {
+          "Time": "2026-10-19T14:51:36.8979275Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/file:profiles/vault-catalog.json",
+          "Elapsed": 0.81
+        },
+        {
+          "Time": "2026-10-19T14:51:37.5283977Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/file:vault/legacy-verification.json",
+          "Elapsed": 0.63
+        },
+        {
+          "Time": "2026-10-19T14:51:38.4711313Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/receipt-written",
+          "Elapsed": 0.94
+        },
+        {
+          "Time": "2026-10-19T14:51:39.0702136Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/committed",
+          "Elapsed": 0.59
+        },
+        {
+          "Time": "2026-10-19T14:51:41.8971377Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/cleaned",
+          "Elapsed": 2.83
+        },
+        {
+          "Time": "2026-10-19T14:51:41.8971377Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary",
+          "Elapsed": 8.49
+        },
+        {
+          "Time": "2026-10-19T14:51:46.8279743Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestLaunchRealProcessCrashRetainsUnknown",
+          "Elapsed": 0.62
+        },
+        {
+          "Time": "2026-10-19T14:51:47.4340258Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestLaunchRealDaemonCrashDuringLockDrainsAcrossReplacement",
+          "Elapsed": 0.61
+        },
+        {
+          "Time": "2026-10-19T14:51:54.9828794Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries/prepared",
+          "Elapsed": 0.56
+        },
+        {
+          "Time": "2026-10-19T14:51:55.6763139Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries/slot-published",
+          "Elapsed": 0.69
+        },
+        {
+          "Time": "2026-10-19T14:51:56.4855869Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries/installed-verified",
+          "Elapsed": 0.81
+        },
+        {
+          "Time": "2026-10-19T14:51:57.1965627Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries/old-retired",
+          "Elapsed": 0.71
+        },
+        {
+          "Time": "2026-10-19T14:51:57.8955299Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries/receipt-written",
+          "Elapsed": 0.7
+        },
+        {
+          "Time": "2026-10-19T14:51:58.2119986Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestModernManagedReplaySurvivesRotationAndNewIncarnation",
+          "Elapsed": 2.43
+        },
+        {
+          "Time": "2026-10-19T14:51:58.6509907Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries/cleaned",
+          "Elapsed": 0.76
+        },
+        {
+          "Time": "2026-10-19T14:51:58.6509907Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries",
+          "Elapsed": 4.23
+        },
+        {
+          "Time": "2026-10-19T14:52:00.7017597Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestModernReplayRetiresOnlyExpiredVerificationKeys",
+          "Elapsed": 2.49
+        },
+        {
+          "Time": "2026-10-19T14:52:08.9595996Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestCachedInspectionActualIPCDoesNotExtendIdle",
+          "Elapsed": 0.36
+        },
+        {
+          "Time": "2026-10-19T14:52:25.204836Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestLegacyMigrationPreservesLayersAndRetryReceipts",
+          "Elapsed": 0.89
+        }
+      ]
+    },
+    "arm64": {
+      "required_test_count": 20,
+      "suite_sha256": "a601ef31b8ea786715e30156b6ded4e62b948eb41a7eb4384592a219f1acb73f",
+      "test_events": [
+        {
+          "Time": "2026-10-19T07:50:55.5917827-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI/current",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T07:50:55.5917827-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI/previous_task_protocol",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T07:50:55.5917827-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI/previous_UI",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T07:50:55.5917827-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI/legacy",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T07:50:55.5917827-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI/previous_protocol",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T07:50:55.5917827-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T07:50:59.0804649-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestConcurrentImportReplaysSameRequest",
+          "Elapsed": 1.03
+        },
+        {
+          "Time": "2026-10-19T07:51:00.6514949-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop/prepared",
+          "Elapsed": 3.07
+        },
+        {
+          "Time": "2026-10-19T07:51:00.8172001-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestImportPreviewApplyAndStaleProtection",
+          "Elapsed": 1.74
+        },
+        {
+          "Time": "2026-10-19T07:51:01.3873523-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestImportRejectsWrongIdentityAndTamperedArchive",
+          "Elapsed": 0.57
+        },
+        {
+          "Time": "2026-10-19T07:51:03.110162-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop/old-stop",
+          "Elapsed": 2.46
+        },
+        {
+          "Time": "2026-10-19T07:51:03.110162-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop",
+          "Elapsed": 5.53
+        },
+        {
+          "Time": "2026-10-19T07:51:20.7356293-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestPublicRestoreCannotDowngradeExistingSealedProfile",
+          "Elapsed": 2.22
+        },
+        {
+          "Time": "2026-10-19T07:51:22.7869395-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestLegacyBackupReceiptReplaysAfterProtectedMigration",
+          "Elapsed": 2.05
+        },
+        {
+          "Time": "2026-10-19T07:51:25.6457635-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestFrozenLauncherRealProcessRestartAndLock",
+          "Elapsed": 6.82
+        },
+        {
+          "Time": "2026-10-19T07:51:26.5949997-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestProtectedRestoreDrainsLaunchLeaseAndRejectsStalePreview",
+          "Elapsed": 3.81
+        },
+        {
+          "Time": "2026-10-19T07:51:28.0444395-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestPublicManagedRestartRejectsReplacedGenerationBeforeOldStop",
+          "Elapsed": 2.4
+        },
+        {
+          "Time": "2026-10-19T07:52:04.9957905-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/services",
+          "Test": "TestRestartPreservesStopMutationWhenColdStartPreflightFails/acknowledged",
+          "Elapsed": 0.49
+        },
+        {
+          "Time": "2026-10-19T07:52:06.24735-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/services",
+          "Test": "TestRestartPreservesStopMutationWhenColdStartPreflightFails/accepted_stop_response_lost",
+          "Elapsed": 1.25
+        },
+        {
+          "Time": "2026-10-19T07:52:06.24735-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/services",
+          "Test": "TestRestartPreservesStopMutationWhenColdStartPreflightFails",
+          "Elapsed": 1.74
+        },
+        {
+          "Time": "2026-10-19T07:52:35.9671359-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestPassiveProtectedInspectionUsesOnlyCachedKeyAndRespectsLock",
+          "Elapsed": 1.98
+        },
+        {
+          "Time": "2026-10-19T07:52:36.6915245-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/recovery-written",
+          "Elapsed": 0.65
+        },
+        {
+          "Time": "2026-10-19T07:52:37.3666846-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/intent-published",
+          "Elapsed": 0.68
+        },
+        {
+          "Time": "2026-10-19T07:52:38.2159809-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/file:.maintenance/values-key",
+          "Elapsed": 0.85
+        },
+        {
+          "Time": "2026-10-19T07:52:39.0143457-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/file:profiles/p1-a172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333.json",
+          "Elapsed": 0.8
+        },
+        {
+          "Time": "2026-10-19T07:52:39.7472959-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/file:profiles/vault-catalog.json",
+          "Elapsed": 0.73
+        },
+        {
+          "Time": "2026-10-19T07:52:40.5330189-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/file:vault/legacy-verification.json",
+          "Elapsed": 0.79
+        },
+        {
+          "Time": "2026-10-19T07:52:41.3214805-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/receipt-written",
+          "Elapsed": 0.79
+        },
+        {
+          "Time": "2026-10-19T07:52:41.8169038-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/committed",
+          "Elapsed": 0.5
+        },
+        {
+          "Time": "2026-10-19T07:52:42.4624879-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary/cleaned",
+          "Elapsed": 0.65
+        },
+        {
+          "Time": "2026-10-19T07:52:42.4624879-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary",
+          "Elapsed": 6.43
+        },
+        {
+          "Time": "2026-10-19T07:52:47.9041187-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestLaunchRealProcessCrashRetainsUnknown",
+          "Elapsed": 0.6
+        },
+        {
+          "Time": "2026-10-19T07:52:48.6813515-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestLaunchRealDaemonCrashDuringLockDrainsAcrossReplacement",
+          "Elapsed": 0.78
+        },
+        {
+          "Time": "2026-10-19T07:52:57.8833157-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries/prepared",
+          "Elapsed": 0.85
+        },
+        {
+          "Time": "2026-10-19T07:52:58.6993047-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries/slot-published",
+          "Elapsed": 0.82
+        },
+        {
+          "Time": "2026-10-19T07:52:59.6195101-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries/installed-verified",
+          "Elapsed": 0.92
+        },
+        {
+          "Time": "2026-10-19T07:53:00.5431914-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries/old-retired",
+          "Elapsed": 0.92
+        },
+        {
+          "Time": "2026-10-19T07:53:01.4763351-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries/receipt-written",
+          "Elapsed": 0.93
+        },
+        {
+          "Time": "2026-10-19T07:53:02.2904432-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries/cleaned",
+          "Elapsed": 0.81
+        },
+        {
+          "Time": "2026-10-19T07:53:02.2904432-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries",
+          "Elapsed": 5.25
+        },
+        {
+          "Time": "2026-10-19T07:53:04.3705178-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestModernManagedReplaySurvivesRotationAndNewIncarnation",
+          "Elapsed": 3.83
+        },
+        {
+          "Time": "2026-10-19T07:53:07.4777568-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestModernReplayRetiresOnlyExpiredVerificationKeys",
+          "Elapsed": 3.11
+        },
+        {
+          "Time": "2026-10-19T07:53:12.778515-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestCachedInspectionActualIPCDoesNotExtendIdle",
+          "Elapsed": 0.48
+        },
+        {
+          "Time": "2026-10-19T07:53:37.2176125-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestLegacyMigrationPreservesLayersAndRetryReceipts",
+          "Elapsed": 1.01
+        }
+      ]
+    }
+  },
+  "legacy": {
+    "linux": {
+      "artifact_sha256": "fcf45154a94975a19653c669cd4d414755c6689f287be1b4e09eedd22f29fd5d",
+      "result": {
+        "result": "pass",
+        "baseline_commit": "89100eb98888895a450b2ebd403e4e1c9b5f52d2",
+        "candidate": {
+          "commit": "unknown",
+          "protocol_version": 7,
+          "version": "dev"
+        },
+        "baseline_sha256": "31fcb0586993aeabf90cb2e96d0ee1deb78c3f82f5605705d62fb9d6484347c3",
+        "candidate_sha256": "f344f304cd37ec5db96b0bdda8b1be584ae2ae38023e9007d9fa6264301f4a08",
+        "denials": [
+          "storage_error",
+          "storage_error",
+          "storage_error"
+        ],
+        "dashboard_denials": [
+          "storage_error",
+          "storage_error"
+        ],
+        "old_dashboard_positive_control": true,
+        "incompatible_dashboard_replaced": true,
+        "old_session_rejected_after_replacement": true,
+        "actual_legacy_receipt_replay_without_rollback": true,
+        "legacy_mac_plaintext_scan": "pass",
+        "protected_json_unchanged": true,
+        "migrated_data_canary_scan": "pass",
+        "original_input_preserved_and_still_sensitive": true,
+        "owned_root_removed": true
+      }
+    },
+    "macos": {
+      "artifact_sha256": "5d32c0a6a3a63a3baab27d64cd08d06b3aa7c697195d1b0efeb2d7b9f1139282",
+      "result": {
+        "result": "pass",
+        "baseline_commit": "89100eb98888895a450b2ebd403e4e1c9b5f52d2",
+        "candidate": {
+          "commit": "unknown",
+          "protocol_version": 7,
+          "version": "dev"
+        },
+        "baseline_sha256": "5ade5bb91d4c55e001f22c66dfc7315d2bbd5eaea3a633f910bb6f0641488742",
+        "candidate_sha256": "23dc0859bd84234f33b3eef389ecb1023468f3a997e296e8a90b3fea681cad4d",
+        "denials": [
+          "storage_error",
+          "storage_error",
+          "storage_error"
+        ],
+        "dashboard_denials": [
+          "storage_error",
+          "storage_error"
+        ],
+        "old_dashboard_positive_control": true,
+        "incompatible_dashboard_replaced": true,
+        "old_session_rejected_after_replacement": true,
+        "actual_legacy_receipt_replay_without_rollback": true,
+        "legacy_mac_plaintext_scan": "pass",
+        "protected_json_unchanged": true,
+        "migrated_data_canary_scan": "pass",
+        "original_input_preserved_and_still_sensitive": true,
+        "owned_root_removed": true
+      }
+    },
+    "windows-amd64": {
+      "artifact_sha256": "1ea2432d4ab2616796914fee00f15b119c5bb1bfff42277c3df15a68b935ed13",
+      "result": {
+        "result": "pass",
+        "baseline_commit": "89100eb98888895a450b2ebd403e4e1c9b5f52d2",
+        "candidate": {
+          "commit": "574c44a798c379e1b2c406fb3375aba2f8ea2385",
+          "protocol_version": 7,
+          "version": "0.0.0-vault-validation"
+        },
+        "baseline_sha256": "8e9eb1d425fceb83abcbcd464de49b940150a7001c32098ae40f7cf3a58a6c76",
+        "candidate_sha256": "063c872a9cf96c2e640efac807544cc9c8c3ce1f8e34f73927cb72554fec2d7d",
+        "denials": [
+          "storage_error",
+          "storage_error",
+          "storage_error"
+        ],
+        "dashboard_denials": [
+          "storage_error",
+          "storage_error"
+        ],
+        "old_dashboard_positive_control": true,
+        "incompatible_dashboard_replaced": true,
+        "old_session_rejected_after_replacement": true,
+        "actual_legacy_receipt_replay_without_rollback": true,
+        "legacy_mac_plaintext_scan": "pass",
+        "protected_json_unchanged": true,
+        "migrated_data_canary_scan": "pass",
+        "original_input_preserved_and_still_sensitive": true,
+        "owned_root_removed": true
+      }
+    },
+    "windows-arm64": {
+      "artifact_sha256": "72af8cc0c2c845c8d5e9f29a19e6ed217332bde7bbd5dba744479b6c7e141093",
+      "result": {
+        "result": "pass",
+        "baseline_commit": "89100eb98888895a450b2ebd403e4e1c9b5f52d2",
+        "candidate": {
+          "commit": "574c44a798c379e1b2c406fb3375aba2f8ea2385",
+          "protocol_version": 7,
+          "version": "0.0.0-vault-validation"
+        },
+        "baseline_sha256": "56b09d5effc6d7c58e2f5740fcf5b50625c3f5508b40b79c189057d2fb5e0672",
+        "candidate_sha256": "49150ccc6bcb121f3b35ee68999d1d848fef17d9b99b2cc4a512306f4539683a",
+        "denials": [
+          "storage_error",
+          "storage_error",
+          "storage_error"
+        ],
+        "dashboard_denials": [
+          "storage_error",
+          "storage_error"
+        ],
+        "old_dashboard_positive_control": true,
+        "incompatible_dashboard_replaced": true,
+        "old_session_rejected_after_replacement": true,
+        "actual_legacy_receipt_replay_without_rollback": true,
+        "legacy_mac_plaintext_scan": "pass",
+        "protected_json_unchanged": true,
+        "migrated_data_canary_scan": "pass",
+        "original_input_preserved_and_still_sensitive": true,
+        "owned_root_removed": true
+      }
+    }
+  },
+  "exchange": {
+    "linux": {
+      "artifact_sha256": "6e6dd73302d3dda6001b6c006d6574345b46ab662299cebd5d42daa1d745b273",
+      "result": {
+        "commit": "574c44a798c379e1b2c406fb3375aba2f8ea2385",
+        "target": "linux",
+        "passed": [
+          "macos -> linux",
+          "windows-amd64 -> linux",
+          "windows-arm64 -> linux"
+        ],
+        "fresh_target_vault_profile_generation": true,
+        "logical_slot_versions_preserved": true
+      }
+    },
+    "macos": {
+      "artifact_sha256": "7546d686ae6fa80c6347ab537d2fce72b212dadb45ceeb0cc902d9b7c7550e8d",
+      "result": {
+        "commit": "574c44a798c379e1b2c406fb3375aba2f8ea2385",
+        "target": "macos",
+        "passed": [
+          "linux -> macos",
+          "windows-amd64 -> macos",
+          "windows-arm64 -> macos"
+        ],
+        "fresh_target_vault_profile_generation": true,
+        "logical_slot_versions_preserved": true
+      }
+    },
+    "windows-amd64": {
+      "artifact_sha256": "cc67916fff626b47cb974adaaff46ea2ad9b3d321cba40ecfbc79aad576e093b",
+      "result": {
+        "commit": "574c44a798c379e1b2c406fb3375aba2f8ea2385",
+        "target": "windows-amd64",
+        "passed": [
+          "linux -> windows-amd64",
+          "macos -> windows-amd64",
+          "windows-arm64 -> windows-amd64"
+        ],
+        "fresh_target_vault_profile_generation": true,
+        "logical_slot_versions_preserved": true
+      }
+    },
+    "windows-arm64": {
+      "artifact_sha256": "abda72fdc2cee385f8c0cb04fdd0e26b1ddd7947539abfbc407a01e3d91c785c",
+      "result": {
+        "commit": "574c44a798c379e1b2c406fb3375aba2f8ea2385",
+        "target": "windows-arm64",
+        "passed": [
+          "linux -> windows-arm64",
+          "macos -> windows-arm64",
+          "windows-amd64 -> windows-arm64"
+        ],
+        "fresh_target_vault_profile_generation": true,
+        "logical_slot_versions_preserved": true
+      }
+    }
+  },
+  "limits": [
+    "Unix built CLI reports commit unknown/version dev; exact checkout/job and artifact binary digest provide source provenance.",
+    "Process crash uses real owned OS process exits/kills, not physical power loss.",
+    "PID reuse coverage uses original OS lease/handle identities and no numeric-PID signaling fallback; kernel PID recycling was not forced.",
+    "This is N05 source acceptance; C01 consumer/C02 and A12/C03/Z01 are separate later gates."
+  ]
+}

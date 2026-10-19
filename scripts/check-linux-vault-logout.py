@@ -179,12 +179,19 @@ def privileged(binary):
             unit = account + '-' + name
             command('systemd-run', '--quiet', '--unit', unit, '--property', 'User=' + account,
                     '--property', 'PAMName=' + account, '--property', 'RuntimeMaxSec=90',
+                    '--property', 'StandardOutput=journal', '--property', 'StandardError=journal',
                     '--property', 'Environment=HOME=' + str(home) + ' DEVTOOLS_DISPOSABLE_HOST=1',
                     '/usr/bin/python3', '-B', str(root / 'fixture.py'), '--phase', str(root), name)
             units.append(unit)
             ready = home / (name + '.json')
             try:
-                wait_for(ready.exists, 'Actual PAM session phase did not finish')
+                def completed():
+                    failed = home / (name + '-error.json')
+                    if failed.exists():
+                        details = json.loads(failed.read_text())
+                        raise RuntimeError('Owned PAM phase failed: ' + details['type'] + ': ' + details['message'])
+                    return ready.exists()
+                wait_for(completed, 'Actual PAM session phase did not finish')
             except RuntimeError:
                 # Only this successfully created unit, never system-wide logs.
                 journal = subprocess.run(['journalctl', '--unit', unit, '--no-pager', '-n', '40', '-o', 'cat'],
@@ -235,7 +242,17 @@ def main():
     if sys.platform != 'linux' or os.environ.get('DEVTOOLS_DISPOSABLE_HOST') != '1':
         raise RuntimeError('Requires an explicitly disposable Linux CI host')
     if len(sys.argv) == 4 and sys.argv[1] == '--phase':
-        phase(Path(sys.argv[2]), sys.argv[3])
+        root, name = Path(sys.argv[2]), sys.argv[3]
+        try:
+            phase(root, name)
+        except Exception as error:
+            if root.parent == Path('/tmp') and root.name.startswith('devtools-logout-') and name in ('before', 'after'):
+                message = str(error).replace(PASSWORD.decode(), '[redacted fixture password]').replace(SECRET, '[redacted fixture secret]')[:500]
+                target = root / 'home' / (name + '-error.json')
+                with target.open('x') as output:
+                    target.chmod(0o600)
+                    json.dump({'type': type(error).__name__, 'message': message}, output)
+            raise
     elif len(sys.argv) == 3 and sys.argv[1] == '--privileged':
         privileged(sys.argv[2])
     elif len(sys.argv) == 1:

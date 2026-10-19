@@ -42,3 +42,10 @@ bus readiness를 기다리는 후속 수정과 함께, 실패 시 성공적으�
 마지막 40개 journal entry(최대 12KiB)만 별도 stderr로 보존한다. 알려진 synthetic
 암호/secret을 제거하며 시스템 전체 journal이나 다른 사용자의 unit은 읽지 않는다.
 이 실패를 logout 통과나 특정 backend 결함으로 해석하지 않는다.
+
+`0f2bb92`에서는 실제 PAM account 조건 통과 후 phase가 exit=1로 종료된 사실을
+확인했다. PAM은 프로세스를 login scope로 옮기므로 원래 service의 journal만으로
+Python 내부 오류를 얻지 못할 수 있다. scope 전체 journal을 확대 수집하는 대신
+소유 HOME의 고정 private error file로 제한된 오류 type/message를 전달한다. 알려진
+합성 값은 제거하고 parent는 실패를 즉시 인식한다. 이 자료는 실제 검증의 성공으로
+취급하지 않는다. stderr routing도 해당 unit 안에서만 journal로 명시한다.

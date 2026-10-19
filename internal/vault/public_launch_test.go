@@ -11,7 +11,7 @@ import (
 
 func TestPublicLaunchUnknownBlocksProtectionUntilKnownOutcome(t *testing.T) {
 	ctx := context.Background()
-	root := t.TempDir()
+	root := privateTempDir(t)
 	dir := filepath.Join(root, "vault")
 	id, _ := NewID()
 	admission, err := BeginPublicLaunch(ctx, dir, id, PublicLaunchTicket{Profile: "app"})

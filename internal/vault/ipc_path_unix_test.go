@@ -13,7 +13,7 @@ import (
 )
 
 func TestLongUnixSessionPathRetainsPrivateRootBinding(t *testing.T) {
-	root := filepath.Join(t.TempDir(), strings.Repeat("long", 40))
+	root := filepath.Join(privateTempDir(t), strings.Repeat("long", 40))
 	directory := filepath.Join(root, "vault")
 	id, _ := NewID()
 	wrapping, err := NewKey()

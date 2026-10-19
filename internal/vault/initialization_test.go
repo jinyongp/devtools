@@ -12,7 +12,7 @@ import (
 )
 
 func TestNewVaultKeepsRootFormatBarrierAndMissingCatalogFailsClosed(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "data")
+	root := filepath.Join(privateTempDir(t), "data")
 	master, _ := NewKey()
 	defer master.Destroy()
 	vid, _ := NewID()
@@ -39,7 +39,7 @@ func TestNewVaultKeepsRootFormatBarrierAndMissingCatalogFailsClosed(t *testing.T
 }
 
 func TestVaultProfileDiscoveryUsesIdentityWithoutTreatingCatalogAsProfile(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "data")
+	root := filepath.Join(privateTempDir(t), "data")
 	master, _ := NewKey()
 	defer master.Destroy()
 	vid, _ := NewID()
@@ -69,7 +69,7 @@ func TestVaultProfileDiscoveryUsesIdentityWithoutTreatingCatalogAsProfile(t *tes
 }
 
 func TestMissingRootSlotCannotBeInitializedOverProtectedProfiles(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "data")
+	root := filepath.Join(privateTempDir(t), "data")
 	master, _ := NewKey()
 	defer master.Destroy()
 	vid, _ := NewID()

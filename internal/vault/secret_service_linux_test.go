@@ -282,7 +282,7 @@ func TestSessionNativeHelperRealPipeAndCancellation(t *testing.T) {
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", address)
 	id, _ := NewID()
 	p := SecretServiceProtector{VaultID: id, BusAddress: address}
-	dir := filepath.Join(t.TempDir(), "vault")
+	dir := filepath.Join(privateTempDir(t), "vault")
 	want, err := (KeyFileStore{Directory: dir}).Initialize(context.Background(), id, "secret-service", p)
 	if err != nil {
 		t.Fatal(err)

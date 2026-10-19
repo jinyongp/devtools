@@ -206,7 +206,7 @@ func TestAuthenticatedStoreAtomicBatchAndMissingProfile(t *testing.T) {
 	p, k := profileFixture(t)
 	master := NewMaterial(bytes.Repeat([]byte{9}, 32))
 	defer master.Destroy()
-	s := FileStore{Root: filepath.Join(t.TempDir(), "data"), VaultID: p.VaultID, CatalogKey: master}
+	s := FileStore{Root: filepath.Join(privateTempDir(t), "data"), VaultID: p.VaultID, CatalogKey: master}
 	ctx := context.Background()
 	if err := s.Initialize(ctx); err != nil {
 		t.Fatal(err)
@@ -279,7 +279,7 @@ func TestPublicOnlyAndSealedCatalogDowngrade(t *testing.T) {
 	sealed, k := profileFixture(t)
 	master := NewMaterial(bytes.Repeat([]byte{3}, 32))
 	defer master.Destroy()
-	s := FileStore{Root: filepath.Join(t.TempDir(), "data"), VaultID: sealed.VaultID, CatalogKey: master}
+	s := FileStore{Root: filepath.Join(privateTempDir(t), "data"), VaultID: sealed.VaultID, CatalogKey: master}
 	ctx := context.Background()
 	if err = s.Initialize(ctx); err != nil {
 		t.Fatal(err)

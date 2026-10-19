@@ -148,7 +148,7 @@ func TestKeysetContextAndStableProfileWrapping(t *testing.T) {
 }
 func TestKeyFileInitializeVerifyAndNoImplicitReset(t *testing.T) {
 	p := protectorFixture(t)
-	s := KeyFileStore{Directory: filepath.Join(t.TempDir(), "vault")}
+	s := KeyFileStore{Directory: filepath.Join(privateTempDir(t), "vault")}
 	ctx := context.Background()
 	if _, err := s.Read(); !errors.Is(err, ErrKeyMissing) {
 		t.Fatal("missing key was initialized")
@@ -191,7 +191,7 @@ func TestKeyFileInitializeVerifyAndNoImplicitReset(t *testing.T) {
 	if _, err = k.Unlock(ctx, "passphrase", p); !errors.Is(err, ErrUnavailable) {
 		t.Fatal("protector identity ignored")
 	}
-	other := KeyFileStore{Directory: filepath.Join(t.TempDir(), "vault")}
+	other := KeyFileStore{Directory: filepath.Join(privateTempDir(t), "vault")}
 	if _, err = other.Initialize(ctx, k.VaultID, "passphrase", p); !errors.Is(err, ErrInvalid) {
 		t.Fatal("mismatched protector persisted")
 	}

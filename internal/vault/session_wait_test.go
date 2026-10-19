@@ -27,7 +27,7 @@ func TestSessionLockAndStatusDoNotWaitForNativeResult(t *testing.T) {
 	wrapping := NewMaterial(bytes.Repeat([]byte{0x63}, 32))
 	defer wrapping.Destroy()
 	p := sessionTestProtector{id: id, key: wrapping}
-	dir := filepath.Join(t.TempDir(), "vault")
+	dir := filepath.Join(privateTempDir(t), "vault")
 	key, err := (KeyFileStore{Directory: dir}).Initialize(context.Background(), id, "dpapi", p)
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestSessionDisconnectCancelsNativeWork(t *testing.T) {
 	wrapping := NewMaterial(bytes.Repeat([]byte{0x37}, 32))
 	defer wrapping.Destroy()
 	p := sessionTestProtector{id: id, key: wrapping}
-	dir := filepath.Join(t.TempDir(), "vault")
+	dir := filepath.Join(privateTempDir(t), "vault")
 	key, err := (KeyFileStore{Directory: dir}).Initialize(context.Background(), id, "dpapi", p)
 	if err != nil {
 		t.Fatal(err)

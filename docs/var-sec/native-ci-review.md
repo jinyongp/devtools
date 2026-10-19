@@ -52,3 +52,14 @@ Windows completion의 무변경 검사는 live daemon의 byte-range locked file�
 리뷰 범위: fixture 생성/수명/정리, 두 snapshot 호출의 비교 대상, 설치 fixture의 안전한
 오류 필드, network HOME/cleanup 경로를 확인했다. 영향 Linux 검사와 Python AST를 실행하고
 Windows 실제 결과는 새 CI에서 판정한다. 기존 실행 실패는 아직 해결됐다고 표시하지 않는다.
+
+macOS full suite의 추가 로그에서도 `/var` 경로를 그대로 쓰는 새 vault/values fixture들의
+no-follow 거절을 확인했다. vault의 일반 TempDir 호출은 공통 private helper로 바꿔 OS
+alias 해소와 native ACL 생성을 적용하고, 기존 values Unix helper는 반환 경로를 해소한다.
+제품의 symlink/ACL 거절 규칙은 유지한다. 기존 테스트가 다루는 손상·누락·승격·복구 조건은
+그대로 둔다. 이 추가 수정도 영향 package 전체 검사와 실제 macOS suite에서 확인한다.
+
+추가 수정 후 Linux 전체 vault/values pass(7.874s/9.968s), 두 package race pass
+(22.426s/61.446s), Windows ARM64·Darwin amd64 test binary compile pass.
+release contract 9개 pass. 첫 release 검사에는 writable GOCACHE 지정이 빠져 local
+read-only cache 오류가 났으며, 같은 소스에서 cache 경로를 지정한 재실행으로 확인했다.

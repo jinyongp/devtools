@@ -166,7 +166,7 @@ func (p sessionTestProtector) Unwrap(ctx context.Context, b []byte) ([]byte, err
 	return k.CopyBytes(), nil
 }
 func TestSessionSilentOSReopenAndKeySlotChange(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "vault")
+	dir := filepath.Join(privateTempDir(t), "vault")
 	id, _ := NewID()
 	wrapping := NewMaterial(bytes.Repeat([]byte{0x31}, 32))
 	defer wrapping.Destroy()

@@ -129,6 +129,24 @@ from data.item.id. `process status` reports lifetime; a configured
 can exit successfully with `readiness.ready: false`.
 Restart applies current config and values.
 
+For a user-selected managed server on a supporting build, command configuration
+`values_update = "restart"` opts into automatic application of effective input
+changes. Omitted policy is notify. Do not enable restart for a migration, deploy
+job or foreground command merely because it consumes values; ended one-shot and
+foreground executions are never repeated automatically.
+
+Read process status before retrying. `value_watch` describes current input;
+`value_apply` separately reports requested/applied/failed/paused and a replacement
+`next_id`. Stored values, delivered input, readiness and external authentication
+are distinct successes. Preparation failure keeps the old app; a failure after
+old stop can leave an outage and does not roll back values or stop siblings.
+An automatic attempt is not resubmitted after failure/uncertainty, even for a
+later goal. Three replacements in 30 seconds also pause the chain. Resolve the
+cause and inspect the current project/execution, then use an explicitly authorized
+manual restart with a new UUID to start a new attempt. An unknown coordinator or
+launch outcome needs trustworthy state inspection; do not invent completion from
+a PID, delete coordination files, or blindly create replacement requests.
+
 Use `project up COMMAND... --request-id UUID` for several named servers. Names are
 required; never assume all configured commands are servers. Readiness waits are
 per command. `project status [COMMAND...]`, `project logs COMMAND`, `project restart

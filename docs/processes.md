@@ -159,3 +159,14 @@ values_update = "restart"
 `project restart`를 실행하면 새 시도를 시작한다. 응답이나 담당 프로세스가
 사라져 결과를 확인할 수 없을 때도 자동 반복하지 않는다. 저장 성공, 실제 전달,
 readiness와 외부 서비스 인증 성공은 서로 다르다.
+
+진단할 때는 `values uses`로 선언과 실제 전달을 구분하고, `process status EXECUTION_ID`의
+최상위 `values`, `item.value_watch`, `item.value_apply`를 함께 확인한다. `notify`에서
+`pending`은 변경 알림이며 실패가 아니다. 잠금 때문에 `verification_pending`이면
+기존 앱의 환경이 회수되거나 값이 반영됐다는 뜻도 아니다. 필요한 명시 해제 뒤 상태를
+다시 조회한다. 이미 실패·일시 정지한 자동 시도가 저절로 재개된다고 가정하지 않는다.
+
+준비 오류는 실행 파일·선택·권한·입력 문제를 해결한 뒤 수동으로 재시도한다. 이전 앱을
+중지한 뒤 실패했다면 현재 활성 실행과 `next_id`를 먼저 확인한다. 결과가 `unknown`이면
+PID만 보고 종료하거나 새 UUID를 반복 발급해 중복 실행하지 않는다. 저장값을 자동으로
+되돌리는 대신, 운영자가 현재 상태를 확인하고 다음 start/restart를 명시적으로 선택한다.

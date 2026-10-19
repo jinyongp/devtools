@@ -76,6 +76,27 @@ Go 단위 테스트는 OS가 고른 포트를 먼저 닫은 뒤 재사용하지 
 `devtools run perf:go`(Go benchmark)를 사용한다. 격리 fixture·크기·이력·baseline 비교는
 [성능 안내](../perf/README.md)를 따른다. end-to-end runner는 Linux·WSL용이다.
 
+## var/sec 통합 수용 검증
+
+저장·세션·실행 보호의 실제 OS 검증은 [A12 수용 기록](var-sec/A12-final-review.md)과
+[검사별 연결표](var-sec/A12-acceptance-ledger.md)를 따른다. Keychain Intel/ARM,
+Windows DPAPI x64/ARM64·UID/SID/pipe·설치/업데이트, Linux Secret Service 가용/부재·logout,
+별도 소유 WSL2 배포판 종료·재시작, 12방향 profile/bundle 전송을 구분해 기록한다.
+로컬 test나 cross compile로 이 실제 검증을 대체하지 않는다. WSL vault 검증은
+WSL/Windows 네트워크나 실제 사용자 저장소 이전까지 검증했다는 뜻이 아니다.
+
+`devtools run test:installed vault profiles value_updates output_redaction vault_session`은
+실제 패키징/설치한 CLI의 암호 저장·선택·사용처·기본 알림, opted 관리 서버의 TLS proxy
+재시작/readiness, 출력 보호와 재사용 세션을 격리 데이터로 확인한다. `vault_session`의
+로컬 두 PTY와 실제 distro restart는 별도 근거다. 자동 반영의 실제 프로세스 종료·응답
+유실·post-stop 실패와 storm 제한은 Go 통합 검사 및 native suite에도 포함된다.
+
+`perf/convergence.py`는 같은 10/100/1,000개 데이터에서 notify pending과 자동 적용의
+수렴 관찰 시간을 각각 보존한다. 서로 다른 결과를 같은 처리량처럼 비교하지 않는다.
+실행 준비 latency·RSS·cold/warm·native unwrap·redactor 측정과 함께 [성능 안내](../perf/README.md)를
+읽는다. 세션 조회로 수명을 늘리거나 검증·잠금·출력 보호를 생략해 측정하지 않는다.
+게시 없는 Actions 검증과 실제 릴리스 게시, 사용자 vault 이전은 별도 작업이다.
+
 ## 네트워크 검증과 OS 변경
 
 로컬 네트워크 기능의 사용자 흐름은 [가이드](local-network.md), 저장·복구 계약은

@@ -218,3 +218,36 @@ expiry/manual-lock state and lock acknowledgement time describe cache policy;
 RSS after lock cannot establish secret erasure, sensitive-copy lifetime, or the
 amount of live secret material. Native unwrap counts are measured by separate
 native session tests, and no RSS acceptance threshold is assumed.
+
+## Measure managed value convergence
+
+For the current var/sec source, use an already-built candidate on Linux/WSL:
+
+```sh
+python3 -B perf/convergence.py --binary bin/devtools \
+  --sizes 10,100,1000 --roots 3 --output /tmp/devtools-convergence.json
+```
+
+The harness owns isolated passphrase roots, actual CLI/key sessions, managed
+Python children and readiness probes. Each dataset has the stated number of
+public values plus one public revision and one secret. Three independent roots
+per policy each perform three sequential commits; policy order alternates.
+The default run budget is 300 seconds; `--budget-seconds` changes it. Cleanup is
+outside that budget and uses only private project controls and authenticated
+session retirement. Unconfirmed cleanup retains its root. Existing output is
+never overwritten; incomplete runs retain completed and partial sample rows.
+
+Notify measures commit-return to actual supervisor pending observation; restart
+measures commit-return to applied/readiness and independently observed new child
+input. These are different outcomes, not equal-work throughput arms. Notification
+must leave the original app alive; its subsequent explicit manual restart is timed
+separately. The final opted root also verifies three replacements then a paused
+fourth goal and no launch for a fifth goal over 4.5 seconds (more than two
+configured reconciliation periods), with the actual watcher observing that goal.
+
+Observations include 50ms polling and CLI query overhead. Setup, explicit unlock
+and cleanup are outside the convergence timer. The output keeps binary/harness
+identity, source state, hardware, all raw durations/outcomes and storm counts.
+Small single-host samples give exploratory distributions, not an SLA or reliable
+tail/significance estimate. Original-to-protected baseline timings belong to the
+separate matched CLI harness; no nonexistent baseline automation is invented.

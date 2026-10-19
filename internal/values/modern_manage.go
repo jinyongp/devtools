@@ -477,6 +477,9 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 		for path, body := range extra {
 			files[path] = body
 		}
+		if e = vault.AddCommitHint(files, p); e != nil {
+			return out, VaultError(ctx, e)
+		}
 		err = maintenance.Replace(s.root(), files)
 	}
 	if err != nil {

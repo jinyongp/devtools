@@ -338,6 +338,9 @@ func (s ModernStore) publishHeld(ctx context.Context, p *vault.Profile, key, mas
 	if err != nil {
 		return vault.ErrRecovery
 	}
+	if err = vault.AddCommitHint(files, p); err != nil {
+		return err
+	}
 	return maintenance.Replace(s.root(), files)
 }
 func (s ModernStore) Update(ctx context.Context, change func(*State) (bool, *protocol.Error)) (bool, *protocol.Error) {

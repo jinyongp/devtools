@@ -308,6 +308,9 @@ func (s FileStore) publishWithFiles(ctx context.Context, c *Catalog, p *Profile,
 		return ErrRecovery
 	}
 	files[catalogRelative] = cb
+	if err = AddCommitHint(files, p); err != nil {
+		return err
+	}
 	for path, data := range extra {
 		if _, exists := files[path]; exists {
 			return ErrInvalid

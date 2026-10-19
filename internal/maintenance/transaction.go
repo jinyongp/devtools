@@ -16,6 +16,9 @@ import (
 
 const transactionVersion = 2
 
+// ValueChangeHintPath is a bounded metadata hint, never execution authority.
+const ValueChangeHintPath = ".maintenance/values-change.json"
+
 type transactionPointer struct {
 	Version       int    `json:"version"`
 	TransactionID string `json:"transaction_id"`
@@ -66,6 +69,9 @@ func validKey(name string) bool {
 }
 
 func validReplacementPath(path string) bool {
+	if path == ValueChangeHintPath {
+		return true
+	}
 	if path == "" || filepath.IsAbs(path) || strings.Contains(path, "\\") {
 		return false
 	}

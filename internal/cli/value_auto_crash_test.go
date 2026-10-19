@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -73,6 +74,10 @@ func TestAutomaticCoordinatorRealDeathDuringOldStopDoesNotRepeat(t *testing.T) {
 			}
 			select {
 			case <-deadline.C:
+				r, e := store.Status(ctx, first.Item.ID)
+				if e == nil && r.ValueApply != nil {
+					t.Log("safe automatic outcome", r.ValueApply.State, r.ValueApply.Reason)
+				}
 				t.Fatal("owned coordinator barrier timed out")
 			case <-tick.C:
 			}
@@ -91,7 +96,7 @@ func TestAutomaticCoordinatorRealDeathDuringOldStopDoesNotRepeat(t *testing.T) {
 	}
 	body, _ := json.Marshal(request)
 	child := exec.CommandContext(ctx, exe, "__values-restart", store.Data, string(body))
-	if err := child.Start(); err != nil {
+	if err := process.StartDetached(child); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {

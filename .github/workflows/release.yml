@@ -116,6 +116,10 @@ jobs:
         env:
           DEVTOOLS_DISPOSABLE_HOST: '1'
         run: python3 -B scripts/check-linux-vault.py
+      - name: Verify actual owned-user PAM logout and native key re-unlock
+        env:
+          DEVTOOLS_DISPOSABLE_HOST: '1'
+        run: python3 -B scripts/check-linux-vault-logout.py
       - name: Verify both Unix peer directions with a real different UID
         env:
           DEVTOOLS_DISPOSABLE_HOST: '1'
@@ -128,6 +132,7 @@ jobs:
           path: |
             vault-secret-service-*.jsonl
             vault-secret-service-*.jsonl.stderr
+            vault-secret-service-logout.*
             vault-peers-*
           if-no-files-found: error
           retention-days: 7

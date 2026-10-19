@@ -17,7 +17,12 @@ import (
 	"github.com/jinyongp/devtools/internal/platformfs"
 )
 
+var nativePeerFixture func(string, string) int
+
 func TestMain(m *testing.M) {
+	if len(os.Args) == 4 && os.Args[1] == "__vault-peer-fixture" && nativePeerFixture != nil {
+		os.Exit(nativePeerFixture(os.Args[2], os.Args[3]))
+	}
 	if len(os.Args) == 3 && os.Args[1] == "__vault-rewrap-fixture" {
 		runRewrapFixture()
 		os.Exit(0)

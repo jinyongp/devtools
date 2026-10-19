@@ -89,7 +89,7 @@ func InspectInput(ctx context.Context, root, profile, env string, spec InputSpec
 	if err != nil {
 		return nil, VaultError(ctx, err)
 	}
-	metadata := SnapshotMetadata{Identity: vault.InputIdentity{ProfileID: p.ID, StorageGeneration: p.Generation}, KeyEpoch: p.KeyEpoch, IntegrityVerified: master != nil, Slots: []vault.SlotReference{}}
+	metadata := SnapshotMetadata{Identity: vault.InputIdentity{ProfileID: p.ID, StorageGeneration: p.Generation}, KeyEpoch: p.KeyEpoch, IntegrityVerified: p.Sealed, Slots: []vault.SlotReference{}}
 	if absent {
 		metadata.Identity = vault.InputIdentity{}
 		metadata.Public = &vault.PublicLaunchTicket{Profile: profile}

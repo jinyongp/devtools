@@ -244,8 +244,9 @@ devtools import --file .env --profile myapp
 입력의 이름·종류·common/env 출처·ID·논리 버전·저장소 세대를 조회한다.
 원문과 launch/session 권한은 반환하지 않는다. 키를 새로 해제하거나 세션 수명을
 연장하지 않으며, 보호된 저장소가 잠겨 있으면 `verification_pending`을 반환한다.
-공개 값만 저장한 보호 없는 저장소는 키 없이 조회하며 `integrity_verified: false`로
-구분한다. 조회 중 legacy 데이터를 이행하거나 OS 인증 창을 띄우지 않는다.
+보호 없는 공개 전용 저장소는 키 없이 조회한다. `unsealed` profile의 값 manifest는
+`integrity_verified: false`로 구분한다. 보호된 루트 안에서도 이 값은 false이며,
+그 루트의 인증 요구는 별도로 유지한다. 조회 중 legacy 데이터를 이행하거나 OS 인증 창을 띄우지 않는다.
 
 `values uses --dir PATH`는 해당 프로젝트의 설정상 선택(`kind: declared`)과
 보존된 실행의 전달 기록(`kind: delivered`)을 구분한다. 실행 전에 준비한 기록은

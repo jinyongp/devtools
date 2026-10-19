@@ -78,7 +78,7 @@ func NewInputVersion(source SnapshotMetadata, env string, spec InputSpec) (*Inpu
 		}
 		out.Identity = source.Identity
 		out.KeyEpoch = source.KeyEpoch
-		out.IntegrityVerified = source.IntegrityVerified || source.Launch != nil
+		out.IntegrityVerified = source.IntegrityVerified
 		bound, shadowed := map[string]bool{}, map[string]bool{}
 		for _, name := range spec.Bindings {
 			bound[name] = true

@@ -9,7 +9,7 @@ integration gates and C01/C02 convergence/restart remain separate required work.
 | Area | Review and evidence |
 | --- | --- |
 | Warm-only authentication | Reviewed `InspectInput` and cached RPC: OpenSessionClient only, no SessionManager, unlock, native helper or KDF; same lock ordering, bounded five-second inspection, owned keys destroyed; cold/manual lock and exact idle preservation verified through real IPC. |
-| Manifest/catalog and data exposure | Complete protected catalog/profile authentication precedes reference selection. ResolveSelectedMetadata opens no values, including public variables; tampered manifest rejected even for none. Only names/kind/source/IDs/versions/incarnation/verification escape. No plaintext hash, values, launch ticket, endpoint or session authority. |
+| Manifest/catalog and data exposure | Protected catalog classification and sealed manifest authentication precede reference selection. Unsigned public-only value manifests remain integrity_verified=false, even with a root admission ticket. ResolveSelectedMetadata opens no values, including public variables; tampered manifest rejected even for none. Only names/kind/source/IDs/versions/incarnation/verification escape. No plaintext hash, values, launch ticket, endpoint or session authority. |
 | Public/legacy/absence | Public-only inspection needs no vault and reports unverified integrity. Missing storage has a stable known empty delivery, with no profile publication. Legacy inspection does not migrate or manufacture stable identity. |
 | Effective input comparison | Real common/override and same-value/unselected/bundle membership mutations tested in the delivery unit. Actual profile re-encryption keeps comparison current. Actual logical replacement creates a new generation and a pending input. Bindings and shadowed injection are filtered; missing or secret var binding fails. |
 | Selected expiry | Inspection reads metadata only and matches actual preparation's selected expiry rules. Expired injected secret fails; a metadata-only public binding does not use an expired secret. No common fallback. |
@@ -88,3 +88,23 @@ Native checks of this follow-up remain required by the final gates.
 The preceding macOS fixture correction was confirmed by the successful complete
 2eb9fb7 run 39266251666, including ci-macos. That run precedes this control-bound
 follow-up and the in-progress C01 producer/consumer implementation.
+
+
+## Root admission versus value manifest integrity
+
+C01 caller review found that the delivery constructor treated a launch ticket,
+and passive inspection treated a successfully loaded root key, as proof of value
+manifest integrity. The accepted A08 contract leaves unsealed public profiles
+unsigned even inside a protected root. Catalog classification/root authentication
+does not authenticate those public values. Both flags now retain the profile's
+actual sealed-manifest result. Protected-root authentication remains mandatory;
+locking that root still makes public-profile inspection verification_pending.
+
+A real protected root with a separate unsigned public profile verifies the
+distinction through actual cached IPC, capture/admission metadata, comparison and
+manual lock. The regression fails under the previous two expressions
+(`B02-public-integrity-before.log`) and passes under the correction. Related
+passive inspection, delivery, CLI canary, bundle and public managed race checks
+pass in `B02-public-integrity-race.log`; final focused confirmation is in
+`B02-public-integrity-final.log`. This corrects metadata claims without changing
+storage encryption/classification policy or giving unsigned data new authority.

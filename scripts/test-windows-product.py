@@ -50,6 +50,7 @@ def main():
     base_env.pop("DEVTOOLS_ISOLATED_ROOT", None)
     source_env = dict(base_env, DEVTOOLS_ISOLATED_ROOT=str(root / "source"))
     target_env = dict(base_env, DEVTOOLS_ISOLATED_ROOT=str(root / "target"))
+    native_env = dict(base_env, DEVTOOLS_ISOLATED_ROOT=str(root / "native"))
     steps = []
 
     def raw(arguments, env=source_env, input="", timeout=40):
@@ -130,6 +131,24 @@ timeout = "3s"
         task = mutate("task", "add", "--title", "Installed native task")["item"]["id"]
         assert api("task", "show", task)["item"]["id"] == task
         steps.append("values_secret_and_task_journal")
+
+        # Exercise the packaged CLI's default OS provider as well as the
+        # explicit passphrase roots used by the portable-transfer journey.
+        native = api("vault", "init", env=native_env)["item"]
+        assert native["backend"] == "dpapi" and native["state"] == "unlocked"
+        api("sec", "set", "NATIVE_TOKEN", "--stdin", env=native_env, input="synthetic-native-dpapi-canary")
+        native_command = ["run", "--", node, "-e", "process.stdout.write(process.env.NATIVE_TOKEN)"]
+        assert raw(native_command, env=native_env) == "[REDACTED]"
+        api("vault", "lock", env=native_env)
+        try:
+            raw(native_command, env=native_env)
+            raise AssertionError("Manual lock silently reopened the native provider")
+        except CLIError as error:
+            assert error.code == "vault_locked"
+        assert api("vault", "unlock", env=native_env)["item"]["state"] == "unlocked"
+        assert raw(native_command, env=native_env) == "[REDACTED]"
+        assert api("vault", "status", env=native_env)["item"]["backend"] == "dpapi"
+        steps.append("default_dpapi_native_helper_manual_lock_and_explicit_unlock")
 
         http_port, tls_port = available_port(), available_port()
         mutate("proxy", "configure", "--http-address", f"127.0.0.1:{http_port}", "--https-address", f"127.0.0.1:{tls_port}")
@@ -218,7 +237,8 @@ timeout = "3s"
                 pass  # A concurrent orderly shutdown can close its response.
             finally:
                 connection.close()
-        retire_vaults(root / "source" / "data" / "vault", root / "target" / "data" / "vault")
+        retire_vaults(root / "source" / "data" / "vault", root / "target" / "data" / "vault",
+                      root / "native" / "data" / "vault")
         # Mapped supervisor images and private directory pins may finish closing
         # just after successful control RPC; bounded cleanup does not hide failures.
         for attempt in range(20):

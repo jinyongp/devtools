@@ -9,7 +9,7 @@ research and cross-compilation do not substitute for native product execution.
 | --- | --- | --- |
 | K01–K02 | internal/vault/profile_test.go | NonceFailure, SealedSnapshot: fresh RNG, wrong key/tag/nonce/ciphertext and no partial commit |
 | K03–K04 | internal/vault/profile_test.go; internal/vault/bundle_test.go | ManifestAuthenticatesContentMembershipAndIdentity, sealed catalog and missing profile; no expired override fallback |
-| K05–K06 | internal/vault/keys_test.go; internal/backup/archive_kdf_limit_test.go | KDFHeaderRejectedBeforeDerivation; real preset/wrong password; archive cost bound before password/KDF |
+| K05–K06 | internal/vault/keys_test.go; internal/backup/archive_kdf_limit_test.go | KDFHeaderRejectedBeforeDerivation; real preset/wrong password; archive cost bound before automatic prompt and before every KDF |
 | K07 | internal/vault/keys_test.go; internal/vault/blob_test.go | KeysetContextAndStableProfileWrapping; protected recovery domain and StorageV1 compatibility |
 | K08 | internal/values/vault_migration_test.go; scripts/check-legacy-vault.py | real 89100eb producer, actual old MAC/receipts and synthetic original key/canary scan; no plaintext replacement key |
 | K09 | internal/vault/rotation_test.go; internal/vault/rewrap_test.go | actual durable crash boundaries, root continuity, stale epoch/generation admission rejection; no public rotation command invented |

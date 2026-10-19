@@ -47,6 +47,64 @@ function overrideValue(item, view, version) {
   $("editor-save").textContent = "Continue";
 }
 
+function validBundleName(name) {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name) && name !== "all" && name !== "none";
+}
+
+async function reloadValueAction(view, label, stillCurrent = () => true) {
+  if (!stillCurrent() || profile !== view.profile || scope !== "values") return;
+  await load();
+  if (!stillCurrent() || profile !== view.profile || scope !== "values") return;
+  const target = Array.from($("values-panel").querySelectorAll("button")).find(control =>
+    (control.getAttribute("aria-label") || control.textContent) === label);
+  target?.focus();
+}
+
+function editValueBundle(view, bundle = null) {
+  const byID = new Map(view.items.map(item => [item.value_id, item.key]));
+  const available = new Set(view.items.map(item => item.key));
+  const selected = (bundle?.value_ids || []).map(id => byID.get(id)).filter(Boolean).sort();
+  let savedName = bundle?.name;
+  edit(bundle ? `Edit members: ${bundle.name}` : "Create value bundle", p => {
+    const name = field(p, "Bundle name", bundle?.name || ""); name.disabled = !!bundle;
+    text("p", "A value can belong to several bundles. Editing it updates every bundle that uses it.", p);
+    const members = field(p, "Value names (one per line)", selected.join("\n"), "textarea");
+    members.spellcheck = false;
+    text("p", "Use existing variable or secret names. Leave the list empty for an empty bundle. The environment is selected separately when running a command.", p);
+    return () => {
+      if (!validBundleName(name.value)) throw Error("Use a bundle name of 1–128 letters, digits, dots, underscores or hyphens. all and none are reserved.");
+      const names = members.value.trim() ? members.value.trim().split(/\s+/) : [];
+      if (names.some(key => !available.has(key))) throw Error("Choose existing value names from this profile.");
+      if (new Set(names).size !== names.length) throw Error("Include each value name once.");
+      savedName = name.value;
+      return {bundle:{name:savedName,members:names}};
+    };
+  }, body => valueRequest(view,"bundle.set",body), (_,current)=>reloadValueAction(view,`Edit members: ${savedName}`,current));
+}
+
+function renderValueBundles(panel, view, mutationButton) {
+  const section = text("section","",panel); section.className="value-bundles"; section.setAttribute("aria-label","Value bundles");
+  const toolbar = text("div","",section); toolbar.className = "manage-toolbar";
+  text("h2","Value bundles",toolbar);
+  mutationButton(toolbar,"Create bundle",()=>editValueBundle(view));
+  text("p","Commands use the whole profile by default. Select a bundle only when a command needs a smaller set of values.",section);
+  if (!(view.bundles || []).length) text("p","No bundles. Existing profile and environment selection stays available.",section);
+  for (const bundle of view.bundles || []) {
+    const row = text("div","",section); row.className = "manage-toolbar";
+    text("strong",bundle.name,row); text("span",`${bundle.value_ids.length} values`,row);
+    mutationButton(row,"Edit members",()=>editValueBundle(view,bundle)).setAttribute("aria-label",`Edit members: ${bundle.name}`);
+    let renamed = bundle.name;
+    mutationButton(row,"Rename",()=>edit("Rename value bundle",p=>{
+      const name=field(p,"New bundle name",bundle.name);
+      return()=>{if(!validBundleName(name.value))throw Error("Choose a valid bundle name; all and none are reserved.");renamed=name.value;return{bundle:{name:bundle.name,new_name:renamed}};};
+    },body=>valueRequest(view,"bundle.rename",body),(_,current)=>reloadValueAction(view,`Rename bundle: ${renamed}`,current))).setAttribute("aria-label",`Rename bundle: ${bundle.name}`);
+    mutationButton(row,"Remove",()=>edit("Remove value bundle",p=>{
+      text("p",`Remove ${bundle.name}? Stored values stay in this profile. Commands selecting this bundle will require a new selection.`,p);
+      return()=>({bundle:{name:bundle.name}});
+    },body=>valueRequest(view,"bundle.remove",body),(_,current)=>reloadValueAction(view,"Create bundle",current),true)).setAttribute("aria-label",`Remove bundle: ${bundle.name}`);
+  }
+}
+
 function bulkValues(view) {
   let input;
   edit("Import .env values", p => {
@@ -62,17 +120,21 @@ function bulkValues(view) {
       catch { if (file.isConnected && file.files[0] === selected) $("editor-error").textContent = "Could not read this file."; }
       finally { if (file.isConnected && file.files[0] === selected) $("editor-save").disabled = false; }
     };
+    const bundle = field(p, "Value bundle (optional)");
+    text("p", "Add the imported names to a reusable bundle, or leave blank to keep membership unchanged.", p);
     const overwrite = field(p, "Overwrite existing values", "", "checkbox");
     text("p", "Keeping existing values also preserves inherited common values. Overwriting writes to the selected environment.", p);
     return () => {
       if (!content.value.trim()) throw Error("Choose a file or paste .env assignments.");
       if (new TextEncoder().encode(content.value).length > 500000) throw Error("Use at most 500 KB of .env content.");
-      input = {content:content.value, variables:[], overwrite:overwrite.checked};
+      if (bundle.value && !validBundleName(bundle.value)) throw Error("Choose a valid bundle name; all and none are reserved.");
+      input = {content:content.value, variables:[], overwrite:overwrite.checked, ...(bundle.value ? {bundle:bundle.value} : {})};
       return {env:view.env, import:{...input, preview:true}};
     };
   }, body => valueRequest(view,"import",body), result => {
     edit("Review import", p => {
       text("p", `${view.profile} / ${view.env || "Common"} · ${input.overwrite ? "Overwrite enabled" : "Keep existing values"}`, p);
+      if(input.bundle) text("p", `Bundle: ${input.bundle}. Imported names are added across environments; this import writes ${view.env || "Common"}.`, p);
       text("p", "Select public variables. Secret values stay hidden in this preview. Existing keys retain their kind.", p);
       for(const warning of result.warnings||[])text("p",`${warning.key}: ${warning.message}`,p).className="value-warning";
       const rows = result.items || [];
@@ -82,7 +144,7 @@ function bulkValues(view) {
         return {item, check};
       });
       return () => ({env:view.env, import:{...input, variables:controls.filter(row => row.check.checked).map(row => row.item.key), preview:false}});
-    }, body => valueRequest(view,"import",body), () => { input = null; load(); });
+    }, body => valueRequest(view,"import",body), (_,current) => { input = null; return reloadValueAction(view,"Import .env",current); });
     $("editor-save").textContent = "Import values";
   });
   $("editor-save").textContent = "Preview import";
@@ -160,6 +222,7 @@ async function loadValues(version) {
       return()=>({action:kind.value+".set",key:key.value,value:(kind.value==="secret"?secret:variable).value,env:view.env});
     },body=>{const {action,...rest}=body;return valueRequest(view,action,rest);}));
     mutationButton(toolbar,"Import .env",()=>bulkValues(view));
+    renderValueBundles(panel,view,mutationButton);
     const table=text("table","",panel);table.className="values-table";
     const head=text("thead","",table),heading=text("tr","",head);
     const columns=["Key","Kind","Value — click to edit","Source", "Actions"].map(title=>{

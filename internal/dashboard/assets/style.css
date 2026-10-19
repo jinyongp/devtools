@@ -17,6 +17,8 @@ body[data-connection="connecting"] button:disabled { cursor: wait; }
 body[data-connection="disconnected"] main { height: auto; min-height:calc(100dvh - 140px); }
 .manage-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
 .manage-toolbar button { font-size: 12px; }
+.value-bundles .manage-toolbar { align-items: center; }
+.value-bundles .manage-toolbar > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 #create-item { flex-shrink: 0; }
 #values-panel { overflow: auto; padding: 10px 0; }
 #values-panel table { width: 100%; border-collapse: collapse; font-size: 13px; }

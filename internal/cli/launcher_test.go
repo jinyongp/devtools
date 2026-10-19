@@ -29,6 +29,11 @@ import (
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "__n05-restart-client":
+			if len(os.Args) != 6 {
+				os.Exit(96)
+			}
+			os.Exit(runN05RestartClient(os.Args[2], os.Args[3], os.Args[4], os.Args[5]))
 		case "__redaction-test-once":
 			token := []byte(os.Getenv("TOKEN"))
 			os.Stdout.Write([]byte{0, 0xff})

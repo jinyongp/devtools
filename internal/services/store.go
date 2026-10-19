@@ -517,6 +517,7 @@ func (s Store) rpc(ctx context.Context, id, action string) (Record, error) {
 	return out, e
 }
 func (s Store) statusRecord(ctx context.Context, r Record) (Record, *protocol.Error) {
+	s.finishInputPhase(&r)
 	if r.EndedAt != nil {
 		return r, nil
 	}
@@ -825,6 +826,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 	// Request identity also names the execution, so retry after a lost receipt
 	// observes the same run instead of launching another command.
 	if r, e := s.read(q.RequestID); e == nil {
+		s.finishInputPhase(&r)
 		out.Item = r
 		out.Changed = true
 		if r.StartedAt == nil && r.EndedAt == nil {

@@ -132,6 +132,7 @@ func (s Store) terminalizeLost(ctx context.Context, record Record, respectStartu
 	if readErr != nil {
 		return record, false, readErr
 	}
+	s.finishInputPhase(&current)
 	if current.EndedAt != nil {
 		return current, false, nil
 	}

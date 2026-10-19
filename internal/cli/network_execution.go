@@ -49,11 +49,16 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 	if e != nil {
 		return nil, e
 	}
+	var bundleSelections map[string]string
+	if len(selections) > 0 {
+		bundleSelections = selections[0]
+	}
 	result, e := (netops.Store{Data: m.Data}).Apply(ctx, id, struct {
 		Action, Profile, Root string
 		Names                 []string
 		Overrides             map[string]*string
-	}{"prepare-execution", p.Profile, p.Root, names, overrides}, []string{"project-network/" + p.Profile + "/" + p.Root}, func(j *netops.Journal) (any, *protocol.Error) {
+		Selections            map[string]string `json:"selections,omitempty"`
+	}{"prepare-execution", p.Profile, p.Root, names, overrides, bundleSelections}, []string{"project-network/" + p.Profile + "/" + p.Root}, func(j *netops.Journal) (any, *protocol.Error) {
 		var fields networkCandidateFields
 		present, e := j.Get("fields", &fields)
 		if e != nil {
@@ -316,6 +321,7 @@ func (a *App) networkLifecycle(manager *lifecycle.Manager, streams IO) {
 		names := append([]string{}, request.Commands...)
 		selected := []services.Record{}
 		overrides := map[string]*string{}
+		selections := map[string]string{}
 		if request.Action == lifecycle.ActionRestart {
 			names = []string{}
 			byName := map[string]services.Record{}
@@ -334,19 +340,32 @@ func (a *App) networkLifecycle(manager *lifecycle.Manager, streams IO) {
 					env = record.EnvOverride
 				}
 				overrides[name] = env
+				bundle := request.Bundle
+				if bundle == nil {
+					bundle = record.BundleOverride
+				}
+				if bundle != nil {
+					selections[name] = *bundle
+				}
 			}
 		} else {
 			selected = originals
 			for _, name := range names {
 				overrides[name] = request.Env
+				if request.Bundle != nil {
+					selections[name] = *request.Bundle
+				}
 			}
 		}
-		return a.prepareProxyNetwork(ctx, request.Project, names, selected, overrides, streams, id)
+		return a.prepareProxyNetwork(ctx, request.Project, names, selected, overrides, streams, id, selections)
 	}
-	manager.SnapshotPreflight = a.preflightNetworkSnapshot
+	manager.SnapshotPreflight = a.preflightSelectedNetworkSnapshot
 }
 
 func (a *App) preflightNetworkSnapshot(ctx context.Context, p project.Context, name string, env *string, snapshot *network.ExecutionSnapshot, beforeStop bool) *protocol.Error {
+	return a.preflightSelectedNetworkSnapshot(ctx, p, name, env, snapshot, beforeStop, nil)
+}
+func (a *App) preflightSelectedNetworkSnapshot(ctx context.Context, p project.Context, name string, env *string, snapshot *network.ExecutionSnapshot, beforeStop bool, bundle *string) *protocol.Error {
 	current, e := project.Resolve(p.Root, "")
 	if e != nil {
 		return e
@@ -357,6 +376,9 @@ func (a *App) preflightNetworkSnapshot(ctx context.Context, p project.Context, n
 	command, e := execution.ResolveConfigured(current, name, env, nil)
 	if e != nil {
 		return e
+	}
+	if bundle != nil {
+		command.Selection = *bundle
 	}
 	command, e = a.applyNetworkSnapshot(command, snapshot)
 	if e != nil {

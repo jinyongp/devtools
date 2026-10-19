@@ -3,6 +3,9 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
+import time
+import uuid
 
 home = Path.home()
 project = home / 'project'
@@ -60,6 +63,62 @@ assert result.returncode == 0 and result.stdout == b'public value' and not resul
 result = subprocess.run([binary, 'run', '--bundle', 'backend', '--', 'sh', '-c', 'printf %s "$TOKEN"'],
                         cwd=project, env=selected_env, capture_output=True, timeout=20)
 assert result.returncode == 0 and result.stdout == b'[REDACTED]' and not result.stderr
+
+# The managed path persists an explicit selection across restart, including
+# when the command's configured default changes in between executions.
+original_config = (project / 'devtools.toml').read_text()
+observation = project / 'bundle-observed.json'
+server = project / 'bundle-server.py'
+server.write_text("import json,os,time\nfrom pathlib import Path\np=Path(" + repr(str(observation)) + ")\n"
+                  "t=p.with_suffix('.tmp')\nt.write_text(json.dumps({'public':os.getenv('PUBLIC'),'token_present':'TOKEN' in os.environ}))\n"
+                  "os.replace(t,p)\ntime.sleep(120)\n")
+config = ('profile="vault-fixture"\nbundle="none"\n[commands.bundle-server]\ninject=true\nbundle="backend"\nexec='
+          + json.dumps([sys.executable, str(server)]) + '\n[commands.bundle-server.ready]\nexec='
+          + json.dumps([sys.executable, '-c', 'from pathlib import Path;raise SystemExit(not Path(' + repr(str(observation)) + ').exists())']) + '\ntimeout="5s"\n')
+(project / 'devtools.toml').write_text(config)
+managed = None
+managed_env = dict(env)
+managed_env.pop('TOKEN', None)
+managed_env.pop('PUBLIC', None)
+def managed_api(*args, error=None):
+    result = subprocess.run([binary,*args],cwd=project,env=managed_env,capture_output=True,text=True,timeout=20)
+    assert secret not in result.stdout + result.stderr
+    if error:
+        assert result.returncode and json.loads(result.stderr)['error']['code']==error
+        return
+    assert not result.returncode and not result.stderr
+    return json.loads(result.stdout)['data']
+def observed():
+    deadline=time.monotonic()+5
+    while time.monotonic()<deadline:
+        try:return json.loads(observation.read_text())
+        except (FileNotFoundError,json.JSONDecodeError):time.sleep(.02)
+    raise AssertionError('Managed bundle execution did not publish its public observation')
+try:
+    first=managed_api('process','start','bundle-server','--bundle','frontend','--request-id',str(uuid.uuid4()))
+    managed=first['item']['id']
+    assert first['item']['selection']=='frontend' and first['item']['bundle_override']=='frontend'
+    assert observed()=={'public':'public value','token_present':False}
+    (project / 'devtools.toml').write_text(config.replace('bundle="backend"','bundle="none"'))
+    observation.unlink()
+    restarted=managed_api('process','restart',managed,'--request-id',str(uuid.uuid4()))
+    managed=restarted['item']['id']
+    assert restarted['item']['selection']=='frontend' and observed()=={'public':'public value','token_present':False}
+    observation.unlink()
+    batch=managed_api('project','restart','bundle-server','--timeout','5s','--request-id',str(uuid.uuid4()))
+    managed=batch['items'][0]['item']['id']
+    assert batch['items'][0]['item']['selection']=='frontend' and observed()=={'public':'public value','token_present':False}
+    observation.unlink()
+    empty_batch=managed_api('project','restart','bundle-server','--bundle','none','--timeout','5s','--request-id',str(uuid.uuid4()))
+    empty={'item':empty_batch['items'][0]['item']}
+    managed=empty['item']['id']
+    assert empty['item']['selection']=='none' and observed()=={'public':None,'token_present':False}
+    managed_api('process','restart',managed,'--bundle','missing','--request-id',str(uuid.uuid4()),error='bundle_not_found')
+    assert managed_api('process','status',managed)['item']['state']=='running'
+finally:
+    if managed is not None:
+        managed_api('process','stop',managed,'--request-id',str(uuid.uuid4()))
+    (project / 'devtools.toml').write_text(original_config)
 
 invoke('schema', 'vault', 'unlock')
 invoke('schema', 'sec', 'set')

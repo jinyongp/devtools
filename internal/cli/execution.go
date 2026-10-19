@@ -59,25 +59,12 @@ func (a *App) previewExecution(ctx context.Context, command execution.Command, s
 }
 
 func (a *App) validateProjectCommand(ctx context.Context, p project.Context, name string, envOverride *string) *protocol.Error {
-	current, err := project.Resolve(p.Root, "")
-	if err != nil {
-		return err
-	}
-	if current.Root != p.Root || current.Profile != p.Profile {
-		return protocol.NewError("instance_conflict", "Project identity changed.", 3, nil)
-	}
-	command, err := execution.ResolveConfigured(current, name, envOverride, nil)
-	if err != nil {
-		return err
-	}
-	dependencies, err := a.executionDependencies(command)
-	if err != nil {
-		return err
-	}
-	return execution.Validate(ctx, command, dependencies, os.Environ())
+	return a.checkSelectedProjectCommand(ctx, p, name, envOverride, nil, true)
 }
-
 func (a *App) preflightProjectCommand(ctx context.Context, p project.Context, name string, envOverride *string) *protocol.Error {
+	return a.checkSelectedProjectCommand(ctx, p, name, envOverride, nil, false)
+}
+func (a *App) checkSelectedProjectCommand(ctx context.Context, p project.Context, name string, envOverride, bundle *string, validate bool) *protocol.Error {
 	current, err := project.Resolve(p.Root, "")
 	if err != nil {
 		return err
@@ -89,9 +76,15 @@ func (a *App) preflightProjectCommand(ctx context.Context, p project.Context, na
 	if err != nil {
 		return err
 	}
+	if bundle != nil {
+		command.Selection = *bundle
+	}
 	dependencies, err := a.executionDependencies(command)
 	if err != nil {
 		return err
+	}
+	if validate {
+		return execution.Validate(ctx, command, dependencies, os.Environ())
 	}
 	return execution.Preflight(ctx, command, dependencies, os.Environ())
 }

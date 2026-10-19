@@ -22,14 +22,15 @@ func readinessSchema() map[string]any {
 
 func managedProcessSchema() map[string]any {
 	return object(map[string]any{
-		"ready_configured":  map[string]any{"type": "boolean"},
-		"readiness":         readinessSchema(),
-		"id":                stringSchema(),
-		"profile":           stringSchema(),
-		"instance_id":       stringSchema(),
-		"directory":         stringSchema(),
-		"command":           stringSchema(),
-		"env":               stringSchema(),
+		"ready_configured": map[string]any{"type": "boolean"},
+		"readiness":        readinessSchema(),
+		"id":               stringSchema(),
+		"profile":          stringSchema(),
+		"instance_id":      stringSchema(),
+		"directory":        stringSchema(),
+		"command":          stringSchema(),
+		"env":              stringSchema(),
+		"selection":        stringSchema(), "bundle_override": stringSchema(),
 		"env_override":      map[string]any{"type": []string{"string", "null"}},
 		"inject":            map[string]any{"type": "boolean"},
 		"capture_logs":      map[string]any{"type": "boolean"},
@@ -99,8 +100,12 @@ func (a *App) projectLifecycleManager() (lifecycle.Manager, *protocol.Error) {
 		store.PrepareInput = a.prepareManagedInput
 		manager.Processes = store
 	}
-	manager.Validate = a.validateProjectCommand
-	manager.Preflight = a.preflightProjectCommand
+	manager.Validate = func(ctx context.Context, p project.Context, name string, env, bundle *string) *protocol.Error {
+		return a.checkSelectedProjectCommand(ctx, p, name, env, bundle, true)
+	}
+	manager.Preflight = func(ctx context.Context, p project.Context, name string, env, bundle *string) *protocol.Error {
+		return a.checkSelectedProjectCommand(ctx, p, name, env, bundle, false)
+	}
 	return manager, nil
 }
 
@@ -118,6 +123,7 @@ func (a *App) registerProjectLifecycle() {
 			Options: []Option{
 				directory,
 				{Name: "proxy", Boolean: true, Description: "Prepare the selected serve union, DNS, and listeners before launching the batch."},
+				{Name: "bundle", Pattern: project.ProfilePattern, Description: "Select all, none, or one shared value bundle for the batch."},
 				{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment for every selected command."},
 				{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for every selected command."},
 				{Name: "timeout", Default: "30s", Description: "Readiness wait per selected command, greater than zero and at most 10m."},
@@ -142,6 +148,7 @@ func (a *App) registerProjectLifecycle() {
 			Arguments:   []Argument{commandArgument},
 			Options: []Option{
 				directory,
+				{Name: "bundle", Pattern: project.ProfilePattern, Description: "Select all, none, or one shared value bundle for the batch."},
 				{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment for every restarted command."},
 				{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for every restarted command."},
 				{Name: "timeout", Default: "30s", Description: "Readiness wait per restarted command, greater than zero and at most 10m."},
@@ -204,6 +211,9 @@ func (a *App) projectUp(ctx context.Context, streams IO, request Request) (any, 
 	input := lifecycle.Request{Action: lifecycle.ActionUp, Project: p, Commands: append([]string{}, request.Args...), Timeout: timeout, RequestID: request.Options["request-id"]}
 	input.ProxyMode = request.Options["proxy"] == "true"
 	a.networkLifecycle(&manager, streams)
+	if bundle, ok := request.Options["bundle"]; ok {
+		input.Bundle = &bundle
+	}
 	if env, ok := request.Options["env"]; ok {
 		input.Env = &env
 	}
@@ -229,6 +239,9 @@ func (a *App) projectRestart(ctx context.Context, streams IO, request Request) (
 	}
 	input := lifecycle.Request{Action: lifecycle.ActionRestart, Project: p, Commands: append([]string{}, request.Args...), Timeout: timeout, RequestID: request.Options["request-id"]}
 	a.networkLifecycle(&manager, streams)
+	if bundle, ok := request.Options["bundle"]; ok {
+		input.Bundle = &bundle
+	}
 	if env, ok := request.Options["env"]; ok {
 		input.Env = &env
 	}

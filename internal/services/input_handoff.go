@@ -182,7 +182,11 @@ func ReceiveLauncherInput(ctx context.Context, in io.ReadCloser, out io.WriteClo
 	if e != nil {
 		return nil, e
 	}
-	matches := record.Output != nil && *record.Output == metadata.Output && (record.Capture == (metadata.Output.StdoutReason == "capture")) && metadata.InputID == record.InputSnapshotID && metadata.Profile == record.Profile && metadata.Command == record.Command && metadata.Env == record.Env && input.Directory == record.Directory
+	selection := record.Selection
+	if selection == "" {
+		selection = "all"
+	}
+	matches := metadata.Selection == selection && record.Output != nil && *record.Output == metadata.Output && (record.Capture == (metadata.Output.StdoutReason == "capture")) && metadata.InputID == record.InputSnapshotID && metadata.Profile == record.Profile && metadata.Command == record.Command && metadata.Env == record.Env && input.Directory == record.Directory
 	if matches {
 		var outputErr error
 		bound.Streams, outputErr = redact.Protect(runContext, input.Patterns, metadata.Output, stdout, stderr)

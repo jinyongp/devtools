@@ -122,7 +122,7 @@ func TestUpPreflightsAllCommandsBeforeMutation(t *testing.T) {
 	manager := Manager{
 		Data:      t.TempDir(),
 		Processes: processes,
-		Preflight: func(_ context.Context, _ project.Context, command string, _ *string) *protocol.Error {
+		Preflight: func(_ context.Context, _ project.Context, command string, _ *string, _ *string) *protocol.Error {
 			if command == "api" {
 				return protocol.NewError("requirements_failed", "API requirements are missing.", 3, nil)
 			}
@@ -458,7 +458,7 @@ func TestRestartPartialFailureRetriesOnlyIncompleteChild(t *testing.T) {
 	manager := Manager{
 		Data:      t.TempDir(),
 		Processes: processes,
-		Preflight: func(context.Context, project.Context, string, *string) *protocol.Error { return nil },
+		Preflight: func(context.Context, project.Context, string, *string, *string) *protocol.Error { return nil },
 	}
 	request := Request{Action: ActionRestart, Project: p, Commands: []string{"web", "api"}, Timeout: time.Second, RequestID: tasks.ID()}
 
@@ -509,7 +509,7 @@ func TestRestartBeforeStopFailurePreservesCompletedSibling(t *testing.T) {
 	manager := Manager{
 		Data:      t.TempDir(),
 		Processes: processes,
-		Validate: func(_ context.Context, _ project.Context, command string, _ *string) *protocol.Error {
+		Validate: func(_ context.Context, _ project.Context, command string, _ *string, _ *string) *protocol.Error {
 			if command == "api" && blockAPI {
 				return protocol.NewError("requirements_failed", "api pre-stop blocked", 3, nil)
 			}
@@ -541,6 +541,8 @@ func TestRestartPreflightUsesInheritedEnvOverride(t *testing.T) {
 	p := testProject(t, "web")
 	web := runningRecord(p, "web", tasks.ID())
 	inherited := "staging"
+	bundle := "frontend"
+	web.BundleOverride = &bundle
 	web.Env = inherited
 	web.EnvOverride = &inherited
 	processes := &fakeProcesses{records: []services.Record{web}}
@@ -560,9 +562,11 @@ func TestRestartPreflightUsesInheritedEnvOverride(t *testing.T) {
 		return services.Result{Item: record, Changed: true}, nil
 	}
 	observed := map[services.RestartPhase]*string{}
+	observedBundles := map[services.RestartPhase]*string{}
 	check := func(phase services.RestartPhase) Preflight {
-		return func(_ context.Context, _ project.Context, _ string, env *string) *protocol.Error {
+		return func(_ context.Context, _ project.Context, _ string, env *string, selection *string) *protocol.Error {
 			observed[phase] = env
+			observedBundles[phase] = selection
 			return nil
 		}
 	}
@@ -578,6 +582,9 @@ func TestRestartPreflightUsesInheritedEnvOverride(t *testing.T) {
 		t.Fatalf("restart failed: %#v %v", result, err)
 	}
 	for _, phase := range []services.RestartPhase{services.RestartBeforeStop, services.RestartBeforeStart} {
+		if observedBundles[phase] == nil || *observedBundles[phase] != bundle {
+			t.Fatal("restart preflight lost inherited bundle")
+		}
 		if observed[phase] == nil || *observed[phase] != inherited {
 			t.Fatalf("%s preflight env = %v, want inherited %q", phase, observed[phase], inherited)
 		}

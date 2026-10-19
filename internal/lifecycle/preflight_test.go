@@ -26,7 +26,7 @@ func TestUpSkipsColdStartPreflightForReusableSingletons(t *testing.T) {
 		return services.Result{Item: runningRecord(p, request.Command, request.RequestID), Changed: true}, nil
 	}
 	checked := []string{}
-	manager := Manager{Data: t.TempDir(), Processes: processes, Preflight: func(_ context.Context, _ project.Context, name string, _ *string) *protocol.Error {
+	manager := Manager{Data: t.TempDir(), Processes: processes, Preflight: func(_ context.Context, _ project.Context, name string, _ *string, _ *string) *protocol.Error {
 		checked = append(checked, name)
 		if name == "web" {
 			return protocol.NewError("port_run_active", "The running server already owns its port.", 3, nil)
@@ -48,7 +48,7 @@ func TestUpSkipsColdStartPreflightForReusableSingletons(t *testing.T) {
 func TestUpStillPreflightsNewCommandsBeforeAnyApply(t *testing.T) {
 	p := testProject(t, "web", "api")
 	processes := &fakeProcesses{records: []services.Record{runningRecord(p, "web", tasks.ID())}}
-	manager := Manager{Data: t.TempDir(), Processes: processes, Preflight: func(_ context.Context, _ project.Context, name string, _ *string) *protocol.Error {
+	manager := Manager{Data: t.TempDir(), Processes: processes, Preflight: func(_ context.Context, _ project.Context, name string, _ *string, _ *string) *protocol.Error {
 		if name != "api" {
 			t.Fatalf("unexpected cold-start preflight: %s", name)
 		}
@@ -74,7 +74,7 @@ func TestUpRechecksPreflightIfReuseCandidateBecomesActualStart(t *testing.T) {
 		return services.Result{Item: runningRecord(p, request.Command, request.RequestID), Changed: true}, nil
 	}
 	checked := []string{}
-	manager := Manager{Data: t.TempDir(), Processes: processes, Preflight: func(_ context.Context, _ project.Context, name string, _ *string) *protocol.Error {
+	manager := Manager{Data: t.TempDir(), Processes: processes, Preflight: func(_ context.Context, _ project.Context, name string, _ *string, _ *string) *protocol.Error {
 		checked = append(checked, name)
 		return nil
 	}}
@@ -100,7 +100,7 @@ func TestUpRechecksColdStartImmediatelyBeforeApply(t *testing.T) {
 	manager := Manager{
 		Data:      t.TempDir(),
 		Processes: processes,
-		Preflight: func(context.Context, project.Context, string, *string) *protocol.Error {
+		Preflight: func(context.Context, project.Context, string, *string, *string) *protocol.Error {
 			checked++
 			return nil
 		},

@@ -62,7 +62,7 @@ func TestProxyRestartPreparationBarrierMixedModesAndRetry(t *testing.T) {
 			return nil, protocol.NewError("permission_required", "DNS preparation requires authorization.", 3, nil)
 		}
 		return map[string]*network.ExecutionSnapshot{"web": {ID: tasks.ID()}, "api": {ID: tasks.ID()}}, nil
-	}, Validate: func(context.Context, project.Context, string, *string) *protocol.Error { return nil }}
+	}, Validate: func(context.Context, project.Context, string, *string, *string) *protocol.Error { return nil }}
 	q := Request{Action: ActionRestart, Project: p, Commands: []string{"web", "api", "legacy"}, Timeout: time.Second, RequestID: tasks.ID()}
 	if _, e := m.Apply(context.Background(), q); e == nil {
 		t.Fatal("preparation succeeded unexpectedly")

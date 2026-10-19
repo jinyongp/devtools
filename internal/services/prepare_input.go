@@ -24,6 +24,9 @@ func PrepareFrozenInput(ctx context.Context, r Record, n *network.ExecutionSnaps
 	if e != nil {
 		return execution.Prepared{}, e
 	}
+	if r.BundleOverride != nil {
+		command.Selection = *r.BundleOverride
+	}
 	command.Network = n
 	dependencies, e := dependenciesFor(command)
 	if e != nil {

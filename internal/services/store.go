@@ -48,6 +48,8 @@ func writePrivate(path string, v any) error {
 }
 
 type Record struct {
+	Selection         string       `json:"selection,omitempty"`
+	BundleOverride    *string      `json:"bundle_override,omitempty"`
 	Output            *redact.Plan `json:"output,omitempty"`
 	Outage            bool         `json:"outage,omitempty"`
 	InputSnapshotID   string       `json:"input_snapshot_id,omitempty"`
@@ -120,6 +122,7 @@ const (
 )
 
 type Request struct {
+	Bundle           *string                                                     `json:"bundle,omitempty"`
 	stopPrevious     func(context.Context) *protocol.Error                       `json:"-"`
 	ProxyMode        bool                                                        `json:"proxy_mode,omitempty"`
 	Network          *network.ExecutionSnapshot                                  `json:"network,omitempty"`
@@ -668,7 +671,7 @@ func (s Store) Lock(ctx context.Context) (func(), error) {
 }
 func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	var out Result
-	if !validID(q.RequestID) {
+	if !validID(q.RequestID) || q.Bundle != nil && (!project.ValidProfile(*q.Bundle) || (q.Action != "start" && q.Action != "restart")) {
 		return out, failure("invalid_argument")
 	}
 	if q.Action == "start" && q.ID != "" || q.Action != "start" && (q.Command != "" || q.Directory != "") {
@@ -717,9 +720,12 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 		if err != nil {
 			break
 		}
-		if q.Action == "stop" && (q.Env != nil || q.Capture != nil) {
+		if q.Action == "stop" && (q.Env != nil || q.Capture != nil || q.Bundle != nil) {
 			err = failure("invalid_argument")
 			break
+		}
+		if q.Action == "restart" && q.Bundle == nil {
+			q.Bundle = r.BundleOverride
 		}
 		if q.Action == "restart" && r.ProxyMode {
 			q.ProxyMode = true
@@ -842,6 +848,19 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 	if !ok {
 		return out, failure("command_not_found")
 	}
+	selection := c.Bundle
+	if selection == "" {
+		selection = p.Bundle
+	}
+	if q.Bundle != nil {
+		if !project.ValidProfile(*q.Bundle) {
+			return out, failure("invalid_argument")
+		}
+		selection = *q.Bundle
+	}
+	if selection == "" {
+		selection = "all"
+	}
 	env := c.Env
 	if q.Env != nil {
 		env = *q.Env
@@ -860,7 +879,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 				if r.State == "unknown" {
 					return out, failure("process_unavailable")
 				}
-				if r.ProxyMode != q.ProxyMode || !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture {
+				if r.ProxyMode != q.ProxyMode || !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture || !sameExecutionSelection(r, selection, q.Bundle) {
 					return out, failure("process_conflict")
 				}
 				return Result{Item: r}, nil
@@ -898,14 +917,14 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 				if r.State == "unknown" {
 					return out, failure("process_unavailable")
 				}
-				if r.ProxyMode != q.ProxyMode || !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture {
+				if r.ProxyMode != q.ProxyMode || !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture || !sameExecutionSelection(r, selection, q.Bundle) {
 					return out, failure("process_conflict")
 				}
 				return Result{Item: r}, nil
 			}
 		}
 	}
-	r := Record{ID: q.RequestID, Profile: p.Profile, Instance: instance.ID, Directory: p.Root, Command: q.Command, Env: env, EnvOverride: q.Env, Capture: capture, CreatedAt: time.Now().UTC(), State: "starting", Previous: previous}
+	r := Record{ID: q.RequestID, Profile: p.Profile, Instance: instance.ID, Directory: p.Root, Command: q.Command, Env: env, EnvOverride: q.Env, Selection: selection, BundleOverride: q.Bundle, Capture: capture, CreatedAt: time.Now().UTC(), State: "starting", Previous: previous}
 	r.ProxyMode = q.ProxyMode
 	r.IsolatedRoot = s.IsolatedRoot
 	if q.ProxyMode {
@@ -930,6 +949,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		if prepared.Input == nil {
 			return out, failure("input_snapshot_unavailable")
 		}
+		r.Selection = prepared.Input.Metadata().Selection
 		outputPlan := prepared.Input.Metadata().Output
 		r.Output = &outputPlan
 		r.InputSnapshotID = prepared.Input.Metadata().InputID
@@ -1047,6 +1067,20 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 			}
 		}
 	}
+}
+
+func sameExecutionSelection(record Record, selected string, override *string) bool {
+	if (record.BundleOverride == nil) != (override == nil) {
+		return false
+	}
+	if override != nil && *override != *record.BundleOverride {
+		return false
+	}
+	previous := record.Selection
+	if previous == "" {
+		previous = "all"
+	}
+	return previous == selected
 }
 
 func sameExecutionEnvironment(record Record, env string, inject bool, override *string) bool {

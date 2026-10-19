@@ -26,7 +26,7 @@ func (m Manager) runNetwork(ctx context.Context, request Request, value *receipt
 			continue
 		}
 		child.Result.Condition = nil
-		q := services.Request{Action: "start", Directory: request.Project.Root, Command: child.Command, RequestID: child.RequestID, Env: request.Env, Capture: request.Capture}
+		q := services.Request{Action: "start", Directory: request.Project.Root, Command: child.Command, RequestID: child.RequestID, Env: request.Env, Bundle: request.Bundle, Capture: request.Capture}
 		if request.Action == ActionRestart {
 			q.Action = "restart"
 			q.Directory = ""
@@ -42,25 +42,29 @@ func (m Manager) runNetwork(ctx context.Context, request Request, value *receipt
 				if env == nil {
 					env = record.EnvOverride
 				}
+				bundle := request.Bundle
+				if bundle == nil {
+					bundle = record.BundleOverride
+				}
 				beforeStop := phase == services.RestartBeforeStop
 				if snapshot != nil && m.SnapshotPreflight != nil {
-					return m.SnapshotPreflight(ctx, request.Project, child.Command, env, snapshot, beforeStop)
+					return m.SnapshotPreflight(ctx, request.Project, child.Command, env, snapshot, beforeStop, bundle)
 				}
 				if beforeStop && m.Validate != nil {
-					return m.Validate(ctx, request.Project, child.Command, env)
+					return m.Validate(ctx, request.Project, child.Command, env, bundle)
 				}
 				if !beforeStop && m.Preflight != nil {
-					return m.Preflight(ctx, request.Project, child.Command, env)
+					return m.Preflight(ctx, request.Project, child.Command, env, bundle)
 				}
 				return nil
 			}
 		} else if snapshot != nil && m.SnapshotPreflight != nil {
 			q.BeforeStart = func(ctx context.Context) *protocol.Error {
-				return m.SnapshotPreflight(ctx, request.Project, child.Command, request.Env, snapshot, false)
+				return m.SnapshotPreflight(ctx, request.Project, child.Command, request.Env, snapshot, false, request.Bundle)
 			}
 		} else if m.Preflight != nil {
 			q.BeforeStart = func(ctx context.Context) *protocol.Error {
-				return m.Preflight(ctx, request.Project, child.Command, request.Env)
+				return m.Preflight(ctx, request.Project, child.Command, request.Env, request.Bundle)
 			}
 		}
 		result, e := m.Processes.Apply(ctx, q)

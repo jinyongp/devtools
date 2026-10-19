@@ -53,7 +53,7 @@ func (a *App) registerProcesses() {
 			c.Options = append(c.Options, Option{Name: "proxy", Boolean: true, Description: "Prepare the declared route and DNS before starting."})
 		}
 		if action == "start" || action == "restart" {
-			c.Options = append(c.Options, Option{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment."}, Option{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for seven days after exit."})
+			c.Options = append(c.Options, Option{Name: "bundle", Pattern: project.ProfilePattern, Description: "Select all, none, or a shared value bundle; restart inherits the previous explicit override."}, Option{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment."}, Option{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for seven days after exit."})
 		}
 		if action == "wait" {
 			c.Options = append(c.Options, Option{Name: "timeout", Default: "30s", Description: "Overall readiness wait, greater than zero and at most 10m."})
@@ -117,6 +117,9 @@ func (a *App) registerProcesses() {
 			} else {
 				q.ID = r.Args[0]
 			}
+			if bundle, ok := r.Options["bundle"]; ok {
+				q.Bundle = &bundle
+			}
 			if env, ok := r.Options["env"]; ok {
 				q.Env = &env
 			}
@@ -127,7 +130,7 @@ func (a *App) registerProcesses() {
 			if action == "start" {
 				command, env := q.Command, q.Env
 				if r.Options["proxy"] == "true" {
-					snapshots, e := a.prepareProxyNetwork(ctx, startProject, []string{command}, nil, map[string]*string{command: env}, streams, q.RequestID)
+					snapshots, e := a.prepareProxyNetwork(ctx, startProject, []string{command}, nil, map[string]*string{command: env}, streams, q.RequestID, selectedBundleOverride(command, q.Bundle))
 					if e != nil {
 						return nil, e
 					}
@@ -136,9 +139,9 @@ func (a *App) registerProcesses() {
 				}
 				q.BeforeStart = func(ctx context.Context) *protocol.Error {
 					if q.Network != nil {
-						return a.preflightNetworkSnapshot(ctx, startProject, command, env, q.Network, false)
+						return a.preflightSelectedNetworkSnapshot(ctx, startProject, command, env, q.Network, false, q.Bundle)
 					}
-					return a.preflightProjectCommand(ctx, startProject, command, env)
+					return a.checkSelectedProjectCommand(ctx, startProject, command, env, q.Bundle, false)
 				}
 			}
 			if action == "restart" {
@@ -155,7 +158,11 @@ func (a *App) registerProcesses() {
 					if env == nil {
 						env = original.EnvOverride
 					}
-					snapshots, e := a.prepareProxyNetwork(ctx, p, []string{original.Command}, []services.Record{original}, map[string]*string{original.Command: env}, streams, q.RequestID)
+					bundle := q.Bundle
+					if bundle == nil {
+						bundle = original.BundleOverride
+					}
+					snapshots, e := a.prepareProxyNetwork(ctx, p, []string{original.Command}, []services.Record{original}, map[string]*string{original.Command: env}, streams, q.RequestID, selectedBundleOverride(original.Command, bundle))
 					if e != nil {
 						return nil, e
 					}
@@ -163,20 +170,25 @@ func (a *App) registerProcesses() {
 					q.Network = snapshots[original.Command]
 				}
 				envOverride := q.Env
+				bundleOverride := q.Bundle
 				q.RestartPreflight = func(ctx context.Context, record services.Record, phase services.RestartPhase) *protocol.Error {
 					env := envOverride
 					if env == nil {
 						env = record.EnvOverride
 					}
+					bundle := bundleOverride
+					if bundle == nil {
+						bundle = record.BundleOverride
+					}
 					snapshot := project.Context{Root: record.Directory, Profile: record.Profile}
 					if q.Network != nil {
-						return a.preflightNetworkSnapshot(ctx, snapshot, record.Command, env, q.Network, phase == services.RestartBeforeStop)
+						return a.preflightSelectedNetworkSnapshot(ctx, snapshot, record.Command, env, q.Network, phase == services.RestartBeforeStop, bundle)
 					}
 					switch phase {
 					case services.RestartBeforeStop:
-						return a.validateProjectCommand(ctx, snapshot, record.Command, env)
+						return a.checkSelectedProjectCommand(ctx, snapshot, record.Command, env, bundle, true)
 					case services.RestartBeforeStart:
-						return a.preflightProjectCommand(ctx, snapshot, record.Command, env)
+						return a.checkSelectedProjectCommand(ctx, snapshot, record.Command, env, bundle, false)
 					default:
 						return protocol.NewError("internal_error", "Invalid restart preflight phase.", 1, nil)
 					}
@@ -209,6 +221,9 @@ func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 		command, err := execution.ResolveConfigured(p, r.Command, r.EnvOverride, nil)
 		if err != nil {
 			return err
+		}
+		if r.BundleOverride != nil {
+			command.Selection = *r.BundleOverride
 		}
 		if r.ProxyMode {
 			var snapshot network.ExecutionSnapshot
@@ -289,4 +304,12 @@ func ServePreparedProcessWithLease(ctx context.Context, data, id string, lease *
 		}
 		return e
 	})
+}
+
+func selectedBundleOverride(command string, bundle *string) map[string]string {
+	selected := map[string]string{}
+	if bundle != nil {
+		selected[command] = *bundle
+	}
+	return selected
 }

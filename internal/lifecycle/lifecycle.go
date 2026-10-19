@@ -31,11 +31,11 @@ type ProcessStore interface {
 	Wait(context.Context, string, time.Duration) (services.Record, *protocol.Error)
 }
 
-type Preflight func(context.Context, project.Context, string, *string) *protocol.Error
+type Preflight func(context.Context, project.Context, string, *string, *string) *protocol.Error
 
 type Manager struct {
 	PrepareNetwork    func(context.Context, Request, []services.Record, string) (map[string]*network.ExecutionSnapshot, *protocol.Error)
-	SnapshotPreflight func(context.Context, project.Context, string, *string, *network.ExecutionSnapshot, bool) *protocol.Error
+	SnapshotPreflight func(context.Context, project.Context, string, *string, *network.ExecutionSnapshot, bool, *string) *protocol.Error
 	Data              string
 	Processes         ProcessStore
 	Validate          Preflight
@@ -43,6 +43,7 @@ type Manager struct {
 }
 
 type Request struct {
+	Bundle    *string
 	ProxyMode bool
 	Action    string
 	Project   project.Context
@@ -97,6 +98,7 @@ type receipt struct {
 }
 
 type fingerprintInput struct {
+	Bundle    *string  `json:"bundle,omitempty"`
 	ProxyMode bool     `json:"proxy_mode,omitempty"`
 	Action    string   `json:"action"`
 	Profile   string   `json:"profile"`
@@ -118,7 +120,7 @@ func storageError() *protocol.Error {
 }
 
 func fingerprint(request Request) string {
-	input := fingerprintInput{ProxyMode: request.ProxyMode, Action: request.Action, Profile: request.Project.Profile, Directory: request.Project.Root, Commands: append([]string{}, request.Commands...), Env: request.Env, Capture: request.Capture}
+	input := fingerprintInput{Bundle: request.Bundle, ProxyMode: request.ProxyMode, Action: request.Action, Profile: request.Project.Profile, Directory: request.Project.Root, Commands: append([]string{}, request.Commands...), Env: request.Env, Capture: request.Capture}
 	if request.Action == ActionUp || request.Action == ActionRestart {
 		input.Timeout = int64(request.Timeout)
 	}
@@ -144,7 +146,7 @@ func (m Manager) projectLock(p project.Context) string {
 }
 
 func validateRequest(request Request) *protocol.Error {
-	if !filepath.IsAbs(request.Project.Root) || !project.ValidProfile(request.Project.Profile) || !requestIDPattern.MatchString(request.RequestID) {
+	if !filepath.IsAbs(request.Project.Root) || !project.ValidProfile(request.Project.Profile) || !requestIDPattern.MatchString(request.RequestID) || request.Bundle != nil && (!project.ValidProfile(*request.Bundle) || request.Action == ActionDown) {
 		return fail("invalid_argument", "Project lifecycle request is invalid.", 2, nil)
 	}
 	if request.Action != ActionUp && request.Action != ActionDown && request.Action != ActionRestart {
@@ -235,7 +237,7 @@ func (m Manager) initialUp(ctx context.Context, request Request, fp string) (rec
 			if existing[name] {
 				continue
 			}
-			if err := m.Preflight(ctx, request.Project, name, request.Env); err != nil {
+			if err := m.Preflight(ctx, request.Project, name, request.Env, request.Bundle); err != nil {
 				return receipt{}, err
 			}
 		}
@@ -384,10 +386,10 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 			continue
 		}
 		child.Result.Condition = nil
-		processRequest := services.Request{Action: "start", Directory: request.Project.Root, Command: child.Command, Env: request.Env, Capture: request.Capture, RequestID: child.RequestID}
+		processRequest := services.Request{Action: "start", Directory: request.Project.Root, Command: child.Command, Bundle: request.Bundle, Env: request.Env, Capture: request.Capture, RequestID: child.RequestID}
 		if m.Preflight != nil {
 			processRequest.BeforeStart = func(ctx context.Context) *protocol.Error {
-				return m.Preflight(ctx, request.Project, child.Command, request.Env)
+				return m.Preflight(ctx, request.Project, child.Command, request.Env, request.Bundle)
 			}
 		}
 		result, err := m.Processes.Apply(ctx, processRequest)
@@ -529,6 +531,7 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 		}
 		child.Result.Condition = nil
 		processRequest := services.Request{
+			Bundle:    request.Bundle,
 			Action:    "restart",
 			ID:        child.ExecutionID,
 			Env:       request.Env,
@@ -541,15 +544,19 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 				if env == nil {
 					env = record.EnvOverride
 				}
+				bundle := request.Bundle
+				if bundle == nil {
+					bundle = record.BundleOverride
+				}
 				snapshot := project.Context{Root: record.Directory, Profile: record.Profile}
 				switch phase {
 				case services.RestartBeforeStop:
 					if m.Validate != nil {
-						return m.Validate(ctx, snapshot, record.Command, env)
+						return m.Validate(ctx, snapshot, record.Command, env, bundle)
 					}
 				case services.RestartBeforeStart:
 					if m.Preflight != nil {
-						return m.Preflight(ctx, snapshot, record.Command, env)
+						return m.Preflight(ctx, snapshot, record.Command, env, bundle)
 					}
 				default:
 					return protocol.NewError("internal_error", "Invalid restart preflight phase.", 1, nil)
@@ -746,7 +753,11 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 				if env == nil && child.Result.Item != nil {
 					env = child.Result.Item.EnvOverride
 				}
-				if e := m.Validate(ctx, request.Project, child.Command, env); e != nil {
+				bundle := request.Bundle
+				if bundle == nil && child.Result.Item != nil {
+					bundle = child.Result.Item.BundleOverride
+				}
+				if e := m.Validate(ctx, request.Project, child.Command, env, bundle); e != nil {
 					return value.result(replayed), e
 				}
 			}

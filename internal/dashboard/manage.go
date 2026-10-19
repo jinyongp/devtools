@@ -95,33 +95,12 @@ func (s *Server) valueStore(profile string) values.ModernStore {
 }
 
 func (s *Server) validateProjectCommand(ctx context.Context, p project.Context, name string, envOverride *string) *protocol.Error {
-	current, err := project.Resolve(p.Root, "")
-	if err != nil {
-		return err
-	}
-	if current.Root != p.Root || current.Profile != p.Profile {
-		return protocol.NewError("instance_conflict", "Project identity changed.", 3, nil)
-	}
-	command, err := execution.ResolveConfigured(current, name, envOverride, nil)
-	if err != nil {
-		return err
-	}
-	configRoot := ""
-	if len(command.Bind)+len(command.Serve) > 0 {
-		dirs, pathErr := paths.Current()
-		if pathErr != nil {
-			return protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil)
-		}
-		configRoot = dirs.Config
-	}
-	dependencies, err := execution.DependenciesFor(command, filepath.Dir(s.data), configRoot)
-	if err != nil {
-		return err
-	}
-	return execution.Validate(ctx, command, dependencies, os.Environ())
+	return s.checkSelectedProjectCommand(ctx, p, name, envOverride, nil, true)
 }
-
 func (s *Server) preflightProjectCommand(ctx context.Context, p project.Context, name string, envOverride *string) *protocol.Error {
+	return s.checkSelectedProjectCommand(ctx, p, name, envOverride, nil, false)
+}
+func (s *Server) checkSelectedProjectCommand(ctx context.Context, p project.Context, name string, envOverride, bundle *string, validate bool) *protocol.Error {
 	current, err := project.Resolve(p.Root, "")
 	if err != nil {
 		return err
@@ -132,6 +111,9 @@ func (s *Server) preflightProjectCommand(ctx context.Context, p project.Context,
 	command, err := execution.ResolveConfigured(current, name, envOverride, nil)
 	if err != nil {
 		return err
+	}
+	if bundle != nil {
+		command.Selection = *bundle
 	}
 	configRoot := ""
 	if len(command.Bind)+len(command.Serve) > 0 {
@@ -144,9 +126,13 @@ func (s *Server) preflightProjectCommand(ctx context.Context, p project.Context,
 	dependencies, err := execution.DependenciesFor(command, filepath.Dir(s.data), configRoot)
 	if err != nil {
 		return err
+	}
+	if validate {
+		return execution.Validate(ctx, command, dependencies, os.Environ())
 	}
 	return execution.Preflight(ctx, command, dependencies, os.Environ())
 }
+
 func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	kind, _, e := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if e != nil || kind != "application/json" {
@@ -242,7 +228,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 			req.Process.Directory = p.Root
 			command, env := req.Process.Command, req.Process.Env
 			req.Process.BeforeStart = func(ctx context.Context) *protocol.Error {
-				return s.preflightProjectCommand(ctx, p, command, env)
+				return s.checkSelectedProjectCommand(ctx, p, command, env, req.Process.Bundle, false)
 			}
 		} else {
 			record, e := manager.Status(r.Context(), req.Process.ID)
@@ -260,17 +246,22 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				envOverride := req.Process.Env
+				bundleOverride := req.Process.Bundle
 				req.Process.RestartPreflight = func(ctx context.Context, old services.Record, phase services.RestartPhase) *protocol.Error {
 					env := envOverride
 					if env == nil {
 						env = old.EnvOverride
 					}
+					bundle := bundleOverride
+					if bundle == nil {
+						bundle = old.BundleOverride
+					}
 					snapshot := project.Context{Root: old.Directory, Profile: old.Profile}
 					switch phase {
 					case services.RestartBeforeStop:
-						return s.validateProjectCommand(ctx, snapshot, old.Command, env)
+						return s.checkSelectedProjectCommand(ctx, snapshot, old.Command, env, bundle, true)
 					case services.RestartBeforeStart:
-						return s.preflightProjectCommand(ctx, snapshot, old.Command, env)
+						return s.checkSelectedProjectCommand(ctx, snapshot, old.Command, env, bundle, false)
 					default:
 						return protocol.NewError("internal_error", "Invalid restart preflight phase.", 1, nil)
 					}
@@ -278,7 +269,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if req.Process.Action == "check" {
-			if req.Process.Directory != "" || req.Process.Command != "" || req.Process.Env != nil || req.Process.Capture != nil {
+			if req.Process.Directory != "" || req.Process.Command != "" || req.Process.Env != nil || req.Process.Capture != nil || req.Process.Bundle != nil {
 				invalidAction(w)
 				return
 			}

@@ -31,8 +31,14 @@ var (
 // Protector wraps the random vault key. An implementation must never initialize
 // a replacement key, change backend, or lower protection after an unwrap error.
 type Protector interface {
+	Identity() ProtectionIdentity
 	Wrap(context.Context, []byte) ([]byte, error)
 	Unwrap(context.Context, []byte) ([]byte, error)
+}
+
+type ProtectionIdentity struct {
+	Backend string
+	VaultID string
 }
 
 type SessionState string

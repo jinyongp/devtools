@@ -24,7 +24,9 @@ func profileFixture(t *testing.T) (*Profile, *Material) {
 	}
 	k := NewMaterial(bytes.Repeat([]byte{0x42}, 32))
 	t.Cleanup(k.Destroy)
-	p, err := NewSealedProfile("app", id, []byte("opaque-protector-fixture"), k)
+	master := NewMaterial(bytes.Repeat([]byte{0x17}, 32))
+	defer master.Destroy()
+	p, err := NewSealedProfile("app", id, master, k)
 	if err != nil {
 		t.Fatal(err)
 	}

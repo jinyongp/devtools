@@ -37,8 +37,10 @@ kind·env·bundle·common/override 존재와 모든 slot/version/expiry/nonce/�
 암호 backend는 Argon2id m=64MiB, t=3, p=4, salt=16 random bytes,
 out=32 bytes의 명시 preset만 허용한다. KDF 전에 header·salt·nonce·숫자·길이를
 검사하며 해제 실패 때 비용 하향·평문 키·새 vault로 전환하지 않는다.
-`Protector.Wrap/Unwrap`은 random vault key를 보호하고 오류를 복구 초기화로
-해석하지 않는다. Backend는 macOS Keychain, Windows user DPAPI,
+`Protector.Identity`는 backend와 vault ID를 고정하고 `Wrap/Unwrap`은 random
+vault key를 보호한다. 초기화는 실제 unwrap과 원래 키의 일치를 확인한 뒤
+보호된 key slot만 배타적으로 게시한다. 오류를 복구 초기화로 해석하지 않는다.
+Backend는 macOS Keychain, Windows user DPAPI,
 기존 Linux Secret Service, keyring 없는 환경의 명시 암호 세션이다.
 
 저장 문서의 최대 표현은 기존 backup plaintext 한도와 같은 128MiB다.

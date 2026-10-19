@@ -104,9 +104,8 @@ func NewProfile(name string) (*Profile, error) {
 	return &Profile{Format: StorageVersion, Name: name, ID: id, Generation: gen, Revision: 1, Envs: []string{}, Values: []Value{}, Bundles: []Bundle{}}, nil
 }
 
-// NewSealedProfile expects an already protected profile keyset. The wrapper is
-// authenticated with the profile, while key unwrapping belongs to the protector.
-func NewSealedProfile(name, vaultID string, wrapped []byte, key *Material) (*Profile, error) {
+// NewSealedProfile binds key wrapping to the newly allocated stable profile ID.
+func NewSealedProfile(name, vaultID string, master, key *Material) (*Profile, error) {
 	p, err := NewProfile(name)
 	if err != nil {
 		return nil, err
@@ -114,7 +113,10 @@ func NewSealedProfile(name, vaultID string, wrapped []byte, key *Material) (*Pro
 	p.VaultID = vaultID
 	p.Sealed = true
 	p.KeyEpoch = 1
-	p.WrappedKey = append([]byte(nil), wrapped...)
+	p.WrappedKey, err = WrapKeyset(master, vaultID, p.ID, p.KeyEpoch, key)
+	if err != nil {
+		return nil, err
+	}
 	if err = p.Sign(key); err != nil {
 		return nil, err
 	}
@@ -126,7 +128,7 @@ func (p *Profile) validate() error {
 		return ErrInvalid
 	}
 	if p.Sealed {
-		if !validID(p.VaultID) || p.KeyEpoch == 0 || len(p.WrappedKey) == 0 {
+		if !validID(p.VaultID) || p.KeyEpoch == 0 || len(p.WrappedKey) != wrappedKeySize {
 			return ErrInvalid
 		}
 	} else if p.VaultID != "" || p.KeyEpoch != 0 || len(p.WrappedKey) != 0 || len(p.Tag) != 0 {

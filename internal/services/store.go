@@ -126,6 +126,7 @@ const (
 )
 
 type Request struct {
+	AutoGoal         *vault.InputIdentity                                        `json:"auto_goal,omitempty"`
 	Bundle           *string                                                     `json:"bundle,omitempty"`
 	stopPrevious     func(context.Context) *protocol.Error                       `json:"-"`
 	ProxyMode        bool                                                        `json:"proxy_mode,omitempty"`
@@ -678,6 +679,9 @@ func (s Store) Lock(ctx context.Context) (func(), error) {
 }
 func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	var out Result
+	if q.AutoGoal != nil && (q.Action != "restart" || s.PrepareInput == nil) {
+		return out, failure("invalid_argument")
+	}
 	if !validID(q.RequestID) || q.Bundle != nil && (!project.ValidProfile(*q.Bundle) || (q.Action != "start" && q.Action != "restart")) {
 		return out, failure("invalid_argument")
 	}
@@ -726,6 +730,31 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 		r, err = s.read(q.ID)
 		if err != nil {
 			break
+		}
+		if q.AutoGoal != nil {
+			// A retry may observe a committed successor after the original has
+			// stopped. Reconcile that exact execution; never create another.
+			if candidate, e := s.read(q.RequestID); e == nil {
+				if candidate.Previous != r.ID || candidate.InputVersion == nil || candidate.InputVersion.Identity != *q.AutoGoal {
+					err = failure("request_conflict")
+					break
+				}
+				out, err = s.start(ctx, q, r.ID)
+				break
+			} else if e.Code != "process_not_found" {
+				err = e
+				break
+			}
+			live, e := s.statusRecord(ctx, r)
+			if e != nil || live.State != "running" || live.EndedAt != nil {
+				err = failure("process_not_running")
+				break
+			}
+			p, e := project.Resolve(r.Directory, "")
+			if e != nil || p.Profile != r.Profile || p.Root != r.Directory || p.Commands[r.Command].ValuesUpdate != "restart" {
+				err = failure("values_update_disabled")
+				break
+			}
 		}
 		if q.Action == "stop" && (q.Env != nil || q.Capture != nil || q.Bundle != nil) {
 			err = failure("invalid_argument")
@@ -957,7 +986,11 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		if prepared.Input == nil {
 			return out, failure("input_snapshot_unavailable")
 		}
-		r.InputVersion = prepared.Input.Metadata().Delivery.Clone()
+		delivery := prepared.Input.Metadata().Delivery
+		if q.AutoGoal != nil && (delivery == nil || delivery.Identity != *q.AutoGoal) {
+			return out, failure("value_goal_changed")
+		}
+		r.InputVersion = delivery.Clone()
 		r.Selection = prepared.Input.Metadata().Selection
 		outputPlan := prepared.Input.Metadata().Output
 		r.Output = &outputPlan

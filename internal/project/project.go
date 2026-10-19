@@ -28,6 +28,7 @@ type Config struct {
 }
 
 type Command struct {
+	ValuesUpdate string             `toml:"values_update,omitempty"`
 	Bundle       string             `toml:"bundle,omitempty"`
 	Output       redact.Mode        `toml:"output,omitempty"`
 	Stdout       redact.Mode        `toml:"stdout,omitempty"`
@@ -125,6 +126,9 @@ func parse(data []byte, path, root string) (Context, *protocol.Error) {
 		}
 	}
 	for name, command := range config.Commands {
+		if command.ValuesUpdate != "" && command.ValuesUpdate != "notify" && command.ValuesUpdate != "restart" {
+			return Context{}, protocol.NewError("invalid_config", "Invalid value update policy.", 3, nil)
+		}
 		if command.Bundle != "" && !ValidProfile(command.Bundle) {
 			return Context{}, protocol.NewError("invalid_config", "Invalid value bundle selection.", 3, nil)
 		}

@@ -185,3 +185,28 @@ func TestBundleConfigValidatesProjectAndCommandSelections(t *testing.T) {
 		}
 	}
 }
+
+func TestValuesUpdatePolicyRejectsUnknownAndDefaultsToNotify(t *testing.T) {
+	for _, policy := range []string{"", "notify", "restart", "reload", "Restart"} {
+		t.Run("policy-"+policy, func(t *testing.T) {
+			root := t.TempDir()
+			text := "profile='app'\n[commands.web]\nexec=['fixture']\n"
+			if policy != "" {
+				text += "values_update='" + policy + "'\n"
+			}
+			if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(text), 0600); err != nil {
+				t.Fatal(err)
+			}
+			p, e := Resolve(root, "")
+			if policy == "reload" || policy == "Restart" {
+				if e == nil || e.Code != "invalid_config" {
+					t.Fatal("unknown restart policy accepted")
+				}
+				return
+			}
+			if e != nil || p.Commands["web"].ValuesUpdate != policy {
+				t.Fatal("policy not preserved", e)
+			}
+		})
+	}
+}

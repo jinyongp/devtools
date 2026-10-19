@@ -15,8 +15,17 @@ import (
 	"github.com/jinyongp/devtools/internal/values"
 )
 
+func canonicalTestRoot(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
 func TestInspectEmptyStoreIsReadyAndReadOnly(t *testing.T) {
-	root := t.TempDir()
+	root := canonicalTestRoot(t)
 	input := Input{
 		Data:   filepath.Join(root, "data"),
 		Config: filepath.Join(root, "config"),
@@ -35,7 +44,7 @@ func TestInspectEmptyStoreIsReadyAndReadOnly(t *testing.T) {
 }
 
 func TestInspectDoesNotExposeStoredSecret(t *testing.T) {
-	root := t.TempDir()
+	root := canonicalTestRoot(t)
 	input := Input{
 		Data:   filepath.Join(root, "data"),
 		Config: filepath.Join(root, "config"),
@@ -67,7 +76,7 @@ func TestInspectDoesNotExposeStoredSecret(t *testing.T) {
 }
 
 func TestInspectReportsSectionFailureWithoutDiscardingReport(t *testing.T) {
-	root := t.TempDir()
+	root := canonicalTestRoot(t)
 	input := Input{
 		Data:   filepath.Join(root, "data"),
 		Config: filepath.Join(root, "config"),
@@ -89,7 +98,7 @@ func TestInspectReportsSectionFailureWithoutDiscardingReport(t *testing.T) {
 }
 
 func TestInspectUsesLiveProcessStateForProfileActiveCounts(t *testing.T) {
-	root := t.TempDir()
+	root := canonicalTestRoot(t)
 	input := Input{
 		Data:   filepath.Join(root, "data"),
 		Config: filepath.Join(root, "config"),

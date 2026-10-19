@@ -94,3 +94,11 @@ resolve가 Windows temporary 8.3 경로를 긴 이름으로 바꾸는 문제였�
 리뷰: 실제 start entry·platform preflight·inherited lease·handoff caller와 helper의 경로
 전달을 확인했다. Python syntax와 양 architecture의 CLI test binary compile을 수행하고,
 실제 installed product의 readiness/restart/stop/transfer는 수정 CI에서 다시 확인한다.
+
+## macOS backup·diagnostics fixture 후속 검토
+
+`b56e5ce`의 macOS vault/values/CLI suite는 pass했고 backup·diagnostics에서 같은 `/var`
+alias가 남아 있었다. backup의 기존 Unix privateTestRoot와 diagnostics의 vault 상태를
+읽는 test root를 실제 경로로 선택한다. 저장소와 read-only 진단의 제품 검사는 유지한다.
+기존 fixture caller와 cleanup, missing/corruption/restore/canary 검사의 조건을 재검토했다.
+Linux backup/diagnostics 전체 race pass(34.533s/1.126s). 실제 macOS 결과는 후속 CI에 남는다.

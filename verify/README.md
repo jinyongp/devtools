@@ -55,6 +55,9 @@ devtools run test:installed project_lifecycle
 # vault 설정·재사용 세션·잠긴 metadata·JSON/schema/completion
 devtools run test:installed vault
 
+# 실제 두 PTY의 공유 세션·daemon crash 뒤 수동 잠금 유지
+devtools run test:installed vault_session
+
 # 출력 보호·binary stdout 예외·stderr·캡처·PTY·느린 소비자 취소
 devtools run test:installed output_redaction
 

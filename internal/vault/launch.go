@@ -18,10 +18,14 @@ import (
 // It is public metadata, not a bearer credential: admission also checks OS peers,
 // the current live session, its lock epoch, and its unlocked key cache.
 type LaunchTicket struct {
-	VaultID   string    `json:"vault_id"`
-	SessionID string    `json:"session_id"`
-	Epoch     uint64    `json:"epoch"`
-	ExpiresAt time.Time `json:"expires_at"`
+	VaultID           string    `json:"vault_id"`
+	SessionID         string    `json:"session_id"`
+	Epoch             uint64    `json:"epoch"`
+	ExpiresAt         time.Time `json:"expires_at"`
+	Profile           string    `json:"profile,omitempty"`
+	ProfileID         string    `json:"profile_id,omitempty"`
+	StorageGeneration string    `json:"storage_generation,omitempty"`
+	KeyEpoch          uint64    `json:"key_epoch,omitempty"`
 }
 
 type launchRecord struct {
@@ -45,33 +49,66 @@ type LaunchAdmission struct {
 func launchGate(directory string) string { return filepath.Join(directory, "launch.lock") }
 func launchName(id string) string        { return filepath.Join("launches", id+".json") }
 func validLaunchTicket(t LaunchTicket) bool {
-	return validID(t.VaultID) && validID(t.SessionID) && !t.ExpiresAt.IsZero()
+	if !validID(t.VaultID) || !validID(t.SessionID) || t.ExpiresAt.IsZero() {
+		return false
+	}
+	if t.Profile == "" && t.ProfileID == "" && t.StorageGeneration == "" && t.KeyEpoch == 0 {
+		return true
+	}
+	return namePattern.MatchString(t.Profile) && validID(t.ProfileID) && validID(t.StorageGeneration) && t.KeyEpoch > 0
 }
 
 func (s *KeySession) authorizeLaunch(ctx context.Context, ticket LaunchTicket, sessionID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if !validLaunchTicket(ticket) || ticket.SessionID != sessionID || ticket.Epoch != s.epoch {
-		return ErrLocked
-	}
-	if !s.now().Before(ticket.ExpiresAt) {
-		return ErrLocked
-	}
-	k, err := s.read()
+	key, err := s.launchKey(ctx, ticket, sessionID)
 	if err != nil {
 		return err
 	}
+	defer key.Destroy()
+	if ticket.Profile != "" {
+		// The launcher holds the shared launch lease. Generation writers take
+		// its exclusive side before disk maintenance, so this authenticated
+		// observation remains valid until the actual spawn outcome.
+		store := FileStore{Root: filepath.Dir(s.directory), VaultID: ticket.VaultID, CatalogKey: key}
+		p, profileKey, err := store.ReadWithMaster(ctx, ticket.Profile, key)
+		if err != nil {
+			return err
+		}
+		profileKey.Destroy()
+		if p.ID != ticket.ProfileID || p.Generation != ticket.StorageGeneration || p.KeyEpoch != ticket.KeyEpoch {
+			return ErrInputChanged
+		}
+	}
+	// A manual lock may have won while disk validation ran. Never refresh the
+	// ticket from a newer session or hold the state mutex over disk maintenance.
+	finalKey, err := s.launchKey(ctx, ticket, sessionID)
+	finalKey.Destroy()
+	return err
+}
+
+func (s *KeySession) launchKey(ctx context.Context, ticket LaunchTicket, sessionID string) (*Material, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if !validLaunchTicket(ticket) || ticket.SessionID != sessionID || ticket.Epoch != s.epoch {
+		return nil, ErrLocked
+	}
+	if !s.now().Before(ticket.ExpiresAt) {
+		return nil, ErrLocked
+	}
+	k, err := s.read()
+	if err != nil {
+		return nil, err
+	}
 	if k.VaultID != ticket.VaultID {
-		return ErrIntegrity
+		return nil, ErrIntegrity
 	}
 	if s.key == nil || s.status.State != Unlocked {
-		return ErrLocked
+		return nil, ErrLocked
 	}
 	s.touch()
-	return nil
+	return NewMaterial(s.key.data), nil
 }
 
 // BeginLaunch must be called after the launcher has received/validated all input
@@ -148,6 +185,25 @@ func DrainLaunches(ctx context.Context, directory string) error {
 		return ErrLockPending
 	}
 	defer release()
+	return drainLaunchesHeld(ctx, directory)
+}
+
+// AcquireLaunchMutation closes launch admission and drains known outcomes.
+// Keys must already be available. Acquire this physical lease before the disk
+// maintenance gate, and never while holding a session/admission state mutex.
+func AcquireLaunchMutation(ctx context.Context, directory string) (func(), error) {
+	release, err := maintenance.LockExclusive(ctx, launchGate(directory))
+	if err != nil {
+		return nil, ErrLockPending
+	}
+	if err = drainLaunchesHeld(ctx, directory); err != nil {
+		release()
+		return nil, err
+	}
+	return release, nil
+}
+
+func drainLaunchesHeld(ctx context.Context, directory string) error {
 	root, err := platformfs.OpenRoot(directory, false)
 	if err != nil {
 		return ErrRecovery

@@ -236,3 +236,28 @@ func TestVaultSnapshotEmptyOverrideExpiryAndMetadataOnly(t *testing.T) {
 		t.Fatal("metadata-only read ignored manifest corruption")
 	}
 }
+
+func TestProfileKeyRotationDoesNotChangeEffectiveInputRevision(t *testing.T) {
+	root, store, master, _ := vaultSnapshotFixture(t, 2)
+	ctx := context.Background()
+	var calls atomic.Int32
+	before, e := CaptureVault(ctx, root, "app", "local", true, time.Now(), snapshotMaster(master, &calls))
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer before.Destroy()
+	if _, err := store.RotateProfile(ctx, "app", master); err != nil {
+		t.Fatal(err)
+	}
+	after, e := CaptureVault(ctx, root, "app", "local", true, time.Now(), snapshotMaster(master, &calls))
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer after.Destroy()
+	if before.Metadata().Identity != after.Metadata().Identity || after.Metadata().KeyEpoch != before.Metadata().KeyEpoch+1 {
+		t.Fatal("key rotation changed value identity or missed key epoch")
+	}
+	if calls.Load() != 2 {
+		t.Fatal("key lookup occurred per slot")
+	}
+}

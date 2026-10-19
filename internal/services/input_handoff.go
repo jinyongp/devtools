@@ -64,7 +64,7 @@ func (c *launcherInputChannel) close() {
 }
 func launcherFailureCode(code string) string {
 	switch code {
-	case "redaction_unavailable", "vault_locked", "key_missing", "integrity_failed", "recovery_required", "lock_pending", "input_snapshot_expired", "value_expired", "invalid_input_snapshot", "launch_canceled", "key_session_protocol_mismatch":
+	case "input_changed", "redaction_unavailable", "vault_locked", "key_missing", "integrity_failed", "recovery_required", "lock_pending", "input_snapshot_expired", "value_expired", "invalid_input_snapshot", "launch_canceled", "key_session_protocol_mismatch":
 		return code
 	default:
 		return "launcher_unavailable"

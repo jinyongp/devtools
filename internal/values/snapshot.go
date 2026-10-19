@@ -16,6 +16,7 @@ import (
 
 type SnapshotMetadata struct {
 	Launch            *vault.LaunchTicket   `json:"launch,omitempty"`
+	KeyEpoch          uint64                `json:"key_epoch,omitempty"`
 	Identity          vault.InputIdentity   `json:"identity"`
 	Slots             []vault.SlotReference `json:"slots"`
 	IntegrityVerified bool                  `json:"integrity_verified"`
@@ -153,7 +154,7 @@ func CaptureVault(ctx context.Context, root, profile, env string, inject bool, n
 	if err != nil {
 		return nil, VaultError(ctx, err)
 	}
-	s := &Snapshot{state: newState(profile), canInject: inject, metadata: SnapshotMetadata{Identity: vault.InputIdentity{ProfileID: p.ID, StorageGeneration: p.Generation}, IntegrityVerified: p.Sealed, Slots: []vault.SlotReference{}}}
+	s := &Snapshot{state: newState(profile), canInject: inject, metadata: SnapshotMetadata{Identity: vault.InputIdentity{ProfileID: p.ID, StorageGeneration: p.Generation}, KeyEpoch: p.KeyEpoch, IntegrityVerified: p.Sealed, Slots: []vault.SlotReference{}}}
 	if env != "" {
 		s.state.Envs[env] = true
 	}
@@ -197,7 +198,7 @@ func VaultError(ctx context.Context, err error) *protocol.Error {
 		return canceledError()
 	}
 	code := "storage_error"
-	for _, known := range []error{vault.ErrLocked, vault.ErrKeyMissing, vault.ErrIntegrity, vault.ErrInvalid, vault.ErrTooLarge, vault.ErrUnavailable, vault.ErrRecovery, vault.ErrLockPending, vault.ErrDenied, vault.ErrInteractionRequired, vault.ErrBackendLocked, vault.ErrSessionProtocol} {
+	for _, known := range []error{vault.ErrLocked, vault.ErrKeyMissing, vault.ErrIntegrity, vault.ErrInvalid, vault.ErrTooLarge, vault.ErrUnavailable, vault.ErrRecovery, vault.ErrLockPending, vault.ErrDenied, vault.ErrInteractionRequired, vault.ErrBackendLocked, vault.ErrSessionProtocol, vault.ErrInputChanged} {
 		if errors.Is(err, known) {
 			code = known.Error()
 			break
@@ -227,6 +228,10 @@ func CaptureVaultSession(ctx context.Context, root, profile, env string, inject 
 	}
 	if ticket != nil {
 		copy := *ticket
+		copy.Profile = profile
+		copy.ProfileID = snapshot.metadata.Identity.ProfileID
+		copy.StorageGeneration = snapshot.metadata.Identity.StorageGeneration
+		copy.KeyEpoch = snapshot.metadata.KeyEpoch
 		snapshot.metadata.Launch = &copy
 	}
 	return snapshot, nil

@@ -10,7 +10,7 @@ import (
 
 const (
 	StorageVersion  = 1
-	SessionProtocol = 1
+	SessionProtocol = 2
 	// Keep the storage ceiling within the existing backup plaintext ceiling.
 	MaxDocumentBytes   = 128 << 20
 	MaxFrameBytes      = 16 << 20
@@ -18,14 +18,15 @@ const (
 )
 
 var (
-	ErrLocked      = errors.New("vault_locked")
-	ErrKeyMissing  = errors.New("key_missing")
-	ErrIntegrity   = errors.New("integrity_failed")
-	ErrInvalid     = errors.New("invalid_vault_format")
-	ErrTooLarge    = errors.New("vault_input_too_large")
-	ErrUnavailable = errors.New("key_backend_unavailable")
-	ErrRecovery    = errors.New("vault_recovery_required")
-	ErrLockPending = errors.New("lock_pending")
+	ErrInputChanged = errors.New("input_changed")
+	ErrLocked       = errors.New("vault_locked")
+	ErrKeyMissing   = errors.New("key_missing")
+	ErrIntegrity    = errors.New("integrity_failed")
+	ErrInvalid      = errors.New("invalid_vault_format")
+	ErrTooLarge     = errors.New("vault_input_too_large")
+	ErrUnavailable  = errors.New("key_backend_unavailable")
+	ErrRecovery     = errors.New("vault_recovery_required")
+	ErrLockPending  = errors.New("lock_pending")
 )
 
 // Protector wraps the random vault key. An implementation must never initialize

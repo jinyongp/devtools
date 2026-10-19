@@ -704,6 +704,14 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		return plan, failure("storage_error")
 	}
 	defer release()
+	// The legacy restore writer must not recreate plaintext values, including
+	// a previously absent target profile, inside a protected root. The keyed
+	// logical restore adapter will own this path once configured.
+	if _, protected, markerErr := maintenance.ProtectedRootHeld(e.Data); markerErr != nil {
+		return plan, failure("storage_error")
+	} else if protected {
+		return plan, failure("unsupported_storage")
+	}
 	targetTasks := tasks.Store{Directory: filepath.Join(e.Data, "tasks"), Profile: target}
 	if err := targetTasks.CollectOrphanGenerationsHeld(); err != nil {
 		return plan, failure("storage_error")

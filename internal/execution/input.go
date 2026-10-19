@@ -143,8 +143,11 @@ func validateInputWire(wire inputWire) *protocol.Error {
 	if err != nil || len(id) != 16 || len(wire.Metadata.InputID) != 32 {
 		return snapshotError("invalid_input_snapshot")
 	}
-	if wire.Metadata.Values.Launch != nil && !filepath.IsAbs(wire.VaultDirectory) {
-		return snapshotError("invalid_input_snapshot")
+	if ticket := wire.Metadata.Values.Launch; ticket != nil {
+		identity := wire.Metadata.Values.Identity
+		if !filepath.IsAbs(wire.VaultDirectory) || ticket.Profile != wire.Metadata.Profile || ticket.ProfileID == "" || ticket.ProfileID != identity.ProfileID || ticket.StorageGeneration == "" || ticket.StorageGeneration != identity.StorageGeneration || ticket.KeyEpoch == 0 || ticket.KeyEpoch != wire.Metadata.Values.KeyEpoch {
+			return snapshotError("invalid_input_snapshot")
+		}
 	}
 	if wire.Format != 1 || !filepath.IsAbs(wire.Directory) || !filepath.IsAbs(wire.Executable) || wire.Environment == nil || wire.Metadata.PreparedAt.IsZero() || !wire.Metadata.PrepareDeadline.After(wire.Metadata.PreparedAt) {
 		return snapshotError("invalid_input_snapshot")

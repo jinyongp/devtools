@@ -107,7 +107,7 @@ func sessionCode(err error) string {
 	if err == nil {
 		return ""
 	}
-	for _, known := range []error{ErrLocked, ErrKeyMissing, ErrIntegrity, ErrInvalid, ErrTooLarge, ErrUnavailable, ErrRecovery, ErrLockPending, ErrDenied, ErrInteractionRequired, ErrBackendLocked, ErrSessionProtocol} {
+	for _, known := range []error{ErrLocked, ErrKeyMissing, ErrIntegrity, ErrInvalid, ErrTooLarge, ErrUnavailable, ErrRecovery, ErrLockPending, ErrDenied, ErrInteractionRequired, ErrBackendLocked, ErrSessionProtocol, ErrInputChanged} {
 		if errors.Is(err, known) {
 			return known.Error()
 		}
@@ -118,7 +118,7 @@ func sessionError(code string) error {
 	if code == "" {
 		return nil
 	}
-	for _, known := range []error{ErrLocked, ErrKeyMissing, ErrIntegrity, ErrInvalid, ErrTooLarge, ErrUnavailable, ErrRecovery, ErrLockPending, ErrDenied, ErrInteractionRequired, ErrBackendLocked, ErrSessionProtocol} {
+	for _, known := range []error{ErrLocked, ErrKeyMissing, ErrIntegrity, ErrInvalid, ErrTooLarge, ErrUnavailable, ErrRecovery, ErrLockPending, ErrDenied, ErrInteractionRequired, ErrBackendLocked, ErrSessionProtocol, ErrInputChanged} {
 		if code == known.Error() {
 			return known
 		}

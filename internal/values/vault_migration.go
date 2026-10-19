@@ -280,6 +280,11 @@ func convertLegacy(state *State, vaultID string, master *vault.Material) (*vault
 // after preview fail before publication. Root-key creation/unwrap is external.
 func MigrateLegacy(ctx context.Context, root, vaultID string, master *vault.Material, id, fingerprint string) (vault.ForwardResult, error) {
 	forward := vault.ForwardStore{Root: root, VaultID: vaultID, Master: master}
+	releaseLaunch, err := vault.AcquireLaunchMutation(ctx, filepath.Join(root, "vault"))
+	if err != nil {
+		return vault.ForwardResult{}, err
+	}
+	defer releaseLaunch()
 	release, err := maintenance.AcquireExclusive(ctx, root)
 	if err != nil {
 		return vault.ForwardResult{}, vault.ErrRecovery

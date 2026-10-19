@@ -244,6 +244,11 @@ func (s ForwardStore) Replace(ctx context.Context, id, fingerprint string, after
 	if !s.valid() || !validID(id) || !validForwardFingerprint(fingerprint) || len(after) == 0 {
 		return result, ErrInvalid
 	}
+	releaseLaunch, err := AcquireLaunchMutation(ctx, filepath.Join(s.Root, "vault"))
+	if err != nil {
+		return result, err
+	}
+	defer releaseLaunch()
 	release, err := maintenance.AcquireExclusive(ctx, s.Root)
 	if err != nil {
 		return result, ErrRecovery
@@ -252,7 +257,8 @@ func (s ForwardStore) Replace(ctx context.Context, id, fingerprint string, after
 	return s.ReplaceHeld(ctx, id, fingerprint, after)
 }
 
-// ReplaceHeld requires the exclusive data-root maintenance gate. The caller may
+// ReplaceHeld requires the exclusive launch mutation lease, then the exclusive
+// data-root maintenance gate. The caller may
 // inspect legacy files and prepare validated after-images under that same gate.
 // Acquire native/session keys before entering it.
 func (s ForwardStore) ReplaceHeld(ctx context.Context, id, fingerprint string, after map[string][]byte) (ForwardResult, error) {
@@ -370,6 +376,11 @@ func (s ForwardStore) Recover(ctx context.Context) (ForwardResult, error) {
 	if !s.valid() {
 		return result, ErrInvalid
 	}
+	releaseLaunch, err := AcquireLaunchMutation(ctx, filepath.Join(s.Root, "vault"))
+	if err != nil {
+		return result, err
+	}
+	defer releaseLaunch()
 	release, err := maintenance.AcquireForRecovery(ctx, s.Root)
 	if err != nil {
 		return result, ErrRecovery

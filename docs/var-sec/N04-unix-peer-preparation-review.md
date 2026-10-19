@@ -27,3 +27,12 @@ artifact 연결을 확인했다. macOS 두 architecture 및 Windows 기존 test 
 Python syntax·workflow YAML을 검사한다. Linux 일반 suite는 privileged 검사 skip이며
 전체 vault race로 기존 경로 회귀를 확인한다. 실제 Linux/macOS 다른 UID 결과는 후속 CI에
 남고 이 준비로 N04 전체를 완료하지 않는다.
+
+## 실제 검증 결과
+
+`5fa27ab`의 [Actions](https://github.com/jinyongp/devtools/actions/runs/39235967746)에서
+Linux·macOS Intel·macOS ARM native job이 모두 성공했다. 세 artifact의 test2json을
+대조하여 parent와 양방향 subtest 모두 실제 pass, skip/fail 없음과 wrapper 성공을
+확인했다. [원시 test events](evidence/N04-unix-peers-5fa27ab.json)를 보존한다.
+동일 UID fake나 cross compile 결과가 아니다. Windows SID/remote pipe 등 N04의 나머지
+영역은 별도이므로 N04 전체 완료로 기록하지 않는다.

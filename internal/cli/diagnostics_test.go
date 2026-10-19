@@ -19,6 +19,7 @@ func TestDiagnosticsReportIsReadOnlyMetadata(t *testing.T) {
 	if code, _, diagnostic := invoke(t, app, "DIAGNOSTICS-CANARY", "sec", "set", "TOKEN", "--profile", "app", "--stdin"); code != 0 {
 		t.Fatal(code, diagnostic)
 	}
+	before := outputData(t, app, []string{"vault", "status"})
 	code, out, diagnostic := invoke(t, app, "", "diagnostics")
 	if code != 0 || diagnostic != "" {
 		t.Fatalf("diagnostics: %d %s %s", code, out, diagnostic)
@@ -35,6 +36,13 @@ func TestDiagnosticsReportIsReadOnlyMetadata(t *testing.T) {
 	data := response["data"].(map[string]any)
 	if data["ready"] != true {
 		t.Fatalf("diagnostics not ready: %#v", data)
+	}
+	after := outputData(t, app, []string{"vault", "status"})
+	if mustJSON(t, before) != mustJSON(t, after) {
+		t.Fatal("diagnostics touched key session")
+	}
+	if data["vault"].(map[string]any)["state"] != "unlocked" {
+		t.Fatal("vault metadata missing")
 	}
 	profiles := data["profiles"].(map[string]any)
 	items := profiles["items"].([]any)

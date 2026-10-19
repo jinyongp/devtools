@@ -16,7 +16,7 @@ func (a *App) registerImport() {
 	)
 	item := object(map[string]any{"key": stringSchema(), "kind": map[string]any{"enum": []string{"variable", "secret"}}, "action": map[string]any{"enum": []string{"add", "update", "unchanged", "conflict", "kind_conflict"}}}, "key", "kind", "action")
 	a.commands = append(a.commands, Command{Name: "import", Description: "Import dotenv values atomically; new keys default to secret. Return metadata only.", Options: options,
-		Output: object(map[string]any{"profile": stringSchema(), "env": stringSchema(), "dry_run": map[string]any{"type": "boolean"}, "changed": map[string]any{"type": "boolean"}, "applicable": map[string]any{"type": "boolean"}, "items": map[string]any{"type": "array", "items": item}}, "profile", "env", "dry_run", "changed", "applicable", "items"), Run: a.importCommand})
+		Output: object(map[string]any{"profile": stringSchema(), "env": stringSchema(), "dry_run": map[string]any{"type": "boolean"}, "changed": map[string]any{"type": "boolean"}, "applicable": map[string]any{"type": "boolean"}, "items": map[string]any{"type": "array", "items": item}, "warnings": warningsSchema()}, "profile", "env", "dry_run", "changed", "applicable", "items"), Run: a.importCommand})
 }
 
 func (a *App) importCommand(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
@@ -57,5 +57,9 @@ func (a *App) importCommand(ctx context.Context, streams IO, request Request) (a
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"profile": store.Profile, "env": env, "dry_run": dryRun, "changed": changed, "applicable": applicable, "items": items}, nil
+	result := map[string]any{"profile": store.Profile, "env": env, "dry_run": dryRun, "changed": changed, "applicable": applicable, "items": items}
+	if warnings := values.ImportWarnings(items); len(warnings) > 0 {
+		result["warnings"] = warnings
+	}
+	return result, nil
 }

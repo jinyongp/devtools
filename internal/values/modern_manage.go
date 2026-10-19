@@ -35,7 +35,7 @@ func editRevision(profile string, p *vault.Profile, exists bool) string {
 	return hex.EncodeToString(sum[:])
 }
 func (s ModernStore) Inspect(ctx context.Context, env string) (ManagedView, *protocol.Error) {
-	out := ManagedView{Profile: s.Profile, Env: env, Items: []ManagedItem{}}
+	out := ManagedView{Profile: s.Profile, Env: env, Items: []ManagedItem{}, PublicPrefixes: FrontendPublicPrefixes()}
 	if !project.ValidProfile(s.Profile) {
 		return out, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
@@ -234,6 +234,16 @@ func mutateChange(state *State, c Change) (ChangeResult, *protocol.Error) {
 		}
 	default:
 		return out, protocol.NewError("invalid_argument", "Unknown value action.", 2, nil)
+	}
+	if err == nil {
+		if c.Action == "secret.set" {
+			if warning := FrontendSecretWarning(c.Key); warning != nil {
+				out.Warnings = []Warning{*warning}
+			}
+		}
+		if c.Action == "import" {
+			out.Warnings = ImportWarnings(out.Items)
+		}
 	}
 	return out, err
 }

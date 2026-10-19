@@ -29,6 +29,8 @@ import (
 	"github.com/jinyongp/devtools/internal/retention"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
+	"github.com/jinyongp/devtools/internal/values"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 //go:embed assets/*
@@ -358,6 +360,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			s.action(w, r)
+			return
+		}
+		if r.URL.Path == "/api/vault" {
+			if r.URL.RawQuery != "" {
+				apiError(w, protocol.NewError("invalid_argument", "Vault status has no query inputs.", 2, nil))
+				return
+			}
+			status, e := vault.InspectSession(r.Context(), filepath.Join(filepath.Dir(s.data), "vault"))
+			if e != nil {
+				apiError(w, values.VaultError(r.Context(), e))
+				return
+			}
+			reply(status)
 			return
 		}
 		if r.URL.Path == "/api/values" {

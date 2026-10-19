@@ -476,3 +476,10 @@ button[aria-pressed="true"] { background: #e1eee7; color: #145d51; }
     scroll-behavior: auto;
   }
 }
+
+.vault-state { margin: 0 0 18px; padding: 14px 0; border-bottom: 1px solid #dce1da; overflow-wrap:anywhere; }
+.vault-state p { margin:8px 0; font-size:13px; line-height:1.6; max-width:70ch; }
+.vault-state button { margin-top:4px; }
+
+.value-warning { color:#704418; font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
+.vault-state strong { color:#263c3c; font-size:14px; }

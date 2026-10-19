@@ -1,6 +1,17 @@
 "use strict";
 const valueFilters = {search:"", kind:"all", source:"all"};
 
+function secretNameHint(parent,key,kind,view) {
+  const hint=text("p","",parent);hint.className="value-warning";hint.setAttribute("role","status");
+  const update=(name,type)=>{
+    const exposed=type==="secret"&&(view.public_prefixes||[]).some(prefix=>name.toUpperCase().startsWith(prefix));
+    const message=exposed ? "This name may be published by frontend builds. Keep credentials out of browser bundles." : "";
+    if(hint.textContent!==message)hint.textContent=message;
+    hint.hidden=!exposed;
+  };
+  update(key,kind);return update;
+}
+
 function variableValue(parent, label, original = "") {
   const input = field(parent, label, original, "textarea");
   input.spellcheck = false;
@@ -25,6 +36,7 @@ function overrideValue(item, view, version) {
       const kind = existing?.kind || item.kind;
       edit(`${replacing ? "Edit override" : "Create override"}: ${item.key}`, p => {
         text("p", `Target: ${view.profile} / ${env}. ${replacing ? "Saving replaces this environment’s existing override." : "Common stays unchanged."}`, p);
+        secretNameHint(p,item.key,kind,target);
         const value = kind === "secret" ? field(p, "New secret value", "", "password") :
           variableValue(p, "Value", existing?.value ?? item.value ?? "");
         return () => ({key:item.key, env, value:kind === "secret" ? value.value : value.read()});
@@ -62,6 +74,7 @@ function bulkValues(view) {
     edit("Review import", p => {
       text("p", `${view.profile} / ${view.env || "Common"} · ${input.overwrite ? "Overwrite enabled" : "Keep existing values"}`, p);
       text("p", "Select public variables. Secret values stay hidden in this preview. Existing keys retain their kind.", p);
+      for(const warning of result.warnings||[])text("p",`${warning.key}: ${warning.message}`,p).className="value-warning";
       const rows = result.items || [];
       const controls = rows.map(item => {
         const check = field(p, item.action === "add" ? `${item.key} — Store as public variable` : `${item.key} — ${item.action} · ${item.kind}`, "", "checkbox");
@@ -79,6 +92,7 @@ function inlineValue(cell, item, view, version) {
   const inherited = !!view.env && item.source === "common";
   cell.replaceChildren();
   const form = text("form", "", cell); form.className = "inline-value";
+  secretNameHint(form,item.key,item.kind,view);
   const input = document.createElement(item.kind === "secret" ? "input" : "textarea");
   if (item.kind === "secret") input.type = "password";
   const original = item.value ?? "";
@@ -109,30 +123,43 @@ function inlineValue(cell, item, view, version) {
 
 async function loadValues(version) {
   const panel=$("values-panel"), current=profile; panel.replaceChildren();
-  if(!current){text("p","Choose a profile above to begin.",panel);return;}
   try {
+    const vaultState=await api("/api/vault");
+    if(generation!==version)return;
+    renderVaultState(panel,vaultState);
+    if(!current){text("p","Choose a profile above to begin.",panel);return;}
     const view=await api("/api/values?"+new URLSearchParams({profile:current,env:valueEnv}));
     if(generation!==version)return;
+    text("p",view.integrity_verified ? "Storage verified" : "Metadata view · storage integrity not checked",panel).className="value-count";
+    const blocked=["locked_manual","locking","recovery_required"].includes(vaultState.state)||(vaultState.state==="locked"&&vaultState.backend==="passphrase");
+    const mutationButton=(parent,label,action)=>{
+      const control=button(parent,label,action);control.disabled=blocked;
+      if(blocked)control.title="Unlock or recover the vault to change values.";
+      return control;
+    };
     const toolbar=text("div","",panel);toolbar.className="manage-toolbar value-toolbar";
     const label=text("label","Environment ",toolbar), env=text("select","",label);
     for(const name of ["",...view.envs])text("option",name||"Common",env).value=name;
     env.value=view.env;env.onchange=()=>{valueEnv=env.value;load();};
-    button(toolbar,"Create env",()=>edit("Create environment",p=>{const name=field(p,"Name");return()=>({env:name.value});},body=>valueRequest(view,"env.create",body)));
-    if(view.env)button(toolbar,"Remove env",()=>edit("Remove empty environment",p=>{text("p",`Remove ${view.env} after removing its overrides.`,p);return()=>({env:view.env});},body=>valueRequest(view,"env.remove",body),()=>{valueEnv="";load();},true));
-    button(toolbar,"Add value",()=>edit("Add value",p=>{
+    mutationButton(toolbar,"Create env",()=>edit("Create environment",p=>{const name=field(p,"Name");return()=>({env:name.value});},body=>valueRequest(view,"env.create",body)));
+    if(view.env)mutationButton(toolbar,"Remove env",()=>edit("Remove empty environment",p=>{text("p",`Remove ${view.env} after removing its overrides.`,p);return()=>({env:view.env});},body=>valueRequest(view,"env.remove",body),()=>{valueEnv="";load();},true));
+    mutationButton(toolbar,"Add value",()=>edit("Add value",p=>{
       const key=field(p,"Key"),kindLabel=text("label","Kind",p),kind=text("select","",kindLabel);
       for(const name of ["secret","variable"])text("option",name,kind).value=name;
       const secret=field(p,"Value","","password"),variable=variableValue(p,"Value").input;
       variable.parentElement.hidden=true;
+      const warn=secretNameHint(p,"",kind.value,view);
+      key.addEventListener("input",()=>warn(key.value,kind.value));
       kind.onchange=()=>{
         secret.value=variable.value="";
         const isSecret=kind.value==="secret";
         secret.parentElement.hidden=!isSecret;
         variable.parentElement.hidden=isSecret;
+        warn(key.value,kind.value);
       };
       return()=>({action:kind.value+".set",key:key.value,value:(kind.value==="secret"?secret:variable).value,env:view.env});
     },body=>{const {action,...rest}=body;return valueRequest(view,action,rest);}));
-    button(toolbar,"Import .env",()=>bulkValues(view));
+    mutationButton(toolbar,"Import .env",()=>bulkValues(view));
     const table=text("table","",panel);table.className="values-table";
     const head=text("thead","",table),heading=text("tr","",head);
     const columns=["Key","Kind","Value — click to edit","Source", "Actions"].map(title=>{
@@ -160,7 +187,7 @@ async function loadValues(version) {
         const inherited=!!view.env&&item.source==="common";
         row.classList.toggle("value-inherited",inherited);
         const cell=text("td","",row);cell.className="value-cell";
-        const edit=button(cell,item.kind==="secret"?"Replace secret":item.value===""?"Empty value":item.value,()=>inlineValue(cell,item,view,version));
+        const edit=mutationButton(cell,item.kind==="secret"?"Replace secret":item.value===""?"Empty value":item.value,()=>inlineValue(cell,item,view,version));
         edit.className="value-edit";edit.setAttribute("aria-label",inherited?`Create override for ${item.key} in ${view.env}`:`Edit ${item.key}`);
         edit.title=inherited?`Create an override in ${view.env}`:`Edit ${item.key}`;
         const source=text("td","",row);
@@ -168,12 +195,12 @@ async function loadValues(version) {
         badge.className="value-source "+(!view.env?"common":inherited?"inherited":item.overrides?"override":"local");
         const actions=text("td","",row);
         if(!view.env){
-          const override=button(actions,"Override in…",()=>overrideValue(item,view,version));
+          const override=mutationButton(actions,"Override in…",()=>overrideValue(item,view,version));
           override.className="value-override";
-          override.disabled=!view.envs.length;
+          override.disabled=blocked||!view.envs.length;
           override.title=view.envs.length?`Override ${item.key} in an environment`:"Create an environment first.";
         }
-        if(!view.env||item.source==="env")button(actions,view.env&&item.overrides?"Remove override":"Delete",()=>editRemoval(item));
+        if(!view.env||item.source==="env")mutationButton(actions,view.env&&item.overrides?"Remove override":"Delete",()=>editRemoval(item));
       }
     }
     function editRemoval(item){
@@ -189,4 +216,35 @@ async function loadValues(version) {
     if(e.code==="env_not_found"&&valueEnv){valueEnv="";saveNavigation();await load();notice("The selected environment was removed. Showing Common.");}
     else notice(e.message);
   }}
+}
+
+
+function renderVaultState(panel,state) {
+  const section=text("section","",panel);section.className="vault-state";section.setAttribute("aria-label","Vault protection");
+  const labels={uninitialized:"Public-only storage",unlocked:"Vault unlocked",locked:"Vault locked",locked_manual:"Vault manually locked",locking:"Vault lock pending",recovery_required:"Vault recovery required"};
+  const status=text("p","",section);status.setAttribute("role","status");text("strong",labels[state.state]||"Vault state unavailable",status);
+  const message=state.state==="uninitialized" ? "Secrets need one-time setup: devtools vault init. Without a keyring, use --backend passphrase." : state.state==="recovery_required" ? "Inspect existing protection with devtools vault status, then recover it. Do not initialize a replacement key." : state.state==="locked_manual"||state.state==="locking" ? "Running apps keep values already delivered. Unlock to allow new protected changes and executions." : state.backend==="passphrase" ? "Your passphrase session is reused while active." : "System protection can reopen the key silently when allowed.";
+  text("p",message,section);
+  if(state.state==="unlocked") {
+    const lock=button(section,"Lock vault",async()=>{
+      lock.disabled=true;
+      try {await api("/api/actions",{domain:"vault",vault:{action:"lock"}});await load();document.querySelector(".vault-state button")?.focus();}
+      catch(error){notice(error.message);if(lock.isConnected)lock.disabled=false;}
+    });
+    lock.setAttribute("aria-label","Lock vault for all profiles");
+  } else if(["locked","locked_manual"].includes(state.state)) {
+    button(section,"Unlock vault",()=>{
+      edit("Unlock vault",parent=>{
+        text("p","This key session is shared by all profiles.",parent);
+        if(state.backend!=="passphrase") {
+          text("p","System authentication may open a confirmation window.",parent);
+          return()=>({action:"unlock",interactive:true});
+        }
+        const passphrase=field(parent,"Vault passphrase","","password");passphrase.autocomplete="current-password";
+        return()=>{const value=passphrase.value;passphrase.value="";if(!value)throw Error("Enter the vault passphrase.");return {action:"unlock",passphrase:value};};
+      },vault=>({domain:"vault",vault}),async()=>{await load();document.querySelector(".vault-state button")?.focus();});
+      $("editor-target").textContent="All profiles";
+      $("editor-save").textContent="Unlock vault";
+    });
+  }
 }

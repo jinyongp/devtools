@@ -249,3 +249,15 @@ func TestSecretInputIsNotConsumedBeforeProtectionIsAvailable(t *testing.T) {
 		t.Fatal("unavailable protection consumed secret input", code, input.read)
 	}
 }
+
+func TestSecretFrontendPrefixWarningKeepsValuePrivate(t *testing.T) {
+	app := testApp(t)
+	initializeTestVault(t, app)
+	code, out, diagnostic := invoke(t, app, "synthetic-frontend-secret-canary", "sec", "set", "VITE_TOKEN", "--profile", "app", "--stdin")
+	if code != 0 || !strings.Contains(out, "frontend_public_prefix") || strings.Contains(out+diagnostic, "synthetic-frontend-secret-canary") {
+		t.Fatal("frontend warning missing or private value echoed", code)
+	}
+	if code, _, _ := invoke(t, app, "", "var", "get", "VITE_TOKEN", "--profile", "app"); code != 3 {
+		t.Fatal("warning reclassified secret as public")
+	}
+}

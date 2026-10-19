@@ -46,7 +46,7 @@ func metadataSchema() map[string]any {
 }
 
 func changedSchema() map[string]any {
-	return object(map[string]any{"profile": stringSchema(), "changed": map[string]any{"type": "boolean"}}, "profile", "changed")
+	return object(map[string]any{"profile": stringSchema(), "changed": map[string]any{"type": "boolean"}, "warnings": warningsSchema()}, "profile", "changed")
 }
 
 func changedResult(profile string, changed bool) map[string]any {
@@ -168,7 +168,16 @@ func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kin
 		}
 		return state.Unset(kind, request.Args[0], env)
 	})
-	return changedResult(store.Profile, changed), err
+	result := changedResult(store.Profile, changed)
+	if err == nil && action == "set" && kind == values.Secret {
+		if warning := values.FrontendSecretWarning(request.Args[0]); warning != nil {
+			result["warnings"] = []values.Warning{*warning}
+		}
+	}
+	return result, err
+}
+func warningsSchema() map[string]any {
+	return map[string]any{"type": "array", "items": object(map[string]any{"code": stringSchema(), "key": stringSchema(), "message": stringSchema()}, "code", "key", "message")}
 }
 
 func readSecret(ctx context.Context, streams IO, options map[string]string) (string, *protocol.Error) {

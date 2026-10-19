@@ -62,6 +62,10 @@ func diagnosticsOutputSchema() map[string]any {
 		"configured": map[string]any{"type": "boolean"},
 		"directory":  stringSchema(),
 	}, "configured", "directory")
+	vaultSection := diagnosticsSectionSchema(map[string]any{
+		"state":   map[string]any{"enum": []string{"uninitialized", "locked", "unlocked", "locking", "locked_manual", "recovery_required"}},
+		"backend": stringSchema(), "idle_expires_at": stringSchema(), "requires_explicit_unlock": map[string]any{"type": "boolean"},
+	}, "state", "requires_explicit_unlock")
 	issue := object(map[string]any{
 		"section": stringSchema(),
 		"code":    stringSchema(),
@@ -75,10 +79,11 @@ func diagnosticsOutputSchema() map[string]any {
 		"proxy":     proxy,
 		"dashboard": dashboard,
 		"backup":    backup,
+		"vault":     vaultSection,
 		"issues":    map[string]any{"type": "array", "items": issue},
 		"network":   networkDiagnosticsSchema(),
 		"platform":  platformDiagnosticsSchema(),
-	}, "ready", "paths", "profiles", "ports", "processes", "proxy", "dashboard", "backup", "issues", "platform")
+	}, "ready", "paths", "profiles", "ports", "processes", "proxy", "dashboard", "backup", "vault", "issues", "platform")
 }
 
 func (a *App) registerDiagnostics() {

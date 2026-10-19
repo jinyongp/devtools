@@ -1,7 +1,7 @@
 # A11 제품 연결 검토
 
-A11은 진행 중이다. 이 기록은 관리 명령과 공통 provider 연결 단위의 검토다. dashboard 보호 상태 UI·
-진단의 vault 요약·문서/Skill 및 최종 설치물 수용을 포함한 A11 전체 완료는 아니다. 원래 설치물/
+A11은 진행 중이다. 이 기록은 관리 명령·공통 provider·dashboard 보호 상태 UI와 진단 단위의 검토다.
+문서/Skill 및 최종 설치물 수용을 포함한 A11 전체 완료는 아니다. 원래 설치물/
 native 검증은 N01–N05/A12, 전체 변경 리뷰는 Z01의 필수 조건으로 유지한다.
 
 | 영역 | 상태 | 근거 |
@@ -14,7 +14,8 @@ native 검증은 N01–N05/A12, 전체 변경 리뷰는 Z01의 필수 조건으�
 | 긴 Unix 경로 IPC | reviewed Linux; macOS native pending | 실제 실패를 재현한 뒤 100byte 미만 소켓 경로 선택, root별 사용자 전용 private 디렉터리, 기존 OS peer·vault/session/nonce 검증 유지 |
 | 기존 값/실행/backup provider | reviewed Linux | 공개 전용/보호 root 선택, 실제 재사용 세션, frozen foreground/managed 실행, 새 keyset/generation 전송 |
 | dashboard 공통 store·managed 입력 / completion / doctor | reviewed Linux | passive metadata, 공통 frozen preparation·admission, 잠금 진단, lock 없는 이름 completion |
-| dashboard 보호 상태 UI·vault 진단 요약·문서/Skill | pending | 다음 구현 단위 |
+| dashboard 보호 상태 UI·vault 진단 요약 | reviewed Linux | 실제 browser keyboard lock/unlock·오입력 정리·passive polling·390px 화면, HTTP 인증 경계·JSON schema 검사 |
+| 문서/Skill | pending | 다음 구현 단위 |
 
 확인·수정한 결함:
 
@@ -86,3 +87,25 @@ race(values 1.016s), locked doctor의 passive 상태 race(cli 1.747s), 공개 ma
 재시작의 실제 old 유지 race(cli 6.945s), dashboard frozen factory race(1.108s) 통과.
 새 secret 선검사 뒤 cli/values 전체 consumer 회귀도 통과(18.152s/13.961s).
 마지막 오류 remedy/closed code 변경의 services/cli/values 검사가 통과했다.
+
+
+## Dashboard 보호 상태와 진단
+
+동일 origin·bearer 인증 경계에 전역 vault lock/unlock action과 passive 상태 조회를
+연결했다. 초기 설정과 backend 변경은 CLI에 남긴다. 잠긴 상태에서는 metadata 탐색은
+유지하고 보호된 값 변경을 막는다. unlock 입력은 전송 직후 DOM과 pending object에서
+비우며, 응답 불명 상태의 retry에는 passphrase를 재사용하지 않는다. 이는 JS 문자열이나
+HTTP body의 secure erase를 보장한다는 뜻은 아니다. 기존 실행의 값 회수도 약속하지 않는다.
+
+진단은 backend·잠금 상태·명시 해제 필요 여부를 값 없이 반환한다. 상태 polling은
+daemon 생성, native unlock, idle touch를 하지 않는다. deadline 변화만으로 editor를
+다시 그리지 않는다. frontend 공개 prefix 이름에는 CLI/import/dashboard에서 경고를
+제공하되 키 종류를 바꾸거나 입력을 차단하지 않는다. 이름은 노출 가능성의 단서다.
+
+범위의 source/호출자/오류 경로 검토에서 남은 확인된 결함은 없다. 실제 browser에서
+키보드 잠금·해제, 틀린 암호 뒤 빈 입력, focus 복귀, URL/storage canary, 5.5초 passive
+polling의 동일 만료 시각, prefix 경고 표시/해제와 390×844 화면의 body overflow 없음을
+확인했다. 마지막 즉시 입력 정리 변경 뒤 browser 재검사는 1 passed(7.2s).
+전체 dashboard static 검사 33 passed, 영향 Go package race와 전체 Go 회귀 통과.
+마지막 CLI/HTTP warning 및 diagnostics consumer 검사도 통과했다. 이는 native OS
+보호 저장소·설치물 검증이나 전체 접근성 인증을 대신하지 않는다. 문서와 후속 gate는 남는다.

@@ -165,3 +165,14 @@ for (const action of ['Dependencies', 'Restore excluded tasks', 'Cancel', 'Previ
     if (!closeNew) assert.equal(b.$('editor-fields').querySelector('input').value, 'keep me');
     assert.deepEqual(b.calls, []);
   });
+
+test("unlock requests clear ephemeral passphrase after an uncertain response",async()=>{
+  const b=browser();let sent;
+  b.context.api=async(path,body)=>{sent=body;throw Error("connection lost");};
+  b.run(`edit('Unlock vault',p=>{field(p,'Vault passphrase','','password');return()=>({action:'unlock',passphrase:'synthetic-browser-passphrase'});},vault=>({domain:'vault',vault}))`);
+  await b.submit();
+  assert.equal(sent.vault.passphrase,"");
+  assert.equal(b.$('editor-save').textContent,"Unlock vault");
+  assert.match(b.$('editor-error').textContent,/Passphrase cleared/);
+  assert.equal(b.$('editor-fields').querySelector('input').disabled,false);
+});

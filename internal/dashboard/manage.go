@@ -27,17 +27,18 @@ import (
 )
 
 type actionRequest struct {
-	Domain  string            `json:"domain"`
-	Profile string            `json:"profile"`
-	Action  string            `json:"action"`
-	Target  string            `json:"target"`
-	Body    tasks.Object      `json:"body"`
-	Options map[string]string `json:"options"`
-	Change  *values.Change    `json:"change,omitempty"`
-	Process *services.Request `json:"process,omitempty"`
-	Cleanup *cleanupRequest   `json:"cleanup,omitempty"`
-	Backup  *backupRequest    `json:"backup,omitempty"`
-	Network *networkRequest   `json:"network,omitempty"`
+	Vault   *vaultActionRequest `json:"vault,omitempty"`
+	Domain  string              `json:"domain"`
+	Profile string              `json:"profile"`
+	Action  string              `json:"action"`
+	Target  string              `json:"target"`
+	Body    tasks.Object        `json:"body"`
+	Options map[string]string   `json:"options"`
+	Change  *values.Change      `json:"change,omitempty"`
+	Process *services.Request   `json:"process,omitempty"`
+	Cleanup *cleanupRequest     `json:"cleanup,omitempty"`
+	Backup  *backupRequest      `json:"backup,omitempty"`
+	Network *networkRequest     `json:"network,omitempty"`
 }
 type cleanupRequest struct {
 	Action    string   `json:"action"`
@@ -154,6 +155,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	raw, readErr := io.ReadAll(r.Body)
+	defer clear(raw)
 	if readErr != nil {
 		invalidAction(w)
 		return
@@ -165,17 +167,23 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
 	var req actionRequest
-	if d.Decode(&req) != nil || d.Decode(new(any)) != io.EOF || (!project.ValidProfile(req.Profile) && !(req.Domain == "cleanup" && req.Profile == "")) {
+	if d.Decode(&req) != nil || d.Decode(new(any)) != io.EOF || (!project.ValidProfile(req.Profile) && !((req.Domain == "cleanup" || req.Domain == "vault") && req.Profile == "")) {
 		invalidAction(w)
 		return
 	}
-	if req.Cleanup != nil && req.Domain != "cleanup" || req.Backup != nil && req.Domain != "backup" || req.Network != nil && req.Domain != "network" {
+	if req.Vault != nil && req.Domain != "vault" || req.Cleanup != nil && req.Domain != "cleanup" || req.Backup != nil && req.Domain != "backup" || req.Network != nil && req.Domain != "network" {
 		invalidAction(w)
 		return
 	}
 	var result any
 	var err *protocol.Error
 	switch req.Domain {
+	case "vault":
+		if req.Vault == nil || req.Process != nil || req.Change != nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
+			invalidAction(w)
+			return
+		}
+		result, err = s.vaultAction(r.Context(), req.Vault)
 	case "network":
 		if req.Network == nil || req.Process != nil || req.Change != nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
 			invalidAction(w)

@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+import net from "node:net";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -103,5 +104,90 @@ test("dashboard login, value mutation and navigation survive reload", async ({ p
       // Cleanup should not hide the primary smoke failure.
     }
     rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  }
+});
+
+
+async function retireTestVault(root) {
+  // This test owns the isolated root. Use its existing value-free control
+  // handshake for cleanup, without inferring a daemon PID from a file.
+  let endpoint;
+  try { endpoint=JSON.parse(readFileSync(join(root,"data","vault","session.json"),"utf8")); }
+  catch { return; }
+  const socket=net.createConnection(endpoint.endpoint);
+  let buffered=Buffer.alloc(0), waiting, closed=false;
+  const drain=()=>{
+    if(!waiting||buffered.length<4)return;
+    const size=buffered.readUInt32BE(0);
+    if(!size||size>131072){waiting.reject(Error("Invalid private control frame"));waiting=null;return;}
+    if(buffered.length<size+4)return;
+    const frame=buffered.subarray(4,size+4);buffered=buffered.subarray(size+4);
+    const owner=waiting;waiting=null;
+    try {owner.resolve(JSON.parse(frame.toString("utf8")));} catch {owner.reject(Error("Invalid private control response"));}
+  };
+  socket.on("data",chunk=>{buffered=Buffer.concat([buffered,chunk]);drain();});
+  socket.on("error",()=>{if(waiting){waiting.reject(Error("Private control unavailable"));waiting=null;}});
+  socket.on("close",()=>{closed=true;if(waiting){waiting.reject(Error("Private control closed"));waiting=null;}});
+  socket.setTimeout(5000,()=>socket.destroy(Error("Private control timeout")));
+  const frame=()=>new Promise((resolve,reject)=>{if(closed){reject(Error("Private control closed"));return;}waiting={resolve,reject};drain();});
+  try {
+    const hello=await frame();
+    for(const key of ["protocol","vault_id","session_id","endpoint"])expect(hello[key]).toBe(endpoint[key]);
+    expect(hello.control_protocol).toBe(1);
+    const body=Buffer.from(JSON.stringify({protocol:hello.protocol,vault_id:hello.vault_id,session_id:hello.session_id,lock_epoch:hello.lock_epoch,challenge:hello.challenge,operation:"retire"}));
+    const size=Buffer.alloc(4);size.writeUInt32BE(body.length);socket.write(Buffer.concat([size,body]));
+    const result=await frame();expect(result.error).toBeFalsy();expect(result.key).toBeUndefined();
+  } finally {socket.destroy();}
+}
+
+test("vault controls keep metadata passive and clear unlock input",async({page})=>{
+  test.setTimeout(60000);
+  const root=mkdtempSync(join(tmpdir(),"devtools-vault-browser-"));
+  const isolation=join(root,"isolation"),project=join(root,"project");mkdirSync(project,{recursive:true});
+  writeFileSync(join(project,"devtools.toml"),"profile='vault-browser'\n");
+  const env={...process.env,DEVTOOLS_ISOLATED_ROOT:isolation};
+  const passphrase="synthetic-browser-vault-passphrase";
+  try {
+    runCLI(["vault","init","--backend","passphrase","--passphrase-stdin"],project,env,passphrase+"\n");
+    runCLI(["var","set","MESSAGE","--value","visible public value"],project,env);
+    runCLI(["sec","set","TOKEN","--stdin"],project,env,"synthetic-browser-secret-canary");
+    const started=JSON.parse(runCLI(["dashboard"],project,env));
+    await page.goto(started.data.item.url,{waitUntil:"domcontentloaded"});
+    await page.locator("#values-nav").click();
+    await expect(page.getByText("Vault unlocked",{exact:true})).toBeVisible();
+    await expect(page.locator("#values-panel")).not.toContainText("synthetic-browser-secret-canary");
+    await page.getByRole("button",{name:"Lock vault for all profiles"}).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("Vault manually locked",{exact:true})).toBeVisible();
+    await expect(page.getByRole("button",{name:"Edit MESSAGE",exact:true})).toBeDisabled();
+    const status=JSON.parse(runCLI(["vault","status"],project,env)).data.item;
+    expect(status.state).toBe("locked_manual");
+    await page.getByRole("button",{name:"Unlock vault",exact:true}).focus();await page.keyboard.press("Enter");
+    const input=page.getByLabel("Vault passphrase",{exact:true});await expect(input).toBeFocused();
+    await input.fill("synthetic-wrong-passphrase");await page.keyboard.press("Enter");
+    await expect(page.locator("#editor-error")).toContainText("Passphrase cleared");await expect(input).toHaveValue("");
+    await input.fill(passphrase);await page.getByRole("button",{name:"Unlock vault",exact:true}).last().click();
+    await expect(page.locator("#editor")).not.toBeVisible();
+    await expect(page.getByText("Vault unlocked",{exact:true})).toBeVisible();
+    await expect(page.getByRole("button",{name:"Lock vault for all profiles"})).toBeFocused();
+    expect(page.url()).not.toContain(passphrase);
+    const storage=await page.evaluate(()=>JSON.stringify({local:{...localStorage},session:{...sessionStorage}}));
+    expect(storage).not.toContain(passphrase);expect(storage).not.toContain("synthetic-browser-secret-canary");
+    const before=JSON.parse(runCLI(["vault","status"],project,env)).data.item.idle_expires_at;
+    await page.waitForTimeout(5500);
+    expect(JSON.parse(runCLI(["vault","status"],project,env)).data.item.idle_expires_at).toBe(before);
+    await page.getByRole("button",{name:"Add value",exact:true}).click();
+    await page.getByLabel("Key",{exact:true}).fill("VITE_TOKEN");
+    await expect(page.getByText("This name may be published by frontend builds. Keep credentials out of browser bundles.",{exact:true})).toBeVisible();
+    await page.getByRole("combobox",{name:"Kind",exact:true}).selectOption("variable");
+    await expect(page.getByText("This name may be published by frontend builds. Keep credentials out of browser bundles.",{exact:true})).not.toBeVisible();
+    await page.getByRole("button",{name:"Cancel",exact:true}).click();
+    await page.setViewportSize({width:390,height:844});
+    await expect(page.getByRole("button",{name:"Lock vault for all profiles"})).toBeVisible();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:process.env.DEVTOOLS_VAULT_SCREENSHOT||join(root,"vault.png")});
+  } finally {
+    try {runCLI(["dashboard","stop"],project,env);}catch{}
+    try {await retireTestVault(isolation);} finally {rmSync(root,{recursive:true,force:true,maxRetries:20,retryDelay:100});}
   }
 });

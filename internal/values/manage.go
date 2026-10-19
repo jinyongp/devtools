@@ -24,6 +24,7 @@ type ManagedItem struct {
 	Value *string `json:"value,omitempty"`
 }
 type ManagedView struct {
+	PublicPrefixes    []string      `json:"public_prefixes"`
 	IntegrityVerified bool          `json:"integrity_verified"`
 	Profile           string        `json:"profile"`
 	Env               string        `json:"env"`
@@ -41,6 +42,7 @@ type Change struct {
 	RequestID string       `json:"request_id"`
 }
 type ChangeResult struct {
+	Warnings   []Warning    `json:"warnings,omitempty"`
 	Items      []ImportItem `json:"items,omitempty"`
 	Applicable bool         `json:"applicable,omitempty"`
 	Profile    string       `json:"profile"`

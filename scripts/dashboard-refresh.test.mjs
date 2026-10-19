@@ -69,3 +69,13 @@ test("management refresh restores scroll even without paginated task results", a
   await b.run("refreshVisibleView()");
   assert.equal(panel.scrollTop, 140);
 });
+
+test("vault cache deadlines do not repaint the page; lock state changes do",async()=>{
+  const b=browser();
+  b.run('rememberRefreshRead("/api/vault",{state:"unlocked",backend:"passphrase",vault_id:"one",idle_expires_at:"before"})');
+  b.context.api=async path=>{b.calls.push(path);return {state:"unlocked",backend:"passphrase",vault_id:"one",idle_expires_at:"later"};};
+  await b.run("refreshVisibleView()");assert.deepEqual(b.calls,["/api/vault"]);
+  b.calls.length=0;
+  b.context.api=async path=>{b.calls.push(path);return {state:"locked_manual",backend:"passphrase",vault_id:"one"};};
+  await b.run("refreshVisibleView()");assert.deepEqual(b.calls,["/api/vault","load"]);
+});

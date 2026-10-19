@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/backup"
 	"github.com/jinyongp/devtools/internal/dashboard"
@@ -14,6 +15,7 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/proxy"
 	"github.com/jinyongp/devtools/internal/services"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 type Input struct {
@@ -84,7 +86,16 @@ type Issue struct {
 	Code    string "json:\"code\""
 }
 
+type Vault struct {
+	Section
+	State                  vault.SessionState `json:"state"`
+	Backend                string             `json:"backend,omitempty"`
+	IdleExpiresAt          *time.Time         `json:"idle_expires_at,omitempty"`
+	RequiresExplicitUnlock bool               `json:"requires_explicit_unlock"`
+}
+
 type Report struct {
+	Vault     Vault     `json:"vault"`
 	Platform  Platform  `json:"platform"`
 	Network   Network   `json:"network"`
 	Ready     bool      "json:\"ready\""
@@ -128,6 +139,7 @@ func Inspect(ctx context.Context, input Input) (Report, *protocol.Error) {
 		Proxy:     Proxy{Section: healthy()},
 		Dashboard: Dashboard{Section: healthy()},
 		Backup:    Backup{Section: healthy()},
+		Vault:     Vault{Section: healthy()},
 		Issues:    []Issue{},
 	}
 	if !filepath.IsAbs(input.Data) || !filepath.IsAbs(input.Config) || !filepath.IsAbs(input.Cache) {
@@ -143,6 +155,15 @@ func Inspect(ctx context.Context, input Input) (Report, *protocol.Error) {
 		report.issue("platform", protocol.NewError("unsupported_storage", "Private storage requires a supported local filesystem.", 3, nil))
 	}
 
+	session, sessionErr := vault.InspectSession(ctx, filepath.Join(input.Data, "vault"))
+	report.Vault.State = session.State
+	report.Vault.Backend = session.Backend
+	report.Vault.IdleExpiresAt = session.IdleExpiresAt
+	report.Vault.RequiresExplicitUnlock = session.State == vault.LockedManual || session.State == vault.Locking || session.State == vault.Locked && session.Backend == "passphrase"
+	if sessionErr != nil || session.State == vault.RecoveryRequired {
+		report.Vault.Section = Section{Status: "fail", ErrorCode: vault.ErrRecovery.Error()}
+		report.issue("vault", protocol.NewError(vault.ErrRecovery.Error(), "Inspect existing vault protection and recovery state.", 3, nil))
+	}
 	profiles, err := (profilecatalog.Catalog{Data: input.Data}).List(ctx)
 	if err != nil {
 		report.Profiles.Section = Section{Status: "fail", ErrorCode: err.Code}

@@ -49,3 +49,5 @@ binary 89100eb와 candidate 33c9c56의 digest도 원시 자료에 포함했다. 
 8.439±0.840ms·median 8.223ms, 후보 19.493±0.774ms·median 19.236ms였다.
 이 재측정에서도 보호된 실행 준비 비용이 관측되며 앞선 큰 변동의 원인은 확정하지
 않는다. [20회 개별 samples](evidence/A12-injected-run-repeat10.json)를 보존한다.
+
+최신 runtime의 재측정은 [최종 성능 결과](A12-final-performance-results.md)에 보존한다. 위 수치는 이전 준비 단계의 기록으로 유지한다.

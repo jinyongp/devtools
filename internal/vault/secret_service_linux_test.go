@@ -64,13 +64,14 @@ func privateSecretBus(t *testing.T) string {
 // The fixture implements the real D-Bus contract over a private Unix bus. It
 // tests our transport/codec/errors; it is not OS keyring encryption validation.
 type fixtureSecretService struct {
-	mu      sync.Mutex
-	conn    *dbus.Conn
-	keys    map[string][]byte
-	locked  bool
-	fault   string
-	pause   chan struct{}
-	entered chan struct{}
+	mu          sync.Mutex
+	conn        *dbus.Conn
+	keys        map[string][]byte
+	locked      bool
+	fault       string
+	contentType string
+	pause       chan struct{}
+	entered     chan struct{}
 }
 
 func (f *fixtureSecretService) OpenSession(algorithm string, input dbus.Variant) (dbus.Variant, dbus.ObjectPath, *dbus.Error) {
@@ -145,7 +146,11 @@ func (i fixtureSecretItem) GetSecret(session dbus.ObjectPath) (serviceSecret, *d
 	if i.service.fault != "" {
 		return serviceSecret{}, dbus.NewError(i.service.fault, nil)
 	}
-	return serviceSecret{Session: session, Parameters: []byte{}, Value: bytes.Clone(i.service.keys[i.id]), ContentType: "application/octet-stream"}, nil
+	contentType := i.service.contentType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	return serviceSecret{Session: session, Parameters: []byte{}, Value: bytes.Clone(i.service.keys[i.id]), ContentType: contentType}, nil
 }
 func (i fixtureSecretItem) Delete() (dbus.ObjectPath, *dbus.Error) {
 	i.service.mu.Lock()
@@ -210,6 +215,25 @@ func TestSecretServiceRealPrivateBusContract(t *testing.T) {
 		t.Fatal("roundtrip", err)
 	}
 	clear(got)
+	// GNOME uses a fixed text/plain label for its binary Secret.Value bytes.
+	f.mu.Lock()
+	f.contentType = "text/plain"
+	f.mu.Unlock()
+	got, err = p.Unwrap(ctx, wrapped)
+	if err != nil || !bytes.Equal(got, key) {
+		t.Fatal("GNOME binary payload with text MIME label", err)
+	}
+	clear(got)
+	f.mu.Lock()
+	f.contentType = "application/unknown"
+	f.mu.Unlock()
+	if got, err := p.Unwrap(ctx, wrapped); !errors.Is(err, ErrIntegrity) || len(got) != 0 {
+		clear(got)
+		t.Fatal("unrecognized MIME label accepted", err)
+	}
+	f.mu.Lock()
+	f.contentType = "text/plain"
+	f.mu.Unlock()
 	if _, err = p.Wrap(ctx, key); !errors.Is(err, ErrRecovery) {
 		t.Fatal("duplicate", err)
 	}
@@ -340,7 +364,7 @@ func TestNativeSecretServiceLockedCollection(t *testing.T) {
 	unlock := func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		command := exec.CommandContext(ctx, "gnome-keyring-daemon", "--unlock", "--components=secrets")
+		command := exec.CommandContext(ctx, "gnome-keyring-daemon", "--unlock", "--components=secrets", "--control-directory", os.Getenv("GNOME_KEYRING_CONTROL"))
 		command.Stdin = strings.NewReader("synthetic-gnome-keyring-test-password")
 		return command.Run()
 	}

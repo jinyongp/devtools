@@ -63,3 +63,19 @@ alias 해소와 native ACL 생성을 적용하고, 기존 values Unix helper는 
 (22.426s/61.446s), Windows ARM64·Darwin amd64 test binary compile pass.
 release contract 9개 pass. 첫 release 검사에는 writable GOCACHE 지정이 빠져 local
 read-only cache 오류가 났으며, 같은 소스에서 cache 경로를 지정한 재실행으로 확인했다.
+
+## 실제 GNOME의 MIME 응답과 unlock control
+
+`b56e5ce`의 두 macOS Keychain job과 macOS system-network는 실제 pass했다.
+Linux는 파싱 문제를 통과한 뒤 정상 roundtrip의 integrity 실패와 collection 재해제 실패가
+새로 확인됐다. [GNOME 원본 encoder](https://github.com/GNOME/gnome-keyring/blob/main/daemon/dbus/gkd-secret-secret.c)는
+binary Secret.Value에도 고정 `text/plain` MIME을 반환한다. 이를 octet-stream과 함께
+허용하되 bytes의 backend/vault/형식/길이/전체 digest 검증은 계속 적용한다. 텍스트 변환이나
+손상 자료 허용은 없다. 기존 private-bus contract에 GNOME label의 동일 키 roundtrip,
+다른 MIME 거절, text label의 손상 payload 거절을 포함한다.
+
+GNOME fixture는 고정된 private control directory를 만들고 daemon과 unlock helper 모두
+그 디렉터리를 명시한다. 별도 helper가 다른 daemon을 찾거나 시작할 여지를 줄이며,
+실제 Locked property와 unwrap 결과로 해제 여부를 계속 검사한다. 합성 daemon의 직접
+process handle에 대한 종료/회수와 private bus 수명은 유지한다. 이 수정의 실제 GNOME
+전체 pass는 이후 CI에서 확인해야 한다.

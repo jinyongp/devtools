@@ -376,7 +376,11 @@ func (p SecretServiceProtector) Unwrap(ctx context.Context, wrapped []byte) ([]b
 		return nil, secretError(ctx, err)
 	}
 	defer clear(secret.Value)
-	if secret.Session != s.session || len(secret.Parameters) != 0 || secret.ContentType != "application/octet-stream" || len(secret.Value) > MaxKeySlotBytes {
+	// GNOME Keyring returns text/plain even for binary values (its wire encoder
+	// uses that fixed MIME label). Treat the bytes as our typed binary envelope
+	// in either case; never decode text, trim NULs or skip payload verification.
+	validType := secret.ContentType == "application/octet-stream" || secret.ContentType == "text/plain"
+	if secret.Session != s.session || len(secret.Parameters) != 0 || !validType || len(secret.Value) > MaxKeySlotBytes {
 		return nil, ErrIntegrity
 	}
 	return osKeyFromPayload("secret-service", p.VaultID, secret.Value)

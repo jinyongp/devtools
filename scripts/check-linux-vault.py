@@ -29,6 +29,9 @@ def main():
     if not Path.home().name.startswith('devtools-native-secret-'):
         raise RuntimeError('Private bus requires the dedicated synthetic HOME')
     env = dict(os.environ)
+    control = Path(env['XDG_RUNTIME_DIR']) / 'keyring'
+    control.mkdir(mode=0o700)
+    env['GNOME_KEYRING_CONTROL'] = str(control)
 
     def tests(pattern, log, expected, **flags):
         # go -json describes stdout only; dependency downloads go to stderr.
@@ -47,7 +50,8 @@ def main():
     absent = ['TestNativeSecretServiceUnavailableDoesNotActivate']
     tests('^TestNativeSecretServiceUnavailableDoesNotActivate$', 'vault-secret-service-absent.jsonl', absent,
           DEVTOOLS_TEST_NATIVE_SECRET_SERVICE_ABSENT='1')
-    daemon = subprocess.Popen(['gnome-keyring-daemon', '--foreground', '--unlock', '--components=secrets'],
+    daemon = subprocess.Popen(['gnome-keyring-daemon', '--foreground', '--unlock', '--components=secrets',
+                               '--control-directory', str(control)],
                               env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         daemon.stdin.write(b'synthetic-gnome-keyring-test-password')

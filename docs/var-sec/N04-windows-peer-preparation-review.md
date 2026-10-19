@@ -56,3 +56,10 @@ native 결과를 구분하며 후속 결과까지 N04는 pending이다.
 신원 대조와 readiness 연결 사이를 좁히기 위해 실패 시 그 원래 owned handle의
 GetExitCodeProcess 숫자만 기록한다. SIG/PID 추정이나 같은 사용자 대체는 하지 않는다.
 초기 DLL 실패·fixture entry 실패·아직 실행 중인 경우를 현재 근거로 단정하지 않는다.
+
+새 native SID case를 Windows suite의 같은 임시 계정 안에서 먼저 실행하고 60초
+한계를 둔다. 네 필수 parent/subtest pass event와 skip 없음까지 확인한 뒤 기존
+전체 Go suite·vet를 그대로 실행한다. 실패한 native preflight는 전체 suite 성공이
+아니며, 뒤의 검사는 미수행으로 남는다. raw JSON을 별도 artifact로 보존하고 같은
+임시 credential 제거 규칙을 적용한다. native 실패를 찾기 위해 관계없는 전체
+package를 몇 분 기다리는 진단 지연을 줄이며 전체 검사를 대체하지 않는다.

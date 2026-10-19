@@ -188,14 +188,24 @@ jobs:
               } finally { Remove-Item Env:GOARCH }
               $env:DEVTOOLS_TEST_X64_PROVIDER = "$env:RUNNER_TEMP\devtools-provider-suite-amd64.test.exe"
             }
+            & go test -json -count=1 -timeout 60s ./internal/vault -run '^TestNativeWindowsPipePeersRejectOtherSID$' | Tee-Object -FilePath windows-native-peer-results.jsonl
+            if ($LASTEXITCODE -ne 0) { throw 'Actual different-SID pipe preflight failed' }
+            $events = @(Get-Content windows-native-peer-results.jsonl | ForEach-Object { $_ | ConvertFrom-Json })
+            $passed = @($events | Where-Object Action -eq 'pass' | ForEach-Object { $_.Test })
+            foreach ($test in @('TestNativeWindowsPipePeersRejectOtherSID', 'TestNativeWindowsPipePeersRejectOtherSID/client_rejects_other-user_server', 'TestNativeWindowsPipePeersRejectOtherSID/server_rejects_other-user_client', 'TestNativeWindowsPipePeersRejectOtherSID/private_pipe_ACL_rejects_other-user_client')) {
+              if ($passed -notcontains $test) { throw 'Required different-SID native assertion did not actually pass' }
+            }
+            if (@($events | Where-Object Action -eq 'skip').Count -ne 0) { throw 'Native peer preflight was skipped' }
             & go test -json -count=1 -timeout 8m ./... | Tee-Object -FilePath windows-product-suite-results.jsonl
             if ($LASTEXITCODE -ne 0) { throw 'Complete native product suite failed' }
             & go vet ./...
             if ($LASTEXITCODE -ne 0) { throw 'Complete native product vet failed' }
           } finally {
-            if (Test-Path -LiteralPath windows-product-suite-results.jsonl) {
-              $log = [IO.File]::ReadAllText((Join-Path $PWD 'windows-product-suite-results.jsonl'))
-              [IO.File]::WriteAllText((Join-Path $PWD 'windows-product-suite-results.jsonl'), $log.Replace($password, '[redacted disposable credential]'), [Text.UTF8Encoding]::new($false))
+            foreach ($file in @('windows-product-suite-results.jsonl', 'windows-native-peer-results.jsonl')) {
+              if (Test-Path -LiteralPath $file) {
+                $log = [IO.File]::ReadAllText((Join-Path $PWD $file))
+                [IO.File]::WriteAllText((Join-Path $PWD $file), $log.Replace($password, '[redacted disposable credential]'), [Text.UTF8Encoding]::new($false))
+              }
             }
             Remove-Item Env:DEVTOOLS_TEST_USER -ErrorAction SilentlyContinue
             Remove-Item Env:DEVTOOLS_TEST_PASSWORD -ErrorAction SilentlyContinue
@@ -382,6 +392,7 @@ jobs:
             windows-record-publication-results.jsonl
             windows-publication-read-results.jsonl
             windows-product-suite-results.jsonl
+            windows-native-peer-results.jsonl
             project-lifecycle-repeat-results.jsonl
             project-lifecycle-diagnostic-results.jsonl
             windows-legacy-start-results.jsonl

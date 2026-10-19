@@ -24,3 +24,14 @@ fixture를 사용하되, schema가 vault init을 제공하는 빌드만 명시 p
 3 sample/1 warmup smoke를 완료하고 summary/raw 결과를
 `/tmp/devtools-values-plan/A12-perf-protected-smoke/`에 보존했다. 이 smoke는 baseline과의
 비교나 성능 수용 근거가 아니다. baseline/candidate를 같은 설정으로 별도 측정한다.
+
+
+첫 matched 값 관리 비교는 36개 case(10/100/1,000 keys × 12 operations), 각 3 warmup/
+10 sample을 baseline과 candidate에서 같은 설정으로 완료했다. raw 결과는
+`/tmp/devtools-values-plan/A12-values-{baseline,candidate}/`에 보존한다. 이는 CRUD 비용이며
+실행 준비 latency와 다르다. 이에 별도 `project/run-injected-noop`을 추가해 full profile
+주입·snapshot/admission·필터 준비를 실제 자식 `true`의 종료까지 측정한다. 기존 설정 명령
+noop의 inject=false 경로는 유지한다. 이 추가 case도 같은 세 크기와 반복 수로 비교한다.
+
+추가 case의 actual candidate smoke(3 sample/1 warmup)와 기존 perf regression 10개가
+통과했다. `/tmp/devtools-values-plan/A12-injected-smoke/`에 raw 결과를 보존했다.

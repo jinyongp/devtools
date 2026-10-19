@@ -277,6 +277,7 @@ def cases_for(fixture, catalog):
                        ("profile-inspect", ["profile", "inspect", "perf"]),
                        ("cleanup-preview", ["cleanup", "preview"]), ("cleanup-archives", ["cleanup", "archives"])]:
         add("project", name, args)
+    add("project", "run-injected-noop", ["command", "run", "--", "true"])
     for name, args in [("variable-list", ["variable", "list"]), ("variable-get", ["variable", "get", "KEY_000000"]),
                        ("secret-list", ["secret", "list"]), ("env-list", ["env", "list"])]:
         add("values", name, args)

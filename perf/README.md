@@ -184,3 +184,8 @@ session before timing the command. Initialization, migration, Argon2 unlock, hel
 build and daemon retirement are outside timed work. These samples measure ordinary
 commands with an available key session; they do not measure cold unlock latency,
 native key-store API calls or the daemon's retained memory.
+
+The `project/run-injected-noop` case runs `true` through direct execution with the
+fixture's full profile injected. Unlike configured `noop` (`inject=false`), this
+includes value snapshot preparation, admission and output-filter setup even though
+the child produces no output. Select it with `project --case run-injected-noop`.

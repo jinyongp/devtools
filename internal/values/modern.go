@@ -199,12 +199,19 @@ func (s ModernStore) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
 	if err != nil {
 		return nil, storageError()
 	}
-	if raw == nil {
-		return newState(s.Profile), nil
-	}
 	defer clear(raw)
+	return metadataFromRaw(raw, s.Profile)
+}
+func metadataFromRaw(raw []byte, profile string) (*State, *protocol.Error) {
+	ctx := context.Background()
+	if raw == nil {
+		return newState(profile), nil
+	}
 	p, err := vault.DecodeProfile(raw)
 	if err == nil {
+		if p.Name != profile {
+			return nil, VaultError(ctx, vault.ErrIntegrity)
+		}
 		state, e := metadataState(p)
 		if e != nil {
 			return nil, VaultError(ctx, e)
@@ -214,7 +221,7 @@ func (s ModernStore) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
 	if IsLogicalSnapshot(raw) {
 		return nil, VaultError(ctx, vault.ErrInvalid)
 	}
-	state, err := InspectSnapshot(raw, s.Profile)
+	state, err := InspectSnapshot(raw, profile)
 	if err != nil {
 		return nil, VaultError(ctx, vault.ErrInvalid)
 	}

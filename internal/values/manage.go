@@ -24,11 +24,12 @@ type ManagedItem struct {
 	Value *string `json:"value,omitempty"`
 }
 type ManagedView struct {
-	Profile  string        `json:"profile"`
-	Env      string        `json:"env"`
-	Envs     []string      `json:"envs"`
-	Revision string        `json:"revision"`
-	Items    []ManagedItem `json:"items"`
+	IntegrityVerified bool          `json:"integrity_verified"`
+	Profile           string        `json:"profile"`
+	Env               string        `json:"env"`
+	Envs              []string      `json:"envs"`
+	Revision          string        `json:"revision"`
+	Items             []ManagedItem `json:"items"`
 }
 type Change struct {
 	Import    *BatchImport `json:"import,omitempty"`

@@ -38,7 +38,7 @@ func (a *App) registerNetworkEnv() {
 		if e != nil {
 			return nil, e
 		}
-		secretNames, e := (values.Store{Directory: directory, Profile: p.Profile}).CompletionNames(values.Secret, command.Env)
+		secretNames, e := (values.ModernStore{Directory: directory, Profile: p.Profile}).CompletionNames(values.Secret, command.Env)
 		if e != nil && e.Code != "env_not_found" {
 			return nil, e
 		}

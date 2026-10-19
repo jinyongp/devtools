@@ -12,6 +12,7 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 func (a *App) registerDoctor() {
@@ -92,7 +93,7 @@ func (a *App) diagnose(ctx context.Context, streams IO, r Request) (any, *protoc
 	if err != nil {
 		return nil, err
 	}
-	state, err := (values.Store{Directory: directory, Profile: p.Profile}).Read(ctx)
+	state, err := (values.ModernStore{Directory: directory, Profile: p.Profile}).Read(ctx)
 	if err != nil {
 		report.Add("value_storage", "fail", "Profile value storage could not be read.", doctor.Remedy("Check the data directory and its private file permissions.", nil))
 		state = nil
@@ -103,6 +104,34 @@ func (a *App) diagnose(ctx context.Context, streams IO, r Request) (any, *protoc
 			report.Add("env", "fail", "The selected env is undefined.", doctor.Remedy("Create the selected env or choose an existing env.", argv))
 		} else {
 			report.Add("env", "pass", "The selected common/env layer is available.")
+		}
+	}
+	if command.NeedsValues() {
+		status, statusErr := vault.InspectSession(ctx, filepath.Join(filepath.Dir(directory), "vault"))
+		needsProtection := status.State != vault.Uninitialized
+		if state != nil {
+			for _, item := range state.ScopeInventory() {
+				if item.Kind == values.Secret {
+					needsProtection = true
+				}
+			}
+		}
+		if statusErr != nil {
+			return nil, values.VaultError(ctx, statusErr)
+		}
+		if needsProtection {
+			switch {
+			case status.State == vault.Uninitialized:
+				report.Add("vault_session", "fail", "Secret values require explicit local protection setup.", doctor.Remedy("Initialize native protection, or explicitly select --backend passphrase when a keyring is unavailable.", []string{"devtools", "vault", "init"}))
+			case status.State == vault.RecoveryRequired:
+				report.Add("vault_session", "fail", "Vault storage or key protection needs recovery.", doctor.Remedy("Inspect the vault and recover using its existing key; do not initialize a replacement key.", []string{"devtools", "vault", "status"}))
+			case status.State == vault.LockedManual || status.State == vault.Locking || status.State == vault.Locked && status.Backend == "passphrase":
+				report.Add("vault_session", "fail", "The reusable vault session is locked.", doctor.Remedy("Explicitly unlock the vault; use passphrase file/stdin for non-interactive passphrase use.", []string{"devtools", "vault", "unlock"}))
+			case status.State == vault.Unlocked:
+				report.Add("vault_session", "pass", "The vault key session is unlocked; this metadata check does not authenticate profile values.")
+			default:
+				report.Add("vault_session", "skipped", "Native key availability was not checked; diagnosis does not unlock the vault.")
+			}
 		}
 	}
 	if _, err := (tasks.Store{Directory: filepath.Join(filepath.Dir(directory), "tasks"), Profile: p.Profile}).ReadCurrent(ctx); err != nil {

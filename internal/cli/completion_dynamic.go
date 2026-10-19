@@ -337,7 +337,7 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 		if source == "env" {
 			kind = ""
 		}
-		names, _ := (values.Store{Directory: data, Profile: p.Profile}).CompletionNames(kind, selected["env"])
+		names, _ := (values.ModernStore{Directory: data, Profile: p.Profile}).CompletionNames(kind, selected["env"])
 		return names
 	}
 	names, _ := (tasks.Store{Directory: filepath.Join(filepath.Dir(data), "tasks"), Profile: p.Profile}).CompletionIDs(source, selected["workstream"])

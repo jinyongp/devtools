@@ -89,8 +89,8 @@ func apiError(w http.ResponseWriter, e *protocol.Error) {
 func invalidAction(w http.ResponseWriter) {
 	apiError(w, protocol.NewError("invalid_argument", "Provide a valid structured action request.", 2, nil))
 }
-func (s *Server) valueStore(profile string) values.Store {
-	return values.Store{Directory: filepath.Join(filepath.Dir(s.data), "profiles"), Profile: profile}
+func (s *Server) valueStore(profile string) values.ModernStore {
+	return values.CurrentStore(filepath.Join(filepath.Dir(s.data), "profiles"), profile)
 }
 
 func (s *Server) validateProjectCommand(ctx context.Context, p project.Context, name string, envOverride *string) *protocol.Error {
@@ -217,7 +217,10 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 			invalidAction(w)
 			return
 		}
-		manager := services.Store{Data: filepath.Dir(s.data)}
+		manager := services.Store{Data: filepath.Dir(s.data), PrepareInput: s.prepareManagedInput}
+		if directories, e := paths.Current(); e == nil {
+			manager.IsolatedRoot = directories.IsolatedRoot
+		}
 		if req.Process.Action == "start" {
 			p, e := project.Resolve(req.Process.Directory, "")
 			if e != nil {
@@ -320,7 +323,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 // responses can be retried without producing additional encrypted files.
 func (s *Server) backupAction(ctx context.Context, profile string, q backupRequest) (any, *protocol.Error) {
 	c := s.cleanupEngine()
-	engine := backup.Engine{Data: c.Data, Config: c.Config, Cache: c.Cache}
+	engine := backup.Engine{Data: c.Data, Config: c.Config, Cache: c.Cache, VaultMaster: values.SessionMaster(c.Data)}
 	if q.Action == "restore" {
 		if (q.Digest != "") != (q.RequestID != "") {
 			return nil, protocol.NewError("invalid_argument", "Apply requires digest and request ID.", 2, nil)

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/ports"
@@ -36,6 +37,9 @@ func DependenciesFor(command Command, dataRoot, configRoot string) (Dependencies
 	dependencies := Dependencies{VaultDirectory: filepath.Join(dataRoot, "vault")}
 	if command.NeedsValues() {
 		dependencies.ValuesDirectory = filepath.Join(dataRoot, "profiles")
+		dependencies.ValueSnapshot = func(ctx context.Context, profile, env string, inject bool) (*values.Snapshot, *protocol.Error) {
+			return values.CaptureCurrent(ctx, dataRoot, profile, env, inject, time.Now())
+		}
 	}
 	if len(command.Bind)+len(command.Serve) > 0 {
 		defaults, err := ports.DefaultRange(filepath.Join(configRoot, "config.toml"))

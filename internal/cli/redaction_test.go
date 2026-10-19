@@ -10,6 +10,7 @@ import (
 
 func TestForegroundRealBinaryExceptionAndStderrMasking(t *testing.T) {
 	app := testApp(t)
+	initializeTestVault(t, app)
 	canary := "synthetic-byte-token"
 	if code, _, err := invoke(t, app, canary, "sec", "set", "TOKEN", "--stdin", "--profile", "redaction-fixture"); code != 0 {
 		t.Fatal(err)
@@ -36,6 +37,7 @@ func TestForegroundRealBinaryExceptionAndStderrMasking(t *testing.T) {
 
 func TestMaskerLimitRejectsBeforeForegroundChildStarts(t *testing.T) {
 	app := testApp(t)
+	initializeTestVault(t, app)
 	// This exceeds the matcher budget while remaining a valid Windows UTF-16
 	// variable and a valid Unix environment string, so the output gate is tested.
 	large := strings.Repeat("가", 22000)

@@ -10,6 +10,7 @@ import (
 
 func TestDoctorAndRunPreflight(t *testing.T) {
 	app := testApp(t)
+	initializeTestVault(t, app)
 	root := privateTempDir(t)
 	t.Chdir(root)
 	config := `profile="app"

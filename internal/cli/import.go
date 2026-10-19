@@ -45,7 +45,7 @@ func (a *App) importCommand(ctx context.Context, streams IO, request Request) (a
 	var items []values.ImportItem
 	changed, applicable := false, true
 	if dryRun {
-		items, applicable, err = state.PlanImport(parsed, request.ListOptions["var"], env, overwrite)
+		items, applicable, err = store.PlanImport(ctx, parsed, request.ListOptions["var"], env, overwrite)
 	} else {
 		changed, err = store.Update(ctx, func(current *values.State) (bool, *protocol.Error) {
 			var updated bool

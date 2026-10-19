@@ -38,7 +38,8 @@ const restoreReceiptLimit int64 = 128 << 20
 
 type Engine struct {
 	Data, Config, Cache string
-	// VaultMaster is called once per operation, before all disk/launch gates.
+	// VaultMaster selects current logical storage. Protected operations call it
+	// once before disk/launch gates; public-only roots never call the provider.
 	// Nil preserves the legacy reader/writer for roots not yet migrated.
 	VaultMaster func(context.Context) (*vault.Material, error)
 	vaultMaster *vault.Material
@@ -754,7 +755,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	}
 	defer closeScope()
 	e = scoped
-	if e.vaultMaster != nil && expected != "" {
+	if e.VaultMaster != nil && expected != "" {
 		releaseLaunch, err := vault.AcquireLaunchMutation(ctx, filepath.Join(e.Data, "vault"))
 		if err != nil {
 			return plan, values.VaultError(ctx, err)
@@ -839,6 +840,13 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		targetData["tasks"] = append([]byte{}, taskSnapshot.Data...)
 	}
 	hashInput = append(hashInput, []byte("\ntasks:"+digest(taskSnapshot.Data))...)
+	if e.VaultMaster != nil && e.vaultMaster == nil {
+		identity, identityErr := values.PublicSnapshotIdentityHeld(e.Data, target)
+		if identityErr != nil {
+			return plan, values.VaultError(ctx, identityErr)
+		}
+		hashInput = append(hashInput, []byte("\nidentity:"+identity.ProfileID+":"+identity.StorageGeneration)...)
+	}
 	if e.vaultMaster != nil {
 		identity, identityErr := e.vaultStore().SnapshotIdentityHeld(ctx, target)
 		if identityErr != nil {
@@ -962,6 +970,9 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	}
 	valueFiles, replacementErr := e.restoreValueFilesHeld(ctx, target, valuesPayload)
 	if replacementErr != nil {
+		if errors.Is(replacementErr, vault.ErrKeyMissing) || errors.Is(replacementErr, vault.ErrIntegrity) || errors.Is(replacementErr, vault.ErrInvalid) {
+			return plan, values.VaultError(ctx, replacementErr)
+		}
 		return plan, failure("storage_error")
 	}
 	for path, body := range valueFiles {

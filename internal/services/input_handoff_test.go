@@ -8,7 +8,7 @@ import (
 )
 
 func TestLauncherPreparationErrorsRemainValueFreeAndActionable(t *testing.T) {
-	for _, tc := range []struct{ code, want string }{{"redaction_unavailable", "redaction_unavailable"}, {"vault_locked", "vault_locked"}, {"synthetic_sensitive_error_body", "launcher_unavailable"}} {
+	for _, tc := range []struct{ code, want string }{{"redaction_unavailable", "redaction_unavailable"}, {"vault_locked", "vault_locked"}, {"vault_recovery_required", "vault_recovery_required"}, {"key_interaction_required", "key_interaction_required"}, {"synthetic_sensitive_error_body", "launcher_unavailable"}} {
 		read, write, err := os.Pipe()
 		if err != nil {
 			t.Fatal(err)

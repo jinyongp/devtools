@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"os"
@@ -10,8 +11,10 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
+	"github.com/jinyongp/devtools/internal/values"
 )
 
 func TestDashboardProcessStartPreflightRejectsBeforeExecutionRecord(t *testing.T) {
@@ -50,5 +53,53 @@ func TestDashboardProcessStartPreflightRejectsBeforeExecutionRecord(t *testing.T
 	state, portErr := (ports.Store{Directory: filepath.Join(data, "ports")}).Read()
 	if portErr != nil || len(state.Instances) != 0 || len(state.Assignments) != 0 {
 		t.Fatalf("failed preflight mutated port identity: %#v %v", state, portErr)
+	}
+}
+
+func TestDashboardPreparesFrozenPublicInputBeforeManagedRestart(t *testing.T) {
+	ctx := context.Background()
+	data, root := privateTempDir(t), privateTempDir(t)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	args, _ := json.Marshal([]string{exe, "-test.run=^$"})
+	config := "profile='app'\n[commands.web]\ninject=true\nexec=" + string(args) + "\n"
+	if err = os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	store := values.ModernStore{Directory: filepath.Join(data, "profiles"), Profile: "app"}
+	if _, e := store.Update(ctx, func(s *values.State) (bool, *protocol.Error) {
+		return s.Set(values.Variable, "URL", "", "https://before.invalid")
+	}); e != nil {
+		t.Fatal(e)
+	}
+	server := Server{data: filepath.Join(data, "tasks")}
+	prepared, e := server.prepareManagedInput(ctx, services.Record{Profile: "app", Directory: root, Command: "web"}, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer prepared.Release()
+	if prepared.Input.Metadata().Values.Public == nil {
+		t.Fatal("dashboard bypassed generation admission")
+	}
+	if _, e = store.Update(ctx, func(s *values.State) (bool, *protocol.Error) {
+		return s.Set(values.Variable, "URL", "", "https://after.invalid")
+	}); e != nil {
+		t.Fatal(e)
+	}
+	actual, e := prepared.Input.Open()
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer actual.Destroy()
+	found := false
+	for _, item := range actual.Environment {
+		if item == "URL=https://before.invalid" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("dashboard did not freeze actual input")
 	}
 }

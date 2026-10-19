@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/lifecycle"
@@ -161,10 +162,12 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 					if e != nil {
 						return nil, e
 					}
-					state, e := (values.Store{Directory: directory, Profile: p.Profile}).Read(ctx)
+					observed, e := values.CaptureCurrent(ctx, filepath.Dir(directory), p.Profile, command.Env, false, time.Now())
 					if e != nil {
 						return nil, e
 					}
+					state := observed.StateCopy()
+					observed.Destroy()
 					if e := state.CheckEnv(command.Env); e != nil {
 						return nil, e
 					}

@@ -34,6 +34,9 @@ func TestImportCLI(t *testing.T) {
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Fatal("dry-run created storage")
 	}
+	// Preview needs no setup; applying new secrets requires explicit protection.
+	call(3, "--var", "PORT", "--var", "MODE")
+	initializeTestVault(t, a)
 	call(2, "--var", "BAD-KEY", "--var", "PORT")
 	call(2, "--var", "TYPO")
 	call(3, "--env", "missing")

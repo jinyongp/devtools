@@ -304,6 +304,7 @@ secs=["TOKEN"]
 		t.Fatal(err)
 	}
 	app := testApp(t)
+	initializeTestVault(t, app)
 	processes := &cliLifecycleProcesses{}
 	app.lifecycleManager = func(data string) lifecycle.Manager { return lifecycle.Manager{Data: data, Processes: processes} }
 	requestID := tasks.ID()

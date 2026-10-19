@@ -9,6 +9,7 @@ import (
 
 func TestCommandEnvIsPublicAndDoesNotAllocate(t *testing.T) {
 	a := testApp(t)
+	initializeTestVault(t, a)
 	root := privateTempDir(t)
 	t.Chdir(root)
 	config := `profile='app'

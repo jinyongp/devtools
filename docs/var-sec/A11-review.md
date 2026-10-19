@@ -1,7 +1,7 @@
 # A11 제품 연결 검토
 
-A11은 진행 중이다. 이 기록은 먼저 연결한 관리 명령 단위의 검토이며, 기존 var/sec·실행·
-backup·dashboard의 provider 연결이나 전체 A11 수용 완료를 뜻하지 않는다. 원래 설치물/
+A11은 진행 중이다. 이 기록은 관리 명령과 공통 provider 연결 단위의 검토다. dashboard 보호 상태 UI·
+진단의 vault 요약·문서/Skill 및 최종 설치물 수용을 포함한 A11 전체 완료는 아니다. 원래 설치물/
 native 검증은 N01–N05/A12, 전체 변경 리뷰는 Z01의 필수 조건으로 유지한다.
 
 | 영역 | 상태 | 근거 |
@@ -12,8 +12,9 @@ native 검증은 N01–N05/A12, 전체 변경 리뷰는 Z01의 필수 조건으�
 | 명령 입력·schema | reviewed | passphrase argv/env 금지, 명시 파일/파이프 또는 숨김 terminal 입력, 비대화형 입력 없음 즉시 오류, native fallback 없음 |
 | native 초기화 | source reviewed; native pending | OS의 기존 보호 서비스만 선택, 명시 interaction 옵션, isolated root에서는 native 변경 거절 |
 | 긴 Unix 경로 IPC | reviewed Linux; macOS native pending | 실제 실패를 재현한 뒤 100byte 미만 소켓 경로 선택, root별 사용자 전용 private 디렉터리, 기존 OS peer·vault/session/nonce 검증 유지 |
-| 기존 값/실행/backup provider | pending | 다음 구현 단위 |
-| dashboard/진단/completion/문서/Skill | pending | 다음 구현 단위 |
+| 기존 값/실행/backup provider | reviewed Linux | 공개 전용/보호 root 선택, 실제 재사용 세션, frozen foreground/managed 실행, 새 keyset/generation 전송 |
+| dashboard 공통 store·managed 입력 / completion / doctor | reviewed Linux | passive metadata, 공통 frozen preparation·admission, 잠금 진단, lock 없는 이름 completion |
+| dashboard 보호 상태 UI·vault 진단 요약·문서/Skill | pending | 다음 구현 단위 |
 
 확인·수정한 결함:
 
@@ -38,3 +39,50 @@ native 검증은 N01–N05/A12, 전체 변경 리뷰는 Z01의 필수 조건으�
   확인한 기존 control handshake로 종료했다. 실제 사용자 저장소·native keyring은 건드리지 않았다.
 
 이 단위의 검토에 남은 확인된 결함은 없다. pending 영역은 계속 구현한다.
+
+
+## 공통 provider와 실제 제품 경로 연결
+
+- 기존 var/sec/env/import는 ModernStore를 사용한다. 공개 전용 root는 vault 없이 동작한다.
+  새 secret은 명시 init이 필요하며, secret 입력을 소비하기 전에 키 사용 가능 여부를
+  확인한다. 실제 변경도 세션 접근을 다시 확인하므로 그사이 잠금이 생기면 쓰지 않는다.
+  입력 읽는 동안 disk gate를 보유하지 않는다. 명령마다 passphrase를 다시 입력하지 않는다.
+- 공개 조회·secret 이름·profile inspect/diff·completion은 메타데이터만 읽고 세션을
+  열거나 idle 시간을 늘리지 않는다. 공개 조회와 dashboard 관리 view는
+  integrity_verified=false를 명시한다. import 비교에는 placeholder 대신 인증된 실제
+  상태를 사용하며 요청 값은 출력하지 않는다. doctor는 잠긴 세션을 조회만 해 fail과
+  필요한 action을 보여주고, native 해제를 실행해 검사했다고 가장하지 않는다.
+- 실제 실행과 managed 준비는 Root 유무에 맞는 snapshot/ticket을 사용한다. proxy
+  binding을 변경하는 준비도 먼저 인증한다. dashboard process 경로가 기존 legacy
+  start로 남아 있던 지점을 공통 PrepareFrozenInput으로 바꿨다. CLI/dashboard 모두
+  old stop 전에 실제 값을 고정하고 같은 private launcher admission을 사용한다.
+- managed handoff가 공개 ticket을 건너뛰던 결함을 확인해 수정했다. 실제 자식 프로세스
+  재시작 준비 뒤 storage generation을 바꾸면 input_changed로 거절하고 이전 앱은
+  running을 유지한다. dashboard factory도 실제 입력을 고정하는지 검사했다.
+- backup/전송 factory가 보호 root에서 한 번 세션 키를 얻고 논리 archive를 사용한다.
+  공개 전용 root는 provider를 호출하지 않고 같은 논리 형식으로 내보내며, 복원은 새
+  로컬 ID/generation을 사용한다. 공개 전용의 동등 값 복원도 옛 preview를 부활시키지
+  않는다. secret/sealed 이력을 공개 root에 새 평문 파일로 복원하지 않는다.
+- launcher가 recovery/native 오류를 일반 launcher_unavailable로 뭉개던 code allowlist를
+  현재 vault 오류에 맞췄다. 알려진 code만 내보내고 private message/body는 전달하지 않는다.
+  일반 오류는 원문 없는 unlock/status remedy를 제공하며 임의 backend 변경을 제안하지 않는다.
+
+검사: 전체 Go 회귀 통과. values/backup/execution/cli/dashboard/profiles 전체 race
+통과(69.811s/46.204s/4.198s/54.449s/3.429s/1.775s). 공통 managed 준비 수정 뒤
+cli/services/dashboard 전체 race 재검사도 통과(46.776s/9.175s/2.522s). 마지막 secret
+입력 접근 선검사와 오류 remedy 수정은 해당 consumer 검사로 추가 검증한다. 관련 vet와
+Windows ARM64 CLI/macOS ARM64 dashboard test compile도 통과했다. 교차 빌드는 native
+실기를 대신하지 않는다.
+
+실제 빌드한 CLI와 두 isolated root로 공개 변수 저장 → 명시 보호 설정 → secret 저장 →
+기본 출력 마스킹 → 잠긴 상태의 metadata read/실행 거절 → 명시 해제 → 실제 age 전송/
+새 root import → 마스킹 실행을 확인했다. 새 디스크 자료에는 합성 secret canary가
+없음을 검사했고 두 session daemon은 peer 확인 뒤 종료했다. native keyring/실제 사용자
+저장소는 사용하지 않았다. 이 단위의 범위에는 남은 확인된 결함이 없으며, pending UI/문서/
+설치물·native gate는 계속 유지한다.
+
+마지막 추가 검사: secret stdin 접근 선검사 race(cli 2.783s), invalid profile의 무접근
+race(values 1.016s), locked doctor의 passive 상태 race(cli 1.747s), 공개 managed
+재시작의 실제 old 유지 race(cli 6.945s), dashboard frozen factory race(1.108s) 통과.
+새 secret 선검사 뒤 cli/values 전체 consumer 회귀도 통과(18.152s/13.961s).
+마지막 오류 remedy/closed code 변경의 services/cli/values 검사가 통과했다.

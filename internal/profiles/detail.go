@@ -117,7 +117,7 @@ func (c Catalog) listHeld(ctx context.Context) ([]Summary, *protocol.Error) {
 	for _, name := range names {
 		summary := Summary{Profile: name, Values: valuesPresent[name], Tasks: tasksPresent[name], InstanceCount: instanceCounts[name], ProcessCount: processCounts[name], ActiveProcessCount: activeCounts[name]}
 		if summary.Values {
-			state, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: name}).ReadHeld(ctx)
+			state, readErr := (values.ModernStore{Directory: filepath.Join(c.Data, "profiles"), Profile: name}).ReadHeld(ctx)
 			if readErr != nil {
 				return nil, readErr
 			}
@@ -170,7 +170,7 @@ func (c Catalog) inspectHeld(ctx context.Context, profile string) (Detail, *prot
 	detail.Processes = []Process{}
 
 	if detail.Values {
-		state, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: profile}).ReadHeld(ctx)
+		state, readErr := (values.ModernStore{Directory: filepath.Join(c.Data, "profiles"), Profile: profile}).ReadHeld(ctx)
 		if readErr != nil {
 			return Detail{}, readErr
 		}

@@ -64,7 +64,7 @@ func (c *launcherInputChannel) close() {
 }
 func launcherFailureCode(code string) string {
 	switch code {
-	case "input_changed", "redaction_unavailable", "vault_locked", "key_missing", "integrity_failed", "recovery_required", "lock_pending", "input_snapshot_expired", "value_expired", "invalid_input_snapshot", "launch_canceled", "key_session_protocol_mismatch":
+	case "input_changed", "redaction_unavailable", "vault_locked", "key_missing", "integrity_failed", "recovery_required", "lock_pending", "input_snapshot_expired", "value_expired", "invalid_input_snapshot", "launch_canceled", "key_session_protocol_mismatch", "vault_recovery_required", "key_backend_unavailable", "key_access_denied", "key_interaction_required", "key_backend_locked", "invalid_vault_format", "vault_input_too_large":
 		return code
 	default:
 		return "launcher_unavailable"
@@ -208,7 +208,13 @@ func ReceiveLauncherInput(ctx context.Context, in io.ReadCloser, out io.WriteClo
 	if e = payload.Validate(time.Now()); e != nil {
 		return nil, e
 	}
-	if ticket := metadata.Values.Launch; ticket != nil {
+	if ticket := metadata.Values.Public; ticket != nil {
+		admission, err := vault.BeginPublicLaunch(ctx, filepath.Join(data, "vault"), metadata.InputID, *ticket)
+		if err != nil {
+			return nil, values.VaultError(ctx, err)
+		}
+		bound.admission = admission
+	} else if ticket := metadata.Values.Launch; ticket != nil {
 		client, err := vault.OpenSessionClient(filepath.Join(data, "vault"))
 		if err != nil {
 			return nil, values.VaultError(ctx, err)

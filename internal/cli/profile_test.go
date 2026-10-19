@@ -22,7 +22,9 @@ func TestProfileExportImportAcrossStores(t *testing.T) {
 	}
 
 	source := testApp(t)
+	initializeTestVault(t, source)
 	destination := testApp(t)
+	initializeTestVault(t, destination)
 	identity := filepath.Join(root, "identity.txt")
 	recipient := filepath.Join(root, "recipient.txt")
 	archive := filepath.Join(root, "app.age")
@@ -124,6 +126,7 @@ func TestProfileExportImportAcrossStores(t *testing.T) {
 
 func TestProfileListAndInspectHideStoredValues(t *testing.T) {
 	app := testApp(t)
+	initializeTestVault(t, app)
 	profile := []string{"--profile", "app"}
 	if code, _, diagnostic := invoke(t, app, "", append([]string{"env", "create", "local"}, profile...)...); code != 0 {
 		t.Fatal(diagnostic)
@@ -213,6 +216,7 @@ func TestProfileInspectCountsOnlyCurrentTaskDefinitions(t *testing.T) {
 
 func TestProfileDiffIsMetadataOnly(t *testing.T) {
 	app := testApp(t)
+	initializeTestVault(t, app)
 	for _, profile := range []string{"left", "right"} {
 		if code, _, diagnostic := invoke(t, app, "", "env", "create", "local", "--profile", profile); code != 0 {
 			t.Fatal(diagnostic)

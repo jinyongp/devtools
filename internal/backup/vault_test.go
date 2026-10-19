@@ -380,3 +380,46 @@ func TestProtectedRestoreDrainsLaunchLeaseAndRejectsStalePreview(t *testing.T) {
 		t.Fatal("replay rolled back later state", err)
 	}
 }
+
+func TestCurrentPublicBackupUsesFreshGenerationWithoutAKeySession(t *testing.T) {
+	ctx := context.Background()
+	root := privateTestRoot(t)
+	calls := 0
+	engine := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache"), VaultMaster: func(context.Context) (*vault.Material, error) { calls++; return nil, vault.ErrUnavailable }}
+	store := values.ModernStore{Directory: filepath.Join(engine.Data, "profiles"), Profile: "app"}
+	if _, e := store.Update(ctx, func(s *values.State) (bool, *protocol.Error) {
+		return s.Set(values.Variable, "URL", "", "https://example.invalid")
+	}); e != nil {
+		t.Fatal(e)
+	}
+	identity, recipient := backupIdentity(t)
+	if _, e := engine.Configure(filepath.Join(root, "safety"), recipient); e != nil {
+		t.Fatal(e)
+	}
+	archive, e := engine.Create(ctx, "app", filepath.Join(root, "public.age"), recipient)
+	if e != nil {
+		t.Fatal(e)
+	}
+	preview, e := engine.Restore(ctx, archive.Path, identity, "app", "app", "", "", true)
+	if e != nil {
+		t.Fatal(e)
+	}
+	id := "00000000-0000-4000-8000-000000000151"
+	applied, e := engine.Restore(ctx, archive.Path, identity, "app", "app", preview.Digest, id, true)
+	if e != nil || !applied.Applied {
+		t.Fatal("public apply", e)
+	}
+	if _, e = engine.Restore(ctx, archive.Path, identity, "app", "app", preview.Digest, "00000000-0000-4000-8000-000000000152", true); e == nil || e.Code != "revision_conflict" {
+		t.Fatal("identical public restore revived stale preview", e)
+	}
+	replay, e := engine.Restore(ctx, archive.Path, identity, "app", "app", preview.Digest, id, true)
+	if e != nil || !replay.Replayed {
+		t.Fatal("public restore replay", e)
+	}
+	if calls != 0 {
+		t.Fatal("public backup invoked session provider")
+	}
+	if _, err := os.Stat(filepath.Join(engine.Data, "vault", "key-slot.json")); !os.IsNotExist(err) {
+		t.Fatal("public backup initialized protection")
+	}
+}

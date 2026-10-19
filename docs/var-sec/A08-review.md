@@ -17,7 +17,7 @@ pipe로만 전달한다. secret payload를 launcher의 argv/env·디스크·공�
 | port 소비자 | reviewed Linux | 값·binding·할당은 미리 고정, old stop 뒤 해당 할당의 유효성/가용성 확인과 claim만 수행; latest 값 대체 없음 |
 | 요청 재시도 | reviewed Linux | execution ID/opaque input ID/목표를 고정; frozen 입력이 있는 terminal 실패의 batch 재시도는 새 UUID로 바꾸지 않음 |
 | 공개 출력·저장 | reviewed | 원문 fmt/JSON 금지 유지, input ID는 random; plaintext digest로 추측 oracle을 만들지 않음; control task context 미상속 |
-| 복구·키 회전과의 결합 | pending A10/A12 | restore/rotation은 admission gate 및 generation 변경과 연결하고 실제 fault matrix를 재검증해야 함 |
+| 복구·키 회전과의 결합 | reviewed Linux; native pending N05/A12 | 실제 restore/rotation과 generation/epoch admission 검사, 최종 설치물/native fault matrix는 필수 후속 검증 |
 | native 실기 | pending A12 | Windows x64/ARM64, macOS, 실제 WSL 재시작은 기존 Actions/통합 gate에서 확인; cross build를 실기로 세지 않음 |
 
 Linux 실제 key-session daemon, launcher, 앱 프로세스와 실제 encrypted profile을
@@ -87,3 +87,8 @@ profile 자체의 integrity_verified는 false다. 준비 metadata 복사로 내�
 vault 및 macOS ARM64 execution test binary 교차 빌드 통과. 이 단위의 source 리뷰에
 남은 확인된 결함은 없다. 원래 설치물/native 최종 요구는 N05에 그대로 보존하며 A11 연결
 뒤 수행한다. A08/A10 source 완료가 N05/A12/Z01의 통과를 의미하지 않는다.
+
+A11 provider 연결 검토에서 managed handoff의 공개 ticket 처리와 dashboard frozen
+preparation 누락을 확인해 공통 경로로 연결했다. 실제 public managed 재시작 준비 뒤
+generation 교체가 일어나도 old stop 이전 거절과 기존 running 유지를 검증했다.
+현재 source 검증 기록은 A11-review.md에 이어 기록하며 native/설치물 검증은 남아 있다.

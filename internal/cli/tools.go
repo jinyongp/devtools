@@ -21,16 +21,16 @@ func userDataDirectory() (string, *protocol.Error) {
 	return filepath.Join(dirs.Data, "profiles"), nil
 }
 
-func (a *App) store(options map[string]string) (values.Store, *protocol.Error) {
+func (a *App) store(options map[string]string) (values.ModernStore, *protocol.Error) {
 	p, err := project.Resolve(".", options["profile"])
 	if err != nil {
-		return values.Store{}, err
+		return values.ModernStore{}, err
 	}
 	dir, err := a.dataDirectory()
 	if err != nil {
-		return values.Store{}, err
+		return values.ModernStore{}, err
 	}
-	return values.Store{Directory: dir, Profile: p.Profile}, nil
+	return values.CurrentStore(dir, p.Profile), nil
 }
 
 func profileOptions(withEnv bool) []Option {
@@ -80,10 +80,10 @@ func (a *App) registerTools() {
 				}
 			}
 			if action == "list" {
-				command.Output = object(map[string]any{"profile": stringSchema(), "items": map[string]any{"type": "array", "items": metadataSchema()}}, "profile", "items")
+				command.Output = object(map[string]any{"profile": stringSchema(), "items": map[string]any{"type": "array", "items": metadataSchema()}, "integrity_verified": map[string]any{"type": "boolean"}}, "profile", "items", "integrity_verified")
 			}
 			if action == "get" {
-				command.Output = object(map[string]any{"profile": stringSchema(), "value": stringSchema(), "metadata": metadataSchema()}, "profile", "value", "metadata")
+				command.Output = object(map[string]any{"profile": stringSchema(), "value": stringSchema(), "metadata": metadataSchema(), "integrity_verified": map[string]any{"type": "boolean"}}, "profile", "value", "metadata", "integrity_verified")
 			}
 			command.Run = func(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
 				return a.valueCommand(ctx, streams, request, kind, action)
@@ -135,19 +135,26 @@ func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kin
 		}
 		if action == "list" {
 			items, err := state.List(kind, env)
-			return map[string]any{"profile": store.Profile, "items": items}, err
+			return map[string]any{"profile": store.Profile, "items": items, "integrity_verified": false}, err
 		}
 		value, metadata, err := state.GetVariable(request.Args[0], env)
-		return map[string]any{"profile": store.Profile, "value": value, "metadata": metadata}, err
+		return map[string]any{"profile": store.Profile, "value": value, "metadata": metadata, "integrity_verified": false}, err
 	}
 	value := request.Options["value"]
 	if action == "set" && kind == values.Secret {
+		_, fromFile := request.Options["file"]
+		if fromFile == (request.Options["stdin"] == "true") {
+			return nil, argumentError("Select exactly one secret input: --file or --stdin.", "")
+		}
 		// Check scope before consuming a potentially blocking input stream.
 		state, err := store.Read(ctx)
 		if err != nil {
 			return nil, err
 		}
 		if err := state.CheckEnv(env); err != nil {
+			return nil, err
+		}
+		if err = store.RequireSecretWrite(ctx); err != nil {
 			return nil, err
 		}
 		value, err = readSecret(ctx, streams, request.Options)

@@ -7,6 +7,7 @@ import (
 	"github.com/jinyongp/devtools/internal/backup"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/values"
 )
 
 func (a *App) backupEngine() (backup.Engine, *protocol.Error) {
@@ -18,7 +19,7 @@ func (a *App) backupEngine() (backup.Engine, *protocol.Error) {
 	if failure != nil {
 		return backup.Engine{}, failure
 	}
-	return backup.Engine{Data: filepath.Dir(d), Config: dirs.Config, Cache: dirs.Cache}, nil
+	return backup.Engine{Data: filepath.Dir(d), Config: dirs.Config, Cache: dirs.Cache, VaultMaster: values.SessionMaster(filepath.Dir(d))}, nil
 }
 
 func filePathOption(name string, required bool) Option {

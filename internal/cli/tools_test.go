@@ -33,6 +33,7 @@ func invoke(t *testing.T, app *App, input string, args ...string) (int, string, 
 
 func TestValueCommands(t *testing.T) {
 	app := testApp(t)
+	initializeTestVault(t, app)
 	profile := []string{"--profile", "app"}
 	call := func(want int, input string, args ...string) string {
 		t.Helper()
@@ -140,6 +141,7 @@ func TestNamedAndDirectRun(t *testing.T) {
 
 func TestSecretFileAndRawOutput(t *testing.T) {
 	app := testApp(t)
+	initializeTestVault(t, app)
 	root := privateTempDir(t)
 	file := filepath.Join(root, "secret")
 	if err := os.WriteFile(file, []byte("true\n"), 0600); err != nil {

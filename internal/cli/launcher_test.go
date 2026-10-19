@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/execution"
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
@@ -493,4 +494,83 @@ func TestFrozenLauncherRealProcessRestartAndLock(t *testing.T) {
 		t.Fatal("known spawn failure did not drain", err)
 	}
 
+}
+
+func TestPublicManagedRestartRejectsReplacedGenerationBeforeOldStop(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	app := testApp(t)
+	root := privateTempDir(t)
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	args, _ := json.Marshal([]string{executable, "__launcher-test-app", filepath.Join(root, "observed.json")})
+	config := "profile='app'\n[commands.web]\ninject=true\nexec=" + string(args) + "\n"
+	if err = os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, diagnostic := invoke(t, app, "", "var", "set", "TOKEN", "--profile", "app", "--value", "public-token"); code != 0 {
+		t.Fatal(diagnostic)
+	}
+	service, e := app.serviceStore()
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		records, _ := service.List(cleanup, "")
+		for _, r := range records {
+			if r.EndedAt == nil {
+				service.Apply(cleanup, services.Request{Action: "stop", ID: r.ID, RequestID: tasks.ID()})
+			}
+		}
+	})
+	first, e := service.Apply(ctx, services.Request{Action: "start", Directory: root, Command: "web", RequestID: tasks.ID()})
+	if e != nil || first.Item.State != "running" {
+		t.Fatal("public managed start", e)
+	}
+	original := service.PrepareInput
+	service.PrepareInput = func(ctx context.Context, r services.Record, n *network.ExecutionSnapshot) (execution.Prepared, *protocol.Error) {
+		prepared, e := original(ctx, r, n)
+		if e != nil {
+			return prepared, e
+		}
+		finish, err := vault.AcquireLaunchMutation(ctx, filepath.Join(service.Data, "vault"))
+		if err != nil {
+			prepared.Release()
+			return execution.Prepared{}, values.VaultError(ctx, err)
+		}
+		release, err := maintenance.AcquireExclusive(ctx, service.Data)
+		if err != nil {
+			finish()
+			prepared.Release()
+			return execution.Prepared{}, values.VaultError(ctx, err)
+		}
+		logical, err := values.PublicLogicalSnapshotHeld(ctx, service.Data, r.Profile)
+		if err == nil {
+			var files map[string][]byte
+			files, err = values.PreparePublicRestoreHeld(ctx, service.Data, r.Profile, logical)
+			if err == nil {
+				err = maintenance.Replace(service.Data, files)
+			}
+		}
+		clear(logical)
+		release()
+		finish()
+		if err != nil {
+			prepared.Release()
+			return execution.Prepared{}, values.VaultError(ctx, err)
+		}
+		return prepared, nil
+	}
+	_, e = service.Apply(ctx, services.Request{Action: "restart", ID: first.Item.ID, RequestID: tasks.ID()})
+	if e == nil || e.Code != "input_changed" {
+		t.Fatal("managed launcher admitted stale public generation", e)
+	}
+	current, e := service.Status(ctx, first.Item.ID)
+	if e != nil || current.State != "running" {
+		t.Fatal("generation rejection stopped old app", e, current.State)
+	}
 }

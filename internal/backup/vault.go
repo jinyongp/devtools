@@ -17,6 +17,23 @@ func (e Engine) withVault(ctx context.Context) (Engine, func(), *protocol.Error)
 	if e.VaultMaster == nil || e.vaultMaster != nil {
 		return e, func() {}, nil
 	}
+	k, err := (vault.KeyFileStore{Directory: filepath.Join(e.Data, "vault")}).Read()
+	if err != nil {
+		if errors.Is(err, vault.ErrKeyMissing) {
+			release, gateErr := maintenance.AcquireShared(ctx, e.Data)
+			if gateErr != nil {
+				return e, nil, values.VaultError(ctx, gateErr)
+			}
+			check := vault.CheckPublicRootHeld(e.Data)
+			release()
+			if check == nil {
+				return e, func() {}, nil
+			} else {
+				return e, nil, values.VaultError(ctx, check)
+			}
+		}
+		return e, nil, values.VaultError(ctx, err)
+	}
 	master, err := e.VaultMaster(ctx)
 	if err != nil {
 		return e, nil, values.VaultError(ctx, err)
@@ -28,11 +45,6 @@ func (e Engine) withVault(ctx context.Context) (Engine, func(), *protocol.Error)
 		master.Destroy()
 		return e, nil, values.VaultError(ctx, vault.ErrLocked)
 	}
-	k, err := (vault.KeyFileStore{Directory: filepath.Join(e.Data, "vault")}).Read()
-	if err != nil {
-		master.Destroy()
-		return e, nil, values.VaultError(ctx, err)
-	}
 	e.vaultMaster = master
 	e.vaultID = k.VaultID
 	return e, master.Destroy, nil
@@ -43,6 +55,9 @@ func (e Engine) vaultStore() vault.FileStore {
 func (e Engine) valueSnapshotHeld(ctx context.Context, name string) ([]byte, error) {
 	if e.vaultMaster != nil {
 		return e.vaultStore().LogicalSnapshotHeld(ctx, name)
+	}
+	if e.VaultMaster != nil {
+		return values.PublicLogicalSnapshotHeld(ctx, e.Data, name)
 	}
 	return profilekey.Snapshot(filepath.Join(e.Data, "profiles"), name, "values", limit)
 }
@@ -70,9 +85,15 @@ func (e Engine) restoreValueFilesHeld(ctx context.Context, name string, data []b
 	if e.vaultMaster != nil {
 		return values.PrepareVaultRestoreHeld(ctx, e.Data, e.vaultID, e.vaultMaster, name, data)
 	}
+	if e.VaultMaster != nil {
+		return values.PreparePublicRestoreHeld(ctx, e.Data, name, data)
+	}
 	return profilekey.Replacement(filepath.Join(e.Data, "profiles"), name, "values", data)
 }
 func (e Engine) checkVaultRootHeld() error {
+	if e.VaultMaster != nil && e.vaultMaster == nil {
+		return vault.CheckPublicRootHeld(e.Data)
+	}
 	id, protected, err := maintenance.ProtectedRootHeld(e.Data)
 	if err != nil {
 		return err

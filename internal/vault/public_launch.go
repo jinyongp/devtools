@@ -34,15 +34,15 @@ func validLaunchRecord(r launchRecord) bool {
 // CheckPublicRootHeld closes a race with root initialization. Callers hold the
 // data-root maintenance gate; no native key lookup or session interaction occurs.
 func CheckPublicRootHeld(root string) error {
-	if _, protected, err := maintenance.ProtectedRootHeld(root); err != nil {
-		return ErrRecovery
-	} else if protected {
-		return ErrInputChanged
-	}
 	if _, err := (KeyFileStore{Directory: filepath.Join(root, "vault")}).Read(); err == nil {
 		return ErrInputChanged
 	} else if !errors.Is(err, ErrKeyMissing) {
 		return err
+	}
+	if _, protected, err := maintenance.ProtectedRootHeld(root); err != nil {
+		return ErrRecovery
+	} else if protected {
+		return ErrKeyMissing
 	}
 	if _, err := os.Lstat(filepath.Join(root, catalogRelative)); err == nil {
 		return ErrKeyMissing

@@ -15,6 +15,7 @@ func TestDiagnosticsReportIsReadOnlyMetadata(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
 
 	app := testApp(t)
+	initializeTestVault(t, app)
 	if code, _, diagnostic := invoke(t, app, "DIAGNOSTICS-CANARY", "sec", "set", "TOKEN", "--profile", "app", "--stdin"); code != 0 {
 		t.Fatal(code, diagnostic)
 	}

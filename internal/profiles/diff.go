@@ -100,7 +100,7 @@ func (c Catalog) canonicalHeld(ctx context.Context, profile string) (Canonical, 
 		return result, protocol.NewError("profile_not_found", "The selected profile does not exist in devtools storage.", 3, map[string]any{"profile": profile})
 	}
 	if summary.Values {
-		state, readErr := (values.Store{Directory: filepath.Join(c.Data, "profiles"), Profile: profile}).ReadHeld(ctx)
+		state, readErr := (values.ModernStore{Directory: filepath.Join(c.Data, "profiles"), Profile: profile}).ReadHeld(ctx)
 		if readErr != nil {
 			return result, readErr
 		}

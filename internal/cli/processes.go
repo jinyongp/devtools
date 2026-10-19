@@ -256,35 +256,7 @@ func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 // prepareManagedInput performs all value/config/tool work before the launcher
 // is admitted and before a restart stops its old execution.
 func (a *App) prepareManagedInput(ctx context.Context, r services.Record, networkSnapshot *network.ExecutionSnapshot) (execution.Prepared, *protocol.Error) {
-	p, e := project.Resolve(r.Directory, "")
-	if e != nil {
-		return execution.Prepared{}, e
-	}
-	if p.Profile != r.Profile || p.Root != r.Directory {
-		return execution.Prepared{}, protocol.NewError("instance_conflict", "Project identity changed.", 3, nil)
-	}
-	command, e := execution.ResolveConfigured(p, r.Command, r.EnvOverride, nil)
-	if e != nil {
-		return execution.Prepared{}, e
-	}
-	command.Network = networkSnapshot
-	dependencies, e := a.executionDependencies(command)
-	if e != nil {
-		return execution.Prepared{}, e
-	}
-	dependencies.CaptureOutput = r.Capture
-	dependencies.DeferServing = true
-	dependencies.IsolatedRoot = r.IsolatedRoot
-	prepared, e := execution.PrepareInput(ctx, command, dependencies, os.Environ(), execution.PlanOptions{})
-	if e != nil {
-		return execution.Prepared{}, e
-	}
-	checks := prepared.Checks(ctx, os.Environ(), false)
-	if !execution.ChecksPassed(checks) {
-		prepared.Release()
-		return execution.Prepared{}, protocol.NewError("requirements_failed", "Command prerequisites are not satisfied. Run devtools doctor for diagnostics.", 3, map[string]any{"checks": checks})
-	}
-	return prepared, nil
+	return services.PrepareFrozenInput(ctx, r, networkSnapshot, a.executionDependencies)
 }
 
 func ServePreparedProcessWithLease(ctx context.Context, data, id string, lease *os.File) error {

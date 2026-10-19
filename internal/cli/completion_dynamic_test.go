@@ -16,6 +16,7 @@ import (
 
 func TestDynamicCompletion(t *testing.T) {
 	a := testApp(t)
+	initializeTestVault(t, a)
 	projectDir := privateTempDir(t)
 	t.Chdir(projectDir)
 	if err := os.WriteFile("devtools.toml", []byte("profile = 'app'\n[ports.web]\nport = 38082\n[proxies.web]\nhost = 'web.localhost'\nport = 'web'\n[commands.web]\nexec = ['echo', 'CANARY-VALUE']\n"), 0600); err != nil {
@@ -61,6 +62,10 @@ func TestDynamicCompletion(t *testing.T) {
 			}
 			if entry.IsDir() {
 				out[path] = "dir"
+				return nil
+			}
+			if entry.Type()&os.ModeSocket != 0 {
+				out[path] = "socket"
 				return nil
 			}
 			b, err := os.ReadFile(path)

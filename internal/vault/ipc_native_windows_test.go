@@ -22,7 +22,11 @@ func init() { nativePeerFixture = runWindowsPeerFixture }
 // A deliberately public fixture pipe lets the peer check run independently of
 // the production pipe ACL. No key, session endpoint file or request uses it.
 func nativePeerTestPipe(name string) (windows.Handle, error) {
-	sd, err := windows.SecurityDescriptorFromString("D:P(A;;GA;;;WD)")
+	return nativePeerPipe(name, "D:P(A;;GA;;;WD)", true)
+}
+
+func nativePeerPipe(name, descriptor string, rejectRemote bool) (windows.Handle, error) {
+	sd, err := windows.SecurityDescriptorFromString(descriptor)
 	if err != nil {
 		return 0, err
 	}
@@ -31,8 +35,12 @@ func nativePeerTestPipe(name string) (windows.Handle, error) {
 	if err != nil {
 		return 0, err
 	}
+	mode := uint32(windows.PIPE_TYPE_BYTE | windows.PIPE_READMODE_BYTE | windows.PIPE_WAIT)
+	if rejectRemote {
+		mode |= windows.PIPE_REJECT_REMOTE_CLIENTS
+	}
 	return windows.CreateNamedPipe(ptr, windows.PIPE_ACCESS_DUPLEX|windows.FILE_FLAG_OVERLAPPED|windows.FILE_FLAG_FIRST_PIPE_INSTANCE,
-		windows.PIPE_TYPE_BYTE|windows.PIPE_READMODE_BYTE|windows.PIPE_WAIT|windows.PIPE_REJECT_REMOTE_CLIENTS,
+		mode,
 		1, 4096, 4096, 0, &attrs)
 }
 
@@ -237,6 +245,46 @@ func TestNativeWindowsPipePeersRejectOtherSID(t *testing.T) {
 		defer windows.CloseHandle(handle)
 		process := child(t, "denied-client", name)
 		wait(t, process)
+	})
+	t.Run("remote UNC clients are rejected", func(t *testing.T) {
+		owner, err := windows.GetCurrentProcessToken().GetTokenUser()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Same user/SYSTEM ACL as production: only the remote-rejection mode
+		// differs. A successful control establishes actual SMB reachability.
+		controlName := endpoint()
+		control, err := nativePeerPipe(controlName, "D:P(A;;GA;;;"+owner.User.Sid.String()+")(A;;GA;;;SY)", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer windows.CloseHandle(control)
+		openRemote := func(name string) (windows.Handle, error) {
+			unc := `\\127.0.0.1\pipe\` + strings.TrimPrefix(name, `\\.\pipe\`)
+			ptr, err := windows.UTF16PtrFromString(unc)
+			if err != nil {
+				return 0, err
+			}
+			return windows.CreateFile(ptr, windows.FILE_READ_DATA|windows.FILE_WRITE_DATA|windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE, 0, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OVERLAPPED|windows.SECURITY_SQOS_PRESENT|windows.SECURITY_IDENTIFICATION, 0)
+		}
+		remote, err := openRemote(controlName)
+		if err != nil {
+			t.Fatal("actual loopback SMB control is unavailable", err)
+		}
+		windows.CloseHandle(remote)
+		productionName := endpoint()
+		production, err := newSessionPipe(productionName, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer windows.CloseHandle(production)
+		remote, err = openRemote(productionName)
+		if err == nil {
+			windows.CloseHandle(remote)
+		}
+		if !errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+			t.Fatal("production pipe did not reject the reachable remote transport", err)
+		}
 	})
 }
 

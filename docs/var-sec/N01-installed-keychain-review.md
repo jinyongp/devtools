@@ -25,3 +25,10 @@ signing/update/checksum·locked denial·old-session drain·새 native access·�
 key identity·secret 로그/argv 미유입·cleanup/timeout을 확인했다. Python syntax와
 workflow YAML을 검사한다. Linux에서 macOS나 native 서명 통과를 주장하지 않는다.
 실제 Intel/ARM 결과는 후속 필수 native jobs까지 pending이며 N01 전체는 아직 진행 중이다.
+
+`aaf5fd0`의 두 architecture에서 새 HOME은 Keychain preferences도 비어 있어 default
+조회가 실패했다. 아직 native CLI나 update에 도달하지 않았다. parent UID의 기존
+default가 wrapper-owned keychain인지 먼저 확인한 뒤, 새 private HOME의 preferences와
+search/default도 그 한 keychain으로 명시한다. 다른 keychain을 생성하거나 선택하지
+않으며 부모 wrapper의 원래 selection 복원은 유지한다. 제품 Keychain ACL은 변경하지
+않는다. 이후 CLI 실패는 원문 대신 제한된 error code와 command 이름만 기록한다.

@@ -43,6 +43,10 @@ def main():
         env.pop('DEVTOOLS_TASK_CONTEXT', None)
         # Keychain selection must remain the owned OS user's temporary keychain
         # even though devtools' filesystem paths use a synthetic HOME.
+        (home / 'Library/Keychains').mkdir(parents=True, mode=0o700)
+        (home / 'Library/Preferences').mkdir(parents=True, mode=0o700)
+        checked('/usr/bin/security', 'list-keychains', '-d', 'user', '-s', str(keychain), env=env)
+        checked('/usr/bin/security', 'default-keychain', '-d', 'user', '-s', str(keychain), env=env)
         selection = checked('/usr/bin/security', 'default-keychain', '-d', 'user', env=env).decode().strip().strip('"')
         if Path(selection).resolve() != keychain.resolve():
             raise RuntimeError('Synthetic HOME changed keychain selection')
@@ -82,7 +86,13 @@ def main():
                     raise RuntimeError('Unclassified locked Keychain response')
                 return code
             if result.returncode or result.stderr:
-                raise RuntimeError('Installed native CLI failed: ' + args[0])
+                try:
+                    code = json.loads(result.stderr)['error']['code']
+                    if not re.fullmatch('[a-z_]{1,64}', code):
+                        code = 'unclassified'
+                except (ValueError, KeyError, TypeError):
+                    code = 'unstructured_response'
+                raise RuntimeError('Installed native CLI failed: ' + '/'.join(args[:2]) + ': ' + code)
             return json.loads(result.stdout)['data']
         def run():
             result = subprocess.run([str(binary), 'run', '--profile', 'native-keychain-fixture', '--',

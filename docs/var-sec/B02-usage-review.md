@@ -71,3 +71,20 @@ only this fixture's private data path with filepath.EvalSymlinks, matching the
 existing values/CLI fixture contract. Product symlink protections are unchanged.
 The exact failed log is `/tmp/devtools-values-plan/4ed-macos-failed.log`.
 Local focused race passes after correction; fresh macOS CI remains required.
+
+## Large delivery metadata at the supervisor boundary
+
+While connecting C01's consumer, a real control HTTP regression reproduced that
+1,000 safe slot references exceed the old 64 KiB supervisor response reader.
+It returned an identity/decode failure and could classify a live supervisor as
+unknown. The response read remains bounded, now at the same 16 MiB ceiling as
+the frozen launcher frame that already contains the delivery metadata. No value
+or authority is added to records/responses. A real authenticated loopback response
+with 1,000 references fails before the fix (`B02-large-record-before.log`) and
+passes after it; related frozen restart/client-crash/usage race checks pass in
+`B02-large-record-fixed-race.log`. The fixture canonicalizes its private data path.
+Native checks of this follow-up remain required by the final gates.
+
+The preceding macOS fixture correction was confirmed by the successful complete
+2eb9fb7 run 39266251666, including ci-macos. That run precedes this control-bound
+follow-up and the in-progress C01 producer/consumer implementation.

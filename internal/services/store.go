@@ -33,6 +33,7 @@ import (
 	"github.com/jinyongp/devtools/internal/retention"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 type Store struct {
@@ -510,7 +511,9 @@ func (s Store) rpc(ctx context.Context, id, action string) (Record, error) {
 	if response.StatusCode != 200 {
 		return out, errors.New("unavailable")
 	}
-	e = json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&out)
+	// Delivery references can exceed the old 64 KiB control bound for 1,000
+	// values. Keep the same ceiling as their already bounded launcher frame.
+	e = json.NewDecoder(io.LimitReader(response.Body, vault.MaxFrameBytes)).Decode(&out)
 	if out.ID != id {
 		return out, errors.New("identity mismatch")
 	}

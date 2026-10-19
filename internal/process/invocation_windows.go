@@ -33,9 +33,22 @@ func prepareInvocation(ctx context.Context, args []string, dir string, env []str
 		return nil, protocol.NewError("command_not_found", "Execution directory was not found.", 127, nil)
 	}
 	dir = canonical
-	path, e := LookPath(args[0], dir, env)
-	if e != nil {
-		return nil, e
+	path := executablePath(ctx)
+	if path == "" {
+		var e *protocol.Error
+		path, e = LookPath(args[0], dir, env)
+		if e != nil {
+			return nil, e
+		}
+	} else {
+		if !filepath.IsAbs(path) {
+			return nil, protocol.NewError("invalid_argument", "Prepared executable path must be absolute.", 2, nil)
+		}
+		var e *protocol.Error
+		path, e = LookPath(path, dir, env)
+		if e != nil {
+			return nil, e
+		}
 	}
 	if strings.EqualFold(filepath.Ext(path), ".ps1") {
 		return nil, protocol.NewError("invalid_argument", "Run PowerShell scripts with powershell.exe/pwsh -File explicitly.", 2, nil)

@@ -3,8 +3,10 @@ package execution
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/ports"
@@ -17,6 +19,7 @@ import (
 // Dependencies supplies user-global stores needed to prepare one command.
 // Callers keep ownership of user path/config discovery.
 type Dependencies struct {
+	ValueSnapshot   func(context.Context, string, string, bool) (*values.Snapshot, *protocol.Error)
 	ValuesDirectory string
 	Ports           ports.Store
 	PortDefaults    []int
@@ -43,12 +46,14 @@ func DependenciesFor(command Command, dataRoot, configRoot string) (Dependencies
 // Prepared contains the side-effect-bounded result of command preparation.
 // Release must be called after non-preview port preparation.
 type Prepared struct {
-	Command      Command
-	Args         []string
-	Injected     map[string]string
-	State        *values.State
-	PathOverride *string
-	Release      func()
+	Input            *InputPayload
+	probeEnvironment []string
+	Command          Command
+	Args             []string
+	Injected         map[string]string
+	State            *values.State
+	PathOverride     *string
+	Release          func()
 }
 
 // NeedsValues reports whether preparing the command must inspect profile values.
@@ -66,7 +71,7 @@ func prepare(ctx context.Context, command Command, dependencies Dependencies, pr
 	var state *values.State
 	if command.NeedsValues() {
 		var err *protocol.Error
-		state, err = (values.Store{Directory: dependencies.ValuesDirectory, Profile: command.Project.Profile}).Read(ctx)
+		state, err = readExecutionState(ctx, command, dependencies)
 		if err != nil {
 			return Prepared{}, err
 		}
@@ -87,6 +92,7 @@ func Preview(ctx context.Context, command Command, state *values.State, dependen
 }
 
 type preparationOptions struct {
+	parentEnvironment        *[]string
 	preview                  bool
 	injectValues             bool
 	managedParentEnvironment *[]string
@@ -138,7 +144,11 @@ func prepareResolved(ctx context.Context, command Command, state *values.State, 
 		}
 		command.Project.Ports = definitions
 	}
-	prepared, release, err := dependencies.Ports.Prepare(ctx, command.Project, command.projectCommand(), command.Env, state, dependencies.PortDefaults, options.preview)
+	parent := os.Environ()
+	if options.parentEnvironment != nil {
+		parent = *options.parentEnvironment
+	}
+	prepared, release, err := dependencies.Ports.PrepareWithEnvironment(ctx, command.Project, command.projectCommand(), command.Env, state, dependencies.PortDefaults, options.preview, parent)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -207,6 +217,9 @@ func ValidateNetwork(command Command, dependencies Dependencies) *protocol.Error
 // preserves managed preflight behavior; foreground execution can leave it false
 // so commands without declared requirements fail naturally at exec time.
 func (p Prepared) Checks(ctx context.Context, parentEnvironment []string, forceExecutable bool) []doctor.Check {
+	if p.probeEnvironment != nil {
+		parentEnvironment = append([]string{}, p.probeEnvironment...)
+	}
 	if p.Command.Requirements.Empty() && !forceExecutable {
 		return []doctor.Check{}
 	}
@@ -257,7 +270,7 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 	var state *values.State
 	if command.NeedsValues() {
 		var err *protocol.Error
-		state, err = (values.Store{Directory: dependencies.ValuesDirectory, Profile: command.Project.Profile}).Read(ctx)
+		state, err = readExecutionState(ctx, command, dependencies)
 		if err != nil {
 			return err
 		}
@@ -401,16 +414,45 @@ func Preflight(ctx context.Context, command Command, dependencies Dependencies, 
 // Environment overlays injected profile and binding values on the caller's
 // process environment.
 func (p Prepared) Environment(parent []string) []string {
+	if p.Input != nil {
+		input, e := p.Input.Open()
+		if e != nil {
+			return []string{}
+		}
+		defer input.Destroy()
+		return append([]string{}, input.Environment...)
+	}
 	return process.Environment(parent, p.Injected)
 }
 
 // Execute runs a prepared command using either the regular foreground process
 // path or a caller-provided managed-process runner.
 func (p Prepared) Execute(ctx context.Context, parentEnvironment []string, runner process.Runner, in io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
+	if p.Input != nil {
+		if e := p.Input.Validate(time.Now()); e != nil {
+			return 0, e
+		}
+		input, e := p.Input.Open()
+		if e != nil {
+			return 0, e
+		}
+		defer input.Destroy()
+		ctx = process.WithExecutablePath(process.WithReadyProbe(ctx, input.Ready), input.Executable)
+		if runner != nil {
+			if e := process.ValidateManaged(input.Args, input.Directory, input.Environment); e != nil {
+				return 0, e
+			}
+			ctx = process.WithRunner(ctx, runner)
+		}
+		return process.Execute(ctx, input.Args, input.Directory, input.Environment, in, out, diagnostic)
+	}
 	if err := process.ValidateEnvironment(p.Injected); err != nil {
 		return 0, err
 	}
 	ctx = process.WithReadyProbe(ctx, p.Command.Ready)
+	if e := process.ValidateExecInput(p.Args, p.Environment(parentEnvironment)); e != nil {
+		return 0, e
+	}
 	if runner != nil {
 		if err := process.ValidateManaged(p.Args, p.Command.Directory, p.Environment(parentEnvironment)); err != nil {
 			return 0, err

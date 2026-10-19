@@ -19,6 +19,17 @@ type SignalError struct{ Signal syscall.Signal }
 type Runner func(context.Context, []string, string, []string, io.Reader, io.Writer, io.Writer) (int, *protocol.Error)
 type runnerKey struct{}
 type readyProbeKey struct{}
+type executableKey struct{}
+
+// WithExecutablePath binds a previously resolved executable to an actual input
+// snapshot. argv[0] retains the caller's original spelling.
+func WithExecutablePath(ctx context.Context, path string) context.Context {
+	return context.WithValue(ctx, executableKey{}, path)
+}
+func executablePath(ctx context.Context) string {
+	path, _ := ctx.Value(executableKey{}).(string)
+	return path
+}
 
 func WithRunner(ctx context.Context, runner Runner) context.Context {
 	return context.WithValue(ctx, runnerKey{}, runner)

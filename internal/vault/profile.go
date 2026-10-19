@@ -71,6 +71,13 @@ type SlotReference struct {
 	SlotID  string `json:"slot_id"`
 	Version string `json:"value_version"`
 }
+type EffectiveValue struct {
+	Reference SlotReference
+	Kind      ValueKind
+	Scope     string
+	Value     string
+	ExpiresAt *int64
+}
 
 func NewID() (string, error) { return randomID(rand.Reader) }
 func randomID(r io.Reader) (string, error) {
@@ -513,14 +520,29 @@ func (p *Profile) set(name string, kind ValueKind, env, value string, key *Mater
 // Environment verifies the whole snapshot before resolving a common/env layer.
 // A present expired or damaged override is never replaced by common.
 func (p *Profile) Environment(env string, key *Material, now time.Time) (map[string]string, []SlotReference, error) {
-	if err := p.Verify(key); err != nil {
+	selected, err := p.ResolveValues(env, key, now, true)
+	if err != nil {
 		return nil, nil, err
+	}
+	out := make(map[string]string, len(selected))
+	refs := make([]SlotReference, 0, len(selected))
+	for _, value := range selected {
+		out[value.Reference.Name] = value.Value
+		refs = append(refs, value.Reference)
+	}
+	return out, refs, nil
+}
+
+// ResolveValues keeps source identity/expiry beside effective values. A metadata
+// or binding-only read verifies the manifest but never decrypts secret slots.
+func (p *Profile) ResolveValues(env string, key *Material, now time.Time, includeSecrets bool) ([]EffectiveValue, error) {
+	if err := p.Verify(key); err != nil {
+		return nil, err
 	}
 	if err := p.checkEnv(env); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	out := map[string]string{}
-	refs := []SlotReference{}
+	out := []EffectiveValue{}
 	for _, v := range p.Values {
 		var chosen *Slot
 		for i := range v.Slots {
@@ -541,17 +563,24 @@ func (p *Profile) Environment(env string, key *Material, now time.Time) (map[str
 		if chosen == nil {
 			continue
 		}
-		if chosen.ExpiresAt != nil && now.Unix() >= *chosen.ExpiresAt {
-			return nil, nil, errorsNamed("value_expired")
+		value := EffectiveValue{Reference: SlotReference{Name: v.Name, ValueID: v.ID, SlotID: chosen.ID, Version: chosen.Version}, Kind: v.Kind, Scope: chosen.Env}
+		if chosen.ExpiresAt != nil {
+			expires := *chosen.ExpiresAt
+			value.ExpiresAt = &expires
 		}
-		b, err := p.open(v, *chosen, key)
-		if err != nil {
-			return nil, nil, err
+		if includeSecrets || v.Kind == Public {
+			if chosen.ExpiresAt != nil && now.Unix() >= *chosen.ExpiresAt {
+				return nil, errorsNamed("value_expired")
+			}
+			b, err := p.open(v, *chosen, key)
+			if err != nil {
+				return nil, err
+			}
+			value.Value = string(b)
+			clear(b)
 		}
-		out[v.Name] = string(b)
-		clear(b)
-		refs = append(refs, SlotReference{Name: v.Name, ValueID: v.ID, SlotID: chosen.ID, Version: chosen.Version})
+		out = append(out, value)
 	}
-	sort.Slice(refs, func(i, j int) bool { return refs[i].Name < refs[j].Name })
-	return out, refs, nil
+	sort.Slice(out, func(i, j int) bool { return out[i].Reference.Name < out[j].Reference.Name })
+	return out, nil
 }

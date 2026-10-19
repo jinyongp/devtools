@@ -154,7 +154,7 @@ func (s FileStore) Initialize(ctx context.Context) error {
 func entryFor(p *Profile) CatalogEntry {
 	return CatalogEntry{Name: p.Name, ID: p.ID, Generation: p.Generation, Revision: p.Revision, KeyEpoch: p.KeyEpoch, Sealed: p.Sealed, Tag: append([]byte(nil), p.Tag...)}
 }
-func (s FileStore) readProfile(c *Catalog, name string, key *Material) (*Profile, int, error) {
+func (s FileStore) readProfileEnvelope(c *Catalog, name string) (*Profile, int, error) {
 	index := -1
 	for i, e := range c.Entries {
 		if e.Name == name {
@@ -177,10 +177,51 @@ func (s FileStore) readProfile(c *Catalog, name string, key *Material) (*Profile
 	if want.Name != got.Name || want.ID != got.ID || want.Generation != got.Generation || want.Revision != got.Revision || want.KeyEpoch != got.KeyEpoch || want.Sealed != got.Sealed || !hmac.Equal(want.Tag, got.Tag) || (p.Sealed && p.VaultID != s.VaultID) {
 		return nil, index, ErrIntegrity
 	}
+	return p, index, nil
+}
+func (s FileStore) readProfile(c *Catalog, name string, key *Material) (*Profile, int, error) {
+	p, index, err := s.readProfileEnvelope(c, name)
+	if err != nil {
+		return nil, index, err
+	}
 	if err = p.Verify(key); err != nil {
 		return nil, index, err
 	}
 	return p, index, nil
+}
+
+// ReadWithMaster authenticates catalog, profile identity and keyset under one
+// shared disk gate. The caller obtains the root key before entering this gate;
+// no OS authentication or session IPC occurs inside it.
+func (s FileStore) ReadWithMaster(ctx context.Context, name string, master *Material) (*Profile, *Material, error) {
+	if !namePattern.MatchString(name) {
+		return nil, nil, ErrInvalid
+	}
+	release, err := maintenance.AcquireShared(ctx, s.Root)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer release()
+	c, err := s.readCatalog()
+	if err != nil {
+		return nil, nil, err
+	}
+	p, _, err := s.readProfileEnvelope(c, name)
+	if err != nil {
+		return nil, nil, err
+	}
+	var key *Material
+	if p.Sealed {
+		key, err = UnwrapKeyset(master, p.VaultID, p.ID, p.KeyEpoch, p.WrappedKey)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if err = p.Verify(key); err != nil {
+		key.Destroy()
+		return nil, nil, err
+	}
+	return p, key, nil
 }
 func (s FileStore) Read(ctx context.Context, name string, key *Material) (*Profile, error) {
 	if !namePattern.MatchString(name) {

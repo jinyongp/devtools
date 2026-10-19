@@ -20,9 +20,13 @@ type Prepared struct {
 }
 
 func (s Store) Prepare(ctx context.Context, p project.Context, c project.Command, env string, valuesState *values.State, defaults []int, preview bool) (Prepared, func(), *protocol.Error) {
+	return s.PrepareWithEnvironment(ctx, p, c, env, valuesState, defaults, preview, os.Environ())
+}
+
+func (s Store) PrepareWithEnvironment(ctx context.Context, p project.Context, c project.Command, env string, valuesState *values.State, defaults []int, preview bool, parent []string) (Prepared, func(), *protocol.Error) {
 	result := Prepared{}
 	var resolveErr *protocol.Error
-	p, resolveErr = p.ResolvePorts(os.Environ(), c.Serve)
+	p, resolveErr = p.ResolvePorts(parent, c.Serve)
 	if resolveErr != nil {
 		return result, func() {}, resolveErr
 	}

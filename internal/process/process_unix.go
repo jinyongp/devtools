@@ -34,6 +34,11 @@ func Environment(parent []string, injected map[string]string) []string {
 	return result
 }
 
+func splitEnvironment(item string) (string, string, bool) { return strings.Cut(item, "=") }
+func sameEnvironmentName(a, b string) bool                { return a == b }
+
+func CompleteEnvironment(environment []string) []string { return append([]string{}, environment...) }
+
 // LookPath resolves an executable using the command's directory and environment.
 func LookPath(name, dir string, env []string) (string, *protocol.Error) {
 	check := func(path string) bool {

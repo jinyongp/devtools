@@ -17,6 +17,14 @@ func inputVersionSchema() map[string]any {
 	v["type"] = []string{"object", "null"}
 	return v
 }
+func valueWatchSchema() map[string]any {
+	return object(map[string]any{
+		"state":  map[string]any{"enum": []string{"current", "pending", "failed", "unknown", "verification_pending"}},
+		"reason": stringSchema(), "updated_at": stringSchema(),
+		"goal":               object(map[string]any{"profile_id": stringSchema(), "storage_generation": stringSchema(), "effective_input_revision": stringSchema()}, "profile_id", "storage_generation", "effective_input_revision"),
+		"integrity_verified": map[string]any{"type": "boolean"},
+	}, "state", "reason", "updated_at", "integrity_verified")
+}
 func inputObservationSchema() map[string]any {
 	return object(map[string]any{"state": map[string]any{"enum": []string{"current", "pending", "failed", "unknown", "verification_pending"}}, "reason": stringSchema(), "delivered": inputVersionSchema(), "current": inputVersionSchema()}, "state", "reason", "delivered", "current")
 }

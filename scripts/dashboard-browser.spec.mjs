@@ -249,10 +249,12 @@ test("process value delivery shows changes and locked verification without readi
     await expect(page.locator("#values-panel")).toContainText("Delivery records do not show which values the application read.");
     runCLI(["var","set","URL","--value","synthetic-usage-browser-public-after"],project,env);
     await expect(page.locator("#values-panel")).toContainText("Value changes pending",{timeout:15000});
+    await expect(page.locator("#values-panel")).toContainText("Background value check: pending",{timeout:15000});
     const uses=JSON.parse(runCLI(["values","uses"],project,env)).data.items;
     expect(uses.find(item=>item.execution_id===execution.id).values.state).toBe("pending");
     runCLI(["vault","lock"],project,env);
     await expect(page.locator("#values-panel")).toContainText("Value verification pending",{timeout:15000});
+    await expect(page.locator("#values-panel")).toContainText("Background value check: verification pending",{timeout:15000});
     for(const canary of ["synthetic-usage-browser-secret-canary","synthetic-usage-browser-public-before","synthetic-usage-browser-public-after"])await expect(page.locator("#values-panel")).not.toContainText(canary);
     const stillRunning=JSON.parse(runCLI(["process","status",execution.id],project,env)).data;
     expect(stillRunning.item.id).toBe(execution.id);expect(stillRunning.item.ended_at).toBeNull();

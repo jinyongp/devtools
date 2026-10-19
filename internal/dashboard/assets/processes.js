@@ -56,6 +56,7 @@ async function loadProcesses(version) {
         }
         text("p","Delivery records do not show which values the application read.",section);
       }
+      if(item.value_watch)text("p",`Background value check: ${item.value_watch.state.replaceAll("_"," ")} · ${item.value_watch.reason.replaceAll("_"," ")}`,section);
       if(item.output)text("p",`Output: stdout ${item.output.stdout}, stderr ${item.output.stderr}`,section);
 
       if(item.reason)text("p",`${item.reason.replaceAll("_"," ")}${item.exit_code==null?"":` · exit ${item.exit_code}`}`,section);

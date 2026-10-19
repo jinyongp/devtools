@@ -50,6 +50,7 @@ func writePrivate(path string, v any) error {
 }
 
 type Record struct {
+	ValueWatch        *ValueWatchStatus    `json:"value_watch,omitempty"`
 	InputVersion      *values.InputVersion `json:"input_version,omitempty"`
 	Selection         string               `json:"selection,omitempty"`
 	BundleOverride    *string              `json:"bundle_override,omitempty"`

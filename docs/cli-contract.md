@@ -548,3 +548,11 @@ Unix의 `0700` 디렉터리/`0600` 파일 및 Windows의 현재 사용자·SYSTE
 이미 실행 중인 앱 환경을 회수하지 않는다. non-TTY/capture의 기본 마스킹은
 [정의한 출력 경로](output-protection.md)에 적용된다. 앱 파일·네트워크·임의 변환이나
 같은 사용자 권한의 의도적인 접근을 막는 sandbox는 아니다.
+
+Managed process records can include `value_watch`, the supervisor's last passive
+background value observation (`state`, `reason`, `updated_at`, optional `goal`,
+`integrity_verified`). The goal contains opaque input identities only. Locked or
+unavailable verification clears the goal; polling never unlocks or renews the key
+session. The original `input_version` continues to describe recorded delivery.
+The timestamp also applies when the last observation is retained in terminal
+history. Notifications alone do not restart an application.

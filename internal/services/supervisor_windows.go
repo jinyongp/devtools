@@ -62,6 +62,8 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var mu sync.Mutex
+	stopValueWatch := func() {}
+	defer func() { stopValueWatch() }()
 	var probe func(context.Context) Readiness
 	probeGate := make(chan struct{}, 1)
 	probeGate <- struct{}{}
@@ -142,7 +144,6 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 		code, runErr := process.ExecuteOwned(ctx, args, dir, env, in, out, diagnostic, func() *protocol.Error {
 			now := time.Now().UTC()
 			mu.Lock()
-			defer mu.Unlock()
 			next := r
 			if selection, ok := ctx.Value(environmentSelectionKey{}).(environmentSelection); ok {
 				next.Env = selection.Env
@@ -156,13 +157,23 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 				next.LaunchPhase = "spawned"
 			}
 			if writePrivate(s.path(id, "record.json"), next) != nil {
+				mu.Unlock()
 				return storageError()
 			}
 			r = next
+
 			if config != nil {
 				preparedEnv := append([]string{}, env...)
 				probe = func(query context.Context) Readiness { return runProbe(query, *config, dir, preparedEnv) }
 			}
+			mu.Unlock()
+			stopValueWatch = s.startValueWatch(ctx, func() Record { mu.Lock(); defer mu.Unlock(); return r }, func(status ValueWatchStatus) {
+				mu.Lock()
+				defer mu.Unlock()
+				if r.EndedAt == nil {
+					r.ValueWatch = &status
+				}
+			})
 			return nil
 		})
 		if runErr == nil {

@@ -72,6 +72,8 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var mu sync.Mutex
+	stopValueWatch := func() {}
+	defer func() { stopValueWatch() }()
 	var probe func(context.Context) Readiness
 	probeGate := make(chan struct{}, 1)
 	probeGate <- struct{}{}
@@ -193,6 +195,15 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 		mu.Unlock()
 		if writeErr != nil {
 			cancel()
+		}
+		if writeErr == nil {
+			stopValueWatch = s.startValueWatch(ctx, func() Record { mu.Lock(); defer mu.Unlock(); return r }, func(status ValueWatchStatus) {
+				mu.Lock()
+				defer mu.Unlock()
+				if r.EndedAt == nil {
+					r.ValueWatch = &status
+				}
+			})
 		}
 		done := make(chan error, 1)
 		go func() { done <- cmd.Wait() }()

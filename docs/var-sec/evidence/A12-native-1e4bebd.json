@@ -1,0 +1,1651 @@
+{
+  "source_commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+  "run_id": 39286793430,
+  "run_url": "https://github.com/jinyongp/devtools/actions/runs/39286793430",
+  "publish": false,
+  "jobs": [
+    {
+      "name": "validate-release",
+      "id": 118184320202,
+      "conclusion": "success"
+    },
+    {
+      "name": "wsl-vault",
+      "id": 118184342456,
+      "conclusion": "success"
+    },
+    {
+      "name": "vault-macos (macos-15-intel, amd64)",
+      "id": 118184342464,
+      "conclusion": "success"
+    },
+    {
+      "name": "vault-linux",
+      "id": 118184342672,
+      "conclusion": "success"
+    },
+    {
+      "name": "system-network (macos, macos-latest)",
+      "id": 118184342871,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-linux",
+      "id": 118184342908,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-macos",
+      "id": 118184343138,
+      "conclusion": "success"
+    },
+    {
+      "name": "vault-macos (macos-15, arm64)",
+      "id": 118184343732,
+      "conclusion": "success"
+    },
+    {
+      "name": "system-network (linux, ubuntu-24.04)",
+      "id": 118184344642,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / suite",
+      "id": 118184349223,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / race",
+      "id": 118184350575,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / boundaries",
+      "id": 118184351269,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / product",
+      "id": 118184351548,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / installer-x64",
+      "id": 118184351693,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / installer-ps7",
+      "id": 118184352074,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / boundaries",
+      "id": 118184352152,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / installer-ps5",
+      "id": 118184352215,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / suite",
+      "id": 118184352326,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / product",
+      "id": 118184353320,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / installer-ps7",
+      "id": 118184353655,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / installer-ps5",
+      "id": 118184354043,
+      "conclusion": "success"
+    },
+    {
+      "name": "profile-exchange (macos-latest, macos)",
+      "id": 118185935999,
+      "conclusion": "success"
+    },
+    {
+      "name": "package",
+      "id": 118185936010,
+      "conclusion": "success"
+    },
+    {
+      "name": "profile-exchange (windows-2025, windows-amd64)",
+      "id": 118185936095,
+      "conclusion": "success"
+    },
+    {
+      "name": "profile-exchange (ubuntu-24.04, linux)",
+      "id": 118185936111,
+      "conclusion": "success"
+    },
+    {
+      "name": "profile-exchange (windows-11-arm, windows-arm64)",
+      "id": 118185936199,
+      "conclusion": "success"
+    },
+    {
+      "name": "release",
+      "id": 118191563326,
+      "conclusion": "skipped"
+    },
+    {
+      "name": "homebrew",
+      "id": 118191564293,
+      "conclusion": "skipped"
+    },
+    {
+      "name": "installer-page",
+      "id": 118191565293,
+      "conclusion": "skipped"
+    }
+  ],
+  "native": {
+    "macos-amd64": {
+      "sha256": "47a61f17d93cdd1d7c8ea336b353b11a148bcf4d434a5408d1d5853acd132673",
+      "bytes": 3630,
+      "required_pass": [
+        {
+          "Time": "2026-10-19T16:37:34.692283Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainSyntheticVault",
+          "Elapsed": 0.06
+        },
+        {
+          "Time": "2026-10-19T16:37:34.789309Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainLockedCollectionRefusesSilentAccess",
+          "Elapsed": 0.1
+        },
+        {
+          "Time": "2026-10-19T16:37:35.844179Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainSessionReuseCounts",
+          "Elapsed": 1.05
+        }
+      ],
+      "package_pass": [
+        "github.com/jinyongp/devtools/internal/vault"
+      ],
+      "native_counts": [
+        {
+          "backend": "keychain",
+          "initial_cold_unwraps": 1,
+          "warm_use_batches": [
+            10,
+            100,
+            1000
+          ],
+          "concurrent_warm_uses": 32,
+          "warm_unwraps": 0,
+          "after_expiry_unwraps": 1,
+          "manual_locked_use_unwraps": 0,
+          "explicit_unlock_unwraps": 1,
+          "total_unwraps": 3,
+          "initialization_excluded": true,
+          "os_syscall_count": false
+        }
+      ],
+      "peers": {
+        "sha256": "2b1833198e0371d376e45ce61d969a1306a30ac96eecfc7c15c33cc7ffabf628",
+        "bytes": 2565,
+        "required_pass": [
+          {
+            "Action": "pass",
+            "Package": "github.com/jinyongp/devtools/internal/vault",
+            "Test": "TestNativeUnixPeersRejectOtherUID"
+          }
+        ],
+        "package_pass": [
+          "github.com/jinyongp/devtools/internal/vault"
+        ],
+        "native_counts": []
+      },
+      "installed": {
+        "sha256": "89f7e196d5066fe306d565a4a9c48038a60cab013221a1896810e6adcc5e3917",
+        "bytes": 450,
+        "result": {
+          "native_installed_keychain": "pass",
+          "signed_test_packages": "adhoc",
+          "signatures_differ": true,
+          "locked_denial": "key_access_denied",
+          "silent_native_reopen_after_session_retirement": true,
+          "old_key_session_retired_before_update": true,
+          "synthetic_home_removed": true,
+          "changed_signature_authorization_required": "key_access_denied",
+          "explicit_previous_version_recovery": "pass",
+          "existing_creator_app_policy_preserved": true
+        }
+      }
+    },
+    "macos-arm64": {
+      "sha256": "8bd4d4e4308774d2915a8c8097a6155c757fa8cc6956f63bd96602d303f7007a",
+      "bytes": 3630,
+      "required_pass": [
+        {
+          "Time": "2026-10-19T16:37:07.718342Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainSyntheticVault",
+          "Elapsed": 0.04
+        },
+        {
+          "Time": "2026-10-19T16:37:07.76661Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainLockedCollectionRefusesSilentAccess",
+          "Elapsed": 0.05
+        },
+        {
+          "Time": "2026-10-19T16:37:08.210618Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainSessionReuseCounts",
+          "Elapsed": 0.44
+        }
+      ],
+      "package_pass": [
+        "github.com/jinyongp/devtools/internal/vault"
+      ],
+      "native_counts": [
+        {
+          "backend": "keychain",
+          "initial_cold_unwraps": 1,
+          "warm_use_batches": [
+            10,
+            100,
+            1000
+          ],
+          "concurrent_warm_uses": 32,
+          "warm_unwraps": 0,
+          "after_expiry_unwraps": 1,
+          "manual_locked_use_unwraps": 0,
+          "explicit_unlock_unwraps": 1,
+          "total_unwraps": 3,
+          "initialization_excluded": true,
+          "os_syscall_count": false
+        }
+      ],
+      "peers": {
+        "sha256": "0e3bbc76ae7ede27dd381a8cff6fbd271b9ed40a4205a9e00af3309e232b5bbd",
+        "bytes": 2565,
+        "required_pass": [
+          {
+            "Action": "pass",
+            "Package": "github.com/jinyongp/devtools/internal/vault",
+            "Test": "TestNativeUnixPeersRejectOtherUID"
+          }
+        ],
+        "package_pass": [
+          "github.com/jinyongp/devtools/internal/vault"
+        ],
+        "native_counts": []
+      },
+      "installed": {
+        "sha256": "89f7e196d5066fe306d565a4a9c48038a60cab013221a1896810e6adcc5e3917",
+        "bytes": 450,
+        "result": {
+          "native_installed_keychain": "pass",
+          "signed_test_packages": "adhoc",
+          "signatures_differ": true,
+          "locked_denial": "key_access_denied",
+          "silent_native_reopen_after_session_retirement": true,
+          "old_key_session_retired_before_update": true,
+          "synthetic_home_removed": true,
+          "changed_signature_authorization_required": "key_access_denied",
+          "explicit_previous_version_recovery": "pass",
+          "existing_creator_app_policy_preserved": true
+        }
+      }
+    },
+    "linux": {
+      "sha256": "dff12b8d6e5974e7f6fed460122703d500b30f70545b497771babaf4c6ce7bcc",
+      "bytes": 3674,
+      "required_pass": [
+        {
+          "Time": "2026-10-19T16:37:08.550402323Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeSecretServiceSyntheticVault",
+          "Elapsed": 0.01
+        },
+        {
+          "Time": "2026-10-19T16:37:08.565273005Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeSecretServiceLockedCollection",
+          "Elapsed": 0.01
+        },
+        {
+          "Time": "2026-10-19T16:37:08.694103116Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeSecretServiceSessionReuseCounts",
+          "Elapsed": 0.13
+        }
+      ],
+      "package_pass": [
+        "github.com/jinyongp/devtools/internal/vault"
+      ],
+      "native_counts": [
+        {
+          "backend": "secret-service",
+          "initial_cold_unwraps": 1,
+          "warm_use_batches": [
+            10,
+            100,
+            1000
+          ],
+          "concurrent_warm_uses": 32,
+          "warm_unwraps": 0,
+          "after_expiry_unwraps": 1,
+          "manual_locked_use_unwraps": 0,
+          "explicit_unlock_unwraps": 1,
+          "total_unwraps": 3,
+          "initialization_excluded": true,
+          "os_syscall_count": false
+        }
+      ],
+      "peers": {
+        "sha256": "ff22e978a52dd4eb621f081453607a1c58234aa9116521c0ab2dc05bbbf012f8",
+        "bytes": 2565,
+        "required_pass": [
+          {
+            "Action": "pass",
+            "Package": "github.com/jinyongp/devtools/internal/vault",
+            "Test": "TestNativeUnixPeersRejectOtherUID"
+          }
+        ],
+        "package_pass": [
+          "github.com/jinyongp/devtools/internal/vault"
+        ],
+        "native_counts": []
+      },
+      "absent": {
+        "sha256": "b15495765f4c236e2dd8b2e7230fa5e33fbdcf25a89a817c8d5820343a9cfe8f",
+        "bytes": 1490,
+        "required_pass": [
+          {
+            "Time": "2026-10-19T16:37:08.199832277Z",
+            "Action": "pass",
+            "Package": "github.com/jinyongp/devtools/internal/vault",
+            "Test": "TestNativeSecretServiceUnavailableDoesNotActivate",
+            "Elapsed": 0
+          }
+        ],
+        "package_pass": [
+          "github.com/jinyongp/devtools/internal/vault"
+        ],
+        "native_counts": []
+      },
+      "stopped": {
+        "sha256": "6cd0b9415aa89a0311b1d36df060fb931e29f4a3d333856c89c4b898ad41d16a",
+        "bytes": 1489,
+        "required_pass": [
+          {
+            "Time": "2026-10-19T16:37:08.99857936Z",
+            "Action": "pass",
+            "Package": "github.com/jinyongp/devtools/internal/vault",
+            "Test": "TestNativeSecretServiceUnavailableDoesNotActivate",
+            "Elapsed": 0
+          }
+        ],
+        "package_pass": [
+          "github.com/jinyongp/devtools/internal/vault"
+        ],
+        "native_counts": []
+      },
+      "logout": {
+        "sha256": "e341894691667339e5aa2251472a514a962daa8069882f2b9e0517146c7963ad",
+        "bytes": 272,
+        "result": {
+          "real_pam_logout": "pass",
+          "native_backend": "secret-service",
+          "warm_session_lost": true,
+          "locked_native_access_denied": true,
+          "explicit_unlock_preserved_values": true,
+          "silent_native_reopen_after_os_unlock": true,
+          "owned_account_and_home_removed": true
+        }
+      }
+    },
+    "wsl": {
+      "sha256": "08150d203eec9d225ef77229858f5e0acf42bd092a7eb412c15ccb1aec98b5e7",
+      "bytes": 1789,
+      "result": {
+        "result": "pass",
+        "distribution": "devtools-vault-test-59418fde8c71497e91614b6d7ff54cec",
+        "binary_sha256": "53500c16206d4583144fc4feee9da024df44445fb13598f692cd12e6945c3657",
+        "phases": [
+          {
+            "phase": "prepare",
+            "result": "pass",
+            "kernel": "6.18.40.1-microsoft-standard-WSL2",
+            "filesystem": "ext2/ext3",
+            "uid": 1001,
+            "binary_identity": {
+              "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+              "protocol_version": 7,
+              "version": "0.0.0-wsl-validation"
+            }
+          },
+          {
+            "phase": "after-manual-restart",
+            "result": "pass",
+            "kernel": "6.18.40.1-microsoft-standard-WSL2",
+            "filesystem": "ext2/ext3",
+            "uid": 1001,
+            "binary_identity": {
+              "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+              "protocol_version": 7,
+              "version": "0.0.0-wsl-validation"
+            }
+          },
+          {
+            "phase": "after-unlocked-restart",
+            "result": "pass",
+            "kernel": "6.18.40.1-microsoft-standard-WSL2",
+            "filesystem": "ext2/ext3",
+            "uid": 1001,
+            "binary_identity": {
+              "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+              "protocol_version": 7,
+              "version": "0.0.0-wsl-validation"
+            }
+          }
+        ],
+        "recovery_root": "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\devtools-wsl-import-6p0qbks2",
+        "wsl_version": "WSL version: 3.0.1.0\r\nKernel version: 6.18.40.1-1\r\nWSLg version: 1.0.79\r\nMSRDC version: 1.2.7214\r\nDirect3D version: 1.611.1-81528511\r\nDXCore version: 10.0.26100.1-240331-1435.ge-release\r\nWindows version: 10.0.26100.33438",
+        "rootfs_sha256": "2a790896740b14d637dbdc583cce1ba081ac53b9e9cdb46dc09a2f73abbd9934",
+        "checks_passed": true,
+        "owned_distribution_removed": true
+      }
+    }
+  },
+  "windows": {
+    "amd64": {
+      "sha256": "0f84965135020468c48fe16af184507d5d3d93c3979d08224cdaba8dc27fd659",
+      "bytes": 1121997,
+      "required_pass": [
+        {
+          "Time": "2026-10-19T16:40:49.9893277Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestCachedInspectionActualIPCDoesNotExtendIdle",
+          "Elapsed": 0.53
+        },
+        {
+          "Time": "2026-10-19T16:38:34.4000321Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestConcurrentImportReplaysSameRequest",
+          "Elapsed": 0.77
+        },
+        {
+          "Time": "2026-10-19T16:40:21.8726203Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary",
+          "Elapsed": 7.19
+        },
+        {
+          "Time": "2026-10-19T16:38:59.280901Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestFrozenLauncherRealProcessRestartAndLock",
+          "Elapsed": 6.1
+        },
+        {
+          "Time": "2026-10-19T16:38:35.8027597Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestImportPreviewApplyAndStaleProtection",
+          "Elapsed": 1.4
+        },
+        {
+          "Time": "2026-10-19T16:38:36.2264598Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestImportRejectsWrongIdentityAndTamperedArchive",
+          "Elapsed": 0.42
+        },
+        {
+          "Time": "2026-10-19T16:40:28.1793102Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestLaunchRealDaemonCrashDuringLockDrainsAcrossReplacement",
+          "Elapsed": 0.76
+        },
+        {
+          "Time": "2026-10-19T16:40:27.4150779Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestLaunchRealProcessCrashRetainsUnknown",
+          "Elapsed": 0.61
+        },
+        {
+          "Time": "2026-10-19T16:38:59.2156522Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestLegacyBackupReceiptReplaysAfterProtectedMigration",
+          "Elapsed": 1.61
+        },
+        {
+          "Time": "2026-10-19T16:41:22.9843919Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestLegacyMigrationPreservesLayersAndRetryReceipts",
+          "Elapsed": 1.85
+        },
+        {
+          "Time": "2026-10-19T16:40:40.0393711Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestModernManagedReplaySurvivesRotationAndNewIncarnation",
+          "Elapsed": 2.7
+        },
+        {
+          "Time": "2026-10-19T16:40:42.7139315Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestModernReplayRetiresOnlyExpiredVerificationKeys",
+          "Elapsed": 2.67
+        },
+        {
+          "Time": "2026-10-19T16:40:16.624251Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestPassiveProtectedInspectionUsesOnlyCachedKeyAndRespectsLock",
+          "Elapsed": 4.89
+        },
+        {
+          "Time": "2026-10-19T16:39:02.4126932Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestProtectedRestoreDrainsLaunchLeaseAndRejectsStalePreview",
+          "Elapsed": 3.2
+        },
+        {
+          "Time": "2026-10-19T16:39:00.9365866Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestPublicManagedRestartRejectsReplacedGenerationBeforeOldStop",
+          "Elapsed": 1.66
+        },
+        {
+          "Time": "2026-10-19T16:38:57.6049556Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestPublicRestoreCannotDowngradeExistingSealedProfile",
+          "Elapsed": 2.01
+        },
+        {
+          "Time": "2026-10-19T16:39:37.6591832Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/services",
+          "Test": "TestRestartPreservesStopMutationWhenColdStartPreflightFails",
+          "Elapsed": 1.49
+        },
+        {
+          "Time": "2026-10-19T16:38:40.1941256Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop",
+          "Elapsed": 6.4
+        },
+        {
+          "Time": "2026-10-19T16:40:39.605941Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries",
+          "Elapsed": 5.74
+        },
+        {
+          "Time": "2026-10-19T16:38:32.1393102Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T16:40:20.4154843Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestAutomaticCoordinatorRealDeathDuringOldStopDoesNotRepeat",
+          "Elapsed": 3.97
+        },
+        {
+          "Time": "2026-10-19T16:40:24.1750522Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestAutomaticGoalGuardRejectsChangedInputBeforeStoppingOldExecution",
+          "Elapsed": 3.76
+        },
+        {
+          "Time": "2026-10-19T16:40:37.2937516Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestAutomaticRestartPostStopSpawnAndReadinessFailuresRemainExplicit",
+          "Elapsed": 13.12
+        },
+        {
+          "Time": "2026-10-19T16:41:04.4891093Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestAutomaticValueRestartRealCoordinatorOptInFailureLatchAndOverrides",
+          "Elapsed": 27.2
+        },
+        {
+          "Time": "2026-10-19T16:41:16.350058Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestManagedSupervisorValueWatchReconcilesWithoutHintsAndKeepsAppAlive",
+          "Elapsed": 10
+        },
+        {
+          "Time": "2026-10-19T16:38:29.2993043Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestArchiveModeRejectsExcessiveOrNoncanonicalKDFBeforePassword",
+          "Elapsed": 0.05
+        },
+        {
+          "Time": "2026-10-19T16:40:14.6769964Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeDPAPISessionReuseCounts",
+          "Elapsed": 3.33
+        },
+        {
+          "Time": "2026-10-19T16:40:48.0359387Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestSessionSameUserRawClientCanReceiveKey",
+          "Elapsed": 0.45
+        },
+        {
+          "Time": "2026-10-19T16:40:48.4524899Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestSessionConnectionFloodIsBoundedAndRecovers",
+          "Elapsed": 0.42
+        },
+        {
+          "Time": "2026-10-19T16:40:49.3080564Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestSessionConcurrentWrongPassphrasesSerializeRealKDF",
+          "Elapsed": 0.86
+        },
+        {
+          "Time": "2026-10-19T16:40:24.2891272Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestKDFHeaderRejectedBeforeDerivation",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T16:40:28.1869959Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestManifestAuthenticatesContentMembershipAndIdentity",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T16:41:15.3424886Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestVaultSnapshotBatchCannotMixAndRemainsFrozen",
+          "Elapsed": 4.53
+        },
+        {
+          "Time": "2026-10-19T16:40:04.8715389Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestSelectedVaultSnapshotFreezesMembershipValuesAndOneKeyAccess",
+          "Elapsed": 2.58
+        },
+        {
+          "Time": "2026-10-19T16:40:49.4896338Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestProtectedPublicProfileDoesNotClaimSealedManifestIntegrity",
+          "Elapsed": 1.47
+        },
+        {
+          "Time": "2026-10-19T16:40:31.2139036Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestInputWatchRealProcessRecoversLostHintsAndKeyDaemonReplacement",
+          "Elapsed": 10.41
+        }
+      ],
+      "package_pass": [
+        "github.com/jinyongp/devtools/internal/archiveproof",
+        "github.com/jinyongp/devtools/cmd/devtools",
+        "github.com/jinyongp/devtools/internal/ca",
+        "github.com/jinyongp/devtools/internal/cleanup",
+        "github.com/jinyongp/devtools/internal/diagnostics",
+        "github.com/jinyongp/devtools/internal/doctor",
+        "github.com/jinyongp/devtools/internal/dashboard",
+        "github.com/jinyongp/devtools/internal/execution",
+        "github.com/jinyongp/devtools/internal/hosts",
+        "github.com/jinyongp/devtools/internal/expose",
+        "github.com/jinyongp/devtools/internal/location",
+        "github.com/jinyongp/devtools/internal/lifecycle",
+        "github.com/jinyongp/devtools/internal/netops",
+        "github.com/jinyongp/devtools/internal/netsetup",
+        "github.com/jinyongp/devtools/internal/network",
+        "github.com/jinyongp/devtools/internal/maintenance",
+        "github.com/jinyongp/devtools/internal/paths",
+        "github.com/jinyongp/devtools/internal/platformfs",
+        "github.com/jinyongp/devtools/internal/ports",
+        "github.com/jinyongp/devtools/internal/privilege",
+        "github.com/jinyongp/devtools/internal/backup",
+        "github.com/jinyongp/devtools/internal/profilekey",
+        "github.com/jinyongp/devtools/internal/profiletransfer",
+        "github.com/jinyongp/devtools/internal/profiles",
+        "github.com/jinyongp/devtools/internal/protocol",
+        "github.com/jinyongp/devtools/internal/project",
+        "github.com/jinyongp/devtools/internal/redact",
+        "github.com/jinyongp/devtools/internal/retention",
+        "github.com/jinyongp/devtools/internal/process",
+        "github.com/jinyongp/devtools/internal/services",
+        "github.com/jinyongp/devtools/internal/truststore",
+        "github.com/jinyongp/devtools/internal/proxy",
+        "github.com/jinyongp/devtools/internal/vault",
+        "github.com/jinyongp/devtools/internal/windowsinstall",
+        "github.com/jinyongp/devtools/internal/cli",
+        "github.com/jinyongp/devtools/scripts/package-skill",
+        "github.com/jinyongp/devtools/perf/fixture",
+        "github.com/jinyongp/devtools/internal/values",
+        "github.com/jinyongp/devtools/internal/tasks"
+      ],
+      "native_counts": [
+        {
+          "backend": "dpapi",
+          "initial_cold_unwraps": 1,
+          "warm_use_batches": [
+            10,
+            100,
+            1000
+          ],
+          "concurrent_warm_uses": 32,
+          "warm_unwraps": 0,
+          "after_expiry_unwraps": 1,
+          "manual_locked_use_unwraps": 0,
+          "explicit_unlock_unwraps": 1,
+          "total_unwraps": 3,
+          "initialization_excluded": true,
+          "os_syscall_count": false
+        }
+      ],
+      "peers": {
+        "sha256": "bd78bafd9206eb5d4ef2b8cd9bc52fc2c6c9da896c38acd7dc8c0664adeeae42",
+        "bytes": 5667,
+        "required_pass": [
+          {
+            "Time": "2026-10-19T16:38:20.4207104Z",
+            "Action": "pass",
+            "Package": "github.com/jinyongp/devtools/internal/vault",
+            "Test": "TestNativeWindowsPipePeersRejectOtherSID",
+            "Elapsed": 0.23
+          }
+        ],
+        "package_pass": [
+          "github.com/jinyongp/devtools/internal/vault"
+        ],
+        "native_counts": []
+      },
+      "windows-installed-product-results.json": {
+        "sha256": "1cf108416ca97eb7b552e4688b34ee6702dcf8ef45e730c7c2e81a9047b08ad2",
+        "bytes": 943,
+        "result": {
+          "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+          "version": "0.0.0-vault-validation",
+          "final_version": "0.0.0-vault-validation.native-update",
+          "protocol": 7,
+          "exe_sha256": "6629d8c8b7bc0deab12f693dde8882af9022795236b807a8cdc96ac4863a77f9",
+          "steps": {
+            "candidate_install_and_alias": "pass",
+            "values_secret_and_task_journal": "pass",
+            "default_dpapi_silent_native_reopen_after_session_retirement": "pass",
+            "default_dpapi_native_helper_manual_lock_and_explicit_unlock": "pass",
+            "default_dpapi_data_and_cold_native_unlock_after_self_update": "pass",
+            "managed_readiness_retry_restart_stop_and_verified_tls": "pass",
+            "encrypted_profile_transfer_preview_apply_retry": "pass"
+          },
+          "isolated": false,
+          "isolated_transfer_and_managed_roots": true,
+          "native_provider_disposable_user_root": true,
+          "os_trust_modified": false,
+          "real_pc": "NOT RUN",
+          "owned_roots_removed": true
+        }
+      },
+      "windows-browser-results.json": {
+        "sha256": "9835f5bd2e49ff89279b155a95c38ca6ed2c372509d3018ecea07eb388954222",
+        "bytes": 337,
+        "result": {
+          "cli_commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+          "protocol": 7,
+          "node_arch": "x64",
+          "browser_arch": "amd64",
+          "browser_version": "153.0.8010.12",
+          "login": "pass",
+          "mutation": "pass",
+          "reload": "pass",
+          "cli_confirmation": "pass",
+          "missing_session": "401",
+          "foreign_origin": "403",
+          "real_pc": "NOT RUN"
+        }
+      },
+      "windows-product-identity.json": {
+        "sha256": "d3ad4ce6dae9a95b67592acdf4d033d43dd417cebcead93dfb5a742f74e3ba73",
+        "bytes": 363,
+        "result": {
+          "exe_sha256": "166415d78ad4708373b41856c686bee49fa83541c752a12a0d8e204688f12d95",
+          "version": "0.0.0-vault-validation",
+          "zip_sha256": "f21b044f01c1cf750c27c7c90c53936d1203a14d21210974fd24f4ce47ae5c0a",
+          "architecture": "amd64",
+          "zip": "devtools_0.0.0-vault-validation_windows_amd64.zip",
+          "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253"
+        }
+      }
+    },
+    "arm64": {
+      "sha256": "57262f707959d5576c6e1db117fa0426c6e7aa4669ee9182fd75066fe8af72c1",
+      "bytes": 1147097,
+      "required_pass": [
+        {
+          "Time": "2026-10-19T09:41:59.2415819-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestCachedInspectionActualIPCDoesNotExtendIdle",
+          "Elapsed": 0.48
+        },
+        {
+          "Time": "2026-10-19T09:39:44.4545173-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestConcurrentImportReplaysSameRequest",
+          "Elapsed": 1.13
+        },
+        {
+          "Time": "2026-10-19T09:41:31.3712458-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestEncryptedForwardRecoveryAtEveryDurableBoundary",
+          "Elapsed": 5.54
+        },
+        {
+          "Time": "2026-10-19T09:40:11.9301183-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestFrozenLauncherRealProcessRestartAndLock",
+          "Elapsed": 7.28
+        },
+        {
+          "Time": "2026-10-19T09:39:46.1947908-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestImportPreviewApplyAndStaleProtection",
+          "Elapsed": 1.74
+        },
+        {
+          "Time": "2026-10-19T09:39:47.398622-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestImportRejectsWrongIdentityAndTamperedArchive",
+          "Elapsed": 1.2
+        },
+        {
+          "Time": "2026-10-19T09:41:37.3409543-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestLaunchRealDaemonCrashDuringLockDrainsAcrossReplacement",
+          "Elapsed": 0.71
+        },
+        {
+          "Time": "2026-10-19T09:41:36.6289941-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestLaunchRealProcessCrashRetainsUnknown",
+          "Elapsed": 0.68
+        },
+        {
+          "Time": "2026-10-19T09:40:07.949531-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestLegacyBackupReceiptReplaysAfterProtectedMigration",
+          "Elapsed": 2
+        },
+        {
+          "Time": "2026-10-19T09:42:25.1329041-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestLegacyMigrationPreservesLayersAndRetryReceipts",
+          "Elapsed": 1.23
+        },
+        {
+          "Time": "2026-10-19T09:41:47.0484018-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestModernManagedReplaySurvivesRotationAndNewIncarnation",
+          "Elapsed": 2.06
+        },
+        {
+          "Time": "2026-10-19T09:41:49.8969106-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestModernReplayRetiresOnlyExpiredVerificationKeys",
+          "Elapsed": 2.85
+        },
+        {
+          "Time": "2026-10-19T09:41:24.5019327-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestPassiveProtectedInspectionUsesOnlyCachedKeyAndRespectsLock",
+          "Elapsed": 1.67
+        },
+        {
+          "Time": "2026-10-19T09:40:11.8399405-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestProtectedRestoreDrainsLaunchLeaseAndRejectsStalePreview",
+          "Elapsed": 3.88
+        },
+        {
+          "Time": "2026-10-19T09:40:13.4728542-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestPublicManagedRestartRejectsReplacedGenerationBeforeOldStop",
+          "Elapsed": 1.54
+        },
+        {
+          "Time": "2026-10-19T09:40:05.9461571-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestPublicRestoreCannotDowngradeExistingSealedProfile",
+          "Elapsed": 1.85
+        },
+        {
+          "Time": "2026-10-19T09:40:54.0538816-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/services",
+          "Test": "TestRestartPreservesStopMutationWhenColdStartPreflightFails",
+          "Elapsed": 1.6
+        },
+        {
+          "Time": "2026-10-19T09:39:50.6037382-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop",
+          "Elapsed": 6.25
+        },
+        {
+          "Time": "2026-10-19T09:41:49.0303832-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestRewrapRecoveryAtDurableBoundaries",
+          "Elapsed": 5.34
+        },
+        {
+          "Time": "2026-10-19T09:39:41.9433619-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/dashboard",
+          "Test": "TestServerCompatibilityIncludesEmbeddedUI",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T09:41:30.3962316-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestAutomaticCoordinatorRealDeathDuringOldStopDoesNotRepeat",
+          "Elapsed": 3.49
+        },
+        {
+          "Time": "2026-10-19T09:41:33.6514886-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestAutomaticGoalGuardRejectsChangedInputBeforeStoppingOldExecution",
+          "Elapsed": 3.25
+        },
+        {
+          "Time": "2026-10-19T09:41:46.9579472-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestAutomaticRestartPostStopSpawnAndReadinessFailuresRemainExplicit",
+          "Elapsed": 13.31
+        },
+        {
+          "Time": "2026-10-19T09:42:10.5280302-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestAutomaticValueRestartRealCoordinatorOptInFailureLatchAndOverrides",
+          "Elapsed": 23.57
+        },
+        {
+          "Time": "2026-10-19T09:42:20.7414889-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/cli",
+          "Test": "TestManagedSupervisorValueWatchReconcilesWithoutHintsAndKeepsAppAlive",
+          "Elapsed": 8.37
+        },
+        {
+          "Time": "2026-10-19T09:39:40.1228099-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/backup",
+          "Test": "TestArchiveModeRejectsExcessiveOrNoncanonicalKDFBeforePassword",
+          "Elapsed": 0.06
+        },
+        {
+          "Time": "2026-10-19T09:41:25.8321601-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeDPAPISessionReuseCounts",
+          "Elapsed": 1.79
+        },
+        {
+          "Time": "2026-10-19T09:41:57.5099058-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestSessionSameUserRawClientCanReceiveKey",
+          "Elapsed": 0.46
+        },
+        {
+          "Time": "2026-10-19T09:41:57.8581732-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestSessionConnectionFloodIsBoundedAndRecovers",
+          "Elapsed": 0.35
+        },
+        {
+          "Time": "2026-10-19T09:41:58.580586-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestSessionConcurrentWrongPassphrasesSerializeRealKDF",
+          "Elapsed": 0.72
+        },
+        {
+          "Time": "2026-10-19T09:41:33.7501147-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestKDFHeaderRejectedBeforeDerivation",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T09:41:37.3444864-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestManifestAuthenticatesContentMembershipAndIdentity",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-19T09:42:18.0632517-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestVaultSnapshotBatchCannotMixAndRemainsFrozen",
+          "Elapsed": 5.8
+        },
+        {
+          "Time": "2026-10-19T09:41:18.86119-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestSelectedVaultSnapshotFreezesMembershipValuesAndOneKeyAccess",
+          "Elapsed": 2.35
+        },
+        {
+          "Time": "2026-10-19T09:41:56.9798252-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestProtectedPublicProfileDoesNotClaimSealedManifestIntegrity",
+          "Elapsed": 1.64
+        },
+        {
+          "Time": "2026-10-19T09:41:38.5585688-07:00",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/values",
+          "Test": "TestInputWatchRealProcessRecoversLostHintsAndKeyDaemonReplacement",
+          "Elapsed": 10.36
+        }
+      ],
+      "package_pass": [
+        "github.com/jinyongp/devtools/internal/archiveproof",
+        "github.com/jinyongp/devtools/cmd/devtools",
+        "github.com/jinyongp/devtools/internal/ca",
+        "github.com/jinyongp/devtools/internal/cleanup",
+        "github.com/jinyongp/devtools/internal/diagnostics",
+        "github.com/jinyongp/devtools/internal/doctor",
+        "github.com/jinyongp/devtools/internal/dashboard",
+        "github.com/jinyongp/devtools/internal/execution",
+        "github.com/jinyongp/devtools/internal/hosts",
+        "github.com/jinyongp/devtools/internal/expose",
+        "github.com/jinyongp/devtools/internal/location",
+        "github.com/jinyongp/devtools/internal/lifecycle",
+        "github.com/jinyongp/devtools/internal/netops",
+        "github.com/jinyongp/devtools/internal/netsetup",
+        "github.com/jinyongp/devtools/internal/network",
+        "github.com/jinyongp/devtools/internal/paths",
+        "github.com/jinyongp/devtools/internal/platformfs",
+        "github.com/jinyongp/devtools/internal/maintenance",
+        "github.com/jinyongp/devtools/internal/backup",
+        "github.com/jinyongp/devtools/internal/ports",
+        "github.com/jinyongp/devtools/internal/privilege",
+        "github.com/jinyongp/devtools/internal/profilekey",
+        "github.com/jinyongp/devtools/internal/profiletransfer",
+        "github.com/jinyongp/devtools/internal/profiles",
+        "github.com/jinyongp/devtools/internal/project",
+        "github.com/jinyongp/devtools/internal/protocol",
+        "github.com/jinyongp/devtools/internal/redact",
+        "github.com/jinyongp/devtools/internal/retention",
+        "github.com/jinyongp/devtools/internal/process",
+        "github.com/jinyongp/devtools/internal/services",
+        "github.com/jinyongp/devtools/internal/truststore",
+        "github.com/jinyongp/devtools/internal/proxy",
+        "github.com/jinyongp/devtools/internal/vault",
+        "github.com/jinyongp/devtools/internal/windowsinstall",
+        "github.com/jinyongp/devtools/internal/cli",
+        "github.com/jinyongp/devtools/internal/values",
+        "github.com/jinyongp/devtools/scripts/package-skill",
+        "github.com/jinyongp/devtools/perf/fixture",
+        "github.com/jinyongp/devtools/internal/tasks"
+      ],
+      "native_counts": [
+        {
+          "backend": "dpapi",
+          "initial_cold_unwraps": 1,
+          "warm_use_batches": [
+            10,
+            100,
+            1000
+          ],
+          "concurrent_warm_uses": 32,
+          "warm_unwraps": 0,
+          "after_expiry_unwraps": 1,
+          "manual_locked_use_unwraps": 0,
+          "explicit_unlock_unwraps": 1,
+          "total_unwraps": 3,
+          "initialization_excluded": true,
+          "os_syscall_count": false
+        }
+      ],
+      "peers": {
+        "sha256": "2b51ec32367f19cfaca266e647e1452daa7f5bd7e6bd2deeb8556e2065c08027",
+        "bytes": 5783,
+        "required_pass": [
+          {
+            "Time": "2026-10-19T09:39:33.2790596-07:00",
+            "Action": "pass",
+            "Package": "github.com/jinyongp/devtools/internal/vault",
+            "Test": "TestNativeWindowsPipePeersRejectOtherSID",
+            "Elapsed": 0.32
+          }
+        ],
+        "package_pass": [
+          "github.com/jinyongp/devtools/internal/vault"
+        ],
+        "native_counts": []
+      },
+      "windows-installed-product-results.json": {
+        "sha256": "292da52d48dbaa93d5e7a25379caada979bed91adc53bf4daf2391a22cd76419",
+        "bytes": 943,
+        "result": {
+          "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+          "version": "0.0.0-vault-validation",
+          "final_version": "0.0.0-vault-validation.native-update",
+          "protocol": 7,
+          "exe_sha256": "16a74f5f49dbbbc263d75ddd2a580d2def6f417f03962d4023c78f225817a8e5",
+          "steps": {
+            "candidate_install_and_alias": "pass",
+            "values_secret_and_task_journal": "pass",
+            "default_dpapi_silent_native_reopen_after_session_retirement": "pass",
+            "default_dpapi_native_helper_manual_lock_and_explicit_unlock": "pass",
+            "default_dpapi_data_and_cold_native_unlock_after_self_update": "pass",
+            "managed_readiness_retry_restart_stop_and_verified_tls": "pass",
+            "encrypted_profile_transfer_preview_apply_retry": "pass"
+          },
+          "isolated": false,
+          "isolated_transfer_and_managed_roots": true,
+          "native_provider_disposable_user_root": true,
+          "os_trust_modified": false,
+          "real_pc": "NOT RUN",
+          "owned_roots_removed": true
+        }
+      },
+      "windows-browser-results.json": {
+        "sha256": "7f7b6ae1bc5bc3d61c998631b7257148ba95d660598eedab4777ed2d84d37037",
+        "bytes": 339,
+        "result": {
+          "cli_commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+          "protocol": 7,
+          "node_arch": "arm64",
+          "browser_arch": "amd64",
+          "browser_version": "153.0.8010.12",
+          "login": "pass",
+          "mutation": "pass",
+          "reload": "pass",
+          "cli_confirmation": "pass",
+          "missing_session": "401",
+          "foreign_origin": "403",
+          "real_pc": "NOT RUN"
+        }
+      },
+      "windows-product-identity.json": {
+        "sha256": "3858366c529907fd6c9ecb1299d1021dfacf0be490f7eeba12a341452c0b162d",
+        "bytes": 363,
+        "result": {
+          "version": "0.0.0-vault-validation",
+          "zip_sha256": "5a822dd6387e245c996d646b2607a83785b8579707631f4e9af8a999fa5fc926",
+          "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+          "exe_sha256": "268f175cc9f8c5416c239f448fed741b269db86746547fd43f6655012c119c7a",
+          "architecture": "arm64",
+          "zip": "devtools_0.0.0-vault-validation_windows_arm64.zip"
+        }
+      }
+    }
+  },
+  "exchange": {
+    "linux": {
+      "sha256": "8ba6f90e7e214afcb69cfc465bb82ebdd9edc368dce24506c49b65efdcc69423",
+      "bytes": 340,
+      "result": {
+        "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+        "target": "linux",
+        "passed": [
+          "macos -> linux",
+          "windows-amd64 -> linux",
+          "windows-arm64 -> linux"
+        ],
+        "fresh_target_vault_profile_generation": true,
+        "logical_slot_versions_preserved": true,
+        "nonempty_bundle_ids_members_and_selected_slots_preserved": true
+      }
+    },
+    "macos": {
+      "sha256": "8a2f7e6ee72277c6a65cae0db57a7e9f07c9623949bcdd2fab289ee4d9d1b667",
+      "bytes": 340,
+      "result": {
+        "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+        "target": "macos",
+        "passed": [
+          "linux -> macos",
+          "windows-amd64 -> macos",
+          "windows-arm64 -> macos"
+        ],
+        "fresh_target_vault_profile_generation": true,
+        "logical_slot_versions_preserved": true,
+        "nonempty_bundle_ids_members_and_selected_slots_preserved": true
+      }
+    },
+    "windows-amd64": {
+      "sha256": "2a791359d61bcb62953a19daffe6793530947b8c95ff9ff1787cf2a6f4dbf321",
+      "bytes": 376,
+      "result": {
+        "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+        "target": "windows-amd64",
+        "passed": [
+          "linux -> windows-amd64",
+          "macos -> windows-amd64",
+          "windows-arm64 -> windows-amd64"
+        ],
+        "fresh_target_vault_profile_generation": true,
+        "logical_slot_versions_preserved": true,
+        "nonempty_bundle_ids_members_and_selected_slots_preserved": true
+      }
+    },
+    "windows-arm64": {
+      "sha256": "66b6711b5cd789de53669de6835b3c328da23e530b260bb6413146a64e99efd6",
+      "bytes": 376,
+      "result": {
+        "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+        "target": "windows-arm64",
+        "passed": [
+          "linux -> windows-arm64",
+          "macos -> windows-arm64",
+          "windows-amd64 -> windows-arm64"
+        ],
+        "fresh_target_vault_profile_generation": true,
+        "logical_slot_versions_preserved": true,
+        "nonempty_bundle_ids_members_and_selected_slots_preserved": true
+      }
+    }
+  },
+  "legacy": {
+    "windows-amd64": {
+      "sha256": "42d6cfe614d60ba4eb78438508cb7c5c6f2064b317a82d5d7ead984df948be48",
+      "bytes": 988,
+      "result": {
+        "result": "pass",
+        "baseline_commit": "89100eb98888895a450b2ebd403e4e1c9b5f52d2",
+        "candidate": {
+          "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+          "protocol_version": 7,
+          "version": "0.0.0-vault-validation"
+        },
+        "baseline_sha256": "8e9eb1d425fceb83abcbcd464de49b940150a7001c32098ae40f7cf3a58a6c76",
+        "candidate_sha256": "166415d78ad4708373b41856c686bee49fa83541c752a12a0d8e204688f12d95",
+        "denials": [
+          "storage_error",
+          "storage_error",
+          "storage_error"
+        ],
+        "dashboard_denials": [
+          "storage_error",
+          "storage_error"
+        ],
+        "old_dashboard_positive_control": true,
+        "incompatible_dashboard_replaced": true,
+        "old_session_rejected_after_replacement": true,
+        "actual_legacy_receipt_replay_without_rollback": true,
+        "legacy_mac_plaintext_scan": "pass",
+        "protected_json_unchanged": true,
+        "migrated_data_canary_scan": "pass",
+        "original_input_preserved_and_still_sensitive": true,
+        "owned_root_removed": true
+      }
+    },
+    "windows-arm64": {
+      "sha256": "fea0281b74ce8b75b776ed6d76cc676d69cb3ff33153bbff762917ba10b25084",
+      "bytes": 988,
+      "result": {
+        "result": "pass",
+        "baseline_commit": "89100eb98888895a450b2ebd403e4e1c9b5f52d2",
+        "candidate": {
+          "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+          "protocol_version": 7,
+          "version": "0.0.0-vault-validation"
+        },
+        "baseline_sha256": "56b09d5effc6d7c58e2f5740fcf5b50625c3f5508b40b79c189057d2fb5e0672",
+        "candidate_sha256": "268f175cc9f8c5416c239f448fed741b269db86746547fd43f6655012c119c7a",
+        "denials": [
+          "storage_error",
+          "storage_error",
+          "storage_error"
+        ],
+        "dashboard_denials": [
+          "storage_error",
+          "storage_error"
+        ],
+        "old_dashboard_positive_control": true,
+        "incompatible_dashboard_replaced": true,
+        "old_session_rejected_after_replacement": true,
+        "actual_legacy_receipt_replay_without_rollback": true,
+        "legacy_mac_plaintext_scan": "pass",
+        "protected_json_unchanged": true,
+        "migrated_data_canary_scan": "pass",
+        "original_input_preserved_and_still_sensitive": true,
+        "owned_root_removed": true
+      }
+    },
+    "linux": {
+      "sha256": "87f9a27eb959beea91ede3a34e082847fe8214229b9a95f8b5a1ec3812c6948e",
+      "bytes": 907,
+      "result": {
+        "result": "pass",
+        "baseline_commit": "89100eb98888895a450b2ebd403e4e1c9b5f52d2",
+        "candidate": {
+          "commit": "unknown",
+          "protocol_version": 7,
+          "version": "dev"
+        },
+        "baseline_sha256": "31fcb0586993aeabf90cb2e96d0ee1deb78c3f82f5605705d62fb9d6484347c3",
+        "candidate_sha256": "d621a6b62d65cddc25497a311aba19153200f5ac77ee920e177ce3ef5f961733",
+        "denials": [
+          "storage_error",
+          "storage_error",
+          "storage_error"
+        ],
+        "dashboard_denials": [
+          "storage_error",
+          "storage_error"
+        ],
+        "old_dashboard_positive_control": true,
+        "incompatible_dashboard_replaced": true,
+        "old_session_rejected_after_replacement": true,
+        "actual_legacy_receipt_replay_without_rollback": true,
+        "legacy_mac_plaintext_scan": "pass",
+        "protected_json_unchanged": true,
+        "migrated_data_canary_scan": "pass",
+        "original_input_preserved_and_still_sensitive": true,
+        "owned_root_removed": true
+      }
+    },
+    "macos": {
+      "sha256": "05bc5de8ece685620492370cdf1e8d8add3927776f1ba9e2cbd41189f5625d90",
+      "bytes": 907,
+      "result": {
+        "result": "pass",
+        "baseline_commit": "89100eb98888895a450b2ebd403e4e1c9b5f52d2",
+        "candidate": {
+          "commit": "unknown",
+          "protocol_version": 7,
+          "version": "dev"
+        },
+        "baseline_sha256": "5ade5bb91d4c55e001f22c66dfc7315d2bbd5eaea3a633f910bb6f0641488742",
+        "candidate_sha256": "475cea45ae968860f8a8168696c3e4642fe4f0a0e27b486ad5a1f23fb08a4a9b",
+        "denials": [
+          "storage_error",
+          "storage_error",
+          "storage_error"
+        ],
+        "dashboard_denials": [
+          "storage_error",
+          "storage_error"
+        ],
+        "old_dashboard_positive_control": true,
+        "incompatible_dashboard_replaced": true,
+        "old_session_rejected_after_replacement": true,
+        "actual_legacy_receipt_replay_without_rollback": true,
+        "legacy_mac_plaintext_scan": "pass",
+        "protected_json_unchanged": true,
+        "migrated_data_canary_scan": "pass",
+        "original_input_preserved_and_still_sensitive": true,
+        "owned_root_removed": true
+      }
+    }
+  },
+  "initial_successful_jobs": [
+    {
+      "name": "validate-release",
+      "id": 118175600980,
+      "conclusion": "success"
+    },
+    {
+      "name": "vault-linux",
+      "id": 118175706846,
+      "conclusion": "success"
+    },
+    {
+      "name": "vault-macos (macos-15-intel, amd64)",
+      "id": 118175706864,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-linux",
+      "id": 118175707035,
+      "conclusion": "success"
+    },
+    {
+      "name": "wsl-vault",
+      "id": 118175707050,
+      "conclusion": "success"
+    },
+    {
+      "name": "vault-macos (macos-15, arm64)",
+      "id": 118175707170,
+      "conclusion": "success"
+    },
+    {
+      "name": "system-network (macos, macos-latest)",
+      "id": 118175707222,
+      "conclusion": "success"
+    },
+    {
+      "name": "system-network (linux, ubuntu-24.04)",
+      "id": 118175707237,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-macos",
+      "id": 118175707262,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / suite",
+      "id": 118175708106,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / installer-ps5",
+      "id": 118175708314,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / product",
+      "id": 118175708324,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / installer-ps5",
+      "id": 118175708330,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / suite",
+      "id": 118175708358,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / installer-ps7",
+      "id": 118175708380,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / product",
+      "id": 118175708473,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / race",
+      "id": 118175708673,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / boundaries",
+      "id": 118175708675,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / installer-ps7",
+      "id": 118175708751,
+      "conclusion": "success"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / boundaries",
+      "id": 118175708795,
+      "conclusion": "success"
+    }
+  ],
+  "artifact_attempts": "Native suites/providers/WSL/installed producers are successful attempt-1 results at the same SHA. The emulated x64 installer and dependent package/exchange run again in attempt 2; no native suite rerun is invented.",
+  "archive_cli_probe": {
+    "sha256": "ec1700c17376d6bbd901d1c687723e60b9298d30b6f52914ff03bde5da725692",
+    "bytes": 956,
+    "result": {
+      "commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+      "default_noninteractive_cli": true,
+      "kdf_executed": false,
+      "rows": [
+        {
+          "factor": "18",
+          "code": "passphrase_required",
+          "elapsed_seconds": 0.007525022025220096
+        },
+        {
+          "factor": "19",
+          "code": "invalid_backup",
+          "elapsed_seconds": 0.0075522120168898255
+        },
+        {
+          "factor": "22",
+          "code": "invalid_backup",
+          "elapsed_seconds": 0.006756137998308986
+        },
+        {
+          "factor": "-1",
+          "code": "invalid_backup",
+          "elapsed_seconds": 0.007024619990261272
+        },
+        {
+          "factor": "18446744073709551616",
+          "code": "invalid_backup",
+          "elapsed_seconds": 0.006820137990871444
+        },
+        {
+          "factor": "+18",
+          "code": "invalid_backup",
+          "elapsed_seconds": 0.0068711859930772334
+        },
+        {
+          "factor": "018",
+          "code": "invalid_backup",
+          "elapsed_seconds": 0.006838888017227873
+        }
+      ]
+    }
+  },
+  "local_checks": {
+    "check:all": {
+      "sha256": "9f557067fa5de3cc5da33f3403992d354006305a9f55d06c44cdd6f72e3146e1",
+      "bytes": 13587,
+      "result": "exit 0"
+    },
+    "test:installed (30)": {
+      "sha256": "d19dd3375ca9a885508b06024052ee865b835a7428d0523abe6f2ab8d8a3a806",
+      "bytes": 6034,
+      "result": "exit 0"
+    },
+    "browser (4)": {
+      "sha256": "dd920a689d05506f22309f39a33b9f633540a73b7b4b4a4dfb91e12a520750a6",
+      "bytes": 710,
+      "result": "exit 0"
+    },
+    "installed usage follow-up": {
+      "sha256": "2cad7ee9ce9b37ed7f26db188e24028705d3b06bece388551aff98126aa9a5f3",
+      "bytes": 398,
+      "result": "exit 0",
+      "test_commit": "5be2322",
+      "runtime_commit": "1e4bebd6d955ff58409416fea77e8a4183b81253",
+      "scope": "additional local actual installed assertions; native tests do not include this later test-only extension"
+    }
+  },
+  "performance": {
+    "runtime_commit": "f3722b2b408bc94850787eae01b57c58f4787d9a",
+    "baseline_commit": "89100eb98888895a450b2ebd403e4e1c9b5f52d2",
+    "report": "docs/var-sec/A12-final-performance-results.md",
+    "applicability": "Later production change is backup archive input cost guard; measured warm snapshot/launch/session/redactor paths unchanged."
+  },
+  "known_failure_revalidation": {
+    "initial_job": 118175708922,
+    "engine": "pwsh.exe x64 emulated on ARM64",
+    "exit_code": -1073741819,
+    "error": "Fatal error. 0xC0000005",
+    "source_unchanged": true,
+    "assertions_preserved": true,
+    "successful_job": 118184351693
+  }
+}

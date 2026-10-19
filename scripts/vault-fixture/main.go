@@ -25,7 +25,7 @@ func retire(ctx context.Context, directory string) error {
 	}
 	client, err := vault.OpenSessionClient(directory)
 	if err != nil {
-		return errors.New("cannot verify test session identity")
+		return fmt.Errorf("cannot verify test session identity: %w", err)
 	}
 	if err = client.Retire(ctx); err != nil && !errors.Is(err, vault.ErrUnavailable) {
 		return errors.New("test session retirement failed")

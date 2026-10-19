@@ -22,6 +22,8 @@ class CLIError(RuntimeError):
     def __init__(self, arguments, code, details):
         self.code, self.details = code, details or {}
         safe = {key: self.details.get(key) for key in ("operation", "os_error")}
+        safe["conditions"] = [item.get("condition", {}).get("code")
+                              for item in (self.details.get("items") or []) if item.get("condition")]
         super().__init__(f"Installed command {arguments[:3]} failed: {code} {safe}")
 
 

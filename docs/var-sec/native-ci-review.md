@@ -32,3 +32,23 @@ fail 값만으로는 file-based keychain의 UI를 차단하지 못한다는
 리뷰: Wrap/Unwrap/Remove의 query와 모든 조기 반환에서 설정 복구와 CF release를 확인했다.
 Darwin ARM64 test binary compile pass. locked collection 실제 거절과 unlock 후 같은 키
 유지는 두 native architecture의 수정 CI가 확인할 필수 조건이다.
+
+## Native fixture의 파일 경계
+
+Windows full suite의 다섯 vault 검사에서 공통 session fixture의 `FileStore.Initialize`가
+recovery 오류로 끝났다. session fixture는 `os.MkdirTemp` root 자체를 data root로 썼지만,
+이 API는 Windows의 protected ACL을 만들지 않는다. 테스트 data root를 그 아래의
+production `platformfs.OpenRoot(..., true)`로 생성한 private child로 옮긴다. 공개 ACL을
+허용하도록 제품 검사를 바꾸지 않는다. macOS fixture 경로의 기존 OS symlink는 실제
+경로로 선택한 뒤 사용한다.
+
+Windows completion의 무변경 검사는 live daemon의 byte-range locked file을 ReadFile해
+실패했다. lock 파일 이름과 수정 시간은 계속 비교하되 OS가 잠근 bytes를 읽지 않는다.
+다른 일반 파일의 내용 비교는 유지한다. macOS system-network fixture도 `/var` alias를
+실제 temporary 경로로 바꿔 no-follow 경계에 전달한다. Windows installed product 실패의
+하위 condition 및 session helper의 typed 오류를 출력에 포함해 원인 추적을 가능하게 한다.
+값·키·credential·raw child output은 추가하지 않는다.
+
+리뷰 범위: fixture 생성/수명/정리, 두 snapshot 호출의 비교 대상, 설치 fixture의 안전한
+오류 필드, network HOME/cleanup 경로를 확인했다. 영향 Linux 검사와 Python AST를 실행하고
+Windows 실제 결과는 새 CI에서 판정한다. 기존 실행 실패는 아직 해결됐다고 표시하지 않는다.

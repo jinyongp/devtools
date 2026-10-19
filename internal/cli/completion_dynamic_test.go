@@ -68,6 +68,16 @@ func TestDynamicCompletion(t *testing.T) {
 				out[path] = "socket"
 				return nil
 			}
+			// Windows byte-range locks prohibit reading live daemon lock bytes.
+			// Observe their metadata while retaining their names in the snapshot.
+			if strings.HasSuffix(entry.Name(), ".lock") {
+				info, err := entry.Info()
+				if err != nil {
+					return err
+				}
+				out[path] = info.ModTime().String()
+				return nil
+			}
 			b, err := os.ReadFile(path)
 			if err != nil {
 				return err

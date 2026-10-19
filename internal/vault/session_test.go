@@ -53,7 +53,20 @@ func sessionFixture(t *testing.T) (string, PassphraseProtector, *Material) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(base) })
+	temporary := base
+	t.Cleanup(func() { os.RemoveAll(temporary) })
+	// MkdirTemp does not establish a protected user-only ACL on Windows.
+	// Use the production filesystem boundary for the actual data root.
+	base, err = filepath.EvalSymlinks(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base = filepath.Join(base, "private")
+	root, err := platformfs.OpenRoot(base, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.Close()
 	directory := filepath.Join(base, "vault")
 	p := protectorFixture(t)
 	key, err := (KeyFileStore{Directory: directory}).Initialize(context.Background(), p.VaultID, "passphrase", p)

@@ -26,7 +26,9 @@ def main():
     temporary=tempfile.mkdtemp(prefix="devtools-system-network-")
     # Retain keys and recovery state if any OS cleanup cannot be confirmed.
     if temporary:
-        root=Path(temporary);root.chmod(0o700)
+        # macOS's /var temporary path is an OS symlink. Select the real path
+        # before passing HOME to the no-follow private storage boundary.
+        root=Path(temporary).resolve();root.chmod(0o700)
         report["recovery_root"]=str(root)
         binary=root/"bin"/"devtools";binary.parent.mkdir();shutil.copy2(source,binary)
         project=root/"project";project.mkdir()

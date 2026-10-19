@@ -35,3 +35,7 @@ noop의 inject=false 경로는 유지한다. 이 추가 case도 같은 세 크�
 
 추가 case의 actual candidate smoke(3 sample/1 warmup)와 기존 perf regression 10개가
 통과했다. `/tmp/devtools-values-plan/A12-injected-smoke/`에 raw 결과를 보존했다.
+
+양쪽 36 CRUD/3 execution case의 matched 측정을 완료했다. [선택 결과와 한계](A12-warm-session-results.md),
+같은 문서의 tracked raw sample JSON을 함께 보존한다. 이 초기 결과로 A12의 다른 성능 축이나
+native 필수 검사를 완료 처리하지 않는다.

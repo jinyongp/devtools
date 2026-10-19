@@ -81,8 +81,11 @@ devtools run --env local -- cmd.exe /d /c set LOG_LEVEL
 JSON을 반환하고, 실행한 자식 프로그램의 출력은 그대로 전달합니다.
 
 생성된 `devtools.toml`은 Git에 커밋해 두세요. 같은 profile을 사용하는 프로젝트와
-worktree는 저장한 값을 공유합니다. 환경변수와 secret은 사용자 전용 권한의 평문 파일로
-저장되며, 백업은 별도로 암호화합니다. secret 등록과 프로젝트 명령 설정은
+worktree는 저장한 값을 공유합니다. 현재 소스는 secret을 로컬 암호화하고
+OS 보호 또는 암호 기반 키 세션을 재사용합니다.
+공개 변수는 조회할 수 있습니다. `vault` 명령을 제공하는 빌드에서는 처음 한 번
+`devtools vault init`으로 준비합니다. [설정과 적용 빌드](docs/secret-protection.md)를 확인하세요.
+secret 등록과 프로젝트 명령 설정은
 [값과 실행 가이드](docs/cli-contract.md)를 참고하세요.
 
 명령 사용법이 필요하면 `devtools --help` 또는 `devtools task --help`처럼

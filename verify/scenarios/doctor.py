@@ -65,6 +65,7 @@ assert remedy['required_inputs'] == ['stdin']
 failure = api("run", "check", expected=3)
 assert failure["error"]["code"] == "requirements_failed"
 assert not (project / "marker").exists()
+api("vault", "init", "--backend", "passphrase", "--passphrase-stdin", input="synthetic-test-vault-passphrase\n")
 api("sec", "set", "TOKEN", "--env", "dev", "--stdin", input=canary)
 nested = project / "nested"
 nested.mkdir()

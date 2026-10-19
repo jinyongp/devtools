@@ -48,6 +48,7 @@ def api(*args, input=None):
     assert canary.encode() not in result.stdout + result.stderr
     return json.loads(result.stdout)['data']
 
+api('vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input=b'synthetic-test-vault-passphrase\n')
 api('sec', 'set', 'TOKEN', '--stdin', input=canary.encode())
 
 def run(*options, binary_output=False):

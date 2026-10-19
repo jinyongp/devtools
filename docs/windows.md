@@ -88,8 +88,10 @@ Config, data, cache, and runtime directories are separate under LocalAppData's
 `devtools` directory. Private storage requires local NTFS with access restricted to
 the current user and SYSTEM. Unsupported ACLs are not repaired automatically.
 UNC/SMB, device paths, alternate data streams, reparse points/symlinks, and cloud-synced
-folders are unsupported for active private storage. Private data is plaintext;
-backups and profile exports are encrypted. Use [profile transfer](profiles.md) to
+folders are unsupported for active private storage. In the current var/sec source,
+secret values use local encryption with user DPAPI protection; public variables and
+metadata remain readable. Check [vault setup and build availability](secret-protection.md).
+Backups and profile exports are encrypted separately. Use [profile transfer](profiles.md) to
 move data between computers or operating systems.
 
 Managed processes join an owned Job at creation. Shutdown requests graceful exit,

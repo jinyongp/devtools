@@ -5,6 +5,13 @@
 `devtools backup`은 전역 var/sec/env와 task/workstream을 age X25519 recipient로 암호화해 보관한다. `devtools profile export/import`는 같은 snapshot payload를 다른 기기로 옮기며, protocol v5부터 기본 transfer는 원본 기기에서 먼저 만드는 age scrypt passphrase archive를 사용한다.
 백업 보관은 아래 키 준비부터, 기기 간 이동은 [Profile 전송 가이드](profiles.md#다른-기기로-내보내기)부터 시작한다. 모든 명령은 JSON을 반환하며 passphrase·개인 identity·백업 값 원문은 출력하지 않는다.
 
+현재 var/sec 소스의 보호 root에서는 내보낼 값을 기존 키 세션으로 인증한다.
+secret이 포함된 논리 자료를 받을 대상도 먼저 [vault 설정과 해제](secret-protection.md)가
+필요하다. archive는 논리 값·버전·종류·계층을 보존하지만 기기 root key, 세션과 실행
+handle은 옮기지 않는다. 복원한 profile은 새 로컬 ID·generation·keyset을 사용한다.
+공개 전용 root의 공개 값 백업에는 vault 설정이 필요하지 않다. 이전 형식의 archive는
+호환 경로로 읽으며, profile 전송 암호와 로컬 vault 암호는 별개다.
+
 ## 키와 기본 위치 준비
 
 키 파일을 둘 디렉터리를 준비한 뒤 다음 명령을 실행한다. 파일이 이미 있으면 그대로 보존하고 오류를 반환한다.

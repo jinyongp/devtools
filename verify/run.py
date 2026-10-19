@@ -9,6 +9,8 @@ import sys
 import tempfile
 import uuid
 
+from vault_fixture import retire_home_sessions
+
 
 TEST_VERSIONS = ("0.0.0-test.1", "0.0.0-test.2")
 SCENARIO_TIMEOUT_SECONDS = 180
@@ -152,7 +154,7 @@ def cleanup_managed_processes(home: Path, env) -> bool:
                 clean = False
         except (KeyError, TypeError, json.JSONDecodeError):
             clean = False
-    return clean
+    return retire_home_sessions(home) and clean
 
 
 def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:

@@ -45,6 +45,7 @@ Some linked topic guides are currently in Korean.
 ## Working in a project
 
 - [Values and commands](cli-contract.md): profiles, environment overrides, variables, secrets, dotenv import, and saved commands.
+- [Local secret protection](secret-protection.md) (current source): one-time vault setup, reusable sessions, locking, migration, and recovery.
 - [Diagnostics](doctor.md): `doctor`, `diagnostics`, required tools, and recovery.
 - [Ports](ports.md): assignments, bindings, project URLs, and worktree names.
 - [Processes](processes.md): start, logs, restart, stop, and partial batch failures.

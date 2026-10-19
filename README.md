@@ -83,10 +83,11 @@ an installed project tool's command after `--`, such as `pnpm dev` or `go run .`
 Devtools data commands return JSON; child commands keep their own output.
 
 Commit the generated `devtools.toml` to Git. Projects and worktrees that use the
-same profile share stored values. Environment variables and secrets are stored
-in plaintext files accessible only to your user account; backups are encrypted
-separately. See [values and command execution](docs/cli-contract.md) to add
-secrets and configure project commands.
+same profile share stored values. The current source protects stored secrets with
+local encryption and a reusable OS-protected or passphrase key session; public variables remain readable. This
+requires one-time `devtools vault init` on a build exposing that command. See
+[local secret protection](docs/secret-protection.md) for setup and build availability.
+The [values guide](docs/cli-contract.md) covers secret registration and saved commands.
 
 Use `devtools --help` or a command's help, such as `devtools task --help`, to
 explore the CLI. Run `devtools command list` to see your configured project commands.

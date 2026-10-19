@@ -52,6 +52,9 @@ devtools run test:installed profiles
 # 실제 서버의 다중 시작·readiness·재사용·worktree 격리·부분 재시도
 devtools run test:installed project_lifecycle
 
+# vault 설정·재사용 세션·잠긴 metadata·JSON/schema/completion
+devtools run test:installed vault
+
 # 출력 보호·binary stdout 예외·stderr·캡처·PTY·느린 소비자 취소
 devtools run test:installed output_redaction
 
@@ -64,7 +67,9 @@ devtools run test:installed --list
 
 기본 실행은 현재 OS/architecture용 `0.0.0-test.1`, `0.0.0-test.2` CLI release와
 `0.0.0-test.1` Agent Skill artifact를 임시 디렉터리에 만든다. 모든 시나리오가 끝나면
-release와 사용자 데이터가 자동으로 삭제된다. 시나리오가 실패해도 runner가 격리 HOME에서
+release와 사용자 데이터가 자동으로 삭제된다. secret을 사용하는 시나리오는 명시
+passphrase vault를 준비하며 native keyring을 변경하지 않는다. 테스트가 만든 키 세션은
+해당 private endpoint의 OS 사용자와 challenge를 확인한 value-free control로 종료한다. 시나리오가 실패해도 runner가 격리 HOME에서
 시작한 proxy, dashboard, managed process를 정리한 뒤 임시 데이터를 삭제한다.
 
 각 시나리오는 진행 로그를 즉시 출력한다. 180초 안에 끝나지 않으면 해당 시나리오의

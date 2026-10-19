@@ -89,6 +89,7 @@ URL={template="http://${var.HOST}:${bind.P}/v1"}
 ''')
     api("var", "set", "HOST", "--value", "localhost", cwd=frontend)
     assert execute("devtools", "run", "read", cwd=frontend).stdout.strip() == "http://localhost:23000/v1"
+    api("vault", "init", "--backend", "passphrase", "--passphrase-stdin", input="synthetic-test-vault-passphrase\n", cwd=frontend)
     api("sec", "set", "URL", "--stdin", input="secret-canary", cwd=frontend)
     assert api("run", "read", cwd=frontend, expected=3)["error"]["code"] == "binding_conflict"
 finally:

@@ -75,7 +75,9 @@ retrying; refresh stale revisions or previews and reassess changed input. Stop
 blind retries when missing permissions, conflicting state, or unavailable tools
 need resolution. Remedy argv suggests an action; it does not authorize it.
 
-Keep secrets in stdin/private files. Task contexts, dashboard links and raw child
-logs may expose credentials; omit them from shared evidence. Inspect saved
+Keep secrets in stdin/private files. Discover `vault` support before using local key
+protection; setup/unlock is reused rather than repeated for every command. Task contexts,
+dashboard links, historical logs and output outside filtering may expose credentials;
+omit them from shared evidence. Inspect saved
 operation results and query live state separately: a replay is not a fresh health
 check. Report completed changes, observed validation, and unresolved conditions.

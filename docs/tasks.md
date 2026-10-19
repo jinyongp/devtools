@@ -225,6 +225,12 @@ Raw logs and validation evidence are loaded through their explicit controls.
 
 **Variables & secrets** selects common values or an environment. Variables display
 their values; secrets display storage metadata and accept a replacement value.
+On builds with vault support, this view shows the shared key-session state and
+explicit lock/unlock controls. Protected writes require an unlocked session; metadata
+remains available while locked. Setup stays in the CLI. Unlock input is cleared after
+sending, including uncertain responses; check status before re-entering it. Polling does
+not unlock the vault or extend its idle timeout. See [local protection](secret-protection.md).
+
 Editing an inherited value creates an override in the selected environment.
 From **Common**, choose **Override in…** on a key, select an environment, and enter its value. Existing overrides are identified before saving. Saving opens that environment; the common value stays unchanged. Create an environment first if none exists. Secrets accept a new value with a masked input.
 

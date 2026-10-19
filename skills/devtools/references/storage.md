@@ -60,6 +60,13 @@ Config files, instance/port assignments, live processes and dashboard sessions
 are not restored. Reconnect the target project and prepare its local execution
 state separately. Refresh task cursors after restore.
 
+For builds with vault support, protected exports require the existing reusable local
+key session. Logical value archives exclude device keys, vault sessions and launch
+handles. A sealed import needs an initialized/unlocked destination vault; restoration
+creates fresh local profile IDs, storage generations and keysets while preserving
+logical values/versions. Transfer passphrases and vault passphrases are independent.
+A preview can become stale even when a replacement restores identical values.
+
 ## Cleanup and archives
 
 `cleanup preview` returns data.id as PLAN_ID and data.items candidate IDs. Apply

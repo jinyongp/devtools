@@ -2,8 +2,8 @@
 
 기준: `89100eb98888895a450b2ebd403e4e1c9b5f52d2`.
 Workstream: `1888bdf7-3f14-4eeb-8782-329795103204`.
-이 문서는 구현 계약이다. 아래 저장 형식과 신규 명령의 제품 통합·OS 검증은
-후속 작업에서 수행한다. 기존 사용자 저장소를 이 문서 추가만으로 전환하지 않는다.
+이 문서는 구현 계약이다. 현재 저장 형식과 신규 명령의 제품 통합은 진행 중이며
+OS별 최종 검증은 별도 gate에서 수행한다. 기존 사용자 저장소를 이 문서 추가만으로 전환하지 않는다.
 
 ## 호환성과 공개 경계
 
@@ -21,7 +21,9 @@ Workstream: `1888bdf7-3f14-4eeb-8782-329795103204`.
 
 ## 저장·키 계약
 
-저장 형식과 세션 protocol은 각각 독립된 version 1로 시작한다. 슬롯은
+저장 형식은 version 1이며 세션 protocol은 version 2다. 둘은 독립적으로 관리하고
+저장용 HKDF는 저장 형식 version 1에 결합한다. 세션 protocol 변경으로 기존 저장 키를 바꾸지 않는다.
+슬롯은
 32-byte key와 매번 새 RNG 24-byte nonce의 XChaCha20-Poly1305를 사용한다.
 Vault 상위키와 profile keyset은 독립 난수이며 HKDF-SHA-256 info는
 protocol·vault/profile ID·용도를 결합한다. keyset의 암호화·manifest·receipt

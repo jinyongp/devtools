@@ -49,7 +49,10 @@ devtools diagnostics
 ```
 
 보고서는 profile metadata, port instance와 assignment 개수, managed process 상태 개수,
-proxy와 dashboard 실행 상태, 공개 backup 설정 상태를 포함한다. 각 영역은
+proxy와 dashboard 실행 상태, 공개 backup 설정 상태를 포함한다. 현재 var/sec 소스는
+값 없는 vault 보호 상태와 명시 해제 필요 여부도 포함한다. 이 상태 조회는 세션을
+열거나 idle 시간을 연장하지 않는다. 잠금 자체는 검사 실패가 아니며, recovery 상태는
+`ready:false`로 보고한다. [설정과 복구](secret-protection.md)를 참고한다. 각 영역은
 `status: "pass"` 또는 `status: "fail"`을 반환하고, 읽기나 저장소 검사가 실패한 영역은
 `error_code`와 `issues`에 기록한다. `data.ready`는 모든 영역을 정상적으로 조회했는지를
 나타낸다.

@@ -66,6 +66,8 @@ api(source, 'init', '--profile', 'portable')
 api(source, 'env', 'create', 'local', '--profile', 'portable')
 api(source, 'var', 'set', 'MODE', '--profile', 'portable', '--value', 'development')
 api(source, 'var', 'set', 'MODE', '--profile', 'portable', '--env', 'local', '--value', 'override')
+for local_env in (source, target):
+    api(local_env, 'vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input='synthetic-test-vault-passphrase\n')
 api(source, 'sec', 'set', 'TOKEN', '--profile', 'portable', '--stdin', input=canary)
 task = mutate('add', body={'title': 'Portable task'})['item']['id']
 workstream = mutate('workstream create', body={'title': 'Portable workstream'})['item']['id']

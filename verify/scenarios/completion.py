@@ -42,6 +42,7 @@ call('env', 'create', 'local')
 call('env', 'create', 'staging', '--profile', 'other')
 call('var', 'set', '_LEVEL', '--value', 'CANARY-VALUE')
 call('var', 'set', 'LOCAL_ONLY', '--env', 'local', '--value', 'CANARY-VALUE')
+call('vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input='synthetic-test-vault-passphrase\n')
 call('sec', 'set', 'TOKEN', '--stdin', input='CANARY-SECRET')
 task_id = json.loads(call('task', 'add', '--title', 'CANARY-TITLE',
                           '--request-id', str(uuid.uuid4())))['data']['item']['id']

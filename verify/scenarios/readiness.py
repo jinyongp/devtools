@@ -67,6 +67,7 @@ finally:
  os.close(fd)
 ''')
 api('var','set','PUBLIC','--value','initial')
+api('vault','init','--backend','passphrase','--passphrase-stdin',input='synthetic-test-vault-passphrase\n')
 api('sec','set','TOKEN','--stdin',input=canary)
 live=[]
 try:

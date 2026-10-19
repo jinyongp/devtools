@@ -21,6 +21,7 @@ call(['sh',os.environ['DEVTOOLS_TEST_INSTALLER'],'install','--version','0.0.0-te
 identity, recipient = str(home / 'identity'), str(home / 'recipient')
 api('backup','keygen','--identity-file',identity,'--recipient-file',recipient)
 api('backup','configure','--directory',str(home / 'backups'),'--recipient-file',recipient)
+api('vault','init','--backend','passphrase','--passphrase-stdin',input='synthetic-test-vault-passphrase\n')
 api('sec','set','TOKEN','--profile','fixture','--stdin',input='BACKUP_CANARY')
 api('var','set','MODE','--profile','fixture','--value','development')
 task = api('task','add','--profile','fixture','--title','Recover me','--request-id',str(uuid.uuid4()))

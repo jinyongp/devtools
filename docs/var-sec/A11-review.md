@@ -1,7 +1,7 @@
 # A11 제품 연결 검토
 
-A11은 진행 중이다. 이 기록은 관리 명령·공통 provider·dashboard 보호 상태 UI와 진단 단위의 검토다.
-문서/Skill 및 최종 설치물 수용을 포함한 A11 전체 완료는 아니다. 원래 설치물/
+A11 제품 연결 범위의 구현·문서·Linux 설치물 검토를 완료했다.
+원래 native 통합 수용과 첫 배포 판정은 아래 필수 gate에 남으며 이 기록으로 대체하지 않는다. 원래 설치물/
 native 검증은 N01–N05/A12, 전체 변경 리뷰는 Z01의 필수 조건으로 유지한다.
 
 | 영역 | 상태 | 근거 |
@@ -15,7 +15,7 @@ native 검증은 N01–N05/A12, 전체 변경 리뷰는 Z01의 필수 조건으�
 | 기존 값/실행/backup provider | reviewed Linux | 공개 전용/보호 root 선택, 실제 재사용 세션, frozen foreground/managed 실행, 새 keyset/generation 전송 |
 | dashboard 공통 store·managed 입력 / completion / doctor | reviewed Linux | passive metadata, 공통 frozen preparation·admission, 잠금 진단, lock 없는 이름 completion |
 | dashboard 보호 상태 UI·vault 진단 요약 | reviewed Linux | 실제 browser keyboard lock/unlock·오입력 정리·passive polling·390px 화면, HTTP 인증 경계·JSON schema 검사 |
-| 문서/Skill | pending | 다음 구현 단위 |
+| 문서/Skill | reviewed current source | README 두 언어·CLI/backup/dashboard/진단·Skill의 저장/출력/해제 설명을 실제 동작과 대조; 배포 완료로 표시하지 않음 |
 
 확인·수정한 결함:
 
@@ -109,3 +109,42 @@ polling의 동일 만료 시각, prefix 경고 표시/해제와 390×844 화면�
 전체 dashboard static 검사 33 passed, 영향 Go package race와 전체 Go 회귀 통과.
 마지막 CLI/HTTP warning 및 diagnostics consumer 검사도 통과했다. 이는 native OS
 보호 저장소·설치물 검증이나 전체 접근성 인증을 대신하지 않는다. 문서와 후속 gate는 남는다.
+
+
+## 문서와 설치물 최종 연결 검토
+
+CLI/dashboard/diagnostics/profile consumer, 공개 schema·help·completion, README 두 언어,
+CLI/backup/windows/task/관리 API 안내와 배포되는 Skill을 검토했다. 별도 secret-protection
+가이드는 최초 설정부터 재사용·잠금·기존 전환·복구·실제 보호 범위를 연결한다. 이전 설치
+빌드와 현재 소스를 구분하고 native 검증을 완료했다고 쓰지 않는다. 문서의 session protocol
+설명도 실제 version 2와 저장 HKDF version 1의 독립 계약으로 바로잡았다. 로컬 파일 링크가
+존재함을 검사했다. 가이드의 OS별 실제 첫 설정은 native gate가 확인해야 한다.
+
+설치 검증은 테스트 release를 실제 패키징·설치하고 각 소유 HOME에서 실행했다. secret을
+쓰는 기존 시나리오만 명시 passphrase init을 하며 전역 자동 초기화로 오류를 숨기지 않는다.
+runner는 종료 시 Linux peer UID/macOS getpeereid와 endpoint/session/challenge를 확인하는
+value-free control로 자체 session을 retire한다. native keyring은 변경하지 않는다.
+
+새 vault 시나리오는 public-only → 초기화 전 거절 → 비대화형 암호 없음 즉시 오류 →
+명시 init/secret write → 재사용 → manual lock → 값 없는 secret 목록/공개 조회/진단/
+completion → locked write 거절 → 오입력 거절 → 해제/recover → 실제 마스킹 실행을
+확인한다. no sec get과 아직 미구현 bundle option 거절도 확인한다. 최초 테스트에서
+completion에 argv를 전달했던 fixture 오류는 기존 NUL stdin 계약으로 수정했고 재실행했다.
+
+최종 실행 근거:
+
+- `./scripts/project check` 통과: Skill 공식 검증·재현 가능한 package/negative fixture,
+  dashboard 33개, installer/release/project/perf 검사, 전체 gofmt/vet/Go race 포함.
+  주요 race 결과 backup 58.962s, CLI 70.471s, values 87.651s, vault 37.286s.
+- `python3 -B verify/run.py vault completion` 통과. Bash/zsh 실제 completion,
+  interactive Bash Readline까지 확인했다. 미설치 fish는 이 호스트에서 확인하지 않았다.
+- `python3 -B verify/run.py install tasks doctor ports backup profiles readiness output_redaction`
+  전체 통과. 실제 설치/update·task/dashboard·진단·포트·전송/replay·readiness와 실제
+  pipe/PTY/capture/느린 소비자 취소를 새 protected provider에 연결해 확인했다.
+- 현재 repo의 Playwright file을 명시한 browser 검사 2 passed(10.1s). 별도 중첩 worktree의
+  test를 실행한 결과와 혼합하지 않았다. Linux 결과를 Windows evidence로 기록하지 않는다.
+- verify runner의 Git 격리와 timeout/cleanup 회귀 2 passed.
+
+현재 A11 범위에서 남은 확인된 적격 결함은 없다. 전체 변경 일괄 리뷰 Z01, 실제 OS별
+N01–N05와 A12, bundle/usage/변경 반영 B/C는 아직 완료가 아니다. 이 검토는 그 검증을
+면제하거나 배포·push 권한을 추가하지 않는다.

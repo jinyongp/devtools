@@ -21,6 +21,27 @@ arguments. Preview dotenv import with --dry-run; existing key kinds are retained
 new keys named by --var are public, and other new keys become secrets. Different
 stored values require explicit --overwrite; failed import preserves all values.
 
+## Local key protection (discover installed support first)
+
+Check `schema vault status` and `schema vault init`; older installed builds may not
+provide them. On supporting builds, public-only roots need no vault. Before the first
+secret, use explicit one-time `vault init` with existing native protection or explicitly
+choose `--backend passphrase` for a keyringless host. Do not install/start a keyring or
+silently change protection backend. Isolated roots require passphrase protection.
+`vault status` is passive. A successful key session is reused across commands and profiles;
+never put a passphrase in argv/env. Use explicit private-file/piped inputs or hidden
+terminal input for init/unlock. Native authentication UI requires `--interactive`.
+Manual lock survives daemon restart; passphrase sessions require explicit unlock after
+idle expiry. Ordinary metadata queries, completion and diagnostics do not unlock or
+extend the session. Protected-root writes/execution require authentication even for a
+public profile; no-injection commands keep their existing behavior.
+
+`vault recover` finishes an interrupted storage transition after explicit unlock; it
+verifies existing protection rather than inventing a replacement key. Do not remove
+key/catalog/recovery files or infer execution completion from a PID. Unknown admission
+stays unresolved until trustworthy recovery evidence is available. Lock cannot revoke
+values already delivered to applications. Original dotenv files remain after import.
+
 ## Diagnose preparation
 
 Use `doctor COMMAND` before a configured command when setup is uncertain.
@@ -33,8 +54,10 @@ recipient material. A stopped proxy/dashboard or unconfigured backup is a readab
 Each remedy has `argv`, `required_inputs`, and `message`. Supply missing inputs before
 execution; an empty argv describes a manual action. These are suggestions, not automatic
 permission to install tools or change data. Keep secrets in stdin/files, never remedy argv.
-Secrets enter processes through `command run` or managed commands. Child output
-and explicitly captured logs may contain secrets.
+Secrets enter processes through `command run` or managed commands. On supporting builds,
+new non-TTY stdout/stderr and captured logs mask delivered secrets. TTY/raw exceptions,
+historical logs, application files and unknown/encoded tokens remain outside that
+guarantee; never treat output filtering as a sandbox.
 
 ## Foreground execution
 

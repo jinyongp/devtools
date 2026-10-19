@@ -24,7 +24,7 @@ CLI와 dashboard는 task/workstream, var/sec/env, 프로세스, 백업·복구, 
 
 ## HTTP 인터페이스
 
-`GET /api/profiles`는 값이나 작업이 저장된 profile 목록을 반환한다. `GET /api/query`는 기존 task 조회 계약을 사용한다. `GET /api/values?profile=app&env=local`은 `{profile, env, envs, revision, items}`를 반환한다. `env`를 생략하면 공통 값을 조회한다. 각 item은 `key`, `kind`, `source`, `overrides`를 포함하며 variable에만 `value`를 포함한다.
+`GET /api/profiles`는 값이나 작업이 저장된 profile 목록을 반환한다. `GET /api/query`는 기존 task 조회 계약을 사용한다. `GET /api/values?profile=app&env=local`은 `{profile, env, envs, revision, items, integrity_verified, public_prefixes}`를 반환한다. `integrity_verified:false`는 메타데이터 조회이며 저장 인증이 아니다. `env`를 생략하면 공통 값을 조회한다. 각 item은 `key`, `kind`, `source`, `overrides`를 포함하며 variable에만 `value`를 포함한다.
 
 `POST /api/actions`는 `Content-Type: application/json`, 같은 서버의 정확한 `Origin`, 브라우저 세션의 `Authorization: Bearer …`를 요구한다. 본문은 최대 1 MiB의 JSON 객체다. task 요청 예시는 다음과 같다.
 
@@ -89,3 +89,19 @@ task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, 
 `Profile` 선택기로 대상을 선택하고 `Variables & secrets`에서 공통 값과 env override를 편집한다. secret 필드는 새 값을 입력하는 방식이며, 저장 후 입력을 비운다. workstream 소속 작업은 실행 중·완료 후에도 정의와 의존성을 편집한다. 계획 본문 편집, 범위 제외·복원은 영향 미리보기 후 같은 리비전으로 저장한다. 제외 항목은 workstream의 복원 메뉴에서 선택한다. 명세는 요구사항과 완료 조건을 행 단위로 편집한다. `stale`, `stale-running`, `removed-running`은 lifecycle과 별도로 표시한다.
 
 화면은 변경 대상을 표시하고 제거·취소·점유 해제 전에 확인 단계를 제공한다. workstream 취소는 함께 취소할 open task의 제목 목록을 보여주며, 미리 보기의 리비전을 적용 요청에 사용한다. 응답 수신이 불확실하면 같은 요청을 재전송하며, 충돌 시 최신 내용을 조회한 후 다시 편집한다. 인증 세션은 origin별 sessionStorage에 유지한다. 실행 컨텍스트는 실제 작업하는 에이전트가 CLI에서 관리한다.
+
+
+## Vault 상태와 명시 해제 (현재 var/sec 소스)
+
+`GET /api/vault`는 query 입력 없이 passive 상태를 반환한다. daemon 생성·native
+해제·idle touch를 하지 않는다. 기존 인증과 GET 제한은 그대로 적용한다.
+`POST /api/actions`에 `{domain:"vault", vault:{action:"lock"}}` 또는
+`{domain:"vault", vault:{action:"unlock", passphrase:"<ephemeral input>"}}`를 보낸다.
+이 전역 action은 profile을 요구하지 않으며 실제 passphrase를 URL·로그·영수증에
+넣지 않는다. native unlock은 passphrase 대신 `interactive:true`로 OS 인증을 허용한다.
+lock에는 unlock 입력을 보내지 않는다. 초기 setup/backend 변경은 제공하지 않는다.
+
+반환은 `{item:{state, ...}}`이며 재시도 영수증을 만들지 않는다. 결과 불명 시 상태를
+조회하고 새 명시 입력을 받는다. 값 변경의 동일 UUID 재전송과 다르다. 새 값 변경
+영수증의 replay 창은 30일이며 만료 요청은 `request_expired`다. frontend 공개 prefix
+경고는 값 없이 `warnings`에 담고 키 종류를 자동 변경하지 않는다.

@@ -212,6 +212,8 @@ try:
     assert json.loads(http("/api/actions", change, headers=mutation_headers))["data"]["replayed"]
     values = json.loads(http("/api/values?profile=fixture"))
     assert any(item.get("value") == "true" for item in values["items"])
+    api("vault", "init", "--backend", "passphrase", "--passphrase-stdin", input="synthetic-test-vault-passphrase\n")
+    values = json.loads(http("/api/values?profile=fixture"))
     change["change"].update(action="secret.set", key="DASHBOARD_SECRET", value="synthetic-private-input",
                             revision=values["revision"], request_id=str(uuid.uuid4()))
     response = http("/api/actions", change, headers=mutation_headers)

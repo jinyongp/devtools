@@ -189,7 +189,9 @@ devtools sec unset DATABASE_URL --env local
 devtools sec unset API_TOKEN
 ```
 
-secret에는 값을 명령 인자로 넘기는 `--value`를 제공하지 않는다. GUI, 숨김 입력 프롬프트, 대화형 셸, 수동 잠금 해제를 요구하지 않는다. 파일·stdin 입력은 secret 값을 에이전트가 직접 읽거나 명령 문자열에 포함할 필요 없이 등록하는 경로다.
+secret에는 값을 명령 인자로 넘기는 `--value`를 제공하지 않는다. 현재 var/sec 소스에서는
+먼저 [vault를 설정](secret-protection.md)한다. 해제된 세션은 재사용하므로 명령마다
+암호를 입력하지 않는다. 수동 잠금이나 암호 세션 만료 뒤에는 명시 해제가 필요하다. 파일·stdin 입력은 secret 값을 에이전트가 직접 읽거나 명령 문자열에 포함할 필요 없이 등록하는 경로다.
 
 키의 종류는 profile 단위로 고정한다. 같은 키를 어떤 env에서는 var, 다른 env에서는 sec로 취급하지 않는다. env는 값만 덮어쓴다.
 
@@ -441,7 +443,10 @@ Windows에서는 설치한 task runner나 명시 PowerShell 검사 스크립트�
 
 주입은 실행한 자식 프로세스와 그 자식에만 적용된다. 에이전트의 부모 셸이나 다른 터미널의 환경변수는 바뀌지 않는다. 같은 profile을 공유해도 각 worktree는 실행할 때 env를 따로 선택할 수 있다.
 
-`command run`은 자식 프로세스의 입출력과 신호를 전달하고 종료 코드를 보존한다. 자식 출력은 JSON으로 감싸거나 마스킹하지 않는다. 따라서 `true`, `3000` 같은 변수값 때문에 정상 출력이 변형되지 않는다.
+`command run`은 자식 프로세스의 신호와 종료 코드를 보존하고 출력을 JSON으로 감싸지 않는다.
+현재 소스의 새 실행은 non-TTY stdout·stderr에서 실제 전달 secret을 기본 마스킹한다.
+공개 var는 마스킹 패턴이 아니다. 짧은 secret도 마스킹하므로 정상 출력 일부가 가려질 수 있다.
+TTY·바이너리 예외와 한도는 [출력 보호](output-protection.md)를 따른다.
 
 실행 파일은 선택한 실행 디렉터리와 최종 환경의 PATH를 기준으로 찾는다.
 Unix에서는 `SIGINT`, `SIGTERM`, `SIGHUP`을 자식 프로세스 그룹에 전달하고 3초 후 남은
@@ -493,12 +498,16 @@ var·sec 목록의 `items`와 var 조회의 `metadata`에는 `key`, `kind`, `sou
 
 ## 로컬 저장과 secret 보호 범위
 
-활성 값 저장소는 사용자 전용 로컬 파일에 평문으로 보관한다. Unix에서는 디렉터리 `0700`,
-파일 `0600` 권한을 사용한다. Windows에서는 Known Folder LocalAppData 아래 local NTFS에
-현재 사용자와 SYSTEM만 허용하는 보호 DACL을 사용한다. 경로·파일시스템 제한은
-[Windows 저장소 안내](windows.md#storage-and-processes)를 따른다.
-별도로 생성하는 [백업](backup.md)은 공개키로 암호화하고 profile 전송은 passphrase도 지원한다.
+현재 var/sec 소스의 secret은 로컬 암호화하고 OS 보호 또는 명시 암호 기반 세션으로
+키를 보호한다. 공개 var와 이름·종류 등 메타데이터는 숨기지 않는다. setup·잠금·복구와
+기존 평문 자료의 전환은 [로컬 secret 보호](secret-protection.md)를 따른다. 이 기능이
+없는 설치 빌드는 이전 평문 저장 동작을 유지하므로 설치 CLI의 schema를 확인한다.
 
-devtools의 기본 목록, 오류, 로그에는 secret 값을 포함하지 않는다. secret은 실행할 프로세스에 직접 주입한다. 보호 목표는 에이전트가 정상적인 CLI 사용 중 실수로 값을 읽어 대화나 로그에 남기지 않게 하는 것이다.
+Unix의 `0700` 디렉터리/`0600` 파일 및 Windows의 현재 사용자·SYSTEM 전용 DACL도
+유지한다. [Windows 경로 제한](windows.md#storage-and-processes)과 별도
+[암호화 백업](backup.md)은 계속 적용된다.
 
-같은 사용자 권한으로 저장 파일을 직접 읽는 접근까지 차단하지는 않는다. 자식 프로그램이 secret을 출력하면 그 출력은 그대로 전달된다. 이 저장 방식과 CLI 계약은 동일 사용자 권한의 의도적 접근을 막는 격리 경계가 아니다.
+실행은 실제 전달할 값을 old stop 전에 고정한다. vault 잠금은 새 보호 실행을 막지만
+이미 실행 중인 앱 환경을 회수하지 않는다. non-TTY/capture의 기본 마스킹은
+[정의한 출력 경로](output-protection.md)에 적용된다. 앱 파일·네트워크·임의 변환이나
+같은 사용자 권한의 의도적인 접근을 막는 sandbox는 아니다.

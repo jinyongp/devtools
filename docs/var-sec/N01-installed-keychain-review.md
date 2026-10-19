@@ -39,3 +39,22 @@ profile 대상 명령의 helper를 root 전체 vault/version/update에도 적용
 helper는 실제 profile 명령에만 profile을 붙이며 root 명령은 자신의 vault root를
 그대로 선택한다. 제품 schema나 native fallback을 바꾸지 않는다. 올바른 root 명령이
 isolated native mutation을 계속 거절하는 것도 확인한다.
+
+## 기존 앱별 보호를 유지한 실제 signature 경계
+
+85e72de는 두 architecture에서 새 서명 이후 OS의 creator-app 규칙으로 unlock이
+거절됨을 확인했다. 별도 user-level decrypt ACL 추가안은 자동 승인 검토가 명시 승인을
+요구하여 미반영 상태로 보존했다. 기본 source에는 권한 확대를 넣지 않는다.
+
+기존 계약의 명시 --interactive/typed denial 흐름에 맞춰 signed update의 결과와
+새 앱 OS 승인을 구분한다. 새 서명은 비대화형 접근이 거절되어야 하고, 그 상태에서
+수동 잠금·retirement를 완료한 뒤 사용자가 명시 선택한 이전 버전으로 실제 updater를
+실행한다. 원래 서명으로 vault/같은 secret이 다시 열려야 한다. 이는 저장 값/키를
+자동 rollback하는 경로가 아니라 이전 binary를 명시 복구하는 합성 fixture다.
+
+이 검사는 OS 앱 승인을 우회하지 않고 update/denial/data 보존/recovery를 실제로
+확인한다. headless CI에서 사람이 OS 승인 UI를 누른 것까지 주장하지 않는다.
+기존 guide의 --interactive 지침과 승인 필요 상태를 명확히 했다. 최초의 더 강한
+‘서명 변경 후에도 무승인 성공’ 기대는 원래 P01 계약의 필수 조건으로 정해진 것이
+아니며, 이를 위해 앱별 보호를 자동 제거하지 않는다. 후속 Intel/ARM 실기 전에는
+새 recovery 흐름을 pass로 기록하지 않는다.

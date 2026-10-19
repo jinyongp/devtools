@@ -24,6 +24,13 @@ Service를 사용한다. OS 확인 창을 허용하려면 해당 init/unlock에 
 WSL은 별도의 Linux 저장소와 서비스를 사용한다. Windows의 키나 데이터 디렉터리를
 직접 공유하지 않는다.
 
+macOS Keychain은 OS의 기존 앱 접근 조건을 유지한다. 업데이트로 서명이 바뀌면 새
+버전의 접근 승인이 필요할 수 있다. 비대화형 명령의 `key_access_denied` 또는
+`key_interaction_required`는 저장 데이터가 사라졌다는 뜻이 아니다. OS 확인이 가능한
+터미널에서 `devtools vault unlock --interactive`로 명시적으로 확인을 허용한다.
+해결 전에는 원본·키·접근 가능한 기존 빌드를 보존한다. 설치/업데이트 완료와 Keychain의
+새 앱 승인 완료는 별도이며, 일반 명령마다 OS 확인을 자동 반복하지 않는다.
+
 keyring이 없는 서버·컨테이너에서는 처음부터 암호 backend를 명시한다. 터미널에서는
 숨김 입력을 사용하고, 자동화에서는 준비한 비공개 일반 파일이나 파이프를 명시한다.
 다음 `/private/vault-passphrase`는 직접 준비한 파일 경로로 바꾼다.

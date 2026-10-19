@@ -126,6 +126,15 @@ def main():
             if not updated['changed'] or api('version')['version'] != '0.0.0-native.2':
                 raise RuntimeError('Installed update did not apply')
             checked('/usr/bin/codesign', '--verify', '--strict', str(binary))
+            update_denial = api('vault', 'unlock', denied=True)
+            # Preserve the OS creator-app policy. A changed signature needs
+            # explicit user authorization; prove denial did not lose the data.
+            api('vault', 'lock')
+            retire_vaults(directory)
+            recovered = api('update', '--version', '0.0.0-native.1', '--source', str(releases))
+            if not recovered['changed'] or api('version')['version'] != '0.0.0-native.1':
+                raise RuntimeError('Explicit previous-version recovery did not apply')
+            checked('/usr/bin/codesign', '--verify', '--strict', str(binary))
             api('vault', 'unlock')
             run()
             final = api('vault', 'status')['item']
@@ -137,7 +146,9 @@ def main():
                 retire_vaults(directory)
     evidence = dict(native_installed_keychain='pass', signed_test_packages='adhoc',
                     signatures_differ=signatures[0] != signatures[1], locked_denial=denial,
-                    old_key_session_retired_before_update=True, synthetic_home_removed=True)
+                    old_key_session_retired_before_update=True, synthetic_home_removed=True,
+                    changed_signature_authorization_required=update_denial,
+                    explicit_previous_version_recovery='pass', existing_creator_app_policy_preserved=True)
     if not evidence['signatures_differ']:
         raise RuntimeError('Two versions did not have different signed identities')
     Path('vault-keychain-installed.json').write_text(json.dumps(evidence, indent=2) + '\n')

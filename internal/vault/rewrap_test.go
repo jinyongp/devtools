@@ -213,16 +213,25 @@ func TestRewrapRecoveryAtDurableBoundaries(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-			defer cancel()
-			child := exec.CommandContext(ctx, executable, "__vault-rewrap-fixture", dir)
+			childCtx, cancelChild := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancelChild()
+			child := exec.CommandContext(childCtx, executable, "__vault-rewrap-fixture", dir)
 			child.Stdin = bytes.NewReader(b)
+			started := time.Now()
 			err = child.Run()
+			cancelChild()
+			t.Logf("owned crash checkpoint elapsed: %s", time.Since(started))
 			var exit *exec.ExitError
 			if !errors.As(err, &exit) || exit.ExitCode() != 99 {
 				t.Fatal("owned rewrap process did not reach checkpoint", err)
 			}
-			result, err := (KeyFileStore{Directory: dir}).Rewrap(ctx, id, old, next)
+			// Crash delivery, explicit recovery and independent key verification
+			// are separate operations; each retains the same bounded deadline.
+			retryCtx, cancelRetry := context.WithTimeout(context.Background(), 20*time.Second)
+			started = time.Now()
+			result, err := (KeyFileStore{Directory: dir}).Rewrap(retryCtx, id, old, next)
+			cancelRetry()
+			t.Logf("explicit recovery elapsed: %s", time.Since(started))
 			if err != nil || !result.Changed || !result.Replayed {
 				t.Fatal("durable rewrap retry", err)
 			}
@@ -230,7 +239,11 @@ func TestRewrapRecoveryAtDurableBoundaries(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			actual, err := unwrapRoot(ctx, next, current)
+			verifyCtx, cancelVerify := context.WithTimeout(context.Background(), 20*time.Second)
+			started = time.Now()
+			actual, err := unwrapRoot(verifyCtx, next, current)
+			cancelVerify()
+			t.Logf("independent key verification elapsed: %s", time.Since(started))
 			if err != nil {
 				t.Fatal(err)
 			}

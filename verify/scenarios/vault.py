@@ -43,6 +43,24 @@ initial = invoke('vault', 'status')['item']
 assert initial['state'] == 'unlocked'
 assert invoke('var', 'get', 'PUBLIC')['integrity_verified'] is False
 assert invoke('sec', 'list')['items'][0]['key'] == 'TOKEN'
+# Register shared membership once, then select the reusable bundle on execution.
+assignments = home / 'bundle.env'
+assignments.write_text('PUBLIC=public value\nTOKEN=' + secret + '\n')
+assignments.chmod(0o600)
+invoke('import', '--file', str(assignments), '--var', 'PUBLIC', '--bundle', 'backend')
+bundles = invoke('bundle', 'list')
+invoke('bundle', 'set', 'frontend', '--key', 'PUBLIC', '--revision', bundles['revision'],
+       '--request-id', '00000000-0000-4000-8000-000000000996')
+selected_env = dict(env)
+selected_env.pop('TOKEN', None)
+result = subprocess.run([binary, 'run', '--bundle', 'frontend', '--', 'sh', '-c',
+                         'test -z "${TOKEN+x}" && printf %s "$PUBLIC"'], cwd=project,
+                        env=selected_env, capture_output=True, timeout=20)
+assert result.returncode == 0 and result.stdout == b'public value' and not result.stderr
+result = subprocess.run([binary, 'run', '--bundle', 'backend', '--', 'sh', '-c', 'printf %s "$TOKEN"'],
+                        cwd=project, env=selected_env, capture_output=True, timeout=20)
+assert result.returncode == 0 and result.stdout == b'[REDACTED]' and not result.stderr
+
 invoke('schema', 'vault', 'unlock')
 invoke('schema', 'sec', 'set')
 for unavailable in [('sec', 'get', 'TOKEN')]:

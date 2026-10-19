@@ -125,6 +125,7 @@ func New(version, commit string) *App {
 	a.registerTools()
 	a.registerCommands()
 	a.registerImport()
+	a.registerBundles()
 	a.registerTasks()
 	a.registerDashboard()
 	a.registerDoctor()

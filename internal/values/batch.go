@@ -6,6 +6,8 @@ import (
 )
 
 type BatchImport struct {
+	LayerOnly bool     `json:"layer_only,omitempty"`
+	Bundle    string   `json:"bundle,omitempty"`
 	Content   string   `json:"content"`
 	Variables []string `json:"variables"`
 	Overwrite bool     `json:"overwrite"`

@@ -17,31 +17,42 @@ import (
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 type ManagedItem struct {
+	ValueID string `json:"value_id,omitempty"`
 	Metadata
 	Value *string `json:"value,omitempty"`
 }
 type ManagedView struct {
-	PublicPrefixes    []string      `json:"public_prefixes"`
-	IntegrityVerified bool          `json:"integrity_verified"`
-	Profile           string        `json:"profile"`
-	Env               string        `json:"env"`
-	Envs              []string      `json:"envs"`
-	Revision          string        `json:"revision"`
-	Items             []ManagedItem `json:"items"`
+	Bundles           []vault.Bundle `json:"bundles"`
+	PublicPrefixes    []string       `json:"public_prefixes"`
+	IntegrityVerified bool           `json:"integrity_verified"`
+	Profile           string         `json:"profile"`
+	Env               string         `json:"env"`
+	Envs              []string       `json:"envs"`
+	Revision          string         `json:"revision"`
+	Items             []ManagedItem  `json:"items"`
+}
+type BundleChange struct {
+	Name    string   `json:"name"`
+	NewName string   `json:"new_name,omitempty"`
+	Members []string `json:"members,omitempty"`
+	Preview bool     `json:"preview,omitempty"`
 }
 type Change struct {
-	Import    *BatchImport `json:"import,omitempty"`
-	Action    string       `json:"action"`
-	Key       string       `json:"key"`
-	Env       string       `json:"env"`
-	Value     *string      `json:"value,omitempty"`
-	Revision  string       `json:"revision"`
-	RequestID string       `json:"request_id"`
+	Bundle    *BundleChange `json:"bundle,omitempty"`
+	Import    *BatchImport  `json:"import,omitempty"`
+	Action    string        `json:"action"`
+	Key       string        `json:"key"`
+	Env       string        `json:"env"`
+	Value     *string       `json:"value,omitempty"`
+	Revision  string        `json:"revision"`
+	RequestID string        `json:"request_id"`
 }
 type ChangeResult struct {
+	Bundle     string       `json:"bundle,omitempty"`
 	Warnings   []Warning    `json:"warnings,omitempty"`
 	Items      []ImportItem `json:"items,omitempty"`
 	Applicable bool         `json:"applicable,omitempty"`

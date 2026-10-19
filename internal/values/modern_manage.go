@@ -35,7 +35,7 @@ func editRevision(profile string, p *vault.Profile, exists bool) string {
 	return hex.EncodeToString(sum[:])
 }
 func (s ModernStore) Inspect(ctx context.Context, env string) (ManagedView, *protocol.Error) {
-	out := ManagedView{Profile: s.Profile, Env: env, Items: []ManagedItem{}, PublicPrefixes: FrontendPublicPrefixes()}
+	out := ManagedView{Profile: s.Profile, Env: env, Items: []ManagedItem{}, Bundles: []vault.Bundle{}, PublicPrefixes: FrontendPublicPrefixes()}
 	if !project.ValidProfile(s.Profile) {
 		return out, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
@@ -79,6 +79,11 @@ func (s ModernStore) Inspect(ctx context.Context, env string) (ManagedView, *pro
 	if err != nil {
 		return out, VaultError(ctx, err)
 	}
+	out.Bundles = append([]vault.Bundle{}, p.Bundles...)
+	ids := map[string]string{}
+	for _, v := range p.Values {
+		ids[v.Name] = v.ID
+	}
 	out.Revision = editRevision(s.Profile, p, exists)
 	out.Envs = state.EnvNames()
 	for _, kind := range []Kind{Variable, Secret} {
@@ -87,7 +92,7 @@ func (s ModernStore) Inspect(ctx context.Context, env string) (ManagedView, *pro
 			return out, e
 		}
 		for _, metadata := range entries {
-			item := ManagedItem{Metadata: metadata}
+			item := ManagedItem{Metadata: metadata, ValueID: ids[metadata.Key]}
 			if kind == Variable {
 				if value, _, e := state.GetVariable(metadata.Key, env); e == nil {
 					item.Value = &value
@@ -192,14 +197,22 @@ func mutateChange(state *State, c Change) (ChangeResult, *protocol.Error) {
 	var err *protocol.Error
 	switch c.Action {
 	case "import":
-		if c.Import == nil || c.Key != "" || c.Value != nil || len(c.Import.Content) > 500000 {
+		if c.Import == nil || c.Key != "" || c.Value != nil || len(c.Import.Content) > 500000 || (c.Import.Bundle != "" && !vault.ValidBundleName(c.Import.Bundle)) {
 			return out, protocol.NewError("invalid_argument", "Provide bounded import input and options.", 2, nil)
 		}
+		out.Bundle = c.Import.Bundle
 		input, e := ParseDotenv(c.Import.Content)
 		if e != nil {
 			return out, e
 		}
-		out.Items, out.Applicable, err = state.batchImport(input, c.Import.Variables, c.Env, c.Import.Overwrite, !c.Import.Preview)
+		if c.Import.LayerOnly {
+			out.Items, out.Applicable, err = state.PlanImport(input, c.Import.Variables, c.Env, c.Import.Overwrite)
+			if err == nil && !c.Import.Preview {
+				out.Items, _, err = state.Import(input, c.Import.Variables, c.Env, c.Import.Overwrite)
+			}
+		} else {
+			out.Items, out.Applicable, err = state.batchImport(input, c.Import.Variables, c.Env, c.Import.Overwrite, !c.Import.Preview)
+		}
 		for _, item := range out.Items {
 			if item.Action == "add" || item.Action == "update" {
 				out.Changed = true
@@ -322,9 +335,23 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 		return out, VaultError(ctx, err)
 	}
 	after := before.Clone()
-	out, changeErr := mutateChange(after, c)
-	if changeErr != nil {
-		return out, changeErr
+	var changeErr *protocol.Error
+	if c.Bundle != nil {
+		changed, err := mutateBundle(p, key, c)
+		if err != nil {
+			return out, VaultError(ctx, err)
+		}
+		out.Changed, out.Bundle = changed, c.Bundle.Name
+	} else {
+		out, changeErr = mutateChange(after, c)
+		if changeErr != nil {
+			return out, changeErr
+		}
+	}
+	if c.Bundle != nil && c.Bundle.Preview {
+		out.Changed = false
+		out.Revision = c.Revision
+		return out, nil
 	}
 	if c.Import != nil && c.Import.Preview {
 		out.Changed = false
@@ -380,6 +407,13 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	}
 	if err = applyProfileDiff(p, key, before, after); err != nil {
 		return out, VaultError(ctx, err)
+	}
+	if c.Import != nil && c.Import.Bundle != "" {
+		changed, err := importBundle(p, key, c.Import.Bundle, out.Items)
+		if err != nil {
+			return out, VaultError(ctx, err)
+		}
+		out.Changed = out.Changed || changed
 	}
 	out.Revision = editRevision(s.Profile, p, true)
 	var fingerprintKey *vault.Material

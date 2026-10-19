@@ -172,6 +172,38 @@ func (s *KeySession) scheduleExpiry() {
 	})
 }
 
+// InspectCached lends only an already-cached key to metadata authentication.
+// It never unwraps native protection, derives a passphrase key, or touches idle.
+func (s *KeySession) InspectCached(ctx context.Context) (*Material, error) {
+	return s.inspectCachedAtEpoch(ctx, nil)
+}
+func (s *KeySession) inspectCachedAtEpoch(ctx context.Context, expected *uint64) (*Material, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if expected != nil && *expected != s.epoch {
+		return nil, ErrLockPending
+	}
+	if _, err := s.read(); err != nil {
+		return nil, err
+	}
+	if s.status.State == RecoveryRequired {
+		return nil, ErrRecovery
+	}
+	if s.key == nil || s.status.State != Unlocked {
+		return nil, ErrLocked
+	}
+	b := s.key.CopyBytes()
+	defer clear(b)
+	if len(b) != 32 {
+		s.destroy(RecoveryRequired)
+		return nil, ErrIntegrity
+	}
+	return NewMaterial(b), nil
+}
+
 // Use returns an owned key only to an authenticated internal operation. Polling
 // Status never calls Use. Callers destroy the result after their bounded work.
 func (s *KeySession) Use(ctx context.Context) (*Material, error) {

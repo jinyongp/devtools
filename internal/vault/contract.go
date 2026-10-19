@@ -10,7 +10,7 @@ import (
 
 const (
 	StorageVersion  = 1
-	SessionProtocol = 2
+	SessionProtocol = 3
 	// Keep the storage ceiling within the existing backup plaintext ceiling.
 	MaxDocumentBytes   = 128 << 20
 	MaxFrameBytes      = 16 << 20

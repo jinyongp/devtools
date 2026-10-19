@@ -21,7 +21,7 @@ OS별 최종 검증은 별도 gate에서 수행한다. 기존 사용자 저장�
 
 ## 저장·키 계약
 
-저장 형식은 version 1이며 세션 protocol은 version 2다. 둘은 독립적으로 관리하고
+저장 형식은 version 1이며 세션 protocol은 version 3다. 둘은 독립적으로 관리하고
 저장용 HKDF는 저장 형식 version 1에 결합한다. 세션 protocol 변경으로 기존 저장 키를 바꾸지 않는다.
 슬롯은
 32-byte key와 매번 새 RNG 24-byte nonce의 XChaCha20-Poly1305를 사용한다.
@@ -132,3 +132,8 @@ Bundle/uses/notify는 단계 B, opt-in managed 자동 restart는 단계 C다.
 과거 상태 복원·모든 메모리 사본 삭제는 이 계약의 격리 보장 밖이다.
 각 작업은 검증→리뷰/수정/재검증→단위 커밋과 근거 기록 후 완료하고,
 전체 구현 후 Z01 종합 리뷰를 수행한다. 모델 통과는 OS/제품 통과가 아니다.
+
+
+## 수명 연장 없는 metadata 인증
+
+B02의 상태/사용처 검증은 이미 warm인 키만 inspect로 잠깐 빌린다. idle deadline을 연장하거나 native UI/KDF/자동 OS 재해제를 실행하지 않는다. cold/expired/manual/recovery 상태는 pending/오류로 남긴다. inspection도 user/peer/vault/session/challenge/lock epoch를 확인하고 lock의 in-flight delivery drain에 포함한다. launch ticket은 발급하지 않는다. 새 inspect wire operation 때문에 session protocol만 3으로 올리며 storage/HKDF version 1은 유지한다. 실제 값 작업이 이전 daemon을 만나면 기존 stable control retirement 후 새 session을 사용하고 필요한 명시 해제를 다시 받는다. passive inspection은 이전 daemon을 재시작하지 않는다.

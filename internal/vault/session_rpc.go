@@ -253,7 +253,7 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 	// Count admitted deliveries, but never hold the state mutex while waiting
 	// for native IPC or response writes. Lock drains that count outside mu.
 	switch req.Operation {
-	case "use", "admit":
+	case "use", "inspect", "admit":
 		err = admissions.beginUse()
 		if err == nil {
 			defer admissions.finishUse()
@@ -302,6 +302,14 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 		pass := NewMaterial(req.Passphrase)
 		err = s.unlockAtEpoch(ctx, pass, req.Interactive, req.LockEpoch)
 		pass.Destroy()
+	case "inspect":
+		var key *Material
+		key, err = s.inspectCachedAtEpoch(ctx, &req.LockEpoch)
+		if err == nil {
+			response.Key = key.CopyBytes()
+			key.Destroy()
+			defer clear(response.Key)
+		}
 	case "use":
 		var key *Material
 		key, err = s.useAtEpoch(ctx, req.LockEpoch)
@@ -395,7 +403,7 @@ func (c *SessionClient) requestWithTicket(ctx context.Context, operation string,
 		clear(response.Key)
 		return nil, err
 	}
-	if operation != "use" && len(response.Key) > 0 {
+	if operation != "use" && operation != "inspect" && len(response.Key) > 0 {
 		clear(response.Key)
 		return nil, ErrIntegrity
 	}
@@ -413,6 +421,17 @@ func (c *SessionClient) Unlock(ctx context.Context, passphrase *Material, intera
 	defer clear(b)
 	_, err := c.request(ctx, "unlock", b, interactive)
 	return err
+}
+func (c *SessionClient) InspectCached(ctx context.Context) (*Material, error) {
+	r, err := c.request(ctx, "inspect", nil, false)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(r.Key)
+	if len(r.Key) != 32 || r.Ticket != nil {
+		return nil, ErrIntegrity
+	}
+	return NewMaterial(r.Key), nil
 }
 func (c *SessionClient) Use(ctx context.Context) (*Material, error) {
 	key, _, err := c.UseWithTicket(ctx)

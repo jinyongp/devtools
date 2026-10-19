@@ -146,11 +146,16 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 	childExit := 0
 	ran := false
 	runner := func(ctx context.Context, args []string, dir string, env []string, in io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
-		path, err := process.LookPath(args[0], dir, env)
-		if err != nil {
-			return 0, err
+		path := process.ExecutablePath(ctx)
+		if path == "" {
+			var err *protocol.Error
+			path, err = process.LookPath(args[0], dir, env)
+			if err != nil {
+				return 0, err
+			}
 		}
 		cmd := exec.Command(path, args[1:]...)
+		cmd.Args[0] = args[0]
 		cmd.Dir = dir
 		cmd.Env = env
 		cmd.Stdin = in
@@ -163,6 +168,10 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 		}
 		if cmd.Start() != nil {
 			return 0, failure("execution_failed")
+		}
+		notifyErr := process.NotifyStarted(ctx)
+		if notifyErr != nil {
+			cancel()
 		}
 		now := time.Now().UTC()
 		mu.Lock()
@@ -177,6 +186,9 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 		}
 		r.StartedAt = &now
 		r.State = "running"
+		if r.InputSnapshotID != "" {
+			r.LaunchPhase = "spawned"
+		}
 		writeErr := writePrivate(s.path(id, "record.json"), r)
 		mu.Unlock()
 		if writeErr != nil {
@@ -207,15 +219,23 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 		} else if waitErr != nil && !errors.Is(waitErr, exec.ErrWaitDelay) {
 			childExit = 1
 		}
+		if notifyErr != nil {
+			return childExit, notifyErr
+		}
 		return childExit, nil
 	}
 	err = execute(ctx, r, runner, output)
 	mu.Lock()
+	s.finishInputPhase(&r)
 	now := time.Now().UTC()
 	r.EndedAt = &now
 	r.State = "exited"
 	r.ExitCode = &childExit
-	if ctx.Err() != nil {
+	if err != nil && err.Code == "launch_outcome_unknown" {
+		r.State = "failed"
+		r.Reason = err.Code
+		r.ExitCode = nil
+	} else if ctx.Err() != nil {
 		r.State = "stopped"
 		r.Reason = "stop_requested"
 	} else if err != nil {

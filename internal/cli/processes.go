@@ -10,6 +10,7 @@ import (
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/paths"
+	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -26,7 +27,7 @@ func (a *App) serviceStore() (services.Store, *protocol.Error) {
 	if err != nil {
 		return services.Store{}, portFailure("io_error")
 	}
-	return services.Store{Data: filepath.Dir(d), IsolatedRoot: directories.IsolatedRoot}, nil
+	return services.Store{Data: filepath.Dir(d), IsolatedRoot: directories.IsolatedRoot, PrepareInput: a.prepareManagedInput}, nil
 }
 func (a *App) registerProcesses() {
 	descriptions := map[string]string{
@@ -248,4 +249,64 @@ func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 		return s.ServeWithLease(ctx, id, lease, execute)
 	}
 	return s.Serve(ctx, id, execute)
+}
+
+// prepareManagedInput performs all value/config/tool work before the launcher
+// is admitted and before a restart stops its old execution.
+func (a *App) prepareManagedInput(ctx context.Context, r services.Record, networkSnapshot *network.ExecutionSnapshot) (execution.Prepared, *protocol.Error) {
+	p, e := project.Resolve(r.Directory, "")
+	if e != nil {
+		return execution.Prepared{}, e
+	}
+	if p.Profile != r.Profile || p.Root != r.Directory {
+		return execution.Prepared{}, protocol.NewError("instance_conflict", "Project identity changed.", 3, nil)
+	}
+	command, e := execution.ResolveConfigured(p, r.Command, r.EnvOverride, nil)
+	if e != nil {
+		return execution.Prepared{}, e
+	}
+	command.Network = networkSnapshot
+	dependencies, e := a.executionDependencies(command)
+	if e != nil {
+		return execution.Prepared{}, e
+	}
+	dependencies.DeferServing = true
+	dependencies.IsolatedRoot = r.IsolatedRoot
+	prepared, e := execution.PrepareInput(ctx, command, dependencies, os.Environ(), execution.PlanOptions{})
+	if e != nil {
+		return execution.Prepared{}, e
+	}
+	checks := prepared.Checks(ctx, os.Environ(), false)
+	if !execution.ChecksPassed(checks) {
+		prepared.Release()
+		return execution.Prepared{}, protocol.NewError("requirements_failed", "Command prerequisites are not satisfied. Run devtools doctor for diagnostics.", 3, map[string]any{"checks": checks})
+	}
+	return prepared, nil
+}
+
+func ServePreparedProcessWithLease(ctx context.Context, data, id string, lease *os.File) error {
+	store := services.Store{Data: data}
+	return store.ServeWithLease(ctx, id, lease, func(ctx context.Context, r services.Record, runner process.Runner, output io.Writer) *protocol.Error {
+		bound, e := services.ReceiveLauncherInput(ctx, os.Stdin, os.Stdout, r, data)
+		if e != nil {
+			return e
+		}
+		defer bound.Close()
+		input, e := bound.Payload.Open()
+		if e != nil {
+			return e
+		}
+		defer input.Destroy()
+		release, e := (ports.Store{Directory: filepath.Join(data, "ports")}).ClaimPrepared(ctx, input.Served)
+		if e != nil {
+			return e
+		}
+		defer release()
+		metadata := bound.Payload.Metadata()
+		ctx = services.WithEnvironmentSelection(ctx, metadata.Env, metadata.Inject)
+		ctx = process.WithExecutablePath(process.WithReadyProbe(ctx, input.Ready), input.Executable)
+		ctx = process.WithStarted(ctx, func() *protocol.Error { return bound.Complete("spawned") })
+		_, e = runner(ctx, input.Args, input.Directory, input.Environment, nil, output, output)
+		return e
+	})
 }

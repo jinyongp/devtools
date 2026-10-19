@@ -15,6 +15,7 @@ import (
 )
 
 type SnapshotMetadata struct {
+	Launch            *vault.LaunchTicket   `json:"launch,omitempty"`
 	Identity          vault.InputIdentity   `json:"identity"`
 	Slots             []vault.SlotReference `json:"slots"`
 	IntegrityVerified bool                  `json:"integrity_verified"`
@@ -74,6 +75,10 @@ func (s *Snapshot) Metadata() SnapshotMetadata {
 		return SnapshotMetadata{Slots: []vault.SlotReference{}}
 	}
 	m := s.metadata
+	if m.Launch != nil {
+		ticket := *m.Launch
+		m.Launch = &ticket
+	}
 	m.Slots = append([]vault.SlotReference{}, m.Slots...)
 	if m.EarliestExpiry != nil {
 		expiry := *m.EarliestExpiry
@@ -205,4 +210,24 @@ func VaultError(ctx context.Context, err error) *protocol.Error {
 		}
 	}
 	return protocol.NewError(code, "Cannot prepare verified profile values.", 3, nil)
+}
+
+// CaptureVaultSession preserves the admission ticket from the same key delivery
+// used to authenticate the input. A later unlocked session cannot refresh an old
+// prepared input's authority silently.
+func CaptureVaultSession(ctx context.Context, root, profile, env string, inject bool, now time.Time, client *vault.SessionClient) (*Snapshot, *protocol.Error) {
+	var ticket *vault.LaunchTicket
+	snapshot, err := CaptureVault(ctx, root, profile, env, inject, now, func(ctx context.Context) (*vault.Material, error) {
+		key, t, e := client.UseWithTicket(ctx)
+		ticket = t
+		return key, e
+	})
+	if err != nil {
+		return nil, err
+	}
+	if ticket != nil {
+		copy := *ticket
+		snapshot.metadata.Launch = &copy
+	}
+	return snapshot, nil
 }

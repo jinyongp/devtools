@@ -29,14 +29,15 @@ type sessionHello struct {
 	Challenge       string `json:"challenge"`
 }
 type sessionRequest struct {
-	LockEpoch   uint64 `json:"lock_epoch"`
-	Protocol    int    `json:"protocol"`
-	VaultID     string `json:"vault_id"`
-	SessionID   string `json:"session_id"`
-	Challenge   string `json:"challenge"`
-	Operation   string `json:"operation"`
-	Passphrase  []byte `json:"passphrase,omitempty"`
-	Interactive bool   `json:"interactive,omitempty"`
+	LockEpoch   uint64        `json:"lock_epoch"`
+	Protocol    int           `json:"protocol"`
+	VaultID     string        `json:"vault_id"`
+	SessionID   string        `json:"session_id"`
+	Challenge   string        `json:"challenge"`
+	Operation   string        `json:"operation"`
+	Passphrase  []byte        `json:"passphrase,omitempty"`
+	Interactive bool          `json:"interactive,omitempty"`
+	Ticket      *LaunchTicket `json:"ticket,omitempty"`
 }
 
 // This is a private wire response. Never forward it into protocol diagnostics.
@@ -44,6 +45,7 @@ type sessionResponse struct {
 	Status SessionStatus `json:"status"`
 	Key    []byte        `json:"key,omitempty"`
 	Error  string        `json:"error,omitempty"`
+	Ticket *LaunchTicket `json:"ticket,omitempty"`
 }
 
 type sessionAdmissions struct {
@@ -240,6 +242,10 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 	go func() { defer close(watchDone); var extra [1]byte; c.Read(extra[:]); cancel() }()
 	defer func() { c.Close(); <-watchDone }()
 	var response sessionResponse
+	if (req.Operation == "admit") != (req.Ticket != nil) {
+		writeSessionFrame(c, sessionResponse{Status: s.Status(), Error: ErrInvalid.Error()})
+		return
+	}
 	if req.Operation != "unlock" && (len(req.Passphrase) > 0 || req.Interactive) {
 		writeSessionFrame(c, sessionResponse{Status: s.Status(), Error: ErrInvalid.Error()})
 		return
@@ -247,7 +253,7 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 	// Count admitted deliveries, but never hold the state mutex while waiting
 	// for native IPC or response writes. Lock drains that count outside mu.
 	switch req.Operation {
-	case "use":
+	case "use", "admit":
 		err = admissions.beginUse()
 		if err == nil {
 			defer admissions.finishUse()
@@ -265,6 +271,7 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 			err = s.Lock(ctx)
 		} else {
 			s.Close()
+			err = DrainLaunches(ctx, s.directory)
 		}
 		if err == nil {
 			err = admissions.drain(ctx)
@@ -289,9 +296,12 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 		key, err = s.useAtEpoch(ctx, req.LockEpoch)
 		if err == nil {
 			response.Key = key.CopyBytes()
+			response.Ticket = &LaunchTicket{VaultID: endpoint.VaultID, SessionID: endpoint.SessionID, Epoch: req.LockEpoch, ExpiresAt: time.Now().Add(30 * time.Second).UTC()}
 			key.Destroy()
 			defer clear(response.Key)
 		}
+	case "admit":
+		err = s.authorizeLaunch(ctx, *req.Ticket, endpoint.SessionID)
 	case "lock":
 		// Intent and cache lock were committed before draining admissions.
 	case "retire":
@@ -331,6 +341,9 @@ func OpenSessionClient(directory string) (*SessionClient, error) {
 	return &SessionClient{Directory: directory, Endpoint: *e}, nil
 }
 func (c *SessionClient) request(ctx context.Context, operation string, passphrase []byte, interactive bool) (*sessionResponse, error) {
+	return c.requestWithTicket(ctx, operation, passphrase, interactive, nil)
+}
+func (c *SessionClient) requestWithTicket(ctx context.Context, operation string, passphrase []byte, interactive bool, ticket *LaunchTicket) (*sessionResponse, error) {
 	if c.Endpoint.Protocol != SessionProtocol && operation != "retire" {
 		return nil, ErrSessionProtocol
 	}
@@ -354,7 +367,7 @@ func (c *SessionClient) request(ctx context.Context, operation string, passphras
 	if hello.SessionEndpoint != c.Endpoint || hello.ControlProtocol != 1 || !validID(hello.Challenge) {
 		return nil, ErrSessionProtocol
 	}
-	req := sessionRequest{Protocol: c.Endpoint.Protocol, LockEpoch: hello.LockEpoch, VaultID: c.Endpoint.VaultID, SessionID: c.Endpoint.SessionID, Challenge: hello.Challenge, Operation: operation, Passphrase: passphrase, Interactive: interactive}
+	req := sessionRequest{Protocol: c.Endpoint.Protocol, LockEpoch: hello.LockEpoch, VaultID: c.Endpoint.VaultID, SessionID: c.Endpoint.SessionID, Challenge: hello.Challenge, Operation: operation, Passphrase: passphrase, Interactive: interactive, Ticket: ticket}
 	if err = writeSessionFrame(connection, req); err != nil {
 		return nil, ErrUnavailable
 	}
@@ -391,15 +404,19 @@ func (c *SessionClient) Unlock(ctx context.Context, passphrase *Material, intera
 	return err
 }
 func (c *SessionClient) Use(ctx context.Context) (*Material, error) {
+	key, _, err := c.UseWithTicket(ctx)
+	return key, err
+}
+func (c *SessionClient) UseWithTicket(ctx context.Context) (*Material, *LaunchTicket, error) {
 	r, err := c.request(ctx, "use", nil, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer clear(r.Key)
-	if len(r.Key) != 32 {
-		return nil, ErrIntegrity
+	if len(r.Key) != 32 || r.Ticket == nil || !validLaunchTicket(*r.Ticket) || r.Ticket.SessionID != c.Endpoint.SessionID || r.Ticket.VaultID != c.Endpoint.VaultID {
+		return nil, nil, ErrIntegrity
 	}
-	return NewMaterial(r.Key), nil
+	return NewMaterial(r.Key), r.Ticket, nil
 }
 func (c *SessionClient) Lock(ctx context.Context) error {
 	_, err := c.request(ctx, "lock", nil, false)

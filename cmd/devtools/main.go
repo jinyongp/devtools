@@ -133,6 +133,20 @@ func main() {
 		}
 		return
 	}
+
+	if len(os.Args) == 5 && os.Args[1] == "__process-launch" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		defer stop()
+		lease, err := services.OpenInheritedLease(os.Args[4])
+		if err != nil {
+			os.Exit(1)
+		}
+		defer lease.Close()
+		if cli.ServePreparedProcessWithLease(ctx, os.Args[2], os.Args[3], lease) != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 5 && os.Args[1] == "__process-serve" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()

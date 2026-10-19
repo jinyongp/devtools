@@ -24,6 +24,12 @@ func (s Store) Prepare(ctx context.Context, p project.Context, c project.Command
 }
 
 func (s Store) PrepareWithEnvironment(ctx context.Context, p project.Context, c project.Command, env string, valuesState *values.State, defaults []int, preview bool, parent []string) (Prepared, func(), *protocol.Error) {
+	return s.PrepareForLauncher(ctx, p, c, env, valuesState, defaults, preview, parent, false)
+}
+
+// PrepareForLauncher freezes assignments/bindings before an old server stops.
+// Deferred serving claims are acquired against these exact assignments later.
+func (s Store) PrepareForLauncher(ctx context.Context, p project.Context, c project.Command, env string, valuesState *values.State, defaults []int, preview bool, parent []string, deferServing bool) (Prepared, func(), *protocol.Error) {
 	result := Prepared{}
 	var resolveErr *protocol.Error
 	p, resolveErr = p.ResolvePorts(parent, c.Serve)
@@ -49,19 +55,23 @@ func (s Store) PrepareWithEnvironment(ctx context.Context, p project.Context, c 
 			if !ok {
 				return false, fail("port_not_found")
 			}
-			if e := s.Active(ctx, i.ID, name); e != nil {
-				return false, e
+			if !deferServing {
+				if e := s.Active(ctx, i.ID, name); e != nil {
+					return false, e
+				}
 			}
 			a, created, e := s.Allocate(ctx, st, *i, name, def, defaults)
 			if e != nil {
 				return false, e
 			}
-			free, e := s.Available(a.Port)
-			if e != nil {
-				return false, e
-			}
-			if !free {
-				return false, fail("port_in_use")
+			if !deferServing {
+				free, e := s.Available(a.Port)
+				if e != nil {
+					return false, e
+				}
+				if !free {
+					return false, fail("port_in_use")
+				}
 			}
 			changed = changed || created
 			result.Assignments = append(result.Assignments, a)
@@ -85,7 +95,7 @@ func (s Store) PrepareWithEnvironment(ctx context.Context, p project.Context, c 
 			}
 			result.Args[n] = expanded
 		}
-		if !preview && len(names) > 0 {
+		if !preview && !deferServing && len(names) > 0 {
 			var e *protocol.Error
 			release, e = s.Claim(ctx, i.ID, names)
 			if e != nil {
@@ -269,4 +279,48 @@ func (st *State) bind(p project.Context, c project.Command, env string, state *v
 		out[key] = value
 	}
 	return out, pending, nil
+}
+
+// ClaimPrepared accepts only the already frozen assignments. It never resolves
+// config or profile values after an old process was stopped.
+func (s Store) ClaimPrepared(ctx context.Context, assignments []Assignment) (func(), *protocol.Error) {
+	release := func() {}
+	if len(assignments) == 0 {
+		return release, nil
+	}
+	releases := []func(){}
+	release = func() {
+		for _, r := range releases {
+			r()
+		}
+	}
+	err := s.Update(ctx, func(st *State) (bool, *protocol.Error) {
+		for _, a := range assignments {
+			current := st.Get(a.Instance.ID, a.Name)
+			if current == nil || current.Port != a.Port || current.Instance.Profile != a.Instance.Profile || current.Instance.Directory != a.Instance.Directory {
+				return false, fail("port_assignment_changed")
+			}
+			if err := s.Active(ctx, a.Instance.ID, a.Name); err != nil {
+				return false, err
+			}
+			free, err := s.Available(a.Port)
+			if err != nil {
+				return false, err
+			}
+			if !free {
+				return false, fail("port_in_use")
+			}
+			claimed, err := s.Claim(ctx, a.Instance.ID, []string{a.Name})
+			if err != nil {
+				return false, err
+			}
+			releases = append(releases, claimed)
+		}
+		return false, nil
+	})
+	if err != nil {
+		release()
+		return func() {}, err
+	}
+	return release, nil
 }

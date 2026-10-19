@@ -22,25 +22,26 @@ func readinessSchema() map[string]any {
 
 func managedProcessSchema() map[string]any {
 	return object(map[string]any{
-		"ready_configured": map[string]any{"type": "boolean"},
-		"readiness":        readinessSchema(),
-		"id":               stringSchema(),
-		"profile":          stringSchema(),
-		"instance_id":      stringSchema(),
-		"directory":        stringSchema(),
-		"command":          stringSchema(),
-		"env":              stringSchema(),
-		"env_override":     map[string]any{"type": []string{"string", "null"}},
-		"inject":           map[string]any{"type": "boolean"},
-		"capture_logs":     map[string]any{"type": "boolean"},
-		"created_at":       stringSchema(),
-		"started_at":       map[string]any{"type": []string{"string", "null"}},
-		"ended_at":         map[string]any{"type": []string{"string", "null"}},
-		"exit_code":        map[string]any{"type": []string{"integer", "null"}},
-		"reason":           stringSchema(),
-		"state":            stringSchema(),
-		"previous_id":      stringSchema(),
-		"proxy_mode":       map[string]any{"type": "boolean"}, "network_snapshot_id": stringSchema(), "isolated_root": stringSchema(),
+		"ready_configured":  map[string]any{"type": "boolean"},
+		"readiness":         readinessSchema(),
+		"id":                stringSchema(),
+		"profile":           stringSchema(),
+		"instance_id":       stringSchema(),
+		"directory":         stringSchema(),
+		"command":           stringSchema(),
+		"env":               stringSchema(),
+		"env_override":      map[string]any{"type": []string{"string", "null"}},
+		"inject":            map[string]any{"type": "boolean"},
+		"capture_logs":      map[string]any{"type": "boolean"},
+		"created_at":        stringSchema(),
+		"started_at":        map[string]any{"type": []string{"string", "null"}},
+		"ended_at":          map[string]any{"type": []string{"string", "null"}},
+		"exit_code":         map[string]any{"type": []string{"integer", "null"}},
+		"reason":            stringSchema(),
+		"state":             stringSchema(),
+		"previous_id":       stringSchema(),
+		"input_snapshot_id": stringSchema(), "launch_phase": stringSchema(), "outage": map[string]any{"type": "boolean"},
+		"proxy_mode": map[string]any{"type": "boolean"}, "network_snapshot_id": stringSchema(), "isolated_root": stringSchema(),
 	}, "ready_configured", "id", "profile", "instance_id", "directory", "command", "env", "env_override", "capture_logs", "created_at", "started_at", "ended_at", "exit_code", "reason", "state")
 }
 
@@ -94,6 +95,7 @@ func (a *App) projectLifecycleManager() (lifecycle.Manager, *protocol.Error) {
 			return manager, portFailure("io_error")
 		}
 		store.IsolatedRoot = directories.IsolatedRoot
+		store.PrepareInput = a.prepareManagedInput
 		manager.Processes = store
 	}
 	manager.Validate = a.validateProjectCommand

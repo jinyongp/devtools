@@ -60,9 +60,6 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 		return nil, err
 	}
 	defer prepared.Release()
-	if directories, e := a.currentPaths(); e == nil && directories.IsolatedRoot != "" {
-		prepared.Injected["DEVTOOLS_ISOLATED_ROOT"] = directories.IsolatedRoot
-	}
 	checks := prepared.Checks(ctx, os.Environ(), false)
 	if !execution.ChecksPassed(checks) {
 		return nil, protocol.NewError("requirements_failed", "Command prerequisites are not satisfied. Run devtools doctor for diagnostics.", 3, map[string]any{"checks": checks})

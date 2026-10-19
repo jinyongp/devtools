@@ -1,13 +1,16 @@
 package execution
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -18,6 +21,7 @@ import (
 const DefaultPreparationTimeout = 30 * time.Second
 
 type InputMetadata struct {
+	InputID         string                  `json:"input_id"`
 	Inject          bool                    `json:"inject"`
 	Selection       string                  `json:"selection"`
 	Parent          process.ParentPolicy    `json:"parent"`
@@ -32,29 +36,34 @@ type InputMetadata struct {
 // InputPayload contains the actual immutable process input. Its encoded bytes
 // cross only the explicit launcher boundary; normal JSON/fmt cannot reveal it.
 type InputPayload struct {
+	consumed *atomic.Bool
 	body     *vault.Material
 	metadata InputMetadata
 }
 type inputWire struct {
-	Format      int                 `json:"format"`
-	Metadata    InputMetadata       `json:"metadata"`
-	Args        []string            `json:"args"`
-	Environment []string            `json:"environment"`
-	Directory   string              `json:"directory"`
-	Executable  string              `json:"executable"`
-	Ready       *project.ReadyProbe `json:"ready,omitempty"`
-	Patterns    [][]byte            `json:"patterns"`
+	VaultDirectory string              `json:"vault_directory,omitempty"`
+	Served         []ports.Assignment  `json:"served,omitempty"`
+	Format         int                 `json:"format"`
+	Metadata       InputMetadata       `json:"metadata"`
+	Args           []string            `json:"args"`
+	Environment    []string            `json:"environment"`
+	Directory      string              `json:"directory"`
+	Executable     string              `json:"executable"`
+	Ready          *project.ReadyProbe `json:"ready,omitempty"`
+	Patterns       [][]byte            `json:"patterns"`
 }
 
 // ProcessInput is an owned, explicit spawn/redactor boundary. Destroy it after
 // use; decoded string copies and OS process environments are not a secure heap.
 type ProcessInput struct {
-	Args        []string
-	Environment []string
-	Directory   string
-	Executable  string
-	Ready       *project.ReadyProbe
-	Patterns    [][]byte
+	VaultDirectory string
+	Served         []ports.Assignment
+	Args           []string
+	Environment    []string
+	Directory      string
+	Executable     string
+	Ready          *project.ReadyProbe
+	Patterns       [][]byte
 }
 
 func (InputPayload) MarshalJSON() ([]byte, error) {
@@ -80,6 +89,10 @@ func snapshotError(code string) *protocol.Error {
 	return protocol.NewError(code, "Prepared execution input is unavailable or expired; prepare a new execution.", 3, nil)
 }
 func cloneInputMetadata(metadata InputMetadata) InputMetadata {
+	if metadata.Values.Launch != nil {
+		ticket := *metadata.Values.Launch
+		metadata.Values.Launch = &ticket
+	}
 	metadata.Parent.Allow = append([]string{}, metadata.Parent.Allow...)
 	metadata.Values.Slots = append([]vault.SlotReference{}, metadata.Values.Slots...)
 	if metadata.Values.EarliestExpiry != nil {
@@ -118,9 +131,16 @@ func newInputPayload(wire inputWire) (*InputPayload, *protocol.Error) {
 	if len(b) > vault.MaxFrameBytes {
 		return nil, protocol.NewError("execution_input_too_large", "Execution payload exceeds the supported transport limit.", 2, nil)
 	}
-	return &InputPayload{body: vault.NewMaterial(b), metadata: cloneInputMetadata(wire.Metadata)}, nil
+	return &InputPayload{consumed: &atomic.Bool{}, body: vault.NewMaterial(b), metadata: cloneInputMetadata(wire.Metadata)}, nil
 }
 func validateInputWire(wire inputWire) *protocol.Error {
+	id, err := hex.DecodeString(wire.Metadata.InputID)
+	if err != nil || len(id) != 16 || len(wire.Metadata.InputID) != 32 {
+		return snapshotError("invalid_input_snapshot")
+	}
+	if wire.Metadata.Values.Launch != nil && !filepath.IsAbs(wire.VaultDirectory) {
+		return snapshotError("invalid_input_snapshot")
+	}
 	if wire.Format != 1 || !filepath.IsAbs(wire.Directory) || !filepath.IsAbs(wire.Executable) || wire.Environment == nil || wire.Metadata.PreparedAt.IsZero() || !wire.Metadata.PrepareDeadline.After(wire.Metadata.PreparedAt) {
 		return snapshotError("invalid_input_snapshot")
 	}
@@ -162,11 +182,11 @@ func (p *InputPayload) Open() (*ProcessInput, *protocol.Error) {
 		}
 		return nil, e
 	}
-	return &ProcessInput{Args: wire.Args, Environment: wire.Environment, Directory: wire.Directory, Executable: wire.Executable, Ready: wire.Ready, Patterns: wire.Patterns}, nil
+	return &ProcessInput{VaultDirectory: wire.VaultDirectory, Served: wire.Served, Args: wire.Args, Environment: wire.Environment, Directory: wire.Directory, Executable: wire.Executable, Ready: wire.Ready, Patterns: wire.Patterns}, nil
 }
 
 // EncodeForLauncher returns an owned sensitive copy, never a public receipt or
-// on-disk plaintext file. A08 supplies authenticated handoff and admission.
+// on-disk plaintext file. Callers bind the chosen launcher before admission.
 func (p *InputPayload) EncodeForLauncher() (*vault.Material, *protocol.Error) {
 	if p == nil || p.body == nil {
 		return nil, snapshotError("input_snapshot_unavailable")
@@ -206,10 +226,12 @@ func (p *ProcessInput) Destroy() {
 		clear(pattern)
 	}
 	p.Patterns = nil
+	p.Served = nil
 	clear(p.Args)
 	clear(p.Environment)
 	p.Args = nil
 	p.Environment = nil
+	p.VaultDirectory = ""
 	p.Directory = ""
 	p.Executable = ""
 	p.Ready = nil

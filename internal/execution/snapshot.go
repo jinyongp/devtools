@@ -13,6 +13,7 @@ import (
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 type PlanOptions struct {
@@ -189,6 +190,9 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 	if e != nil {
 		return Prepared{}, e
 	}
+	if dependencies.IsolatedRoot != "" {
+		prepared.Injected["DEVTOOLS_ISOLATED_ROOT"] = dependencies.IsolatedRoot
+	}
 	environment := process.CompleteEnvironment(process.Environment(plan.parent, prepared.Injected))
 	if e = process.ValidateExecInput(prepared.Args, environment); e != nil {
 		prepared.Release()
@@ -227,8 +231,13 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 			clear(pattern)
 		}
 	}()
-	metadata := InputMetadata{Inject: plan.summary.Inject, Selection: plan.summary.Selection, Parent: plan.summary.Parent, Profile: plan.command.Project.Profile, Command: plan.command.Name, Env: plan.command.Env, PreparedAt: snapshot.created, PrepareDeadline: snapshot.deadline, Values: snapshot.values.Metadata()}
-	prepared.Input, e = newInputPayload(inputWire{Format: 1, Metadata: metadata, Args: prepared.Args, Environment: environment, Directory: prepared.Command.Directory, Executable: path, Ready: cloneReady(prepared.Command.Ready), Patterns: patterns})
+	inputID, err := vault.NewID()
+	if err != nil {
+		prepared.Release()
+		return Prepared{}, snapshotError("input_snapshot_unavailable")
+	}
+	metadata := InputMetadata{InputID: inputID, Inject: plan.summary.Inject, Selection: plan.summary.Selection, Parent: plan.summary.Parent, Profile: plan.command.Project.Profile, Command: plan.command.Name, Env: plan.command.Env, PreparedAt: snapshot.created, PrepareDeadline: snapshot.deadline, Values: snapshot.values.Metadata()}
+	prepared.Input, e = newInputPayload(inputWire{VaultDirectory: dependencies.VaultDirectory, Served: prepared.Assignments, Format: 1, Metadata: metadata, Args: prepared.Args, Environment: environment, Directory: prepared.Command.Directory, Executable: path, Ready: cloneReady(prepared.Command.Ready), Patterns: patterns})
 	if e != nil {
 		prepared.Release()
 		return Prepared{}, e

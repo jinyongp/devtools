@@ -36,7 +36,13 @@ func (a *App) prepareExecution(ctx context.Context, command execution.Command, p
 	if err != nil {
 		return execution.Prepared{}, err
 	}
-	return execution.Prepare(ctx, command, dependencies, preview)
+	if directories, e := a.currentPaths(); e == nil {
+		dependencies.IsolatedRoot = directories.IsolatedRoot
+	}
+	if preview {
+		return execution.Prepare(ctx, command, dependencies, true)
+	}
+	return execution.PrepareInput(ctx, command, dependencies, os.Environ(), execution.PlanOptions{})
 }
 
 func (a *App) previewExecution(ctx context.Context, command execution.Command, state *values.State) (execution.Prepared, *protocol.Error) {

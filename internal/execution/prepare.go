@@ -14,11 +14,15 @@ import (
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 // Dependencies supplies user-global stores needed to prepare one command.
 // Callers keep ownership of user path/config discovery.
 type Dependencies struct {
+	IsolatedRoot    string
+	VaultDirectory  string
+	DeferServing    bool
 	ValueSnapshot   func(context.Context, string, string, bool) (*values.Snapshot, *protocol.Error)
 	ValuesDirectory string
 	Ports           ports.Store
@@ -28,7 +32,7 @@ type Dependencies struct {
 // DependenciesFor derives the stores required by one effective command from the
 // user-global data/config roots without creating or mutating storage.
 func DependenciesFor(command Command, dataRoot, configRoot string) (Dependencies, *protocol.Error) {
-	dependencies := Dependencies{}
+	dependencies := Dependencies{VaultDirectory: filepath.Join(dataRoot, "vault")}
 	if command.NeedsValues() {
 		dependencies.ValuesDirectory = filepath.Join(dataRoot, "profiles")
 	}
@@ -46,6 +50,7 @@ func DependenciesFor(command Command, dataRoot, configRoot string) (Dependencies
 // Prepared contains the side-effect-bounded result of command preparation.
 // Release must be called after non-preview port preparation.
 type Prepared struct {
+	Assignments      []ports.Assignment
 	Input            *InputPayload
 	probeEnvironment []string
 	Command          Command
@@ -148,11 +153,12 @@ func prepareResolved(ctx context.Context, command Command, state *values.State, 
 	if options.parentEnvironment != nil {
 		parent = *options.parentEnvironment
 	}
-	prepared, release, err := dependencies.Ports.PrepareWithEnvironment(ctx, command.Project, command.projectCommand(), command.Env, state, dependencies.PortDefaults, options.preview, parent)
+	prepared, release, err := dependencies.Ports.PrepareForLauncher(ctx, command.Project, command.projectCommand(), command.Env, state, dependencies.PortDefaults, options.preview, parent, dependencies.DeferServing)
 	if err != nil {
 		return Prepared{}, err
 	}
 	out.Release = release
+	out.Assignments = prepared.Assignments
 	out.Args = append(append([]string{}, prepared.Args...), command.ExtraArgs...)
 	for key, value := range prepared.Bind {
 		out.Injected[key] = value
@@ -436,7 +442,34 @@ func (p Prepared) Execute(ctx context.Context, parentEnvironment []string, runne
 		if e != nil {
 			return 0, e
 		}
+
 		defer input.Destroy()
+		if !p.Input.consumed.CompareAndSwap(false, true) {
+			return 0, snapshotError("input_snapshot_consumed")
+		}
+		if ticket := p.Input.metadata.Values.Launch; ticket != nil {
+			client, err := vault.OpenSessionClient(input.VaultDirectory)
+			if err != nil {
+				return 0, values.VaultError(ctx, err)
+			}
+			admission, err := client.BeginLaunch(ctx, p.Input.metadata.InputID, *ticket)
+			if err != nil {
+				return 0, values.VaultError(ctx, err)
+			}
+			completed := false
+			defer func() {
+				if !completed {
+					admission.Finish(context.Background(), "canceled")
+				}
+			}()
+			ctx = process.WithStarted(ctx, func() *protocol.Error {
+				completed = true
+				if err := admission.Finish(context.Background(), "spawned"); err != nil {
+					return values.VaultError(ctx, err)
+				}
+				return nil
+			})
+		}
 		ctx = process.WithExecutablePath(process.WithReadyProbe(ctx, input.Ready), input.Executable)
 		if runner != nil {
 			if e := process.ValidateManaged(input.Args, input.Directory, input.Environment); e != nil {

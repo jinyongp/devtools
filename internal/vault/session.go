@@ -25,7 +25,7 @@ type manualLock struct {
 }
 
 // KeySession owns one root key and serializes bounded unwrap/KDF work. Execution
-// admission and launcher draining belong to the execution layer (A08); clearing
+// admission and durable launcher draining are coordinated in launch.go; clearing
 // this cache cannot revoke bytes already delivered to a caller or application.
 type KeySession struct {
 	mu           sync.Mutex
@@ -278,6 +278,12 @@ func (s *KeySession) copyForUse() (*Material, error) {
 	return NewMaterial(b), nil
 }
 func (s *KeySession) Lock(ctx context.Context) error {
+	if err := s.lockIntent(ctx); err != nil {
+		return err
+	}
+	return DrainLaunches(ctx, s.directory)
+}
+func (s *KeySession) lockIntent(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := ctx.Err(); err != nil {

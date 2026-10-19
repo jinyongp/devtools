@@ -152,6 +152,9 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 			next.ReadyConfigured = config != nil
 			next.StartedAt = &now
 			next.State = "running"
+			if next.InputSnapshotID != "" {
+				next.LaunchPhase = "spawned"
+			}
 			if writePrivate(s.path(id, "record.json"), next) != nil {
 				return storageError()
 			}
@@ -171,6 +174,7 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 
 	err = execute(ctx, r, runner, output)
 	mu.Lock()
+	s.finishInputPhase(&r)
 	now := time.Now().UTC()
 	r.EndedAt = &now
 	r.State = "exited"

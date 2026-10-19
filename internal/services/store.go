@@ -22,9 +22,11 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/archiveproof"
+	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/retention"
@@ -32,6 +34,7 @@ import (
 )
 
 type Store struct {
+	PrepareInput func(context.Context, Record, *network.ExecutionSnapshot) (execution.Prepared, *protocol.Error)
 	Data         string
 	IsolatedRoot string
 }
@@ -44,6 +47,9 @@ func writePrivate(path string, v any) error {
 }
 
 type Record struct {
+	Outage            bool       `json:"outage,omitempty"`
+	InputSnapshotID   string     `json:"input_snapshot_id,omitempty"`
+	LaunchPhase       string     `json:"launch_phase,omitempty"`
 	ProxyMode         bool       `json:"proxy_mode,omitempty"`
 	NetworkSnapshotID string     `json:"network_snapshot_id,omitempty"`
 	IsolatedRoot      string     `json:"isolated_root,omitempty"`
@@ -112,6 +118,7 @@ const (
 )
 
 type Request struct {
+	stopPrevious     func(context.Context) *protocol.Error                       `json:"-"`
 	ProxyMode        bool                                                        `json:"proxy_mode,omitempty"`
 	Network          *network.ExecutionSnapshot                                  `json:"network,omitempty"`
 	Action           string                                                      `json:"action"`
@@ -507,6 +514,10 @@ func (s Store) statusRecord(ctx context.Context, r Record) (Record, *protocol.Er
 		return r, nil
 	}
 	if live, err := s.rpc(ctx, r.ID, "status"); err == nil {
+		if live.StartedAt == nil && live.InputSnapshotID == r.InputSnapshotID {
+			live.LaunchPhase = r.LaunchPhase
+			live.Outage = r.Outage
+		}
 		return live, nil
 	}
 	lost, err := s.supervisorLost(ctx, r, true)
@@ -721,6 +732,30 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 				break
 			}
 		}
+
+		if q.Action == "restart" && s.PrepareInput != nil {
+			q.Directory = r.Directory
+			q.Command = r.Command
+			if q.Env == nil {
+				q.Env = r.EnvOverride
+			}
+			if q.Capture == nil {
+				q.Capture = &r.Capture
+			}
+			q.BeforeStart = nil
+			q.stopPrevious = func(ctx context.Context) *protocol.Error {
+				stopped, e := s.stop(ctx, r)
+				out.Changed = out.Changed || stopped.Changed
+				return e
+			}
+			started, e := s.start(ctx, q, r.ID)
+			if started.Item.ID != "" {
+				out.Item = started.Item
+			}
+			out.Changed = out.Changed || started.Changed
+			err = e
+			break
+		}
 		out, err = s.stop(ctx, r)
 		if err != nil {
 			break
@@ -819,7 +854,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 			return out, listErr
 		}
 		for _, r := range list {
-			if r.Directory == p.Root && r.Command == q.Command && r.EndedAt == nil && r.State != "interrupted" {
+			if r.ID != previous && r.Directory == p.Root && r.Command == q.Command && r.EndedAt == nil && r.State != "interrupted" {
 				if r.State == "unknown" {
 					return out, failure("process_unavailable")
 				}
@@ -857,7 +892,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 			return out, listErr
 		}
 		for _, r := range list {
-			if r.Instance == instance.ID && r.Command == q.Command && r.EndedAt == nil && r.State != "interrupted" {
+			if r.ID != previous && r.Instance == instance.ID && r.Command == q.Command && r.EndedAt == nil && r.State != "interrupted" {
 				if r.State == "unknown" {
 					return out, failure("process_unavailable")
 				}
@@ -879,6 +914,23 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 	}
 	inject := c.Inject || q.Env != nil
 	r.Inject = &inject
+
+	var prepared execution.Prepared
+	if s.PrepareInput != nil {
+		var e *protocol.Error
+		prepared, e = s.PrepareInput(ctx, r, q.Network)
+		if e != nil {
+			return out, e
+		}
+		if prepared.Release != nil {
+			defer prepared.Release()
+		}
+		if prepared.Input == nil {
+			return out, failure("input_snapshot_unavailable")
+		}
+		r.InputSnapshotID = prepared.Input.Metadata().InputID
+		r.LaunchPhase = "prepared"
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return out, storageError()
@@ -887,9 +939,24 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 	if launchErr != nil {
 		return out, launchErr
 	}
-	cmd := exec.Command(exe, "__process-serve", s.Data, r.ID, "3")
+	entry := "__process-serve"
+	if s.PrepareInput != nil {
+		entry = "__process-launch"
+	}
+	cmd := exec.Command(exe, entry, s.Data, r.ID, "3")
+	var channel *launcherInputChannel
+	if s.PrepareInput != nil {
+		var err error
+		channel, err = newLauncherInputChannel(ctx, cmd)
+		if err != nil {
+			lease.unlockClose()
+			return out, storageError()
+		}
+		defer channel.close()
+	}
+	cmd.Env, _ = process.SelectParent(os.Environ(), process.ParentPolicy{})
 	if r.IsolatedRoot != "" {
-		cmd.Env = append(os.Environ(), "DEVTOOLS_ISOLATED_ROOT="+r.IsolatedRoot)
+		cmd.Env = append(cmd.Env, "DEVTOOLS_ISOLATED_ROOT="+r.IsolatedRoot)
 	}
 	cmd.Dir = p.Root
 
@@ -907,6 +974,35 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 	}
 	_ = lease.closeReference()
 	go func() { _ = cmd.Wait() }()
+
+	if channel != nil {
+		channel.inherited()
+		_, handoffErr := channel.bind(prepared.Input)
+		if handoffErr == nil {
+			handoffErr = channel.admit()
+		}
+		if handoffErr != nil {
+			return Result{Item: r}, handoffErr
+		}
+		r.LaunchPhase = "admitted"
+		if writePrivate(s.path(r.ID, "record.json"), r) != nil {
+			return Result{Item: r}, storageError()
+		}
+		changed := false
+		if q.stopPrevious != nil {
+			if e := q.stopPrevious(ctx); e != nil {
+				return Result{Item: r}, e
+			}
+			changed = true
+		}
+		r.LaunchPhase = "committed"
+		if writePrivate(s.path(r.ID, "record.json"), r) != nil {
+			return Result{Item: r, Changed: changed}, storageError()
+		}
+		if e := channel.commit(); e != nil {
+			return Result{Item: r, Changed: changed}, e
+		}
+	}
 	deadline := time.NewTimer(legacyStartupGrace)
 	defer deadline.Stop()
 	tick := time.NewTicker(25 * time.Millisecond)

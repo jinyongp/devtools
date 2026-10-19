@@ -180,7 +180,7 @@ func pending(err *protocol.Error) bool {
 		return false
 	}
 	switch err.Code {
-	case "process_pending", "readiness_timeout", "readiness_unavailable":
+	case "process_pending", "readiness_timeout", "readiness_unavailable", "launch_outcome_unknown", "lock_pending":
 		return true
 	default:
 		return false
@@ -403,8 +403,16 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 			}
 			child.Result.Condition = condition(err)
 			if err.Code != "canceled" && !pending(err) {
-				child.RequestID = tasks.ID()
-				child.ExecutionID = ""
+				if result.Item.InputSnapshotID != "" {
+					child.Done = true
+				} else {
+					if result.Item.InputSnapshotID != "" {
+						child.Done = true
+					} else {
+						child.RequestID = tasks.ID()
+						child.ExecutionID = ""
+					}
+				}
 			}
 			if writeErr := writeReceipt(path, *value); writeErr != nil {
 				return writeErr
@@ -417,8 +425,12 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 		if result.Item.EndedAt != nil || result.Item.State == "failed" || result.Item.State == "interrupted" {
 			child.Result.Status = "failed"
 			child.Result.Condition = &Condition{Code: "process_failed", Message: "Managed process did not remain running."}
-			child.RequestID = tasks.ID()
-			child.ExecutionID = ""
+			if result.Item.InputSnapshotID != "" {
+				child.Done = true
+			} else {
+				child.RequestID = tasks.ID()
+				child.ExecutionID = ""
+			}
 			if writeErr := writeReceipt(path, *value); writeErr != nil {
 				return writeErr
 			}
@@ -440,8 +452,12 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 				if pending(waitErr) {
 					child.Result.Status = "pending"
 				} else if waitErr.Code != "canceled" {
-					child.RequestID = tasks.ID()
-					child.ExecutionID = ""
+					if result.Item.InputSnapshotID != "" {
+						child.Done = true
+					} else {
+						child.RequestID = tasks.ID()
+						child.ExecutionID = ""
+					}
 				}
 				child.Result.Condition = condition(waitErr)
 				if writeErr := writeReceipt(path, *value); writeErr != nil {
@@ -553,7 +569,11 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 			}
 			child.Result.Condition = condition(err)
 			if err.Code != "canceled" && !pending(err) {
-				child.RequestID = tasks.ID()
+				if result.Item.InputSnapshotID != "" {
+					child.Done = true
+				} else {
+					child.RequestID = tasks.ID()
+				}
 			}
 			if writeErr := writeReceipt(path, *value); writeErr != nil {
 				return writeErr
@@ -566,7 +586,11 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 		if result.Item.EndedAt != nil || result.Item.State == "failed" || result.Item.State == "interrupted" {
 			child.Result.Status = "failed"
 			child.Result.Condition = &Condition{Code: "process_failed", Message: "Restarted process did not remain running."}
-			child.RequestID = tasks.ID()
+			if result.Item.InputSnapshotID != "" {
+				child.Done = true
+			} else {
+				child.RequestID = tasks.ID()
+			}
 			if writeErr := writeReceipt(path, *value); writeErr != nil {
 				return writeErr
 			}
@@ -588,7 +612,11 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 				if pending(waitErr) {
 					child.Result.Status = "pending"
 				} else if waitErr.Code != "canceled" {
-					child.RequestID = tasks.ID()
+					if result.Item.InputSnapshotID != "" {
+						child.Done = true
+					} else {
+						child.RequestID = tasks.ID()
+					}
 				}
 				child.Result.Condition = condition(waitErr)
 				if writeErr := writeReceipt(path, *value); writeErr != nil {

@@ -61,6 +61,14 @@ func Execute(ctx context.Context, args []string, dir string, env []string, in io
 		}
 		return 0, protocol.NewError("execution_failed", "Cannot start the requested command.", 126, nil)
 	}
+	if e := NotifyStarted(ctx); e != nil {
+		_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		_ = command.Wait()
+		if interactive {
+			_ = tty.restoreAfterStartFailure()
+		}
+		return 0, e
+	}
 	if interactive {
 		return waitInteractive(ctx.Done(), func() error { return context.Cause(ctx) }, command, tty)
 	}

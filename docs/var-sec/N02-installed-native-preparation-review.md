@@ -30,3 +30,22 @@ mkdir 성공 후에만 그 root의 소유권을 기록하고 native 검사를 �
 모든 자체 root 정리가 끝난 뒤에만 성공 artifact를 발행한다. 현재 개발 호스트의 기본
 root에는 이 검사를 실행하지 않는다. Python syntax와 두 call site·실패 전/후 cleanup을
 재검토했으며 수정된 Windows native 결과는 후속 CI에서 확인한다.
+
+## 실제 native 자료를 유지한 self-update 검증 추가
+
+별도 설치/업데이트와 native DPAPI 검사를 잇는다. 같은 임시 기본 root의 native
+secret을 남긴 채 manual lock·authenticated retire/lease drain을 완료하고, 같은
+source SHA의 다른 version package를 private fixture 디렉터리에 만든다. 실제 설치
+binary의 update를 실행한 뒤 새 version·명시 nopassphrase unlock·원래 secret의
+masked 실행·동일 vault/backend를 확인한다. old cache로 성공시키지 않는다.
+
+추가 package는 게시하지 않고 같은 owned temporary root 안에서만 사용한다.
+원래 candidate version과 실제 최종 test version을 각각 evidence에 기록한다.
+기존 isolated source/target 및 관리 실행·암호화 전송 검사를 유지하며 새 image로
+동작한다. finally는 모든 root의 old/new worker를 실제 retirement/lease로 정리한 뒤
+root를 제거한다. native mutation guard·기존 root 거절은 그대로다.
+
+리뷰: source/version/digest provenance, old key session 종료, actual self-update 호출,
+새 worker native unlock, 값/identity 보존, managed/transfer caller와 최종 image/version
+표시·cleanup을 확인했다. Python syntax와 release contract를 검사한다. 실제 x64/ARM64
+결과 전까지 이 연결 검사를 pass 또는 N02 완료로 표시하지 않는다.

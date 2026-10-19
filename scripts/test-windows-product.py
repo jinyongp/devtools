@@ -15,6 +15,7 @@ import time
 import uuid
 from urllib.parse import urlsplit
 
+import package as release_package
 from vault_test_support import retire_vaults
 
 
@@ -66,8 +67,8 @@ def main():
             raise RuntimeError(f"Installed command {arguments[:3]} exited {result.returncode}: {reason}")
         return result.stdout.decode("utf-8")
 
-    def api(*arguments, env=source_env, input=""):
-        result = json.loads(raw(list(arguments), env=env, input=input))
+    def api(*arguments, env=source_env, input="", timeout=40):
+        result = json.loads(raw(list(arguments), env=env, input=input, timeout=timeout))
         assert result["schema_version"] == 1 and result["ok"]
         return result["data"]
 
@@ -161,6 +162,24 @@ timeout = "3s"
         assert api("vault", "status", env=native_env)["item"]["backend"] == "dpapi"
         steps.append("default_dpapi_native_helper_manual_lock_and_explicit_unlock")
 
+        # Exercise the actual updater while native data remains in place. Drain
+        # this root's old key session so a cached key cannot hide a new-image
+        # DPAPI access failure. Other owned roots retain their existing sessions.
+        api("vault", "lock", env=native_env)
+        retire_vaults(native_root / "data" / "vault")
+        update_version = args.version + (".native-update" if "-" in args.version else "-native-update")
+        architecture = subprocess.check_output(["go", "env", "GOHOSTARCH"], env=base_env, text=True).strip()
+        update_directory = root / "native-update-releases"
+        release_package.package(env=dict(base_env, VERSION=update_version, COMMIT=args.commit,
+                                        TARGET_OS="windows", TARGET_ARCH=architecture, OUTPUT_DIR=str(update_directory)))
+        changed = api("update", "--version", update_version, "--source", str(update_directory), env=native_env, timeout=120)
+        assert changed["changed"] and api("version", env=native_env)["version"] == update_version
+        assert api("vault", "unlock", env=native_env)["item"]["state"] == "unlocked"
+        assert raw(native_command, env=native_env) == "[REDACTED]"
+        updated_native = api("vault", "status", env=native_env)["item"]
+        assert updated_native["backend"] == "dpapi" and updated_native["vault_id"] == native["vault_id"]
+        steps.append("default_dpapi_data_and_cold_native_unlock_after_self_update")
+
         http_port, tls_port = available_port(), available_port()
         mutate("proxy", "configure", "--http-address", f"127.0.0.1:{http_port}", "--https-address", f"127.0.0.1:{tls_port}")
         request = str(uuid.uuid4())
@@ -215,7 +234,7 @@ timeout = "3s"
         assert api("backup", "status", env=target_env)["item"]["configured"] is False
         assert api("diagnostics")["ready"]
         steps.append("encrypted_profile_transfer_preview_apply_retry")
-        result = {"commit": args.commit, "version": args.version, "protocol": 7,
+        result = {"commit": args.commit, "version": args.version, "final_version": update_version, "protocol": 7,
                   "exe_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
                   "steps": {step: "pass" for step in steps}, "isolated": False,
                   "isolated_transfer_and_managed_roots": True, "native_provider_disposable_user_root": True,

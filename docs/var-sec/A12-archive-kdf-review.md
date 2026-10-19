@@ -26,3 +26,11 @@ platforms, file replacement, direct decoder callers, recipient compatibility,
 password prompt ordering and existing archive authentication. No remaining
 eligible finding in this change. This bounds one KDF invocation, not total
 machine resources against many independent same-user commands.
+
+Actual compiled CLI 1e4bebd default noninteractive imports were also checked with
+synthetic headers: factor 18 reaches passphrase_required, while 19/22/negative/
+overflow/+18/018 return invalid_backup before password selection. No password
+was supplied, so those checks do not run a KDF. Raw safe result rows are included
+in the final A12 evidence. Both Windows native x64 and ARM64 independently pass the new archive-cost
+test in the exact same source suites (0.05s/0.06s). Full-run installation and
+exchange acceptance remains separate until the required jobs finish.

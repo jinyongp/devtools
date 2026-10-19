@@ -69,3 +69,26 @@ verification-key 보존기간, public-only 실행의 generation 확인은 후속
   유효한 JSON인 손상 fixture로 확인했으며, 빈 문자열과 공개 profile의 정상 전송은
   계속 허용한다. key rotation 전후 실제 effective input revision이 같고 별도
   key epoch만 증가하는 snapshot 회귀 검사도 추가했다.
+
+## 상위 키 보호 방식 변경 검토
+
+`KeyFileStore.Rewrap`은 같은 난수 root를 새 protector로 감싼다. profile key epoch나
+논리 값을 바꾸지 않는다. 새 protector를 통한 실제 개봉 검증, 암호화한 pending 자료의
+실제 개봉 검증, 새 key file publication, 설치된 slot의 실제 개봉 검증, 이전 native
+항목 제거, 영수증·pending 정리 순서다. Native 호출 중에는 maintenance/session/
+key-slot write 잠금을 보유하지 않는다. 동일 native backend 재선택도 no-op 영수증을 남긴다.
+
+- 실제 별도 프로세스를 prepared / slot-published / installed-verified / old-retired /
+  receipt-written / cleaned의 6곳에서 종료하고 같은 operation ID로 복구했다.
+- 새 slot 검증 실패 시 이전 native 항목을 제거하지 않는다. 이전 항목 제거 실패는
+  새 보호 상태를 유지한 채 pending으로 남겨 같은 요청으로 재시도한다.
+- 영수증 저장 후 pending 정리 전에 중단된 경우도 복구한다. 이 경우를 누락하면
+  완료된 작업이 영구 recovery 상태가 되는 결함이 있어 수정했다.
+- native item 생성 직후 로컬 intent 전 종료된 경우, 선택한 backend/vault의 기존
+  항목을 개봉해 같은 root임을 확인한 경우에만 재사용한다. 다른 root를 덮어쓰거나
+  backend를 자동 변경하지 않는다. 실제 OS 호출은 N01/N03 실기 gate가 남아 있다.
+- 합성 root/암호가 새 디스크 자료에 원문으로 남지 않는지 검사했다. 수동 잠금
+  표식과 session 재시작 뒤 `locked_manual` 상태가 유지되는지 확인했다.
+
+기존 vault 전체 회귀, 관련 race와 vet, Windows/macOS test compile을 수행했다.
+실제 native 보호 변경, CLI 연결, 영수증 retention은 아직 완료했다고 기록하지 않는다.

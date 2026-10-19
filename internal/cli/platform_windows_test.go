@@ -12,7 +12,7 @@ func TestWindowsPublicPlatformAndPrivateAllowlist(t *testing.T) {
 			t.Fatal(name, failure)
 		}
 	}
-	for _, name := range []string{"__complete", "__trust-check", "__exposure-provider", "__proxy-serve", "__process-serve", "__dashboard-serve"} {
+	for _, name := range []string{"__complete", "__trust-check", "__exposure-provider", "__proxy-serve", "__process-serve", "__process-launch", "__dashboard-serve"} {
 		var output bytes.Buffer
 		if code := InternalPlatformPreflight([]string{name}, &output); code != 0 || output.Len() != 0 {
 			t.Fatal(name, code, output.String())

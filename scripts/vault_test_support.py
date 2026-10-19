@@ -11,7 +11,9 @@ _scratch = None
 
 def retire_vaults(*directories):
     global _control, _scratch
-    existing = [Path(path).resolve() for path in directories if (Path(path) / 'session.json').exists()]
+    # Preserve the caller's spelling: session endpoints bind to the exact data
+    # root, and Windows resolve() expands 8.3 paths used by tempfile/Go.
+    existing = [Path(os.path.abspath(path)) for path in directories if (Path(path) / 'session.json').exists()]
     if not existing:
         return
     if _control is None:

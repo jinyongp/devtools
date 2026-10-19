@@ -79,3 +79,18 @@ GNOME fixture는 고정된 private control directory를 만들고 daemon과 unlo
 실제 Locked property와 unwrap 결과로 해제 여부를 계속 검사한다. 합성 daemon의 직접
 process handle에 대한 종료/회수와 private bus 수명은 유지한다. 이 수정의 실제 GNOME
 전체 pass는 이후 CI에서 확인해야 한다.
+
+## Windows frozen launcher와 cleanup 경로
+
+`b56e5ce`의 installed product는 `launcher_unavailable`로 실패했다. 호출을 따라가니
+새 `__process-launch`가 Windows private entry allowlist에 없어 inherited lease나 frozen
+payload를 받기 전에 unsupported_platform으로 종료됐다. 실제 product가 사용하는 이
+entry를 허용하고 기존 platform contract 검사에 포함한다. 동일 binary/상속 lease 검증과
+payload/admission 검증을 건너뛰지 않는다. legacy __process-serve도 계속 유지한다.
+
+cleanup helper의 recovery 오류는 endpoint가 root의 경로 문자열에 바인딩되는데 Python
+resolve가 Windows temporary 8.3 경로를 긴 이름으로 바꾸는 문제였다. helper는 caller가
+선택한 절대 경로 표기를 보존한다. metadata의 endpoint 검증을 느슨하게 하지 않는다.
+리뷰: 실제 start entry·platform preflight·inherited lease·handoff caller와 helper의 경로
+전달을 확인했다. Python syntax와 양 architecture의 CLI test binary compile을 수행하고,
+실제 installed product의 readiness/restart/stop/transfer는 수정 CI에서 다시 확인한다.

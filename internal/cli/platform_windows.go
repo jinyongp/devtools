@@ -15,7 +15,7 @@ func InternalPlatformPreflight(args []string, diagnostic io.Writer) int {
 		return 0
 	}
 	switch args[0] {
-	case "__complete", "__trust-check", "__exposure-provider", "__proxy-serve", "__process-serve", "__dashboard-serve":
+	case "__complete", "__trust-check", "__exposure-provider", "__proxy-serve", "__process-serve", "__process-launch", "__dashboard-serve":
 		return 0
 	}
 	_ = protocol.Failure(diagnostic, protocol.NewError("unsupported_platform", "This private entry point is unavailable on Windows.", 3, nil))

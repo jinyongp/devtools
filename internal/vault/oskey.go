@@ -9,6 +9,7 @@ import (
 var (
 	ErrDenied              = errors.New("key_access_denied")
 	ErrInteractionRequired = errors.New("key_interaction_required")
+	ErrBackendLocked       = errors.New("key_backend_locked")
 )
 
 // Native key stores receive a typed, vault-bound payload. Validate it after

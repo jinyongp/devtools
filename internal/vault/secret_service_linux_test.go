@@ -1,0 +1,270 @@
+package vault
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"errors"
+	"os"
+	"os/exec"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/godbus/dbus/v5"
+)
+
+func TestUserBusAddressRejectsRemoteAndFallback(t *testing.T) {
+	for _, s := range []string{"tcp:host=localhost,port=123", "autolaunch:", "unixexec:path=x", "unix:path=/a;tcp:host=x", "unix:path=/a,path=/b", "unix:path=relative", "unix:path=/a,abstract=b", "unix:path=/a%00b", "unix:path=%XX"} {
+		if _, err := userBusSocket(s); !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("accepted %q", s)
+		}
+	}
+	for s, want := range map[string]string{"unix:path=/tmp/a%20b,guid=abc": "/tmp/a b", "unix:abstract=test": "\x00test"} {
+		if got, err := userBusSocket(s); err != nil || got != want {
+			t.Fatal(s, err)
+		}
+	}
+}
+
+func privateSecretBus(t *testing.T) string {
+	t.Helper()
+	binary, err := exec.LookPath("dbus-daemon")
+	if err != nil {
+		t.Skip("D-Bus integration needs a disposable dbus-daemon")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(ctx, binary, "--session", "--nofork", "--print-address=1")
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	if err = cmd.Start(); err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cancel(); cmd.Wait() })
+	line := make(chan string, 1)
+	go func() { s, _ := bufio.NewReader(out).ReadString('\n'); line <- strings.TrimSpace(s) }()
+	select {
+	case s := <-line:
+		if s == "" {
+			t.Fatal("bus did not start")
+		}
+		return s
+	case <-time.After(5 * time.Second):
+		t.Fatal("bus start timeout")
+	}
+	return ""
+}
+
+// The fixture implements the real D-Bus contract over a private Unix bus. It
+// tests our transport/codec/errors; it is not OS keyring encryption validation.
+type fixtureSecretService struct {
+	mu     sync.Mutex
+	conn   *dbus.Conn
+	keys   map[string][]byte
+	locked bool
+	fault  string
+}
+
+func (f *fixtureSecretService) OpenSession(algorithm string, input dbus.Variant) (dbus.Variant, dbus.ObjectPath, *dbus.Error) {
+	if algorithm != "plain" || input.Value() != "" {
+		return dbus.Variant{}, "/", dbus.NewError("org.freedesktop.DBus.Error.InvalidArgs", nil)
+	}
+	return dbus.MakeVariant(""), "/org/freedesktop/secrets/session/test", nil
+}
+func (f *fixtureSecretService) ReadAlias(alias string) (dbus.ObjectPath, *dbus.Error) {
+	return "/org/freedesktop/secrets/collection/test", nil
+}
+func (f *fixtureSecretService) Unlock(paths []dbus.ObjectPath) ([]dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
+	return []dbus.ObjectPath{}, "/org/freedesktop/secrets/prompt/test", nil
+}
+
+type fixtureSecretPrompt struct{ service *fixtureSecretService }
+
+func (p fixtureSecretPrompt) Prompt(window string) *dbus.Error {
+	if err := p.service.conn.Emit("/org/freedesktop/secrets/prompt/test", secretInterface+"Prompt.Completed", true, dbus.MakeVariant([]dbus.ObjectPath{})); err != nil {
+		return dbus.NewError("org.freedesktop.DBus.Error.Failed", nil)
+	}
+	return nil
+}
+func (f *fixtureSecretService) SearchItems(attrs map[string]string) ([]dbus.ObjectPath, []dbus.ObjectPath, *dbus.Error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	items := []dbus.ObjectPath{}
+	if _, ok := f.keys[attrs["vault-id"]]; ok {
+		items = append(items, dbus.ObjectPath("/org/freedesktop/secrets/item/"+attrs["vault-id"]))
+	}
+	if f.locked {
+		return []dbus.ObjectPath{}, items, nil
+	}
+	return items, []dbus.ObjectPath{}, nil
+}
+func (f *fixtureSecretService) Get(iface, property string) (dbus.Variant, *dbus.Error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return dbus.MakeVariant(f.locked), nil
+}
+func (f *fixtureSecretService) CreateItem(props map[string]dbus.Variant, secret serviceSecret, replace bool) (dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if replace {
+		return "/", "/", dbus.NewError("org.freedesktop.DBus.Error.InvalidArgs", nil)
+	}
+	attrs, ok := props[secretInterface+"Item.Attributes"].Value().(map[string]string)
+	if !ok {
+		return "/", "/", dbus.NewError("org.freedesktop.DBus.Error.InvalidArgs", nil)
+	}
+	id := attrs["vault-id"]
+	f.keys[id] = bytes.Clone(secret.Value)
+	path := dbus.ObjectPath("/org/freedesktop/secrets/item/" + id)
+	if err := f.conn.Export(fixtureSecretItem{f, id}, path, secretInterface+"Item"); err != nil {
+		return "/", "/", dbus.NewError("org.freedesktop.DBus.Error.Failed", nil)
+	}
+	return path, "/", nil
+}
+
+type fixtureSecretItem struct {
+	service *fixtureSecretService
+	id      string
+}
+
+func (i fixtureSecretItem) GetSecret(session dbus.ObjectPath) (serviceSecret, *dbus.Error) {
+	i.service.mu.Lock()
+	defer i.service.mu.Unlock()
+	if i.service.fault != "" {
+		return serviceSecret{}, dbus.NewError(i.service.fault, nil)
+	}
+	return serviceSecret{Session: session, Parameters: []byte{}, Value: bytes.Clone(i.service.keys[i.id]), ContentType: "application/octet-stream"}, nil
+}
+func (i fixtureSecretItem) Delete() (dbus.ObjectPath, *dbus.Error) {
+	i.service.mu.Lock()
+	defer i.service.mu.Unlock()
+	clear(i.service.keys[i.id])
+	delete(i.service.keys, i.id)
+	return "/", nil
+}
+func installFixtureSecretService(t *testing.T, address string) *fixtureSecretService {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	c, err := dialUserBus(ctx, address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close() })
+	f := &fixtureSecretService{conn: c, keys: make(map[string][]byte)}
+	if err := c.Export(fixtureSecretPrompt{f}, "/org/freedesktop/secrets/prompt/test", secretInterface+"Prompt"); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range []struct {
+		path  dbus.ObjectPath
+		iface string
+	}{{secretRoot, secretInterface + "Service"}, {"/org/freedesktop/secrets/collection/test", secretInterface + "Collection"}, {"/org/freedesktop/secrets/collection/test", "org.freedesktop.DBus.Properties"}} {
+		if err := c.Export(f, e.path, e.iface); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if reply, err := c.RequestName(secretService, dbus.NameFlagDoNotQueue); err != nil || reply != dbus.RequestNameReplyPrimaryOwner {
+		t.Fatal("service name", err)
+	}
+	t.Cleanup(func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		for _, v := range f.keys {
+			clear(v)
+		}
+	})
+	return f
+}
+
+func TestSecretServiceRealPrivateBusContract(t *testing.T) {
+	address := privateSecretBus(t)
+	p := SecretServiceProtector{VaultID: "0123456789abcdef0123456789abcdef", BusAddress: address}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	key := bytes.Repeat([]byte{0x52}, 32)
+	if _, err := p.Wrap(ctx, key); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("absent service", err)
+	}
+	f := installFixtureSecretService(t, address)
+	wrapped, err := p.Wrap(ctx, key)
+	if err != nil {
+		t.Fatal("wrap", err)
+	}
+	if bytes.Contains(wrapped, key) {
+		t.Fatal("local slot contains plaintext")
+	}
+	got, err := p.Unwrap(ctx, wrapped)
+	if err != nil || !bytes.Equal(got, key) {
+		t.Fatal("roundtrip", err)
+	}
+	clear(got)
+	if _, err = p.Wrap(ctx, key); !errors.Is(err, ErrRecovery) {
+		t.Fatal("duplicate", err)
+	}
+	f.mu.Lock()
+	f.locked = true
+	f.mu.Unlock()
+	if _, err = p.Unwrap(ctx, wrapped); !errors.Is(err, ErrBackendLocked) {
+		t.Fatal("locked", err)
+	}
+	p.AllowInteraction = true
+	if _, err = p.Unwrap(ctx, wrapped); !errors.Is(err, ErrDenied) {
+		t.Fatal("authentication canceled", err)
+	}
+	p.AllowInteraction = false
+	f.mu.Lock()
+	f.locked = false
+	f.fault = secretInterface + "Error.NoSession"
+	f.mu.Unlock()
+	if _, err = p.Unwrap(ctx, wrapped); !errors.Is(err, ErrRecovery) {
+		t.Fatal("session lost", err)
+	}
+	f.mu.Lock()
+	f.fault = ""
+	f.keys[p.VaultID][0] ^= 1
+	f.mu.Unlock()
+	if _, err = p.Unwrap(ctx, wrapped); !errors.Is(err, ErrIntegrity) {
+		t.Fatal("corrupt payload", err)
+	}
+	if err = p.Remove(ctx); err != nil {
+		t.Fatal("cleanup", err)
+	}
+	if _, err = p.Unwrap(ctx, wrapped); !errors.Is(err, ErrKeyMissing) {
+		t.Fatal("missing", err)
+	}
+	f.conn.Close()
+	if _, err = p.Unwrap(ctx, wrapped); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("service exit", err)
+	}
+}
+
+func TestNativeSecretServiceSyntheticVault(t *testing.T) {
+	if os.Getenv("DEVTOOLS_TEST_NATIVE_SECRET_SERVICE") != "1" {
+		t.Skip("requires disposable real Secret Service environment")
+	}
+	id, err := NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := SecretServiceProtector{VaultID: id}
+	key := bytes.Repeat([]byte{0x63}, 32)
+	wrapped, err := p.Wrap(context.Background(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := p.Remove(context.Background()); err != nil {
+			t.Error("synthetic key cleanup", err)
+		}
+	})
+	got, err := p.Unwrap(context.Background(), wrapped)
+	if err != nil || !bytes.Equal(got, key) {
+		t.Fatal("native roundtrip", err)
+	}
+	clear(got)
+}

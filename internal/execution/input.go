@@ -91,6 +91,10 @@ func snapshotError(code string) *protocol.Error {
 	return protocol.NewError(code, "Prepared execution input is unavailable or expired; prepare a new execution.", 3, nil)
 }
 func cloneInputMetadata(metadata InputMetadata) InputMetadata {
+	if metadata.Values.Public != nil {
+		copy := *metadata.Values.Public
+		metadata.Values.Public = &copy
+	}
 	if metadata.Values.Launch != nil {
 		ticket := *metadata.Values.Launch
 		metadata.Values.Launch = &ticket
@@ -143,9 +147,15 @@ func validateInputWire(wire inputWire) *protocol.Error {
 	if err != nil || len(id) != 16 || len(wire.Metadata.InputID) != 32 {
 		return snapshotError("invalid_input_snapshot")
 	}
+	if ticket := wire.Metadata.Values.Public; ticket != nil {
+		identity := wire.Metadata.Values.Identity
+		if wire.Metadata.Values.Launch != nil || !filepath.IsAbs(wire.VaultDirectory) || !ticket.Valid() || ticket.Profile != wire.Metadata.Profile || ticket.ProfileID != identity.ProfileID || ticket.StorageGeneration != identity.StorageGeneration || wire.Metadata.Values.KeyEpoch != 0 || wire.Metadata.Values.IntegrityVerified {
+			return snapshotError("invalid_input_snapshot")
+		}
+	}
 	if ticket := wire.Metadata.Values.Launch; ticket != nil {
 		identity := wire.Metadata.Values.Identity
-		if !filepath.IsAbs(wire.VaultDirectory) || ticket.Profile != wire.Metadata.Profile || ticket.ProfileID == "" || ticket.ProfileID != identity.ProfileID || ticket.StorageGeneration == "" || ticket.StorageGeneration != identity.StorageGeneration || ticket.KeyEpoch == 0 || ticket.KeyEpoch != wire.Metadata.Values.KeyEpoch {
+		if !filepath.IsAbs(wire.VaultDirectory) || ticket.Profile != wire.Metadata.Profile || ticket.ProfileID == "" || ticket.ProfileID != identity.ProfileID || ticket.StorageGeneration == "" || ticket.StorageGeneration != identity.StorageGeneration || ticket.KeyEpoch != wire.Metadata.Values.KeyEpoch {
 			return snapshotError("invalid_input_snapshot")
 		}
 	}

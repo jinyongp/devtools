@@ -29,10 +29,11 @@ type LaunchTicket struct {
 }
 
 type launchRecord struct {
-	Format  int          `json:"format"`
-	ID      string       `json:"id"`
-	Ticket  LaunchTicket `json:"ticket"`
-	Outcome string       `json:"outcome"`
+	Public  *PublicLaunchTicket `json:"public,omitempty"`
+	Format  int                 `json:"format"`
+	ID      string              `json:"id"`
+	Ticket  LaunchTicket        `json:"ticket"`
+	Outcome string              `json:"outcome"`
 }
 
 // LaunchAdmission is owned by the launcher process itself, never by a client
@@ -55,7 +56,7 @@ func validLaunchTicket(t LaunchTicket) bool {
 	if t.Profile == "" && t.ProfileID == "" && t.StorageGeneration == "" && t.KeyEpoch == 0 {
 		return true
 	}
-	return namePattern.MatchString(t.Profile) && validID(t.ProfileID) && validID(t.StorageGeneration) && t.KeyEpoch > 0
+	return namePattern.MatchString(t.Profile) && validID(t.ProfileID) && validID(t.StorageGeneration)
 }
 
 func (s *KeySession) authorizeLaunch(ctx context.Context, ticket LaunchTicket, sessionID string) error {
@@ -69,7 +70,12 @@ func (s *KeySession) authorizeLaunch(ctx context.Context, ticket LaunchTicket, s
 		// its exclusive side before disk maintenance, so this authenticated
 		// observation remains valid until the actual spawn outcome.
 		store := FileStore{Root: filepath.Dir(s.directory), VaultID: ticket.VaultID, CatalogKey: key}
-		p, profileKey, err := store.ReadWithMaster(ctx, ticket.Profile, key)
+		release, err := maintenance.AcquireShared(ctx, store.Root)
+		if err != nil {
+			return err
+		}
+		p, profileKey, err := store.ReadAnyWithMasterHeld(ctx, ticket.Profile, key)
+		release()
 		if err != nil {
 			return err
 		}
@@ -232,7 +238,7 @@ func drainLaunchesHeld(ctx context.Context, directory string) error {
 		}
 		b, e := root.ReadFile(launchName(id), MaxKeySlotBytes)
 		var record launchRecord
-		if e != nil || StrictDecode(b, &record) != nil || record.Format != StorageVersion || record.ID != id || !validLaunchTicket(record.Ticket) {
+		if e != nil || StrictDecode(b, &record) != nil || record.Format != StorageVersion || record.ID != id || !validLaunchRecord(record) {
 			return ErrRecovery
 		}
 		switch record.Outcome {

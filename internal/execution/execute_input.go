@@ -41,15 +41,21 @@ func (p Prepared) executeInput(ctx context.Context, runner process.Runner, in io
 			failure = protocol.NewError("output_protection_failed", "Protected output could not be delivered safely.", 1, nil)
 		}
 	}()
-	if ticket := p.Input.metadata.Values.Launch; ticket != nil {
+	var admission *vault.LaunchAdmission
+	var admissionErr error
+	if ticket := p.Input.metadata.Values.Public; ticket != nil {
+		admission, admissionErr = vault.BeginPublicLaunch(ctx, input.VaultDirectory, p.Input.metadata.InputID, *ticket)
+	} else if ticket := p.Input.metadata.Values.Launch; ticket != nil {
 		client, err := vault.OpenSessionClient(input.VaultDirectory)
 		if err != nil {
 			return 0, values.VaultError(ctx, err)
 		}
-		admission, err := client.BeginLaunch(ctx, p.Input.metadata.InputID, *ticket)
-		if err != nil {
-			return 0, values.VaultError(ctx, err)
-		}
+		admission, admissionErr = client.BeginLaunch(ctx, p.Input.metadata.InputID, *ticket)
+	}
+	if admissionErr != nil {
+		return 0, values.VaultError(ctx, admissionErr)
+	}
+	if admission != nil {
 		completed := false
 		defer func() {
 			if !completed {

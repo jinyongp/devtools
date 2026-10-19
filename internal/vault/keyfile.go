@@ -127,6 +127,23 @@ func (s KeyFileStore) Initialize(ctx context.Context, vaultID, backend string, p
 	if len(b) > MaxKeySlotBytes*2 {
 		return nil, ErrTooLarge
 	}
+	// Root setup changes public launch classification too. Native wrapping
+	// and actual unwrap verification have finished before taking either gate.
+	if filepath.Base(s.Directory) == "vault" {
+		finish, err := AcquireLaunchMutation(ctx, s.Directory)
+		if err != nil {
+			return nil, err
+		}
+		defer finish()
+		release, err := maintenance.AcquireExclusive(ctx, filepath.Dir(s.Directory))
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+		if err = CheckPublicRootHeld(filepath.Dir(s.Directory)); err != nil {
+			return nil, err
+		}
+	}
 	r, err := platformfs.OpenRoot(s.Directory, true)
 	if err != nil {
 		return nil, ErrRecovery

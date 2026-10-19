@@ -10,17 +10,19 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/vault"
 )
 
 type SnapshotMetadata struct {
-	Launch            *vault.LaunchTicket   `json:"launch,omitempty"`
-	KeyEpoch          uint64                `json:"key_epoch,omitempty"`
-	Identity          vault.InputIdentity   `json:"identity"`
-	Slots             []vault.SlotReference `json:"slots"`
-	IntegrityVerified bool                  `json:"integrity_verified"`
-	EarliestExpiry    *time.Time            `json:"earliest_expiry,omitempty"`
+	Public            *vault.PublicLaunchTicket `json:"public,omitempty"`
+	Launch            *vault.LaunchTicket       `json:"launch,omitempty"`
+	KeyEpoch          uint64                    `json:"key_epoch,omitempty"`
+	Identity          vault.InputIdentity       `json:"identity"`
+	Slots             []vault.SlotReference     `json:"slots"`
+	IntegrityVerified bool                      `json:"integrity_verified"`
+	EarliestExpiry    *time.Time                `json:"earliest_expiry,omitempty"`
 }
 
 // Snapshot is an owned, in-memory view of exactly one observed profile/env.
@@ -87,6 +89,10 @@ func (s *Snapshot) Metadata() SnapshotMetadata {
 		return SnapshotMetadata{Slots: []vault.SlotReference{}}
 	}
 	m := s.metadata
+	if m.Public != nil {
+		copy := *m.Public
+		m.Public = &copy
+	}
 	if m.Launch != nil {
 		ticket := *m.Launch
 		m.Launch = &ticket
@@ -159,11 +165,29 @@ func CaptureVault(ctx context.Context, root, profile, env string, inject bool, n
 	if err != nil {
 		return nil, VaultError(ctx, err)
 	}
-	p, profileKey, err := (vault.FileStore{Root: root, VaultID: k.VaultID, CatalogKey: key}).ReadWithMaster(ctx, profile, key)
+	release, err := maintenance.AcquireExclusive(ctx, root)
+	if err != nil {
+		return nil, VaultError(ctx, err)
+	}
+	store := vault.FileStore{Root: root, VaultID: k.VaultID, CatalogKey: key}
+	p, profileKey, err := store.ReadAnyWithMasterHeld(ctx, profile, key)
+	if err != nil && err.Error() == "profile_not_found" {
+		p, err = vault.NewProfile(profile)
+		if err == nil {
+			err = store.PublishManagedHeld(ctx, p, nil)
+		}
+	}
+	release()
 	if err != nil {
 		return nil, VaultError(ctx, err)
 	}
 	defer profileKey.Destroy()
+	return captureProfile(p, profileKey, env, inject, now)
+}
+
+func captureProfile(p *vault.Profile, profileKey *vault.Material, env string, inject bool, now time.Time) (*Snapshot, *protocol.Error) {
+	ctx := context.Background()
+	profile := p.Name
 	effective, err := p.ResolveValues(env, profileKey, now, inject)
 	if err != nil {
 		return nil, VaultError(ctx, err)

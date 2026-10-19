@@ -1,0 +1,204 @@
+{
+  "source_commit": "44896ec73ebdebe5227b6d0c4748e670df288c7a",
+  "run_url": "https://github.com/jinyongp/devtools/actions/runs/39248889539",
+  "architectures": {
+    "amd64": {
+      "job_id": 118047629770,
+      "job_conclusion": "success",
+      "installed": {
+        "native_installed_keychain": "pass",
+        "signed_test_packages": "adhoc",
+        "signatures_differ": true,
+        "locked_denial": "key_access_denied",
+        "old_key_session_retired_before_update": true,
+        "synthetic_home_removed": true,
+        "changed_signature_authorization_required": "key_access_denied",
+        "explicit_previous_version_recovery": "pass",
+        "existing_creator_app_policy_preserved": true
+      },
+      "test_events": [
+        {
+          "Time": "2026-10-19T12:02:37.064522Z",
+          "Action": "start",
+          "Package": "github.com/jinyongp/devtools/internal/vault"
+        },
+        {
+          "Time": "2026-10-19T12:02:37.073886Z",
+          "Action": "run",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainSyntheticVault"
+        },
+        {
+          "Time": "2026-10-19T12:02:37.074043Z",
+          "Action": "output",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainSyntheticVault",
+          "Output": "=== RUN   TestNativeKeychainSyntheticVault\n",
+          "OutputType": "frame"
+        },
+        {
+          "Time": "2026-10-19T12:02:37.113013Z",
+          "Action": "output",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainSyntheticVault",
+          "Output": "--- PASS: TestNativeKeychainSyntheticVault (0.04s)\n",
+          "OutputType": "frame"
+        },
+        {
+          "Time": "2026-10-19T12:02:37.113066Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainSyntheticVault",
+          "Elapsed": 0.04
+        },
+        {
+          "Time": "2026-10-19T12:02:37.113118Z",
+          "Action": "run",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainLockedCollectionRefusesSilentAccess"
+        },
+        {
+          "Time": "2026-10-19T12:02:37.113131Z",
+          "Action": "output",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainLockedCollectionRefusesSilentAccess",
+          "Output": "=== RUN   TestNativeKeychainLockedCollectionRefusesSilentAccess\n",
+          "OutputType": "frame"
+        },
+        {
+          "Time": "2026-10-19T12:02:37.180253Z",
+          "Action": "output",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainLockedCollectionRefusesSilentAccess",
+          "Output": "--- PASS: TestNativeKeychainLockedCollectionRefusesSilentAccess (0.07s)\n",
+          "OutputType": "frame"
+        },
+        {
+          "Time": "2026-10-19T12:02:37.18049Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainLockedCollectionRefusesSilentAccess",
+          "Elapsed": 0.07
+        },
+        {
+          "Time": "2026-10-19T12:02:37.180624Z",
+          "Action": "output",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Output": "PASS\n",
+          "OutputType": "frame"
+        },
+        {
+          "Time": "2026-10-19T12:02:37.18148Z",
+          "Action": "output",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Output": "ok  \tgithub.com/jinyongp/devtools/internal/vault\t0.116s\n"
+        },
+        {
+          "Time": "2026-10-19T12:02:37.181522Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Elapsed": 0.117
+        }
+      ]
+    },
+    "arm64": {
+      "job_id": 118047629755,
+      "job_conclusion": "success",
+      "installed": {
+        "native_installed_keychain": "pass",
+        "signed_test_packages": "adhoc",
+        "signatures_differ": true,
+        "locked_denial": "key_access_denied",
+        "old_key_session_retired_before_update": true,
+        "synthetic_home_removed": true,
+        "changed_signature_authorization_required": "key_access_denied",
+        "explicit_previous_version_recovery": "pass",
+        "existing_creator_app_policy_preserved": true
+      },
+      "test_events": [
+        {
+          "Time": "2026-10-19T12:02:46.101057Z",
+          "Action": "start",
+          "Package": "github.com/jinyongp/devtools/internal/vault"
+        },
+        {
+          "Time": "2026-10-19T12:02:46.182297Z",
+          "Action": "run",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainSyntheticVault"
+        },
+        {
+          "Time": "2026-10-19T12:02:46.220576Z",
+          "Action": "output",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainSyntheticVault",
+          "Output": "=== RUN   TestNativeKeychainSyntheticVault\n",
+          "OutputType": "frame"
+        },
+        {
+          "Time": "2026-10-19T12:02:46.375983Z",
+          "Action": "output",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainSyntheticVault",
+          "Output": "--- PASS: TestNativeKeychainSyntheticVault (0.19s)\n",
+          "OutputType": "frame"
+        },
+        {
+          "Time": "2026-10-19T12:02:46.376057Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainSyntheticVault",
+          "Elapsed": 0.19
+        },
+        {
+          "Time": "2026-10-19T12:02:46.376123Z",
+          "Action": "run",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainLockedCollectionRefusesSilentAccess"
+        },
+        {
+          "Time": "2026-10-19T12:02:46.376131Z",
+          "Action": "output",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainLockedCollectionRefusesSilentAccess",
+          "Output": "=== RUN   TestNativeKeychainLockedCollectionRefusesSilentAccess\n",
+          "OutputType": "frame"
+        },
+        {
+          "Time": "2026-10-19T12:02:46.494139Z",
+          "Action": "output",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainLockedCollectionRefusesSilentAccess",
+          "Output": "--- PASS: TestNativeKeychainLockedCollectionRefusesSilentAccess (0.12s)\n",
+          "OutputType": "frame"
+        },
+        {
+          "Time": "2026-10-19T12:02:46.494282Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Test": "TestNativeKeychainLockedCollectionRefusesSilentAccess",
+          "Elapsed": 0.12
+        },
+        {
+          "Time": "2026-10-19T12:02:46.494307Z",
+          "Action": "output",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Output": "PASS\n",
+          "OutputType": "frame"
+        },
+        {
+          "Time": "2026-10-19T12:02:46.494461Z",
+          "Action": "output",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Output": "ok  \tgithub.com/jinyongp/devtools/internal/vault\t0.346s\n"
+        },
+        {
+          "Time": "2026-10-19T12:02:46.494487Z",
+          "Action": "pass",
+          "Package": "github.com/jinyongp/devtools/internal/vault",
+          "Elapsed": 0.393
+        }
+      ]
+    }
+  }
+}

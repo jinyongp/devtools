@@ -49,3 +49,7 @@ Python 내부 오류를 얻지 못할 수 있다. scope 전체 journal을 확대
 소유 HOME의 고정 private error file로 제한된 오류 type/message를 전달한다. 알려진
 합성 값은 제거하고 parent는 실패를 즉시 인식한다. 이 자료는 실제 검증의 성공으로
 취급하지 않는다. stderr routing도 해당 unit 안에서만 journal로 명시한다.
+
+`aaf5fd0`의 private error file로 첫 session의 vault API 실패까지 좁혔다. 아직
+logout 이전이다. init/status 등 subcommand와 원문 없는 제한된 API error code를
+함께 남기도록 보완한다. raw stderr·native key·환경 원문을 수집하지 않는다.

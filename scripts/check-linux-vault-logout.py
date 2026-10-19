@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import re
 import shutil
 import socket
 import struct
@@ -74,7 +75,13 @@ def phase(root, name):
                     raise RuntimeError('Expected protected operation denial')
                 return response['error']
             if result.returncode or result.stderr:
-                raise RuntimeError('Native CLI operation failed: ' + args[0])
+                try:
+                    code = json.loads(result.stderr)['error']['code']
+                    if not isinstance(code, str) or not re.fullmatch('[a-z_]{1,64}', code):
+                        code = 'unclassified'
+                except (ValueError, KeyError, TypeError):
+                    code = 'unstructured_response'
+                raise RuntimeError('Native CLI operation failed: ' + '/'.join(args[:2]) + ': ' + code)
             return json.loads(result.stdout)['data']
         def run():
             result = subprocess.run([binary, 'run', '--profile', 'logout-fixture', '--',

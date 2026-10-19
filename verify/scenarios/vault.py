@@ -37,6 +37,9 @@ def invoke(*args, input=None, error=None):
 assert invoke('vault', 'status')['item']['state'] == 'uninitialized'
 invoke('init', '--profile', 'vault-fixture')
 invoke('var', 'set', 'PUBLIC', '--value', 'public value')
+public = invoke('values', 'inspect')['values']['current']
+assert public is not None and public['integrity_verified'] is False
+assert [slot['name'] for slot in public['slots']] == ['PUBLIC']
 invoke('sec', 'set', 'TOKEN', '--stdin', input=secret, error='key_missing')
 # No implicit terminal input or wait in a noninteractive invocation.
 invoke('vault', 'init', '--backend', 'passphrase', error='passphrase_required')
@@ -54,6 +57,8 @@ invoke('import', '--file', str(assignments), '--var', 'PUBLIC', '--bundle', 'bac
 bundles = invoke('bundle', 'list')
 invoke('bundle', 'set', 'frontend', '--key', 'PUBLIC', '--revision', bundles['revision'],
        '--request-id', '00000000-0000-4000-8000-000000000996')
+invoke('bundle', 'set', 'deploy', '--key', 'TOKEN',
+       '--revision', invoke('bundle', 'list')['revision'], '--request-id', str(uuid.uuid4()))
 selected_env = dict(env)
 selected_env.pop('TOKEN', None)
 result = subprocess.run([binary, 'run', '--bundle', 'frontend', '--', 'sh', '-c',
@@ -63,6 +68,9 @@ assert result.returncode == 0 and result.stdout == b'public value' and not resul
 result = subprocess.run([binary, 'run', '--bundle', 'backend', '--', 'sh', '-c', 'printf %s "$TOKEN"'],
                         cwd=project, env=selected_env, capture_output=True, timeout=20)
 assert result.returncode == 0 and result.stdout == b'[REDACTED]' and not result.stderr
+deploy = invoke('values', 'inspect', '--bundle', 'deploy')['values']['current']
+assert deploy['integrity_verified'] is True
+assert [slot['name'] for slot in deploy['slots']] == ['TOKEN']
 
 # The managed path persists an explicit selection across restart, including
 # when the command's configured default changes in between executions.
@@ -99,6 +107,49 @@ try:
     managed=first['item']['id']
     assert first['item']['selection']=='frontend' and first['item']['bundle_override']=='frontend'
     assert observed()=={'public':'public value','token_present':False}
+    # Actual installed metadata APIs distinguish configured selection from the
+    # frozen delivered override, without returning values or extending idle.
+    before_queries = invoke('vault', 'status')['item']
+    inspected = managed_api('values', 'inspect', '--bundle', 'frontend')
+    usages = managed_api('values', 'uses')
+    configured = managed_api('command', 'inspect', 'bundle-server')
+    assert configured['item']['values_update'] == 'notify'
+    assert configured['item']['selection'] == 'backend'
+    assert inspected['values']['current']['slots'] == first['item']['input_version']['slots']
+    declared = [item for item in usages['items'] if item['kind'] == 'declared']
+    delivered = [item for item in usages['items'] if item['kind'] == 'delivered']
+    assert len(declared) == len(delivered) == 1
+    assert declared[0]['selection'] == 'backend'
+    assert delivered[0]['selection'] == 'frontend' and delivered[0]['execution_id'] == managed
+    assert delivered[0]['values']['state'] == 'current'
+    metadata = json.dumps([inspected, usages, configured])
+    for forbidden in [secret, passphrase, 'public value', 'session_id', 'challenge', 'ciphertext', 'launch_id']:
+        assert forbidden not in metadata, 'metadata exposed value or authority'
+    for command, fields in [('values inspect', {'profile','env','selection','values'}),
+                            ('values uses', {'profile','items'}),
+                            ('bundle list', {'profile','revision','integrity_verified','items'})]:
+        schema = managed_api('schema', *command.split())
+        assert schema['output_mode'] == 'json'
+        assert fields <= set(schema['output_schema']['required'])
+    assert invoke('vault', 'status')['item'] == before_queries
+    # Default notify preserves the actual app. Unselected secret changes do not
+    # change its effective input; a selected public change does report pending.
+    invoke('sec', 'set', 'TOKEN', '--stdin', input=secret+'-unselected')
+    assert managed_api('process', 'status', managed)['values']['state'] == 'current'
+    invoke('var', 'set', 'PUBLIC', '--value', 'selected changed')
+    deadline = time.monotonic() + 10
+    while True:
+        status = managed_api('process', 'status', managed)
+        if status['item'].get('value_watch', {}).get('state') == 'pending':
+            break
+        assert time.monotonic() < deadline, 'notify watcher did not converge'
+        time.sleep(.05)
+    assert status['values']['state'] == 'pending' and status['item']['state'] == 'running'
+    assert not status['item'].get('value_apply')
+    assert len(managed_api('process', 'list')['items']) == 1
+    assert observed() == {'public':'public value','token_present':False}
+    invoke('var', 'set', 'PUBLIC', '--value', 'public value')
+    invoke('sec', 'set', 'TOKEN', '--stdin', input=secret)
     (project / 'devtools.toml').write_text(config.replace('bundle="backend"','bundle="none"'))
     observation.unlink()
     restarted=managed_api('process','restart',managed,'--request-id',str(uuid.uuid4()))
@@ -134,6 +185,9 @@ invoke('run', '--bundle', 'missing', '--', 'true', error='bundle_not_found')
 invoke('vault', 'lock')
 locked = invoke('vault', 'status')['item']
 assert locked['state'] == 'locked_manual'
+for selection in ['frontend', 'none']:
+    inspection = invoke('values', 'inspect', '--bundle', selection)['values']
+    assert inspection['state'] == 'verification_pending' and inspection['current'] is None
 assert invoke('var', 'get', 'PUBLIC')['value'] == 'public value'
 invoke('sec', 'list')
 invoke('diagnostics')

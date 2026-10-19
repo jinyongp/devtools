@@ -15,3 +15,18 @@ root 정리에 포함한다. DPAPI는 별도 사용자 keyring item을 만들지
 자식의 non-TTY 출력, 기존 source/target fixture와 cleanup을 확인했다. Python syntax를
 검사했다. 실제 Windows x64/ARM64 product CI가 실행하기 전에는 pass나 N02 완료로
 표시하지 않는다. native 데이터가 있는 상태의 설치 update·다른 SID pipe 등은 별도 조건이다.
+
+## 실제 CI에서 확인한 fixture 경계 수정
+
+5fa27ab의 실제 두 product lane은 `isolated_operation_forbidden`으로 종료됐다. 이는 제품의
+의도된 제한이다. native key-store mutation을 isolated root에서 허용하도록 바꾸지 않는다.
+대신 명시 disposable flag가 있는 Windows Actions 계정에서 public project inspect로
+기본 경로를 읽고 config/data/cache/runtime이 같은 예상 root의 child인지 확인한다. 기존
+root나 symlink가 있으면 어떤 native mutation/삭제도 하지 않고 실패한다. 없다면 원자적
+mkdir 성공 후에만 그 root의 소유권을 기록하고 native 검사를 진행한다.
+
+마지막에는 소유한 세션의 authenticated retire/실제 lease drain 뒤 이 root만 삭제한다.
+본래 source/target은 계속 isolated이며 실제 사용자 root를 썼다는 사실을 결과에 표시한다.
+모든 자체 root 정리가 끝난 뒤에만 성공 artifact를 발행한다. 현재 개발 호스트의 기본
+root에는 이 검사를 실행하지 않는다. Python syntax와 두 call site·실패 전/후 cleanup을
+재검토했으며 수정된 Windows native 결과는 후속 CI에서 확인한다.

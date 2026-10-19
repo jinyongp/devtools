@@ -307,6 +307,8 @@ jobs:
 
       - name: Verify installed candidate and actual Chromium dashboard
         if: ${{ matrix.lane == 'product' && (github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'product') }}
+        env:
+          DEVTOOLS_DISPOSABLE_HOST: '1'
         run: |
           $env:VERSION = '${{ inputs.version || '0.0.0-windows-candidate' }}'
           $env:COMMIT = $env:DEVTOOLS_SOURCE_COMMIT

@@ -39,8 +39,8 @@ def main():
     parser.add_argument("--version", required=True)
     parser.add_argument("--commit", required=True)
     args = parser.parse_args()
-    if os.name != "nt":
-        raise RuntimeError("This journey runs only on native Windows Actions")
+    if os.name != "nt" or os.environ.get("DEVTOOLS_DISPOSABLE_HOST") != "1":
+        raise RuntimeError("This journey requires explicitly disposable native Windows Actions")
     repository = Path.cwd()
     root = Path(tempfile.mkdtemp(prefix="devtools-native-product-"))
     project = root / "프로젝트 공백"
@@ -50,7 +50,8 @@ def main():
     base_env.pop("DEVTOOLS_ISOLATED_ROOT", None)
     source_env = dict(base_env, DEVTOOLS_ISOLATED_ROOT=str(root / "source"))
     target_env = dict(base_env, DEVTOOLS_ISOLATED_ROOT=str(root / "target"))
-    native_env = dict(base_env, DEVTOOLS_ISOLATED_ROOT=str(root / "native"))
+    native_env = dict(base_env)
+    native_root = None
     steps = []
 
     def raw(arguments, env=source_env, input="", timeout=40):
@@ -134,6 +135,16 @@ timeout = "3s"
 
         # Exercise the packaged CLI's default OS provider as well as the
         # explicit passphrase roots used by the portable-transfer journey.
+        # Native mutation is intentionally forbidden in isolated product roots.
+        # Claim only a nonexistent default root on this disposable CI account.
+        native_paths = api("project", "inspect", env=native_env)["paths"]
+        candidate_root = Path(native_paths["data"]).parent
+        assert candidate_root.is_absolute()
+        assert all(Path(native_paths[name]) == candidate_root / name for name in ("config", "data", "cache", "runtime"))
+        if os.path.lexists(candidate_root):
+            raise RuntimeError("Refusing to touch an existing native user root")
+        candidate_root.mkdir()
+        native_root = candidate_root
         native = api("vault", "init", env=native_env)["item"]
         assert native["backend"] == "dpapi" and native["state"] == "unlocked"
         api("sec", "set", "NATIVE_TOKEN", "--stdin", env=native_env, input="synthetic-native-dpapi-canary")
@@ -206,9 +217,9 @@ timeout = "3s"
         steps.append("encrypted_profile_transfer_preview_apply_retry")
         result = {"commit": args.commit, "version": args.version, "protocol": 7,
                   "exe_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-                  "steps": {step: "pass" for step in steps}, "isolated": True,
+                  "steps": {step: "pass" for step in steps}, "isolated": False,
+                  "isolated_transfer_and_managed_roots": True, "native_provider_disposable_user_root": True,
                   "os_trust_modified": False, "real_pc": "NOT RUN"}
-        (repository / "windows-installed-product-results.json").write_text(json.dumps(result, indent=2) + "\n")
     finally:
         if binary.exists():
             try:
@@ -237,18 +248,23 @@ timeout = "3s"
                 pass  # A concurrent orderly shutdown can close its response.
             finally:
                 connection.close()
-        retire_vaults(root / "source" / "data" / "vault", root / "target" / "data" / "vault",
-                      root / "native" / "data" / "vault")
+        vault_roots = [root / "source" / "data" / "vault", root / "target" / "data" / "vault"]
+        if native_root is not None:
+            vault_roots.append(native_root / "data" / "vault")
+        retire_vaults(*vault_roots)
         # Mapped supervisor images and private directory pins may finish closing
         # just after successful control RPC; bounded cleanup does not hide failures.
-        for attempt in range(20):
-            try:
-                shutil.rmtree(root)
-                break
-            except OSError:
-                if attempt == 19:
-                    raise
-                time.sleep(0.1)
+        for owned_root in ([native_root] if native_root is not None else []) + [root]:
+            for attempt in range(20):
+                try:
+                    shutil.rmtree(owned_root)
+                    break
+                except OSError:
+                    if attempt == 19:
+                        raise
+                    time.sleep(0.1)
+    result["owned_roots_removed"] = True
+    (repository / "windows-installed-product-results.json").write_text(json.dumps(result, indent=2) + "\n")
 
 
 if __name__ == "__main__":

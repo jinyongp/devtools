@@ -45,6 +45,7 @@ def phase(root, name):
     control = runtime / 'keyring'
     control.mkdir(mode=0o700, exist_ok=True)
     env['GNOME_KEYRING_CONTROL'] = str(control)
+    wait_for(lambda: (runtime / 'bus').exists(), 'PAM user bus did not become ready')
     argv = ['gnome-keyring-daemon', '--foreground', '--components=secrets', '--control-directory', str(control)]
     if name == 'before':
         argv.append('--unlock')

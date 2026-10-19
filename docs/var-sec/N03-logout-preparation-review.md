@@ -30,3 +30,8 @@ schema를 검토했다. 비 disposable/non-root guard를 mock으로 검사하여
 일어나지 않음을 확인했다. Python syntax와 workflow YAML을 검사한다. 실제 로그아웃
 결과는 새 CI의 필수 단계가 통과하기 전까지 pending이다. GUI 잠금·최대절전 검증은
 이 fixture로 주장하지 않는다.
+
+추가 준비 검토: PAM session 등록과 user bus socket 준비는 별도이므로 daemon 시작 전에
+해당 runtime의 bus 준비를 최대 20초 기다린다. 준비 실패를 정상 로그아웃 결과로
+해석하지 않는다. release-check 전체 pass와 PyYAML을 통한 workflow parse pass.
+실제 root/PAM 실행은 disposable Actions 전용이며 로컬 guard 검사로 대체하지 않는다.

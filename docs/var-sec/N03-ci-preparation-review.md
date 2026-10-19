@@ -1,6 +1,6 @@
 # N03 실제 Linux Secret Service 수용 준비
 
-현재 진행(2026-10-19): 사용자 승인에 따라 main에서 실제 GNOME 검사를 실행했다. JSON 진단 혼합을 수정한 뒤 MIME 호환과 collection 재해제 실패를 확인하여 별도 커밋으로 보완했다. 실제 정상/잠금/종료 전체 pass는 아직 확인 전이다. 아래는 실행 전 준비 기록이며 [native-ci-review.md](native-ci-review.md)가 최신 경과다.
+현재 진행(2026-10-19): main 1c0b22c에서 실제 GNOME 서비스 부재·정상 roundtrip·collection 잠금/재해제·종료 뒤 no activation 검사가 모두 pass했다. 아래는 준비 당시와 수정 경과의 기록이다. OS logout과 다른 사용자 IPC 등 나머지 native 조건은 별도로 남아 있으며 N03 전체 완료를 뜻하지 않는다.
 
 N03은 진행 중이다. 현재 WSL에서 실제 private D-Bus의 서비스 부재 검사를 실행했다.
 이 호스트에는 gnome-keyring-daemon이 없어 실제 GNOME 정상·잠금·종료 검증 결과는 없다.
@@ -43,3 +43,15 @@ JSON test event에서 필요한 test의 실제 pass를 확인한다. skip/빈 ma
 
 Actions dispatch나 push는 아직 수행하지 않았다. 현재 revision의 native 결과가 확보된 뒤
 실패를 수정·재검토하고 N03 완료 조건을 따로 판단한다.
+
+## 실제 GNOME 검증 결과
+
+[1c0b22c의 vault-linux job](https://github.com/jinyongp/devtools/actions/runs/39234515925/job/118001457543)이
+pass했다. artifacts의 absent/native/stopped JSONL을 대조해 각각 필수 test의 실제 pass와
+skip/fail 없음, 동일 job의 정상 완료를 확인했다. [원래 test events](evidence/N03-secret-service-1c0b22c.json)를
+보존한다. 초기 다운로드 stderr·GNOME MIME·기존 daemon unlock의 세 실패와 수정은
+[native-ci-review.md](native-ci-review.md)에 남긴다.
+
+이 결과는 실제 GNOME 저장/재조회·잠금/명시 해제·서비스 종료의 근거다. OS logout과
+다른 사용자 peer의 검증을 대신하지 않으며 전용 root/private bus/HOME 밖의 기존
+사용자 keyring을 설치·시작·잠그지 않았다. 추가 UID 검사는 별도 native 후속 작업이다.

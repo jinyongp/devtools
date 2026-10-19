@@ -1,5 +1,7 @@
 # N03 실제 Linux Secret Service 수용 준비
 
+현재 진행(2026-10-19): 사용자 승인에 따라 main에서 실제 GNOME 검사를 실행했다. JSON 진단 혼합을 수정한 뒤 MIME 호환과 collection 재해제 실패를 확인하여 별도 커밋으로 보완했다. 실제 정상/잠금/종료 전체 pass는 아직 확인 전이다. 아래는 실행 전 준비 기록이며 [native-ci-review.md](native-ci-review.md)가 최신 경과다.
+
 N03은 진행 중이다. 현재 WSL에서 실제 private D-Bus의 서비스 부재 검사를 실행했다.
 이 호스트에는 gnome-keyring-daemon이 없어 실제 GNOME 정상·잠금·종료 검증 결과는 없다.
 이를 adapter fixture나 cross compile로 통과 처리하지 않는다.

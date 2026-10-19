@@ -1,5 +1,7 @@
 # N02 Windows DPAPI 다른 사용자 검증 준비
 
+현재 진행(2026-10-19): main의 b56e5ce에서 Windows x64/ARM64 전체 suite가 실제 pass했다. 설치물 검사의 launcher 진입점 누락을 수정하여 de6fd4b에서 재검증 중이다. 아래 준비 당시의 교차 compile과 실제 결과를 구분하며 N02 전체 완료 전이다. 최신 근거는 [native-ci-review.md](native-ci-review.md)를 따른다.
+
 N02는 진행 중이다. Windows native 수용 결과는 아직 없으며 이 문서는 추가한 실제
 OS 테스트의 source review와 교차 compile만 기록한다.
 

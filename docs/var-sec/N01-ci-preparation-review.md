@@ -1,5 +1,7 @@
 # N01 native 수용 실행 준비 검토
 
+현재 진행(2026-10-19): 사용자 승인에 따라 main으로 push하고 실제 Actions를 실행했다. b56e5ce의 Intel/ARM Keychain 검사는 pass했다. 설치/update와 나머지 통합 조건을 포함한 N01 전체 완료는 아직 pending이다. 아래는 CI 실행 전 준비 기록이며 최신 실패·수정은 [native-ci-review.md](native-ci-review.md)에 누적한다.
+
 N01은 진행 중이다. 이 기록은 CI 실행 경로와 fixture 준비만 검토하며 macOS native 수용
 완료 근거가 아니다. A11은 `38f07c9`에서 제품 연결·Linux 설치물·review 검증을 완료했다.
 N01–N05와 A12, B/C, 최종 Z01의 원래 완료 조건은 유지한다.

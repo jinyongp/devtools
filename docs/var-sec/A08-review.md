@@ -1,5 +1,7 @@
 # A08 launcher/admission 구현 검토
 
+현재 상태(2026-10-19): A08 source 구현은 완료했고 A10/A11의 저장 전환·제품 연결도 반영됐다. 원래 native/설치물 통합 조건은 N05/A12에 남아 있다. 아래 구현 checkpoint의 미완료 표현은 당시 범위에 관한 기록이며 현재 native 완료 선언이 아니다. [A11-review.md](A11-review.md)와 [native-ci-review.md](native-ci-review.md)를 함께 읽는다.
+
 대상 기준은 A07 `0a0d3ad` 이후의 launcher binding, key-session ticket,
 영속 launch journal과 OS gate, foreground/managed 소비자, deferred port claim,
 재시작 결과와 요청 재시도다. 모든 실행 입력은 RAM과 특정 자식에 상속한 anonymous

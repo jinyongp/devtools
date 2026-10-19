@@ -32,6 +32,7 @@ import (
 	"github.com/jinyongp/devtools/internal/redact"
 	"github.com/jinyongp/devtools/internal/retention"
 	"github.com/jinyongp/devtools/internal/tasks"
+	"github.com/jinyongp/devtools/internal/values"
 )
 
 type Store struct {
@@ -48,33 +49,34 @@ func writePrivate(path string, v any) error {
 }
 
 type Record struct {
-	Selection         string       `json:"selection,omitempty"`
-	BundleOverride    *string      `json:"bundle_override,omitempty"`
-	Output            *redact.Plan `json:"output,omitempty"`
-	Outage            bool         `json:"outage,omitempty"`
-	InputSnapshotID   string       `json:"input_snapshot_id,omitempty"`
-	LaunchPhase       string       `json:"launch_phase,omitempty"`
-	ProxyMode         bool         `json:"proxy_mode,omitempty"`
-	NetworkSnapshotID string       `json:"network_snapshot_id,omitempty"`
-	IsolatedRoot      string       `json:"isolated_root,omitempty"`
-	ReadyConfigured   bool         `json:"ready_configured"`
-	Readiness         *Readiness   `json:"readiness,omitempty"`
-	ID                string       `json:"id"`
-	Profile           string       `json:"profile"`
-	Instance          string       `json:"instance_id"`
-	Directory         string       `json:"directory"`
-	Command           string       `json:"command"`
-	Env               string       `json:"env"`
-	EnvOverride       *string      `json:"env_override"`
-	Inject            *bool        `json:"inject,omitempty"`
-	Capture           bool         `json:"capture_logs"`
-	CreatedAt         time.Time    `json:"created_at"`
-	StartedAt         *time.Time   `json:"started_at"`
-	EndedAt           *time.Time   `json:"ended_at"`
-	ExitCode          *int         `json:"exit_code"`
-	Reason            string       `json:"reason"`
-	State             string       `json:"state"`
-	Previous          string       `json:"previous_id,omitempty"`
+	InputVersion      *values.InputVersion `json:"input_version,omitempty"`
+	Selection         string               `json:"selection,omitempty"`
+	BundleOverride    *string              `json:"bundle_override,omitempty"`
+	Output            *redact.Plan         `json:"output,omitempty"`
+	Outage            bool                 `json:"outage,omitempty"`
+	InputSnapshotID   string               `json:"input_snapshot_id,omitempty"`
+	LaunchPhase       string               `json:"launch_phase,omitempty"`
+	ProxyMode         bool                 `json:"proxy_mode,omitempty"`
+	NetworkSnapshotID string               `json:"network_snapshot_id,omitempty"`
+	IsolatedRoot      string               `json:"isolated_root,omitempty"`
+	ReadyConfigured   bool                 `json:"ready_configured"`
+	Readiness         *Readiness           `json:"readiness,omitempty"`
+	ID                string               `json:"id"`
+	Profile           string               `json:"profile"`
+	Instance          string               `json:"instance_id"`
+	Directory         string               `json:"directory"`
+	Command           string               `json:"command"`
+	Env               string               `json:"env"`
+	EnvOverride       *string              `json:"env_override"`
+	Inject            *bool                `json:"inject,omitempty"`
+	Capture           bool                 `json:"capture_logs"`
+	CreatedAt         time.Time            `json:"created_at"`
+	StartedAt         *time.Time           `json:"started_at"`
+	EndedAt           *time.Time           `json:"ended_at"`
+	ExitCode          *int                 `json:"exit_code"`
+	Reason            string               `json:"reason"`
+	State             string               `json:"state"`
+	Previous          string               `json:"previous_id,omitempty"`
 }
 
 type archiveMarker struct {
@@ -949,6 +951,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		if prepared.Input == nil {
 			return out, failure("input_snapshot_unavailable")
 		}
+		r.InputVersion = prepared.Input.Metadata().Delivery.Clone()
 		r.Selection = prepared.Input.Metadata().Selection
 		outputPlan := prepared.Input.Metadata().Output
 		r.Output = &outputPlan

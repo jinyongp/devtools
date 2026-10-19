@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/execution"
@@ -186,7 +187,7 @@ func ReceiveLauncherInput(ctx context.Context, in io.ReadCloser, out io.WriteClo
 	if selection == "" {
 		selection = "all"
 	}
-	matches := metadata.Selection == selection && record.Output != nil && *record.Output == metadata.Output && (record.Capture == (metadata.Output.StdoutReason == "capture")) && metadata.InputID == record.InputSnapshotID && metadata.Profile == record.Profile && metadata.Command == record.Command && metadata.Env == record.Env && input.Directory == record.Directory
+	matches := reflect.DeepEqual(record.InputVersion, metadata.Delivery) && metadata.Selection == selection && record.Output != nil && *record.Output == metadata.Output && (record.Capture == (metadata.Output.StdoutReason == "capture")) && metadata.InputID == record.InputSnapshotID && metadata.Profile == record.Profile && metadata.Command == record.Command && metadata.Env == record.Env && input.Directory == record.Directory
 	if matches {
 		var outputErr error
 		bound.Streams, outputErr = redact.Protect(runContext, input.Patterns, metadata.Output, stdout, stderr)

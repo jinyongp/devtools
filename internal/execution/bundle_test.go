@@ -100,6 +100,25 @@ func TestBundleExecutionUsesSelectedPublicSnapshotAndHandoff(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer prepared.Release()
+	delivery := prepared.Input.Metadata().Delivery
+	if delivery == nil || len(delivery.Slots) != 1 || delivery.Slots[0].Name != "PUBLIC" || delivery.Spec.Selection != "frontend" || delivery.IntegrityVerified {
+		t.Fatal("public delivery metadata did not match actual selection", delivery)
+	}
+	copy := prepared.Input.Metadata()
+	copy.Delivery.Slots[0].Version = "changed"
+	if prepared.Input.Metadata().Delivery.Slots[0].Version == "changed" {
+		t.Fatal("caller can mutate frozen delivery metadata")
+	}
+	encodedInput := prepared.Input.body.CopyBytes()
+	defer clear(encodedInput)
+	var wire inputWire
+	if err := vault.StrictDecode(encodedInput, &wire); err != nil {
+		t.Fatal(err)
+	}
+	wire.Metadata.Delivery.Slots[0].Version = "changed"
+	if e := validateInputWire(wire); e == nil || e.Code != "invalid_input_snapshot" {
+		t.Fatal("transport accepted delivery metadata inconsistent with actual snapshot", e)
+	}
 	if len(prepared.Injected) != 1 || prepared.Injected["PUBLIC"] != "selected" || prepared.Input.Metadata().Selection != "frontend" {
 		t.Fatal("selected payload expanded")
 	}
@@ -115,6 +134,9 @@ func TestBundleExecutionUsesSelectedPublicSnapshotAndHandoff(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer empty.Release()
+	if delivery := empty.Input.Metadata().Delivery; delivery == nil || len(delivery.Slots) != 0 {
+		t.Fatal("empty delivery became unknown or included slots")
+	}
 	if len(empty.Injected) != 0 || empty.Input.Metadata().Selection != "none" {
 		t.Fatal("none injected values")
 	}

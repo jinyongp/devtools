@@ -66,6 +66,7 @@ type Bundle struct {
 	ValueIDs []string `json:"value_ids"`
 }
 type SlotReference struct {
+	Env     string `json:"env,omitempty"`
 	Name    string `json:"name"`
 	ValueID string `json:"value_id"`
 	SlotID  string `json:"slot_id"`
@@ -575,7 +576,7 @@ func (p *Profile) resolveValues(env string, key *Material, now time.Time, includ
 		if chosen == nil {
 			continue
 		}
-		value := EffectiveValue{Reference: SlotReference{Name: v.Name, ValueID: v.ID, SlotID: chosen.ID, Version: chosen.Version}, Kind: v.Kind, Scope: chosen.Env}
+		value := EffectiveValue{Reference: SlotReference{Env: chosen.Env, Name: v.Name, ValueID: v.ID, SlotID: chosen.ID, Version: chosen.Version}, Kind: v.Kind, Scope: chosen.Env}
 		if chosen.ExpiresAt != nil {
 			expires := *chosen.ExpiresAt
 			value.ExpiresAt = &expires

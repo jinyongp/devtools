@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"reflect"
 	"sync/atomic"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 const DefaultPreparationTimeout = 30 * time.Second
 
 type InputMetadata struct {
+	Delivery        *values.InputVersion    `json:"delivery,omitempty"`
 	Output          redact.Plan             `json:"output"`
 	InputID         string                  `json:"input_id"`
 	Inject          bool                    `json:"inject"`
@@ -91,6 +93,7 @@ func snapshotError(code string) *protocol.Error {
 	return protocol.NewError(code, "Prepared execution input is unavailable or expired; prepare a new execution.", 3, nil)
 }
 func cloneInputMetadata(metadata InputMetadata) InputMetadata {
+	metadata.Delivery = metadata.Delivery.Clone()
 	if metadata.Values.Public != nil {
 		copy := *metadata.Values.Public
 		metadata.Values.Public = &copy
@@ -167,6 +170,12 @@ func validateInputWire(wire inputWire) *protocol.Error {
 	}
 	if !vault.ValidSelection(wire.Metadata.Selection) || wire.Metadata.Selection == "" {
 		return snapshotError("invalid_input_snapshot")
+	}
+	if delivered := wire.Metadata.Delivery; delivered != nil {
+		expected, err := values.NewInputVersion(wire.Metadata.Values, wire.Metadata.Env, delivered.Spec)
+		if err != nil || !reflect.DeepEqual(delivered, expected) || delivered.Spec.Selection != wire.Metadata.Selection || delivered.Spec.Inject != wire.Metadata.Inject {
+			return snapshotError("invalid_input_snapshot")
+		}
 	}
 	if wire.Metadata.Values.Identity.Revision != "" {
 		selected := wire.Metadata.Values.Selection

@@ -273,6 +273,15 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 		}
 	}
 	metadata := InputMetadata{Output: outputPlan, InputID: inputID, Inject: plan.summary.Inject, Selection: plan.summary.Selection, Parent: plan.summary.Parent, Profile: plan.command.Project.Profile, Command: plan.command.Name, Env: plan.command.Env, PreparedAt: snapshot.created, PrepareDeadline: snapshot.deadline, Values: snapshot.values.Metadata()}
+	spec := plan.command.ValueInputSpec()
+	if dependencies.IsolatedRoot != "" {
+		spec.Shadowed = append(spec.Shadowed, "DEVTOOLS_ISOLATED_ROOT")
+	}
+	metadata.Delivery, err = values.NewInputVersion(metadata.Values, plan.command.Env, spec)
+	if err != nil {
+		prepared.Release()
+		return Prepared{}, values.VaultError(ctx, err)
+	}
 	prepared.Input, e = newInputPayload(inputWire{VaultDirectory: dependencies.VaultDirectory, Served: prepared.Assignments, Format: 1, Metadata: metadata, Args: prepared.Args, Environment: environment, Directory: prepared.Command.Directory, Executable: path, Ready: cloneReady(prepared.Command.Ready), Patterns: patterns})
 	if e != nil {
 		prepared.Release()

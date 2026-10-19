@@ -2,16 +2,16 @@ package vault
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"syscall"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf16"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -126,12 +126,25 @@ func TestNativeWindowsPipePeersRejectOtherSID(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	child := func(mode, endpoint string) *exec.Cmd {
-		cmd := exec.CommandContext(ctx, binary, "__vault-peer-fixture", mode, endpoint)
-		cmd.Dir = directory
-		cmd.Env = []string{"SystemRoot=" + os.Getenv("SystemRoot"), "WINDIR=" + os.Getenv("WINDIR")}
-		cmd.SysProcAttr = &syscall.SysProcAttr{Token: syscall.Token(token)}
-		return cmd
+	child := func(mode, endpoint string) (*os.Process, *bufio.Reader) {
+		t.Helper()
+		process, output, err := startNativeWindowsPeer(token, binary, directory, mode, endpoint)
+		if err != nil {
+			t.Fatal("cannot start different-SID fixture", err)
+		}
+		t.Cleanup(func() { process.Kill(); process.Wait(); output.Close() })
+		go func() {
+			<-ctx.Done()
+			process.Kill()
+		}()
+		return process, bufio.NewReader(output)
+	}
+	identity := func(output *bufio.Reader) {
+		t.Helper()
+		line, err := output.ReadString('\n')
+		if err != nil || line != expectedSID+"\n" {
+			t.Fatal("fixture process did not use the alternate SID")
+		}
 	}
 	endpoint := func() string {
 		id, err := NewID()
@@ -142,19 +155,8 @@ func TestNativeWindowsPipePeersRejectOtherSID(t *testing.T) {
 	}
 	t.Run("client rejects other-user server", func(t *testing.T) {
 		name := endpoint()
-		cmd := child("server", name)
-		ready, err := cmd.StdoutPipe()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := cmd.Start(); err != nil {
-			t.Fatal("cannot start different-SID server", err)
-		}
-		defer func() { cmd.Process.Kill(); cmd.Wait() }()
-		line, err := bufio.NewReader(ready).ReadString('\n')
-		if err != nil || line != expectedSID+"\n" {
-			t.Fatal("server process did not use the alternate SID")
-		}
+		_, output := child("server", name)
+		identity(output)
 		connection, err := dialSession(ctx, name)
 		if connection != nil {
 			connection.Close()
@@ -170,13 +172,7 @@ func TestNativeWindowsPipePeersRejectOtherSID(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer windows.CloseHandle(handle)
-		cmd := child("client", name)
-		var identity bytes.Buffer
-		cmd.Stdout = &identity
-		if err := cmd.Start(); err != nil {
-			t.Fatal("cannot start different-SID client", err)
-		}
-		defer func() { cmd.Process.Kill(); cmd.Wait() }()
+		process, output := child("client", name)
 		if err := connectSessionPipe(ctx, handle); err != nil {
 			t.Fatal(err)
 		}
@@ -185,8 +181,9 @@ func TestNativeWindowsPipePeersRejectOtherSID(t *testing.T) {
 		}
 		// Complete the client's read before asserting its reported process SID.
 		windows.DisconnectNamedPipe(handle)
-		if err := cmd.Wait(); err != nil || identity.String() != expectedSID+"\n" {
-			t.Fatal("client process did not use the alternate SID", err)
+		identity(output)
+		if state, err := process.Wait(); err != nil || !state.Success() {
+			t.Fatal("different-SID client did not complete", err)
 		}
 	})
 	t.Run("private pipe ACL rejects other-user client", func(t *testing.T) {
@@ -196,11 +193,55 @@ func TestNativeWindowsPipePeersRejectOtherSID(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer windows.CloseHandle(handle)
-		cmd := child("denied-client", name)
-		var identity bytes.Buffer
-		cmd.Stdout = &identity
-		if err := cmd.Run(); err != nil || identity.String() != expectedSID+"\n" {
+		process, output := child("denied-client", name)
+		identity(output)
+		if state, err := process.Wait(); err != nil || !state.Success() {
 			t.Fatal("production pipe ACL did not deny the different-SID process", err)
 		}
 	})
+}
+
+// CreateProcessWithTokenW uses the runner's impersonation privilege instead of
+// CreateProcessAsUser's primary-token assignment privilege. Only public fixture
+// code and endpoint names enter the child; no credential environment is inherited.
+func startNativeWindowsPeer(token windows.Token, binary, directory, mode, endpoint string) (*os.Process, *os.File, error) {
+	read, write, err := os.Pipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	defer write.Close()
+	fail := func(err error) (*os.Process, *os.File, error) { read.Close(); return nil, nil, err }
+	if err := windows.SetHandleInformation(windows.Handle(write.Fd()), windows.HANDLE_FLAG_INHERIT, windows.HANDLE_FLAG_INHERIT); err != nil {
+		return fail(err)
+	}
+	nullName, _ := windows.UTF16PtrFromString("NUL")
+	attrs := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), InheritHandle: 1}
+	null, err := windows.CreateFile(nullName, windows.GENERIC_READ|windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, &attrs, windows.OPEN_EXISTING, 0, 0)
+	if err != nil {
+		return fail(err)
+	}
+	defer windows.CloseHandle(null)
+	application, _ := windows.UTF16PtrFromString(binary)
+	command, _ := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{binary, "__vault-peer-fixture", mode, endpoint}))
+	cwd, _ := windows.UTF16PtrFromString(directory)
+	environment := utf16.Encode([]rune(strings.Join([]string{"SystemRoot=" + os.Getenv("SystemRoot"), "WINDIR=" + os.Getenv("WINDIR"), ""}, "\x00") + "\x00"))
+	startup := windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfo{})), Flags: windows.STARTF_USESTDHANDLES, StdInput: null, StdOutput: windows.Handle(write.Fd()), StdErr: null}
+	var info windows.ProcessInformation
+	ok, _, callErr := windows.NewLazySystemDLL("advapi32.dll").NewProc("CreateProcessWithTokenW").Call(uintptr(token), 0, uintptr(unsafe.Pointer(application)), uintptr(unsafe.Pointer(command)), windows.CREATE_UNICODE_ENVIRONMENT, uintptr(unsafe.Pointer(&environment[0])), uintptr(unsafe.Pointer(cwd)), uintptr(unsafe.Pointer(&startup)), uintptr(unsafe.Pointer(&info)))
+	runtime.KeepAlive(application)
+	runtime.KeepAlive(command)
+	runtime.KeepAlive(cwd)
+	runtime.KeepAlive(environment)
+	runtime.KeepAlive(write)
+	if ok == 0 {
+		return fail(callErr)
+	}
+	defer windows.CloseHandle(info.Thread)
+	defer windows.CloseHandle(info.Process)
+	process, err := os.FindProcess(int(info.ProcessId))
+	if err != nil {
+		windows.TerminateProcess(info.Process, 1)
+		return fail(err)
+	}
+	return process, read, nil
 }

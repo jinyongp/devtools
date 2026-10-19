@@ -25,8 +25,14 @@ Windows suite 계정 fixture를 확인했다. x64/ARM64 test binary compile과 v
 실제 다른 SID process의 실행·거절 결과는 새 Windows CI에서 확인하기 전까지 pending이며
 N04 전체 완료로 표시하지 않는다.
 
-다른 SID의 process 생성은 Go의 Windows token 경로(CreateProcessAsUser)를 사용한다.
-[Microsoft의 권한 계약](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessasuserw)에
-따라 native CI에서 실제 생성 가능 여부도 확인해야 한다. 필요한 권한이 없을 때 동일
-사용자 process로 대체하거나 skip을 pass로 처리하지 않는다. 제품의 process 생성이나
-사용자 OS 정책을 이 준비로 바꾸지 않는다.
+`9aa1bc5`의 두 architecture에서 CreateProcessAsUser 호출이 실제로 1314(필수 권한
+부재)로 실패했다. 제품 pipe 검사에 도달하기 전의 fixture 실패다.
+[Microsoft의 CreateProcessWithTokenW 계약](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithtokenw)에
+따라 runner의 impersonation privilege를 사용하는 test 전용 launcher로 변경했다.
+기존 LogonUser의 다른 SID primary token을 그대로 사용하며 OS 권한 정책을 수정하지 않는다.
+
+절대 application 경로와 ComposeCommandLine, NUL stdin/stderr, 공개 SID 전용 stdout,
+SystemRoot/WINDIR만 담은 명시 environment block을 전달한다. 자식의 credential 상속을
+막으며 token/process/thread/pipe handle을 닫는다. 원래 소유한 live process handle로
+종료하고 context 만료 시 kill한다. 세 native assertion과 SID 대조는 유지한다.
+양 architecture compile/vet pass. 실제 생성과 pipe 거절은 후속 CI에서 확인한다.

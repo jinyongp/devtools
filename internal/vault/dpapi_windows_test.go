@@ -101,3 +101,7 @@ func TestNativeDPAPIRejectsDifferentWindowsIdentity(t *testing.T) {
 	}
 	clear(got)
 }
+
+func TestNativeDPAPISessionReuseCounts(t *testing.T) {
+	checkNativeSessionReuse(t, "dpapi")
+}

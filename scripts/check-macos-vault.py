@@ -40,7 +40,7 @@ def main():
                 raise RuntimeError('Native Keychain tests failed; inspect value-free JSON test evidence')
             events = [json.loads(line) for line in Path('vault-keychain-results.jsonl').read_text().splitlines()]
             passed = {event.get('Test') for event in events if event.get('Action') == 'pass'}
-            if not {'TestNativeKeychainSyntheticVault', 'TestNativeKeychainLockedCollectionRefusesSilentAccess'} <= passed:
+            if not {'TestNativeKeychainSyntheticVault', 'TestNativeKeychainLockedCollectionRefusesSilentAccess', 'TestNativeKeychainSessionReuseCounts'} <= passed:
                 raise RuntimeError('Required native Keychain tests did not actually pass')
             subprocess.run([sys.executable, '-B', 'scripts/check-macos-installed-vault.py'], env=env, check=True, timeout=300)
         finally:

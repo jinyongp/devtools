@@ -126,3 +126,10 @@ func TestNativeKeychainLockedCollectionRefusesSilentAccess(t *testing.T) {
 	}
 	clear(got)
 }
+
+func TestNativeKeychainSessionReuseCounts(t *testing.T) {
+	if os.Getenv("DEVTOOLS_TEST_NATIVE_KEYCHAIN") != "1" {
+		t.Skip("requires disposable macOS keychain")
+	}
+	checkNativeSessionReuse(t, "keychain")
+}

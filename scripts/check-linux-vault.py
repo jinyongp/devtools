@@ -68,8 +68,8 @@ def main():
             if time.monotonic() >= deadline:
                 raise RuntimeError('Synthetic native daemon did not own Secret Service')
             time.sleep(.05)
-        tests('^TestNativeSecretService(SyntheticVault|LockedCollection)$', 'vault-secret-service-native.jsonl',
-              ['TestNativeSecretServiceSyntheticVault', 'TestNativeSecretServiceLockedCollection'],
+        tests('^TestNativeSecretService(SyntheticVault|LockedCollection|SessionReuseCounts)$', 'vault-secret-service-native.jsonl',
+              ['TestNativeSecretServiceSyntheticVault', 'TestNativeSecretServiceLockedCollection', 'TestNativeSecretServiceSessionReuseCounts'],
               DEVTOOLS_TEST_NATIVE_SECRET_SERVICE='1')
     finally:
         if daemon.poll() is None:

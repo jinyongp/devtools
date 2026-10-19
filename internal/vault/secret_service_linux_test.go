@@ -491,3 +491,17 @@ func TestNativeSecretServiceUnavailableDoesNotActivate(t *testing.T) {
 		t.Fatal("absent service was activated", err)
 	}
 }
+
+func TestNativeSecretServiceSessionReuseCounts(t *testing.T) {
+	if os.Getenv("DEVTOOLS_TEST_NATIVE_SECRET_SERVICE") != "1" {
+		t.Skip("requires disposable real Secret Service")
+	}
+	checkNativeSessionReuse(t, "secret-service")
+}
+
+func TestSessionNativeHelperCachedUnwrapCountsWithPrivateBusFixture(t *testing.T) {
+	address := privateSecretBus(t)
+	installFixtureSecretService(t, address)
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", address)
+	checkNativeSessionReuse(t, "secret-service")
+}

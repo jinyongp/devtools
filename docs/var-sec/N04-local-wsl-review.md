@@ -1,6 +1,6 @@
 # N04 실제 WSL 다중 터미널·daemon 중단 검증
 
-현재 진행(2026-10-19): 두 실제 PTY/daemon crash의 로컬 근거는 유지하며 distro restart는 별도 [필수 CI 검증](N04-wsl-restart-preparation-review.md)으로 연결했다. 현재 사용자 WSL을 종료하지 않는다. 실제 CI가 pass하기 전에는 restart를 완료로 세지 않는다.
+현재 진행(2026-10-19): 두 실제 PTY/daemon crash의 로컬 근거에 더해 de6fd4b의 별도 Actions에서 실제 WSL2 배포판 종료·재시작도 pass했다. 아래 로컬 기록의 NOT RUN은 당시 실행 범위를 뜻한다. 실제 재시작과 정리 근거는 [N04-wsl-restart-preparation-review.md](N04-wsl-restart-preparation-review.md)의 후속 결과를 따른다. N04의 다른 OS/다른 사용자 IPC 조건은 별도로 남아 있다.
 
 N04는 진행 중이다. 아래 범위는 현재 설치한 candidate를 실제 WSL2 커널
 `6.18.33.2-microsoft-standard-WSL2`에서 실행한 결과다. 다른 OS나 distro 재시작을

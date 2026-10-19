@@ -1,0 +1,48 @@
+{
+  "result": "pass",
+  "distribution": "devtools-vault-test-483276a955604e96951c79b34c166fd4",
+  "binary_sha256": "6abbc60b76792bb54ab12dc084c161aff70d7016279ca8281d97576e0b5178bb",
+  "phases": [
+    {
+      "phase": "prepare",
+      "result": "pass",
+      "kernel": "6.18.40.1-microsoft-standard-WSL2",
+      "filesystem": "ext2/ext3",
+      "uid": 1001,
+      "binary_identity": {
+        "commit": "de6fd4b6f7459fce2f446bd7e367e23378409296",
+        "protocol_version": 7,
+        "version": "0.0.0-wsl-validation"
+      }
+    },
+    {
+      "phase": "after-manual-restart",
+      "result": "pass",
+      "kernel": "6.18.40.1-microsoft-standard-WSL2",
+      "filesystem": "ext2/ext3",
+      "uid": 1001,
+      "binary_identity": {
+        "commit": "de6fd4b6f7459fce2f446bd7e367e23378409296",
+        "protocol_version": 7,
+        "version": "0.0.0-wsl-validation"
+      }
+    },
+    {
+      "phase": "after-unlocked-restart",
+      "result": "pass",
+      "kernel": "6.18.40.1-microsoft-standard-WSL2",
+      "filesystem": "ext2/ext3",
+      "uid": 1001,
+      "binary_identity": {
+        "commit": "de6fd4b6f7459fce2f446bd7e367e23378409296",
+        "protocol_version": 7,
+        "version": "0.0.0-wsl-validation"
+      }
+    }
+  ],
+  "recovery_root": "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\devtools-wsl-import-h01sv3z1",
+  "wsl_version": "WSL version: 3.0.1.0\r\nKernel version: 6.18.40.1-1\r\nWSLg version: 1.0.79\r\nMSRDC version: 1.2.7214\r\nDirect3D version: 1.611.1-81528511\r\nDXCore version: 10.0.26100.1-240331-1435.ge-release\r\nWindows version: 10.0.26100.33438",
+  "rootfs_sha256": "2a790896740b14d637dbdc583cce1ba081ac53b9e9cdb46dc09a2f73abbd9934",
+  "checks_passed": true,
+  "owned_distribution_removed": true
+}

@@ -29,3 +29,16 @@ lockfile의 YAML parser를 통과했다. 기존 verify runner 2개와 새 owners
 3개가 pass했다. 후자의 mock은 기존 distro 무변경, 부분 import cleanup, unregister 실패 시
 복구 파일 보존을 검사하며 실제 WSL2 재시작의 근거가 아니다. 실제 결과는 Actions에서
 별도로 확인하고 실패를 수정한다.
+
+## 실제 WSL2 결과
+
+[Actions 39233624557의 wsl-vault job](https://github.com/jinyongp/devtools/actions/runs/39233624557/job/117997371744)은
+후보 `de6fd4b6f7459fce2f446bd7e367e23378409296`에서 pass했다. artifact를 내려받아
+세 phase의 실제 pass와 같은 binary commit, `checks_passed`, `owned_distribution_removed`를
+확인했다. kernel은 `6.18.40.1-microsoft-standard-WSL2`, Linux filesystem `ext2/ext3`,
+실행 UID는 1001이었다. manual lock 유지와 unlocked session 소실, 명시 unlock 후 별도
+프로세스의 재사용·마스킹이 두 실제 distro 종료/재시작을 넘어 확인됐다.
+
+[원본 JSON 증거](evidence/N04-wsl-restart-de6fd4b.json)를 보존한다. 이 검사는 실제 kernel과
+등록된 독립 distro를 사용했으며 현재 개발 WSL이나 다른 기존 배포판을 종료하지 않았다.
+다른 OS 사용자·Windows pipe 양쪽 peer 확인 등 나머지 N04 범위는 이 pass로 대체하지 않는다.

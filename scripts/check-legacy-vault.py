@@ -99,9 +99,6 @@ def main():
                                    input=SECRET if '--stdin' in operation else None, denied=True))
             if disk_state() != before:
                 raise RuntimeError('Old CLI changed protected data or created a plaintext profile')
-            for path in data.rglob('*'):
-                if path.is_file() and SECRET.encode() in path.read_bytes():
-                    raise RuntimeError('Plaintext canary remains in migrated data')
             if source.read_text() != 'TOKEN=' + SECRET + '\n':
                 raise RuntimeError('Migration changed original user input')
             result = subprocess.run([str(current), 'run', '--profile', 'compatibility', '--', sys.executable,
@@ -109,6 +106,20 @@ def main():
                                     cwd=root, env=env, capture_output=True, timeout=30)
             if result.returncode or result.stdout != b'[REDACTED]' or result.stderr:
                 raise RuntimeError('Actual migrated secret did not execute safely')
+            # Windows byte-range leases can forbid even read-only scans while
+            # the owning daemon is alive. Drain this fixture's worker first;
+            # inspect all files, including launch/receipt state from the run.
+            retire_vaults(directory)
+            for path in data.rglob('*'):
+                if not path.is_file():
+                    continue
+                try:
+                    content = path.read_bytes()
+                except OSError as error:
+                    raise RuntimeError('Cannot scan owned fixture file: ' + str(path.relative_to(data))) from error
+                if SECRET.encode() in content:
+                    raise RuntimeError('Plaintext canary remains in migrated data')
+
         finally:
             if directory is not None:
                 retire_vaults(directory)

@@ -13,3 +13,8 @@
 | native CI 연결 | reviewed/pending, Linux/macOS 기존 profile producer에 결과 JSON 포함; Windows 두 arch의 packaged product binary도 같은 검사를 필수 수행, 기존 artifacts에 JSON 보존 |
 
 로컬에서 기존 baseline binary와 새 archive build의 두 경로 모두 실제 pass했다. 실제 실행 결과는 /tmp/devtools-values-plan/N05-actual-legacy-{linux,built-linux}.json에 있다. synthetic passphrase는 stdin, old secret도 stdin, child argv는 환경 키 이름만 포함한다. 새 runner에서 실제 통과하기 전 native CI pass로 기록하지 않는다. 기존 action pin·권한·배포 조건은 유지하고 외부 action/dependency를 추가하지 않는다. Python/YAML 검사와 release contract 검사를 수행한다. N05의 나머지 fault matrix와 12방향 이전 근거는 별도로 검토한다.
+
+
+## Windows live lease와 canary scan 순서
+
+6deb437의 실제 Windows 두 product는 old CLI 세 거절과 JSON 불변 검사 뒤, live daemon이 남아 있는 data 전체 read scan에서 PermissionError를 냈다. scan을 생략하거나 PermissionError를 pass로 바꾸지 않는다. 실제 migrated child 실행을 먼저 확인하고 authenticated retirement/lease drain을 끝낸 뒤 모든 일반 파일을 읽는다. 이 순서로 실행 후 추가된 launch/receipt까지 scan한다. 다른 파일의 read 오류는 계속 실패이며 상대 fixture 경로만 진단한다. 현재 Linux 수정 경로 pass, Windows 실제 결과 전까지 원인 해소를 통과로 기록하지 않는다.

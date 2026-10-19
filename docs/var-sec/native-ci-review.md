@@ -132,3 +132,16 @@ daemon은 새로 만들지 않고 동일한 collection·item을 유지한다. Lo
 리뷰: plain 명령의 requirements 부재와 뒤따르는 doctor/run assertion을 다시 확인했다.
 실제 Linux package/install doctor 시나리오 pass. macOS 설치 검증은 후속 Actions에서
 확인하며 Linux 결과를 macOS 통과로 기록하지 않는다.
+
+## macOS profile exchange cleanup 경로 검토
+
+`59c1188`에서 macOS check:all/build/installed 전체 단계는 pass했다. 이후 producer가
+완료 후 자기 세션을 retire할 때 /var alias로 endpoint를 찾지 못했다. Unix 제품 root는
+canonical인데 공용 Python helper가 Windows용 경로 표기 보존을 모든 OS에 적용했다.
+helper만 Unix canonical/Windows 기존 절대 표기로 구분한다. Windows 8.3 경로의 기존
+계약과 제품 endpoint/root binding은 유지한다.
+
+리뷰: producer/consumer root와 helper의 endpoint 확인·lease drain·복수 directory 정리를
+확인했다. 실제 Linux producer를 symlink TMPDIR로 실행하여 export·정리 완료를 확인했다.
+Python syntax pass. 원래 Mac 실패의 원시 경로와 같은 alias 조건을 사용했으며 macOS
+전체 job과 12방향 import는 후속 native CI까지 pending이다.

@@ -13,7 +13,7 @@ import (
 )
 
 func TestKeychainStatusContract(t *testing.T) {
-	for code, want := range map[int32]error{0: nil, -25300: ErrKeyMissing, -25308: ErrInteractionRequired, -128: ErrDenied, -25293: ErrDenied, -25299: ErrRecovery, -25291: ErrUnavailable} {
+	for code, want := range map[int32]error{0: nil, -25300: ErrKeyMissing, -25308: ErrInteractionRequired, -25315: ErrInteractionRequired, -128: ErrDenied, -25293: ErrDenied, -25299: ErrRecovery, -25291: ErrUnavailable} {
 		if !errors.Is(keychainStatus(code), want) {
 			t.Fatalf("status %d", code)
 		}

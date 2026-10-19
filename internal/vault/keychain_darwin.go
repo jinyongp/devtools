@@ -23,21 +23,29 @@ func (p KeychainProtector) Identity() ProtectionIdentity {
 }
 
 type keychainAPI struct {
-	dictCreate   func(uintptr, int, uintptr, uintptr) uintptr
-	dictSet      func(uintptr, uintptr, uintptr)
-	stringCreate func(uintptr, *byte, int, uint32, bool) uintptr
-	dataCreate   func(uintptr, *byte, int) uintptr
-	dataLength   func(uintptr) int
-	dataBytes    func(uintptr) *byte
-	dataType     func() uintptr
-	getType      func(uintptr) uintptr
-	release      func(uintptr)
-	readPointer  func(*uintptr, uintptr, uintptr) uintptr
-	add          func(uintptr, *uintptr) int32
-	copy         func(uintptr, *uintptr) int32
-	delete       func(uintptr) int32
-	constants    map[string]uintptr
+	dictCreate     func(uintptr, int, uintptr, uintptr) uintptr
+	dictSet        func(uintptr, uintptr, uintptr)
+	stringCreate   func(uintptr, *byte, int, uint32, bool) uintptr
+	dataCreate     func(uintptr, *byte, int) uintptr
+	dataLength     func(uintptr) int
+	dataBytes      func(uintptr) *byte
+	dataType       func() uintptr
+	getType        func(uintptr) uintptr
+	release        func(uintptr)
+	readPointer    func(*uintptr, uintptr, uintptr) uintptr
+	add            func(uintptr, *uintptr) int32
+	copy           func(uintptr, *uintptr) int32
+	delete         func(uintptr) int32
+	getInteraction func(*uint8) int32
+	setInteraction func(uint8) int32
+	constants      map[string]uintptr
 }
+
+// File-based macOS keychains ignore the SecItem authentication-UI query key.
+// Their interaction setting is process-global: serialize our native calls and
+// restore the previous setting even on error. Native session calls still run in
+// a bounded helper process because an OS call cannot observe a Go cancellation.
+var keychainInteractionMu sync.Mutex
 
 var loadKeychain = sync.OnceValues(func() (*keychainAPI, error) {
 	cf, err := purego.Dlopen("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", purego.RTLD_NOW|purego.RTLD_LOCAL)
@@ -61,6 +69,8 @@ var loadKeychain = sync.OnceValues(func() (*keychainAPI, error) {
 		{cf, "CFDataGetTypeID", &a.dataType}, {cf, "CFGetTypeID", &a.getType}, {cf, "CFRelease", &a.release},
 		{cf, "memcpy", &a.readPointer},
 		{sec, "SecItemAdd", &a.add}, {sec, "SecItemCopyMatching", &a.copy}, {sec, "SecItemDelete", &a.delete},
+		{sec, "SecKeychainGetUserInteractionAllowed", &a.getInteraction},
+		{sec, "SecKeychainSetUserInteractionAllowed", &a.setInteraction},
 	}
 	for _, b := range bindings {
 		s, err := purego.Dlsym(b.h, b.name)
@@ -109,8 +119,27 @@ func (p KeychainProtector) query() (*keychainAPI, uintptr, func(), error) {
 	if err != nil {
 		return nil, 0, nil, err
 	}
+	keychainInteractionMu.Lock()
+	var previous uint8
+	if err := keychainStatus(a.getInteraction(&previous)); err != nil {
+		keychainInteractionMu.Unlock()
+		return nil, 0, nil, err
+	}
+	allow := uint8(0)
+	if p.AllowInteraction {
+		allow = 1
+	}
+	if err := keychainStatus(a.setInteraction(allow)); err != nil {
+		keychainInteractionMu.Unlock()
+		return nil, 0, nil, err
+	}
+	restore := func() {
+		a.setInteraction(previous)
+		keychainInteractionMu.Unlock()
+	}
 	d := a.dictCreate(0, 0, 0, 0)
 	if d == 0 {
+		restore()
 		return nil, 0, nil, ErrUnavailable
 	}
 	owned := []uintptr{d}
@@ -119,6 +148,7 @@ func (p KeychainProtector) query() (*keychainAPI, uintptr, func(), error) {
 		for _, ref := range owned {
 			a.release(ref)
 		}
+		restore()
 	}
 	for _, item := range []struct{ key, value string }{{"kSecAttrService", "devtools.vault.v1"}, {"kSecAttrAccount", p.VaultID}} {
 		b := []byte(item.value)
@@ -144,7 +174,7 @@ func keychainStatus(code int32) error {
 		return nil
 	case -25300:
 		return ErrKeyMissing
-	case -25308:
+	case -25308, -25315:
 		return ErrInteractionRequired
 	case -128, -25293:
 		return ErrDenied

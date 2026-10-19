@@ -15,6 +15,8 @@ import time
 import uuid
 from urllib.parse import urlsplit
 
+from vault_test_support import retire_vaults
+
 
 class CLIError(RuntimeError):
     def __init__(self, arguments, code, details):
@@ -120,6 +122,7 @@ timeout = "3s"
 '''
         (project / "devtools.toml").write_text(config, encoding="utf-8")
         api("var", "set", "MESSAGE", "--value", "portable-public-canary")
+        api("vault", "init", "--backend", "passphrase", "--passphrase-stdin", input="synthetic-source-vault-unlock\n")
         api("sec", "set", "TOKEN", "--stdin", input="synthetic-secret-canary\n")
         assert api("var", "get", "MESSAGE")["value"] == "portable-public-canary"
         task = mutate("task", "add", "--title", "Installed native task")["item"]["id"]
@@ -167,6 +170,7 @@ timeout = "3s"
         encrypted = archive.read_bytes()
         assert b"synthetic-secret-canary" not in encrypted and passphrase.strip().encode() not in encrypted
         base = ["profile", "import", "--file", str(archive), "--passphrase-stdin"]
+        api("vault", "init", "--backend", "passphrase", "--passphrase-stdin", env=target_env, input="synthetic-target-vault-unlock\n")
         preview = api(*base, env=target_env, input=passphrase)
         request = str(uuid.uuid4())
         restored = mutate(*base, "--apply", preview["digest"], env=target_env, input=passphrase, request=request)
@@ -212,6 +216,7 @@ timeout = "3s"
                 pass  # A concurrent orderly shutdown can close its response.
             finally:
                 connection.close()
+        retire_vaults(root / "source" / "data" / "vault", root / "target" / "data" / "vault")
         # Mapped supervisor images and private directory pins may finish closing
         # just after successful control RPC; bounded cleanup does not hide failures.
         for attempt in range(20):

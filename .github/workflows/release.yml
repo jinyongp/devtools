@@ -98,6 +98,41 @@ jobs:
       focus: full
       reuse-source: ${{ needs.validate-release.outputs.windows-source-reused == 'true' }}
 
+  vault-macos:
+    needs: validate-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            arch: amd64
+          - runner: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+          cache: true
+      - name: Verify actual native architecture
+        run: test "$(go env GOHOSTARCH)" = '${{ matrix.arch }}'
+      - name: Verify disposable native Keychain and locked collection
+        env:
+          DEVTOOLS_DISPOSABLE_HOST: '1'
+        run: python3 -B scripts/check-macos-vault.py
+      - name: Preserve native Keychain evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vault-keychain-${{ matrix.arch }}
+          path: vault-keychain-results.jsonl
+          if-no-files-found: error
+          retention-days: 7
+
   ci-macos:
     needs: validate-release
     runs-on: macos-latest
@@ -248,7 +283,7 @@ jobs:
           - runner: windows-11-arm
             origin: windows-arm64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     defaults:
       run:
         shell: bash
@@ -256,6 +291,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.commit }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+          cache: true
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: profile-exchange-*
@@ -274,7 +313,7 @@ jobs:
           retention-days: 7
 
   package:
-    needs: [validate-release, ci-macos, ci-linux, ci-windows]
+    needs: [validate-release, ci-macos, ci-linux, ci-windows, vault-macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:

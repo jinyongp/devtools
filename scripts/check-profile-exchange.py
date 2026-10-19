@@ -10,6 +10,8 @@ import sys
 import tempfile
 import uuid
 
+from vault_test_support import retire_vaults
+
 PASSPHRASE = 'synthetic-cross-platform-fixture-passphrase\n'
 SECRET = 'synthetic-cross-platform-secret\n'
 VALUE = '한글 / café / C:\\Users\\fixture / /home/fixture'
@@ -44,6 +46,7 @@ def export_fixture(binary, root, output, origin, commit):
     api('env', 'create', 'local')
     api('var', 'set', 'MESSAGE', '--value', VALUE)
     api('var', 'set', 'MESSAGE', '--env', 'local', '--value', 'environment override')
+    cli(binary, root, 'vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input='synthetic-local-vault-unlock\n')
     api('sec', 'set', 'TOKEN', '--stdin', input=SECRET)
     task = mutate('add', body={'title': 'Cross-platform task 한글'})['item']['id']
     workstream = mutate('workstream', 'create', body={'title': 'Portable workstream'})['item']['id']
@@ -107,6 +110,7 @@ def import_fixtures(root, fixtures, origin, commit):
         private_archive_copy(archive, encrypted)
         def api(*args, **kwargs):
             return cli(binary, target, *args, '--profile', 'portable', **kwargs)
+        cli(binary, target, 'vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input='synthetic-destination-vault-unlock\n')
         base = ['profile', 'import', '--file', str(archive), '--passphrase-stdin']
         preview = api(*base, input=PASSPHRASE)
         request = str(uuid.uuid4())
@@ -140,12 +144,15 @@ def main():
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='devtools-profile-exchange-') as temporary:
         root = Path(temporary)
-        if args.mode == 'export':
-            export_fixture(args.binary.resolve(), root, args.directory.resolve(), args.origin, args.commit)
-        else:
-            result = import_fixtures(root, args.directory.resolve(), args.origin, args.commit)
-            args.evidence.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
-            print(json.dumps(result))
+        try:
+            if args.mode == 'export':
+                export_fixture(args.binary.resolve(), root, args.directory.resolve(), args.origin, args.commit)
+            else:
+                result = import_fixtures(root, args.directory.resolve(), args.origin, args.commit)
+                args.evidence.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+                print(json.dumps(result))
+        finally:
+            retire_vaults(root / 'data' / 'vault', *(p / 'data' / 'vault' for p in root.iterdir() if p.is_dir()))
 
 
 if __name__ == '__main__':

@@ -18,6 +18,7 @@ import (
 	"github.com/jinyongp/devtools/internal/proxy"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/truststore"
+	"github.com/jinyongp/devtools/internal/vault"
 	"golang.org/x/term"
 )
 
@@ -25,6 +26,22 @@ var version = "dev"
 var commit = "unknown"
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "__vault-native-unwrap" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		defer stop()
+		if vault.NativeUnlockHelper(ctx, os.Stdin, os.Stdout) != nil {
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 3 && os.Args[1] == "__vault-session" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		defer stop()
+		if vault.ServeKeySession(ctx, os.Args[2]) != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	if windowsNetworkHelperEntry() {
 		return
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -63,11 +64,13 @@ func privateSecretBus(t *testing.T) string {
 // The fixture implements the real D-Bus contract over a private Unix bus. It
 // tests our transport/codec/errors; it is not OS keyring encryption validation.
 type fixtureSecretService struct {
-	mu     sync.Mutex
-	conn   *dbus.Conn
-	keys   map[string][]byte
-	locked bool
-	fault  string
+	mu      sync.Mutex
+	conn    *dbus.Conn
+	keys    map[string][]byte
+	locked  bool
+	fault   string
+	pause   chan struct{}
+	entered chan struct{}
 }
 
 func (f *fixtureSecretService) OpenSession(algorithm string, input dbus.Variant) (dbus.Variant, dbus.ObjectPath, *dbus.Error) {
@@ -135,6 +138,10 @@ type fixtureSecretItem struct {
 func (i fixtureSecretItem) GetSecret(session dbus.ObjectPath) (serviceSecret, *dbus.Error) {
 	i.service.mu.Lock()
 	defer i.service.mu.Unlock()
+	if i.service.pause != nil {
+		close(i.service.entered)
+		<-i.service.pause
+	}
 	if i.service.fault != "" {
 		return serviceSecret{}, dbus.NewError(i.service.fault, nil)
 	}
@@ -267,4 +274,61 @@ func TestNativeSecretServiceSyntheticVault(t *testing.T) {
 		t.Fatal("native roundtrip", err)
 	}
 	clear(got)
+}
+
+func TestSessionNativeHelperRealPipeAndCancellation(t *testing.T) {
+	address := privateSecretBus(t)
+	f := installFixtureSecretService(t, address)
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", address)
+	id, _ := NewID()
+	p := SecretServiceProtector{VaultID: id, BusAddress: address}
+	dir := filepath.Join(t.TempDir(), "vault")
+	want, err := (KeyFileStore{Directory: dir}).Initialize(context.Background(), id, "secret-service", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer want.Destroy()
+	s := NewKeySession(dir)
+	defer s.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	key, err := s.Use(ctx)
+	if err != nil || !sameMaterial(key, want) {
+		t.Fatal("native helper pipe", err)
+	}
+	key.Destroy()
+	s.Close()
+	pause, entered := make(chan struct{}), make(chan struct{})
+	defer close(pause)
+	f.mu.Lock()
+	f.pause = pause
+	f.entered = entered
+	f.mu.Unlock()
+	operation, stop := context.WithCancel(ctx)
+	defer stop()
+	done := make(chan error, 1)
+	go func() {
+		key, err := s.Use(operation)
+		if key != nil {
+			key.Destroy()
+		}
+		done <- err
+	}()
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal("helper did not reach OS wait", ctx.Err())
+	}
+	stop()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatal("native cancellation", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("native helper remained blocked")
+	}
+	if s.Status().State != Locked {
+		t.Fatal("failed native operation opened session")
+	}
 }

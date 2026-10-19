@@ -77,19 +77,11 @@ func (p *Profile) ExportLogical(key *Material) (*Material, error) {
 // session, launch handle, process record, or source vault identity. It prepares
 // an in-memory candidate; publication still needs the launch mutation barrier.
 func ImportLogical(encoded *Material, target, vaultID string, master *Material) (*Profile, *Material, error) {
-	if encoded == nil {
-		return nil, nil, ErrInvalid
-	}
-	if len(encoded.data) > MaxProtectedPlainBytes {
-		return nil, nil, ErrTooLarge
-	}
-	var wire logicalProfile
-	if err := StrictDecode(encoded.data, &wire); err != nil {
+	decoded, err := decodeLogical(encoded)
+	if err != nil {
 		return nil, nil, err
 	}
-	if wire.Sealed == nil || wire.Format != 1 || !namePattern.MatchString(wire.Profile) || wire.Envs == nil || wire.Values == nil || wire.Bundles == nil {
-		return nil, nil, ErrInvalid
-	}
+	wire := *decoded
 	p, err := NewProfile(target)
 	if err != nil {
 		return nil, nil, err

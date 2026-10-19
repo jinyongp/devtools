@@ -699,6 +699,9 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	if selected == nil {
 		return plan, failure("not_found")
 	}
+	if values.IsLogicalSnapshot(selected.Values) {
+		return plan, failure("unsupported_storage")
+	}
 	release, err := maintenance.Acquire(ctx, e.Data)
 	if err != nil {
 		return plan, failure("storage_error")

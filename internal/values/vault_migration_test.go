@@ -179,3 +179,33 @@ func TestLegacyMigrationRejectsStalePreview(t *testing.T) {
 		t.Fatal("later edit lost")
 	}
 }
+
+func TestVaultInitializationRequiresLegacyMigration(t *testing.T) {
+	ctx := context.Background()
+	root := privateTempDir(t)
+	s := Store{Directory: filepath.Join(root, "profiles"), Profile: "app"}
+	if _, e := s.Update(ctx, func(s *State) (bool, *protocol.Error) {
+		return s.Set(Secret, "TOKEN", "", "synthetic-initialization-canary")
+	}); e != nil {
+		t.Fatal(e)
+	}
+	path := filepath.Join(root, "profiles", profilekey.CanonicalFilename("app"))
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	master, _ := vault.NewKey()
+	defer master.Destroy()
+	vid, _ := vault.NewID()
+	store := vault.FileStore{Root: root, VaultID: vid, CatalogKey: master}
+	if err = store.Initialize(ctx); err == nil || err.Error() != "migration_required" {
+		t.Fatal("legacy data initialized without migration", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("initialization touched legacy plaintext", err)
+	}
+	if _, e := s.Read(ctx); e != nil {
+		t.Fatal("failed initialization blocked legacy recovery", e)
+	}
+}

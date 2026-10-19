@@ -92,3 +92,22 @@ key-slot write 잠금을 보유하지 않는다. 동일 native backend 재선택
 
 기존 vault 전체 회귀, 관련 race와 vet, Windows/macOS test compile을 수행했다.
 실제 native 보호 변경, CLI 연결, 영수증 retention은 아직 완료했다고 기록하지 않는다.
+
+## 최초 생성·portable 경계 재검토
+
+- IPC protocol을 2로 올릴 때 기존 HKDF가 같은 상수를 참조해 저장 format 1의
+  키 도출까지 바뀌는 문제를 확인했다. 키 도출은 StorageVersion에 고정했다.
+  Python 표준 라이브러리로 독립 계산한 storage v1/HKDF 고정 벡터로 검증했다.
+- 새 vault 초기화도 encrypted forward publication과 영속 root format barrier를
+  사용한다. 기존 profile이 있으면 migration을 요구하고, 보호된 root의 catalog가
+  사라진 경우에는 새 빈 vault를 만들지 않는다.
+- 일반 profile publication은 identity/legacy marker도 함께 관리한다. discovery는
+  보호된 root의 catalog를 profile로 오인하지 않는다. Create에서 legacy resolution도
+  확인해 구형 값을 일반 경로로 덮어쓰지 않는다.
+- portable logical payload는 암호화 전에 ID·slot·env·kind·bundle 구조를 검증한다.
+  metadata/diff용 호환 view만 private 메모리 안에서 legacy 형식으로 투영하고,
+  실제 복원 자료는 logical 형식의 TTL/version/bundle을 유지한다. legacy writer는
+  보호된 root뿐 아니라 새 logical archive를 빈 root에 쓰는 경우도 거절한다.
+
+관련 package 회귀·race·vet 및 선택한 Windows/macOS test compile을 확인했다.
+실제 keyed backup engine adapter와 CLI 연결은 계속 미완료 상태다.

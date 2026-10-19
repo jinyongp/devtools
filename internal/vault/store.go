@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -128,6 +129,11 @@ func (s FileStore) Initialize(ctx context.Context) error {
 	if !validID(s.VaultID) {
 		return ErrInvalid
 	}
+	releaseLaunch, err := AcquireLaunchMutation(ctx, filepath.Join(s.Root, "vault"))
+	if err != nil {
+		return err
+	}
+	defer releaseLaunch()
 	release, err := maintenance.AcquireExclusive(ctx, s.Root)
 	if err != nil {
 		return err
@@ -137,6 +143,18 @@ func (s FileStore) Initialize(ctx context.Context) error {
 		return errorsNamed("vault_already_initialized")
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return ErrRecovery
+	}
+	if _, protected, err := maintenance.ProtectedRootHeld(s.Root); err != nil {
+		return err
+	} else if protected {
+		return ErrKeyMissing
+	}
+	names, err := profilekey.Enumerate(filepath.Join(s.Root, "profiles"), "values")
+	if err != nil {
+		return ErrRecovery
+	}
+	if len(names) > 0 {
+		return errorsNamed("migration_required")
 	}
 	c := Catalog{Format: StorageVersion, VaultID: s.VaultID, Entries: []CatalogEntry{}}
 	if err = c.Sign(s.CatalogKey); err != nil {
@@ -149,7 +167,12 @@ func (s FileStore) Initialize(ctx context.Context) error {
 	if err = ctx.Err(); err != nil {
 		return err
 	}
-	return maintenance.Replace(s.Root, map[string][]byte{catalogRelative: b})
+	id, err := NewID()
+	if err != nil {
+		return err
+	}
+	_, err = (ForwardStore{Root: s.Root, VaultID: s.VaultID, Master: s.CatalogKey}).ReplaceHeld(ctx, id, hex.EncodeToString(c.Tag), map[string][]byte{catalogRelative: b})
+	return err
 }
 func entryFor(p *Profile) CatalogEntry {
 	return CatalogEntry{Name: p.Name, ID: p.ID, Generation: p.Generation, Revision: p.Revision, KeyEpoch: p.KeyEpoch, Sealed: p.Sealed, Tag: append([]byte(nil), p.Tag...)}
@@ -202,6 +225,18 @@ func (s FileStore) ReadWithMaster(ctx context.Context, name string, master *Mate
 		return nil, nil, err
 	}
 	defer release()
+	return s.ReadWithMasterHeld(ctx, name, master)
+}
+
+// ReadWithMasterHeld requires a shared/exclusive data-root maintenance gate.
+// The root key must have been acquired before that gate.
+func (s FileStore) ReadWithMasterHeld(ctx context.Context, name string, master *Material) (*Profile, *Material, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	if !namePattern.MatchString(name) {
+		return nil, nil, ErrInvalid
+	}
 	c, err := s.readCatalog()
 	if err != nil {
 		return nil, nil, err
@@ -265,7 +300,12 @@ func (s FileStore) publish(ctx context.Context, c *Catalog, p *Profile, key *Mat
 	}
 	// Ordinary writes only accept already encrypted profiles. Legacy plaintext
 	// migration must use its own encrypted recovery journal, not this helper.
-	return maintenance.Replace(s.Root, map[string][]byte{catalogRelative: cb, "profiles/" + profilekey.CanonicalFilename(p.Name): pb})
+	files, err := profilekey.Replacement(filepath.Join(s.Root, "profiles"), p.Name, "values", pb)
+	if err != nil {
+		return ErrRecovery
+	}
+	files[catalogRelative] = cb
+	return maintenance.Replace(s.Root, files)
 }
 func (s FileStore) Create(ctx context.Context, p *Profile, key *Material) error {
 	if err := p.Verify(key); err != nil {
@@ -289,6 +329,13 @@ func (s FileStore) Create(ctx context.Context, p *Profile, key *Material) error 
 		return errorsNamed("profile_exists")
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return ErrRecovery
+	}
+	resolved, resolveErr := profilekey.Resolve(filepath.Join(s.Root, "profiles"), p.Name, "values")
+	if resolveErr != nil {
+		return ErrRecovery
+	}
+	if resolved.Mode != profilekey.ModeNone {
+		return errorsNamed("migration_required")
 	}
 	c.Entries = append(c.Entries, entryFor(p))
 	return s.publish(ctx, c, p, key)

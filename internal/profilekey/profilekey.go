@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/project"
 )
@@ -384,6 +385,15 @@ func Enumerate(directory, domain string) ([]string, error) {
 			continue
 		}
 		name := entry.Name()
+		// The authenticated vault catalog is root metadata, never a profile.
+		// Profile identities still require their matching canonical file.
+		if domain == "values" && name == "vault-catalog.json" {
+			if _, protected, err := maintenance.ProtectedRootHeld(maintenance.Root(directory)); err != nil {
+				return nil, err
+			} else if protected {
+				continue
+			}
+		}
 		if domain == "tasks" && strings.HasSuffix(name, ".head.json") {
 			key := strings.TrimSuffix(name, ".head.json")
 			if !ValidKey(key) || !seenKeys[key] {

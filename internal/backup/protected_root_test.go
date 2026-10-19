@@ -54,3 +54,48 @@ func TestLegacyRestoreCannotCreatePlaintextProfileInProtectedRoot(t *testing.T) 
 		t.Fatal("plaintext profile created")
 	}
 }
+
+func TestLegacyRestoreRejectsLogicalSecretArchiveOnEmptyRoot(t *testing.T) {
+	ctx := context.Background()
+	root := privateTestRoot(t)
+	identity, public := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
+	if _, err := Keygen(identity, public); err != nil {
+		t.Fatal(err)
+	}
+	master, _ := vault.NewKey()
+	defer master.Destroy()
+	key, _ := vault.NewKey()
+	defer key.Destroy()
+	vid, _ := vault.NewID()
+	p, err := vault.NewSealedProfile("source", vid, master, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Set("TOKEN", vault.Secret, "", "synthetic-new-logical-archive", key)
+	logical, err := p.ExportLogical(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer logical.Destroy()
+	raw := logical.CopyBytes()
+	defer clear(raw)
+	recipientValue, err := recipient(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encrypted, err := encode(Snapshot{Version: 1, Created: "2026-10-19T00:00:00Z", Profiles: []Profile{{Name: "source", Values: raw}}}, recipientValue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(root, "logical.age")
+	if err = exclusive(archive, encrypted); err != nil {
+		t.Fatal(err)
+	}
+	engine := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
+	if _, err := engine.Import(ctx, ImportRequest{Path: archive, IdentityPath: identity, Target: "brand-new"}); err == nil || err.Code != "unsupported_storage" {
+		t.Fatal("legacy engine accepted logical secret payload", err)
+	}
+	if _, err = os.Stat(filepath.Join(engine.Data, "profiles", profilekey.CanonicalFilename("brand-new"))); !os.IsNotExist(err) {
+		t.Fatal("logical plaintext written as a profile")
+	}
+}

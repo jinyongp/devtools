@@ -196,7 +196,9 @@ func derive(key *Material, vaultID, profileID, purpose string) ([]byte, error) {
 		return nil, ErrLocked
 	}
 	e := NewEncoder("key-info")
-	e.Uint(SessionProtocol)
+	// Stored ciphertext follows the storage crypto contract, independently of
+	// transport/daemon protocol upgrades.
+	e.Uint(StorageVersion)
 	e.String(vaultID)
 	e.String(profileID)
 	e.String(purpose)

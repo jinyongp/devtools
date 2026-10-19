@@ -14,6 +14,7 @@ import (
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/redact"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
 )
@@ -21,6 +22,7 @@ import (
 const DefaultPreparationTimeout = 30 * time.Second
 
 type InputMetadata struct {
+	Output          redact.Plan             `json:"output"`
 	InputID         string                  `json:"input_id"`
 	Inject          bool                    `json:"inject"`
 	Selection       string                  `json:"selection"`
@@ -134,6 +136,9 @@ func newInputPayload(wire inputWire) (*InputPayload, *protocol.Error) {
 	return &InputPayload{consumed: &atomic.Bool{}, body: vault.NewMaterial(b), metadata: cloneInputMetadata(wire.Metadata)}, nil
 }
 func validateInputWire(wire inputWire) *protocol.Error {
+	if !wire.Metadata.Output.Valid() {
+		return snapshotError("invalid_input_snapshot")
+	}
 	id, err := hex.DecodeString(wire.Metadata.InputID)
 	if err != nil || len(id) != 16 || len(wire.Metadata.InputID) != 32 {
 		return snapshotError("invalid_input_snapshot")

@@ -11,6 +11,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/redact"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -26,6 +27,9 @@ type Config struct {
 }
 
 type Command struct {
+	Output       redact.Mode        `toml:"output,omitempty"`
+	Stdout       redact.Mode        `toml:"stdout,omitempty"`
+	Stderr       redact.Mode        `toml:"stderr,omitempty"`
 	Ready        *ReadyProbe        `toml:"ready,omitempty"`
 	Serve        []string           `toml:"serve,omitempty"`
 	Bind         map[string]Binding `toml:"bind,omitempty"`
@@ -118,6 +122,9 @@ func parse(data []byte, path, root string) (Context, *protocol.Error) {
 		}
 	}
 	for name, command := range config.Commands {
+		if !(redact.Policy{Mode: command.Output, Stdout: command.Stdout, Stderr: command.Stderr}).Valid() {
+			return Context{}, protocol.NewError("invalid_config", "Invalid command output mode.", 3, nil)
+		}
 		if command.Ready != nil && !command.Ready.Valid() {
 			return Context{}, protocol.NewError("invalid_config", "Invalid readiness command or timeout.", 3, nil)
 		}

@@ -30,7 +30,7 @@ devtools schema command run
   response, retry with the original ID and identical input. Take `TASK_ID`, `RUN_ID`,
   `EXECUTION_ID`, and `DIGEST` from earlier responses.
 - **Output:** data commands return JSON. `ok: true` does not imply a diagnostic's
-  `ready: true`. `run` preserves the child's output and exit code.
+  `ready: true`. `run` keeps child streams outside JSON and preserves the exit code, with [output protection](output-protection.md) for new executions.
 
 Some linked topic guides are currently in Korean.
 
@@ -61,6 +61,7 @@ Some linked topic guides are currently in Korean.
 Use `devtools schema COMMAND` for the installed CLI's input and output contracts.
 Design background is separate from public command availability.
 
+- [Execution output protection](output-protection.md): per-stream modes, TTY/raw exceptions, capture masking, and limits.
 - [CLI output](cli-output.md): output modes, JSON paths, errors, and protocol migration.
 - [Task API](task-api-contract.md), [plan editing](task-edit-api.md): state transitions, revisions, and retries.
 - [Dashboard API](management-api-contract.md): authentication, Origin, mutations, and previews.

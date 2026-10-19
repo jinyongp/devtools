@@ -264,7 +264,12 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 		}
 	case "lock", "retire":
 		admissions.beginLock()
-		defer admissions.finishLock()
+		pendingLock := true
+		defer func() {
+			if pendingLock {
+				admissions.finishLock()
+			}
+		}()
 		if req.Operation == "lock" {
 			// Persist manual intent before waiting for an already admitted
 			// response. A daemon crash while draining must not lose the latch.
@@ -275,6 +280,12 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 		}
 		if err == nil {
 			err = admissions.drain(ctx)
+		}
+		// A successful lock response is a completion boundary. A following
+		// explicit unlock must not observe this finished request as pending.
+		if req.Operation == "lock" {
+			admissions.finishLock()
+			pendingLock = false
 		}
 	}
 	if err != nil {

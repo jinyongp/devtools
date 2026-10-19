@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,6 +28,15 @@ import (
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "__redaction-test-once":
+			token := []byte(os.Getenv("TOKEN"))
+			os.Stdout.Write([]byte{0, 0xff})
+			for _, value := range token {
+				os.Stdout.Write([]byte{value})
+				os.Stderr.Write([]byte{value})
+			}
+			os.Stdout.Write([]byte{0x80})
+			os.Exit(23)
 		case "__process-launch":
 			if len(os.Args) != 5 {
 				os.Exit(90)
@@ -57,6 +67,26 @@ func TestMain(m *testing.M) {
 			if os.Args[1] == "__launcher-test-once" {
 				os.Exit(0)
 			}
+
+			go func() {
+				directory := filepath.Dir(os.Args[2])
+				for {
+					if _, err := os.Stat(filepath.Join(directory, "emit-secret")); err == nil {
+						break
+					}
+					time.Sleep(time.Millisecond)
+				}
+				token := []byte(os.Getenv("TOKEN"))
+				os.Stdout.Write([]byte("out:"))
+				os.Stderr.Write([]byte("err:"))
+				for _, value := range token {
+					os.Stdout.Write([]byte{value})
+					os.Stderr.Write([]byte{value})
+				}
+				os.Stdout.Write([]byte("|done"))
+				os.Stderr.Write([]byte("|done"))
+				os.WriteFile(filepath.Join(directory, "emitted-secret"), []byte("done"), 0600)
+			}()
 			signals := make(chan os.Signal, 1)
 			signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 			fmt.Fprintln(os.Stdout, "synthetic launcher child running")
@@ -141,7 +171,7 @@ func TestFrozenLauncherRealProcessRestartAndLock(t *testing.T) {
 		if e != nil {
 			return execution.Prepared{}, e
 		}
-		dependencies := execution.Dependencies{VaultDirectory: dir, ValueSnapshot: func(ctx context.Context, profile, env string, inject bool) (*values.Snapshot, *protocol.Error) {
+		dependencies := execution.Dependencies{VaultDirectory: dir, CaptureOutput: r.Capture, ValueSnapshot: func(ctx context.Context, profile, env string, inject bool) (*values.Snapshot, *protocol.Error) {
 			return values.CaptureVaultSession(ctx, data, profile, env, inject, time.Now(), client)
 		}}
 		prepared, e := execution.PrepareInput(ctx, command, dependencies, append(os.Environ(), "DEVTOOLS_TASK_CONTEXT=synthetic-do-not-inherit"), execution.PlanOptions{Parent: process.ParentPolicy{}})
@@ -160,7 +190,8 @@ func TestFrozenLauncherRealProcessRestartAndLock(t *testing.T) {
 			}
 		}
 	})
-	first, e := service.Apply(ctx, services.Request{Action: "start", Directory: root, Command: "web", RequestID: tasks.ID()})
+	capture := true
+	first, e := service.Apply(ctx, services.Request{Action: "start", Directory: root, Command: "web", Capture: &capture, RequestID: tasks.ID()})
 	if e != nil || first.Item.State != "running" {
 		t.Fatalf("start failed: %v state=%s reason=%s", e, first.Item.State, first.Item.Reason)
 	}
@@ -191,7 +222,86 @@ func TestFrozenLauncherRealProcessRestartAndLock(t *testing.T) {
 	if e != nil || current.State != "running" {
 		t.Fatal("lock-before-admit stopped old execution", e, current.State)
 	}
+
+	// Output from the already running app must keep its old patterns while the
+	// key cache is manually locked and authenticated storage contains a new value.
+	if _, err := store.Update(ctx, "launcher-fixture", keyset, func(p *vault.Profile) (bool, error) {
+		return p.Set("TOKEN", vault.Secret, "", "temporary-other", keyset)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "emit-secret"), []byte("emit"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	deadlineOutput := time.Now().Add(3 * time.Second)
+	for {
+		if _, err := os.Stat(filepath.Join(root, "emitted-secret")); err == nil {
+			break
+		}
+		if time.Now().After(deadlineOutput) {
+			t.Fatal("old app output not produced")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	for {
+		content, e := service.Logs(ctx, first.Item.ID)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if strings.Contains(content, "frozen-one") {
+			t.Fatal("old secret stored in captured output")
+		}
+		if strings.Count(content, "[REDACTED]") >= 2 {
+			break
+		}
+		if time.Now().After(deadlineOutput) {
+			t.Fatal("stdout/stderr were not both masked")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if first.Item.Output == nil || first.Item.Output.StdoutReason != "capture" {
+		t.Fatal("effective output plan not recorded")
+	}
+	if err := filepath.WalkDir(data, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.Type().IsRegular() && !strings.HasSuffix(path, ".lock") && !strings.HasSuffix(path, ".turnstile") {
+			b, e := os.ReadFile(path)
+			if e != nil {
+				return e
+			}
+			if bytes.Contains(b, []byte("frozen-one")) {
+				return fmt.Errorf("synthetic canary found in private runtime storage")
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(filepath.Join(root, "emit-secret"))
+	os.Remove(filepath.Join(root, "emitted-secret"))
+	if _, err := store.Update(ctx, "launcher-fixture", keyset, func(p *vault.Profile) (bool, error) { return p.Set("TOKEN", vault.Secret, "", "frozen-one", keyset) }); err != nil {
+		t.Fatal(err)
+	}
 	if err = client.Unlock(ctx, pass, false); err != nil {
+		t.Fatal(err)
+	}
+
+	beforeReturn = func() {}
+	if _, err := store.Update(ctx, "launcher-fixture", keyset, func(p *vault.Profile) (bool, error) {
+		return p.Set("TOKEN", vault.Secret, "", strings.Repeat("가", 22000), keyset)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, limitErr := service.Apply(ctx, services.Request{Action: "restart", ID: first.Item.ID, RequestID: tasks.ID()})
+	if limitErr == nil || limitErr.Code != "redaction_unavailable" {
+		t.Fatal("masker initialization did not reject before old stop", limitErr)
+	}
+	if previous, e := service.Status(ctx, first.Item.ID); e != nil || previous.State != "running" {
+		t.Fatal("masker limit stopped previous app", e)
+	}
+	if _, err := store.Update(ctx, "launcher-fixture", keyset, func(p *vault.Profile) (bool, error) { return p.Set("TOKEN", vault.Secret, "", "frozen-one", keyset) }); err != nil {
 		t.Fatal(err)
 	}
 	beforeReturn = func() {

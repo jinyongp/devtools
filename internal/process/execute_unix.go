@@ -50,8 +50,8 @@ func Execute(ctx context.Context, args []string, dir string, env []string, in io
 		command.SysProcAttr = tty.childAttrs()
 	} else {
 		command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		command.WaitDelay = 3 * time.Second
 	}
+	command.WaitDelay = 3 * time.Second
 	if err := command.Start(); err != nil {
 		if interactive {
 			_ = tty.restoreAfterStartFailure()

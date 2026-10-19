@@ -5,11 +5,13 @@ import (
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/redact"
 )
 
 // Command is the immutable command-level input shared by foreground and managed
 // execution paths before storage, ports, or process lifetime are involved.
 type Command struct {
+	Output       redact.Policy
 	Network      *network.ExecutionSnapshot
 	Project      project.Context
 	Name         string
@@ -39,6 +41,7 @@ func ResolveConfigured(p project.Context, name string, envOverride *string, extr
 		inject = true
 	}
 	return Command{
+		Output:       redact.Policy{Mode: definition.Output, Stdout: definition.Stdout, Stderr: definition.Stderr},
 		Project:      p,
 		Name:         name,
 		Exec:         append([]string{}, definition.Exec...),
@@ -76,6 +79,7 @@ func (c Command) Arguments() []string {
 
 func (c Command) projectCommand() project.Command {
 	return project.Command{
+		Output: c.Output.Mode, Stdout: c.Output.Stdout, Stderr: c.Output.Stderr,
 		Ready:        cloneReady(c.Ready),
 		Serve:        append([]string{}, c.Serve...),
 		Bind:         cloneBindings(c.Bind),

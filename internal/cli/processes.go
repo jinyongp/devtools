@@ -53,7 +53,7 @@ func (a *App) registerProcesses() {
 			c.Options = append(c.Options, Option{Name: "proxy", Boolean: true, Description: "Prepare the declared route and DNS before starting."})
 		}
 		if action == "start" || action == "restart" {
-			c.Options = append(c.Options, Option{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment."}, Option{Name: "capture-logs", Boolean: true, Description: "Retain bounded raw output for seven days after exit."})
+			c.Options = append(c.Options, Option{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment."}, Option{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for seven days after exit."})
 		}
 		if action == "wait" {
 			c.Options = append(c.Options, Option{Name: "timeout", Default: "30s", Description: "Overall readiness wait, greater than zero and at most 10m."})
@@ -232,7 +232,9 @@ func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 		if err != nil {
 			return err
 		}
-		prepared, err := execution.Prepare(ctx, command, dependencies, false)
+		dependencies.CaptureOutput = r.Capture
+		dependencies.IsolatedRoot = r.IsolatedRoot
+		prepared, err := execution.PrepareInput(ctx, command, dependencies, os.Environ(), execution.PlanOptions{})
 		if err != nil {
 			return err
 		}
@@ -270,6 +272,7 @@ func (a *App) prepareManagedInput(ctx context.Context, r services.Record, networ
 	if e != nil {
 		return execution.Prepared{}, e
 	}
+	dependencies.CaptureOutput = r.Capture
 	dependencies.DeferServing = true
 	dependencies.IsolatedRoot = r.IsolatedRoot
 	prepared, e := execution.PrepareInput(ctx, command, dependencies, os.Environ(), execution.PlanOptions{})
@@ -287,11 +290,13 @@ func (a *App) prepareManagedInput(ctx context.Context, r services.Record, networ
 func ServePreparedProcessWithLease(ctx context.Context, data, id string, lease *os.File) error {
 	store := services.Store{Data: data}
 	return store.ServeWithLease(ctx, id, lease, func(ctx context.Context, r services.Record, runner process.Runner, output io.Writer) *protocol.Error {
-		bound, e := services.ReceiveLauncherInput(ctx, os.Stdin, os.Stdout, r, data)
+		bound, e := services.ReceiveLauncherInput(ctx, os.Stdin, os.Stdout, r, data, output, output)
 		if e != nil {
+			services.ReportLauncherFailure(os.Stdout, e)
 			return e
 		}
 		defer bound.Close()
+		ctx = bound.Streams.Context
 		input, e := bound.Payload.Open()
 		if e != nil {
 			return e
@@ -306,7 +311,10 @@ func ServePreparedProcessWithLease(ctx context.Context, data, id string, lease *
 		ctx = services.WithEnvironmentSelection(ctx, metadata.Env, metadata.Inject)
 		ctx = process.WithExecutablePath(process.WithReadyProbe(ctx, input.Ready), input.Executable)
 		ctx = process.WithStarted(ctx, func() *protocol.Error { return bound.Complete("spawned") })
-		_, e = runner(ctx, input.Args, input.Directory, input.Environment, nil, output, output)
+		_, e = runner(ctx, input.Args, input.Directory, input.Environment, nil, bound.Streams.Out, bound.Streams.Err)
+		if outputErr := bound.FinishOutput(ctx.Err() != nil || e != nil); outputErr != nil {
+			return outputErr
+		}
 		return e
 	})
 }

@@ -52,6 +52,9 @@ devtools run test:installed profiles
 # 실제 서버의 다중 시작·readiness·재사용·worktree 격리·부분 재시도
 devtools run test:installed project_lifecycle
 
+# 출력 보호·binary stdout 예외·stderr·캡처·PTY·느린 소비자 취소
+devtools run test:installed output_redaction
+
 # 프로세스 준비 확인·대기·취소·실행 기준 유지
 devtools run test:installed readiness
 

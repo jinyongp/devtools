@@ -292,6 +292,8 @@ devtools command run lint
 ```
 
 `exec` 배열의 첫 항목은 실행 파일이고, 나머지는 해당 프로그램에 전달할 인자다. 각 이름은 단일 명령을 실행한다.
+새 실행은 기본적으로 non-TTY stdout/stderr를 보호한다. `output`, `stdout`, `stderr` 설정과
+명시 raw 예외는 [실행 출력 보호](output-protection.md)를 참고한다.
 
 devtools 0.22.2 이상에서 명령 이름은 1~128자로, `:`·`/`·`@` 같은 특수문자와 공백·한글을 사용할 수 있다.
 첫 글자 `-`와 제어문자(NUL, 줄바꿈, 탭 등)는 허용하지 않는다.

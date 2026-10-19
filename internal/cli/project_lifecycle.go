@@ -40,6 +40,7 @@ func managedProcessSchema() map[string]any {
 		"reason":            stringSchema(),
 		"state":             stringSchema(),
 		"previous_id":       stringSchema(),
+		"output":            outputPlanSchema(),
 		"input_snapshot_id": stringSchema(), "launch_phase": stringSchema(), "outage": map[string]any{"type": "boolean"},
 		"proxy_mode": map[string]any{"type": "boolean"}, "network_snapshot_id": stringSchema(), "isolated_root": stringSchema(),
 	}, "ready_configured", "id", "profile", "instance_id", "directory", "command", "env", "env_override", "capture_logs", "created_at", "started_at", "ended_at", "exit_code", "reason", "state")
@@ -118,7 +119,7 @@ func (a *App) registerProjectLifecycle() {
 				directory,
 				{Name: "proxy", Boolean: true, Description: "Prepare the selected serve union, DNS, and listeners before launching the batch."},
 				{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment for every selected command."},
-				{Name: "capture-logs", Boolean: true, Description: "Retain bounded raw output for every selected command."},
+				{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for every selected command."},
 				{Name: "timeout", Default: "30s", Description: "Readiness wait per selected command, greater than zero and at most 10m."},
 				{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe project start."},
 			},
@@ -142,7 +143,7 @@ func (a *App) registerProjectLifecycle() {
 			Options: []Option{
 				directory,
 				{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment for every restarted command."},
-				{Name: "capture-logs", Boolean: true, Description: "Retain bounded raw output for every restarted command."},
+				{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for every restarted command."},
 				{Name: "timeout", Default: "30s", Description: "Readiness wait per restarted command, greater than zero and at most 10m."},
 				{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe project restart."},
 			},

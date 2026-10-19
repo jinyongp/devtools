@@ -12,6 +12,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/redact"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
 )
@@ -21,6 +22,7 @@ type PlanOptions struct {
 	Selection string
 }
 type PlanSummary struct {
+	Output    redact.Policy        `json:"output"`
 	Profile   string               `json:"profile"`
 	Command   string               `json:"command,omitempty"`
 	Env       string               `json:"env,omitempty"`
@@ -64,6 +66,9 @@ func (p *Plan) Destroy() {
 	}
 }
 func ResolvePlan(command Command, parent []string, options PlanOptions) (*Plan, *protocol.Error) {
+	if !command.Output.Valid() {
+		return nil, protocol.NewError("invalid_argument", "Invalid output policy.", 2, nil)
+	}
 	if len(command.Exec) == 0 || command.Exec[0] == "" {
 		return nil, protocol.NewError("invalid_argument", "Supply an executable.", 2, nil)
 	}
@@ -86,7 +91,7 @@ func ResolvePlan(command Command, parent []string, options PlanOptions) (*Plan, 
 		options.Parent.Mode = process.ParentInherit
 	}
 	options.Parent.Allow = append([]string{}, options.Parent.Allow...)
-	return &Plan{command: cloneCommand(command), parent: process.CompleteEnvironment(selected), summary: PlanSummary{Profile: command.Project.Profile, Command: command.Name, Env: command.Env, Inject: command.Inject, Selection: options.Selection, Parent: options.Parent}, created: time.Now()}, nil
+	return &Plan{command: cloneCommand(command), parent: process.CompleteEnvironment(selected), summary: PlanSummary{Output: command.Output.Normalize(), Profile: command.Project.Profile, Command: command.Name, Env: command.Env, Inject: command.Inject, Selection: options.Selection, Parent: options.Parent}, created: time.Now()}, nil
 }
 func loadSnapshot(ctx context.Context, command Command, dependencies Dependencies, includeSecrets bool) (*values.Snapshot, *protocol.Error) {
 	if !command.NeedsValues() {
@@ -236,7 +241,17 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 		prepared.Release()
 		return Prepared{}, snapshotError("input_snapshot_unavailable")
 	}
-	metadata := InputMetadata{InputID: inputID, Inject: plan.summary.Inject, Selection: plan.summary.Selection, Parent: plan.summary.Parent, Profile: plan.command.Project.Profile, Command: plan.command.Name, Env: plan.command.Env, PreparedAt: snapshot.created, PrepareDeadline: snapshot.deadline, Values: snapshot.values.Metadata()}
+	outputPlan, outputErr := redact.Resolve(plan.command.Output, dependencies.StdoutTTY, dependencies.StderrTTY, dependencies.CaptureOutput)
+	if outputErr != nil {
+		prepared.Release()
+		return Prepared{}, protocol.NewError("invalid_argument", "Invalid output policy.", 2, nil)
+	}
+	for _, pattern := range patterns {
+		if len(pattern) > 0 && len(pattern) < 4 {
+			outputPlan.ShortSecrets = true
+		}
+	}
+	metadata := InputMetadata{Output: outputPlan, InputID: inputID, Inject: plan.summary.Inject, Selection: plan.summary.Selection, Parent: plan.summary.Parent, Profile: plan.command.Project.Profile, Command: plan.command.Name, Env: plan.command.Env, PreparedAt: snapshot.created, PrepareDeadline: snapshot.deadline, Values: snapshot.values.Metadata()}
 	prepared.Input, e = newInputPayload(inputWire{VaultDirectory: dependencies.VaultDirectory, Served: prepared.Assignments, Format: 1, Metadata: metadata, Args: prepared.Args, Environment: environment, Directory: prepared.Command.Directory, Executable: path, Ready: cloneReady(prepared.Command.Ready), Patterns: patterns})
 	if e != nil {
 		prepared.Release()

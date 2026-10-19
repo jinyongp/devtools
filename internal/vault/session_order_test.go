@@ -160,3 +160,59 @@ func TestSessionChallengeMismatchCannotUseKey(t *testing.T) {
 		t.Fatal("challenge bypass")
 	}
 }
+
+type sentLockResponse struct {
+	net.Conn
+	sent    chan struct{}
+	release chan struct{}
+}
+
+func (c *sentLockResponse) Write(b []byte) (int, error) {
+	n, err := c.Conn.Write(b)
+	if err == nil && bytes.Contains(b, []byte(`"state":"locked_manual"`)) {
+		close(c.sent)
+		<-c.release
+	}
+	return n, err
+}
+func TestLockAcknowledgementClearsPendingBeforeNextUnlock(t *testing.T) {
+	dir, p, _ := sessionFixture(t)
+	s := NewKeySession(dir)
+	defer s.Close()
+	if err := s.Unlock(context.Background(), p.Passphrase, false); err != nil {
+		t.Fatal(err)
+	}
+	sessionID, _ := NewID()
+	endpoint := SessionEndpoint{Protocol: SessionProtocol, VaultID: p.VaultID, SessionID: sessionID, Endpoint: sessionEndpoint(dir, sessionID)}
+	admissions := &sessionAdmissions{}
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+	response := &sentLockResponse{Conn: server, sent: make(chan struct{}), release: make(chan struct{})}
+	defer close(response.release)
+	go serveSessionConnection(context.Background(), response, endpoint, s, admissions, func() {})
+	client.SetDeadline(time.Now().Add(5 * time.Second))
+	var hello sessionHello
+	if err := readSessionFrame(client, &hello); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSessionFrame(client, testSessionRequest(endpoint, hello, "lock")); err != nil {
+		t.Fatal(err)
+	}
+	var locked sessionResponse
+	if err := readSessionFrame(client, &locked); err != nil || locked.Error != "" {
+		t.Fatal("lock acknowledgement", err, locked.Error)
+	}
+	<-response.sent // The response arrived; the original server Write is blocked.
+	other, h, _ := testSessionConnection(t, context.Background(), endpoint, s, admissions, false)
+	request := testSessionRequest(endpoint, h, "unlock")
+	request.Passphrase = p.Passphrase.CopyBytes()
+	defer clear(request.Passphrase)
+	if err := writeSessionFrame(other, request); err != nil {
+		t.Fatal(err)
+	}
+	var unlocked sessionResponse
+	if err := readSessionFrame(other, &unlocked); err != nil || unlocked.Error != "" {
+		t.Fatal("finished lock remained pending after acknowledgement", err, unlocked.Error)
+	}
+}

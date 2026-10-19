@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/execution"
+	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
@@ -31,10 +32,14 @@ func (a *App) executionDependencies(command execution.Command) (execution.Depend
 	return execution.DependenciesFor(command, filepath.Dir(directory), configRoot)
 }
 
-func (a *App) prepareExecution(ctx context.Context, command execution.Command, preview bool) (execution.Prepared, *protocol.Error) {
+func (a *App) prepareExecution(ctx context.Context, command execution.Command, preview bool, streams ...IO) (execution.Prepared, *protocol.Error) {
 	dependencies, err := a.executionDependencies(command)
 	if err != nil {
 		return execution.Prepared{}, err
+	}
+	if len(streams) > 0 {
+		dependencies.StdoutTTY = process.OutputTTY(streams[0].Out)
+		dependencies.StderrTTY = process.OutputTTY(streams[0].Err)
 	}
 	if directories, e := a.currentPaths(); e == nil {
 		dependencies.IsolatedRoot = directories.IsolatedRoot

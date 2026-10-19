@@ -6,14 +6,16 @@ import (
 
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/redact"
 )
 
 type projectCommandSummary struct {
-	Name   string   `json:"name"`
-	Exec   []string `json:"exec"`
-	Inject bool     `json:"inject"`
-	Env    string   `json:"env"`
-	Serve  []string `json:"serve"`
+	Output redact.Policy `json:"output"`
+	Name   string        `json:"name"`
+	Exec   []string      `json:"exec"`
+	Inject bool          `json:"inject"`
+	Env    string        `json:"env"`
+	Serve  []string      `json:"serve"`
 }
 
 type projectCommandBinding struct {
@@ -43,6 +45,7 @@ type projectCommandRequirements struct {
 }
 
 type projectCommandDetails struct {
+	Output       redact.Policy                    `json:"output"`
 	Name         string                           `json:"name"`
 	Exec         []string                         `json:"exec"`
 	Inject       bool                             `json:"inject"`
@@ -55,6 +58,7 @@ type projectCommandDetails struct {
 
 func projectCommandSummarySchema() map[string]any {
 	return object(map[string]any{
+		"output": outputPolicySchema(),
 		"name":   stringSchema(),
 		"exec":   map[string]any{"type": "array", "items": stringSchema()},
 		"inject": map[string]any{"type": "boolean"},
@@ -137,6 +141,7 @@ func (a *App) registerCommands() {
 	)
 	for index := range a.commands {
 		if a.commands[index].Name == "command run" {
+			a.commands[index].Options = append(a.commands[index].Options, outputOptions()...)
 			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "proxy", Boolean: true, Description: "Prepare declared proxy routes and DNS before running the configured server."})
 		}
 	}
@@ -174,6 +179,7 @@ func (a *App) inspectProjectCommand(_ context.Context, _ IO, request Request) (a
 
 func summarizeProjectCommand(name string, command project.Command) projectCommandSummary {
 	return projectCommandSummary{
+		Output: redact.Policy{Mode: command.Output, Stdout: command.Stdout, Stderr: command.Stderr}.Normalize(),
 		Name:   name,
 		Exec:   append([]string{}, command.Exec...),
 		Inject: command.Inject,
@@ -198,6 +204,7 @@ func describeProjectCommand(name string, command project.Command, requirements p
 		ready = &projectCommandReady{Exec: append([]string{}, command.Ready.Exec...), Timeout: command.Ready.Duration().String()}
 	}
 	return projectCommandDetails{
+		Output:       redact.Policy{Mode: command.Output, Stdout: command.Stdout, Stderr: command.Stderr}.Normalize(),
 		Name:         name,
 		Exec:         append([]string{}, command.Exec...),
 		Inject:       command.Inject,

@@ -179,7 +179,11 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 	r.EndedAt = &now
 	r.State = "exited"
 	r.ExitCode = &childExit
-	if ctx.Err() != nil {
+	if err != nil && (err.Code == "launch_outcome_unknown" || err.Code == "output_protection_failed") {
+		r.State = "failed"
+		r.Reason = err.Code
+		r.ExitCode = nil
+	} else if ctx.Err() != nil {
 		r.State = "stopped"
 		r.Reason = "stop_requested"
 	} else if err != nil {

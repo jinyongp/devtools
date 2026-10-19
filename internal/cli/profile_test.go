@@ -94,7 +94,7 @@ func TestProfileExportImportAcrossStores(t *testing.T) {
 	if variable["value"] != "portable" {
 		t.Fatalf("variable not imported: %#v", variable)
 	}
-	code, out, diagnostic := invoke(t, destination, "", append([]string{"command", "run", "--profile", "app", "--"}, commandFixture(t, "token")...)...)
+	code, out, diagnostic := invoke(t, destination, "", append([]string{"command", "run", "--profile", "app", "--stdout", "raw", "--"}, commandFixture(t, "token")...)...)
 	if code != 0 || diagnostic != "" || out != "PROFILE_TRANSFER_SECRET" {
 		t.Fatalf("secret not imported: code=%d out=%q err=%q", code, out, diagnostic)
 	}

@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/redact"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
 )
@@ -62,15 +62,41 @@ func (c *launcherInputChannel) close() {
 	c.inputRead.Close()
 	c.outputWrite.Close()
 }
-func (c *launcherInputChannel) expect(value byte) error {
+func launcherFailureCode(code string) string {
+	switch code {
+	case "redaction_unavailable", "vault_locked", "key_missing", "integrity_failed", "recovery_required", "lock_pending", "input_snapshot_expired", "value_expired", "invalid_input_snapshot", "launch_canceled", "key_session_protocol_mismatch":
+		return code
+	default:
+		return "launcher_unavailable"
+	}
+}
+
+// ReportLauncherFailure sends only a closed, value-free error code on the
+// single-operation control pipe. stderr remains unavailable to the caller.
+func ReportLauncherFailure(out io.Writer, e *protocol.Error) {
+	code := launcherFailureCode(e.Code)
+	frame := append([]byte{0, byte(len(code))}, []byte(code)...)
+	out.Write(frame)
+}
+func (c *launcherInputChannel) expect(value byte) *protocol.Error {
 	var b [1]byte
 	if _, err := io.ReadFull(c.read, b[:]); err != nil {
-		return err
+		return failure("launcher_unavailable")
 	}
-	if b[0] != value {
-		return errors.New("launcher handoff rejected")
+	if b[0] == value {
+		return nil
 	}
-	return nil
+	if b[0] != 0 {
+		return failure("launcher_unavailable")
+	}
+	if _, err := io.ReadFull(c.read, b[:]); err != nil || b[0] == 0 || b[0] > 64 {
+		return failure("launcher_unavailable")
+	}
+	code := make([]byte, int(b[0]))
+	if _, err := io.ReadFull(c.read, code); err != nil {
+		return failure("launcher_unavailable")
+	}
+	return failure(launcherFailureCode(string(code)))
 }
 func (c *launcherInputChannel) bind(payload *execution.InputPayload) (string, *protocol.Error) {
 	encoded, e := payload.EncodeForLauncher()
@@ -89,8 +115,8 @@ func (c *launcherInputChannel) bind(payload *execution.InputPayload) (string, *p
 	if _, err := c.write.Write(b); err != nil {
 		return "", failure("launcher_unavailable")
 	}
-	if c.expect(launchBound) != nil {
-		return "", failure("launcher_unavailable")
+	if err := c.expect(launchBound); err != nil {
+		return "", err
 	}
 	return snapshotID, nil
 }
@@ -98,8 +124,8 @@ func (c *launcherInputChannel) admit() *protocol.Error {
 	if _, err := c.write.Write([]byte{launchAdmitted}); err != nil {
 		return failure("launcher_unavailable")
 	}
-	if c.expect(launchAdmitted) != nil {
-		return failure("launch_not_admitted")
+	if err := c.expect(launchAdmitted); err != nil {
+		return err
 	}
 	return nil
 }
@@ -113,11 +139,14 @@ func (c *launcherInputChannel) commit() *protocol.Error {
 // BoundInput owns an immutable payload and, after Admit, a durable launch lease.
 // One launcher handles exactly one request. Complete at the real spawn boundary.
 type BoundInput struct {
+	Streams   *redact.Streams
+	finished  bool
 	Payload   *execution.InputPayload
 	admission *vault.LaunchAdmission
 }
 
-func ReceiveLauncherInput(ctx context.Context, in io.ReadCloser, out io.WriteCloser, record Record, data string) (*BoundInput, *protocol.Error) {
+func ReceiveLauncherInput(ctx context.Context, in io.ReadCloser, out io.WriteCloser, record Record, data string, stdout, stderr io.Writer) (*BoundInput, *protocol.Error) {
+	runContext := ctx
 	ctx, cancel := context.WithTimeout(ctx, execution.DefaultPreparationTimeout)
 	defer cancel()
 	stop := context.AfterFunc(ctx, func() { in.Close(); out.Close() })
@@ -153,7 +182,15 @@ func ReceiveLauncherInput(ctx context.Context, in io.ReadCloser, out io.WriteClo
 	if e != nil {
 		return nil, e
 	}
-	matches := metadata.InputID == record.InputSnapshotID && metadata.Profile == record.Profile && metadata.Command == record.Command && metadata.Env == record.Env && input.Directory == record.Directory
+	matches := record.Output != nil && *record.Output == metadata.Output && (record.Capture == (metadata.Output.StdoutReason == "capture")) && metadata.InputID == record.InputSnapshotID && metadata.Profile == record.Profile && metadata.Command == record.Command && metadata.Env == record.Env && input.Directory == record.Directory
+	if matches {
+		var outputErr error
+		bound.Streams, outputErr = redact.Protect(runContext, input.Patterns, metadata.Output, stdout, stderr)
+		if outputErr != nil {
+			input.Destroy()
+			return nil, protocol.NewError("redaction_unavailable", "Cannot initialize the requested output protection.", 3, nil)
+		}
+	}
 	input.Destroy()
 	if !matches {
 		return nil, failure("invalid_input_snapshot")
@@ -203,7 +240,18 @@ func (b *BoundInput) Complete(outcome string) *protocol.Error {
 	}
 	return nil
 }
+func (b *BoundInput) FinishOutput(abort bool) *protocol.Error {
+	b.finished = true
+	if b.Streams != nil && b.Streams.Close(abort) != nil {
+		return failure("output_protection_failed")
+	}
+	return nil
+}
+
 func (b *BoundInput) Close() {
+	if !b.finished && b.Streams != nil {
+		b.FinishOutput(true)
+	}
 	// No spawn callback means execution never crossed the OS start boundary.
 	b.Complete("canceled")
 	if b.Payload != nil {

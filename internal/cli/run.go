@@ -7,6 +7,7 @@ import (
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/redact"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
@@ -41,6 +42,15 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 			return nil, err
 		}
 	}
+	if mode := request.Options["output"]; mode != "" {
+		command.Output.Mode = redact.Mode(mode)
+	}
+	if mode := request.Options["stdout"]; mode != "" {
+		command.Output.Stdout = redact.Mode(mode)
+	}
+	if mode := request.Options["stderr"]; mode != "" {
+		command.Output.Stderr = redact.Mode(mode)
+	}
 	if request.Options["proxy"] == "true" {
 		if command.Name == "" {
 			return nil, argumentError("--proxy requires a configured command with declared serve routes.", "proxy")
@@ -55,7 +65,7 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 		}
 		command.Network = snapshots[command.Name]
 	}
-	prepared, err := a.prepareExecution(ctx, command, false)
+	prepared, err := a.prepareExecution(ctx, command, false, streams)
 	if err != nil {
 		return nil, err
 	}

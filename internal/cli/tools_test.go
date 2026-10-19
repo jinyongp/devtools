@@ -149,6 +149,10 @@ func TestSecretFileAndRawOutput(t *testing.T) {
 		t.Fatal(diagnostic)
 	}
 	code, out, diagnostic := invoke(t, app, "", append([]string{"run", "--profile", "app", "--"}, commandFixture(t, "secret-and-true")...)...)
+	if code != 0 || out != "[REDACTED]true" || diagnostic != "" {
+		t.Fatalf("default output not protected: %d %q %s", code, out, diagnostic)
+	}
+	code, out, diagnostic = invoke(t, app, "", append([]string{"run", "--profile", "app", "--stdout", "raw", "--"}, commandFixture(t, "secret-and-true")...)...)
 	if code != 0 || out != "true\ntrue" || diagnostic != "" {
 		t.Fatalf("%d %q %s", code, out, diagnostic)
 	}

@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/ports"
@@ -14,12 +13,14 @@ import (
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
-	"github.com/jinyongp/devtools/internal/vault"
 )
 
 // Dependencies supplies user-global stores needed to prepare one command.
 // Callers keep ownership of user path/config discovery.
 type Dependencies struct {
+	StdoutTTY       bool
+	StderrTTY       bool
+	CaptureOutput   bool
 	IsolatedRoot    string
 	VaultDirectory  string
 	DeferServing    bool
@@ -435,49 +436,7 @@ func (p Prepared) Environment(parent []string) []string {
 // path or a caller-provided managed-process runner.
 func (p Prepared) Execute(ctx context.Context, parentEnvironment []string, runner process.Runner, in io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
 	if p.Input != nil {
-		if e := p.Input.Validate(time.Now()); e != nil {
-			return 0, e
-		}
-		input, e := p.Input.Open()
-		if e != nil {
-			return 0, e
-		}
-
-		defer input.Destroy()
-		if !p.Input.consumed.CompareAndSwap(false, true) {
-			return 0, snapshotError("input_snapshot_consumed")
-		}
-		if ticket := p.Input.metadata.Values.Launch; ticket != nil {
-			client, err := vault.OpenSessionClient(input.VaultDirectory)
-			if err != nil {
-				return 0, values.VaultError(ctx, err)
-			}
-			admission, err := client.BeginLaunch(ctx, p.Input.metadata.InputID, *ticket)
-			if err != nil {
-				return 0, values.VaultError(ctx, err)
-			}
-			completed := false
-			defer func() {
-				if !completed {
-					admission.Finish(context.Background(), "canceled")
-				}
-			}()
-			ctx = process.WithStarted(ctx, func() *protocol.Error {
-				completed = true
-				if err := admission.Finish(context.Background(), "spawned"); err != nil {
-					return values.VaultError(ctx, err)
-				}
-				return nil
-			})
-		}
-		ctx = process.WithExecutablePath(process.WithReadyProbe(ctx, input.Ready), input.Executable)
-		if runner != nil {
-			if e := process.ValidateManaged(input.Args, input.Directory, input.Environment); e != nil {
-				return 0, e
-			}
-			ctx = process.WithRunner(ctx, runner)
-		}
-		return process.Execute(ctx, input.Args, input.Directory, input.Environment, in, out, diagnostic)
+		return p.executeInput(ctx, runner, in, out, diagnostic)
 	}
 	if err := process.ValidateEnvironment(p.Injected); err != nil {
 		return 0, err

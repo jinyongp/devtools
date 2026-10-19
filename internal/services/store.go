@@ -29,6 +29,7 @@ import (
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/redact"
 	"github.com/jinyongp/devtools/internal/retention"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -47,30 +48,31 @@ func writePrivate(path string, v any) error {
 }
 
 type Record struct {
-	Outage            bool       `json:"outage,omitempty"`
-	InputSnapshotID   string     `json:"input_snapshot_id,omitempty"`
-	LaunchPhase       string     `json:"launch_phase,omitempty"`
-	ProxyMode         bool       `json:"proxy_mode,omitempty"`
-	NetworkSnapshotID string     `json:"network_snapshot_id,omitempty"`
-	IsolatedRoot      string     `json:"isolated_root,omitempty"`
-	ReadyConfigured   bool       `json:"ready_configured"`
-	Readiness         *Readiness `json:"readiness,omitempty"`
-	ID                string     `json:"id"`
-	Profile           string     `json:"profile"`
-	Instance          string     `json:"instance_id"`
-	Directory         string     `json:"directory"`
-	Command           string     `json:"command"`
-	Env               string     `json:"env"`
-	EnvOverride       *string    `json:"env_override"`
-	Inject            *bool      `json:"inject,omitempty"`
-	Capture           bool       `json:"capture_logs"`
-	CreatedAt         time.Time  `json:"created_at"`
-	StartedAt         *time.Time `json:"started_at"`
-	EndedAt           *time.Time `json:"ended_at"`
-	ExitCode          *int       `json:"exit_code"`
-	Reason            string     `json:"reason"`
-	State             string     `json:"state"`
-	Previous          string     `json:"previous_id,omitempty"`
+	Output            *redact.Plan `json:"output,omitempty"`
+	Outage            bool         `json:"outage,omitempty"`
+	InputSnapshotID   string       `json:"input_snapshot_id,omitempty"`
+	LaunchPhase       string       `json:"launch_phase,omitempty"`
+	ProxyMode         bool         `json:"proxy_mode,omitempty"`
+	NetworkSnapshotID string       `json:"network_snapshot_id,omitempty"`
+	IsolatedRoot      string       `json:"isolated_root,omitempty"`
+	ReadyConfigured   bool         `json:"ready_configured"`
+	Readiness         *Readiness   `json:"readiness,omitempty"`
+	ID                string       `json:"id"`
+	Profile           string       `json:"profile"`
+	Instance          string       `json:"instance_id"`
+	Directory         string       `json:"directory"`
+	Command           string       `json:"command"`
+	Env               string       `json:"env"`
+	EnvOverride       *string      `json:"env_override"`
+	Inject            *bool        `json:"inject,omitempty"`
+	Capture           bool         `json:"capture_logs"`
+	CreatedAt         time.Time    `json:"created_at"`
+	StartedAt         *time.Time   `json:"started_at"`
+	EndedAt           *time.Time   `json:"ended_at"`
+	ExitCode          *int         `json:"exit_code"`
+	Reason            string       `json:"reason"`
+	State             string       `json:"state"`
+	Previous          string       `json:"previous_id,omitempty"`
 }
 
 type archiveMarker struct {
@@ -182,7 +184,7 @@ func (s Store) root() string                { return filepath.Join(s.Data, "proc
 func (s Store) path(id, name string) string { return filepath.Join(s.root(), id, name) }
 
 func validRecord(id string, r Record) bool {
-	return r.ID == id && project.ValidProfile(r.Profile) && filepath.IsAbs(r.Directory)
+	return r.ID == id && project.ValidProfile(r.Profile) && filepath.IsAbs(r.Directory) && (r.Output == nil || r.Output.Valid())
 }
 
 func markerOwner(m archiveMarker) ArchivedOwner {
@@ -928,6 +930,8 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		if prepared.Input == nil {
 			return out, failure("input_snapshot_unavailable")
 		}
+		outputPlan := prepared.Input.Metadata().Output
+		r.Output = &outputPlan
 		r.InputSnapshotID = prepared.Input.Metadata().InputID
 		r.LaunchPhase = "prepared"
 	}
@@ -973,7 +977,20 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		return Result{Item: r, Changed: true}, nil
 	}
 	_ = lease.closeReference()
-	go func() { _ = cmd.Wait() }()
+	supervisorDone := make(chan struct{})
+	go func() { defer close(supervisorDone); _ = cmd.Wait() }()
+	committed := false
+	if channel != nil {
+		defer func() {
+			channel.close()
+			if !committed {
+				select {
+				case <-supervisorDone:
+				case <-time.After(2 * time.Second):
+				}
+			}
+		}()
+	}
 
 	if channel != nil {
 		channel.inherited()
@@ -1002,6 +1019,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		if e := channel.commit(); e != nil {
 			return Result{Item: r, Changed: changed}, e
 		}
+		committed = true
 	}
 	deadline := time.NewTimer(legacyStartupGrace)
 	defer deadline.Stop()

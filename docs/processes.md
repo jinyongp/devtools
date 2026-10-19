@@ -70,7 +70,7 @@ devtools project down --request-id UUID
 범위를 정한다. 같은 profile을 사용하는 다른 worktree의 실행은 건드리지 않는다.
 `status`와 `down`에서 이름을 생략하면 현재 instance의 활성 managed process 전체를
 대상으로 하며, 별도 `process start`로 실행한 서버도 포함한다. `project logs COMMAND`는
-현재 project instance에서 해당 이름으로 실행 중인 하나의 process를 찾아 보관된 원문 로그를 읽는다.
+현재 project instance에서 해당 이름으로 실행 중인 하나의 process를 찾아 보관된 로그를 읽는다. 새 실행은 저장 전에 마스킹한다.
 같은 profile의 다른 worktree 실행은 선택하지 않는다. 종료 이력과 종료된 실행의 로그는
 `process list`, `process status EXECUTION_ID`, `process logs EXECUTION_ID`로 확인한다.
 
@@ -92,8 +92,8 @@ env·로그 설정 충돌을 판정한다. 실제 새 process를 만드는 경�
 
 부분 실패나 응답 유실 뒤에는 같은 요청 ID와 같은 입력으로 재시도한다. 완료한
 항목은 반복하지 않고 미완료 항목만 이어간다. 시작된 서버의 readiness가 아직
-충족되지 않았으면 해당 실행의 준비 검사를 이어가고, 종료가 확인된 시작 실패는
-새 실행 시도로 처리한다. 변경된 입력에 같은 요청 ID를 사용하면 `request_conflict`다.
+충족되지 않았으면 해당 실행의 준비 검사를 이어간다. Frozen 입력을 확보한 새 실행이
+확정 실패하면 같은 UUID에서 새 입력으로 다시 시작하지 않는다. 새 시도에는 새 요청 ID를 쓴다. 변경된 입력에 같은 요청 ID를 사용하면 `request_conflict`다.
 재시도 결과의 `replayed: true`는 기존 작업을 재개하거나 재현했다는 뜻이다.
 현재 서버 상태가 필요하면 저장된 작업 결과 대신 `project status`를 조회한다.
 
@@ -101,8 +101,8 @@ env·로그 설정 충돌을 판정한다. 실제 새 process를 만드는 경�
 고정한다. 선택한 command가 실행 중이 아니면 새 process를 시작하지 않고 해당 항목을
 `process_not_found` 조건으로 보고한다. 같은 요청을 재전송해도 그 뒤 새로 실행된 process를
 대상으로 바꾸지 않는다. 각 restart는 기존 `process restart`와 같이 최신 project 설정과 값을
-사용한다. 기존 실행을 종료하기 전에 설정, env/필수 값, 실행 파일처럼 현재 실행을 건드리지 않고
-검증할 수 있는 조건을 먼저 확인한다. 이 단계에서 실패하면 기존 실행은 계속 유지된다. 실제 port
+사용한다. 기존 실행을 종료하기 전에 설정·값·실행 파일을 확인하고 실제 입력을 고정해 특정
+launcher에 전달한다. 출력 보호 초기화와 실행 승인도 기존 실행을 멈추기 전에 완료한다. 이 단계에서 실패하면 기존 실행은 계속 유지된다. 실제 port
 availability처럼 stop 이후에만 확정할 수 있는 조건은 종료 뒤 새 실행 직전에 다시 검사하며, 이
 두 번째 검사에서 실패하면 이미 완료된 stop을 되돌리지 않는다. `--env`와 `--capture-logs`를
 생략하면 기존 execution의 선택을 유지하고, 명시하면 새 execution에 적용한다. 일부 command만
@@ -113,15 +113,15 @@ readiness가 선언된 command는 `--timeout` 범위에서 다시 준비 완료�
 시작된 서버까지 종료하지 않는다. 새로운 종료 작업에는 새 요청 ID를 사용한다.
 Profile 데이터를 다른 환경으로 가져오는 절차는 [Profile 관리](profiles.md)를 참고한다.
 
-## 원문 로그
+## 캡처 로그
 
-기본 출력은 버리고 상태와 종료 원인을 보관한다. 원문이 필요한 실행에는 `--capture-logs`를 명시한다.
+기본 출력은 버리고 상태와 종료 원인을 보관한다. 출력 보관이 필요한 실행에는 `--capture-logs`를 명시한다.
 
 ```sh
 devtools process start web --capture-logs --request-id UUID
 devtools process logs EXECUTION_ID
 ```
 
-stdout과 stderr는 합쳐서 마지막 1 MiB까지 보관한다. logs는 JSON의 `content`로 원문을 반환한다. 출력에는 명령이 출력한 secret이 포함될 수 있으므로 일반 상태 조회와 분리해 사용한다. 종료 후 7일이 지나면 `logs_expired`를 반환하며 정리 대상이 된다. restart는 로그 설정을 이어받는다.
+stdout과 stderr는 합쳐서 마지막 1 MiB까지 보관한다. 새 실행은 실제 전달 secret을 stdout/stderr별로 마스킹한 뒤 저장하며, logs는 JSON의 `content`로 저장된 결과를 반환한다. 설정의 raw 예외도 캡처 저장을 우회하지 않는다. [출력 보호의 범위와 한도](output-protection.md)를 확인한다. 과거 로그는 소급해 보호하지 않으며 알 수 없는 token이나 앱이 만든 파일은 필터 범위 밖이다. 종료 후 7일이 지나면 `logs_expired`를 반환하며 정리 대상이 된다. restart는 로그 설정을 이어받는다.
 
-실행 메타데이터와 인증 정보, 선택적으로 수집한 로그는 전역 데이터의 `processes` 아래에 개인 권한으로 저장한다. dashboard의 Processes 화면은 명령·상태·env·프로젝트를 실행별 한 행으로 보여준다. 표 머리글에서 검색과 상태 필터를 적용하고 이름 명령을 시작·종료·재시작할 수 있다. Details를 펼치면 전체 경로·실행 ID·종료 원인을 확인한다. 원문 로그는 별도의 확인 동작으로 읽는다. Projects & worktrees를 펼치면 프로젝트별 명령과 포트를 조회할 수 있다.
+실행 메타데이터와 인증 정보, 선택적으로 수집한 로그는 전역 데이터의 `processes` 아래에 개인 권한으로 저장한다. dashboard의 Processes 화면은 명령·상태·env·프로젝트를 실행별 한 행으로 보여준다. 표 머리글에서 검색과 상태 필터를 적용하고 이름 명령을 시작·종료·재시작할 수 있다. Details를 펼치면 전체 경로·실행 ID·종료 원인을 확인한다. 캡처 로그는 별도의 확인 동작으로 읽는다. Projects & worktrees를 펼치면 프로젝트별 명령과 포트를 조회할 수 있다.

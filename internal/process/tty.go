@@ -19,17 +19,9 @@ type ttySession struct {
 	shellPgrp  int
 }
 
-func directWriter(writer io.Writer) bool {
-	if writer == nil {
-		return true
-	}
-	_, ok := writer.(*os.File)
-	return ok
-}
-
 func detectTTY(in io.Reader, out, diagnostic io.Writer) (*ttySession, bool) {
 	input, ok := in.(*os.File)
-	if !ok || !directWriter(out) || !directWriter(diagnostic) {
+	if !ok {
 		return nil, false
 	}
 	fd := int(input.Fd())

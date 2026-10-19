@@ -16,15 +16,15 @@
 | `json` | 조회·변경·진단·schema 명령 | JSON 응답 한 개 |
 | `text` | `help`, 인자 없는 호출, `--help`·`-h` | 사람이 읽는 도움말 |
 | `artifact` | `completion bash`, `completion zsh`, `completion fish`, `completion powershell` | 생성한 셸 스크립트 원문 |
-| `passthrough` | `command run`, 별칭 `run` | 자식 프로그램의 출력 원문 |
+| `passthrough` | `command run`, 별칭 `run` | 자식 출력 stream; 실행별 출력 보호 적용 |
 
 devtools 옵션 위치의 `--help`는 텍스트 도움말을 반환합니다. `devtools run --help`는
 devtools 도움말입니다. 자식 프로그램의 도움말은 protocol v5에서
 `devtools run NAME -- --help`로 요청하며, protocol v6에서는 `devtools run NAME --help`도
-같이 동작합니다. 이때는 그 프로그램의 출력을 그대로 전달합니다.
+같이 동작합니다. 자식 출력에는 실행별 출력 보호 정책을 적용합니다.
 내부 자동완성 요청인 `__complete`는 공개 명령 카탈로그에 포함하지 않는 줄 단위 프로토콜입니다.
 
-생성물은 그대로 파일에 저장할 수 있습니다. 실행 명령은 자식의 stderr와 종료 코드도 보존합니다.
+생성물은 그대로 파일에 저장할 수 있습니다. 실행 명령은 stdout/stderr를 JSON으로 감싸지 않고 종료 코드를 보존합니다. 새 실행의 non-TTY 출력 보호와 raw 예외는 [실행 출력 보호](output-protection.md)를 따릅니다.
 
 ```sh
 # 파일에 저장할 스크립트 원문
@@ -51,7 +51,7 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 {"schema_version":1,"ok":false,"error":{"code":"command_not_found","message":"The selected project command is not defined."}}
 ```
 
-이 오류 규칙은 도움말 대상 오류와 completion 생성 오류에도 적용됩니다. `command run`은 실행 준비 오류와 Devtools 자체의 스트림 처리 오류에 JSON stderr를 사용합니다. 자식 프로그램의 출력과 종료 상태는 그대로 전달하므로, stderr 전체가 Devtools JSON이라고 가정하면 안 됩니다. 출력 전달 자체가 실패하면 자식의 일부 출력 뒤에 Devtools I/O 오류가 기록될 수 있습니다.
+이 오류 규칙은 도움말 대상 오류와 completion 생성 오류에도 적용됩니다. `command run`은 실행 준비 오류와 Devtools 자체의 스트림 처리 오류에 JSON stderr를 사용합니다. 자식 프로그램의 출력 보호 정책과 종료 상태를 유지하므로, stderr 전체가 Devtools JSON이라고 가정하면 안 됩니다. 출력 전달 자체가 실패하면 자식의 일부 출력 뒤에 Devtools I/O 오류가 기록될 수 있습니다.
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
@@ -111,7 +111,7 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `profile import` | `item`, `digest`, `target_exists`, `diff`, `changed`, `replayed`, `safety_backup`; 미리보기는 변경하지 않음 |
 | `backup status` | 공개 설정 상태를 담은 `item` |
 | `project status` | `profile`, `directory`, 활성 실행 `items` |
-| `project logs` | 활성 실행 `id`, `command`, 보관된 원문 `content` |
+| `project logs` | 활성 실행 `id`, `command`, 보관된 `content` (새 실행은 저장 전 마스킹) |
 | `project up/restart/down` | `action`, `profile`, `directory`, 명령별 `items`, `changed`, `replayed` |
 | `cleanup archives`, apply, restore/purge | 각각 `items`, `items`·`changed`·`replayed`, `item`·`changed` |
 | `cleanup preview` | 계획 ID·만료 시각·`items` |
@@ -244,4 +244,4 @@ devtools env list | jq -r '.data.items[]'
 devtools dashboard | jq -r '.data.item.url'
 ```
 
-Dashboard URL에는 접속 토큰이 포함됩니다. 공개 로그에 남기지 말고 접속할 사용자에게만 전달하세요. JSON 포맷 자체가 비밀 값을 마스킹해 주는 것은 아닙니다. 자식 출력과 명시적으로 요청한 로그 역시 기존 보호 범위를 따릅니다.
+Dashboard URL에는 접속 토큰이 포함됩니다. 공개 로그에 남기지 말고 접속할 사용자에게만 전달하세요. JSON 포맷 자체가 비밀 값을 마스킹해 주는 것은 아닙니다. 새 실행의 자식 stream과 캡처 로그에는 [실행 출력 보호](output-protection.md)를 적용합니다. 과거 로그나 앱이 직접 만든 파일까지 소급해 보호하지는 않습니다.

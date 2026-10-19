@@ -1,9 +1,10 @@
 package execution
 
 import (
+	"strings"
+
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/values"
-	"strings"
 )
 
 // ValueInputSpec records profile values that contribute to the environment or

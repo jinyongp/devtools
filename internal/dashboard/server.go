@@ -403,7 +403,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					instances = append(instances, i)
 				}
 			}
-			reply(map[string]any{"items": items, "instances": instances})
+			observations := map[string]values.InputObservation{}
+			for _, item := range items {
+				observations[item.ID] = manager.InspectRecordValues(r.Context(), item)
+			}
+			reply(map[string]any{"items": items, "instances": instances, "values": observations})
 			return
 		}
 		if r.URL.Path == "/api/network" {

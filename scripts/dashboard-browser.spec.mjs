@@ -226,3 +226,41 @@ test("vault controls keep metadata passive and clear unlock input",async({page})
     try {await retireTestVault(isolation);} finally {rmSync(root,{recursive:true,force:true,maxRetries:20,retryDelay:100});}
   }
 });
+
+test("process value delivery shows changes and locked verification without reading app values",async({page})=>{
+  test.setTimeout(60000);
+  const root=mkdtempSync(join(tmpdir(),"devtools-value-usage-browser-"));
+  const project=join(root,"project"),isolation=join(root,"isolation");mkdirSync(project,{recursive:true});
+  writeFileSync(join(project,"devtools.toml"),`profile = "usage-browser"\n[commands.web]\nexec = [${JSON.stringify(process.execPath)}, "-e", "setInterval(()=>{},1000)"]\ninject = true\n`);
+  const env={...process.env,DEVTOOLS_ISOLATED_ROOT:isolation};
+  let execution;
+  try {
+    runCLI(["vault","init","--backend","passphrase","--passphrase-stdin"],project,env,"synthetic-usage-browser-passphrase\n");
+    runCLI(["sec","set","TOKEN","--stdin"],project,env,"synthetic-usage-browser-secret-canary");
+    runCLI(["var","set","URL","--value","synthetic-usage-browser-public-before"],project,env);
+    execution=JSON.parse(runCLI(["process","start","web","--request-id","00000000-0000-4000-8000-000000007001"],project,env)).data.item;
+    expect(execution.input_version.slots.map(slot=>slot.name)).toEqual(["TOKEN","URL"]);
+    const started=JSON.parse(runCLI(["dashboard"],project,env));
+    await page.goto(started.data.item.url,{waitUntil:"domcontentloaded"});
+    await page.locator("#processes-nav").click();
+    await page.locator(".process-details summary").click();
+    await expect(page.locator("#values-panel")).toContainText("Current values");
+    await expect(page.locator("#values-panel")).toContainText("Recorded delivery: 2 values");
+    await expect(page.locator("#values-panel")).toContainText("Delivery records do not show which values the application read.");
+    runCLI(["var","set","URL","--value","synthetic-usage-browser-public-after"],project,env);
+    await expect(page.locator("#values-panel")).toContainText("Value changes pending",{timeout:15000});
+    const uses=JSON.parse(runCLI(["values","uses"],project,env)).data.items;
+    expect(uses.find(item=>item.execution_id===execution.id).values.state).toBe("pending");
+    runCLI(["vault","lock"],project,env);
+    await expect(page.locator("#values-panel")).toContainText("Value verification pending",{timeout:15000});
+    for(const canary of ["synthetic-usage-browser-secret-canary","synthetic-usage-browser-public-before","synthetic-usage-browser-public-after"])await expect(page.locator("#values-panel")).not.toContainText(canary);
+    const stillRunning=JSON.parse(runCLI(["process","status",execution.id],project,env)).data;
+    expect(stillRunning.item.id).toBe(execution.id);expect(stillRunning.item.ended_at).toBeNull();
+    expect(stillRunning.values.state).toBe("verification_pending");
+  } finally {
+    try {if(execution)runCLI(["process","stop",execution.id,"--request-id","00000000-0000-4000-8000-000000007002"],project,env);} finally {
+      try {runCLI(["dashboard","stop"],project,env);}catch{}
+      try {await retireTestVault(isolation);} finally {rmSync(root,{recursive:true,force:true,maxRetries:20,retryDelay:100});}
+    }
+  }
+});

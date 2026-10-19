@@ -108,6 +108,17 @@ func TestPublicSnapshotPinsGenerationAndActualValuesWithoutSession(t *testing.T)
 	if !errors.Is(err, vault.ErrInputChanged) {
 		t.Fatal("old public generation admitted", err)
 	}
+	delivered, err := NewInputVersion(metadata, "", InputSpec{Inject: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, e := InspectInput(ctx, root, "app", "", InputSpec{Inject: true})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if same, known := SameInput(delivered, current); same || !known {
+		t.Fatal("restored generation was treated as current delivery")
+	}
 }
 
 func TestAbsentPublicSnapshotsHaveStableRevisionAndRejectNewStorage(t *testing.T) {

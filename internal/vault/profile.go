@@ -66,11 +66,12 @@ type Bundle struct {
 	ValueIDs []string `json:"value_ids"`
 }
 type SlotReference struct {
-	Env     string `json:"env,omitempty"`
-	Name    string `json:"name"`
-	ValueID string `json:"value_id"`
-	SlotID  string `json:"slot_id"`
-	Version string `json:"value_version"`
+	Kind    ValueKind `json:"kind,omitempty"`
+	Env     string    `json:"env,omitempty"`
+	Name    string    `json:"name"`
+	ValueID string    `json:"value_id"`
+	SlotID  string    `json:"slot_id"`
+	Version string    `json:"value_version"`
 }
 type EffectiveValue struct {
 	Reference SlotReference
@@ -539,9 +540,9 @@ func (p *Profile) Environment(env string, key *Material, now time.Time) (map[str
 // ResolveValues keeps source identity/expiry beside effective values. A metadata
 // or binding-only read verifies the manifest but never decrypts secret slots.
 func (p *Profile) ResolveValues(env string, key *Material, now time.Time, includeSecrets bool) ([]EffectiveValue, error) {
-	return p.resolveValues(env, key, now, includeSecrets, "all")
+	return p.resolveValues(env, key, now, includeSecrets, "all", false)
 }
-func (p *Profile) resolveValues(env string, key *Material, now time.Time, includeSecrets bool, selection string) ([]EffectiveValue, error) {
+func (p *Profile) resolveValues(env string, key *Material, now time.Time, includeSecrets bool, selection string, metadataOnly bool) ([]EffectiveValue, error) {
 	if err := p.Verify(key); err != nil {
 		return nil, err
 	}
@@ -576,12 +577,12 @@ func (p *Profile) resolveValues(env string, key *Material, now time.Time, includ
 		if chosen == nil {
 			continue
 		}
-		value := EffectiveValue{Reference: SlotReference{Env: chosen.Env, Name: v.Name, ValueID: v.ID, SlotID: chosen.ID, Version: chosen.Version}, Kind: v.Kind, Scope: chosen.Env}
+		value := EffectiveValue{Reference: SlotReference{Kind: v.Kind, Env: chosen.Env, Name: v.Name, ValueID: v.ID, SlotID: chosen.ID, Version: chosen.Version}, Kind: v.Kind, Scope: chosen.Env}
 		if chosen.ExpiresAt != nil {
 			expires := *chosen.ExpiresAt
 			value.ExpiresAt = &expires
 		}
-		if includeSecrets || v.Kind == Public {
+		if !metadataOnly && (includeSecrets || v.Kind == Public) {
 			if chosen.ExpiresAt != nil && now.Unix() >= *chosen.ExpiresAt {
 				return nil, errorsNamed("value_expired")
 			}

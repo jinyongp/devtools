@@ -90,6 +90,15 @@ func TestBundleSelectionSeparatesEnvExpiryAndManifest(t *testing.T) {
 	if err := p.Sign(key); err != nil {
 		t.Fatal(err)
 	}
+	metadata, err := p.ResolveSelectedMetadata("local", key, "all")
+	if err != nil || len(metadata) == 0 {
+		t.Fatal("metadata-only resolution rejected expired selected input", err)
+	}
+	for _, value := range metadata {
+		if value.Value != "" {
+			t.Fatal("metadata-only resolution opened a value")
+		}
+	}
 	for _, selection := range []string{"none", "empty", "frontend"} {
 		got, err := p.ResolveSelectedValues("local", key, time.Now(), true, selection)
 		if err != nil {
@@ -115,6 +124,9 @@ func TestBundleSelectionSeparatesEnvExpiryAndManifest(t *testing.T) {
 	p.Bundles[0].ValueIDs = nil
 	if _, err := p.ResolveSelectedValues("", key, time.Now(), true, "none"); !errors.Is(err, ErrIntegrity) {
 		t.Fatal("none bypassed manifest authentication", err)
+	}
+	if _, err := p.ResolveSelectedMetadata("", key, "none"); !errors.Is(err, ErrIntegrity) {
+		t.Fatal("passive metadata bypassed complete manifest authentication", err)
 	}
 }
 

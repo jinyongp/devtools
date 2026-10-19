@@ -16,6 +16,7 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
+	"github.com/jinyongp/devtools/internal/values"
 )
 
 func (a *App) serviceStore() (services.Store, *protocol.Error) {
@@ -71,9 +72,9 @@ func (a *App) registerProcesses() {
 			c.Options = append(c.Options, Option{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe mutation."})
 		}
 		if action == "list" {
-			c.Output = object(map[string]any{"items": map[string]any{"type": "array", "items": map[string]any{"type": "object"}}}, "items")
+			c.Output = object(map[string]any{"items": arraySchema(map[string]any{"type": "object"}), "values": map[string]any{"type": "object", "additionalProperties": inputObservationSchema()}}, "items", "values")
 		} else if action == "status" {
-			c.Output = itemOutput(map[string]any{"type": "object"})
+			c.Output = object(map[string]any{"item": map[string]any{"type": "object"}, "values": inputObservationSchema()}, "item", "values")
 		} else if action == "logs" {
 			c.Output = object(map[string]any{"id": stringSchema(), "content": stringSchema()}, "id", "content")
 		}
@@ -84,11 +85,21 @@ func (a *App) registerProcesses() {
 			}
 			if action == "list" {
 				items, e := s.List(ctx, r.Options["profile"])
-				return map[string]any{"items": items}, e
+				if e != nil {
+					return nil, e
+				}
+				observations := map[string]values.InputObservation{}
+				for _, item := range items {
+					observations[item.ID] = s.InspectRecordValues(ctx, item)
+				}
+				return map[string]any{"items": items, "values": observations}, nil
 			}
 			if action == "status" {
 				item, err := s.Status(ctx, r.Args[0])
-				return map[string]any{"item": item}, err
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"item": item, "values": s.InspectRecordValues(ctx, item)}, nil
 			}
 			if action == "check" {
 				return s.Check(ctx, r.Args[0])

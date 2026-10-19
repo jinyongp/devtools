@@ -3,8 +3,9 @@ package values
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/jinyongp/devtools/internal/vault"
 	"sort"
+
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 // InputSpec describes only profile contributions. Parent environment policy,
@@ -72,7 +73,7 @@ func NewInputVersion(source SnapshotMetadata, env string, spec InputSpec) (*Inpu
 	if spec.UsesValues() {
 		// Legacy fixture/provider snapshots have no stable slot identities. Do not
 		// manufacture a known delivery from their plaintext State copy.
-		if len(source.Identity.Revision) != 64 {
+		if (source.Identity.ProfileID == "" || source.Identity.StorageGeneration == "") && source.Public == nil {
 			return nil, nil
 		}
 		out.Identity = source.Identity

@@ -238,6 +238,42 @@ devtools import --file .env --profile myapp
 
 중복 키·잘못된 키·닫히지 않은 따옴표·NUL·잘못된 UTF-8은 `invalid_dotenv`와 종료 코드 2로 처리한다. 문법 오류에는 `error.details.line`과 고정된 원인 설명을 제공한다. 파일 내용과 값은 진단에 포함하지 않는다.
 
+## 값 메타데이터와 사용처: values
+
+`values inspect --profile NAME [--env ENV] [--bundle all|none|NAME]`은 선택한
+입력의 이름·종류·common/env 출처·ID·논리 버전·저장소 세대를 조회한다.
+원문과 launch/session 권한은 반환하지 않는다. 키를 새로 해제하거나 세션 수명을
+연장하지 않으며, 보호된 저장소가 잠겨 있으면 `verification_pending`을 반환한다.
+공개 값만 저장한 보호 없는 저장소는 키 없이 조회하며 `integrity_verified: false`로
+구분한다. 조회 중 legacy 데이터를 이행하거나 OS 인증 창을 띄우지 않는다.
+
+`values uses --dir PATH`는 해당 프로젝트의 설정상 선택(`kind: declared`)과
+보존된 실행의 전달 기록(`kind: delivered`)을 구분한다. 실행 전에 준비한 기록은
+`prepared`이며 전달이 확인된 기록으로 취급하지 않는다. 명령마다 키를 열거할
+필요는 없다. 선언에는 output 정책, 실제 전달 기록에는 적용된 stdout/stderr 모드가
+포함된다. 앱이 어떤 값을 읽었는지, 외부 인증에 성공했는지는 관찰하지 않는다.
+
+`command list/inspect`의 `item.selection` 또는 `items[].selection`은 command →
+project → all 순서로 정한 선택이다. `command inspect`는 최상위 `values`에 현재
+입력을 덧붙인다. `process status`도 최상위 `values`를 반환하고, `process list`와
+대시보드의 `/api/processes`는 실행 ID별 `values` 맵을 반환한다. record의
+`input_version`은 실제 준비한 payload의 안전한 메타데이터이며 이전 실행에는
+없을 수 있다. 과거 실행의 `selection`과 현재 `values.current.spec.selection`은
+다를 수 있다. 현재 선택에는 실행 때 명시한 bundle/env override를 계속 적용한다.
+
+비교 상태는 `current`(같은 유효 입력), `pending`(변경 대기), `failed`(만료·누락·
+무결성 오류 등), `verification_pending`(잠금 등으로 확인 대기), `unknown`이다.
+전달 기록이나 현재 입력을 비교할 수 없으면 변경 없음으로 추측하지 않는다.
+`inspect`와 설정 선언은 비교 대상 실행이 없어 `unknown`과
+`inspection_only`/`declared_only` 이유를 사용하며, 조회한 입력은 `current` 필드에
+별도로 제공한다. 조회 요청이 정상 처리되면 종료 코드 0이며 위 상태는 본문에서
+확인한다. 프로젝트 조회 자체의 실패 등은 기존 JSON 오류로 반환한다.
+
+유효 입력은 실제 전달 슬롯의 출처·ID·버전과 profile/storage 세대로 비교한다.
+같은 값 재저장, 암호화 키 epoch 변경, 선택 밖 슬롯 변경은 변경 대기를 만들지
+않는다. 새 bundle 멤버·유효 override·복원된 저장소 세대는 입력을 바꾼다.
+기본 동작은 변경 상태 표시이며 기존 앱을 재시작하지 않는다.
+
 ## 프로젝트 명령: command
 
 `command`는 `devtools.toml`에 등록된 명령을 조회·확인·실행한다. `command list`는 이름과 `exec`, `inject`, `env`, `serve` 요약을 이름순으로 반환하고, `command inspect NAME`은 해당 명령의 `bind`, project와 command 요구 사항을 합친 `requirements`, readiness 설정까지 보여준다. 다른 프로젝트를 조회할 때는 두 조회 명령에 `--dir PATH`를 지정할 수 있다.

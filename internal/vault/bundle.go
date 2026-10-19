@@ -159,5 +159,12 @@ func (p *Profile) selectionIDs(selection string) (map[string]bool, error) {
 // values. Unselected secrets are not decrypted and their expiry does not block
 // this execution; selected expired overrides still fail without common fallback.
 func (p *Profile) ResolveSelectedValues(env string, key *Material, now time.Time, includeSecrets bool, selection string) ([]EffectiveValue, error) {
-	return p.resolveValues(env, key, now, includeSecrets, selection)
+	return p.resolveValues(env, key, now, includeSecrets, selection, false)
+}
+
+// ResolveSelectedMetadata authenticates the complete manifest and resolves the
+// effective slots without opening any value, including public variables. Expiry
+// is returned so callers can inspect only the actual delivered dependencies.
+func (p *Profile) ResolveSelectedMetadata(env string, key *Material, selection string) ([]EffectiveValue, error) {
+	return p.resolveValues(env, key, time.Time{}, false, selection, true)
 }

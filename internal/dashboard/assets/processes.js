@@ -45,6 +45,19 @@ async function loadProcesses(version) {
       section.open=expandedProcesses.has(item.id);
       section.ontoggle=()=>{if(generation===version){if(section.open)expandedProcesses.add(item.id);else expandedProcesses.delete(item.id);saveNavigation();}};
       text("p",item.directory,section);text("p",`Execution ${item.id}`,section);
+      const input=data.values?.[item.id];
+      text("p",`Value selection: ${item.selection||"all"}`,section);
+      if(input){
+        const labels={current:"Current values",pending:"Value changes pending · restart to apply",failed:"Cannot apply current values",unknown:"Value delivery unknown",verification_pending:"Value verification pending · unlock explicitly"};
+        text("p",`${labels[input.state]||"Value delivery unknown"} · ${input.reason.replaceAll("_"," ")}`,section);
+        if(input.delivered){
+          text("p",`Recorded delivery: ${input.delivered.slots.length} values · generation ${input.delivered.identity.storage_generation||"none"}`,section);
+          text("p",input.delivered.slots.map(slot=>`${slot.name} (${slot.env||"common"}, ${slot.value_version})`).join(", ")||"No profile values delivered.",section);
+        }
+        text("p","Delivery records do not show which values the application read.",section);
+      }
+      if(item.output)text("p",`Output: stdout ${item.output.stdout}, stderr ${item.output.stderr}`,section);
+
       if(item.reason)text("p",`${item.reason.replaceAll("_"," ")}${item.exit_code==null?"":` · exit ${item.exit_code}`}`,section);
       const stateCell=text("td","",row),badge=text("span",item.state,stateCell);badge.className="process-state";
       badge.classList.toggle("active",!item.ended_at);badge.classList.toggle("failed",item.state==="exited"&&item.exit_code!=null&&item.exit_code!==0);

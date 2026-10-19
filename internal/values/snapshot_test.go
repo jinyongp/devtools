@@ -260,4 +260,15 @@ func TestProfileKeyRotationDoesNotChangeEffectiveInputRevision(t *testing.T) {
 	if calls.Load() != 2 {
 		t.Fatal("key lookup occurred per slot")
 	}
+	beforeVersion, err := NewInputVersion(before.Metadata(), "local", InputSpec{Inject: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterVersion, err := NewInputVersion(after.Metadata(), "local", InputSpec{Inject: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if same, known := SameInput(beforeVersion, afterVersion); !same || !known {
+		t.Fatal("key re-encryption notified a delivered input change")
+	}
 }

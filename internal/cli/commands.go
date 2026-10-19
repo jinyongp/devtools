@@ -4,18 +4,21 @@ import (
 	"context"
 	"sort"
 
+	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/redact"
+	"github.com/jinyongp/devtools/internal/values"
 )
 
 type projectCommandSummary struct {
-	Output redact.Policy `json:"output"`
-	Name   string        `json:"name"`
-	Exec   []string      `json:"exec"`
-	Inject bool          `json:"inject"`
-	Env    string        `json:"env"`
-	Serve  []string      `json:"serve"`
+	Selection string        `json:"selection"`
+	Output    redact.Policy `json:"output"`
+	Name      string        `json:"name"`
+	Exec      []string      `json:"exec"`
+	Inject    bool          `json:"inject"`
+	Env       string        `json:"env"`
+	Serve     []string      `json:"serve"`
 }
 
 type projectCommandBinding struct {
@@ -45,6 +48,7 @@ type projectCommandRequirements struct {
 }
 
 type projectCommandDetails struct {
+	Selection    string                           `json:"selection"`
 	Output       redact.Policy                    `json:"output"`
 	Name         string                           `json:"name"`
 	Exec         []string                         `json:"exec"`
@@ -58,12 +62,13 @@ type projectCommandDetails struct {
 
 func projectCommandSummarySchema() map[string]any {
 	return object(map[string]any{
-		"output": outputPolicySchema(),
-		"name":   stringSchema(),
-		"exec":   map[string]any{"type": "array", "items": stringSchema()},
-		"inject": map[string]any{"type": "boolean"},
-		"env":    stringSchema(),
-		"serve":  map[string]any{"type": "array", "items": stringSchema()},
+		"output":    outputPolicySchema(),
+		"selection": stringSchema(),
+		"name":      stringSchema(),
+		"exec":      map[string]any{"type": "array", "items": stringSchema()},
+		"inject":    map[string]any{"type": "boolean"},
+		"env":       stringSchema(),
+		"serve":     map[string]any{"type": "array", "items": stringSchema()},
 	}, "name", "exec", "inject", "env", "serve")
 }
 
@@ -124,6 +129,7 @@ func (a *App) registerCommands() {
 			Output: object(map[string]any{
 				"profile": stringSchema(),
 				"item":    projectCommandDetailsSchema(),
+				"values":  inputObservationSchema(),
 			}, "profile", "item"),
 			Run: a.inspectProjectCommand,
 		},
@@ -160,12 +166,18 @@ func (a *App) listProjectCommands(_ context.Context, _ IO, request Request) (any
 	sort.Strings(names)
 	commands := make([]projectCommandSummary, 0, len(names))
 	for _, name := range names {
-		commands = append(commands, summarizeProjectCommand(name, p.Commands[name]))
+		summary := summarizeProjectCommand(name, p.Commands[name])
+		resolved, e := execution.ResolveConfigured(p, name, nil, nil)
+		if e != nil {
+			return nil, e
+		}
+		summary.Selection = resolved.Selection
+		commands = append(commands, summary)
 	}
 	return map[string]any{"profile": p.Profile, "items": commands}, nil
 }
 
-func (a *App) inspectProjectCommand(_ context.Context, _ IO, request Request) (any, *protocol.Error) {
+func (a *App) inspectProjectCommand(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
 	p, err := project.Resolve(request.Options["dir"], "")
 	if err != nil {
 		return nil, err
@@ -175,7 +187,22 @@ func (a *App) inspectProjectCommand(_ context.Context, _ IO, request Request) (a
 	if !exists {
 		return nil, protocol.NewError("command_not_found", "The selected project command is not defined.", 3, nil)
 	}
-	return map[string]any{"profile": p.Profile, "item": describeProjectCommand(name, command, p.Requirements)}, nil
+	details := describeProjectCommand(name, command, p.Requirements)
+	resolved, e := execution.ResolveConfigured(p, name, nil, nil)
+	if e != nil {
+		return nil, e
+	}
+	details.Selection = resolved.Selection
+	store, e := a.serviceStore()
+	if e != nil {
+		return nil, e
+	}
+	current, e := store.InspectCommandValues(ctx, resolved)
+	observation := values.ObserveInput(nil, current, e)
+	if e == nil {
+		observation.Reason = "declared_only"
+	}
+	return map[string]any{"profile": p.Profile, "item": details, "values": observation}, nil
 }
 
 func summarizeProjectCommand(name string, command project.Command) projectCommandSummary {

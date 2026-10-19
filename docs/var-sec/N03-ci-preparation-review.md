@@ -1,6 +1,6 @@
 # N03 실제 Linux Secret Service 수용 준비
 
-현재 진행(2026-10-19): main 1c0b22c에서 실제 GNOME 서비스 부재·정상 roundtrip·collection 잠금/재해제·종료 뒤 no activation 검사가 모두 pass했다. 아래는 준비 당시와 수정 경과의 기록이다. OS logout과 다른 사용자 IPC 등 나머지 native 조건은 별도로 남아 있으며 N03 전체 완료를 뜻하지 않는다.
+현재 결과(2026-10-19): 85e72de의 실제 GNOME 가용/부재·잠금/해제·종료, 다른 UID, PAM/logind logout 및 native CLI 복구·정리가 pass했다. 전체 범위와 한계는 [N03-final-review.md](N03-final-review.md)를 따른다. 아래는 준비·이전 실패의 역사 기록이다.
 
 N03은 진행 중이다. 현재 WSL에서 실제 private D-Bus의 서비스 부재 검사를 실행했다.
 이 호스트에는 gnome-keyring-daemon이 없어 실제 GNOME 정상·잠금·종료 검증 결과는 없다.

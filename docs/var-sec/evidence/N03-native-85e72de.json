@@ -1,0 +1,297 @@
+{
+  "source_commit": "85e72de",
+  "run_url": "https://github.com/jinyongp/devtools/actions/runs/39244830924",
+  "job_id": 118034163439,
+  "logout": {
+    "real_pam_logout": "pass",
+    "native_backend": "secret-service",
+    "warm_session_lost": true,
+    "locked_native_access_denied": true,
+    "explicit_unlock_preserved_values": true,
+    "owned_account_and_home_removed": true
+  },
+  "test_events": {
+    "vault-secret-service-absent.jsonl": [
+      {
+        "Time": "2026-10-19T11:28:56.243107167Z",
+        "Action": "start",
+        "Package": "github.com/jinyongp/devtools/internal/vault"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.24657242Z",
+        "Action": "run",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceUnavailableDoesNotActivate"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.246621963Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceUnavailableDoesNotActivate",
+        "Output": "=== RUN   TestNativeSecretServiceUnavailableDoesNotActivate\n",
+        "OutputType": "frame"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.249321013Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceUnavailableDoesNotActivate",
+        "Output": "--- PASS: TestNativeSecretServiceUnavailableDoesNotActivate (0.00s)\n",
+        "OutputType": "frame"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.249350478Z",
+        "Action": "pass",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceUnavailableDoesNotActivate",
+        "Elapsed": 0
+      },
+      {
+        "Time": "2026-10-19T11:28:56.249368341Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Output": "PASS\n",
+        "OutputType": "frame"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.249819793Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Output": "ok  \tgithub.com/jinyongp/devtools/internal/vault\t0.006s\n"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.249832486Z",
+        "Action": "pass",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Elapsed": 0.007
+      }
+    ],
+    "vault-secret-service-native.jsonl": [
+      {
+        "Time": "2026-10-19T11:28:56.630253647Z",
+        "Action": "start",
+        "Package": "github.com/jinyongp/devtools/internal/vault"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.633903836Z",
+        "Action": "run",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceSyntheticVault"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.63395428Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceSyntheticVault",
+        "Output": "=== RUN   TestNativeSecretServiceSyntheticVault\n",
+        "OutputType": "frame"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.647436462Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceSyntheticVault",
+        "Output": "--- PASS: TestNativeSecretServiceSyntheticVault (0.01s)\n",
+        "OutputType": "frame"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.647466498Z",
+        "Action": "pass",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceSyntheticVault",
+        "Elapsed": 0.01
+      },
+      {
+        "Time": "2026-10-19T11:28:56.647481987Z",
+        "Action": "run",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceLockedCollection"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.647486495Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceLockedCollection",
+        "Output": "=== RUN   TestNativeSecretServiceLockedCollection\n",
+        "OutputType": "frame"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.663608Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceLockedCollection",
+        "Output": "--- PASS: TestNativeSecretServiceLockedCollection (0.02s)\n",
+        "OutputType": "frame"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.663633097Z",
+        "Action": "pass",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceLockedCollection",
+        "Elapsed": 0.02
+      },
+      {
+        "Time": "2026-10-19T11:28:56.663642164Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Output": "PASS\n",
+        "OutputType": "frame"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.664193533Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Output": "ok  \tgithub.com/jinyongp/devtools/internal/vault\t0.034s\n"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.664211246Z",
+        "Action": "pass",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Elapsed": 0.034
+      }
+    ],
+    "vault-secret-service-stopped.jsonl": [
+      {
+        "Time": "2026-10-19T11:28:56.988334775Z",
+        "Action": "start",
+        "Package": "github.com/jinyongp/devtools/internal/vault"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.992062782Z",
+        "Action": "run",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceUnavailableDoesNotActivate"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.992134868Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceUnavailableDoesNotActivate",
+        "Output": "=== RUN   TestNativeSecretServiceUnavailableDoesNotActivate\n",
+        "OutputType": "frame"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.993897853Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceUnavailableDoesNotActivate",
+        "Output": "--- PASS: TestNativeSecretServiceUnavailableDoesNotActivate (0.00s)\n",
+        "OutputType": "frame"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.993917981Z",
+        "Action": "pass",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeSecretServiceUnavailableDoesNotActivate",
+        "Elapsed": 0
+      },
+      {
+        "Time": "2026-10-19T11:28:56.99393353Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Output": "PASS\n",
+        "OutputType": "frame"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.994391657Z",
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Output": "ok  \tgithub.com/jinyongp/devtools/internal/vault\t0.006s\n"
+      },
+      {
+        "Time": "2026-10-19T11:28:56.994413578Z",
+        "Action": "pass",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Elapsed": 0.006
+      }
+    ],
+    "vault-peers-linux.jsonl": [
+      {
+        "Action": "start",
+        "Package": "github.com/jinyongp/devtools/internal/vault"
+      },
+      {
+        "Action": "run",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeUnixPeersRejectOtherUID"
+      },
+      {
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeUnixPeersRejectOtherUID",
+        "Output": "=== RUN   TestNativeUnixPeersRejectOtherUID\n",
+        "OutputType": "frame"
+      },
+      {
+        "Action": "run",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeUnixPeersRejectOtherUID/client_rejects_other-user_server"
+      },
+      {
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeUnixPeersRejectOtherUID/client_rejects_other-user_server",
+        "Output": "=== RUN   TestNativeUnixPeersRejectOtherUID/client_rejects_other-user_server\n",
+        "OutputType": "frame"
+      },
+      {
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeUnixPeersRejectOtherUID/client_rejects_other-user_server",
+        "Output": "--- PASS: TestNativeUnixPeersRejectOtherUID/client_rejects_other-user_server (0.00s)\n",
+        "OutputType": "frame"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeUnixPeersRejectOtherUID/client_rejects_other-user_server"
+      },
+      {
+        "Action": "run",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeUnixPeersRejectOtherUID/server_rejects_other-user_client"
+      },
+      {
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeUnixPeersRejectOtherUID/server_rejects_other-user_client",
+        "Output": "=== RUN   TestNativeUnixPeersRejectOtherUID/server_rejects_other-user_client\n",
+        "OutputType": "frame"
+      },
+      {
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeUnixPeersRejectOtherUID/server_rejects_other-user_client",
+        "Output": "--- PASS: TestNativeUnixPeersRejectOtherUID/server_rejects_other-user_client (0.00s)\n",
+        "OutputType": "frame"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeUnixPeersRejectOtherUID/server_rejects_other-user_client"
+      },
+      {
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeUnixPeersRejectOtherUID",
+        "Output": "--- PASS: TestNativeUnixPeersRejectOtherUID (0.01s)\n",
+        "OutputType": "frame"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Test": "TestNativeUnixPeersRejectOtherUID"
+      },
+      {
+        "Action": "output",
+        "Package": "github.com/jinyongp/devtools/internal/vault",
+        "Output": "PASS\n",
+        "OutputType": "frame"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/jinyongp/devtools/internal/vault"
+      }
+    ]
+  }
+}

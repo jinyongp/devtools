@@ -24,7 +24,7 @@ and all 12 native exchange directions with direct new-identity assertions.
 | Restore integrity / preview | Actual age archive wrong identity and corruption fail, stale and concurrent goal changes rejected, launch lease drains before publication, same request retry, later mutation + re-encryption preserves receipt replay, public restore cannot downgrade sealed history. |
 | B02 own data/output | Actual installed masked stdout/stderr and captured logs plus old running app's old patterns after manual lock/new stored value. New data/temp/journal/receipt scans and native legacy script full data scan after owned worker drain. Explicit app observation/source input fixtures outside protected tree remain synthetic sensitive originals. |
 | B03 originals | original.env preserved and explicitly still sensitive; no deletion or secure erase promise for user originals/old backups. |
-| B05 cross-device | Four actual native producers, all 12 different-source consumers pass; fresh target profile/storage/key identities, logical ValueIDs/slot versions/bundles preserved, live claim/session/handle not restored. |
+| B05 cross-device | Four actual native producers, all 12 different-source consumers pass; fresh target profile/storage/key identities, logical ValueIDs/slot versions preserved and no live session authority reused. Nonempty bundle/native membership coverage belongs to B03. |
 
 Runtime fix e0cfd3d reconciles confirmed outage on lost-launch recovery, original
 execution retry and passive status. Tests first reproduced outage=false after real

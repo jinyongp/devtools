@@ -166,19 +166,28 @@ func CaptureVault(ctx context.Context, root, profile, env string, inject bool, n
 	if err != nil {
 		return nil, VaultError(ctx, err)
 	}
-	release, err := maintenance.AcquireExclusive(ctx, root)
+	release, err := maintenance.AcquireShared(ctx, root)
 	if err != nil {
 		return nil, VaultError(ctx, err)
 	}
 	store := vault.FileStore{Root: root, VaultID: k.VaultID, CatalogKey: key}
 	p, profileKey, err := store.ReadAnyWithMasterHeld(ctx, profile, key)
-	if err != nil && err.Error() == "profile_not_found" {
-		p, err = vault.NewProfile(profile)
-		if err == nil {
-			err = store.PublishManagedHeld(ctx, p, nil)
-		}
-	}
 	release()
+	if err != nil && err.Error() == "profile_not_found" {
+		release, err = maintenance.AcquireExclusive(ctx, root)
+		if err != nil {
+			return nil, VaultError(ctx, err)
+		}
+		// Another creator may have published after the shared read.
+		p, profileKey, err = store.ReadAnyWithMasterHeld(ctx, profile, key)
+		if err != nil && err.Error() == "profile_not_found" {
+			p, err = vault.NewProfile(profile)
+			if err == nil {
+				err = store.PublishManagedHeld(ctx, p, nil)
+			}
+		}
+		release()
+	}
 	if err != nil {
 		return nil, VaultError(ctx, err)
 	}

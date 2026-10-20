@@ -21,34 +21,14 @@ func CapturePublic(ctx context.Context, root, profile, env string, inject bool, 
 	if !project.ValidProfile(profile) {
 		return nil, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
-	release, err := maintenance.AcquireExclusive(ctx, root)
-	if err != nil {
-		return nil, VaultError(ctx, err)
+	p, exists, needsExclusive, e := capturePublicProfile(ctx, root, profile, false)
+	if e != nil {
+		return nil, e
 	}
-	defer release()
-	if err = vault.CheckPublicRootHeld(root); err != nil {
-		return nil, VaultError(ctx, err)
-	}
-	store := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: profile}
-	raw, err := profilekey.Snapshot(store.Directory, profile, "values", vault.MaxDocumentBytes)
-	if err != nil {
-		return nil, storageError()
-	}
-	defer clear(raw)
-	p, exists, err := store.readPublicHeld()
-	if err != nil {
-		return nil, VaultError(ctx, err)
-	}
-	if p.Sealed {
-		return nil, VaultError(ctx, vault.ErrKeyMissing)
-	}
-	// A converted legacy profile needs durable IDs, so subsequent executions and
-	// storage replacement can distinguish value revisions from incarnations.
-	if exists {
-		if _, err = vault.DecodeProfile(raw); err != nil {
-			if err = store.publishHeld(ctx, p, nil, nil, ""); err != nil {
-				return nil, VaultError(ctx, err)
-			}
+	if needsExclusive {
+		p, exists, _, e = capturePublicProfile(ctx, root, profile, true)
+		if e != nil {
+			return nil, e
 		}
 	}
 	snapshot, e := captureProfile(p, nil, env, inject, now, selection...)
@@ -76,4 +56,46 @@ func CapturePublic(ctx context.Context, root, profile, env string, inject bool, 
 	}
 	snapshot.metadata.Public = &ticket
 	return snapshot, nil
+}
+
+// capturePublicProfile holds classification and profile reads under one gate.
+func capturePublicProfile(ctx context.Context, root, profile string, exclusive bool) (*vault.Profile, bool, bool, *protocol.Error) {
+	acquire := maintenance.AcquireShared
+	if exclusive {
+		acquire = maintenance.AcquireExclusive
+	}
+	release, err := acquire(ctx, root)
+	if err != nil {
+		return nil, false, false, VaultError(ctx, err)
+	}
+	defer release()
+	if err = vault.CheckPublicRootHeld(root); err != nil {
+		return nil, false, false, VaultError(ctx, err)
+	}
+	store := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: profile}
+	raw, err := profilekey.Snapshot(store.Directory, profile, "values", vault.MaxDocumentBytes)
+	if err != nil {
+		return nil, false, false, storageError()
+	}
+	defer clear(raw)
+	p, exists, err := store.readPublicHeld()
+	if err != nil {
+		return nil, false, false, VaultError(ctx, err)
+	}
+	if p.Sealed {
+		return nil, false, false, VaultError(ctx, vault.ErrKeyMissing)
+	}
+	// A converted legacy profile needs durable IDs, so subsequent executions and
+	// storage replacement can distinguish value revisions from incarnations.
+	if exists {
+		if _, err = vault.DecodeProfile(raw); err != nil {
+			if !exclusive {
+				return nil, false, true, nil
+			}
+			if err = store.publishHeld(ctx, p, nil, nil, ""); err != nil {
+				return nil, false, false, VaultError(ctx, err)
+			}
+		}
+	}
+	return p, exists, false, nil
 }

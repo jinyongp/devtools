@@ -39,40 +39,14 @@ func (s ModernStore) Inspect(ctx context.Context, env string) (ManagedView, *pro
 	if !project.ValidProfile(s.Profile) {
 		return out, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
-	release, err := maintenance.AcquireExclusive(ctx, s.root())
-	if err != nil {
-		return out, VaultError(ctx, err)
+	p, exists, needsExclusive, e := s.inspectionProfile(ctx, false)
+	if e != nil {
+		return out, e
 	}
-	defer release()
-	raw, err := profilekey.Snapshot(s.Directory, s.Profile, "values", vault.MaxDocumentBytes)
-	if err != nil {
-		return out, storageError()
-	}
-	defer clear(raw)
-	var p *vault.Profile
-	exists := raw != nil
-	if exists {
-		p, err = vault.DecodeProfile(raw)
-		if err != nil {
-			legacy, legacyErr := InspectSnapshot(raw, s.Profile)
-			if legacyErr != nil || hasSecret(legacy) {
-				return out, failure("migration_required", "Migrate the legacy profile before managed changes.")
-			}
-			if _, protected, e := maintenance.ProtectedRootHeld(s.root()); e != nil || protected {
-				return out, failure("migration_required", "Migrate the legacy profile before managed changes.")
-			}
-			p, err = convertLegacy(legacy, "", nil)
-			if err != nil {
-				return out, VaultError(ctx, err)
-			}
-			if err = s.publishHeld(ctx, p, nil, nil, ""); err != nil {
-				return out, VaultError(ctx, err)
-			}
-		}
-	} else {
-		p, err = vault.NewProfile(s.Profile)
-		if err != nil {
-			return out, VaultError(ctx, err)
+	if needsExclusive {
+		p, exists, _, e = s.inspectionProfile(ctx, true)
+		if e != nil {
+			return out, e
 		}
 	}
 	state, err := metadataState(p)
@@ -102,6 +76,55 @@ func (s ModernStore) Inspect(ctx context.Context, env string) (ManagedView, *pro
 		}
 	}
 	return out, nil
+}
+
+// inspectionProfile releases the shared gate before retrying a legacy conversion.
+// Every retry rereads storage, so a concurrent writer or initialization wins.
+func (s ModernStore) inspectionProfile(ctx context.Context, exclusive bool) (*vault.Profile, bool, bool, *protocol.Error) {
+	acquire := maintenance.AcquireShared
+	if exclusive {
+		acquire = maintenance.AcquireExclusive
+	}
+	release, err := acquire(ctx, s.root())
+	if err != nil {
+		return nil, false, false, VaultError(ctx, err)
+	}
+	defer release()
+	raw, err := profilekey.Snapshot(s.Directory, s.Profile, "values", vault.MaxDocumentBytes)
+	if err != nil {
+		return nil, false, false, storageError()
+	}
+	defer clear(raw)
+	var p *vault.Profile
+	exists := raw != nil
+	if exists {
+		p, err = vault.DecodeProfile(raw)
+		if err != nil {
+			legacy, legacyErr := InspectSnapshot(raw, s.Profile)
+			if legacyErr != nil || hasSecret(legacy) {
+				return nil, false, false, failure("migration_required", "Migrate the legacy profile before managed changes.")
+			}
+			if _, protected, e := maintenance.ProtectedRootHeld(s.root()); e != nil || protected {
+				return nil, false, false, failure("migration_required", "Migrate the legacy profile before managed changes.")
+			}
+			if !exclusive {
+				return nil, false, true, nil
+			}
+			p, err = convertLegacy(legacy, "", nil)
+			if err != nil {
+				return nil, false, false, VaultError(ctx, err)
+			}
+			if err = s.publishHeld(ctx, p, nil, nil, ""); err != nil {
+				return nil, false, false, VaultError(ctx, err)
+			}
+		}
+	} else {
+		p, err = vault.NewProfile(s.Profile)
+		if err != nil {
+			return nil, false, false, VaultError(ctx, err)
+		}
+	}
+	return p, exists, false, nil
 }
 func sharedReceiptKey(ctx context.Context, root, vaultID string, master *vault.Material, create bool) (*vault.Material, map[string][]byte, error) {
 	if master == nil {

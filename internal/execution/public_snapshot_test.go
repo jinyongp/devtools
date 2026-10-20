@@ -30,7 +30,7 @@ func TestPublicInputActualSpawnNeedsNoSessionAndDrainsOutcome(t *testing.T) {
 	ctx := context.Background()
 	root := privateTempDir(t)
 	store := values.ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app"}
-	if _, e := store.Update(ctx, func(s *values.State) (bool, *protocol.Error) {
+	if _, e := store.Update(ctx, func(s *values.Editor) (bool, *protocol.Error) {
 		return s.Set(values.Variable, "PUBLIC_URL", "", "https://before.invalid")
 	}); e != nil {
 		t.Fatal(e)
@@ -53,7 +53,7 @@ func TestPublicInputActualSpawnNeedsNoSessionAndDrainsOutcome(t *testing.T) {
 		return p
 	}
 	prepared := prepare()
-	if _, e := store.Update(ctx, func(s *values.State) (bool, *protocol.Error) {
+	if _, e := store.Update(ctx, func(s *values.Editor) (bool, *protocol.Error) {
 		return s.Set(values.Variable, "PUBLIC_URL", "", "https://after.invalid")
 	}); e != nil {
 		t.Fatal(e)

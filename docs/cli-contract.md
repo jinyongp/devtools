@@ -5,7 +5,8 @@
 HTTPS·도메인·공유와 통합 시작의 확장 계약은
 [local network contract](network-design.md)를 따른다.
 
-이 문서는 확정된 사용 방식과 공개 CLI 계약을 정리한다.
+이 문서는 현재 소스의 사용 방식과 공개 CLI 계약을 정리한다.
+설치본의 지원 여부는 [기능 확인 방법](README.md#check-feature-availability)을 따른다.
 
 포트 할당과 명령별 `serve`·`bind`·템플릿은 [포트 사용 가이드](ports.md)와
 [포트 관리 계약](port-design.md)을 따른다. worktree별 `.localhost` route는
@@ -16,7 +17,7 @@ CLI protocol은 v7이다. v0.23.0의 v6에서 도입한 `run` 인자 구분 규�
 이전 v0.22.3은 protocol v5를 사용한다. 버전별 사용법은 아래 명령 실행 절에,
 전환 규칙은 [CLI 출력 계약](cli-output.md#protocol-v6-마이그레이션)에 정리했다.
 
-이 문서는 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `import`, `env`, `command`의 사용법을 다룬다. `run`은 `command run`의 호환 alias다. 전체 기능 안내는 [README](../README.md), 설치된 바이너리의 명령 목록은 `devtools schema`에서 확인한다. 예시는 설치한 `devtools`가 PATH에 있는 환경을 기준으로 한다.
+이 문서는 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `import`, `env`, `bundle`, `values`, `command`의 사용법을 다룬다. `run`은 `command run`의 호환 alias다. 전체 기능 안내는 [README](../README.md), 설치된 바이너리의 명령 목록은 `devtools schema`에서 확인한다. 예시는 설치한 `devtools`가 PATH에 있는 환경을 기준으로 한다.
 
 ## 사용 목적
 
@@ -248,6 +249,7 @@ profile/env 전체 선택이 기본이다. frontend·backend·deploy처럼 일�
 조회한 revision과 새 요청 ID로, `my-installed-command`는 사용할 프로그램으로 바꾼다.
 
 ```sh
+devtools bundle list
 devtools bundle set backend --key API_URL --key TOKEN --revision REVISION --request-id UUID
 devtools values inspect --bundle backend --env local
 devtools run --bundle backend --env local -- my-installed-command
@@ -267,7 +269,9 @@ bundle = "backend"
 
 선택 우선순위는 CLI `--bundle` → command `bundle` → project `bundle` → `all`이다.
 env는 선택한 값의 슬롯을 정한다. `none`은 profile 값을 선택하지 않으며 `--env`만으로
-해제되지 않는다. 부모 환경 상속은 별도이므로 부모에 있던 credential까지 제거하지 않는다.
+해제되지 않는다. `--bundle`만으로 `inject = false`인 이름 명령의 주입을 활성화하지는 않는다.
+주입하려면 `inject = true` 또는 명시 `--env`가 필요하다. 부모 환경 상속은 별도이므로
+부모에 있던 credential까지 제거하지 않는다.
 없는 bundle과 선택 밖 var binding은 오류다. 자동으로 전체 선택으로 바꾸지 않는다.
 
 `bundle set`은 전체 membership을 원자적으로 교체한다. `rename`은 ID를 유지하고
@@ -316,7 +320,7 @@ project → all 순서로 정한 선택이다. `command inspect`는 최상위 `v
 
 ## 프로젝트 명령: command
 
-`command`는 `devtools.toml`에 등록된 명령을 조회·확인·실행한다. `command list`는 이름과 `exec`, `inject`, `env`, `serve` 요약을 이름순으로 반환하고, `command inspect NAME`은 해당 명령의 `bind`, project와 command 요구 사항을 합친 `requirements`, readiness 설정까지 보여준다. 다른 프로젝트를 조회할 때는 두 조회 명령에 `--dir PATH`를 지정할 수 있다.
+`command`는 `devtools.toml`에 등록된 명령을 조회·확인·실행한다. `command list`는 이름과 `exec`, `inject`, `env`, `serve`, `selection`, `output`, `values_update` 요약을 이름순으로 반환하고, `command inspect NAME`은 해당 명령의 `bind`, project와 command 요구 사항을 합친 `requirements`, readiness 설정까지 보여준다. 다른 프로젝트를 조회할 때는 두 조회 명령에 `--dir PATH`를 지정할 수 있다.
 
 ```sh
 devtools command list
@@ -539,7 +543,10 @@ CTRL_BREAK·종료 경계를 사용한다. batch 인수 제한과 PowerShell 5.1
 조회·변경 명령은 항상 JSON을 반환한다. 성공은 stdout, Devtools 오류는 stderr로 분리하고, 오류에는 에이전트가 분기할 수 있는 고정된 코드가 포함된다. 도움말은 text, completion은 artifact, 명령 실행은 passthrough로 구분한다. `devtools schema COMMAND`의 `output_mode`에서 출력 종류를 확인한다. 공통 필드와 이전 버전의 JSON 경로 변경은 [CLI 출력 계약](cli-output.md)을 따른다. 응답의 `schema_version`은 도구가 제공하는 envelope 버전이며 사용자 설정값이 아니다.
 
 값 조회·등록 등 일반 데이터 명령은 대화형 질의를 요구하지 않는다. 명시 stdin은 데이터 입력 경로다.
-다만 대화형 profile 전송은 passphrase를 입력받으며 자동화에서는 파일·stdin 옵션을 명시해야 한다.
+vault 초기 설정·명시 해제와 대화형 profile 전송은 암호 입력이나 허용한 OS 확인이
+필요할 수 있다. 자동화에서는 파일·stdin 입력을 명시하고 기존 해제 세션을 재사용한다.
+일반 조회·실행이 암호나 OS 확인을 자동으로 기다린다고 가정하지 않는다.
+[로컬 secret 보호](secret-protection.md)와 아래 전송 안내를 따른다.
 Windows의 hosts 승격·OS 인증서 신뢰는 별도의 사용자 확인이 필요하다.
 [Profile 이동](profiles.md)과 [Windows 권한 안내](windows.md#local-https-and-permissions)를 따른다.
 

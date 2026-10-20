@@ -1,5 +1,8 @@
 # Devtools correctness, recovery, and storage improvement plan
 
+이 문서는 아래 기준 시점의 설계 기록이다. 당시의 문제·제안·미완료 표현을 보존한다.
+현행 사용법은 [Profile 저장 호환성](profiles.md#저장-형식-업그레이드와-구버전-실행)·[프로세스](processes.md)·[출력 보호](output-protection.md)를 따른다.
+
 ## 상태
 
 상태: 구현 전 통합 계획

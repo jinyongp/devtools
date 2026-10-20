@@ -1,6 +1,8 @@
 # 로컬 var/sec 저장·실행 계약
 
-기준: `89100eb98888895a450b2ebd403e4e1c9b5f52d2`.
+[문서 목록](README.md) · [사용자 설정](secret-protection.md) · [최종 검증과 이력](var-sec/README.md)
+
+구현 전 baseline: `89100eb98888895a450b2ebd403e4e1c9b5f52d2`.
 Workstream: `1888bdf7-3f14-4eeb-8782-329795103204`.
 이 문서는 현재 소스의 구현 계약이다. 저장·실행 보호의 실제 OS 수용 근거는
 [A12](var-sec/A12-final-review.md), bundle·사용처는 [B03](var-sec/B03-final-review.md),
@@ -130,11 +132,12 @@ keyset/generation으로 저장하며 live session/handle을 이전하지 않는�
 초과·선택 누락·snapshot 만료를 구분한다. noninteractive 입력 대기 없음,
 raw detail 없음, 명시 action 없는 위험한 자동 retry 없음이 기본이다.
 
-Bundle/uses/notify는 단계 B, opt-in managed 자동 restart는 단계 C다.
+Bundle/uses/notify는 단계 B, opt-in managed 자동 restart는 단계 C에서 구현했다.
 같은 사용자 악성 agent·이미 실행된 앱·직접 파일/네트워크 출력·root·전체
 과거 상태 복원·모든 메모리 사본 삭제는 이 계약의 격리 보장 밖이다.
 각 작업은 검증→리뷰/수정/재검증→단위 커밋과 근거 기록 후 완료하고,
-전체 구현 후 Z01 종합 리뷰를 수행한다. 모델 통과는 OS/제품 통과가 아니다.
+전체 구현 후 Z01 종합 리뷰를 완료했다. 결과와 과거 중간 기록은 [검증 색인](var-sec/README.md)에서
+구분한다. 모델 통과는 OS/제품 통과가 아니다.
 
 
 ## 수명 연장 없는 metadata 인증

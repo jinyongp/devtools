@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-URL binding·전역 backend 참조·registry v3 확장은
+URL binding·전역 backend 참조·registry v4의 현재 계약은
 [local network contract](network-design.md)를 따른다.
 
 port·instance 명령과 serve·bind의 사용 계약이다. 실행 예시는
@@ -265,7 +265,9 @@ profile·env의 원본 var를 읽는다.
 
 bind는 명령별 명시적 주입이다. `inject = false`여도 bind는 적용한다.
 var 템플릿 참조는 선택한 profile·env에서 필요한 var를 읽고,
-inject는 기존 계약대로 profile 값 전체의 주입 여부를 결정한다.
+inject는 선택한 profile 값의 주입 여부를 결정한다. 전체 선택이 기본이며,
+명시 bundle이 있으면 해당 var 참조도 묶음 안에 있어야 한다. `none`이나 선택 밖 참조는
+전체 선택으로 우회하지 않는다. [bundle 선택](cli-contract.md#재사용할-값-묶음-bundle)을 따른다.
 
 exec 배열에는 `${bind.NAME}`를 사용할 수 있다. bind 평가를 완료한 뒤
 원래 배열 요소 하나를 인자 하나로 전달한다. 추가 인자 분할과 셸 평가는

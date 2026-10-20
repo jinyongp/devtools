@@ -80,6 +80,12 @@ to use the updated executable. Your profile data and `devtools.toml` are preserv
 Downgrading the binary does not undo data-format upgrades; restore a compatible
 backup into a fresh data directory if you need an older release.
 
+For builds with vault support, updating the binary does not encrypt old secrets.
+Follow [local secret setup and migration](secret-protection.md#기존-저장소를-전환하기)
+before using them. Keep the existing key material and recovery backup. On macOS,
+a changed application signature can require explicit Keychain approval with
+`devtools vault unlock --interactive`; installation success does not grant that approval.
+
 Update the Agent Skill separately if you installed it:
 
 ```sh

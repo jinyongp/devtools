@@ -1,5 +1,8 @@
 # Process lifecycle / cleanup recovery plan
 
+이 문서는 아래 기준 시점의 설계 기록이다. 당시의 문제·제안·미완료 표현을 보존한다.
+현행 사용법은 [프로세스](processes.md)·[저장소 정리](cleanup.md)를 따른다.
+
 ## 상태
 
 상태: 구현 전 설계 계획

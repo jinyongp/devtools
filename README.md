@@ -80,12 +80,15 @@ devtools run --env local -- cmd.exe /d /c set LOG_LEVEL
 
 These print `debug` and `LOG_LEVEL=debug`, respectively. In your project, put
 an installed project tool's command after `--`, such as `pnpm dev` or `go run .`.
-Devtools data commands return JSON; child commands keep their own output.
+Devtools data commands return JSON; child output is not wrapped in JSON.
+On builds with [output protection](docs/output-protection.md), non-TTY stdout and
+stderr mask delivered secrets by default. TTY output uses the configured policy.
 
 Commit the generated `devtools.toml` to Git. Projects and worktrees that use the
 same profile share stored values. The current source protects stored secrets with
-local encryption and a reusable OS-protected or passphrase key session; public variables remain readable. This
-requires one-time `devtools vault init` on a build exposing that command. See
+local encryption and a reusable OS-protected or passphrase key session; public
+variables remain readable. On a build exposing the vault commands, this requires
+one-time `devtools vault init`. See
 [local secret protection](docs/secret-protection.md) for setup and build availability.
 The [values guide](docs/cli-contract.md) covers secret registration and saved commands.
 
@@ -126,6 +129,7 @@ developer instructions, and historical design records. Most guides are in Korean
 the [task and workstream guide](docs/tasks.md) is in English.
 
 - Values and configuration: [variables, secrets, and commands](docs/cli-contract.md),
+  [local secret protection](docs/secret-protection.md), [output protection](docs/output-protection.md),
   [environment diagnostics](docs/doctor.md).
 - Servers and URLs: [ports](docs/ports.md), [server lifecycle](docs/processes.md),
   [readiness](docs/process-readiness.md), [local domains, HTTPS, and sharing](docs/local-network.md).
@@ -164,6 +168,8 @@ devtools update
 
 The update replaces the executable and preserves your profile data and project
 configuration. Check the new version with `devtools version`.
+For a build with vault support, follow [secret setup and migration](docs/secret-protection.md)
+before using existing secrets. Updating the executable alone does not encrypt old data.
 
 If you use a coding agent, [update the Skill too](docs/agent-skill.md#업데이트).
 The CLI and Skill are updated separately through their respective installers.

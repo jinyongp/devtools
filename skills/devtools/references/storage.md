@@ -10,7 +10,9 @@ values or secret equality; no metadata difference does not prove equal values.
 
 Use `profile export` and `profile import` for the default cross-device transfer.
 The default is source-first: run export on the source without preparing the destination,
-copy the resulting `.age` file, then import it on the destination. Interactive export
+copy the resulting `.age` file, then import it on the destination. For vault-supporting builds, unlock the protected source
+before export; initialize/unlock the destination before applying protected values.
+This local setup is separate from the archive passphrase. Interactive export
 prompts twice for a passphrase with terminal echo disabled; interactive import prompts once.
 Devtools does not persist the passphrase. For non-interactive use, select exactly one of
 `--passphrase-file` or `--passphrase-stdin`; never place a passphrase in argv or env.

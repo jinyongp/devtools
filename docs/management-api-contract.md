@@ -24,7 +24,9 @@ CLI와 dashboard는 task/workstream, var/sec/env, 프로세스, 백업·복구, 
 
 ## HTTP 인터페이스
 
-`GET /api/profiles`는 값이나 작업이 저장된 profile 목록을 반환한다. `GET /api/query`는 기존 task 조회 계약을 사용한다. `GET /api/values?profile=app&env=local`은 `{profile, env, envs, revision, items, integrity_verified, public_prefixes}`를 반환한다. `integrity_verified:false`는 메타데이터 조회이며 저장 인증이 아니다. `env`를 생략하면 공통 값을 조회한다. 각 item은 `key`, `kind`, `source`, `overrides`를 포함하며 variable에만 `value`를 포함한다.
+`GET /api/profiles`는 값이나 작업이 저장된 profile 목록을 반환한다. `GET /api/query`는 기존 task 조회 계약을 사용한다.
+
+`GET /api/values?profile=app&env=local`은 `{profile, env, envs, revision, items, bundles, integrity_verified, public_prefixes}`를 반환한다. `integrity_verified:false`는 저장 인증이 완료됐다는 뜻이 아니다. `env`를 생략하면 공통 값을 조회한다. 각 item은 `key`, `kind`, `source`, `overrides`와 존재하는 경우 `value_id`를 포함하며 variable에만 `value`를 포함한다. `bundles`는 `bundle_id`, `name`, `value_ids`로 공유 membership을 반환한다.
 
 `POST /api/actions`는 `Content-Type: application/json`, 같은 서버의 정확한 `Origin`, 브라우저 세션의 `Authorization: Bearer …`를 요구한다. 본문은 최대 1 MiB의 JSON 객체다. task 요청 예시는 다음과 같다.
 
@@ -68,6 +70,13 @@ task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, 
 
 값 action은 `variable.set`, `secret.set`, `variable.unset`, `secret.unset`, `env.create`, `env.remove`다. set은 빈 문자열을 포함한 `value`를 받는다. unset은 `key`와 `env`, env action은 `env`를 받는다. `env`의 빈 문자열은 공통 영역이다. env 삭제는 override를 먼저 정리한 상태에서 가능하다.
 
+bundle 변경도 같은 `domain:"values"`와 `change.revision`·`request_id`를 사용한다.
+action은 `bundle.set`, `bundle.rename`, `bundle.remove`다. `change.bundle`은
+`{name, members?, new_name?, preview?}`이며 members는 키 이름 배열이다.
+set은 전체 membership을 교체하고 rename은 `new_name`을 받으며 ID를 유지한다.
+`preview:true`는 저장하지 않는다. bundle 삭제는 값 자체를 삭제하지 않는다.
+CLI의 `bundle list`와 HTTP `/api/values`에서 얻은 revision은 같은 값 저장소의 편집 기준이다.
+
 일괄 등록은 `change.action: "import"`와 `change.import: {content:"KEY=value", variables:[], overwrite:false, preview:true}`를 사용한다. `env`, `revision`, `request_id`는 다른 값 변경과 같은 위치에 전달한다. `preview:true`는 원문 값을 포함하지 않는 `items`와 `applicable`을 반환하고, `preview:false`는 같은 리비전을 검사한 뒤 전체 변경을 원자적으로 저장한다. 새 키는 secret이 기본이며 `variables`로 공개 키를 선택한다. 기존 키는 profile에 등록된 종류를 유지한다.
 
 `overwrite:false`는 선택 env의 유효 값과 상속한 공통 값을 유지하고 `skip`으로 표시한다. `overwrite:true`는 선택한 계층에 값을 저장하며 공통 값을 상속하던 키에는 env override를 만든다. 미리 보기와 적용은 기존 CLI의 `.env` 파서를 사용한다. 화면은 최대 500 KB의 파일 또는 붙여넣기를 받고, 변경 API는 전체 JSON 요청을 1 MiB로 제한한다.
@@ -76,7 +85,12 @@ task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, 
 
 ## 화면에서 관리하기
 
-프로세스 목록은 `GET /api/processes?profile=app`으로 조회한다. 변경은 `POST /api/actions`에 `{domain:"process", profile:"app", process:{action:"start", directory:"/projects/app", command:"web", request_id:"UUID"}}`를 전달한다. stop·restart는 directory·command 대신 `id`에 실행 UUID를 전달한다. start·restart는 선택적으로 `env`와 `capture_logs`를 받는다. 실행 UUID가 변경 대상을 고정하고 요청 UUID가 재시도를 구분한다. 값·작업 편집 리비전은 프로세스 실행에 적용하지 않는다. `GET /api/process-logs?profile=app&id=UUID`는 명시적으로 요청한 원문을 `{content}`로 반환한다.
+프로세스 목록은 `GET /api/processes?profile=app`으로 조회한다. 변경은 `POST /api/actions`에 `{domain:"process", profile:"app", process:{action:"start", directory:"/projects/app", command:"web", request_id:"UUID"}}`를 전달한다. stop·restart는 directory·command 대신 `id`에 실행 UUID를 전달한다. start·restart는 선택적으로 `env`, `bundle`, `capture_logs`를 받는다.
+실행 UUID가 변경 대상을 고정하고 요청 UUID가 재시도를 구분한다. 값·작업 편집 리비전은 프로세스 실행에 적용하지 않는다.
+
+`GET /api/processes`는 `items`, `instances`와 실행 ID별 `values` 관찰 맵을 반환한다. 실행의 `input_version`, `value_watch`, `value_apply`와 현재 비교 결과는 [값 사용처](cli-contract.md#값-메타데이터와-사용처-values)·[자동 반영](processes.md#값-변경-알림과-자동-반영)을 따른다.
+
+`GET /api/process-logs?profile=app&id=UUID`는 명시적으로 요청한 저장 로그를 `{content}`로 반환한다. 새 실행은 [저장 전 마스킹](output-protection.md)을 적용하며 과거 로그는 소급 처리하지 않는다.
 
 준비 확인은 같은 endpoint에 `{domain:"process", profile:"app", process:{action:"check", id:"UUID"}}`를 전달한다. 대상 profile을 검사한 뒤 실행 시점의 설정·환경으로 한 번 확인하고, 실행 메타데이터와 `readiness`를 반환한다. 매 요청은 새 관측이며 변경 영수증을 사용하지 않는다. [준비 확인 계약](process-readiness.md)에 결과와 시간 제한을 정의한다.
 

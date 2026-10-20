@@ -8,6 +8,13 @@ profile을 공유하지만, 다른 기기로 옮길 때는 암호화한 파일�
 아래 전송 흐름은 v0.22.3의 CLI protocol v5에서 도입되었으며 v6와 현재 소스 후보 v7에서도 같습니다.
 Windows 네이티브와 WSL 사이에도 암호화 파일로 옮깁니다. 데이터 디렉터리를 직접 공유하지 마세요.
 
+vault 지원 빌드의 보호된 원본에서는 export 전에 기존 키 세션을 해제해야 합니다.
+secret이 포함된 자료를 받을 대상에서도 [vault를 설정하고 해제](secret-protection.md)하세요.
+원본에서 archive를 먼저 만드는 순서는 그대로이며, 대상 준비는 import 적용 전에 하면 됩니다.
+전송 암호는 archive 복호화용이고 vault 암호는 로컬 키 해제용으로 서로 별개입니다.
+기기 키·세션은 전송하지 않습니다. bundle과 공유 ValueID·논리 버전은 보존하고,
+대상 profile ID·storage generation·keyset은 새로 만듭니다.
+
 ## 저장된 profile 찾기
 
 프로젝트 밖에서도 다음 명령으로 알려진 profile을 조회할 수 있습니다.
@@ -157,6 +164,11 @@ profile values와 task 저장소는 읽기만 할 때 기존 형식을 그대로
 처음 변경하면 현재 저장 형식으로 자동 전환될 수 있습니다. 전환은 중간 상태가 노출되지 않도록
 복구 가능한 transaction으로 게시되며, 같은 profile의 이전 파일 경로에는 구버전이 별도 상태를
 새로 만들지 못하도록 차단 정보가 남습니다.
+
+secret 암호화 전환은 별도입니다. 실행 파일 업데이트나 단순 조회만으로 이전 평문 자료를
+전환하지 않으며, `vault init`이 모든 기존 profile의 secret 계층을 전환합니다.
+전환 전에 같은 저장소의 CLI·dashboard 등 writer를 함께 업데이트하고,
+기존 자료와 복구 가능한 암호화 백업을 보존하세요. 자세한 순서는 [전환 안내](secret-protection.md#기존-저장소를-전환하기)를 따릅니다.
 
 이 전환이 한 번 발생한 데이터 디렉터리를 **구버전 devtools binary가 다시 쓰는 in-place downgrade는
 지원하지 않습니다.** 구버전으로 돌아가야 한다면 전환 전에 별도로 보관한 구버전 호환 backup을

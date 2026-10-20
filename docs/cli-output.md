@@ -92,7 +92,7 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 
 | 명령군 | 데이터 구조 |
 | --- | --- |
-| `command`, `env`, `variable`, `secret` 목록 | `items`; 해당하는 경우 `profile` |
+| `command`, `env`, `variable`, `secret`, `bundle` 목록 | `items`; 해당하는 경우 `profile` |
 | `command inspect`, `project inspect` | `item`; `profile` 또는 `paths` 메타데이터 |
 | `init` | `item`, `changed` |
 | `port`, `instance` 목록·단일 조회 | `items` 또는 `item` |
@@ -101,6 +101,9 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `port prune` | `removed`, `retained`, `changed` 보고서 |
 | `process` 목록·상태·변경 | `items`, `item`, 또는 `item`·`changed`·`replayed` |
 | `process check/wait/logs` | readiness 또는 로그 보고서 |
+| `vault status`, init/recover/lock/unlock | 각각 `item`, `item`·`changed`; 상태 조회는 키를 해제하지 않음 |
+| `bundle set/rename/remove` | `profile`, `bundle`, `revision`, `changed`, `replayed` |
+| `values inspect`, `values uses` | 각각 `profile`·`env`·`selection`·`values`, `profile`·`items`; 원문 없는 관찰 보고서 |
 | `proxy` 목록·상태·변경 | `items`, `item`, 또는 `item`·`changed`·`replayed` |
 | `dashboard`·`dashboard start`, status, stop | 각각 `item`·`changed`, `item`, `changed` |
 | `backup keygen/configure/create`, inspect | 각각 `item`·`changed`, `item` |
@@ -125,7 +128,10 @@ CLI protocol v7은 Windows 지원과 함께 도입되었습니다. `version`/`sc
 `data.protocol_version`이 7이고 envelope `schema_version`은 1입니다.
 `diagnostics`에 필수 `platform` 객체가 추가되고 `completion`의 공개 shell 목록에
 `powershell`이 추가됩니다. 설치된 binary의 schema를 다시 조회하세요.
-`run`의 child 인자 경계·출력 모드와 버전 없는 `devtools.toml`은 v6와 같습니다.
+`run`의 child 인자 경계·출력 모드 이름과 버전 없는 `devtools.toml`은 v6와 같습니다.
+현재 소스의 출력 보호는 같은 `passthrough` 모드에서 non-TTY stream을 기본 마스킹하므로
+이 모드를 byte 무변경 보장으로 해석하지 마세요. vault·bundle 지원은 protocol 번호만으로
+판정하지 말고 설치한 CLI의 해당 명령 schema를 확인하세요.
 
 ## protocol v6 마이그레이션
 

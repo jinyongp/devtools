@@ -1,6 +1,9 @@
 # 로컬 secret 보호
 
-이 문서는 var/sec workstream의 **현재 소스** 기준이다. 실제 native·설치물 검증은
+[문서 목록](README.md) · [값과 명령](cli-contract.md) · [출력 보호](output-protection.md)
+
+이 문서는 **현재 개발 소스**의 vault 기능을 설명한다. 공개 v0.27.0에는 이 기능이 없다.
+다음 배포의 변경과 전환 조건은 [릴리스 준비서](releases/v0.28.0.md)를 따른다. 실제 native·설치물 검증은
 [A12 수용 기록](var-sec/A12-final-review.md)에 있으며, 릴리스 게시·설치된 CLI의 지원과는
 구분한다. 설치한 CLI에서 `devtools schema vault status`와 `devtools schema vault init`이
 제공되는지 먼저 확인한다. 이전 빌드의 평문 자료는
@@ -50,6 +53,26 @@ init은 실제 보호 키를 다시 열어 일치 여부를 확인하고 기존 
 사용자가 준비한 secret 파일은 지우지 않는다. 기존 파일·백업·과거 로그와 파일시스템의
 이전 사본이 안전하게 삭제되었다고 보장하지 않는다. `vault_already_initialized`면
 init을 반복하거나 키를 지우지 말고 기존 상태를 확인한다.
+
+## 기존 저장소를 전환하기
+
+`vault init`은 현재 데이터 root의 **모든 profile**에 적용된다. 프로젝트 하나에만
+적용하는 옵션은 없다. 실행 파일 업데이트와 저장 전환은 다음 순서로 구분한다.
+
+1. 기존 버전에서 복구 가능한 [암호화 백업](backup.md)을 만들고 복구 키를 별도로
+   보관한다. 원본 `.env`와 입력 파일도 전환 성공을 확인할 때까지 보존한다.
+2. 같은 데이터 root에 접근하는 CLI·dashboard 등 writer를 vault 지원 빌드로 맞춘다.
+   실행 중인 예전 dashboard는 종료하고 새 빌드로 시작한다. 이미 실행한 앱은
+   옛 환경을 유지하므로 전환 후 별도로 재시작할 대상을 정한다.
+3. `devtools vault status`를 확인한다. `uninitialized`라면 위의 native 또는 명시
+   passphrase 방식으로 한 번 초기화한다. 기존 vault가 있으면 init 대신 unlock을 쓴다.
+4. `vault status`의 `data.item.state`와 `devtools values inspect --profile NAME`을
+   확인한다. 필요한 명령을 새로 실행해 준비·실행 결과를 확인한다. 저장 전환 성공은
+   기존 앱의 갱신이나 외부 서비스 인증 성공을 뜻하지 않는다.
+
+전환된 저장소를 구버전 binary로 다시 쓰는 downgrade는 지원하지 않는다. 구버전이
+필요하면 전환 전 보관한 호환 백업을 별도 새 데이터 경로에서 복구한다. 중단·손상은
+아래 [복구 절차](#오류와-복구)를 따르며 보호 파일 삭제로 초기화를 강제하지 않는다.
 
 ## 평소 사용과 잠금
 
@@ -109,10 +132,13 @@ backend 선택은 CLI에서 한다. 암호 입력은 요청 전송 뒤 비우고
 ## 오류와 복구
 
 `vault_locked`는 명시 unlock, `passphrase_required`는 안전한 입력 제공이 필요하다.
-`key_missing`·`integrity_failed`·`recovery_required`를 빈 저장소로 취급하지 않는다.
+`key_missing`·`integrity_failed`·`vault_recovery_required`를 빈 저장소로 취급하지 않는다.
+`recovery_required`는 `vault status`의 상태 이름이며 오류 코드와 구분한다.
 보호 파일을 지우거나 새 키로 덮어쓰지 말고 상태와 기존 복구 자료를 보존한다.
 
 설정이나 암호화 저장 전환이 중단되었으면 기존 키로 해제한 뒤 실행한다.
+다음 unlock은 passphrase backend용이다. native backend에서는 passphrase 옵션을
+생략하고, OS 확인이 필요할 때만 `--interactive`를 사용한다.
 
 ```sh
 devtools vault unlock --passphrase-file /private/vault-passphrase

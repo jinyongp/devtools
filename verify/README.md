@@ -55,6 +55,9 @@ devtools run test:installed project_lifecycle
 # vault 설정·재사용 세션·잠긴 metadata·JSON/schema/completion
 devtools run test:installed vault
 
+# 저장값 변경 알림·명시 자동 restart·TLS proxy·readiness
+devtools run test:installed value_updates
+
 # 실제 두 PTY의 공유 세션·daemon crash 뒤 수동 잠금 유지
 devtools run test:installed vault_session
 
@@ -117,7 +120,8 @@ Actions이며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 절차를 대
 
 Release의 `profile-exchange`는 이미 빌드한 Linux·macOS·Windows x64/ARM64 CLI와 합성 데이터로
 암호화 archive를 교환한다. 네 native consumer가 다른 세 producer의 archive를 import해 총 12개
-방향을 확인한다. 값·secret·env override·task·workstream·validation, preview/apply/retry를 검사한다.
+방향을 확인한다. 값·secret·env override·공유 bundle ID와 membership·논리 값/슬롯 버전,
+task·workstream·validation, preview/apply/retry를 검사한다. 대상의 profile ID·저장 세대·keyset은 새로 만든다.
 artifact 전송이 mode/ACL을 보존하지 않으므로 hash 확인 후 테스트 소유 복사본에 원래 private 권한을
 복원한다. importer의 권한 검사는 유지한다. 경로 문자열은 그대로 보존하며 자동 변환은 약속하지 않는다. 별도 빌드는 하지 않고
 package 작업과 병렬 실행하되 게시 전에 성공을 요구한다. 실제 사용자 데이터는 사용하지 않는다.
@@ -125,6 +129,11 @@ package 작업과 병렬 실행하되 게시 전에 성공을 요구한다. 실�
 실제 PC의 UAC·CurrentUser trust/browser 통합·터미널 닫기·설치/update 관찰과 최종 WSL2/Windows
 browser 연계는 NOT RUN이다. runner browser 성공이나 과거 standalone probe로 그 범위를
 확대하지 않는다. [지원 범위와 한계](../docs/windows.md)를 함께 확인한다.
+
+var/sec의 실제 Keychain·DPAPI·Secret Service·다른 UID/SID·logout·소유 WSL2 재시작은
+[A12 수용 기록](../docs/var-sec/A12-final-review.md)과 [검증 색인](../docs/var-sec/README.md)을 따른다.
+일반 installed 시나리오의 passphrase fixture와 OS별 native 검증을 구분한다.
+WSL vault 재시작 통과를 Windows 브라우저 네트워크 검증으로 확대하지 않는다.
 
 ## 기존 release 검증
 

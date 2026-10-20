@@ -78,7 +78,9 @@ devtools run --env local -- cmd.exe /d /c set LOG_LEVEL
 
 각각 `debug`, `LOG_LEVEL=debug`가 출력됩니다. 실제 프로젝트에서는 `--` 뒤에
 `pnpm dev`, `go run .` 등 설치된 프로젝트 도구의 명령을 넣으세요. devtools 명령은
-JSON을 반환하고, 실행한 자식 프로그램의 출력은 그대로 전달합니다.
+JSON을 반환하고, 자식 프로그램의 출력은 JSON으로 감싸지 않습니다.
+[출력 보호](docs/output-protection.md)를 지원하는 빌드에서는 non-TTY stdout·stderr의
+전달된 secret을 기본 마스킹합니다. TTY 출력에는 설정한 정책을 적용합니다.
 
 생성된 `devtools.toml`은 Git에 커밋해 두세요. 같은 profile을 사용하는 프로젝트와
 worktree는 저장한 값을 공유합니다. 현재 소스는 secret을 로컬 암호화하고
@@ -121,7 +123,8 @@ v0.22.3 등 이전 버전에서는 구분자 `--`를 붙이세요.
 
 [전체 문서](docs/README.md)에서 사용자 가이드, API 계약, 개발 안내와 과거 설계 기록을 찾을 수 있습니다.
 
-- 값과 설정: [변수·secret·명령 실행](docs/cli-contract.md), [개발환경 진단](docs/doctor.md).
+- 값과 설정: [변수·secret·명령 실행](docs/cli-contract.md), [로컬 secret 보호](docs/secret-protection.md),
+  [출력 보호](docs/output-protection.md), [개발환경 진단](docs/doctor.md).
 - 서버와 주소: [포트](docs/ports.md), [서버 실행·종료](docs/processes.md),
   [준비 확인](docs/process-readiness.md), [로컬 도메인·HTTPS·공유](docs/local-network.md).
 - 작업 관리: [task·workstream·dashboard](docs/tasks.md) — `devtools dashboard`가 반환한
@@ -158,6 +161,8 @@ devtools update
 
 기존 profile 데이터와 프로젝트 설정을 유지하며 실행 파일을 교체합니다.
 완료 후 `devtools version`으로 새 버전을 확인하세요.
+vault 지원 빌드에서 기존 secret을 사용하려면 [설정과 저장 전환](docs/secret-protection.md)을
+따르세요. 실행 파일 업데이트만으로 이전 자료가 암호화되지는 않습니다.
 
 에이전트와 사용한다면 [Skill도 함께 업데이트](docs/agent-skill.md#업데이트)하세요.
 CLI와 Skill은 각각 사용하는 설치 도구로 갱신합니다.

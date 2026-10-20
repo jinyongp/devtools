@@ -1,12 +1,17 @@
 # Task와 workstream 설계
 
+[문서 목록](README.md) · [현행 사용법](tasks.md) · [API 상세 계약](task-api-contract.md)
+
 상태: task·workstream·dashboard의 사용·API 계약. 실행 예시는 [사용 가이드](tasks.md), 명령별 입력은 바이너리의 `schema`에서 확인한다. [API 상세 계약과 전이 검증](task-api-contract.md)에 입력·출력 필드, action별 전이, 오류·재시도 우선순위와 검증 사례를 정의한다.
+
+초기 제안과 후속 확정 내용이 함께 남아 있다. 제안 표의 호출만 복사하지 말고,
+현행 API와 설치한 CLI의 schema에서 필수 옵션·지원 기능을 확인한다.
 
 ## 목적과 합의한 방향
 
 devtools에서 계획 수립부터 실행·검증·마감까지 이어지는 작업 흐름을 관리한다. 단일 `devtools` 에이전트 스킬이 CLI에 저장된 맥락과 상태를 읽고 작업을 진행한다. 기존 workstream 스킬의 명세·계획·검증 연결과 Taskwarrior의 작업·의존성 개념을 통합한다.
 
-macOS, Linux, WSL에서 비대화형 CLI와 JSON 응답을 사용한다. 에이전트가 주 사용자이며 여러 세션의 동시 작업과 세션 중단 후 인계를 지원한다.
+macOS, Linux, WSL과 Windows 네이티브에서 비대화형 CLI와 JSON 응답을 사용한다. 에이전트가 주 사용자이며 여러 세션의 동시 작업과 세션 중단 후 인계를 지원한다.
 
 | 개념 | 의미 |
 | --- | --- |
@@ -27,6 +32,7 @@ CLI가 명세·계획의 Markdown 본문, 구조화된 참조 관계, task와 �
 | --- | --- |
 | macOS | `~/Library/Application Support/devtools/data` |
 | Linux·WSL | `$XDG_DATA_HOME/devtools`, 기본값 `~/.local/share/devtools` |
+| Windows | Known Folder LocalAppData 아래 `devtools/data` |
 
 Linux·WSL의 XDG 경로가 비어 있거나 상대 경로이면 기본값을 사용한다. 데이터 디렉터리의 `tasks` 아래에서 profile별 action 이력과 요청 영수증을 관리한다.
 
@@ -183,7 +189,7 @@ task와 workstream 모두 여러 선행 항목을 가질 수 있다. 선행 항�
    └─ 공통 기반 완료 (같은 항목 참조)
 ```
 
-조회에는 항목 ID·제목·현재 상태·대기 원인을 포함한다. workstream 외부의 차단 원인도 task 조회에서 확인할 수 있게 한다. 역방향 조회, 깊이 제한, 일부 결과의 이어 읽기, 사람이 읽는 텍스트 출력 옵션은 API 상세화 때 정한다.
+조회에는 항목 ID·제목·현재 상태·대기 원인을 포함한다. workstream 외부의 차단 원인도 task 조회에서 확인할 수 있게 한다. 출력은 JSON이며 역방향 조회·깊이 제한·이어 읽기 계약은 [Task API](task-api-contract.md#dashboard조회-경계)를 따른다.
 
 ### 점유와 실행
 

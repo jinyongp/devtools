@@ -54,6 +54,9 @@ Windows 11 ARM64와 Go 1.27.1을 사용한다. 현재 runner와 실행 근거·�
 [Windows 안내](windows.md)와 [최종 리뷰](windows-support/implementation/W9.md)를 따른다.
 Windows 구현 결정의 배경은 [지원 계획](windows-support-plan.md)과
 [사전 조사](windows-support/research.md)에 보존한다. 이 기록이 Windows 출시를 의미하지는 않는다.
+Windows 최초 검증의 W9와 현재 var/sec 검증은 별도 소스 기준이다.
+최신 var/sec 근거는 아래 [통합 수용 검증](#varsec-통합-수용-검증)과
+[검증 색인](var-sec/README.md)에서 확인한다.
 
 변경 영역만 먼저 확인할 때는 다음 검사를 사용한다.
 
@@ -188,6 +191,24 @@ devtools run release:publish
 깨끗한 main을 올린 뒤 버전과 정확한 커밋 SHA로 Release 워크플로를 요청한다.
 로컬에서 릴리즈 태그를 만들지 않는다. Node.js와 인증된 GitHub CLI(`gh`)가 필요하다.
 
+`release:plan`은 remote tag를 fetch하며 게시하지 않는다. GitHub 응답이 커서
+`spawnSync gh ENOBUFS`로 실패하면 버전 계산도 완료되지 않은 것이다.
+`release:publish`도 같은 조회 경로를 사용하므로 이 오류를 게시 성공으로 해석하지 않는다.
+현재 확인한 후보와 전환 안내는 [v0.28.0 준비서](releases/v0.28.0.md)를 따른다.
+명시 workflow 입력으로 게시할 때는 공개 안정 릴리스 목록을 좁혀 조회하고,
+그 태그가 후보의 ancestor인지와 이후 커밋의 feature/breaking 변경을 확인해 버전을 정한다.
+최신 공개 태그가 후보에 포함되지 않으면 단순히 버전 숫자만 올리지 않는다.
+
+```sh
+gh release list --limit 10 --json tagName,isDraft,isPrerelease,publishedAt
+git merge-base --is-ancestor PREVIOUS_TAG CANDIDATE_SHA
+git log --format=%s PREVIOUS_TAG..CANDIDATE_SHA
+```
+
+`PREVIOUS_TAG`와 `CANDIDATE_SHA`는 확인한 공개 안정 태그와 최종 커밋으로 바꾼다.
+0.x의 feature/breaking은 minor, 나머지는 patch를 올리는 것이 현재 script의 규칙이다.
+직접 workflow를 요청해도 아래의 source/version·필수 검사·main ancestry 조건은 유지된다.
+
 워크플로는 요청한 전체 commit SHA를 checkout하고 macOS·Linux 검사와 Windows x64·ARM64의
 full 제품 검사를 필수 dependency로 실행한다. Windows 소스 검증은 요청 SHA와 workflow SHA가 같고,
 같은 저장소 main push의 전체 lane·필수 단계가 성공한 최신 attempt만 재사용한다. PR·fork·focused 실행,
@@ -235,9 +256,10 @@ Pages source는 저장소
 태그 생성과 게시 없이 모든 필수 검증·패키징을 실행하려면 다음 명령을 사용한다.
 후보 branch는 --ref에 해당 branch를 지정하고 같은 후보의 전체 SHA를 commit에 전달한다.
 Homebrew·Pages도 게시하지 않는다. 이 경우 `release-assets` artifact에서 준비된 배포물을 확인할 수 있다.
+`VERSION`은 확인한 릴리스 번호(접두사 `v` 제외)로 바꾼다.
 
 ```sh
-gh workflow run release.yml --ref main -f version=0.23.0 -f commit="$(git rev-parse HEAD)" -f publish=false
+gh workflow run release.yml --ref main -f version=VERSION -f commit="$(git rev-parse HEAD)" -f publish=false
 ```
 
 로컬에서 스킬 배포물만 확인하려면

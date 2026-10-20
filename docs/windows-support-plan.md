@@ -1,5 +1,8 @@
 # Windows native / WSL support implementation plan
 
+과거 구현 전 계획이다. 완료 판정은 [W9](windows-support/implementation/W9.md),
+이후 var/sec의 OS별 검증은 [A12](var-sec/A12-final-review.md)를 따른다.
+
 ## 1. 목적과 상태
 
 Windows 네이티브 CLI를 추가하고 WSL 사용 환경을 개선한다. 구현자가 운영체제별 의미를

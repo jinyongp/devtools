@@ -1,8 +1,21 @@
 # devtools documentation
 
 Start with the [root README](../README.md) for installation and a first project.
-A [Korean README](../README.ko.md) is also available. These guides assume the latest
-stable release; release-specific changes belong in release notes and historical records.
+A [Korean README](../README.ko.md) is also available. Check examples against your
+installed CLI's help and schema. Installers select the latest stable release;
+this checkout also documents source features that may not yet be published.
+
+## Check feature availability
+
+`devtools version` identifies the executable you actually run. Protocol v7 alone
+does not establish vault support: discover each feature with `devtools schema`,
+for example `devtools schema vault init`, `devtools schema bundle set`, and
+`devtools schema command run`. A release or Skill update does not update an
+already-installed CLI, migrate old secret files, or restart existing services.
+
+The [release preparation guide](releases/v0.28.0.md) describes the candidate changes
+and publication checks. The [var/sec review index](var-sec/README.md) links completed
+implementation evidence and earlier checkpoints; neither page is proof of publication.
 
 <a id="문서-버전과-예제-읽기"></a>
 
@@ -46,6 +59,7 @@ Some linked topic guides are currently in Korean.
 
 - [Values and commands](cli-contract.md): profiles, environment overrides, variables, secrets, dotenv import, and saved commands.
 - [Local secret protection](secret-protection.md) (current source): one-time vault setup, reusable sessions, locking, migration, and recovery.
+- [Reusable value bundles and usage](cli-contract.md#재사용할-값-묶음-bundle): save var/sec selection once and inspect delivery without reading secrets.
 - [Diagnostics](doctor.md): `doctor`, `diagnostics`, required tools, and recovery.
 - [Ports](ports.md): assignments, bindings, project URLs, and worktree names.
 - [Processes](processes.md): start, logs, restart, stop, and partial batch failures.
@@ -68,6 +82,7 @@ Design background is separate from public command availability.
 - [Dashboard API](management-api-contract.md): authentication, Origin, mutations, and previews.
 - [Port contract](port-design.md), [network contract](network-design.md) (English): identity, declarations, addresses, and ownership.
 - [Legacy HTTP proxy contract](proxy-design.md): HTTP compatibility; extensions follow the network contract.
+- [Local var/sec contract](var-sec-contract.md): authenticated storage, key sessions, launch snapshots, and lock guarantees.
 
 ## Development and verification
 
@@ -83,8 +98,9 @@ Design background is separate from public command availability.
 These records preserve decisions and evidence for their stated source and date.
 Use the guides above for current installation and behavior.
 
-- [Documentation review](documentation-review.md).
-- [Windows release preparation](releases/v0.25.0.md).
+- [Current documentation review](documentation-audit.md), [previous documentation review](documentation-review.md).
+- [var/sec release preparation](releases/v0.28.0.md), [historical Windows preparation](releases/v0.25.0.md).
+- [var/sec final reviews and implementation history](var-sec/README.md).
 - [Task/workstream design](task-workstream-design.md), [management roadmap](management-roadmap.md).
 - [Proxy MVP](proxy-plan.md), [profile/project lifecycle](profile-project-lifecycle-plan.md).
 - [Hardening](devtools-hardening-plan.md), [storage correctness](correctness-recovery-storage-plan.md), [process/cleanup recovery](process-lifecycle-recovery-plan.md).

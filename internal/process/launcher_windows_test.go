@@ -86,6 +86,22 @@ type jobScenarioResult struct {
 	StopMillis int64
 }
 
+func readFixtureMarker(path string) ([]byte, error) {
+	name, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return nil, err
+	}
+	// The final name can become visible before the publishing rename releases
+	// its DELETE handle. Readers must permit that handle to coexist with them.
+	handle, err := windows.CreateFile(name, windows.GENERIC_READ, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(handle), path)
+	defer file.Close()
+	return io.ReadAll(file)
+}
+
 func openFixtureNodes(dir string, count int) ([]windows.Handle, error) {
 	deadline := time.Now().Add(12 * time.Second)
 	for time.Now().Before(deadline) {
@@ -99,7 +115,7 @@ func openFixtureNodes(dir string, count int) ([]windows.Handle, error) {
 		if complete {
 			var handles []windows.Handle
 			for n := 0; n < count; n++ {
-				body, err := os.ReadFile(filepath.Join(dir, fmt.Sprintf("node-%d", n)))
+				body, err := readFixtureMarker(filepath.Join(dir, fmt.Sprintf("node-%d", n)))
 				if err != nil {
 					for _, h := range handles {
 						windows.CloseHandle(h)
@@ -125,6 +141,34 @@ func openFixtureNodes(dir string, count int) ([]windows.Handle, error) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	return nil, errors.New("fixture tree was not ready")
+}
+
+func TestWindowsJobFixtureReadsMarkerWhileRenameHandleIsOpen(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "node-0")
+	if err := os.WriteFile(path, []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {
+		t.Fatal(err)
+	}
+	name, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, err := windows.CreateFile(name, windows.DELETE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(handle)
+	if _, err := os.ReadFile(path); !errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
+		t.Fatalf("fixture must reproduce a pending rename's sharing conflict: %v", err)
+	}
+	handles, err := openFixtureNodes(dir, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeFixtureNodes(handles)
+	if len(handles) != 1 {
+		t.Fatalf("got %d process handles, want 1", len(handles))
+	}
 }
 func closeFixtureNodes(handles []windows.Handle) {
 	for _, h := range handles {

@@ -45,26 +45,51 @@ jobs:
         with:
           ref: ${{ steps.release.outputs.tag }}
 
+      - name: Select installer files
+        id: source
+        run: |
+          printf 'commit=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          {
+            echo 'files<<INSTALLERS'
+            echo install.sh
+            if [ -f scripts/install.ps1 ]; then echo install.ps1; fi
+            echo INSTALLERS
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify published installer files
+        id: installers
+        uses: releaseway/actions/distribute@1b1d72999b59f03d334845f5accb982c38f4afe1 # v0.6.1
+        with:
+          tag: ${{ steps.release.outputs.tag }}
+          commit: ${{ steps.source.outputs.commit }}
+          files: ${{ steps.source.outputs.files }}
+          verification: digest
+
       - name: Prepare installer site
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ steps.release.outputs.tag }}
+          SITE: ${{ steps.installers.outputs.path }}
         run: |
-          mkdir -p pages
-          gh release download "$TAG" --pattern install.sh --dir pages
-          cmp scripts/install.sh pages/install.sh
+          cmp scripts/install.sh "$SITE/install.sh"
           if [ -f scripts/install.ps1 ]; then
-            gh release download "$TAG" --pattern install.ps1 --dir pages
-            cmp scripts/install.ps1 pages/install.ps1
+            cmp scripts/install.ps1 "$SITE/install.ps1"
           fi
-          sh -n pages/install.sh
-          touch pages/.nojekyll
+          sh -n "$SITE/install.sh"
+          touch "$SITE/.nojekyll"
+
+      - name: Preserve installer verification report
+        if: ${{ always() && steps.installers.outputs.report != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installer-distribution
+          path: ${{ steps.installers.outputs.report }}
+          if-no-files-found: error
+          retention-days: 30
 
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: pages
+          path: ${{ steps.installers.outputs.path }}
       - name: Deploy installer page
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

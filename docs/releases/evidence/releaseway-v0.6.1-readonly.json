@@ -1,0 +1,85 @@
+{
+  "date": "2026-10-20",
+  "actions": {
+    "version": "v0.6.1",
+    "commit": "1b1d72999b59f03d334845f5accb982c38f4afe1",
+    "annotated_tag_object": "58b3d80a9efc8953d849c13139b8a1709bd0334b",
+    "release_url": "https://github.com/releaseway/actions/releases/tag/v0.6.1",
+    "bundle_modified": false,
+    "main_bundle_sha256": "07fe7fbed46b0f041182fa7d6e4444c4b0643d07b5db8df0af5b2e485d3462ff",
+    "distribute_bundle_sha256": "4d24d3889c3b01086809843ea16507f8e4074fc963da5fa97817879977718b55"
+  },
+  "homebrew_actions": {
+    "latest_version": "v0.4.2",
+    "commit": "c1be213c09e18836142bbad3561a0feda507536a",
+    "changed": false
+  },
+  "runtime": "Node.js 24.22.0 on Linux",
+  "notes_preview": {
+    "repository": "jinyongp/devtools",
+    "tag": "v0.28.0",
+    "commit": "3ca717a2510425a0cab25e579cde6ee98ebeb1ae",
+    "notes": "standard",
+    "state": "preview",
+    "notes_state": "prepared",
+    "release_url": "",
+    "diagnostics": {
+      "operation": "preview",
+      "status": "success",
+      "phase": "complete",
+      "remote_tag": "matched",
+      "error": null
+    },
+    "previous_enobufs_reproduced": false
+  },
+  "installer_distribution": {
+    "tag": "v0.28.0",
+    "commit": "3ca717a2510425a0cab25e579cde6ee98ebeb1ae",
+    "release_id": 417893503,
+    "immutable": true,
+    "verification": "digest",
+    "source_scripts_byte_equal": true,
+    "files": [
+      {
+        "path": "install.sh",
+        "size": 6743,
+        "sha256": "09c10620cd8f240b9695ea388f1e5953870b56ca34a9927c1a53808458399d3e"
+      },
+      {
+        "path": "install.ps1",
+        "size": 16203,
+        "sha256": "846c929af14d62043137ebd82ecfde77d8bcfc9975c3431fc64177bfcce63943"
+      }
+    ]
+  },
+  "checks": {
+    "upstream_tests": {
+      "passed": 49,
+      "files": [
+        "test/github.test.mjs",
+        "test/contract.test.mjs",
+        "test/release-contract.test.mjs",
+        "test/action-smoke.test.mjs",
+        "test/diagnostics.test.mjs",
+        "test/distribute-release.test.mjs",
+        "test/distribute-local.test.mjs"
+      ]
+    },
+    "devtools_release_tests": {
+      "passed": 10,
+      "file": "scripts/release.test.mjs",
+      "environment": "GOCACHE=/tmp/devtools-analysis-gocache",
+      "initial_attempt": "9 passed; packaging fixture could not write the default Go cache under the sandbox. Reran with the writable task cache."
+    },
+    "actionlint": {
+      "version": "1.7.12",
+      "passed": true,
+      "files": [".github/workflows/release.yml", ".github/workflows/pages.yml"],
+      "shellcheck": false,
+      "pyflakes": false
+    }
+  },
+  "publication_executed": false,
+  "homebrew_publish_executed": false,
+  "pages_deploy_executed": false
+}

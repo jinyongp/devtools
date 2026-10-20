@@ -34,17 +34,8 @@ on:
       - package.json
       - go.mod
       - go.sum
+  # Required checks must report a result for every PR, including docs-only PRs.
   pull_request:
-    paths:
-      - .github/workflows/windows-platform.yml
-      - internal/**
-      - cmd/devtools/**
-      - scripts/**
-      - devtools.toml
-      - pnpm-lock.yaml
-      - package.json
-      - go.mod
-      - go.sum
 
 permissions:
   contents: read
@@ -417,3 +408,16 @@ jobs:
             unsupported*.json
           if-no-files-found: warn
           retention-days: 7
+
+  validation:
+    # Focused diagnostics and reused release lanes cannot satisfy the full PR gate.
+    name: ${{ (inputs.focus == '' || inputs.focus == 'full') && !inputs.reuse-source && 'Windows validation' || 'Windows focused validation' }}
+    if: ${{ always() }}
+    needs: native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require all native Windows lanes
+        env:
+          NATIVE_RESULT: ${{ needs.native.result }}
+        run: test "$NATIVE_RESULT" = success

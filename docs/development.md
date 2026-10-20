@@ -179,6 +179,23 @@ CLI에서 확인한 최종 값을 한 흐름으로 검증한다. Release의 Linu
 - packaging·저장 호환성·분리된 프로세스 수명이 기능에 포함되면 installed-release 검증을 추가한다.
 
 
+## main 병합 검사
+
+main의 필수 상태 검사는 GitHub Actions가 생성하는 `Windows validation`과
+`Homebrew validation`이다. GitHub의 branch protection 설정에서 관리하며,
+실행 workflow가 없는 과거 `auto-merge / auto-merge` 항목은 사용하지 않는다.
+자동 병합 기능 자체와 필수 검사는 별개다.
+
+두 workflow는 문서만 바뀐 PR을 포함해 모든 PR에서 실행된다.
+Windows 검사는 x64·ARM64 전체 lane의 성공을, Homebrew 검사는 Formula 생성·검증의
+성공을 요구한다. 선행 job이 실패·취소·skip돼도 최종 검사는 실행되어 실패를 반환한다.
+Windows focused 실행과 릴리스의 소스 검사 재사용 실행은 `Windows focused validation`으로
+구분하므로 전체 PR 검사를 대신하지 않는다. Homebrew는 비게시 수동 검사도 지원한다.
+
+관리자 예외는 기존 설정을 유지한다. 관리자의 직접 push는 필수 검사를 우회할 수 있으므로
+일반 변경은 PR의 두 검사 결과를 확인한 뒤 병합한다. 문서 변경에도 Windows 전체 검사를
+실행하며, push의 경로 필터는 PR 검사 적용 범위에 영향을 주지 않는다.
+
 ## 릴리스
 
 ```sh
@@ -191,10 +208,12 @@ devtools run release:publish
 깨끗한 main을 올린 뒤 버전과 정확한 커밋 SHA로 Release 워크플로를 요청한다.
 로컬에서 릴리즈 태그를 만들지 않는다. Node.js와 인증된 GitHub CLI(`gh`)가 필요하다.
 
-`release:plan`은 remote tag를 fetch하며 게시하지 않는다. GitHub 응답이 커서
-`spawnSync gh ENOBUFS`로 실패하면 버전 계산도 완료되지 않은 것이다.
-`release:publish`도 같은 조회 경로를 사용하므로 이 오류를 게시 성공으로 해석하지 않는다.
-현재 확인한 후보와 전환 안내는 [v0.28.0 준비서](releases/v0.28.0.md)를 따른다.
+`release:plan`은 remote tag를 fetch하며 게시하지 않는다. GitHub CLI에서 공개 안정 태그 이름만
+추려 Node.js로 전달하므로 릴리스 본문·자산 metadata가 커져도 버전 조회 버퍼를 채우지 않는다.
+`release:publish`도 같은 조회를 사용한다. API 조회가 실패하면 버전 계산도 중단하며
+게시되지 않은 태그만으로 기준 버전을 대체하지 않는다.
+저장소 전환 안내는 [v0.28.0 준비서](releases/v0.28.0.md), 이후 batch 변경 후보의 검증은
+[D02 기록](var-sec/D02-release-validation.md)을 따른다.
 명시 workflow 입력으로 게시할 때는 공개 안정 릴리스 목록을 좁혀 조회하고,
 그 태그가 후보의 ancestor인지와 이후 커밋의 feature/breaking 변경을 확인해 버전을 정한다.
 최신 공개 태그가 후보에 포함되지 않으면 단순히 버전 숫자만 올리지 않는다.
@@ -237,6 +256,8 @@ Windows의 실행 근거는 Actions이며 실제 PC·WSL2 연계 한계는 [Wind
 
 게시 job은 준비된 `release-assets` artifact를 내려받아 태그를 생성하고,
 고정 SHA의 `releaseway/actions`로 immutable GitHub Release를 게시한다.
+현재 Releaseway pin과 적용한 기능, 업스트림 오류의 해결·검증 결과는
+[연동 업데이트 기록](releases/releaseway-upgrade.md)을 확인한다.
 같은 버전의 태그가 이미 있으면 동일 커밋인지 확인해 재사용하며, 다른 커밋의 태그는
 교체하지 않는다. 릴리즈 노트는 `notes: standard` 기본 템플릿으로
 게시된 이전 릴리즈 이후의 커밋을 Features·Fixes 등으로 분류한다. 이 경로를 사용하려면
@@ -244,11 +265,15 @@ Windows의 실행 근거는 Actions이며 실제 PC·WSL2 연계 한계는 [Wind
 게시 단계가 실패하면 같은 실행의 실패한 job을 재실행한다. 준비한 artifact를 그대로
 사용하므로 새 버전이나 태그 교체 없이 Releaseway의 게시 재시도를 사용할 수 있다.
 artifact는 30일간 보관한다. GitHub Release 게시 이후 Homebrew와 installer 배포는
-독립적으로 실행한다. installer job은 `.github/workflows/pages.yml`에 게시된 태그를
+독립적으로 실행한다. 게시 액션의 `diagnostics-path`는 가능한 경우 `release-diagnostics`
+artifact로 남기며 진단 파일이 없다고 원격 변경이 없었다고 판단하지 않는다.
+installer job은 `.github/workflows/pages.yml`에 게시된 태그를
 전달하고, 해당 workflow가 릴리스의
 `install.sh`와 해당 태그에 존재하는 `install.ps1`을 각각
 `jinyongp.dev/devtools/install.sh`, `jinyongp.dev/devtools/install.ps1`에 배포한다.
 각 파일은 선택한 태그의 소스와 정확히 대조하며 과거 Unix-only 태그에는 Windows 파일을 요구하지 않는다.
+Releaseway `distribute` step은 해당 태그의 commit SHA와 GitHub asset digest·크기를 먼저
+검증하고 `installer-distribution` artifact에 보고서를 남긴다.
 Pages source는 저장소
 설정에서 GitHub Actions로 한 번 활성화해야 하며, workflow를 수동 실행하면 최신 안정
 릴리스를 바로 게시할 수 있다.

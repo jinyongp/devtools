@@ -507,7 +507,8 @@ jobs:
       - name: Create or reuse the verified release tag
         run: sh scripts/publish-release-tag.sh
       - name: Publish release
-        uses: releaseway/actions@5841e545ff259790a3b2461299e741d62c69a73d # v0.4.1
+        id: publication
+        uses: releaseway/actions@1b1d72999b59f03d334845f5accb982c38f4afe1 # v0.6.1
         with:
           tag: ${{ needs.validate-release.outputs.tag }}
           commit: ${{ inputs.commit }}
@@ -516,12 +517,22 @@ jobs:
           notes: standard
           prerelease: ${{ contains(inputs.version, '-') && 'true' || 'false' }}
           latest: ${{ contains(inputs.version, '-') && 'false' || 'automatic' }}
+      - name: Preserve publication diagnostics
+        if: ${{ always() && steps.publication.outputs.diagnostics-path != '' }}
+        # A diagnostic upload must not suppress a completed release's follow-up jobs.
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-diagnostics
+          path: ${{ steps.publication.outputs.diagnostics-path }}
+          if-no-files-found: warn
+          retention-days: 30
 
   homebrew:
     needs: [validate-release, release]
     # An optional skipped ancestor must not suppress post-release publication.
     if: ${{ !cancelled() && needs.validate-release.result == 'success' && needs.release.result == 'success' && !contains(inputs.version, '-') }}
-    uses: releaseway/homebrew-actions/.github/workflows/publish.yml@5ff7e261e32542dde8902ef16483405c2bf4ca12 # v0.4.0
+    uses: releaseway/homebrew-actions/.github/workflows/publish.yml@c1be213c09e18836142bbad3561a0feda507536a # v0.4.2
     with:
       commit: ${{ inputs.commit }}
       version: ${{ needs.validate-release.outputs.tag }}

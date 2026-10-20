@@ -5,10 +5,10 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -18,7 +18,7 @@ func TestPreparedLegacyWriteComparesStoredSource(t *testing.T) {
 			t.Run(fmt.Sprintf("changed=%v/concurrent=%v", changed, concurrent), func(t *testing.T) {
 				ctx := context.Background()
 				s := ModernStore{Directory: filepath.Join(privateTempDir(t), "profiles"), Profile: "LegacyProfile"}
-				if err := os.MkdirAll(s.Directory, 0700); err != nil {
+				if err := platformfs.MkdirPrivate(s.Directory); err != nil {
 					t.Fatal(err)
 				}
 				path := filepath.Join(s.Directory, hex.EncodeToString([]byte(s.Profile))+".json")
@@ -28,7 +28,7 @@ func TestPreparedLegacyWriteComparesStoredSource(t *testing.T) {
 				}
 				if concurrent {
 					s.beforeCommit = func() {
-						if err := os.WriteFile(path, bytes.ReplaceAll(source, []byte("before"), []byte("concurrent")), 0600); err != nil {
+						if err := writePrivateFixture(path, bytes.ReplaceAll(source, []byte("before"), []byte("concurrent")), 0600); err != nil {
 							t.Fatal(err)
 						}
 					}

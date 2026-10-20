@@ -28,6 +28,21 @@ Service를 사용한다. OS 확인 창을 허용하려면 해당 init/unlock에 
 WSL은 별도의 Linux 저장소와 서비스를 사용한다. Windows의 키나 데이터 디렉터리를
 직접 공유하지 않는다.
 
+`key_backend_unavailable`은 OS 키 저장소를 사용할 수 없다는 뜻이다. 특히 Secret
+Service가 없는 WSL에서는 `--interactive`만 추가해도 해결되지 않는다.
+`vault status`가 `uninitialized`일 때 암호 방식을 명시적으로 선택할 수 있다.
+이미 초기화된 vault라면 기존 키를 복구해야 하며 다른 backend로 다시 초기화하지 않는다.
+
+```sh
+devtools vault init --backend passphrase
+```
+
+실제 터미널에서는 암호를 두 번 숨김 입력한다. 초기화 성공 직후 `unlocked`는 정상이다.
+암호화 저장소를 만든 뒤 바로 사용할 수 있도록 키 세션도 열기 때문이다.
+`unlocked`는 디스크에 평문으로 저장한다는 뜻이 아니다. `idle_expires_at`은 마지막
+성공한 키 사용 이후 8시간의 유휴 만료 시각이며, `vault status` 조회는 이를 연장하지
+않는다. 즉시 세션을 잠그려면 `devtools vault lock`을 실행한다.
+
 macOS Keychain은 OS의 기존 앱 접근 조건을 유지한다. 업데이트로 서명이 바뀌면 새
 버전의 접근 승인이 필요할 수 있다. 비대화형 명령의 `key_access_denied` 또는
 `key_interaction_required`는 저장 데이터가 사라졌다는 뜻이 아니다. OS 확인이 가능한

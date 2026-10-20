@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,6 +16,58 @@ import (
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
 )
+
+func TestVaultInitializationErrorKeepsRecoveryAndOtherErrors(t *testing.T) {
+	for _, kind := range []string{"uninitialized", "protected_without_key", "existing_key", "passphrase", "denied", "canceled"} {
+		t.Run(kind, func(t *testing.T) {
+			directory := filepath.Join(privateTempDir(t), "vault")
+			ctx := context.Background()
+			backend := "secret-service"
+			cause := fmt.Errorf("native setup: %w", vault.ErrUnavailable)
+			switch kind {
+			case "protected_without_key":
+				profiles := filepath.Join(filepath.Dir(directory), "profiles")
+				if err := os.MkdirAll(profiles, 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(profiles, "vault-catalog.json"), []byte("{}"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "existing_key":
+				id, err := vault.NewID()
+				if err != nil {
+					t.Fatal(err)
+				}
+				pass := vault.NewMaterial([]byte("synthetic-existing-vault"))
+				defer pass.Destroy()
+				master, err := (vault.KeyFileStore{Directory: directory}).Initialize(ctx, id, "passphrase", vault.PassphraseProtector{VaultID: id, Passphrase: pass})
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer master.Destroy()
+			case "passphrase":
+				backend = "passphrase"
+			case "denied":
+				cause = vault.ErrDenied
+			case "canceled":
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			e := vaultInitializationError(ctx, directory, backend, cause)
+			body, err := json.Marshal(e)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := strings.Contains(string(body), `"--backend","passphrase"`), kind == "uninitialized"; got != want {
+				t.Fatalf("unsafe or missing initialization remedy: %s", body)
+			}
+			if kind == "uninitialized" && (e.Code != "key_backend_unavailable" || !strings.Contains(e.Message, "Secret Service")) {
+				t.Fatalf("missing backend diagnosis: %s", body)
+			}
+		})
+	}
+}
 
 func vaultStatusResult(t *testing.T, output string) vault.SessionStatus {
 	t.Helper()

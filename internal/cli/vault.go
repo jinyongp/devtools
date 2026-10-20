@@ -132,12 +132,12 @@ func (a *App) initializeVault(ctx context.Context, streams IO, r Request) (any, 
 		backend = vault.NativeBackend()
 		protector, err = vault.NativeProtection(id, r.Options["interactive"] == "true")
 		if err != nil {
-			return nil, values.VaultError(ctx, err)
+			return nil, vaultInitializationError(ctx, directory, backend, err)
 		}
 	}
 	master, err := keys.Initialize(ctx, id, backend, protector)
 	if err != nil {
-		return nil, values.VaultError(ctx, err)
+		return nil, vaultInitializationError(ctx, directory, backend, err)
 	}
 	defer master.Destroy()
 	inventory, err := values.InspectLegacyMigration(ctx, filepath.Dir(directory), master)
@@ -167,6 +167,29 @@ func (a *App) initializeVault(ctx context.Context, streams IO, r Request) (any, 
 	}
 	return map[string]any{"item": status, "changed": true}, nil
 }
+
+// A setup alternative is safe only before a key slot or protected storage exists.
+// Later failures must retain the existing unlock/recovery guidance.
+func vaultInitializationError(ctx context.Context, directory, backend string, err error) *protocol.Error {
+	e := values.VaultError(ctx, err)
+	if backend == "passphrase" || !errors.Is(err, vault.ErrUnavailable) || ctx.Err() != nil {
+		return e
+	}
+	status, statusErr := vault.InspectSession(ctx, directory)
+	if statusErr != nil || status.State != vault.Uninitialized {
+		return e
+	}
+	message := "Cannot initialize the vault because the OS key store is unavailable."
+	if backend == "secret-service" {
+		message += " Linux and WSL require an already running Secret Service on the current user's D-Bus session; Windows key protection is separate."
+	}
+	message += " No automatic switch to passphrase protection was attempted."
+	return protocol.NewError(e.Code, message, 3, map[string]any{"remedies": []protocol.Remedy{
+		{Argv: []string{"devtools", "vault", "status"}, RequiredInputs: []string{}, Message: "Confirm the vault is still uninitialized before choosing a protection backend."},
+		{Argv: []string{"devtools", "vault", "init", "--backend", "passphrase"}, RequiredInputs: []string{}, Message: "For an uninitialized vault, explicitly choose passphrase protection. A terminal prompts twice with hidden input; non-interactive use requires --passphrase-file or --passphrase-stdin. Never put the passphrase in argv or environment."},
+	}})
+}
+
 func (a *App) changeVaultLock(ctx context.Context, streams IO, r Request, action string) (any, *protocol.Error) {
 	directory, e := a.vaultDirectory()
 	if e != nil {

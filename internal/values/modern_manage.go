@@ -334,6 +334,7 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 		return out, VaultError(ctx, err)
 	}
 	defer key.Destroy()
+	defer clear(base.original)
 	// Receipt reads share one gate with the original profile used for replay.
 	releaseRead, err := maintenance.AcquireShared(ctx, s.root())
 	if err != nil {
@@ -346,6 +347,7 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	}
 	replay, found, replayErr := s.replayHeld(ctx, c, current, currentKey, master, vaultID)
 	currentKey.Destroy()
+	baseErr := s.checkBase(base, currentExists)
 	releaseRead()
 	if replayErr != nil {
 		return out, replayErr
@@ -353,8 +355,8 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	if found {
 		return replay, nil
 	}
-	if e := s.checkBase(base, current, currentExists); e != nil {
-		return out, e
+	if baseErr != nil {
+		return out, baseErr
 	}
 	if c.Revision != editRevision(s.Profile, p, base.exists) {
 		return out, failure("revision_conflict", "Profile changed; reload before editing.")
@@ -425,7 +427,7 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	if found {
 		return replay, nil
 	}
-	if e := s.checkBase(base, current, currentExists); e != nil {
+	if e := s.checkBase(base, currentExists); e != nil {
 		return out, e
 	}
 	out.Revision = editRevision(s.Profile, p, true)

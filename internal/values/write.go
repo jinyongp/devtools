@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/vault"
 )
@@ -49,18 +50,18 @@ func (s ModernStore) readForEdit(ctx context.Context, master *vault.Material, va
 	p, key, exists, err := s.readHeld(ctx, master, vaultID)
 	if err == nil {
 		base.exists = exists
+		// Legacy conversion generates fresh IDs on every read. Compare the stored
+		// source, not its transient converted representation, at commit time.
+		base.original, err = profilekey.Snapshot(s.Directory, s.Profile, "values", vault.MaxDocumentBytes)
+	}
+	if err == nil {
 		base.protection, err = (vault.KeyFileStore{Directory: filepath.Join(s.root(), "vault")}).WriteIdentity()
 	}
 	release()
 	stopHeld()
 	if err != nil {
 		key.Destroy()
-		return nil, nil, base, err
-	}
-	// The owned source no longer needs a gate while serializing/computing.
-	base.original, err = p.Encode()
-	if err != nil {
-		key.Destroy()
+		clear(base.original)
 		return nil, nil, base, err
 	}
 	return p, key, base, nil
@@ -115,17 +116,20 @@ func (s ModernStore) lockCommit(ctx context.Context, base writeBase, promoted bo
 	}
 	return release, nil
 }
-func (s ModernStore) checkBase(base writeBase, current *vault.Profile, exists bool) *protocol.Error {
+
+// checkBase requires the same maintenance lease as the current profile read.
+func (s ModernStore) checkBase(base writeBase, exists bool) *protocol.Error {
 	if base.exists != exists {
 		return failure("revision_conflict", "Profile changed during preparation; retry with current state.")
 	}
 	if !exists {
 		return nil
 	}
-	observed, err := current.Encode()
+	observed, err := profilekey.Snapshot(s.Directory, s.Profile, "values", vault.MaxDocumentBytes)
 	if err != nil {
 		return VaultError(context.Background(), err)
 	}
+	defer clear(observed)
 	if !bytes.Equal(base.original, observed) {
 		return failure("revision_conflict", "Profile changed during preparation; retry with current state.")
 	}

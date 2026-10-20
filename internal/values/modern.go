@@ -280,6 +280,7 @@ func (s ModernStore) Update(ctx context.Context, change func(*Editor) (bool, *pr
 		return false, VaultError(ctx, err)
 	}
 	defer key.Destroy()
+	defer clear(base.original)
 	var editor *Editor
 	defer func() {
 		if editor != nil && editor.promoted {
@@ -323,12 +324,12 @@ func (s ModernStore) Update(ctx context.Context, change func(*Editor) (bool, *pr
 		return false, VaultError(ctx, err)
 	}
 	defer release()
-	current, currentKey, currentExists, err := s.readHeld(ctx, master, vaultID)
+	_, currentKey, currentExists, err := s.readHeld(ctx, master, vaultID)
 	if err != nil {
 		return false, VaultError(ctx, err)
 	}
 	currentKey.Destroy()
-	if e := s.checkBase(base, current, currentExists); e != nil {
+	if e := s.checkBase(base, currentExists); e != nil {
 		return false, e
 	}
 	if !changed {

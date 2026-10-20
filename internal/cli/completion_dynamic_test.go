@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -143,13 +144,11 @@ func TestDynamicCompletion(t *testing.T) {
 		{[]string{"task", "show", otherTask, ""}, nil},
 	}
 	for _, tc := range cases {
-		code, out, stderr := invoke(t, a, strings.Join(tc.words, "\x00")+"\x00", "__complete")
-		want := strings.Join(tc.want, "\n")
-		if want != "" {
-			want += "\n"
-		}
-		if code != 0 || stderr != "" || out != want {
-			t.Fatalf("%v: code=%d out=%q err=%q want=%q", tc.words, code, out, stderr, want)
+		// Candidate correctness is independent of the shell protocol's best-effort
+		// 200ms budget, which may expire during storage reads on a busy runner.
+		got := a.dynamicCandidates(tc.words)
+		if strings.Join(got, "\n") != strings.Join(tc.want, "\n") {
+			t.Fatalf("%v: got=%q want=%q", tc.words, got, tc.want)
 		}
 	}
 	if !reflect.DeepEqual(before, snapshot()) {
@@ -163,17 +162,40 @@ func TestDynamicCompletion(t *testing.T) {
 	}
 }
 
+func TestCompletionProtocol(t *testing.T) {
+	a := testApp(t)
+	// A fixed provider list exercises NUL parsing, dispatch, sorting, filtering
+	// and newline encoding without tying storage correctness to a latency bound.
+	for _, tc := range []struct {
+		input string
+		want  string
+	}{
+		{"expose\x00start\x00web\x00--provider\x00\x00", "cloudflared\nlan\nlocal\ntailscale\n"},
+		{"expose\x00start\x00web\x00--provider\x00lo\x00", "local\n"},
+		{"expose\x00start\x00web\x00--provider=lo\x00", "--provider=local\n"},
+	} {
+		code, out, stderr := invoke(t, a, tc.input, "__complete")
+		if code != 0 || stderr != "" || out != tc.want {
+			t.Fatalf("%q: code=%d out=%q err=%q want=%q", tc.input, code, out, stderr, tc.want)
+		}
+	}
+}
+
 func TestCompletionDeadline(t *testing.T) {
 	a := testApp(t)
 	reader, writer := io.Pipe()
 	defer reader.Close()
 	defer writer.Close()
+	var out, diagnostic bytes.Buffer
 	start := time.Now()
-	if code := a.completeDynamic(context.Background(), IO{In: reader, Out: io.Discard, Err: io.Discard}); code != 0 {
+	if code := a.completeDynamic(context.Background(), IO{In: reader, Out: &out, Err: &diagnostic}); code != 0 {
 		t.Fatal(code)
 	}
 	if time.Since(start) > time.Second {
 		t.Fatal("completion waited on unbounded input")
+	}
+	if out.Len() != 0 || diagnostic.Len() != 0 {
+		t.Fatal("expired completion emitted output or diagnostics")
 	}
 	dir, _ := a.dataDirectory()
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {

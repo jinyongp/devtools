@@ -24,8 +24,7 @@
 
 저장 형식은 version 1이며 세션 protocol은 version 3다. 둘은 독립적으로 관리하고
 저장용 HKDF는 저장 형식 version 1에 결합한다. 세션 protocol 변경으로 기존 저장 키를 바꾸지 않는다.
-슬롯은
-32-byte key와 매번 새 RNG 24-byte nonce의 XChaCha20-Poly1305를 사용한다.
+슬롯은 32-byte key와 매번 새 RNG 24-byte nonce의 XChaCha20-Poly1305를 사용한다.
 Vault 상위키와 profile keyset은 독립 난수이며 HKDF-SHA-256 info는
 protocol·vault/profile ID·용도를 결합한다. keyset의 암호화·manifest·receipt
 키는 목적을 분리한다. AAD는 형식·vault/profile/value/slot ID·value version·

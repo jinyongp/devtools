@@ -6,6 +6,9 @@
 선택한 env, 필수 실행 도구와 var/sec 등록 여부를 진단한다.
 `doctor COMMAND`는 해당 명령의 실행 파일과 필수 조건까지 확인한다.
 
+아래 `test`와 `staging`은 프로젝트에 선언한 명령과 미리 만든 env를 나타낸다.
+프로젝트 전체를 확인할 때는 인자 없는 `doctor`부터 실행한다.
+
 ```sh
 devtools doctor
 devtools doctor test
@@ -19,7 +22,7 @@ devtools doctor --profile myapp
 status는 `pass`, `fail`, `skipped`다. 저장소나 env 문제로 이어지는 검사를
 수행할 수 없으면 skipped로 표시하고 먼저 해결할 조건을 안내한다.
 
-Protocol v5의 `remedies`는 task 진단과 같은 구조의 배열이다. 정상 check는 빈 배열을
+`remedies`는 task 진단과 같은 구조의 배열이다. 정상 check는 빈 배열을
 반환한다. 각 remedy의 `argv`는 셸 문자열이 아닌 인자 배열이고, `required_inputs`는
 사용자가 추가로 제공할 입력 이름, `message`는 조치 설명이다. 예를 들어 secret이
 없으면 다음과 같이 반환한다.
@@ -49,8 +52,8 @@ devtools diagnostics
 ```
 
 보고서는 profile metadata, port instance와 assignment 개수, managed process 상태 개수,
-proxy와 dashboard 실행 상태, 공개 backup 설정 상태를 포함한다. 현재 var/sec 소스는
-값 없는 vault 보호 상태와 명시 해제 필요 여부도 포함한다. 이 상태 조회는 세션을
+proxy와 dashboard 실행 상태, 공개 backup 설정 상태를 포함한다.
+vault 지원 빌드는 값 없는 보호 상태와 명시 해제 필요 여부도 포함한다. 이 상태 조회는 세션을
 열거나 idle 시간을 연장하지 않는다. 잠금 자체는 검사 실패가 아니며, recovery 상태는
 `ready:false`로 보고한다. [설정과 복구](secret-protection.md)를 참고한다. 각 영역은
 `status: "pass"` 또는 `status: "fail"`을 반환하고, 읽기나 저장소 검사가 실패한 영역은

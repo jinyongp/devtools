@@ -167,7 +167,8 @@ Windows `platform.isolation`은 현재 프로세스 토큰으로 확인한 `appc
 ACL 교정이나 저장소 자동 전환을 수행하지 않습니다.
 Windows Known Folder는 격리 환경에서 별도 경로를 반환할 수 있으므로 빈 목록의 저장소
 출처도 확인하세요. 오류 5만으로 특정 ACL이나 샌드박스 규칙을 원인으로 단정하지 않습니다.
-이 변경은 AppContainer에서 새 저장소를 생성할 수 있다는 지원 보장이 아닙니다.
+AppContainer의 저장소 생성·ACL 검증 정책은 [Windows 안내](windows.md#storage-and-processes)를
+따릅니다. 해당 identity 정책이 있어도 호스트 샌드박스가 접근을 거부할 수 있습니다.
 
 ## protocol v7 마이그레이션
 
@@ -254,8 +255,8 @@ Protocol v2의 자동화는 import 입력과 doctor 응답을 함께 변경해�
 | doctor check | 선택적 문자열 `remedy` | 항상 배열 `remedies`; 원소는 `argv`, `required_inputs`, `message` |
 | 반복 positional | 선언한 개수로 제한 | 마지막 인자의 `repeatable`; schema의 `args.items`와 help의 `<command...>`로 표현 |
 
-`profile list/inspect/diff`, `backup status`, 직접 공개 recipient 입력과
-`project up/status/logs/restart/down`은 project-scoped managed process 명령입니다. 세부 사용법은 [Profile 관리](profiles.md),
+`profile list/inspect/diff`와 `backup status`는 저장된 데이터를 조회합니다.
+`project up/status/logs/restart/down`은 프로젝트 범위의 managed process 명령입니다. 세부 사용법은 [Profile 관리](profiles.md),
 [백업](backup.md), [프로세스 관리](processes.md), [doctor](doctor.md)를 참고하세요.
 
 Project lifecycle의 부분 실패는 stderr 오류의 `details.items`에서 확인합니다.

@@ -87,31 +87,8 @@ npx skills remove devtools --global
 
 ## 형식과 검증
 
-Skill 디렉터리는 Agent Skills 규약의 기본 구조를 그대로 사용합니다.
-
-```text
-skills/
-└── devtools/
-    ├── SKILL.md
-    └── references/
-        ├── execution.md
-        ├── network.md
-        ├── platforms.md
-        ├── storage.md
-        └── tasks.md
-```
-
-`SKILL.md`에는 필수 `name`·`description` frontmatter와 실행 지침이 들어 있습니다.
-목적별 상세 지침은 `references/`에서 필요한 파일만 읽습니다. 릴리스 아카이브에도
-이 참조 파일을 함께 포함하며, 검증 시 원본 디렉터리 전체와 비교합니다.
-공식 reference validator로 원본을 확인할 수 있습니다.
-
-```sh
-uvx --from skills-ref==0.1.1 agentskills validate skills/devtools
-```
-
-Release CI는 reference validator와 함께 실제 `skills` CLI가 저장소에서
-`devtools` Skill을 발견하는지도 검증합니다.
+Skill 원본은 `skills/devtools/SKILL.md`, 목적별 지침은 `references/`에 있습니다.
+원본 수정, 공식 규약 검사와 패키징 검증은 [개발 안내](development.md#agent-skill-검증)를 따릅니다.
 
 ## 오프라인 또는 수동 설치
 
@@ -125,8 +102,23 @@ curl -fLO "${base}/devtools-skill_${version}.tar.gz"
 curl -fLO "${base}/devtools-skill_${version}.tar.gz.sha256"
 ```
 
-체크섬을 확인한 뒤 사용하는 에이전트가 읽는 Skill 디렉터리에 아카이브의 `devtools/`
-디렉터리를 배치합니다. 이 방식에서는 설치 위치와 업데이트를 사용자가 직접 관리합니다.
+다운로드한 파일이 있는 디렉터리에서 체크섬을 확인합니다. Linux·WSL은
+`sha256sum`, macOS는 `shasum`을 사용합니다.
+
+Linux·WSL:
+
+```sh
+sha256sum -c "devtools-skill_${version}.tar.gz.sha256"
+```
+
+macOS:
+
+```sh
+shasum -a 256 -c "devtools-skill_${version}.tar.gz.sha256"
+```
+
+사용하는 OS의 검사에서 성공한 뒤 압축을 풀고, 에이전트가 읽는 Skill 디렉터리에
+아카이브의 `devtools/` 디렉터리를 배치합니다. 이 방식에서는 설치 위치와 업데이트를 사용자가 직접 관리합니다.
 
 Agent Skill은 지침 파일을 설치하는 기능입니다. profile 등록, secret 저장, task 생성 같은
 devtools 데이터 변경은 에이전트가 실제 사용자 요청을 수행할 때 CLI를 통해 이루어집니다.

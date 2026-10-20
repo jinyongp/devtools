@@ -83,10 +83,9 @@ JSON을 반환하고, 자식 프로그램의 출력은 JSON으로 감싸지 않�
 전달된 secret을 기본 마스킹합니다. TTY 출력에는 설정한 정책을 적용합니다.
 
 생성된 `devtools.toml`은 Git에 커밋해 두세요. 같은 profile을 사용하는 프로젝트와
-worktree는 저장한 값을 공유합니다. 현재 소스는 secret을 로컬 암호화하고
-OS 보호 또는 암호 기반 키 세션을 재사용합니다.
-공개 변수는 조회할 수 있습니다. `vault` 명령을 제공하는 빌드에서는 처음 한 번
-`devtools vault init`으로 준비합니다. [설정과 적용 빌드](docs/secret-protection.md)를 확인하세요.
+worktree는 저장한 값을 공유합니다. vault 지원 빌드는 secret을 로컬 암호화하고
+OS 보호 또는 암호 기반 키 세션을 재사용합니다. 공개 변수는 조회할 수 있습니다.
+secret을 저장하기 전에 vault를 준비하세요. [설정과 적용 빌드](docs/secret-protection.md)를 확인하세요.
 secret 등록과 프로젝트 명령 설정은
 [값과 실행 가이드](docs/cli-contract.md)를 참고하세요.
 
@@ -121,13 +120,13 @@ v0.22.3 등 이전 버전에서는 구분자 `--`를 붙이세요.
 
 ## 사용 가이드
 
-[전체 문서](docs/README.md)에서 사용자 가이드, API 계약, 개발 안내와 과거 설계 기록을 찾을 수 있습니다.
+[전체 문서](docs/README.md)에서 사용자 가이드, API 계약, 개발 안내와 구조 설명을 찾을 수 있습니다.
 
 - 값과 설정: [변수·secret·명령 실행](docs/cli-contract.md), [로컬 secret 보호](docs/secret-protection.md),
   [출력 보호](docs/output-protection.md), [개발환경 진단](docs/doctor.md).
 - 서버와 주소: [포트](docs/ports.md), [서버 실행·종료](docs/processes.md),
   [준비 확인](docs/process-readiness.md), [로컬 도메인·HTTPS·공유](docs/local-network.md).
-- 작업 관리: [task·workstream·dashboard](docs/tasks.md) — `devtools dashboard`가 반환한
+- 작업 관리: [task·workstream](docs/tasks.md), [Dashboard](docs/dashboard.md) — `devtools dashboard`가 반환한
   `data.item.url`로 브라우저에 접속합니다. 로그인 링크는 인증정보이므로 공유하지 마세요.
 - 데이터 관리: [Profile 조회·이동](docs/profiles.md), [암호화 백업·복구](docs/backup.md),
   [저장소 정리](docs/cleanup.md).

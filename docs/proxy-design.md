@@ -1,185 +1,64 @@
-# 로컬 reverse proxy 계약
+# HTTP proxy 전달 계약
 
-[문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
+[문서 목록](README.md) · [설정과 실행](local-network.md) · [네트워크 전체 계약](network-design.md)
 
-HTTPS·도메인·listener·공유 확장의 현재 계약은
-[local network contract](network-design.md)를 따른다. 아래는 기존 HTTP 동작의 호환성 기준이다.
+이 문서는 route 선택과 HTTP 전달을 설명한다.
+listener·DNS·HTTPS·공유·복구 설정은 [네트워크 계약](network-design.md)을 따른다.
+명령 예시는 [사용 가이드](local-network.md)에 있다.
 
-이 문서는 `devtools proxy` MVP의 프로젝트 설정, route 해석, CLI, daemon 수명과
-HTTP 전달 계약을 정의한다. 설치된 실행 파일의 검증은
-[검증 안내](../verify/README.md)를 따른다.
+## Route 선택과 소유 범위
 
-## 사용 목적
+프로젝트 route는 등록된 instance의 `devtools.toml` 선언과 port assignment를 결합한다.
+프로젝트의 canonical root와 profile이 등록 정보와 같아야 한다.
+다른 위치의 설정이나 다른 profile을 기존 assignment와 결합하지 않는다.
+전역 route는 프로젝트 없이 고정 backend를 참조하며 별도 route UUID를 가진다.
 
-같은 profile의 여러 worktree는 실행 위치마다 다른 개발 서버 port를 할당받는다.
-proxy는 이 port를 instance별 `.localhost` hostname에 연결한다.
+호스트는 선택 listener에서 하나의 ready route와 정확히 일치해야 한다.
+alias·할당·설정이 없거나 충돌하면 임의의 후보로 전달하지 않는다.
+한 instance의 오류가 다른 정상 route의 전달까지 막지는 않는다.
+route 설정·소유권과 활성화 원본은 요청 시 확인한다. 장기 연결도 주기적으로 재검사한다.
 
-```text
-http://main.app.localhost:20200
-http://feature.app.localhost:20200
-```
+literal `.localhost` route는 기존 implicit 활성화와 호환된다.
+환경변수 기반 route는 activation snapshot을 사용하며 변경 뒤 다시 up해야 한다.
+명시 down은 tombstone을 남겨 TOML 제거·재등록이나 daemon 재시작만으로 해제되지 않는다.
 
-proxy는 사용자 단위 daemon 하나다. 프로젝트 process를 시작하지 않으며 현재 port
-assignment가 가리키는 loopback server로 요청만 전달한다.
-
-## 프로젝트 설정
-
-route는 프로젝트의 `devtools.toml`에 선언한다.
-
-```toml
-profile = "app"
-
-[ports.web]
-range = [3000, 3099]
-
-[proxies.app]
-host = "${instance.alias}.app.localhost"
-port = "web"
-```
-
-`[proxies.NAME]`의 이름, `host`, `port`는 필수다. `port`는 같은 파일의
-`[ports.NAME]`을 참조한다. 고정 hostname도 사용할 수 있다.
-
-```toml
-[proxies.app]
-host = "app.localhost"
-port = "web"
-```
-
-host template은 다음 참조만 지원한다.
-
-| 참조 | 값 |
-| --- | --- |
-| `${profile}` | instance가 등록된 profile |
-| `${instance.alias}` | `devtools instance name`으로 지정한 alias |
-| `${proxy}` | `[proxies.NAME]`의 NAME |
-
-host는 소문자 ASCII hostname이며 `.localhost`로 끝난다. 각 label은 영문 소문자,
-숫자와 내부 `-`만 사용한다. proxy 이름, template 문법 또는 port 선언 참조가
-잘못되면 프로젝트 설정 전체가 `invalid_config`다.
-
-template을 사용해 계산한 최종 hostname도 같은 규칙을 만족해야 한다. alias가 없거나
-계산 결과가 유효하지 않으면 해당 route는 전달되지 않는다.
-
-## instance와 route 해석
-
-route 탐색 대상은 port store에 등록된 instance다. resolver는 각 instance의 현재
-디렉터리와 `devtools.toml` 변경 여부를 확인하고, 변경된 설정만 다시 읽어 다음
-identity를 확인한다. 변경되지 않은 설정과 전역 route 계산 결과는 daemon 내부에서
-재사용한다.
-
-- 설정의 canonical root가 등록된 directory와 같다.
-- 설정의 profile이 등록된 profile과 같다.
-- route가 참조한 service에 저장된 port assignment가 있다.
-
-root 또는 profile이 다르면 기존 assignment와 새 설정을 결합하지 않는다. 프로젝트
-설정, instance alias 또는 port assignment 변경은 다음 요청의 route 계산에 반영되며
-daemon 재시작을 요구하지 않는다.
-
-`proxy list`는 정상 route와 진단 항목을 결정적인 순서로 반환한다. 각 항목은 `kind`,
-`host`, `proxy`, `profile`, `instance_id`, `alias`, `directory`, `service`,
-`target_port`, `status`를 가진다. alias 또는 assignment 누락은 route 진단이다.
-디렉터리 부재, 설정 읽기 실패와 identity 불일치는 hostname, proxy 이름, service와
-target port가 null인 instance 진단이다.
-
-| kind | status | 의미 |
-| --- | --- | --- |
-| route | `ready` | 전달 가능한 route |
-| route | `alias_missing` | template에 필요한 instance alias 없음 |
-| route | `assignment_missing` | 대상 service의 저장된 port assignment 없음 |
-| route | `host_invalid` | template 확장 결과가 hostname 규칙을 만족하지 않음 |
-| route | `host_conflict` | 둘 이상의 route가 같은 hostname을 사용함 |
-| instance | `location_missing` | 등록된 directory가 사라짐 |
-| instance | `config_invalid` | 설정 없음, TOML 오류 또는 strict config 검증 실패 |
-| instance | `config_unavailable` | directory 또는 설정을 읽을 수 없음 |
-| instance | `instance_conflict` | 저장된 profile·directory와 현재 project identity 불일치 |
-
-동일 hostname이 여러 route로 계산되면 관련 route 전체가 `host_conflict`다. 충돌한
-후보 중 하나를 선택하지 않는다. 한 instance의 진단은 다른 instance의 정상 route를
-막지 않는다.
-
-## CLI
-
-```sh
-devtools proxy start --request-id UUID
-devtools proxy start --port 20200 --request-id UUID
-devtools proxy status
-devtools proxy list
-devtools proxy list --profile app
-devtools proxy stop --request-id UUID
-```
-
-첫 start에서 `--port`를 생략하면 20200을 사용한다. listener port의 단일 원본은 port
-store의 proxy 전용 전역 reservation이다. reservation은 daemon을 중지해도 유지되고
-프로젝트 port allocator의 후보에서 제외된다.
-
-중지 상태에서 `start --port NEW_PORT`를 실행하면 assignment, 다른 reservation과 OS
-점유를 검사한 뒤 reservation을 원자적으로 교체한다. 실행 중인 daemon과 다른 port를
-요청하면 `proxy_conflict`다.
-
-start와 stop은 request UUID를 사용한다. 같은 UUID와 입력을 재전송하면 기존 결과를
-반환한다. 같은 UUID에 다른 입력을 사용하면 `request_conflict`다. 동시 start는
-daemon 하나만 만든다.
-
-status는 `data.item`에 `running`, `state`, `started_at`, `reason`과 reservation에서
-계산한 `port`, `url`을 반환한다. list는 `data.items`에 route·instance 진단을 반환한다.
-start·stop은 `data.item`의 상태와 별도로 `data.changed`·`data.replayed`를 제공하며,
-false도 생략하지 않는다. 재시도에서는 최초 changed를 유지한다.
-전체 출력 종류와 마이그레이션은 [CLI 출력 계약](cli-output.md)을 따른다.
-
-control endpoint에 접근할 수 없고 lease가 해제됐으면 상태는 `interrupted`다. 이미
-중지된 proxy의 stop은 변경 없는 성공이다.
-
-## listener reservation과 저장 호환성
-
-port registry version 2는 project assignment와 별도로 proxy listener reservation을
-저장한다. assignment와 reservation 전체에서 port 번호는 유일하다.
-
-version 1 registry는 빈 reservation 목록으로 읽는다. 첫 변경에서 기존 instance와
-assignment를 보존한 version 2를 원자적으로 저장한다. read-only 명령은 저장 형식을
-바꾸지 않는다. malformed registry와 assignment에 겹치는 reservation은
-`invalid_storage`다.
-
-start는 proxy operation lock을 먼저 잡고 reservation 변경 중 port registry lock을
-잡는다. reservation commit 뒤 daemon을 시작한다. commit 뒤 spawn, bind 또는 readiness가
-실패해도 reservation은 선택한 listener port의 단일 원본으로 유지된다. 다음 start는
-같은 port를 재사용한다.
-
-daemon record, control address, token, request receipt와 lease는 사용자 데이터
-디렉터리의 `proxy/` 아래에 private permission으로 저장한다. daemon record는 listener
-port를 중복 저장하지 않는다. route 선언도 복사해 저장하지 않는다.
-
-## HTTP 전달
-
-listener는 `127.0.0.1`과 IPv6를 지원하는 host의 `::1`에 같은 port로 bind한다. IPv6
-지원 host에서는 두 bind가 하나의 start 조건이다. 하나라도 실패하면 열린 listener를
-닫고 start를 실패시킨다. IPv6 protocol을 지원하지 않는 환경만 IPv4 단독 실행을
-허용한다.
-
-요청 Host에서 listener port를 제거한 hostname이 정상 route와 정확히 일치할 때만
-전달한다.
+## HTTP 응답과 TLS
 
 | 조건 | HTTP 상태 |
 | --- | --- |
-| 등록되지 않은 hostname | 404 |
-| 충돌하거나 해석할 수 없는 route | 503 |
+| 잘못되거나 등록되지 않은 hostname, TLS SNI 불일치 | 404 |
+| route 충돌·사용 불가 또는 해석 실패 | 503 |
+| 공유하지 않은 route에 대한 외부 요청 | 403 |
 | backend 연결 실패 | 502 |
+| HTTPS가 설정된 listener의 HTTP 요청 | 307, 같은 경로·query의 HTTPS URL |
 
-upstream은 port store의 local assignment로만 구성한다. 설정에서 scheme, target
-hostname 또는 URL을 지정할 수 없다. transport는 `HTTP_PROXY`, `HTTPS_PROXY`,
-`ALL_PROXY`를 사용하지 않는다.
+HTTPS는 명시 설정한 listener에 적용하며 활성 route의 SNI hostname만 허용한다.
+클라이언트의 CA 신뢰와 backend readiness는 listener 실행 여부와 별도로 확인한다.
+공유하지 않은 route는 wildcard listener에서도 loopback 접근만 허용한다.
 
-upstream Host는 loopback target으로 바꾸고 원래 host는 `X-Forwarded-Host`로
-전달한다. `X-Forwarded-Proto`는 `http`다. 일반 HTTP body와 header, streaming
-response, WebSocket upgrade를 지원한다. 오류 응답에는 프로젝트 경로와 내부 오류
-원문을 포함하지 않는다.
+## Backend와 전달 헤더
 
-## MVP 범위 밖
+backend는 등록된 loopback port로 연결한다. 임의 URL을 대상으로 하는 forward proxy가 아니다.
+transport는 부모의 `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`를 사용하지 않는다.
+일반 HTTP body·header, streaming response와 WebSocket upgrade를 전달한다.
 
-- HTTPS와 인증서 발급
-- 외부 interface와 LAN bind
-- hosts 파일과 시스템 DNS 변경
-- backend process 자동 시작·재시작
-- dashboard와 관리 API
-- 전역 `config.toml` 관리 명령
-- 임의 URL을 대상으로 하는 forward proxy
+upstream `Host`는 loopback target으로 바꾸고 원래 공개 authority는
+`X-Forwarded-Host`로 전달한다. `X-Forwarded-Proto`는 실제 연결의 HTTP/HTTPS를 반영한다.
+외부 provider가 TLS를 종료하는 bridge는 commit한 공개 scheme·authority를 사용한다.
+클라이언트가 보낸 forwarding header를 신뢰 근거로 사용하지 않는다.
+
+공유 Basic 인증을 소비했으면 `Authorization`을 backend에 넘기지 않는다.
+명시적인 `--no-auth` 공유는 애플리케이션 인증을 위해 해당 헤더를 유지한다.
+오류 응답에 프로젝트 경로나 내부 오류 원문을 포함하지 않는다.
+
+## 연결 수명과 정리
+
+listener와 exposure는 각자 backend 연결 풀을 소유한다.
+선택한 listener 중지, 공유 해제와 source 변경은 해당 범위의 요청·stream·idle 연결을 정리한다.
+다른 listener나 공유의 정상 연결은 유지한다.
+동시 provider 변경, 열린 stream의 취소와 CA 정리는 [전체 계약](network-design.md#exposure-replay-and-cleanup)을 따른다.
+
+포트 reservation은 listener 중지 뒤에도 유지한다.
+port registry의 현재 저장 형식과 호환성은 [포트 저장 계약](port-design.md#범위와-저장-범위)을 따른다.
+실제 HTTP·WebSocket·TLS 검증 방법과 모의 provider의 한계는
+[검증 안내](../verify/README.md#검증-경계)를 참고한다.

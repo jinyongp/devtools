@@ -1,24 +1,18 @@
-# 사용법과 CLI 계약
+# 변수·secret과 명령 실행
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-HTTPS·도메인·공유와 통합 시작의 확장 계약은
-[local network contract](network-design.md)를 따른다.
+프로젝트에 profile을 연결하고 변수·secret·env를 관리해 명령에 전달하는 가이드다.
+예시는 `devtools`가 PATH에 있는 환경을 전제로 한다.
+설치본의 기능은 [version·schema 확인 방법](README.md#check-feature-availability)을 따른다.
 
-이 문서는 현재 소스의 사용 방식과 공개 CLI 계약을 정리한다.
-설치본의 지원 여부는 [기능 확인 방법](README.md#check-feature-availability)을 따른다.
+- [프로젝트 연결](#profile과-프로젝트-연결), [env 만들기](#env-생성과-삭제).
+- [일반 변수](#일반-변수-variable--var), [secret 등록](#민감한-변수-secret--sec), [dotenv 가져오기](#기존-dotenv-파일-가져오기-import).
+- [값 묶음](#재사용할-값-묶음-bundle), [메타데이터와 사용처](#값-메타데이터와-사용처-values).
+- [직접·이름 명령 실행](#프로젝트-명령-command), [추가 인자 전달](#이름-명령에-추가-인자-전달).
 
-포트 할당과 명령별 `serve`·`bind`·템플릿은 [포트 사용 가이드](ports.md)와
-[포트 관리 계약](port-design.md)을 따른다. worktree별 `.localhost` route는
-[로컬 reverse proxy](proxy.md)를 참고한다. 저장된 profile의 조회·비교·환경 간 이동은
-[Profile 관리](profiles.md), `project up/status/logs/restart/down`은 [프로세스 관리](processes.md#프로젝트-서버를-함께-관리하기)를 따른다.
-CLI protocol은 v8이다. v0.23.0의 v6에서 도입한 `run` 인자 구분 규칙을 유지한다.
-공통 저장소 오류 상세·격리 진단은 [v8 마이그레이션](cli-output.md#protocol-v8-마이그레이션)을 따른다.
-Windows platform 진단·PowerShell shell은 [v7 마이그레이션](cli-output.md#protocol-v7-마이그레이션)을 따른다.
-이전 v0.22.3은 protocol v5를 사용한다. 버전별 사용법은 아래 명령 실행 절에,
-전환 규칙은 [CLI 출력 계약](cli-output.md#protocol-v6-마이그레이션)에 정리했다.
-
-이 문서는 `init`, `version`, `schema`, `help`, `project inspect`, `variable`/`var`, `secret`/`sec`, `import`, `env`, `bundle`, `values`, `command`의 사용법을 다룬다. `run`은 `command run`의 호환 alias다. 전체 기능 안내는 [README](../README.md), 설치된 바이너리의 명령 목록은 `devtools schema`에서 확인한다. 예시는 설치한 `devtools`가 PATH에 있는 환경을 기준으로 한다.
+포트와 URL은 [포트 가이드](ports.md), 서버 수명 관리는 [프로세스 가이드](processes.md),
+JSON 형식·오류·protocol 전환은 [CLI 출력 계약](cli-output.md)을 따른다.
 
 ## 사용 목적
 
@@ -171,6 +165,9 @@ devtools var unset LOG_LEVEL
 
 `secret`은 정식 이름이고 `sec`는 같은 동작을 하는 별칭이다. secret은 프로세스에 주입할 수 있지만, 값을 반환하는 조회 명령은 제공하지 않는다.
 
+먼저 [vault 설정](secret-protection.md)을 완료하고 잠긴 키 세션을 해제한다.
+해제된 세션은 재사용하므로 명령마다 암호를 입력하지 않는다.
+
 값 등록은 파일이나 stdin을 사용한다. 다음 파일 경로는 실제 값을 담은 파일을 준비한 뒤 사용한다.
 
 `--file`은 일반 파일을 읽고, `--stdin`은 파이프나 파일 리다이렉션으로 전달된 데이터를 읽는다. 한 번의 호출에서 입력 방식 하나를 선택한다. 공백과 마지막 개행을 포함해 입력 내용을 그대로 저장하므로 입력 파일은 사용할 값과 정확히 일치하게 준비한다.
@@ -191,9 +188,8 @@ devtools sec unset DATABASE_URL --env local
 devtools sec unset API_TOKEN
 ```
 
-secret에는 값을 명령 인자로 넘기는 `--value`를 제공하지 않는다. 현재 var/sec 소스에서는
-먼저 [vault를 설정](secret-protection.md)한다. 해제된 세션은 재사용하므로 명령마다
-암호를 입력하지 않는다. 수동 잠금이나 암호 세션 만료 뒤에는 명시 해제가 필요하다. 파일·stdin 입력은 secret 값을 에이전트가 직접 읽거나 명령 문자열에 포함할 필요 없이 등록하는 경로다.
+secret에는 값을 명령 인자로 넘기는 `--value`를 제공하지 않는다.
+수동 잠금이나 암호 세션 만료 뒤에는 명시 해제가 필요하다. 파일·stdin 입력은 secret 값을 에이전트가 직접 읽거나 명령 문자열에 포함할 필요 없이 등록하는 경로다.
 
 키의 종류는 profile 단위로 고정한다. 같은 키를 어떤 env에서는 var, 다른 env에서는 sec로 취급하지 않는다. env는 값만 덮어쓴다.
 
@@ -525,7 +521,7 @@ Windows에서는 설치한 task runner나 명시 PowerShell 검사 스크립트�
 주입은 실행한 자식 프로세스와 그 자식에만 적용된다. 에이전트의 부모 셸이나 다른 터미널의 환경변수는 바뀌지 않는다. 같은 profile을 공유해도 각 worktree는 실행할 때 env를 따로 선택할 수 있다.
 
 `command run`은 자식 프로세스의 신호와 종료 코드를 보존하고 출력을 JSON으로 감싸지 않는다.
-현재 소스의 새 실행은 non-TTY stdout·stderr에서 실제 전달 secret을 기본 마스킹한다.
+새 실행은 non-TTY stdout·stderr에서 실제 전달 secret을 기본 마스킹한다.
 공개 var는 마스킹 패턴이 아니다. 짧은 secret도 마스킹하므로 정상 출력 일부가 가려질 수 있다.
 TTY·바이너리 예외와 한도는 [출력 보호](output-protection.md)를 따른다.
 
@@ -582,13 +578,13 @@ var·sec 목록의 `items`와 var 조회의 `metadata`에는 `key`, `kind`, `sou
 
 ## 로컬 저장과 secret 보호 범위
 
-현재 var/sec 소스의 secret은 로컬 암호화하고 OS 보호 또는 명시 암호 기반 세션으로
+vault 지원 빌드는 secret을 로컬 암호화하고 OS 보호 또는 명시 암호 기반 세션으로
 키를 보호한다. 공개 var와 이름·종류 등 메타데이터는 숨기지 않는다. setup·잠금·복구와
 기존 평문 자료의 전환은 [로컬 secret 보호](secret-protection.md)를 따른다. 이 기능이
 없는 설치 빌드는 이전 평문 저장 동작을 유지하므로 설치 CLI의 schema를 확인한다.
 
-Unix의 `0700` 디렉터리/`0600` 파일 및 Windows의 현재 사용자·SYSTEM 전용 DACL도
-유지한다. [Windows 경로 제한](windows.md#storage-and-processes)과 별도
+Unix의 `0700` 디렉터리/`0600` 파일과 Windows의 private DACL을 유지한다.
+Windows는 현재 사용자·SYSTEM, AppContainer에서는 해당 컨테이너 SID도 허용한다. [Windows 경로 제한](windows.md#storage-and-processes)과 별도
 [암호화 백업](backup.md)은 계속 적용된다.
 
 실행은 실제 전달할 값을 old stop 전에 고정한다. vault 잠금은 새 보호 실행을 막지만
@@ -596,22 +592,5 @@ Unix의 `0700` 디렉터리/`0600` 파일 및 Windows의 현재 사용자·SYSTE
 [정의한 출력 경로](output-protection.md)에 적용된다. 앱 파일·네트워크·임의 변환이나
 같은 사용자 권한의 의도적인 접근을 막는 sandbox는 아니다.
 
-Managed process records can include `value_watch`, the supervisor's last passive
-background value observation (`state`, `reason`, `updated_at`, optional `goal`,
-`integrity_verified`). The goal contains opaque input identities only. Locked or
-unavailable verification clears the goal; polling never unlocks or renews the key
-session. The original `input_version` continues to describe recorded delivery.
-The timestamp also applies when the last observation is retained in terminal
-history. Notifications alone do not restart an application.
-
-Configured command list/inspect expose `values_update` (`notify` by default,
-`restart` only by explicit per-command opt-in). Managed records may include
-`value_apply` with `state` (`requested`, `applied`, `failed`, `paused`), safe
-`reason`, `updated_at`, original `execution_id`, optional operation `request_id`,
-replacement `next_id` and opaque `goal`. `auto_origin` and bounded `auto_restarts`
-track automatic replacement ancestry and burst timestamps. No secret bytes or
-launcher authority enter these fields. Failed/abandoned attempts do not resubmit;
-a manual restart with a new request UUID is explicit retry. A successor retains
-its own upstream completion, so retention of old history does not disable future
-updates. A `requested` operation with no completion for 90 seconds is reported as
-paused with unknown outcome; the original request identity remains fixed.
+실행에 전달된 입력과 변경 대기·자동 교체 상태는 [프로세스 관리](processes.md#값-변경-알림과-자동-반영)를,
+응답 필드의 의미는 [관리 API 계약](management-api-contract.md#값-변경-관찰과-자동-교체)을 따른다.

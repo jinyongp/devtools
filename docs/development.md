@@ -149,7 +149,8 @@ devtools run dev:dashboard
 
 개발 전용 실행 파일을 빌드한 뒤 서버를 터미널에서 실행한다.
 `internal/dashboard/assets`의 HTML·JS·CSS를 수정하고 브라우저를 새로고침하면
-수정 내용이 바로 반영된다. 응답은 `Cache-Control: no-store`로 제공한다.
+수정 내용이 바로 반영된다. D3 배포 파일의 버전·출처·license·SHA-256은
+`internal/dashboard/assets/dependencies.json`에서 관리한다. 응답은 `Cache-Control: no-store`로 제공한다.
 Go 코드를 수정했을 때는 `Ctrl+C`로 종료하고 `devtools run dev:dashboard`를 다시 실행한다.
 
 현재 사용자의 devtools 데이터와 저장소의 profile을 사용한다. 개발 서버는
@@ -175,6 +176,23 @@ Smoke는 dashboard 로그인, Values 화면의 변수 수정, URL navigation과 
 CLI에서 확인한 최종 값을 한 흐름으로 검증한다. Release의 Linux CI에서는 Chromium의 OS 의존성도
 함께 설치하며 이 smoke가 통과한 뒤 설치된 release 시나리오를 실행한다. Playwright는
 `@playwright/test` 1.63.0으로 정확히 고정한다.
+
+## Agent Skill 검증
+
+Skill 원본은 `skills/devtools/SKILL.md`이며 목적별 지침은 같은 디렉터리의
+`references/`에 둔다. 원본과 참조를 함께 수정하고 다음 검사를 사용한다.
+
+```sh
+devtools run check:skill
+devtools run check:skill-release
+devtools run check:skill-discovery
+```
+
+`check:skill`은 고정 버전의 공식 reference validator로 규약을 검사한다.
+`check:skill-release`는 archive 구성·checksum과 전체 원본의 일치를 확인한다.
+`check:skill-discovery`는 현재 checkout을 검사하고,
+`check:skill-discovery-public`은 별도로 공개 GitHub 소스를 확인한다.
+배포 파일에는 필요한 참조를 함께 포함한다. 사용자 설치·업데이트는 [설치 가이드](agent-skill.md)를 따른다.
 
 ## 도구 추가
 

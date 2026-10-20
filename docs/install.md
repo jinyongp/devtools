@@ -37,9 +37,8 @@ brew install jinyongp/tap/devtools
 ```
 
 Homebrew also installs `dvt` as a symlink to `devtools` and completion files for
-bash, zsh, and fish. Both command names work without editing shell configuration.
-The Formula declares the link through `command_aliases`; Homebrew manages its
-updates and removal.
+bash, zsh, and fish. Both command names use the Homebrew installation directory already on your PATH.
+Homebrew manages updates and removal.
 
 Or install with curl:
 
@@ -80,7 +79,7 @@ to use the updated executable. Your profile data and `devtools.toml` are preserv
 Downgrading the binary does not undo data-format upgrades; restore a compatible
 backup into a fresh data directory if you need an older release.
 
-For builds with vault support, updating the binary does not encrypt old secrets.
+On builds with vault support, updating the binary does not encrypt old secrets.
 Follow [local secret setup and migration](secret-protection.md#기존-저장소를-전환하기)
 before using them. Keep the existing key material and recovery backup. On macOS,
 a changed application signature can require explicit Keychain approval with

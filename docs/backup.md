@@ -1,11 +1,14 @@
-# 암호화 백업, 복구와 profile 이동
+# 암호화 백업과 복구
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-`devtools backup`은 전역 var/sec/env와 task/workstream을 age X25519 recipient로 암호화해 보관한다. `devtools profile export/import`는 같은 snapshot payload를 다른 기기로 옮기며, protocol v5부터 기본 transfer는 원본 기기에서 먼저 만드는 age scrypt passphrase archive를 사용한다.
+`devtools backup`은 변수·secret·env와 task/workstream을 age X25519 공개키로 암호화해 보관한다.
+
+<a id="다른-환경으로-profile-이동"></a>
+
 백업 보관은 아래 키 준비부터, 기기 간 이동은 [Profile 전송 가이드](profiles.md#다른-기기로-내보내기)부터 시작한다. 모든 명령은 JSON을 반환하며 passphrase·개인 identity·백업 값 원문은 출력하지 않는다.
 
-현재 var/sec 소스의 보호 root에서는 내보낼 값을 기존 키 세션으로 인증한다.
+vault가 설정된 보호 root에서는 내보낼 값을 기존 키 세션으로 인증한다.
 secret이 포함된 논리 자료를 받을 대상도 먼저 [vault 설정과 해제](secret-protection.md)가
 필요하다. archive는 논리 값·버전·종류·계층을 보존하지만 기기 root key, 세션과 실행
 handle은 옮기지 않는다. 복원한 profile은 새 로컬 ID·generation·keyset을 사용한다.
@@ -31,14 +34,6 @@ devtools backup configure --directory /backups/devtools --recipient-file /secure
 
 `backup create`는 `--recipient` 또는 `--recipient-file`을 명시할 수 있고, 둘 다 생략하면 `backup configure`의 공개 recipient를 사용한다. output을 생략하면 설정된 backup directory를 사용한다.
 
-`profile export`는 기본적으로 recipient 없이 실행하며 터미널에서 passphrase를 두 번 입력받아 age scrypt archive를 만든다. non-interactive 환경에서는 `--passphrase-file` 또는 `--passphrase-stdin`을 사용한다. 기존 X25519 자동화는 `--recipient`/`--recipient-file` advanced mode로 유지한다. output을 생략하면 `./<profile>.age`를 사용하며 `backup configure`를 사용하지 않는다.
-
-Passphrase archive는 기존과 같은 scrypt `logN=18`로 생성한다. 기본 대화형 가져오기는
-비밀번호를 요청하기 전에 헤더를 검사한다. 모든 passphrase 복호화는 KDF 실행 전에
-`logN>18`이나 잘못된 비용 표기를 거절한다. 이 제한은 인증 전 KDF 메모리 사용을 약 256 MiB로 제한하며,
-devtools가 생성한 기존 archive와 X25519 recipient 전송에는 영향을 주지 않는다.
-별도 도구로 더 높은 비용을 지정한 age archive는 지원하지 않는다.
-
 ## 백업 생성과 확인
 
 ```sh
@@ -57,47 +52,6 @@ CLI의 keygen·configure·create는 `data.item`에 결과 메타데이터를, `d
 복구·가져오기의 적용 영수증은 최대 128 MiB이며, 가져오기 영수증에는 전체 비교 결과도 포함된다. 쓰기와 재시도 읽기에
 같은 상한을 적용한다. 직렬화된 결과가 상한을 넘으면 `result_too_large`로 저장소 교체 전에
 거절한다. 이전 버전이 기록한 1 MiB 초과 영수증도 새 상한 안이면 재생할 수 있다.
-
-## 다른 환경으로 profile 이동
-
-기본 profile transfer는 대상 기기를 먼저 준비하지 않습니다.
-
-```sh
-# 원본 기기
-devtools profile export
-# passphrase를 두 번 입력
-
-# <profile>.age 파일 하나만 대상 기기로 복사
-
-# 대상 기기
-devtools profile import --file ./<profile>.age
-# 같은 passphrase 입력
-```
-
-자동화에서는 passphrase를 argv나 환경변수에 넣지 않고
-`--passphrase-file` 또는 `--passphrase-stdin`을 사용합니다. passphrase는 devtools가
-지속 저장하지 않습니다.
-
-X25519 recipient transfer가 필요한 기존 자동화는 계속 지원합니다.
-
-```sh
-# 대상 기기
-devtools profile transfer prepare
-
-# 원본 기기
-devtools profile export --recipient age1...
-```
-
-`--recipient-file`·`--identity-file`도 advanced compatibility 입력으로 유지됩니다.
-recipient mode와 passphrase mode는 한 요청에서 섞을 수 없습니다.
-
-Protocol v5의 import는 기본적으로 미리보기만 수행하고 실제 적용에는
-`--apply DIGEST --request-id UUID`가 필요합니다. 기존 profile을 `--replace`할 때의
-safety archive는 현재 import와 같은 방식으로 암호화됩니다. passphrase import면 같은
-passphrase, recipient import면 같은 X25519 recipient를 사용하므로 `backup configure`는
-필요하지 않습니다.
-
-조회·비교, 원본 선택, 교체와 재시도 절차는 [Profile 관리](profiles.md)에 정리되어 있습니다.
 
 ## 복구 미리 보기와 적용
 

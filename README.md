@@ -2,7 +2,7 @@
 
 [English](README.md) | [한국어](README.ko.md)
 
-devtools is a CLI for managing your project's development environment and work.
+devtools is a CLI for managing your project's development environment and tasks.
 Store environment variables and secrets, pass them to commands, and manage
 development servers, ports, and local URLs. Track tasks and progress so you can
 pick up where you left off in another session or with a coding agent.
@@ -85,10 +85,9 @@ On builds with [output protection](docs/output-protection.md), non-TTY stdout an
 stderr mask delivered secrets by default. TTY output uses the configured policy.
 
 Commit the generated `devtools.toml` to Git. Projects and worktrees that use the
-same profile share stored values. The current source protects stored secrets with
-local encryption and a reusable OS-protected or passphrase key session; public
-variables remain readable. On a build exposing the vault commands, this requires
-one-time `devtools vault init`. See
+same profile share stored values. Builds with vault support protect stored secrets
+with local encryption and a reusable OS-protected or passphrase key session;
+public variables remain readable. Complete vault setup before storing secrets. See
 [local secret protection](docs/secret-protection.md) for setup and build availability.
 The [values guide](docs/cli-contract.md) covers secret registration and saved commands.
 
@@ -125,7 +124,7 @@ for the version requirements and both forms.
 ## Guides
 
 The [documentation index](docs/README.md) separates user guides, API contracts,
-developer instructions, and historical design records. Most guides are in Korean;
+developer instructions, and architecture references. Most guides are in Korean;
 the [task and workstream guide](docs/tasks.md) is in English.
 
 - Values and configuration: [variables, secrets, and commands](docs/cli-contract.md),
@@ -133,7 +132,7 @@ the [task and workstream guide](docs/tasks.md) is in English.
   [environment diagnostics](docs/doctor.md).
 - Servers and URLs: [ports](docs/ports.md), [server lifecycle](docs/processes.md),
   [readiness](docs/process-readiness.md), [local domains, HTTPS, and sharing](docs/local-network.md).
-- Work coordination: [tasks, workstreams, and dashboard](docs/tasks.md). Run
+- Work coordination: [tasks and workstreams](docs/tasks.md), [Dashboard](docs/dashboard.md). Run
   `devtools dashboard` and open `data.item.url`. The login link is a credential; keep it private.
 - Data management: [profiles and transfer](docs/profiles.md),
   [encrypted backups and recovery](docs/backup.md), [storage cleanup](docs/cleanup.md).

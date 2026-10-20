@@ -106,7 +106,7 @@ retain the drive-root traversal. Access denial never causes a traversal check to
 be skipped. Explicit isolated roots use this same boundary policy during path
 resolution, without creating directories or changing the environment.
 UNC/SMB, device paths, alternate data streams, reparse points/symlinks, and cloud-synced
-folders are unsupported for active private storage. In the current var/sec source,
+folders are unsupported for active private storage. On builds with vault support,
 secret values use local encryption with user DPAPI protection; public variables and
 metadata remain readable. Check [vault setup and build availability](secret-protection.md).
 Backups and profile exports are encrypted separately. Use [profile transfer](profiles.md) to

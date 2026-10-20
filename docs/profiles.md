@@ -5,10 +5,10 @@
 Profile은 변수·secret·env와 task/workstream을 함께 관리하는 이름입니다. 프로젝트는
 `devtools.toml`의 `profile`로 이 데이터를 선택합니다. 같은 기기의 여러 worktree는 같은
 profile을 공유하지만, 다른 기기로 옮길 때는 암호화한 파일을 내보내고 가져와야 합니다.
-아래 전송 흐름은 v0.22.3의 CLI protocol v5에서 도입되었으며 v6와 현재 소스 후보 v7에서도 같습니다.
+전송은 원본에서 내보내기 → 대상에서 미리보기 → 명시 적용 순서로 진행합니다.
 Windows 네이티브와 WSL 사이에도 암호화 파일로 옮깁니다. 데이터 디렉터리를 직접 공유하지 마세요.
 
-vault 지원 빌드의 보호된 원본에서는 export 전에 기존 키 세션을 해제해야 합니다.
+vault 지원 빌드의 보호된 원본에서는 export 전에 잠긴 키 세션을 해제해야 합니다.
 secret이 포함된 자료를 받을 대상에서도 [vault를 설정하고 해제](secret-protection.md)하세요.
 원본에서 archive를 먼저 만드는 순서는 그대로이며, 대상 준비는 import 적용 전에 하면 됩니다.
 전송 암호는 archive 복호화용이고 vault 암호는 로컬 키 해제용으로 서로 별개입니다.
@@ -45,7 +45,7 @@ managed process만 남아 있는 profile도 목록에 포함됩니다.
 ## 다른 기기로 내보내기
 
 기본 profile 이동은 **원본 기기에서 먼저** 시작합니다. 대상 기기를 미리 준비할 필요가
-없고, 이동해야 하는 filesystem artifact는 암호화된 `.age` 파일 하나뿐입니다.
+없고, 옮길 파일은 암호화된 `.age` 하나입니다.
 
 ```sh
 # 원본 기기: 현재 프로젝트의 profile
@@ -75,6 +75,13 @@ snapshot을 만들기 전에 즉시 `output_exists`로 실패하고 기존 파�
 task/workstream/validation 데이터가 들어갑니다. `devtools.toml`, port 할당, instance 연결,
 실행 중 process, dashboard 세션은 이동하지 않습니다. 프로젝트 파일은 Git 등 기존 방식으로
 별도 준비하세요.
+
+### 전송 암호의 비용 제한
+
+passphrase archive는 age scrypt `logN=18`로 생성합니다.
+복호화는 KDF 실행 전에 `logN>18`과 잘못된 비용 표기를 거절해
+인증 전 메모리 사용을 약 256 MiB로 제한합니다. 별도 도구로 더 높은 비용을 지정한
+archive는 지원하지 않습니다. X25519 recipient 전송에는 이 제한을 적용하지 않습니다.
 
 ### 고급 recipient 방식
 

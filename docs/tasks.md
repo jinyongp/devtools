@@ -1,4 +1,4 @@
-# Tasks, workstreams, and dashboard
+# Tasks and workstreams
 
 [Documentation index](README.md) · [Install and get started](../README.md)
 
@@ -30,8 +30,9 @@ blockers. Keep the context private and use the same profile for every step.
 Every committed mutation reports `previous_revision`, `revision`,
 `current_revision`, `affected_ids`, and `affected_count`. Treat exit code 0 as a
 committed change only when `changed` is true and `affected_count` is positive.
-An identical mutation fails with `no_change` and exit code 3; it does not create
-an action, receipt, or revision. Empty automatic claims and dry-runs remain
+A definition or state update that changes nothing fails with `no_change` and exit
+code 3; it creates no action, receipt, or revision. Appending a checkpoint or result
+is itself a change. Empty automatic claims and dry-runs remain
 intentional non-changing successes.
 For an uncertain response, retry with
 the original request ID and unchanged inputs. A revised request gets a new UUID.
@@ -64,7 +65,7 @@ Command help lists options. Use `devtools schema task workstream spec set` to
 retrieve the input and JSON body schema for that command.
 
 Update existing workstream metadata with `task workstream update WS_ID`. Metadata
-is the public concept; `title` and `description` are the initial supported fields.
+is the public concept; `title` and `description` are supported fields.
 Provide at least one field with the latest revision and a request ID. An empty
 description clears it. Use the `workstream.update` operation of `task workstream
 edit` when metadata must change atomically with other plan content.
@@ -155,10 +156,6 @@ waiver. An inherited pass uses `validation accept` to record reuse in the new ru
 devtools task list --state all --limit 50
 devtools task tree TASK_ID --direction upstream --depth 3
 devtools task workstream tree --direction downstream
-devtools dashboard
-devtools dashboard start
-devtools dashboard status
-devtools dashboard stop
 ```
 
 Lists return `next_cursor`. Graphs return a `cursor` and continuation roots when
@@ -174,84 +171,11 @@ relations at the first query revision. Follow-up queries do not replay event
 history. Cursors from the older event-based cache format return `cursor_invalid`;
 start a fresh query. This cache change does not migrate task journals or WALs.
 
-`devtools dashboard` and its alias `dashboard start` return JSON with server
-metadata in `data.item` and a fresh login link in `data.item.url`. Open the full
-link, including its fragment, to connect the browser tab. Choose a profile from
-the header's dropdown; controls become available after authentication. Status
-returns `data.item`; stop returns `data.changed`. See the [CLI output contract](cli-output.md).
+Open [the Dashboard guide](dashboard.md) for login, plan editing, values, navigation and server controls.
 
-The dashboard embeds D3 7.9.0 and renders directed dependencies on Canvas. The
-keyboard-accessible item list opens context and workstream tasks. Use the profile
-selector for the profile overview, and select a node to emphasize its connected
-paths. The entry link is valid for five minutes and one use; the browser session
-lasts eight idle hours or until the server stops.
+<a id="storage-and-dependencies"></a>
 
-Use the **Profile** selector to choose a profile. The central list opens item
-details; switch to **Graph** to explore dependencies. Details separate overview,
-documents, and activity. Agents claim tasks and record progress and completion
-through the CLI. The dashboard manages plans, definitions, and interventions.
-
-**Dependencies** selects prerequisites by title. Workstream **Specification**
-edits requirements and acceptance criteria as rows, with selectable requirement
-references. **Plan** selects tasks and validations belonging to that workstream.
-**Cancel** previews the open tasks that will also be canceled. Apply uses the
-previewed profile revision; concurrent changes require a fresh review.
-
-For a running task, **Revoke claim** records a reason and invalidates the observed
-run's execution context. It leaves the task open. Running commands continue until
-stopped separately; coordinate with the agent before assigning the work again.
-The equivalent CLI command is:
-
-```sh
-devtools task unclaim TASK_ID --expected-run RUN_ID --if-revision REVISION --reason "Agent session ended" --request-id UUID
-```
-
-Use `task show TASK_ID` to obtain the current run and profile revision. After
-revocation, a new CLI `task claim` starts a new execution. Late writes using the
-previous context return `context_invalid`; the revocation reason remains in history.
-
-Dashboard navigation is stored in the URL query: profile, workspace tab, environment,
-search and filters, list/graph view, selected item and its detail tab, expanded process
-details, and graph position. Reloading restores the current view. Browser Back and
-Forward restore navigation; typing a filter updates the current history entry.
-Values and secrets, edit forms, imported content, and raw logs stay in memory.
-Authentication remains in the current browser session, so a view URL also requires
-an authenticated session. If an environment was removed, the view returns to Common.
-
-The visible dashboard checks for changes every five seconds and redraws when its
-data changes. Polling pauses while the browser tab is hidden, a dialog or inline
-editor is open, or an input has focus. Returning to the tab checks immediately.
-Raw logs and validation evidence are loaded through their explicit controls.
-
-**Variables & secrets** selects common values or an environment. Variables display
-their values; secrets display storage metadata and accept a replacement value.
-On builds with vault support, this view shows the shared key-session state and
-explicit lock/unlock controls. Protected writes require an unlocked session; metadata
-remains available while locked. Setup stays in the CLI. Unlock input is cleared after
-sending, including uncertain responses; check status before re-entering it. Polling does
-not unlock the vault or extend its idle timeout. See [local protection](secret-protection.md).
-
-Editing an inherited value creates an override in the selected environment.
-From **Common**, choose **Override in…** on a key, select an environment, and enter its value. Existing overrides are identified before saving. Saving opens that environment; the common value stays unchanged. Create an environment first if none exists. Secrets accept a new value with a masked input.
-
-With an environment selected, **Inherited common**, **Overrides common**, and
-**Env only** distinguish storage layers. Inherited rows use a muted background;
-editing them offers **Create override**. **Remove override** restores inheritance,
-while **Delete** removes an environment-only value. These labels apply equally to
-variables and secrets and reflect stored layers, even when values are equal.
-Use the Key, Kind, and Source column headers to search keys and filter by kind
-and inheritance status together. Click a value to edit it in place,
-then save or cancel; secret cells accept a replacement. **Import .env** accepts
-a file or pasted assignments and previews key names and actions. New keys default
-to secret; select public variables in the preview. **Overwrite existing values**
-writes to the selected layer. Keeping existing values skips effective keys,
-including inherited common values. The import is applied atomically.
-Each import accepts up to 500 KB and 5,000 keys.
-Removing an override restores the common value. Concurrent changes require a
-refresh before editing again. See the [management API](management-api-contract.md)
-for request and retry behavior.
-
-## Storage and dependencies
+## Storage and verification
 
 Task journals live under the `tasks` subdirectory of the data path reported by
 `devtools project inspect`. Files are private to the user. The dashboard server
@@ -262,15 +186,6 @@ server memory. The browser keeps its credential in origin-scoped sessionStorage 
 sends it explicitly in the Authorization header. Task records and execution context
 receipts are separate from the variable/secret store.
 
-The project pins Go 1.27.1 and go-toml 2.4.3. The dashboard includes the exact
-official D3 7.9.0 bundle, with its license and SHA-256 in
-`internal/dashboard/assets/dependencies.json`. D3 declares no peer dependencies.
-CI actions use immutable commit references. Project commands use the CLI built
-from the checked-out source and are declared in `devtools.toml`.
-
-On macOS/Linux, `devtools run check:all` runs the Go race tests. Windows uses
-ordinary Go tests here; its required Actions gate adds x64 race and ARM64 native
-contention checks. `devtools run test:installed` is the Unix runner for concurrent
-claims, takeover, retries, worktree sharing, and dashboard sessions, using an
-isolated temporary home. Windows installed-product checks use
-[the dedicated native workflow](../verify/README.md#windows-native-actions).
+For isolated regression commands and native Windows checks, see
+[installed-release verification](../verify/README.md). The
+[development guide](development.md) covers build dependencies and contributor checks.

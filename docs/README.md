@@ -58,7 +58,7 @@ Some linked topic guides are currently in Korean.
 ## Working in a project
 
 - [Values and commands](cli-contract.md): profiles, environment overrides, variables, secrets, dotenv import, and saved commands.
-- [Local secret protection](secret-protection.md) (current source): one-time vault setup, reusable sessions, locking, migration, and recovery.
+- [Local secret protection](secret-protection.md): one-time vault setup, reusable sessions, locking, migration, and recovery.
 - [Reusable value bundles and usage](cli-contract.md#재사용할-값-묶음-bundle): save var/sec selection once and inspect delivery without reading secrets.
 - [Diagnostics](doctor.md): `doctor`, `diagnostics`, required tools, and recovery.
 - [Ports](ports.md): assignments, bindings, project URLs, and worktree names.
@@ -66,7 +66,8 @@ Some linked topic guides are currently in Korean.
 - [Readiness](process-readiness.md): wait until a server can accept requests.
 - [Local networking and sharing](local-network.md): domains, HTTPS, listeners, external sharing, and cleanup.
 - [Legacy proxy guide](proxy.md): links to the current network guide.
-- [Tasks, workstreams, and dashboard](tasks.md) (English): plans, claims, validation, handoffs, and browser management.
+- [Tasks and workstreams](tasks.md) (English): plans, claims, validation, and handoffs.
+- [Dashboard](dashboard.md) (English): sign in, edit plans and values, and manage resources in a browser.
 - [Profiles](profiles.md): metadata, encrypted transfer, preview, and replacement.
 - [Backups and recovery](backup.md): keys, encryption, preview/apply, and interrupted restores.
 - [Storage cleanup](cleanup.md): selection, archive recovery, and permanent deletion.
@@ -81,7 +82,7 @@ Design background is separate from public command availability.
 - [Task API](task-api-contract.md), [plan editing](task-edit-api.md): state transitions, revisions, and retries.
 - [Dashboard API](management-api-contract.md): authentication, Origin, mutations, and previews.
 - [Port contract](port-design.md), [network contract](network-design.md) (English): identity, declarations, addresses, and ownership.
-- [Legacy HTTP proxy contract](proxy-design.md): HTTP compatibility; extensions follow the network contract.
+- [HTTP proxy contract](proxy-design.md): route selection, forwarding, redirects, and connection lifetime.
 - [Local var/sec contract](var-sec-contract.md): authenticated storage, key sessions, launch snapshots, and lock guarantees.
 
 ## Development and verification

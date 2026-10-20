@@ -12,8 +12,8 @@ Windows의 지원/검증 범위는 [Windows 안내](windows.md), 별도 client t
 
 아래 예시는 루트의 frontend와 `api` 하위 프로젝트에 각각 `pnpm dev`가 준비되어 있고,
 두 서버가 환경변수 `PORT`를 읽는 프로젝트를 기준으로 한다. 실행 도구와 서버는 devtools가 설치하지 않는다.
-`shop.test` custom host는 OS hosts 변경 권한이 필요하다. OS 변경 없이 먼저 확인하려면
-api의 host를 `api.${instance.alias}.${profile}.localhost`로 바꾸고 고포트 listener를 사용한다.
+처음에는 `.localhost`와 기본 고포트 listener를 사용해 OS hosts·인증서 신뢰 변경 없이 확인한다.
+custom host와 OS 신뢰 등록은 아래의 별도 설정 절차를 따른다.
 WSL에서 Windows 브라우저로 접속할 때는 별도의 DNS·신뢰 경계를 확인한다.
 
 ```toml
@@ -30,7 +30,7 @@ strict = true
 host = "${instance.alias}.${profile}.localhost"
 port = "web"
 [proxies.api]
-host = "api.${instance.alias}.${DEV_DOMAIN:-shop.test}"
+host = "api.${instance.alias}.${profile}.localhost"
 port = "api"
 
 [commands.web]
@@ -56,8 +56,6 @@ devtools project up web api --proxy --request-id UUID
 devtools command env web
 devtools proxy env api
 devtools project status
-devtools project restart web api --request-id UUID
-devtools project down --request-id UUID
 ```
 
 `--proxy`는 선택한 서버의 포트를 함께 할당하고 binding·DNS·listener를 준비한 뒤
@@ -70,7 +68,8 @@ foreground는 `devtools run --proxy web`, 단일 managed 서버는
 `run`의 devtools 옵션은 command 이름 앞에 둔다. 이름 뒤 옵션은 child 인자다.
 다른 worktree는 `instance name feature`처럼 별도 alias를 지정한다.
 프로젝트 lifecycle은 현재 실제 프로젝트 디렉터리의 서버만 선택한다.
-`project down`은 backend를 종료한다. route 비활성화는 `proxy down NAME --request-id UUID`다.
+설정·값을 바꿨으면 `devtools project restart web api --request-id UUID`로 교체한다.
+`devtools project down --request-id UUID`는 backend를 종료한다. route 비활성화는 `proxy down NAME --request-id UUID`다.
 
 ## listener와 HTTPS
 
@@ -79,16 +78,24 @@ listener는 HTTP/HTTPS 주소 묶음의 이름이다. 프로젝트 `listener` �
 다른 이름은 먼저 `proxy configure --listener preview`처럼 등록한다.
 초기 HTTP 주소는 loopback `:20200`이다. HTTPS는 명시적으로 설정한다.
 
+앞 예시의 서버와 route를 실행한 상태에서 기본 listener에 HTTPS를 추가하는 예다.
+먼저 listener를 중지한 뒤 설정하고 다시 시작한다. listener 설정만으로 backend를
+재시작하지는 않으므로, 이어서 프로젝트 서버를 restart해 새 URL binding을 적용한다.
+
 ```sh
+devtools proxy stop --listener default --request-id UUID
 devtools proxy configure --http-address 127.0.0.1:18080 --https-address 127.0.0.1:18443 --request-id UUID
 devtools proxy configure --listener preview --http-address 127.0.0.1:18081 --https-address 127.0.0.1:18444 --request-id UUID
+devtools proxy start --listener default --request-id UUID
+devtools project restart web api --request-id UUID
 devtools proxy status --all
 devtools proxy ca export --output ./devtools-ca.pem
 curl --noproxy '*' --cacert ./devtools-ca.pem --resolve main.shop.localhost:18443:127.0.0.1 https://main.shop.localhost:18443/
-devtools proxy stop --listener default --request-id UUID
 devtools proxy start --listener preview --request-id UUID
 ```
 
+각 변경 명령의 `UUID`는 서로 다른 새 값으로 바꾼다.
+CA 출력 파일이 이미 있으면 다른 `--output` 경로를 사용한다.
 configure는 선택 listener가 중지된 상태에서 실행한다. 프로젝트 route에서
 `listener = "preview"`로 묶음을 선택한다. HTTPS 시작 시 사용자 전용 CA를 생성한다.
 OS 신뢰 등록은 명시 `devtools proxy trust --request-id UUID`로 수행한다.
@@ -110,7 +117,8 @@ setup 의도와 실제 bind 권한은 별도로 검사한다. standalone 업데�
 ## 이름 해석과 환경 변수
 
 `dns` 생략은 `auto`다. `.localhost`는 기존처럼 hosts 파일을 수정하지 않는다.
-custom host는 `proxy up` 또는 `--proxy` 시작 안에서 devtools 소유 hosts mapping을
+예를 들어 `host = "api.${instance.alias}.${DEV_DOMAIN:-shop.test}"`처럼 custom host를
+선언할 수 있다. custom host는 `proxy up` 또는 `--proxy` 시작 안에서 devtools 소유 hosts mapping을
 준비한다. 별도 hosts 명령은 일상 실행에 필요하지 않다.
 wildcard listener의 로컬 hosts mapping은 IPv4의 `127.0.0.1`, IPv6의 `::1`을 사용하며
 `0.0.0.0`이나 `::`를 hosts에 기록하지 않는다.
@@ -140,18 +148,27 @@ known URL, listener 실행 여부, upstream readiness, client trust는 별도 �
 
 ## 실행 중인 backend와 프로젝트 없는 실행
 
+41000에서 이미 실행 중인 서버를 연결하는 예다. devtools는 그 서버를 소유하거나 종료하지 않는다.
+
 ```sh
 devtools proxy add docs 41000 --global --host docs.localhost --request-id UUID
 devtools proxy up docs --global --request-id UUID
 devtools proxy env docs --global
 devtools proxy list --global
-devtools proxy run docs --global -- python3 server.py
-devtools proxy down docs --global --request-id UUID
-devtools proxy rm docs --global --request-id UUID
 ```
 
-add는 고정 backend 포트를 참조하는 비활성 전역 route를 만든다. 이미 실행 중인 backend에도
-up으로 연결하며 process를 인수하거나 종료하지 않는다. foreground run은 포트가 비었을 때
+add는 고정 backend 포트를 참조하는 비활성 전역 route를 만든다.
+이미 실행 중인 backend에는 up으로 연결하며 process를 인수하거나 종료하지 않는다.
+서버도 devtools로 시작하려면 기존 외부 서버를 사용하지 않는 별도 흐름으로 실행한다.
+다음 `server.py`는 주입된 `PORT`를 읽는 서버 파일로 미리 준비해야 한다.
+
+```sh
+devtools proxy run docs --global -- python3 server.py
+```
+
+연결을 정리할 때는 `proxy down docs --global --request-id UUID`,
+전역 선언까지 제거할 때는 `proxy rm docs --global --request-id UUID`를 사용한다.
+foreground run은 포트가 비었을 때
 정확한 포트를 claim하고 `PORT`, `URL`, `ROUTE_URL`과 모든 global peer의
 `DEVTOOLS_<NAME>_PORT/URL/ROUTE_URL`을 주입한다. 정규화된 이름 충돌은 거절한다.
 child 종료 코드·stdio·signal을 전달하고 종료 시 claim을 해제한다.

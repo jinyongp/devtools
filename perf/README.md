@@ -170,7 +170,7 @@ fixture with synthetic data and run a small end-to-end check before comparing
 performance. Session credentials belong only to the private fixture manifest;
 exported command names identify workloads without recording those credentials.
 
-## Protected value fixtures (current var/sec source)
+## Protected value fixtures
 
 When the measured binary advertises `vault init`, fixture setup explicitly migrates
 the synthetic legacy values into a passphrase-protected vault. Older baseline
@@ -221,7 +221,7 @@ native session tests, and no RSS acceptance threshold is assumed.
 
 ## Measure managed value convergence
 
-For the current var/sec source, use an already-built candidate on Linux/WSL:
+Use an already-built candidate with vault support on Linux/WSL:
 
 ```sh
 python3 -B perf/convergence.py --binary bin/devtools \
@@ -250,7 +250,7 @@ and cleanup are outside the convergence timer. The output keeps binary/harness
 identity, source state, hardware, all raw durations/outcomes and storm counts.
 Small single-host samples give exploratory distributions, not an SLA or reliable
 tail/significance estimate. Original-to-protected baseline timings belong to the
-separate matched CLI harness; no nonexistent baseline automation is invented.
+separate matched CLI harness.
 
 ## Measure encrypted bulk writes
 

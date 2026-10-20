@@ -15,7 +15,7 @@ devtools task workstream edit WORKSTREAM_ID --file edit.json --if-revision N --r
 
 | operation | 필드 |
 | --- | --- |
-| workstream.update | `value`에 metadata 부분 수정. 초기 지원 필드는 `title`, `description` |
+| workstream.update | `value`에 metadata 부분 수정. 지원 필드는 `title`, `description` |
 | spec.update / plan.update | `value: {body}` |
 | requirement.add | `value: {key,text}` |
 | acceptance.add | `value: {key,text,requirement_keys}` |
@@ -52,7 +52,7 @@ task.remove는 논리적 제외다. 이력·점유를 유지하며 활성 의존
 
 owner 때문에만 숨겨진 validation은 task 복원 시 다시 포함된다. 명시 제외한 validation은 계속 제외된다. requirement/acceptance 제거는 참조를 정리하며 다른 정의를 삭제하지 않는다. ID와 문서 key는 재사용 대신 restore한다. validation restore는 현재 포함된 대상을 가리키는 정의 참조를 보존한다. 명시 설정한 관계가 최종 제외 대상을 참조하면 오류다. 반복 remove/restore처럼 최종 투영이 같은 실제 저장 요청은 `no_change`로 실패한다. dry-run에서는 `would_change:false`로 안전하게 확인한다.
 
-metadata는 workstream 자체를 대상으로 하므로 operation에 ID를 받지 않는다. `title`과 `description`은 초기 지원 필드이며 하나 이상 필요하다. title은 표시 metadata라 의미 기준을 바꾸지 않는다. description은 workstream의 목표 정의에 포함되어 해당 workstream과 외부 후행의 현재 완료 기준에 영향을 주지만, 소속 task 정의에는 전파하지 않는다. 빈 description은 설명을 제거한다.
+metadata는 workstream 자체를 대상으로 하므로 operation에 ID를 받지 않는다. `title`과 `description`은 지원 필드이며 하나 이상 필요하다. title은 표시 metadata라 의미 기준을 바꾸지 않는다. description은 workstream의 목표 정의에 포함되어 해당 workstream과 외부 후행의 현재 완료 기준에 영향을 주지만, 소속 task 정의에는 전파하지 않는다. 빈 description은 설명을 제거한다.
 
 표시 순서는 의미 기준을 바꾸지 않는다. 본문 변경은 소속 전체, 구조화된 조건은 참조 작업과 후행에 전파한다. 무관한 task 추가·제외는 기존 task 완료를 유지한다. 의미 epoch는 단조 증가해 A→B→A나 제외→복원으로 근거가 부활하지 않는다. task.move는 표시 순서만 바꾸며 claim 우선순위는 생성 순번·ID다.
 
@@ -88,6 +88,9 @@ edit 결과에는 dry_run, would_change, changes, effects, impact, issues, next_
 
 ## 저장 호환성
 
-v1은 읽을 수 있으며 첫 실제 업무 변경에서 profile.upgraded baseline과 요청 이벤트를 단일 저장으로 기록해 v2가 된다. read/no-op/preview는 업그레이드하지 않는다. 기존 유효 근거와 실행을 보존하고 이미 stale인 근거를 승격하지 않는다. 구버전 바이너리는 v2 읽기·쓰기를 거절하므로 공유 writer를 함께 업데이트한다. 알 수 없는 버전·action도 거절한다.
+아래 v1/v2는 논리 이벤트 형식이다. WAL·snapshot을 사용하는 물리 형식 v3와는
+별개이며 [저장 구조](storage-design.md#task-journal)를 따른다.
+
+논리 v1은 읽을 수 있으며 첫 실제 업무 변경에서 profile.upgraded baseline과 요청 이벤트를 단일 저장으로 기록해 v2가 된다. read/no-op/preview는 업그레이드하지 않는다. 기존 유효 근거와 실행을 보존하고 이미 stale인 근거를 승격하지 않는다. 구버전 바이너리는 v2 읽기·쓰기를 거절하므로 공유 writer를 함께 업데이트한다. 알 수 없는 버전·action도 거절한다.
 
 backup restore는 v1/v2 이력을 보존하고 source context/영수증을 폐기하며 running을 release한다. cleanup은 모든 running과 included 미완료·stale를 보호한다. excluded open만으로 마감된 workstream을 보류하지 않으며 canceled owner의 미충족 작업은 실행 의무에서 제외한다. Dashboard 서버 재사용은 인증·UI·task 프로토콜이 모두 일치해야 한다.

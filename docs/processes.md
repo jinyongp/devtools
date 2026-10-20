@@ -6,6 +6,10 @@
 Windows에서는 상위 host Job이 종료되면 함께 종료될 수 있다. 실제 PC의 터미널 닫기 동작은
 미검증이며 [Windows 안내](windows.md#storage-and-processes)의 수명 경계를 따른다.
 
+먼저 `web` 이름 명령과 필요한 `local` env를 준비한다.
+서버 설정은 [준비 확인 예제](process-readiness.md#설정과-사용)를 참고한다.
+아래 명령은 작업별 예시이며 매 변경 요청의 `UUID`는 새로 생성한다.
+
 ```sh
 devtools process start web --request-id UUID
 devtools process start web --dir /projects/app --env local --request-id UUID
@@ -34,8 +38,6 @@ CTRL_BREAK를 요청하고 3초 후 남은 트리를 종료한다. Job에서의 
 
 ## 대상과 요청 ID 선택
 
-위 예시의 `web`은 프로젝트에 선언한 이름 명령이고, `local`은 미리 생성한 env다.
-완전한 서버 설정 예시는 [준비 확인 가이드](process-readiness.md#설정과-사용)를 참고한다.
 `UUID`에는 `uuidgen` 등으로 생성한 새 요청 ID를 넣고, `EXECUTION_ID`에는
 start 응답의 `data.item.id`를 넣는다. 응답이 불확실한 재시도에는 원래 요청 ID를 유지한다.
 
@@ -92,7 +94,7 @@ env·로그 설정 충돌을 판정한다. 실제 새 process를 만드는 경�
 
 부분 실패나 응답 유실 뒤에는 같은 요청 ID와 같은 입력으로 재시도한다. 완료한
 항목은 반복하지 않고 미완료 항목만 이어간다. 시작된 서버의 readiness가 아직
-충족되지 않았으면 해당 실행의 준비 검사를 이어간다. Frozen 입력을 확보한 새 실행이
+충족되지 않았으면 해당 실행의 준비 검사를 이어간다. 실제 전달할 입력을 고정한 새 실행이
 확정 실패하면 같은 UUID에서 새 입력으로 다시 시작하지 않는다. 새 시도에는 새 요청 ID를 쓴다. 변경된 입력에 같은 요청 ID를 사용하면 `request_conflict`다.
 재시도 결과의 `replayed: true`는 기존 작업을 재개하거나 재현했다는 뜻이다.
 현재 서버 상태가 필요하면 저장된 작업 결과 대신 `project status`를 조회한다.

@@ -1,0 +1,211 @@
+{
+  "recorded_at": "2026-10-20T05:37:07.178945+00:00",
+  "source_commit": "e16c431f6870a18be4b462217e7d4d0f7801543f",
+  "version": "0.28.1",
+  "inputs": {
+    "publish": false,
+    "system_network_smoke": true
+  },
+  "workflow": {
+    "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363",
+    "conclusion": "success",
+    "successful_jobs": 26,
+    "skipped_publication_jobs": [
+      "release",
+      "homebrew",
+      "installer-page"
+    ]
+  },
+  "jobs": [
+    {
+      "name": "validate-release",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118468963662"
+    },
+    {
+      "name": "vault-macos (macos-15, arm64)",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007183"
+    },
+    {
+      "name": "vault-macos (macos-15-intel, amd64)",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007227"
+    },
+    {
+      "name": "vault-linux",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007233"
+    },
+    {
+      "name": "wsl-vault",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007241"
+    },
+    {
+      "name": "ci-macos",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007251"
+    },
+    {
+      "name": "ci-linux",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007263"
+    },
+    {
+      "name": "system-network (macos, macos-latest)",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007275"
+    },
+    {
+      "name": "system-network (linux, ubuntu-24.04)",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007299"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / product",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007418"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / installer-ps5",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007424"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / product",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007430"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / boundaries",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007433"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / suite",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007454"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / installer-ps7",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007457"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / suite",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007470"
+    },
+    {
+      "name": "ci-windows / Windows amd64 / race",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007505"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / installer-x64",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007517"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / boundaries",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007520"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / installer-ps7",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007526"
+    },
+    {
+      "name": "ci-windows / Windows arm64 / installer-ps5",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118469007610"
+    },
+    {
+      "name": "profile-exchange (windows-11-arm, windows-arm64)",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118472847337"
+    },
+    {
+      "name": "profile-exchange (ubuntu-24.04, linux)",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118472847340"
+    },
+    {
+      "name": "profile-exchange (windows-2025, windows-amd64)",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118472847359"
+    },
+    {
+      "name": "profile-exchange (macos-latest, macos)",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118472847413"
+    },
+    {
+      "name": "package",
+      "conclusion": "success",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118472847948"
+    },
+    {
+      "name": "release",
+      "conclusion": "skipped",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118473403392"
+    },
+    {
+      "name": "installer-page",
+      "conclusion": "skipped",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118473403834"
+    },
+    {
+      "name": "homebrew",
+      "conclusion": "skipped",
+      "url": "https://github.com/jinyongp/devtools/actions/runs/39374333363/job/118473404430"
+    }
+  ],
+  "release_assets": {
+    "digest": "sha256:cdb508531f36a9119d52fcdca141949d34bd757fcd609acb986a6c2d6bbda01c",
+    "expired": false,
+    "id": 12242638206,
+    "name": "release-assets",
+    "size_in_bytes": 32975065
+  },
+  "archive_checksums": [
+    {
+      "file": "devtools-skill_0.28.1.tar.gz",
+      "sha256": "6824c25d6bf5756beb3dbd8496c32c577740af754ca98f368fa09a47f06b3404"
+    },
+    {
+      "file": "devtools_0.28.1_darwin_amd64.tar.gz",
+      "sha256": "6bfd79256dfcddd1799c7d67800919ababc0dbfa18ccf9bfa18be23772ac8000"
+    },
+    {
+      "file": "devtools_0.28.1_darwin_arm64.tar.gz",
+      "sha256": "136a34f8c8b829f431593c587d9cde290d38b95e515dd0b9cee2cd473904a733"
+    },
+    {
+      "file": "devtools_0.28.1_linux_amd64.tar.gz",
+      "sha256": "8da948f7067752f74df8b4a1faf63a48b82e310ec7e0f8d203cabc65f0501be9"
+    },
+    {
+      "file": "devtools_0.28.1_linux_arm64.tar.gz",
+      "sha256": "1e0fe785d6bfb1e820b9c200932b748b5cd97a800a16cc2e33b9d852487bddc8"
+    },
+    {
+      "file": "devtools_0.28.1_windows_amd64.zip",
+      "sha256": "47692709bad725a66281ae8c3848c2f6fd727effd097d9ce54b429825108fea2"
+    },
+    {
+      "file": "devtools_0.28.1_windows_arm64.zip",
+      "sha256": "484c7e6a63540d299466dbb99388849abf02f8925e93fe74bc5cc548f7fd5562"
+    }
+  ],
+  "downloaded_binary_version": {
+    "commit": "e16c431f6870a18be4b462217e7d4d0f7801543f",
+    "protocol_version": 7,
+    "version": "0.28.1"
+  },
+  "installers_match_source": true,
+  "installer_shell_syntax": "pass",
+  "publication_executed": false
+}

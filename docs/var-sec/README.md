@@ -10,6 +10,7 @@
 
 | 영역 | 현재 수용 기록 |
 | --- | --- |
+| batch 변경 이후 소스의 native OS·패키징 | [D02 비게시 릴리스 검증](D02-release-validation.md) |
 | 이후 batch 변경·공유 조회·준비/커밋 분리 | [D01 후속 리뷰와 측정](D01-batch-mutation-review.md) |
 | 전체 변경과 보장 범위 | [Z01 최종 리뷰](Z01-final-review.md) |
 | 저장·키·세션·출력·복구·OS별 실기 | [A12 최종 리뷰](A12-final-review.md), [수용 기준 연결표](A12-acceptance-ledger.md) |
@@ -26,6 +27,7 @@ native 검증 소스는 `1e4bebd6d955ff58409416fea77e8a4183b81253`이다.
 
 batch 변경과 잠금 분리는 위 native 실행 이후 추가된 제품 변경이다.
 D01의 로컬 검증과 과거 native 검증을 합쳐 이번 소스의 native 수용으로 판단하지 않는다.
+이후 수정 소스 `e16c431`의 native OS·패키징 성공은 D02에서 별도로 확인한다.
 
 ## 중간 기록 읽는 법
 

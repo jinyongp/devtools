@@ -17,6 +17,17 @@ type storageIdentity struct {
 	trustees []*windows.SID
 }
 
+// WindowsPrivatePathBoundary returns the OS-selected boundary for read-only
+// ancestor validation. It creates no objects and uses the same boundary policy
+// as private storage I/O, including when an isolated root does not exist yet.
+func WindowsPrivatePathBoundary(path string) (string, error) {
+	absolute, err := privatePath(path)
+	if err != nil {
+		return "", err
+	}
+	return storageDirectoryStart(absolute)
+}
+
 // A container's Known Folder is an OS-provided trust boundary: Windows creates
 // its per-user/per-container profile and prevents other containers from accessing
 // it. The owning host user and SYSTEM already control the storage policy. Do not

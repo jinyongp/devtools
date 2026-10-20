@@ -101,7 +101,8 @@ at that Known Folder. Its resolved handle must match the selected path; every
 component below it is pinned and checked for reparse points. The owning host user
 and SYSTEM remain trusted. Paths outside this boundary and ordinary processes
 retain the drive-root traversal. Access denial never causes a traversal check to
-be skipped.
+be skipped. Explicit isolated roots use this same boundary policy during path
+resolution, without creating directories or changing the environment.
 UNC/SMB, device paths, alternate data streams, reparse points/symlinks, and cloud-synced
 folders are unsupported for active private storage. In the current var/sec source,
 secret values use local encryption with user DPAPI protection; public variables and

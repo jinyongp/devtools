@@ -1,4 +1,4 @@
-package platformfs
+package platformfs_test
 
 import (
 	"context"
@@ -14,6 +14,8 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/jinyongp/devtools/internal/paths"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"golang.org/x/sys/windows"
 )
 
@@ -137,8 +139,9 @@ func TestWindowsAppContainerPrivateStorage(t *testing.T) {
 }
 
 func testAppContainerStorage(t *testing.T) {
-	app, err := storageAppContainerSID()
-	if err != nil || app == nil {
+	var app, size uint32
+	err := windows.GetTokenInformation(windows.GetCurrentProcessToken(), 29, (*byte)(unsafe.Pointer(&app)), uint32(unsafe.Sizeof(app)), &size)
+	if err != nil || app == 0 {
 		t.Fatalf("not running in AppContainer: %v", err)
 	}
 	base, err := windows.KnownFolderPath(windows.FOLDERID_LocalAppData, windows.KF_FLAG_DONT_VERIFY)
@@ -146,15 +149,15 @@ func testAppContainerStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(base, "devtools", "data")
-	start, err := storageDirectoryStart(path)
+	start, err := platformfs.WindowsPrivatePathBoundary(path)
 	if err != nil || !strings.EqualFold(start, base) {
 		t.Fatalf("container boundary not selected: %q %v", start, err)
 	}
-	start, err = storageDirectoryStart(filepath.Join(base+"-other", "data"))
+	start, err = platformfs.WindowsPrivatePathBoundary(filepath.Join(base+"-other", "data"))
 	if err != nil || start != filepath.VolumeName(base)+`\` {
 		t.Fatalf("container boundary escaped into sibling: %q %v", start, err)
 	}
-	if unsafe, err := OpenRoot(filepath.Join(base, "alias", "private"), true); !errors.Is(err, ErrUnsafe) {
+	if unsafe, err := platformfs.OpenRoot(filepath.Join(base, "alias", "private"), true); !errors.Is(err, platformfs.ErrUnsafe) {
 		if unsafe != nil {
 			unsafe.Close()
 		}
@@ -163,7 +166,7 @@ func testAppContainerStorage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(base, "outside", "private")); !os.IsNotExist(err) {
 		t.Fatalf("created storage through rejected reparse point: %v", err)
 	}
-	root, err := OpenRoot(path, true)
+	root, err := platformfs.OpenRoot(path, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +174,7 @@ func testAppContainerStorage(t *testing.T) {
 	if err := root.MkdirAll("nested"); err != nil {
 		t.Fatal(err)
 	}
-	if err := MkdirPrivate(filepath.Join(path, "private-child")); err != nil {
+	if err := platformfs.MkdirPrivate(filepath.Join(path, "private-child")); err != nil {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
@@ -192,7 +195,7 @@ func testAppContainerStorage(t *testing.T) {
 	if err := root.ValidateFileHandle("lease", lease.File); err != nil {
 		t.Fatal(err)
 	}
-	if err := CheckFile(lease.File); err != nil {
+	if err := platformfs.CheckFile(lease.File); err != nil {
 		t.Fatal(err)
 	}
 	if err := lease.Close(); err != nil {
@@ -215,11 +218,7 @@ func testAppContainerStorage(t *testing.T) {
 	if err := root.Close(); err != nil {
 		t.Fatal(err)
 	}
-	identity, err := currentStorageIdentity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	private, err := identity.descriptor()
+	private, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +243,7 @@ func testAppContainerStorage(t *testing.T) {
 	}
 	// Case variation must not bypass ACL checks when the Known Folder supplies
 	// a differently cased path prefix. Existing unsafe objects are never repaired.
-	if unsafe, err := OpenRoot(strings.ToLower(path), true); !errors.Is(err, ErrUnsafe) {
+	if unsafe, err := platformfs.OpenRoot(strings.ToLower(path), true); !errors.Is(err, platformfs.ErrUnsafe) {
 		if unsafe != nil {
 			unsafe.Close()
 		}
@@ -258,12 +257,33 @@ func testAppContainerStorage(t *testing.T) {
 		t.Fatal("existing ACL repaired implicitly")
 	}
 	set(private)
-	reopened, err := OpenRoot(path, false)
+	reopened, err := platformfs.OpenRoot(path, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := reopened.Close(); err != nil {
 		t.Fatal(err)
+	}
+	isolated := filepath.Join(base, "isolated")
+	dirs, err := paths.Isolated(isolated)
+	if err != nil {
+		t.Fatalf("isolated path resolution: %v", err)
+	}
+	if _, err := os.Stat(isolated); !os.IsNotExist(err) {
+		t.Fatalf("path resolution created isolated root: %v", err)
+	}
+	if dirs.IsolatedRoot != isolated || dirs.Data != filepath.Join(isolated, "data") {
+		t.Fatalf("unexpected isolated directories: %+v", dirs)
+	}
+	isolatedRoot, err := platformfs.OpenRoot(dirs.Data, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := isolatedRoot.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := paths.Isolated(filepath.Join(base, "alias", "isolated")); !errors.Is(err, platformfs.ErrUnsafe) {
+		t.Fatalf("isolated reparse ancestor accepted: %v", err)
 	}
 	fmt.Fprintln(os.Stdout, "private directories, publication, reopening, locks, leases, reparse rejection and unsafe ACL preservation passed")
 }

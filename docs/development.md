@@ -56,6 +56,11 @@ Release에서는 설치 시나리오·프로필 교환용 export도 Go 검사와
 Linux의 Chromium·Skill discovery 검사는 별도 작업이다. 모든 작업이 성공해야
 패키징·게시로 진행한다. Go 캐시는 검사 작업별로 분리한다.
 
+Windows의 전체 Go suite는 한 runner 안에서 패키지를 순차 실행한다(`go test -p 1`).
+실제 Argon2 파생이 여러 패키지에서 runner의 CPU를 동시에 점유하면 프로세스 재시작·
+IPC 검사의 기존 기한을 넘길 수 있기 때문이다. x64·ARM64와 제품·설치·race 작업의
+병렬 실행, 전체 테스트 범위와 각 테스트의 제한 시간은 유지한다.
+
 로컬 `check:all`은 disposable Actions의 사용자·ACL·OS 경계 검사를 대체하지 않는다.
 Release 검증은 macOS 15, Ubuntu 24.04, Windows Server 2025 x64(테스트 호스트),
 Windows 11 ARM64와 Go 1.27.1을 사용한다. 현재 runner와 실행 근거·실제 PC 미검증 한계는

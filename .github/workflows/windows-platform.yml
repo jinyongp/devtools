@@ -187,7 +187,11 @@ jobs:
               if ($passed -notcontains $test) { throw 'Required different-SID native assertion did not actually pass' }
             }
             if (@($events | Where-Object Action -eq 'skip').Count -ne 0) { throw 'Native peer preflight was skipped' }
-            & go test -json -count=1 -timeout 8m ./... | Tee-Object -FilePath windows-product-suite-results.jsonl
+            # Each package already uses the runner's CPUs (including real Argon2
+            # derivation). Parallel packages overcommit that same CPU budget and
+            # starve real-process handshake/deadline checks. Keep every test and
+            # its existing deadline; serialize packages within this native lane.
+            & go test -p 1 -json -count=1 -timeout 8m ./... | Tee-Object -FilePath windows-product-suite-results.jsonl
             if ($LASTEXITCODE -ne 0) { throw 'Complete native product suite failed' }
             & go vet ./...
             if ($LASTEXITCODE -ne 0) { throw 'Complete native product vet failed' }

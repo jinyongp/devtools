@@ -90,3 +90,31 @@ func TestConcurrentSnapshotCreationRechecksUnderExclusiveGate(t *testing.T) {
 		t.Fatal("missing snapshots")
 	}
 }
+
+func TestSnapshotAndInspectionDeadlinesAreNotUserCancellation(t *testing.T) {
+	root, _, master, _ := vaultSnapshotFixture(t, 1)
+	var calls atomic.Int32
+	store := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app", Master: snapshotMaster(master, &calls)}
+	release, err := maintenance.AcquireExclusive(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	for _, snapshot := range []bool{false, true} {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		var e *protocol.Error
+		if snapshot {
+			var s *Snapshot
+			s, e = CaptureVault(ctx, root, "app", "", true, time.Now(), store.Master)
+			if s != nil {
+				s.Destroy()
+			}
+		} else {
+			_, e = store.Inspect(ctx, "")
+		}
+		cancel()
+		if e == nil || e.Code != "deadline_exceeded" || e.ExitCode != 3 {
+			t.Fatal("gate deadline reported as user cancellation", e)
+		}
+	}
+}

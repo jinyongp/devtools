@@ -2,8 +2,8 @@
 
 [문서 목록](README.md) · [값과 명령](cli-contract.md) · [출력 보호](output-protection.md)
 
-이 문서는 **현재 개발 소스**의 vault 기능을 설명한다. 공개 v0.27.0에는 이 기능이 없다.
-다음 배포의 변경과 전환 조건은 [릴리스 준비서](releases/v0.28.0.md)를 따른다. 실제 native·설치물 검증은
+vault 기능의 지원 기준은 **v0.28.0**이며, v0.27.0에는 이 기능이 없다.
+이 문서는 현재 소스 기준이다. v0.28.0의 변경과 전환 조건은 [릴리스 준비서](releases/v0.28.0.md)를 따른다. 실제 native·설치물 검증은
 [A12 수용 기록](var-sec/A12-final-review.md)에 있으며, 릴리스 게시·설치된 CLI의 지원과는
 구분한다. 설치한 CLI에서 `devtools schema vault status`와 `devtools schema vault init`이
 제공되는지 먼저 확인한다. 이전 빌드의 평문 자료는

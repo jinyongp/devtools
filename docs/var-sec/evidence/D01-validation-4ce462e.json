@@ -1,0 +1,71 @@
+{
+  "runtime_source": "4ce462e54448e7702835a9614fe0eaa882daa7f3",
+  "baseline_source": "b1db965767abf953f8a1e62221e9432f03cb3491",
+  "date": "2026-10-20 Asia/Seoul",
+  "checks": [
+    {
+      "check": "full_race_and_vet",
+      "command": "go test -race ./... -timeout=240s && go vet ./...",
+      "result": "pass",
+      "log_sha256": "0f2d5372f44f2b6f6173be435ceaefa92b9b891936bdf4f2510858b4588ee2ce",
+      "package_results": 37
+    },
+    {
+      "check": "supplemental_regressions",
+      "command": "go test -race ./internal/values -run \"ModernPublicProfileName|ActiveBatchPreparation|SnapshotAndInspectionDeadlines|PreparedWrite|ConcurrentManagedRequest|WriteSessionValidation\" -count=1 -timeout=120s",
+      "result": "pass",
+      "log_sha256": "cd2602eb71381c1b2293e6a8275a9fd40873eaff5bec9665cd68e13a11651dde",
+      "package_results": 1
+    },
+    {
+      "check": "cross_compile",
+      "command": "GOOS=<windows,darwin> GOARCH=<amd64,arm64> go test -c -o <output-dir> ./internal/values ./internal/vault ./internal/cli",
+      "result": "pass",
+      "log_sha256": "0a891d0399e9a1faee68761449518162a5aeb5a1e37adf287ad70d65b343ade0",
+      "package_results": 0
+    }
+  ],
+  "cross_targets": [
+    "windows/amd64",
+    "windows/arm64",
+    "darwin/arm64"
+  ],
+  "cross_execution": false,
+  "runtime_file_sha256": {
+    "internal/cli/cli.go": "d1fda002b5bf399bf98c34c180d0cf54cd1ad1e7141da5ab4c06cd9fdf8ca52b",
+    "internal/cli/import.go": "58b5e77510d988b2a8928bdbad62b2cc6cf595ea3719f86a0b550c5cacc83964",
+    "internal/cli/tools.go": "5ed6710f9961ee756a365f13b4f8c3e7328ad27aa0a3c2829bcf2682845600fc",
+    "internal/execution/snapshot.go": "15965006f7e02b2c30dbe484cd2b8e63ce913881b038069ba7720317e0b8b24c",
+    "internal/protocol/context.go": "6cb3bf07f65e80a7ef0f9fa9cadff10bbca1c8580c15c563b325dae4a649e2ea",
+    "internal/values/bundle.go": null,
+    "internal/values/current.go": "6ce6772f64f641dde5eaa122d631dd3e965b699e66b7553151fa890e6372d697",
+    "internal/values/editor.go": "8f1cccb334594302dc3422ab7867f7610874f1703609fd9ddcb3e7081938d6ac",
+    "internal/values/modern.go": "e18799f55b2c31eb45cb379700f145ca3a1322d318f72e92020efa28cbb931f4",
+    "internal/values/modern_manage.go": "0a302eb718bd960d09f0e3b25d1981c0ca1e2ab7d010ae1674f37ac24bfc51de",
+    "internal/values/public_snapshot.go": "09fd7f098e52b0e99af474234a026879a58c4c82f48ded23a3c0980d4cabc39c",
+    "internal/values/snapshot.go": "50a2dc6edabd8e3bf1b62f7a39666da03981583e6de6404f7ee9b574201e32bf",
+    "internal/values/write.go": "52c91e3a8eea756a91f276d8a5a8f7fd10fadee89a7c745fde46d850a4d5e8b4",
+    "internal/vault/batch.go": "c22fa02ba55d19da509cefc04b8d6b0053a591c3b4b16d0a7fd03de48b524db1",
+    "internal/vault/bundle.go": "6e6462104114af1187bd68f28d574b9f98525301b3a8939765c851a7da64dcd0",
+    "internal/vault/mutation.go": "ba0e297ff2b14e7aecc2a5f702438337fd2b468d8435509b936cbfaeff902f23",
+    "internal/vault/profile.go": "821649c189362c14509102d4824748a92a53b3c3b897c47a0bd42472dcc303fa",
+    "internal/vault/public.go": "c608ccf40195128297bd305447cdf42618e9b35c198b974c518a507809b9e040",
+    "internal/vault/write_access.go": "21b4643c15e387739e9032718e28d7b52230a6386fa0f467e11993eace1548b2"
+  },
+  "supplemental_test_file_sha256": {
+    "internal/values/write_test.go": "bd070a24ff77091041bbe7f88e675e2a20273448caba77e1eee827dc03ba108b",
+    "internal/values/shared_read_test.go": "0e9a73002cccb7c6c7e9558f0a611641882d4579bd87a2c38556f893fef454f2",
+    "internal/values/profile_identity_test.go": "b9ada77c5b9d06f3cf77ba4eeb97acee5cd74d4997e1f3ad38182bb1b5c7e05b"
+  },
+  "build_flags": [
+    "-buildvcs=false",
+    "-trimpath",
+    "-ldflags=-X main.version=analysis -X main.commit=REV"
+  ],
+  "limits": [
+    "Native OS key-store execution was not rerun.",
+    "No memory plaintext tracking or erasure proof.",
+    "Large-write and contention latency each have one valid sample per arm.",
+    "Full race suite uses valid Go test caches where applicable; supplemental newly added race tests ran separately."
+  ]
+}

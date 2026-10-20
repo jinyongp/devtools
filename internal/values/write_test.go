@@ -349,3 +349,76 @@ func TestWriteSessionValidationPrecedesDiskLocks(t *testing.T) {
 		t.Fatal("commit skipped session validation")
 	}
 }
+
+func TestActiveBatchPreparationAllowsOtherProfileCommit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	root, files, master, _ := vaultSnapshotFixture(t, 1)
+	var calls atomic.Int32
+	a := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app", Master: snapshotMaster(master, &calls)}
+	b := a
+	b.Profile = "other"
+	if _, e := b.Update(ctx, func(e *Editor) (bool, *protocol.Error) { return e.Set(Secret, "OTHER_TOKEN", "", "before") }); e != nil {
+		t.Fatal(e)
+	}
+	ready, resume := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(resume) }) }
+	defer release()
+	done := make(chan *protocol.Error, 1)
+	go func() {
+		_, err := a.Update(ctx, func(e *Editor) (bool, *protocol.Error) {
+			if _, err := e.Set(Secret, "BULK_0000", "", "synthetic-first"); err != nil {
+				return false, err
+			}
+			close(ready)
+			select {
+			case <-resume:
+			case <-ctx.Done():
+				return false, VaultError(ctx, ctx.Err())
+			}
+			for i := 1; i < 1000; i++ {
+				if _, err := e.Set(Secret, fmt.Sprintf("BULK_%04d", i), "", "synthetic-bulk-value"); err != nil {
+					return false, err
+				}
+			}
+			return true, nil
+		})
+		done <- err
+	}()
+	awaitPrepared(t, ready)
+	short, stop := context.WithTimeout(ctx, 2*time.Second)
+	defer stop()
+	snapshot, e := CaptureVault(short, root, "other", "", true, time.Now(), b.Master)
+	if e != nil {
+		t.Fatal("execution input blocked during active batch", e)
+	}
+	snapshot.Destroy()
+	if _, e := b.Update(short, func(e *Editor) (bool, *protocol.Error) { return e.Set(Secret, "OTHER_TOKEN", "", "after") }); e != nil {
+		t.Fatal("B blocked inside A's batch", e)
+	}
+	release()
+	if e := <-done; e != nil {
+		t.Fatal(e)
+	}
+	if err := files.VerifyStorage(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []ModernStore{a, b} {
+		snapshot, e := CaptureVault(ctx, root, s.Profile, "", true, time.Now(), s.Master)
+		if e != nil {
+			t.Fatal(e)
+		}
+		env, e := snapshot.StateCopy().Environment("")
+		snapshot.Destroy()
+		if e != nil {
+			t.Fatal(e)
+		}
+		if s.Profile == "app" && len(env) != 1001 {
+			t.Fatal("bulk candidate lost slots")
+		}
+		if s.Profile == "other" && env["OTHER_TOKEN"] != "after" {
+			t.Fatal("other profile commit lost")
+		}
+	}
+}

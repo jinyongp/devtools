@@ -1,0 +1,535 @@
+{
+  "measurement": "encrypted-bulk-mutations-v1",
+  "harness_sha256": "531bf23645ba5c4ef4acc63919c0f3c0b1e76fa06708415c27a5f899468d17c0",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "3.15.0",
+  "go": "go version go1.27.2 linux/amd64",
+  "baseline": {
+    "sha256": "6e144ff2c378be357c607f3238c536cdf8403a7ed5c1e5b0d67c40619dba6372",
+    "version": {
+      "commit": "b1db965767abf953f8a1e62221e9432f03cb3491",
+      "protocol_version": 7,
+      "version": "analysis"
+    }
+  },
+  "candidate": {
+    "sha256": "5d0567963648acb44e8f58f90081baf1424dcc6786640e361574caea7e6f6682",
+    "version": {
+      "commit": "4ce462e",
+      "protocol_version": 7,
+      "version": "analysis"
+    }
+  },
+  "rows": [
+    {
+      "arm": "baseline",
+      "size": 100,
+      "repeat": 0,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 91412984,
+          "peak_cli_and_waited_children_RSS_KiB": 23528
+        },
+        "overwrite": {
+          "wall_ns": 137846468,
+          "peak_cli_and_waited_children_RSS_KiB": 23832
+        },
+        "same_value": {
+          "wall_ns": 15450767,
+          "peak_cli_and_waited_children_RSS_KiB": 19624
+        },
+        "dry_run": {
+          "wall_ns": 12940233,
+          "peak_cli_and_waited_children_RSS_KiB": 19176
+        }
+      }
+    },
+    {
+      "arm": "candidate",
+      "size": 100,
+      "repeat": 0,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 158920271,
+          "peak_cli_and_waited_children_RSS_KiB": 19096
+        },
+        "overwrite": {
+          "wall_ns": 118086491,
+          "peak_cli_and_waited_children_RSS_KiB": 21784
+        },
+        "same_value": {
+          "wall_ns": 71901002,
+          "peak_cli_and_waited_children_RSS_KiB": 20248
+        },
+        "dry_run": {
+          "wall_ns": 80014677,
+          "peak_cli_and_waited_children_RSS_KiB": 19224
+        }
+      }
+    },
+    {
+      "arm": "candidate",
+      "size": 100,
+      "repeat": 1,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 77860637,
+          "peak_cli_and_waited_children_RSS_KiB": 18456
+        },
+        "overwrite": {
+          "wall_ns": 95527446,
+          "peak_cli_and_waited_children_RSS_KiB": 20760
+        },
+        "same_value": {
+          "wall_ns": 20932577,
+          "peak_cli_and_waited_children_RSS_KiB": 19864
+        },
+        "dry_run": {
+          "wall_ns": 14970622,
+          "peak_cli_and_waited_children_RSS_KiB": 19220
+        }
+      }
+    },
+    {
+      "arm": "baseline",
+      "size": 100,
+      "repeat": 1,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 110896165,
+          "peak_cli_and_waited_children_RSS_KiB": 23136
+        },
+        "overwrite": {
+          "wall_ns": 169823821,
+          "peak_cli_and_waited_children_RSS_KiB": 23424
+        },
+        "same_value": {
+          "wall_ns": 18235018,
+          "peak_cli_and_waited_children_RSS_KiB": 20328
+        },
+        "dry_run": {
+          "wall_ns": 16564370,
+          "peak_cli_and_waited_children_RSS_KiB": 18984
+        }
+      }
+    },
+    {
+      "arm": "baseline",
+      "size": 100,
+      "repeat": 2,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 111764926,
+          "peak_cli_and_waited_children_RSS_KiB": 23304
+        },
+        "overwrite": {
+          "wall_ns": 160812865,
+          "peak_cli_and_waited_children_RSS_KiB": 23396
+        },
+        "same_value": {
+          "wall_ns": 17745290,
+          "peak_cli_and_waited_children_RSS_KiB": 20072
+        },
+        "dry_run": {
+          "wall_ns": 16158986,
+          "peak_cli_and_waited_children_RSS_KiB": 19752
+        }
+      }
+    },
+    {
+      "arm": "candidate",
+      "size": 100,
+      "repeat": 2,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 60517750,
+          "peak_cli_and_waited_children_RSS_KiB": 19096
+        },
+        "overwrite": {
+          "wall_ns": 79430310,
+          "peak_cli_and_waited_children_RSS_KiB": 20376
+        },
+        "same_value": {
+          "wall_ns": 20447609,
+          "peak_cli_and_waited_children_RSS_KiB": 20120
+        },
+        "dry_run": {
+          "wall_ns": 14049068,
+          "peak_cli_and_waited_children_RSS_KiB": 19096
+        }
+      }
+    },
+    {
+      "arm": "candidate",
+      "size": 100,
+      "repeat": 3,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 65866541,
+          "peak_cli_and_waited_children_RSS_KiB": 19096
+        },
+        "overwrite": {
+          "wall_ns": 79261591,
+          "peak_cli_and_waited_children_RSS_KiB": 20376
+        },
+        "same_value": {
+          "wall_ns": 20749140,
+          "peak_cli_and_waited_children_RSS_KiB": 20180
+        },
+        "dry_run": {
+          "wall_ns": 14224185,
+          "peak_cli_and_waited_children_RSS_KiB": 19224
+        }
+      }
+    },
+    {
+      "arm": "baseline",
+      "size": 100,
+      "repeat": 3,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 104736889,
+          "peak_cli_and_waited_children_RSS_KiB": 23052
+        },
+        "overwrite": {
+          "wall_ns": 156194088,
+          "peak_cli_and_waited_children_RSS_KiB": 23660
+        },
+        "same_value": {
+          "wall_ns": 16167274,
+          "peak_cli_and_waited_children_RSS_KiB": 19944
+        },
+        "dry_run": {
+          "wall_ns": 15354186,
+          "peak_cli_and_waited_children_RSS_KiB": 19688
+        }
+      }
+    },
+    {
+      "arm": "baseline",
+      "size": 100,
+      "repeat": 4,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 108276320,
+          "peak_cli_and_waited_children_RSS_KiB": 23204
+        },
+        "overwrite": {
+          "wall_ns": 162701725,
+          "peak_cli_and_waited_children_RSS_KiB": 24420
+        },
+        "same_value": {
+          "wall_ns": 17143327,
+          "peak_cli_and_waited_children_RSS_KiB": 19944
+        },
+        "dry_run": {
+          "wall_ns": 14755662,
+          "peak_cli_and_waited_children_RSS_KiB": 19688
+        }
+      }
+    },
+    {
+      "arm": "candidate",
+      "size": 100,
+      "repeat": 4,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 73032969,
+          "peak_cli_and_waited_children_RSS_KiB": 18712
+        },
+        "overwrite": {
+          "wall_ns": 79916039,
+          "peak_cli_and_waited_children_RSS_KiB": 19864
+        },
+        "same_value": {
+          "wall_ns": 16965321,
+          "peak_cli_and_waited_children_RSS_KiB": 19340
+        },
+        "dry_run": {
+          "wall_ns": 12873242,
+          "peak_cli_and_waited_children_RSS_KiB": 19480
+        }
+      }
+    },
+    {
+      "arm": "candidate",
+      "size": 100,
+      "repeat": 5,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 70420426,
+          "peak_cli_and_waited_children_RSS_KiB": 18648
+        },
+        "overwrite": {
+          "wall_ns": 80458825,
+          "peak_cli_and_waited_children_RSS_KiB": 20120
+        },
+        "same_value": {
+          "wall_ns": 20219717,
+          "peak_cli_and_waited_children_RSS_KiB": 19352
+        },
+        "dry_run": {
+          "wall_ns": 13541510,
+          "peak_cli_and_waited_children_RSS_KiB": 19352
+        }
+      }
+    },
+    {
+      "arm": "baseline",
+      "size": 100,
+      "repeat": 5,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 103373497,
+          "peak_cli_and_waited_children_RSS_KiB": 22988
+        },
+        "overwrite": {
+          "wall_ns": 144700871,
+          "peak_cli_and_waited_children_RSS_KiB": 23796
+        },
+        "same_value": {
+          "wall_ns": 15584841,
+          "peak_cli_and_waited_children_RSS_KiB": 19560
+        },
+        "dry_run": {
+          "wall_ns": 13324690,
+          "peak_cli_and_waited_children_RSS_KiB": 19368
+        }
+      }
+    },
+    {
+      "arm": "baseline",
+      "size": 100,
+      "repeat": 6,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 99773019,
+          "peak_cli_and_waited_children_RSS_KiB": 22936
+        },
+        "overwrite": {
+          "wall_ns": 144930166,
+          "peak_cli_and_waited_children_RSS_KiB": 23704
+        },
+        "same_value": {
+          "wall_ns": 14860227,
+          "peak_cli_and_waited_children_RSS_KiB": 19496
+        },
+        "dry_run": {
+          "wall_ns": 12903013,
+          "peak_cli_and_waited_children_RSS_KiB": 19304
+        }
+      }
+    },
+    {
+      "arm": "candidate",
+      "size": 100,
+      "repeat": 6,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 53837598,
+          "peak_cli_and_waited_children_RSS_KiB": 19096
+        },
+        "overwrite": {
+          "wall_ns": 67759602,
+          "peak_cli_and_waited_children_RSS_KiB": 21016
+        },
+        "same_value": {
+          "wall_ns": 16919735,
+          "peak_cli_and_waited_children_RSS_KiB": 19736
+        },
+        "dry_run": {
+          "wall_ns": 15845770,
+          "peak_cli_and_waited_children_RSS_KiB": 19348
+        }
+      }
+    },
+    {
+      "arm": "candidate",
+      "size": 100,
+      "repeat": 7,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 61546387,
+          "peak_cli_and_waited_children_RSS_KiB": 18584
+        },
+        "overwrite": {
+          "wall_ns": 76586035,
+          "peak_cli_and_waited_children_RSS_KiB": 20500
+        },
+        "same_value": {
+          "wall_ns": 19184079,
+          "peak_cli_and_waited_children_RSS_KiB": 21016
+        },
+        "dry_run": {
+          "wall_ns": 18119318,
+          "peak_cli_and_waited_children_RSS_KiB": 19476
+        }
+      }
+    },
+    {
+      "arm": "baseline",
+      "size": 100,
+      "repeat": 7,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 117151562,
+          "peak_cli_and_waited_children_RSS_KiB": 23344
+        },
+        "overwrite": {
+          "wall_ns": 148549812,
+          "peak_cli_and_waited_children_RSS_KiB": 23796
+        },
+        "same_value": {
+          "wall_ns": 15221169,
+          "peak_cli_and_waited_children_RSS_KiB": 19176
+        },
+        "dry_run": {
+          "wall_ns": 13657996,
+          "peak_cli_and_waited_children_RSS_KiB": 19688
+        }
+      }
+    },
+    {
+      "arm": "baseline",
+      "size": 100,
+      "repeat": 8,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 96266485,
+          "peak_cli_and_waited_children_RSS_KiB": 23992
+        },
+        "overwrite": {
+          "wall_ns": 156434545,
+          "peak_cli_and_waited_children_RSS_KiB": 23852
+        },
+        "same_value": {
+          "wall_ns": 15912441,
+          "peak_cli_and_waited_children_RSS_KiB": 19560
+        },
+        "dry_run": {
+          "wall_ns": 12863258,
+          "peak_cli_and_waited_children_RSS_KiB": 19496
+        }
+      }
+    },
+    {
+      "arm": "candidate",
+      "size": 100,
+      "repeat": 8,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 62546526,
+          "peak_cli_and_waited_children_RSS_KiB": 18712
+        },
+        "overwrite": {
+          "wall_ns": 67593938,
+          "peak_cli_and_waited_children_RSS_KiB": 21016
+        },
+        "same_value": {
+          "wall_ns": 19990058,
+          "peak_cli_and_waited_children_RSS_KiB": 19736
+        },
+        "dry_run": {
+          "wall_ns": 12401105,
+          "peak_cli_and_waited_children_RSS_KiB": 19352
+        }
+      }
+    },
+    {
+      "arm": "candidate",
+      "size": 100,
+      "repeat": 9,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 54682264,
+          "peak_cli_and_waited_children_RSS_KiB": 19224
+        },
+        "overwrite": {
+          "wall_ns": 70480766,
+          "peak_cli_and_waited_children_RSS_KiB": 21016
+        },
+        "same_value": {
+          "wall_ns": 17794408,
+          "peak_cli_and_waited_children_RSS_KiB": 21016
+        },
+        "dry_run": {
+          "wall_ns": 12709794,
+          "peak_cli_and_waited_children_RSS_KiB": 19352
+        }
+      }
+    },
+    {
+      "arm": "baseline",
+      "size": 100,
+      "repeat": 9,
+      "input_bytes": 4500,
+      "execution_selection": "all",
+      "samples": {
+        "new_import": {
+          "wall_ns": 102087969,
+          "peak_cli_and_waited_children_RSS_KiB": 23536
+        },
+        "overwrite": {
+          "wall_ns": 138271089,
+          "peak_cli_and_waited_children_RSS_KiB": 23528
+        },
+        "same_value": {
+          "wall_ns": 14765953,
+          "peak_cli_and_waited_children_RSS_KiB": 19688
+        },
+        "dry_run": {
+          "wall_ns": 13608551,
+          "peak_cli_and_waited_children_RSS_KiB": 19944
+        }
+      }
+    }
+  ],
+  "contention": [],
+  "complete": true,
+  "limitations": [
+    "CLI wall time includes GNU time startup; initialization, explicit unlock, input creation and cleanup are excluded.",
+    "Warm passphrase session, independent disposable roots, alternating arm order; external host load uncontrolled.",
+    "Sizes above 1000 measure new import only; large repetitions and contention are exploratory when sampled once.",
+    "Profiles above 4096 values use a one-value bundle for child validation, preserving the existing redaction-pattern limit.",
+    "RSS includes waited children and is not allocated bytes, live secret memory, or proof of erasure.",
+    "Contention uses process overlap observation; deterministic paused-candidate coverage is in Go tests."
+  ]
+}

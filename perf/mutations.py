@@ -106,11 +106,20 @@ def measure(binary, size, repeat):
         data, _ = fixture.call("sec", "list")
         if len(data["items"]) != size:
             raise RuntimeError("Stored secret inventory differs from import")
-        r = subprocess.run([str(binary), "run", "--", "/usr/bin/true"], cwd=fixture.root,
+        selection = "all"
+        if size > 4096:
+            # Bulk storage capacity is separate from the existing output matcher
+            # cap. Authenticate the whole profile and open one imported slot.
+            bundles, _ = fixture.call("bundle", "list")
+            selection = "mutation-check"
+            fixture.call("bundle", "set", selection, "--key", "TOKEN_0000",
+                         "--revision", bundles["revision"],
+                         "--request-id", "00000000-0000-4000-8000-000000000501")
+        r = subprocess.run([str(binary), "run", "--bundle", selection, "--", "/usr/bin/true"], cwd=fixture.root,
                            env=fixture.env, capture_output=True, timeout=30)
         if r.returncode or r.stdout or r.stderr:
             raise RuntimeError("Imported encrypted profile cannot prepare a real child execution")
-        return {"size": size, "repeat": repeat, "input_bytes": source.stat().st_size, "samples": samples}
+        return {"size": size, "repeat": repeat, "input_bytes": source.stat().st_size, "execution_selection": selection, "samples": samples}
     finally:
         fixture.close()
 
@@ -184,6 +193,7 @@ def main():
               "limitations": ["CLI wall time includes GNU time startup; initialization, explicit unlock, input creation and cleanup are excluded.",
                               "Warm passphrase session, independent disposable roots, alternating arm order; external host load uncontrolled.",
                               "Sizes above 1000 measure new import only; large repetitions and contention are exploratory when sampled once.",
+                              "Profiles above 4096 values use a one-value bundle for child validation, preserving the existing redaction-pattern limit.",
                               "RSS includes waited children and is not allocated bytes, live secret memory, or proof of erasure.",
                               "Contention uses process overlap observation; deterministic paused-candidate coverage is in Go tests."]}
     args.output.parent.mkdir(parents=True, exist_ok=True)

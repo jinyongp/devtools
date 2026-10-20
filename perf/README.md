@@ -251,3 +251,49 @@ identity, source state, hardware, all raw durations/outcomes and storm counts.
 Small single-host samples give exploratory distributions, not an SLA or reliable
 tail/significance estimate. Original-to-protected baseline timings belong to the
 separate matched CLI harness; no nonexistent baseline automation is invented.
+
+## Measure encrypted bulk writes
+
+Use `mutations.py` for the work excluded from the process-memory fixture's timed
+region: new secret imports, actual overwrites, same-value imports and previews.
+Build baseline and candidate with the same Go version and flags, including
+`-buildvcs=false -trimpath`, and set their actual revisions in `main.commit`.
+The harness needs Linux/WSL, GNU time, Go (for the owned-session cleanup helper)
+and Python 3.11+. Both binaries must support explicit passphrase vault setup.
+
+```sh
+python3 -B perf/mutations.py --baseline /tmp/devtools-mutation-before \
+  --candidate /tmp/devtools-mutation-after --sizes 100,1000,5000 \
+  --repeats 3 --large-repeats 1 --contention-size 4000 \
+  --output /tmp/devtools-bulk-mutations.json
+```
+
+Every size/repeat/arm gets an independent disposable root and warm passphrase
+session. Arm order alternates by repeat. Setup, input generation and cleanup are
+outside timing; CLI timing includes GNU time startup. The harness checks import
+classification, stored inventory, byte-preserving no-ops/previews and real child
+execution. Above 4,096 values it selects one imported value through a bundle for
+child validation, preserving the output matcher's existing pattern limit. It verifies session retirement before deleting its fixture. Existing
+result files are preserved, and partial rows remain after failure.
+
+Sizes above 1,000 measure new import only. Defaults give three samples for
+100/1,000 and one exploratory 5,000-key sample. Cross-profile contention is also
+exploratory: a process still running may already be printing its result, so use
+`TestPreparedWriteAllowsOtherProfileReadExecutionAndCommit` for deterministic
+proof that preparation releases the gate. RSS is separate from allocations and
+cannot prove sensitive-copy lifetime or erasure.
+
+Measure actual encrypted overwrite allocations and gate phases separately:
+
+```sh
+go test ./internal/values -run '^$' -bench '^BenchmarkModernBatchOverwrite$' \
+  -benchmem -benchtime=200ms -count=3
+```
+
+This benchmark excludes key initialization and initial seeding. It alternates two
+inputs against one fixed profile and includes durable file publication. Phase
+metrics report preparation, shared read wait/hold and exclusive commit wait/hold
+in ns/op; `B/op` and `allocs/op` cover the whole measured update. The observer is
+internal and absent from normal CLI responses. It measures file-gate boundaries,
+not just Go mutex/block time. Commit hold still includes full snapshot
+verification/serialization and filesystem sync; its cost is not constant in bytes.

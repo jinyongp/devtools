@@ -26,7 +26,14 @@ function ghHelper() {
 import("os";"encoding/json";"fmt")
 func main(){
  args:=os.Args[1:];f,e:=os.OpenFile(os.Getenv("GH_CALLS"),os.O_CREATE|os.O_APPEND|os.O_WRONLY,0600);if e!=nil{panic(e)};_=json.NewEncoder(f).Encode(args);_=f.Close()
- if len(args)>0&&args[0]=="api"{if os.Getenv("GH_API_FAIL")!=""{os.Exit(1)};fmt.Println(os.Getenv("RELEASES_JSON"));return}
+ if len(args)>0&&args[0]=="api"{
+  if os.Getenv("GH_API_FAIL")!=""{os.Exit(1)}
+  raw:=[]byte(os.Getenv("RELEASES_JSON"));if path:=os.Getenv("GH_RELEASES_FILE");path!=""{var err error;raw,err=os.ReadFile(path);if err!=nil{panic(err)}}
+  filtered:=false;for _,arg:=range args{if arg=="--jq"{filtered=true}}
+  if !filtered{fmt.Println(string(raw));return}
+  var pages [][]map[string]any;if err:=json.Unmarshal(raw,&pages);err!=nil{panic(err)}
+  for _,page:=range pages{for _,release:=range page{if release["draft"]==false&&release["prerelease"]==false&&release["published_at"]!=nil{fmt.Println(release["tag_name"])}}};return
+ }
  if len(args)>1&&args[0]=="workflow"&&args[1]=="run"{if os.Getenv("GH_DISPATCH_FAIL")!=""{os.Exit(1)};fmt.Println("https://github.com/example/test/actions/runs/1");return};os.Exit(2)
 }`);
   execFileSync('go', ['build', '-o', helper, source], { encoding: 'utf8' });
@@ -133,6 +140,19 @@ test('publish dispatches the exact commit and version without creating a tag', t
   assert.equal(f.command(f.remote, 'rev-parse', 'main'), f.head);
   assert.equal(f.git('tag', '--list', 'v0.23.0'), '');
   assert.equal(f.git('ls-remote', 'origin', 'refs/tags/v0.23.0'), '');
+});
+
+test('planning filters release metadata before the subprocess output buffer', t => {
+  const f = fixture(t);
+  const releases = JSON.parse(f.env.RELEASES_JSON);
+  releases[0][0].body = 'release notes '.repeat(120000);
+  const response = join(f.root, 'large-releases.json');
+  writeFileSync(response, JSON.stringify(releases));
+  const result = f.run([], { GH_RELEASES_FILE: response });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Previous: v0.22.3\nRecommended: v0.23.0/);
+  assert.equal(f.ghCalls().some(args => args[0] === 'workflow'), false);
+  assert.equal(f.git('tag', '--list', 'v0.23.0'), '');
 });
 
 test('failed dispatch can retry the same version without consuming a tag', t => {

@@ -17,10 +17,11 @@ try {
 
   // Failed or unpublished tags never advance the released version.
   const reachable = new Set(git('tag', '--merged', 'HEAD').split('\n'));
-  const releases = JSON.parse(gh('api', 'repos/{owner}/{repo}/releases?per_page=100', '--paginate', '--slurp')).flat();
-  const published = new Set(releases.filter(release =>
-    !release.draft && !release.prerelease && release.published_at && stableVersion.test(release.tag_name)
-  ).map(release => release.tag_name));
+  // Filter in gh so release bodies and asset metadata cannot exhaust Node's
+  // subprocess output buffer as the repository's release history grows.
+  const published = new Set(gh('api', 'repos/{owner}/{repo}/releases?per_page=100', '--paginate', '--jq',
+    '.[] | select(.draft == false and .prerelease == false and .published_at != null) | .tag_name')
+    .split('\n').filter(tag => stableVersion.test(tag)));
   const previous = git('tag', '--sort=-version:refname').split('\n')
     .find(tag => reachable.has(tag) && published.has(tag));
   const range = previous ? `${previous}..HEAD` : 'HEAD';

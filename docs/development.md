@@ -191,10 +191,12 @@ devtools run release:publish
 깨끗한 main을 올린 뒤 버전과 정확한 커밋 SHA로 Release 워크플로를 요청한다.
 로컬에서 릴리즈 태그를 만들지 않는다. Node.js와 인증된 GitHub CLI(`gh`)가 필요하다.
 
-`release:plan`은 remote tag를 fetch하며 게시하지 않는다. GitHub 응답이 커서
-`spawnSync gh ENOBUFS`로 실패하면 버전 계산도 완료되지 않은 것이다.
-`release:publish`도 같은 조회 경로를 사용하므로 이 오류를 게시 성공으로 해석하지 않는다.
-현재 확인한 후보와 전환 안내는 [v0.28.0 준비서](releases/v0.28.0.md)를 따른다.
+`release:plan`은 remote tag를 fetch하며 게시하지 않는다. GitHub CLI에서 공개 안정 태그 이름만
+추려 Node.js로 전달하므로 릴리스 본문·자산 metadata가 커져도 버전 조회 버퍼를 채우지 않는다.
+`release:publish`도 같은 조회를 사용한다. API 조회가 실패하면 버전 계산도 중단하며
+게시되지 않은 태그만으로 기준 버전을 대체하지 않는다.
+저장소 전환 안내는 [v0.28.0 준비서](releases/v0.28.0.md), 이후 batch 변경 후보의 검증은
+[D02 기록](var-sec/D02-release-validation.md)을 따른다.
 명시 workflow 입력으로 게시할 때는 공개 안정 릴리스 목록을 좁혀 조회하고,
 그 태그가 후보의 ancestor인지와 이후 커밋의 feature/breaking 변경을 확인해 버전을 정한다.
 최신 공개 태그가 후보에 포함되지 않으면 단순히 버전 숫자만 올리지 않는다.

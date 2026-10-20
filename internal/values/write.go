@@ -67,7 +67,7 @@ func (s ModernStore) readForEdit(ctx context.Context, master *vault.Material, va
 }
 
 // lockCommit always follows launch -> key-slot -> maintenance ordering. IPC
-// validation finishes before the maintenance gate; no native work occurs here.
+// validation finishes before key-slot/maintenance locks.
 func (s ModernStore) lockCommit(ctx context.Context, base writeBase, promoted bool, validate func(context.Context) error) (func(), error) {
 	directory := filepath.Join(s.root(), "vault")
 	var releaseLaunch func()
@@ -80,18 +80,21 @@ func (s ModernStore) lockCommit(ctx context.Context, base writeBase, promoted bo
 	if err != nil {
 		return nil, err
 	}
+	// Session validation can perform native access if its cache expired. Complete
+	// it before key-slot/maintenance locks; protection changes are checked again
+	// after the slot lease is held.
+	if validate != nil {
+		if err = validate(ctx); err != nil {
+			releaseLaunch()
+			return nil, err
+		}
+	}
 	releaseSlot, err := maintenance.LockShared(ctx, filepath.Join(directory, "key-slot-write.lock"))
 	if err != nil {
 		releaseLaunch()
 		return nil, err
 	}
 	releaseAll := func() { releaseSlot(); releaseLaunch() }
-	if validate != nil {
-		if err = validate(ctx); err != nil {
-			releaseAll()
-			return nil, err
-		}
-	}
 	stopWait := s.measure("commit-wait")
 	releaseGate, err := maintenance.AcquireExclusive(ctx, s.root())
 	stopWait()

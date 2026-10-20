@@ -312,3 +312,40 @@ func TestPreparedWriteRejectsCancellationAndPendingRecovery(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteSessionValidationPrecedesDiskLocks(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	root, _, master, _ := vaultSnapshotFixture(t, 0)
+	var calls atomic.Int32
+	s := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app", Master: snapshotMaster(master, &calls)}
+	validated := false
+	s.WriteMaster = func(ctx context.Context) (*vault.Material, func(context.Context) error, error) {
+		key, err := s.Master(ctx)
+		validate := func(ctx context.Context) error {
+			// Native access must not occur while either of these disk leases is held.
+			release, free, err := maintenance.TryLockExclusive(ctx, filepath.Join(root, "vault", "key-slot-write.lock"))
+			if err != nil {
+				return err
+			}
+			if !free {
+				return fmt.Errorf("validation ran inside key-slot lock")
+			}
+			defer release()
+			gate, err := maintenance.AcquireExclusive(ctx, root)
+			if err != nil {
+				return err
+			}
+			gate()
+			validated = true
+			return nil
+		}
+		return key, validate, err
+	}
+	if _, e := setPublic(ctx, s, "valid"); e != nil {
+		t.Fatal(e)
+	}
+	if !validated {
+		t.Fatal("commit skipped session validation")
+	}
+}

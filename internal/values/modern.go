@@ -187,7 +187,7 @@ func (s ModernStore) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
 	}
 	raw, err := profilekey.Snapshot(s.Directory, s.Profile, "values", vault.MaxDocumentBytes)
 	if err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("read_profile", err)
 	}
 	defer clear(raw)
 	return metadataFromRaw(raw, s.Profile)

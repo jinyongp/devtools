@@ -201,7 +201,7 @@ func proposedEditImpact(s *State, item *Item, kind string, body Object) (Object,
 
 func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error) {
 	if ctx.Err() != nil {
-		return nil, canceledError()
+		return nil, protocol.ContextError(ctx.Err())
 	}
 	kind, cmd := queryKindCommand(q.Command)
 	limit, limitErr := positive(q.Options, "limit", 50, 200)
@@ -219,12 +219,12 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 
 	release, gateErr := maintenance.AcquireShared(ctx, maintenance.Root(store.Directory))
 	if gateErr != nil {
-		return nil, gateError(ctx)
+		return nil, gateError(ctx, gateErr)
 	}
 	defer release()
 	profileRelease, profileErr := LockShared(ctx, store.path()+".lock")
 	if profileErr != nil {
-		return nil, gateError(ctx)
+		return nil, gateError(ctx, profileErr)
 	}
 	defer profileRelease()
 	pruneQueries(store.cacheDirectory())
@@ -385,12 +385,12 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 			if token == "" {
 				dir := store.cacheDirectory()
 				if e := PrivateDir(dir); e != nil {
-					return nil, storageError()
+					return nil, storageErrorAt("create_query_cache", "query_cache", e)
 				}
 				token = ID()
 				snapshot := s.graphSnapshot(store.Profile, kind)
 				if e := WritePrivate(filepath.Join(dir, token+".json"), snapshot); e != nil {
-					return nil, storageError()
+					return nil, storageErrorAt("write_query_cache", "query_cache", e)
 				}
 			}
 			out["cursor"] = token
@@ -455,7 +455,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		if cmd == "context" {
 			responseSize, marshalErr := contextResponseSize(out)
 			if marshalErr != nil {
-				return nil, storageError()
+				return nil, storageErrorAt("encode_response", "task_context", marshalErr)
 			}
 			if responseSize > contextResponseMax {
 				out["documents"] = Object{}
@@ -466,7 +466,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 				out["omitted_ids"] = []string{item.ID}
 				responseSize, marshalErr = contextResponseSize(out)
 				if marshalErr != nil {
-					return nil, storageError()
+					return nil, storageErrorAt("encode_response", "task_context", marshalErr)
 				}
 				if responseSize > contextResponseMax {
 					out["item"] = compactContextItem(itemView)
@@ -612,11 +612,11 @@ func (s Store) page(q Query, out Object, items []any, limit int) (Object, *proto
 	out["next_cursor"] = nil
 	if end < len(items) {
 		if e := PrivateDir(dir); e != nil {
-			return nil, storageError()
+			return nil, storageErrorAt("create_query_cache", "query_cache", e)
 		}
 		token := ID()
 		if e := WritePrivate(filepath.Join(dir, token+".json"), snapshot); e != nil {
-			return nil, storageError()
+			return nil, storageErrorAt("write_query_cache", "query_cache", e)
 		}
 		entries, _ := os.ReadDir(dir)
 		for _, entry := range entries {

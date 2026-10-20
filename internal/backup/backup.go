@@ -173,7 +173,7 @@ func restoreFingerprint(input restoreFingerprintInput) string {
 	return digest([]byte(digest(input.Cipher) + "\n" + input.Source + "\n" + input.Target + "\n" + input.Expected + "\n" + mode))
 }
 
-func failure(code string) *protocol.Error {
+func failure(code string, causes ...error) *protocol.Error {
 	exit := 3
 	switch code {
 	case "invalid_argument":
@@ -183,7 +183,15 @@ func failure(code string) *protocol.Error {
 	case "canceled":
 		exit = 130
 	}
-	return protocol.NewError(code, "Backup operation could not be completed; check the selected files and target state.", exit, nil)
+	failure := protocol.NewError(code, "Backup operation could not be completed; check the selected files and target state.", exit, nil)
+	if code == "storage_error" || code == "backup_error" {
+		var cause error
+		if len(causes) != 0 {
+			cause = causes[0]
+		}
+		return protocol.WithStorageDetails(failure, "backup", "access_storage", "backup_store", cause)
+	}
+	return failure
 }
 
 func outputExistsFailure() *protocol.Error {
@@ -268,7 +276,7 @@ func (e Engine) Status() (Status, *protocol.Error) {
 		return Status{}, nil
 	}
 	if err != nil {
-		return Status{}, failure("storage_error")
+		return Status{}, failure("storage_error", err)
 	}
 	return Status{Configured: true, Directory: c.Directory, Recipient: c.Recipient}, nil
 }
@@ -461,7 +469,7 @@ func (e Engine) createArchive(ctx context.Context, profile, output string, encod
 	e = scoped
 	release, err := maintenance.Acquire(ctx, e.Data)
 	if err != nil {
-		return CreateResult{}, failure("storage_error")
+		return CreateResult{}, failure("storage_error", err)
 	}
 	defer release()
 	if err := e.checkVaultRootHeld(); err != nil {
@@ -469,7 +477,7 @@ func (e Engine) createArchive(ctx context.Context, profile, output string, encod
 	}
 	s, err := e.snapshot(profile)
 	if err != nil {
-		return CreateResult{}, failure("backup_error")
+		return CreateResult{}, failure("backup_error", err)
 	}
 	defer destroySnapshot(&s)
 	if ctx.Err() != nil {
@@ -790,7 +798,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	}
 	release, err := maintenance.Acquire(ctx, e.Data)
 	if err != nil {
-		return plan, failure("storage_error")
+		return plan, failure("storage_error", err)
 	}
 	defer release()
 	// The legacy restore writer must not recreate plaintext values, including
@@ -804,7 +812,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	}
 	targetTasks := tasks.Store{Directory: filepath.Join(e.Data, "tasks"), Profile: target}
 	if err := targetTasks.CollectOrphanGenerationsHeld(); err != nil {
-		return plan, failure("storage_error")
+		return plan, failure("storage_error", err)
 	}
 	fingerprint := restoreFingerprint(restoreFingerprintInput{Cipher: cipher, Source: source, Target: target, Expected: expected, Replace: replace})
 	receiptPath := "backup-receipts/" + requestID + ".json"
@@ -816,7 +824,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		if err == nil {
 			decoded, decodeErr := e.decodeReceipt(ctx, requestID, b)
 			if decodeErr != nil {
-				return plan, failure("storage_error")
+				return plan, failure("storage_error", decodeErr)
 			}
 			defer clear(decoded)
 			b = decoded
@@ -836,7 +844,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 			return previous.Plan, nil
 		}
 		if !errors.Is(err, os.ErrNotExist) {
-			return plan, failure("storage_error")
+			return plan, failure("storage_error", err)
 		}
 	}
 	exists := false
@@ -849,7 +857,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	hashInput := []byte(digest(cipher) + "\n" + source + "\n" + target)
 	valuesData, snapshotErr := e.valueSnapshotHeld(ctx, target)
 	if snapshotErr != nil {
-		return plan, failure("storage_error")
+		return plan, failure("storage_error", snapshotErr)
 	}
 	defer clear(valuesData)
 	if valuesData != nil {
@@ -859,7 +867,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	hashInput = append(hashInput, []byte("\nprofiles:"+digest(valuesData))...)
 	taskSnapshot, snapshotErr := targetTasks.ExportSnapshotHeld(limit)
 	if snapshotErr != nil {
-		return plan, failure("storage_error")
+		return plan, failure("storage_error", snapshotErr)
 	}
 	if taskSnapshot.Data != nil {
 		exists = true
@@ -903,7 +911,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	if request.Import != nil {
 		targetCanonical, canonicalErr := profilecatalog.CanonicalSnapshot(target, targetData["profiles"], targetData["tasks"])
 		if canonicalErr != nil {
-			return plan, failure("storage_error")
+			return plan, failure("storage_error", canonicalErr)
 		}
 		plan.importData = &importReceiptData{Source: request.Import.Source, Target: target, Diff: profilecatalog.Compare(targetCanonical, request.Import.Canonical, false)}
 	}
@@ -973,7 +981,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	appliedPlan.Applied = true
 	receipt, err := json.Marshal(restoreReceipt{Fingerprint: fingerprint, OperationFingerprint: request.OperationFingerprint, Plan: appliedPlan, Import: plan.importData})
 	if err != nil {
-		return plan, failure("storage_error")
+		return plan, failure("storage_error", err)
 	}
 	if int64(len(receipt)) > restoreReceiptLimit {
 		return plan, protocol.NewError("result_too_large", "Restore result exceeds the replay receipt size limit.", 3, map[string]any{"limit_bytes": restoreReceiptLimit})
@@ -999,7 +1007,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		if errors.Is(replacementErr, vault.ErrKeyMissing) || errors.Is(replacementErr, vault.ErrIntegrity) || errors.Is(replacementErr, vault.ErrInvalid) {
 			return plan, values.VaultError(ctx, replacementErr)
 		}
-		return plan, failure("storage_error")
+		return plan, failure("storage_error", replacementErr)
 	}
 	for path, body := range valueFiles {
 		files[path] = body
@@ -1012,7 +1020,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		}
 		staged, stageErr := targetTasks.StageExactSnapshotHeld(taskPayload)
 		if stageErr != nil {
-			return plan, failure("storage_error")
+			return plan, failure("storage_error", stageErr)
 		}
 		for path, body := range staged.Files {
 			files[path] = body
@@ -1020,7 +1028,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	} else {
 		taskFiles, deleteErr := targetTasks.DeletionFilesHeld()
 		if deleteErr != nil {
-			return plan, failure("storage_error")
+			return plan, failure("storage_error", deleteErr)
 		}
 		for path, body := range taskFiles {
 			files[path] = body
@@ -1031,14 +1039,14 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	}
 	// Query snapshots refer to pre-restore revisions and are regenerated.
 	for _, p := range []string{filepath.Join(e.Cache, "task-queries"), filepath.Join(e.Cache, "dashboard", "queries")} {
-		if os.RemoveAll(p) != nil {
-			return plan, failure("storage_error")
+		if err := os.RemoveAll(p); err != nil {
+			return plan, failure("storage_error", err)
 		}
 	}
 	plan.Applied = true
-	if maintenance.Replace(e.Data, files) != nil {
+	if err := maintenance.Replace(e.Data, files); err != nil {
 		plan.Applied = false
-		return plan, failure("storage_error")
+		return plan, failure("storage_error", err)
 	}
 	// The restore and its receipt are committed together above. Generation
 	// reclamation is post-commit housekeeping; a later exclusive task/backup

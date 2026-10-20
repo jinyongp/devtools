@@ -15,12 +15,12 @@ import (
 func (s Store) CacheStamp(ctx context.Context) (string, *protocol.Error) {
 	release, err := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	if err != nil {
-		return "", gateError(ctx)
+		return "", gateError(ctx, err)
 	}
 	defer release()
 	profileRelease, err := LockShared(ctx, s.path()+".lock")
 	if err != nil {
-		return "", gateError(ctx)
+		return "", gateError(ctx, err)
 	}
 	defer profileRelease()
 

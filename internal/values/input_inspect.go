@@ -65,7 +65,7 @@ func InspectInput(ctx context.Context, root, profile, env string, spec InputSpec
 		}
 		raw, e := profilekey.Snapshot(filepath.Join(root, "profiles"), profile, "values", vault.MaxDocumentBytes)
 		if e != nil {
-			return nil, storageError()
+			return nil, storageErrorAt("read_profile", e)
 		}
 		defer clear(raw)
 		if raw == nil {

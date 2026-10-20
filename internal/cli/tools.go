@@ -16,9 +16,13 @@ import (
 func userDataDirectory() (string, *protocol.Error) {
 	dirs, err := paths.Current()
 	if err != nil {
-		return "", protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil)
+		return "", directoryError(err)
 	}
 	return filepath.Join(dirs.Data, "profiles"), nil
+}
+
+func directoryError(cause error) *protocol.Error {
+	return protocol.WithStorageDetails(protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil), "paths", "resolve_user_directories", "user_directories", cause)
 }
 
 func (a *App) store(options map[string]string) (values.ModernStore, *protocol.Error) {

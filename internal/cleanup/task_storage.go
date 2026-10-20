@@ -21,7 +21,7 @@ func (e Engine) retireCompletedTasks(c candidate, archive Archive, already bool)
 	store := e.taskStore(c.Profile)
 	snapshot, err := store.ExportSnapshotHeld(128 << 20)
 	if err != nil {
-		return archive, fail("storage_error")
+		return archive, fail("storage_error", err)
 	}
 	if snapshot.Data == nil && already {
 		_ = store.CollectOrphanGenerationsHeld()
@@ -31,13 +31,19 @@ func (e Engine) retireCompletedTasks(c candidate, archive Archive, already bool)
 		return archive, fail("revision_conflict")
 	}
 	if !already {
-		if maintenance.Write(e.archivePath(c.ID, "payload"), snapshot.Data) != nil || write(e.archivePath(c.ID, "entry.json"), archive) != nil {
-			return archive, fail("storage_error")
+		if err := maintenance.Write(e.archivePath(c.ID, "payload"), snapshot.Data); err != nil {
+			return archive, fail("storage_error", err)
+		}
+		if err := write(e.archivePath(c.ID, "entry.json"), archive); err != nil {
+			return archive, fail("storage_error", err)
 		}
 	}
 	files, err := store.DeletionFilesHeld()
-	if err != nil || maintenance.Replace(e.Data, files) != nil {
-		return archive, fail("storage_error")
+	if err != nil {
+		return archive, fail("storage_error", err)
+	}
+	if err := maintenance.Replace(e.Data, files); err != nil {
+		return archive, fail("storage_error", err)
 	}
 	// The logical deletion committed in maintenance.Replace. Reclamation is
 	// post-commit cleanup and must not turn a committed archive into failure.
@@ -49,11 +55,11 @@ func (e Engine) restoreCompletedTasks(archive Archive, payload []byte) *protocol
 	store := e.taskStore(archive.Profile)
 	canonical, archivedDigest, err := tasks.CanonicalizeExactSnapshot(payload, archive.Profile)
 	if err != nil {
-		return fail("storage_error")
+		return fail("storage_error", err)
 	}
 	current, err := store.ExportSnapshotHeld(128 << 20)
 	if err != nil {
-		return fail("storage_error")
+		return fail("storage_error", err)
 	}
 	if current.Data != nil {
 		if current.Digest != archivedDigest {
@@ -64,10 +70,10 @@ func (e Engine) restoreCompletedTasks(archive Archive, payload []byte) *protocol
 	}
 	staged, err := store.StageExactSnapshotHeld(canonical)
 	if err != nil {
-		return fail("storage_error")
+		return fail("storage_error", err)
 	}
-	if maintenance.Replace(e.Data, staged.Files) != nil {
-		return fail("storage_error")
+	if err := maintenance.Replace(e.Data, staged.Files); err != nil {
+		return fail("storage_error", err)
 	}
 	// Head publication is already committed; orphan deletion is retried by the
 	// next caller-held operation if it cannot be completed now.

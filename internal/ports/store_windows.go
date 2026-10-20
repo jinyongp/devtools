@@ -17,7 +17,7 @@ func (s Store) lock(ctx context.Context, name string, wait, create bool) (io.Clo
 		return nil, nil
 	}
 	if err != nil {
-		return nil, storageError()
+		return nil, storageError(err)
 	}
 	defer root.Close()
 	flags := os.O_RDWR
@@ -29,17 +29,17 @@ func (s Store) lock(ctx context.Context, name string, wait, create bool) (io.Clo
 		return nil, nil
 	}
 	if err != nil {
-		return nil, storageError()
+		return nil, storageError(err)
 	}
 	for {
 		if ctx.Err() != nil {
 			_ = file.Close()
-			return nil, protocol.NewError("canceled", "Execution canceled.", 130, nil)
+			return nil, protocol.ContextError(ctx.Err())
 		}
 		acquired, err := file.TryLock(false)
 		if err != nil {
 			_ = file.Close()
-			return nil, storageError()
+			return nil, storageError(err)
 		}
 		if acquired {
 			return file, nil

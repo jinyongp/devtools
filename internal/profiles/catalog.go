@@ -21,12 +21,16 @@ type Catalog struct {
 	Data string
 }
 
-func catalogError(code string) *protocol.Error {
+func catalogError(code string, causes ...error) *protocol.Error {
 	exit := 1
 	if code == "invalid_storage" {
 		exit = 3
 	}
-	return protocol.NewError(code, "Cannot enumerate profile storage.", exit, nil)
+	var cause error
+	if len(causes) != 0 {
+		cause = causes[0]
+	}
+	return protocol.WithStorageDetails(protocol.NewError(code, "Cannot enumerate profile storage.", exit, nil), "profiles", "enumerate_profiles", "profile_store", cause)
 }
 
 func (c Catalog) acquire(ctx context.Context) (func(), *protocol.Error) {
@@ -38,19 +42,22 @@ func (c Catalog) acquire(ctx context.Context) (func(), *protocol.Error) {
 		if ctx.Err() != nil {
 			return nil, protocol.NewError("canceled", "Request canceled.", 130, nil)
 		}
-		return nil, catalogError("storage_error")
+		return nil, catalogError("storage_error", err)
 	}
 	return release, nil
 }
 
 // storedProfileNames requires the data-root maintenance gate.
 func storedProfileNames(directory string) ([]string, *protocol.Error) {
-	info, err := os.Lstat(directory)
+	_, err := os.Lstat(directory)
 	if errors.Is(err, os.ErrNotExist) {
 		return []string{}, nil
 	}
-	if err != nil || !platformfs.DirectoryPrivate(directory, info) {
-		return nil, catalogError("storage_error")
+	if err != nil {
+		return nil, catalogError("storage_error", err)
+	}
+	if err := platformfs.CheckDirectory(directory); err != nil {
+		return nil, catalogError("storage_error", err)
 	}
 	domain := "tasks"
 	if filepath.Base(directory) == "profiles" {
@@ -58,7 +65,7 @@ func storedProfileNames(directory string) ([]string, *protocol.Error) {
 	}
 	items, err := profilekey.Enumerate(directory, domain)
 	if err != nil {
-		return nil, catalogError("invalid_storage")
+		return nil, catalogError("invalid_storage", err)
 	}
 	return items, nil
 }

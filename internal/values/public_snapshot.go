@@ -75,7 +75,7 @@ func capturePublicProfile(ctx context.Context, root, profile string, exclusive b
 	store := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: profile}
 	raw, err := profilekey.Snapshot(store.Directory, profile, "values", vault.MaxDocumentBytes)
 	if err != nil {
-		return nil, false, false, storageError()
+		return nil, false, false, storageErrorAt("read_profile", err)
 	}
 	defer clear(raw)
 	p, exists, err := store.readPublicHeld()

@@ -91,7 +91,7 @@ func (s ModernStore) inspectionProfile(ctx context.Context, exclusive bool) (*va
 	defer release()
 	raw, err := profilekey.Snapshot(s.Directory, s.Profile, "values", vault.MaxDocumentBytes)
 	if err != nil {
-		return nil, false, false, storageError()
+		return nil, false, false, storageErrorAt("read_profile", err)
 	}
 	defer clear(raw)
 	var p *vault.Profile
@@ -448,13 +448,13 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	}
 	outcome, err := json.Marshal(out)
 	if err != nil {
-		return out, storageError()
+		return out, storageErrorAt("encode_result", err)
 	}
 	now := time.Now()
 	receipt := vault.ValueReceipt{Fingerprint: fingerprint, Result: outcome, ProfileID: p.ID, KeyEpoch: p.KeyEpoch, CreatedAt: now.Unix(), ExpiresAt: now.Add(retention.ValueReceiptAge).Unix()}
 	body, err := json.Marshal(receipt)
 	if err != nil {
-		return out, storageError()
+		return out, storageErrorAt("encode_receipt", err)
 	}
 	if master != nil {
 		plain := vault.NewMaterial(body)
@@ -487,7 +487,7 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 		}
 		files, e := profilekey.Replacement(s.Directory, s.Profile, "values", raw)
 		if e != nil {
-			return out, storageError()
+			return out, storageErrorAt("prepare_replacement", e)
 		}
 		for path, body := range extra {
 			files[path] = body

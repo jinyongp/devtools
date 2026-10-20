@@ -280,7 +280,7 @@ func transferIdentityError(err error) *protocol.Error {
 			}},
 		})
 	default:
-		return protocol.NewError("storage_error", "Cannot access private profile transfer storage.", 1, nil)
+		return protocol.WithStorageDetails(protocol.NewError("storage_error", "Cannot access private profile transfer storage.", 1, nil), "profile_transfer", "access_storage", "transfer_store", err)
 	}
 }
 
@@ -309,7 +309,12 @@ func transferArchiveError(err *protocol.Error) *protocol.Error {
 	default:
 		return err
 	}
-	return protocol.NewError(err.Code, message, err.ExitCode, map[string]any{"remedies": []protocol.Remedy{remedy}})
+	details := make(map[string]any, len(err.Details)+1)
+	for key, value := range err.Details {
+		details[key] = value
+	}
+	details["remedies"] = []protocol.Remedy{remedy}
+	return protocol.NewError(err.Code, message, err.ExitCode, details)
 }
 
 func (a *App) prepareProfileTransfer(ctx context.Context, _ IO, _ Request) (any, *protocol.Error) {
@@ -320,7 +325,7 @@ func (a *App) prepareProfileTransfer(ctx context.Context, _ IO, _ Request) (any,
 	prepared, prepareErr := store.Prepare(ctx)
 	if prepareErr != nil {
 		if errors.Is(prepareErr, context.Canceled) || errors.Is(prepareErr, context.DeadlineExceeded) {
-			return nil, protocol.NewError("canceled", "Execution canceled.", 130, nil)
+			return nil, protocol.ContextError(prepareErr)
 		}
 		return nil, transferIdentityError(prepareErr)
 	}

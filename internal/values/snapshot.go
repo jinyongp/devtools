@@ -275,7 +275,11 @@ func VaultError(ctx context.Context, err error) *protocol.Error {
 	case vault.ErrKeyMissing.Error(), vault.ErrRecovery.Error(), vault.ErrIntegrity.Error(), vault.ErrUnavailable.Error(), vault.ErrDenied.Error():
 		details = map[string]any{"remedies": []protocol.Remedy{{Argv: []string{"devtools", "vault", "status"}, RequiredInputs: []string{}, Message: "Inspect existing protection. Initialize only an uninitialized vault; recover existing keys and storage when recovery is required."}}}
 	}
-	return protocol.NewError(code, "Cannot prepare verified profile values.", 3, details)
+	failure := protocol.NewError(code, "Cannot prepare verified profile values.", 3, details)
+	if code == "storage_error" {
+		return protocol.WithStorageDetails(failure, "values", "prepare_values", "profile_store", err)
+	}
+	return failure
 }
 
 // CaptureVaultSession preserves the admission ticket from the same key delivery

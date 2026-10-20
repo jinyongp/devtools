@@ -58,8 +58,12 @@ type Store struct {
 func fail(code string) *protocol.Error {
 	return protocol.NewError(code, "Port operation could not satisfy the requested condition.", 3, nil)
 }
-func storageError() *protocol.Error {
-	return protocol.NewError("io_error", "Cannot access private port storage or inspect local ports.", 1, nil)
+func storageError(causes ...error) *protocol.Error {
+	var cause error
+	if len(causes) != 0 {
+		cause = causes[0]
+	}
+	return protocol.WithStorageDetails(protocol.NewError("io_error", "Cannot access private port storage or inspect local ports.", 1, nil), "ports", "access_storage", "port_store", cause)
 }
 func empty() *State {
 	return &State{Version: 1, Instances: []Instance{}, Assignments: []Assignment{}, Reservations: []Reservation{}}
@@ -68,23 +72,26 @@ func private(f *os.File) bool {
 	return platformfs.CheckFile(f) == nil
 }
 func (s Store) Read() (*State, *protocol.Error) {
-	i, e := os.Lstat(s.Directory)
+	_, e := os.Lstat(s.Directory)
 	if errors.Is(e, os.ErrNotExist) {
 		return empty(), nil
 	}
-	if e != nil || !platformfs.DirectoryPrivate(s.Directory, i) {
-		return nil, storageError()
+	if e != nil {
+		return nil, storageError(e)
+	}
+	if e := platformfs.CheckDirectory(s.Directory); e != nil {
+		return nil, storageError(e)
 	}
 	f, e := platformfs.OpenPrivate(filepath.Join(s.Directory, "registry.json"), os.O_RDONLY, 0)
 	if errors.Is(e, os.ErrNotExist) {
 		return empty(), nil
 	}
 	if e != nil {
-		return nil, storageError()
+		return nil, storageError(e)
 	}
 	defer f.Close()
-	if !private(f.File) {
-		return nil, storageError()
+	if e := platformfs.CheckFile(f.File); e != nil {
+		return nil, storageError(e)
 	}
 	if info, err := f.Stat(); err != nil || info.Size() > registryDocumentLimit {
 		return nil, fail("invalid_storage")

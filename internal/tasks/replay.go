@@ -255,11 +255,11 @@ func replayJournal(j *Journal) (*State, *protocol.Error) {
 			}
 		}
 		if e.Sequence != n+1 || applyReplayEvent(s, e, signature) != nil {
-			return nil, storageError()
+			return nil, corruptStorage("replay_event", "task_journal")
 		}
 	}
 	if s.Version != j.Version {
-		return nil, storageError()
+		return nil, corruptStorage("validate_journal_version", "task_journal")
 	}
 	return s, nil
 }
@@ -276,7 +276,7 @@ func (s *State) AtRevision(revision int) (*State, *protocol.Error) {
 	out := NewState()
 	for _, e := range s.Events[:revision] {
 		if applyReplayEvent(out, e, s.replaySignatures[e.Sequence]) != nil {
-			return nil, storageError()
+			return nil, corruptStorage("replay_event", "task_journal")
 		}
 	}
 	return out, nil

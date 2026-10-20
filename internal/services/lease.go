@@ -51,21 +51,21 @@ func (s Store) leaseAvailable(ctx context.Context, id string, allowMissing bool)
 		return false, storageError()
 	}
 	if ctx.Err() != nil {
-		return false, failure("canceled")
+		return false, protocol.ContextError(ctx.Err())
 	}
 	lease, acquired, err := tryLease(s.leasePath(id), false)
 	if errors.Is(err, os.ErrNotExist) {
 		if allowMissing {
 			return true, nil
 		}
-		return false, storageError()
+		return false, storageErrorAt("open_lease", err)
 	}
 	if err != nil {
-		return false, storageError()
+		return false, storageErrorAt("open_lease", err)
 	}
 	if acquired {
 		if err := lease.unlockClose(); err != nil {
-			return false, storageError()
+			return false, storageErrorAt("release_lease", err)
 		}
 	}
 	return acquired, nil
@@ -76,14 +76,14 @@ func (s Store) claimLease(ctx context.Context, id string, allowCreate bool) (*lo
 		return nil, false, storageError()
 	}
 	if ctx.Err() != nil {
-		return nil, false, failure("canceled")
+		return nil, false, protocol.ContextError(ctx.Err())
 	}
 	lease, acquired, err := tryLease(s.leasePath(id), allowCreate)
 	if errors.Is(err, os.ErrNotExist) && !allowCreate {
-		return nil, false, storageError()
+		return nil, false, storageErrorAt("open_lease", err)
 	}
 	if err != nil {
-		return nil, false, storageError()
+		return nil, false, storageErrorAt("open_lease", err)
 	}
 	return lease, acquired, nil
 }
@@ -148,7 +148,7 @@ func (s Store) terminalizeLost(ctx context.Context, record Record, respectStartu
 	current.State = "interrupted"
 	current.Reason = "supervisor_lost"
 	if err := writePrivate(s.path(current.ID, "record.json"), current); err != nil {
-		return current, false, storageError()
+		return current, false, storageErrorAt("write_execution_record", err)
 	}
 	return current, true, nil
 }

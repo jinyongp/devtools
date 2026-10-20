@@ -155,8 +155,8 @@ func AuthenticateSnapshot(ctx context.Context, plan *Plan, dependencies Dependen
 	if plan == nil || plan.destroyed {
 		return nil, snapshotError("invalid_input_snapshot")
 	}
-	if ctx.Err() != nil {
-		return nil, protocol.NewError("canceled", "Execution preparation canceled.", 130, nil)
+	if e := protocol.ContextError(ctx.Err()); e != nil {
+		return nil, e
 	}
 	deadline := plan.created.Add(DefaultPreparationTimeout)
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
@@ -206,8 +206,8 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 	if e := snapshot.validate(time.Now()); e != nil {
 		return Prepared{}, e
 	}
-	if ctx.Err() != nil {
-		return Prepared{}, protocol.NewError("canceled", "Execution preparation canceled.", 130, nil)
+	if e := protocol.ContextError(ctx.Err()); e != nil {
+		return Prepared{}, e
 	}
 	ctx, cancel := context.WithDeadline(ctx, snapshot.deadline)
 	defer cancel()

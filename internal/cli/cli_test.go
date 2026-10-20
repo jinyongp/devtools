@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 func TestCommandContract(t *testing.T) {
@@ -116,5 +118,19 @@ func TestOutputFailure(t *testing.T) {
 	}
 	if !bytes.Contains(diagnostic.Bytes(), []byte(`"code":"io_error"`)) {
 		t.Fatal(diagnostic.String())
+	}
+}
+
+func TestCompletedHandlerResultSurvivesLateCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	app := New("test", "abc")
+	app.commands = []Command{{Name: "committed", OutputMode: OutputJSON, Run: func(context.Context, IO, Request) (any, *protocol.Error) {
+		cancel()
+		return map[string]any{"changed": true}, nil
+	}}}
+	var out, diagnostic bytes.Buffer
+	if exit := app.Run(ctx, []string{"committed"}, IO{Out: &out, Err: &diagnostic}); exit != 0 || diagnostic.Len() != 0 || !bytes.Contains(out.Bytes(), []byte(`"changed":true`)) {
+		t.Fatalf("exit=%d out=%s stderr=%s", exit, &out, &diagnostic)
 	}
 }

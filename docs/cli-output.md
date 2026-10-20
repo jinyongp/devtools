@@ -57,6 +57,11 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 
 `schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 7`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
 
+실행 준비 중 사용자 취소는 `canceled`와 종료 코드 130, 준비 기한 초과는
+`deadline_exceeded`와 종료 코드 3으로 구분합니다. 저장이 완료된 뒤 도착한 취소는
+확인된 성공 결과를 덮어쓰지 않습니다. 게시 중 실패는 저장소 복구 규칙을 따르며,
+실패 응답만으로 변경이 없었다고 판단하지 않습니다.
+
 ## JSON 데이터 구조
 
 목록은 `items` 배열로 반환합니다. 결과가 없으면 `null`이나 필드 생략 대신 `[]`를 사용합니다. 기존 페이지네이션이 있는 명령은 `next_cursor` 등 해당 명령의 메타데이터를 함께 반환합니다. 페이지네이션이 없던 명령에 새 페이지네이션을 추가하지는 않습니다.

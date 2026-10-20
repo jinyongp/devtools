@@ -358,6 +358,9 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 		out.Revision = c.Revision
 		return out, nil
 	}
+	if err := ctx.Err(); err != nil {
+		return out, VaultError(ctx, err)
+	}
 	if !after.valid(s.Profile) {
 		return out, storageError()
 	}
@@ -405,7 +408,7 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 			return out, VaultError(ctx, err)
 		}
 	}
-	if err = applyProfileDiff(p, key, before, after); err != nil {
+	if err = applyProfileDiff(ctx, p, key, before, after); err != nil {
 		return out, VaultError(ctx, err)
 	}
 	if c.Import != nil && c.Import.Bundle != "" {

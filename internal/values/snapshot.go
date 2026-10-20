@@ -240,8 +240,11 @@ func captureProfile(p *vault.Profile, profileKey *vault.Material, env string, in
 }
 
 func VaultError(ctx context.Context, err error) *protocol.Error {
-	if ctx.Err() != nil {
-		return canceledError()
+	if e := protocol.ContextError(ctx.Err()); e != nil {
+		return e
+	}
+	if e := protocol.ContextError(err); e != nil {
+		return e
 	}
 	code := "storage_error"
 	for _, known := range []error{vault.ErrLocked, vault.ErrKeyMissing, vault.ErrIntegrity, vault.ErrInvalid, vault.ErrTooLarge, vault.ErrUnavailable, vault.ErrRecovery, vault.ErrLockPending, vault.ErrDenied, vault.ErrInteractionRequired, vault.ErrBackendLocked, vault.ErrSessionProtocol, vault.ErrInputChanged} {

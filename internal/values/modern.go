@@ -249,7 +249,7 @@ func hasSecret(state *State) bool {
 	return false
 }
 
-func applyProfileDiff(p *vault.Profile, key *vault.Material, before, after *State) error {
+func applyProfileDiff(ctx context.Context, p *vault.Profile, key *vault.Material, before, after *State) error {
 	for _, env := range after.EnvNames() {
 		if !before.Envs[env] {
 			if _, err := p.CreateEnv(env, key); err != nil {
@@ -263,6 +263,9 @@ func applyProfileDiff(p *vault.Profile, key *vault.Material, before, after *Stat
 	}
 	sort.Strings(names)
 	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		entry := after.Keys[name]
 		old := before.Keys[name]
 		if old != nil && old.Kind != entry.Kind {
@@ -324,6 +327,9 @@ func applyProfileDiff(p *vault.Profile, key *vault.Material, before, after *Stat
 	return nil
 }
 func (s ModernStore) publishHeld(ctx context.Context, p *vault.Profile, key, master *vault.Material, vaultID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if master != nil {
 		return (vault.FileStore{Root: s.root(), VaultID: vaultID, CatalogKey: master}).PublishManagedHeld(ctx, p, key)
 	}
@@ -377,6 +383,9 @@ func (s ModernStore) Update(ctx context.Context, change func(*State) (bool, *pro
 	if changeErr != nil {
 		return false, changeErr
 	}
+	if err := ctx.Err(); err != nil {
+		return false, VaultError(ctx, err)
+	}
 	if !after.valid(s.Profile) {
 		return false, storageError()
 	}
@@ -422,7 +431,7 @@ func (s ModernStore) Update(ctx context.Context, change func(*State) (bool, *pro
 			return false, VaultError(ctx, err)
 		}
 	}
-	if err = applyProfileDiff(p, key, before, after); err != nil {
+	if err = applyProfileDiff(ctx, p, key, before, after); err != nil {
 		return false, VaultError(ctx, err)
 	}
 	if err = s.publishHeld(ctx, p, key, master, vaultID); err != nil {

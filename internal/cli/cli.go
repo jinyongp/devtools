@@ -195,8 +195,8 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		}
 		return err.ExitCode
 	}
-	if ctx.Err() != nil {
-		return fail(protocol.NewError("canceled", "Execution canceled.", 130, nil))
+	if e := protocol.ContextError(ctx.Err()); e != nil {
+		return fail(e)
 	}
 	rootPrefix := ""
 	if len(args) > 0 && (args[0] == "--isolated-root" || strings.HasPrefix(args[0], "--isolated-root=")) {
@@ -305,9 +305,8 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		}
 		return fail(protocol.NewError("internal_error", "Process command did not return an exit status.", 1, nil))
 	}
-	if ctx.Err() != nil {
-		return fail(protocol.NewError("canceled", "Execution canceled.", 130, nil))
-	}
+	// A successful handler owns its commit outcome; cancellation arriving after
+	// publication must not replace that result with an ambiguous failure.
 	if selected.OutputMode == OutputText || selected.OutputMode == OutputArtifact {
 		if data != nil {
 			return fail(protocol.NewError("internal_error", "Command output does not match its declared mode.", 1, nil))

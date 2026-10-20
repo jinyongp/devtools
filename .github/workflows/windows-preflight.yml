@@ -47,7 +47,7 @@ jobs:
       - name: Build and run isolated Windows API probes
         run: |
           $env:CGO_ENABLED = '0'
-          & go build -o "$env:RUNNER_TEMP/native-probe.exe" docs/windows-support/probes/native_windows.go
+          & go build -o "$env:RUNNER_TEMP/native-probe.exe" verify/probes/native_windows.go
           if ($LASTEXITCODE -ne 0) { throw 'Probe build failed' }
           $result = & "$env:RUNNER_TEMP/native-probe.exe"
           $status = $LASTEXITCODE

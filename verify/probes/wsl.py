@@ -1,4 +1,4 @@
-"""Read-only WSL/Windows interop and temporary loopback probe. No OS setup changes."""
+"""WSL/Windows interop and temporary loopback probe; no OS setup changes."""
 import json
 import os
 from pathlib import Path

@@ -1,6 +1,6 @@
 //go:build ignore
 
-// Standalone pre-implementation probe. Build this file explicitly from the repo
+// Standalone Windows API probe. Build this file explicitly from the repo
 // root; it is deliberately excluded from the product and normal Go test graph.
 package main
 

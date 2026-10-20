@@ -95,8 +95,8 @@ zsh와 fish를 명시적으로 설치해 세 shell을 모두 확인한다.
 `.github/workflows/windows-platform.yml`의 full gate는 x64와 ARM64에서 실행한다.
 release workflow도 이를 필수 dependency로 호출한다. 동일 main push SHA의 전체 성공 근거가 있으면
 소스 검사를 재사용하고 installer·최종 버전의 product lane은 다시 실행한다. 누락·오류 시 전체 재실행한다.
-자세한 조건은 [개발 가이드](../docs/development.md#릴리스)를 따른다. 이 작업의 최종 Windows 실행 근거는
-Actions이며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 절차를 대신 사용하지 않는다.
+자세한 조건은 [개발 가이드](../docs/development.md#릴리스)를 따른다. Windows native 실행은
+Actions에서 검증하며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 절차를 대신 사용하지 않는다.
 
 - suite·boundaries·product lane을 x64/ARM64에서 병렬 실행하고 x64 race는 별도 lane으로 실행한다.
   PS5.1·native PS7·ARM64 위 x64 PS7 설치 검사는 각각 별도 runner에서 병렬 실행한다.
@@ -131,9 +131,21 @@ browser 연계는 NOT RUN이다. runner browser 성공이나 과거 standalone p
 확대하지 않는다. [지원 범위와 한계](../docs/windows.md)를 함께 확인한다.
 
 var/sec의 실제 Keychain·DPAPI·Secret Service·다른 UID/SID·logout·소유 WSL2 재시작은
-[A12 수용 기록](../docs/var-sec/A12-final-review.md)과 [검증 색인](../docs/var-sec/README.md)을 따른다.
+[native 수용 검증 절차](../docs/development.md#varsec-통합-수용-검증)를 따른다.
 일반 installed 시나리오의 passphrase fixture와 OS별 native 검증을 구분한다.
 WSL vault 재시작 통과를 Windows 브라우저 네트워크 검증으로 확대하지 않는다.
+
+## 독립 플랫폼 probe
+
+`verify/probes/native_windows.go`는 제품 코드와 분리한 Windows API 검사다.
+`.github/workflows/windows-preflight.yml`을 수동 실행하면 x64·ARM64 runner에서
+이 파일을 직접 빌드·실행하고 결과를 artifact에 보관한다. 기본 Go test graph에는 포함하지 않는다.
+이 probe의 성공이 제품의 full native gate를 대체하지는 않는다.
+
+`verify/probes/wsl.py`는 WSL에서 Windows PowerShell interop와 임시 loopback 연결을 관찰한다.
+현재 WSL 배포판을 종료하거나 네트워크 설정을 바꾸지 않는다.
+WSL에서 `python3 verify/probes/wsl.py`로 실행하며, 관측 결과만으로
+NAT/mirrored 모드 전체의 지원 여부를 판정하지 않는다.
 
 ## 기존 release 검증
 

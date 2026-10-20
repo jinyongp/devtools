@@ -16,6 +16,14 @@ inject = false
 exec = ["./scripts/project", "check"]
 inject = false
 
+[commands."check:static"]
+exec = ["./scripts/project", "check-static"]
+inject = false
+
+[commands."test:go-lane"]
+exec = ["./scripts/project", "test-go-lane"]
+inject = false
+
 [commands."check:dashboard"]
 exec = ["./scripts/project", "dashboard-check"]
 inject = false

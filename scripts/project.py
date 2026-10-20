@@ -48,6 +48,32 @@ def check_skill_release():
     run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "scripts", "-p", "test_package.py"])
 
 
+GO_TEST_LANES = ("cli", "values", "vault", "rest")
+
+
+def go_test_lane(packages, lane):
+    if lane not in GO_TEST_LANES:
+        raise ValueError("Go test lane must be one of: " + ", ".join(GO_TEST_LANES))
+    # Isolate the three longest native race suites. Newly added packages always
+    # enter rest, so the CI partition cannot silently omit them.
+    dedicated = {"github.com/jinyongp/devtools/internal/" + name: name for name in GO_TEST_LANES[:-1]}
+    selected = [package for package in packages if dedicated.get(package, "rest") == lane]
+    if not selected:
+        raise ValueError("Empty Go test lane: " + lane)
+    return selected
+
+
+def check_static():
+    runner = native_binary("devtools")
+    runner = str(runner.resolve()) if runner.is_file() and (os.name == "nt" or os.access(runner, os.X_OK)) else "devtools"
+    for gate in ("skill-release", "dashboard", "installer", "release", "project", "perf"):
+        run([runner, "run", "check:" + gate])
+    formatted = subprocess.check_output(["gofmt", "-l", "cmd", "internal", "scripts", "skills", "perf", "verify"], text=True)
+    if formatted.strip():
+        raise ValueError("Run gofmt on:\n" + formatted)
+    run(["go", "vet", "./..."])
+
+
 def main(args):
     configure_output()
     if not args:
@@ -72,15 +98,18 @@ def main(args):
         node_tests("dashboard-*.test.mjs", extra)
     elif action == "project-check":
         node_tests("project.test.mjs", extra)
+        run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "scripts", "-p", "test_project.py"])
+    elif action == "check-static":
+        if extra:
+            raise ValueError("check-static accepts no arguments")
+        check_static()
+    elif action == "test-go-lane":
+        if len(extra) != 1 or extra[0] not in GO_TEST_LANES:
+            raise ValueError("test-go-lane requires one of: " + ", ".join(GO_TEST_LANES))
+        packages = subprocess.check_output(["go", "list", "./..."], text=True).splitlines()
+        run(["go", "test", *([] if os.name == "nt" else ["-race"]), *go_test_lane(packages, extra[0])])
     elif action == "check":
-        runner = native_binary("devtools")
-        runner = str(runner.resolve()) if runner.is_file() and (os.name == "nt" or os.access(runner, os.X_OK)) else "devtools"
-        for gate in ("skill-release", "dashboard", "installer", "release", "project", "perf"):
-            run([runner, "run", "check:" + gate])
-        formatted = subprocess.check_output(["gofmt", "-l", "cmd", "internal", "scripts", "skills", "perf", "verify"], text=True)
-        if formatted.strip():
-            raise ValueError("Run gofmt on:\n" + formatted)
-        run(["go", "vet", "./..."])
+        check_static()
         # Native ARM64 Windows has no Go race detector. Unix keeps the existing
         # race gate; native product integration is separately required in CI.
         run(["go", "test", *([] if os.name == "nt" else ["-race"]), "./...", *extra])

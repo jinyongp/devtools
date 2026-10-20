@@ -1,7 +1,7 @@
 goos: linux
 goarch: amd64
 pkg: github.com/jinyongp/devtools/internal/values
-cpu: AMD Ryzen 7 9800X3D 8-Core Processor           
+cpu: AMD Ryzen 7 9800X3D 8-Core Processor
 BenchmarkModernBatchOverwrite/100-16         	       4	  54055611 ns/op	  50408997 commit-held-ns/op	   1647422 commit-wait-ns/op	   1101912 prepare-ns/op	    580760 read-held-ns/op	     51324 read-wait-ns/op	 3058110 B/op	   30344 allocs/op
 BenchmarkModernBatchOverwrite/100-16         	       4	  51931630 ns/op	  48387085 commit-held-ns/op	   1674940 commit-wait-ns/op	   1083249 prepare-ns/op	    502112 read-held-ns/op	     59638 read-wait-ns/op	 3058278 B/op	   30335 allocs/op
 BenchmarkModernBatchOverwrite/100-16         	       5	  50900841 ns/op	  47399918 commit-held-ns/op	   1629572 commit-wait-ns/op	   1074442 prepare-ns/op	    517077 read-held-ns/op	     42881 read-wait-ns/op	 3087406 B/op	   30331 allocs/op

@@ -105,7 +105,8 @@ time 시작 비용이 포함된다. 100/1,000개는 각 3회, 5,000개는 신규
 | 5,000개 | 66,000 | 36,248 |
 
 [Overwrite benchmark 원시 결과](evidence/D01-overwrite-bench-4ce462e.txt)는 CLI와 별도
-측정이다. 초기 보호·seed를 제외한 실제 암호화 overwrite와 파일 게시를 측정한다.
+측정이다. CPU 헤더의 줄 끝 공백만 정리했고 수치 행은 그대로다.
+초기 보호·seed를 제외한 실제 암호화 overwrite와 파일 게시를 측정한다.
 `-benchtime=200ms -count=3`의 각 calibrated batch 추정치 중앙값을 사용한다. 개별 CLI
 요청의 p95/p99가 아니며 baseline 할당량 감소를 이 수치만으로 주장하지 않는다.
 

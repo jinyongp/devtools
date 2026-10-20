@@ -48,8 +48,16 @@ devtools run check:all
 | Windows ARM64 | 일반 Go 테스트 | 필수 Actions의 native 프로세스·잠금 경쟁 검사; Go race detector 없음 |
 | WSL | Linux 빌드와 검사 | 실제 WSL2/Windows 네트워크는 별도 미검증 범위 |
 
+macOS·Linux CI는 OS마다 정적 검사와 네 개의 Go race 작업(`cli`, `values`, `vault`,
+`rest`)을 병렬로 실행한다. 긴 세 패키지를 분리하고 새 패키지는 자동으로 `rest`에
+포함한다. 각 작업은 `devtools run check:static` 또는
+`devtools run test:go-lane cli`처럼 로컬에서도 실행할 수 있다. `check:all`의 범위는 유지한다.
+Release에서는 설치 시나리오·프로필 교환용 export도 Go 검사와 병렬로 실행하며,
+Linux의 Chromium·Skill discovery 검사는 별도 작업이다. 모든 작업이 성공해야
+패키징·게시로 진행한다. Go 캐시는 검사 작업별로 분리한다.
+
 로컬 `check:all`은 disposable Actions의 사용자·ACL·OS 경계 검사를 대체하지 않는다.
-Release 검증은 macOS, Ubuntu 24.04, Windows Server 2025 x64(테스트 호스트),
+Release 검증은 macOS 15, Ubuntu 24.04, Windows Server 2025 x64(테스트 호스트),
 Windows 11 ARM64와 Go 1.27.1을 사용한다. 현재 runner와 실행 근거·실제 PC 미검증 한계는
 [Windows 안내](windows.md)와 [최종 리뷰](windows-support/implementation/W9.md)를 따른다.
 Windows 구현 결정의 배경은 [지원 계획](windows-support-plan.md)과

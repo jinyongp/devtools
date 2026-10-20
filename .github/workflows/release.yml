@@ -182,9 +182,15 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  ci-unix:
+    needs: validate-release
+    uses: ./.github/workflows/unix-platform.yml
+    with:
+      commit: ${{ inputs.commit }}
+
   ci-macos:
     needs: validate-release
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -204,7 +210,6 @@ jobs:
         run: |
           go build -o bin/devtools ./cmd/devtools
           echo "$PWD/bin" >> "$GITHUB_PATH"
-      - run: devtools run check:all
       - run: devtools run build:cli
       - run: ./bin/devtools project inspect
       - name: Verify installed CLI and simulated network failures
@@ -261,13 +266,7 @@ jobs:
         run: |
           go build -o bin/devtools ./cmd/devtools
           echo "$PWD/bin" >> "$GITHUB_PATH"
-      - run: devtools run check:all
-      - run: corepack pnpm install --frozen-lockfile
-      - run: devtools run check:skill-discovery
-      - run: devtools run check:skill-discovery-public
-      - run: corepack pnpm exec playwright install --with-deps chromium
       - run: devtools run build:cli
-      - run: devtools run test:dashboard-browser
       - name: Install verification shells
         run: sudo apt-get update && sudo apt-get install -y fish zsh
       - name: Verify installed CLI and simulated network failures
@@ -287,6 +286,31 @@ jobs:
           path: profile-exchange-linux/
           if-no-files-found: error
           retention-days: 7
+
+  ci-linux-browser:
+    needs: validate-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Bootstrap project CLI
+        run: |
+          go build -o bin/devtools ./cmd/devtools
+          echo "$PWD/bin" >> "$GITHUB_PATH"
+      - run: corepack pnpm install --frozen-lockfile
+      - run: devtools run check:skill-discovery
+      - run: devtools run check:skill-discovery-public
+      - run: corepack pnpm exec playwright install --with-deps chromium
+      - run: devtools run test:dashboard-browser
 
   wsl-vault:
     needs: validate-release
@@ -409,7 +433,7 @@ jobs:
           retention-days: 7
 
   package:
-    needs: [validate-release, ci-macos, ci-linux, ci-windows, vault-macos, vault-linux, wsl-vault]
+    needs: [validate-release, ci-unix, ci-macos, ci-linux, ci-linux-browser, ci-windows, vault-macos, vault-linux, wsl-vault]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:

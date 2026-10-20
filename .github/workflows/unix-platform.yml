@@ -1,0 +1,85 @@
+name: Unix validation
+
+on:
+  workflow_call:
+    inputs:
+      commit:
+        required: true
+        type: string
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/unix-platform.yml
+      - .github/workflows/release.yml
+      - internal/**
+      - cmd/**
+      - scripts/**
+      - skills/**
+      - perf/**
+      - verify/**
+      - devtools.toml
+      - go.mod
+      - go.sum
+      - package.json
+      - pnpm-lock.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    name: ${{ matrix.os }} / ${{ matrix.lane }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+        lane: [static, cli, values, vault, rest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      # Each lane must save its own compiled race/static cache. Otherwise parallel
+      # cold runs compete for the same immutable setup-go cache entry.
+      - name: Separate Go caches by validation lane
+        run: |
+          mkdir -p bin
+          printf '%s\n' '${{ matrix.lane }}' > bin/.devtools-ci-cache-scope
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.mod
+            go.sum
+            bin/.devtools-ci-cache-scope
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: matrix.lane == 'static'
+        with:
+          node-version: '24'
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        if: matrix.lane == 'static'
+        with:
+          enable-cache: false
+      - name: Bootstrap project CLI
+        if: matrix.lane == 'static'
+        run: go build -o bin/devtools ./cmd/devtools
+      - name: Static and tooling checks
+        if: matrix.lane == 'static'
+        run: ./bin/devtools run check:static
+      - name: Native Go race tests
+        if: matrix.lane != 'static'
+        run: python3 -B scripts/project.py test-go-lane '${{ matrix.lane }}'
+
+  validation:
+    name: Unix validation
+    if: always()
+    needs: source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every native lane
+        env:
+          RESULT: ${{ needs.source.result }}
+        run: test "$RESULT" = success

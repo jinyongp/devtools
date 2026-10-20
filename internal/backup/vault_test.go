@@ -317,14 +317,14 @@ func TestProtectedRestoreDrainsLaunchLeaseAndRejectsStalePreview(t *testing.T) {
 	_, e = target.Import(short, request)
 	cancel()
 	release()
-	if e == nil || (e.Code != "canceled" && e.Code != "lock_pending") {
+	if e == nil || (e.Code != "deadline_exceeded" && e.Code != "lock_pending") {
 		t.Fatal("restore ignored a live launch lease", e)
 	}
 	if _, _, err = targetStore.ReadWithMaster(ctx, "copy", master); err == nil || err.Error() != "profile_not_found" {
 		t.Fatal("blocked restore published a profile", err)
 	}
 	if _, e = target.Import(ctx, request); e != nil {
-		t.Fatal("same request cannot retry after a canceled gate wait", e)
+		t.Fatal("same request cannot retry after a timed out gate wait", e)
 	}
 	replace := ImportRequest{Path: archive, IdentityPath: identity, Target: "copy", Replace: true, RecoveryDirectory: filepath.Join(target.Data, "recovery")}
 	before, e := target.Import(ctx, replace)
@@ -387,7 +387,7 @@ func TestCurrentPublicBackupUsesFreshGenerationWithoutAKeySession(t *testing.T) 
 	calls := 0
 	engine := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache"), VaultMaster: func(context.Context) (*vault.Material, error) { calls++; return nil, vault.ErrUnavailable }}
 	store := values.ModernStore{Directory: filepath.Join(engine.Data, "profiles"), Profile: "app"}
-	if _, e := store.Update(ctx, func(s *values.State) (bool, *protocol.Error) {
+	if _, e := store.Update(ctx, func(s *values.Editor) (bool, *protocol.Error) {
 		return s.Set(values.Variable, "URL", "", "https://example.invalid")
 	}); e != nil {
 		t.Fatal(e)

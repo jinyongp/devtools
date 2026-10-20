@@ -14,8 +14,8 @@ import (
 	"github.com/jinyongp/devtools/internal/vault"
 )
 
-// SessionMaster obtains the shared session once per storage operation. Native
-// calls and reusable passphrase-session access occur before storage gates.
+// SessionMaster obtains the shared session before storage gates. Writes also
+// revalidate their original session epoch before acquiring the commit gate.
 func SessionMaster(root string) func(context.Context) (*vault.Material, error) {
 	return func(ctx context.Context) (*vault.Material, error) {
 		client, err := (vault.SessionManager{Directory: filepath.Join(root, "vault")}).Client(ctx)
@@ -26,7 +26,29 @@ func SessionMaster(root string) func(context.Context) (*vault.Material, error) {
 	}
 }
 func CurrentStore(directory, profile string) ModernStore {
-	return ModernStore{Directory: directory, Profile: profile, Master: SessionMaster(maintenance.Root(directory))}
+	root := maintenance.Root(directory)
+	return ModernStore{Directory: directory, Profile: profile, Master: SessionMaster(root), WriteMaster: func(ctx context.Context) (*vault.Material, func(context.Context) error, error) {
+		client, err := (vault.SessionManager{Directory: filepath.Join(root, "vault")}).Client(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		master, ticket, err := client.UseWithTicket(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		validate := func(ctx context.Context) error {
+			current, next, err := client.UseWithTicket(ctx)
+			if err != nil {
+				return err
+			}
+			defer current.Destroy()
+			if next.SessionID != ticket.SessionID || next.VaultID != ticket.VaultID || next.Epoch != ticket.Epoch {
+				return vault.ErrInputChanged
+			}
+			return nil
+		}
+		return master, validate, nil
+	}}
 }
 
 // CaptureCurrent selects the storage/session flow before preparing one actual
@@ -61,8 +83,8 @@ func (s ModernStore) PlanImport(ctx context.Context, input map[string]string, va
 	if err != nil {
 		return nil, false, VaultError(ctx, err)
 	}
-	defer release()
 	p, key, _, err := s.readHeld(ctx, master, id)
+	release()
 	if err != nil {
 		return nil, false, VaultError(ctx, err)
 	}

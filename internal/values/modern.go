@@ -1,7 +1,6 @@
 package values
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -21,6 +20,10 @@ type ModernStore struct {
 	Directory string
 	Profile   string
 	Master    func(context.Context) (*vault.Material, error)
+	// WriteMaster also binds commit authority to the original session epoch.
+	WriteMaster func(context.Context) (*vault.Material, func(context.Context) error, error)
+	// Test seam after candidate computation, before commit lease acquisition.
+	beforeCommit func()
 }
 
 func (s ModernStore) root() string { return maintenance.Root(s.Directory) }
@@ -264,30 +267,16 @@ func (s ModernStore) Update(ctx context.Context, change func(*Editor) (bool, *pr
 		return false, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
 
-	master, vaultID, err := s.scope(ctx)
+	master, vaultID, validate, err := s.writeScope(ctx)
 	if err != nil {
 		return false, VaultError(ctx, err)
 	}
 	defer master.Destroy()
-	release, err := maintenance.AcquireExclusive(ctx, s.root())
-	if err != nil {
-		return false, VaultError(ctx, err)
-	}
-	held := true
-	defer func() {
-		if held {
-			release()
-		}
-	}()
-	p, key, existed, err := s.readHeld(ctx, master, vaultID)
+	p, key, base, err := s.readForEdit(ctx, master, vaultID)
 	if err != nil {
 		return false, VaultError(ctx, err)
 	}
 	defer key.Destroy()
-	original, err := p.Encode()
-	if err != nil {
-		return false, VaultError(ctx, err)
-	}
 	var editor *Editor
 	defer func() {
 		if editor != nil && editor.promoted {
@@ -308,10 +297,8 @@ func (s ModernStore) Update(ctx context.Context, change func(*Editor) (bool, *pr
 		return nil
 	})
 	if errors.Is(err, errUnchanged) {
-		if e := protocol.ContextError(ctx.Err()); e != nil {
-			return false, e
-		}
-		return false, nil
+		changed = false
+		err = nil
 	}
 	if err != nil {
 		if e, ok := err.(*protocol.Error); ok {
@@ -319,35 +306,28 @@ func (s ModernStore) Update(ctx context.Context, change func(*Editor) (bool, *pr
 		}
 		return false, VaultError(ctx, err)
 	}
+	promoted := changed && editor != nil && editor.promoted
+	if promoted {
+		key = editor.key
+	}
+	if s.beforeCommit != nil {
+		s.beforeCommit()
+	}
+	release, err := s.lockCommit(ctx, base, promoted, validate)
+	if err != nil {
+		return false, VaultError(ctx, err)
+	}
+	defer release()
+	current, currentKey, currentExists, err := s.readHeld(ctx, master, vaultID)
+	if err != nil {
+		return false, VaultError(ctx, err)
+	}
+	currentKey.Destroy()
+	if e := s.checkBase(base, current, currentExists); e != nil {
+		return false, e
+	}
 	if !changed {
 		return false, nil
-	}
-	if editor.promoted {
-		key = editor.key
-		release()
-		held = false
-		finish, err := vault.AcquireLaunchMutation(ctx, filepath.Join(s.root(), "vault"))
-		if err != nil {
-			return false, VaultError(ctx, err)
-		}
-		defer finish()
-		release, err = maintenance.AcquireExclusive(ctx, s.root())
-		if err != nil {
-			return false, VaultError(ctx, err)
-		}
-		held = true
-		current, currentKey, currentExists, err := s.readHeld(ctx, master, vaultID)
-		if err != nil {
-			return false, VaultError(ctx, err)
-		}
-		currentKey.Destroy()
-		observed, err := current.Encode()
-		if err != nil {
-			return false, VaultError(ctx, err)
-		}
-		if existed != currentExists || existed && !bytes.Equal(original, observed) {
-			return false, failure("revision_conflict", "Profile changed during protection setup; retry with current state.")
-		}
 	}
 	if err = s.publishHeld(ctx, p, key, master, vaultID); err != nil {
 		return false, VaultError(ctx, err)

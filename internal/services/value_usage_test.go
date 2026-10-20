@@ -32,7 +32,7 @@ func TestValueUsesSeparatesDeclarationsDeliveriesAndUnknown(t *testing.T) {
 	store := values.ModernStore{Directory: filepath.Join(data, "profiles"), Profile: "app"}
 	set := func(name, value string) {
 		t.Helper()
-		if _, e := store.Update(ctx, func(s *values.State) (bool, *protocol.Error) { return s.Set(values.Variable, name, "", value) }); e != nil {
+		if _, e := store.Update(ctx, func(s *values.Editor) (bool, *protocol.Error) { return s.Set(values.Variable, name, "", value) }); e != nil {
 			t.Fatal(e)
 		}
 	}

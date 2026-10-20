@@ -1,7 +1,6 @@
 package values
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -325,37 +324,40 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	if !project.ValidProfile(s.Profile) || !modernRequestID.MatchString(c.RequestID) || c.Revision == "" {
 		return out, protocol.NewError("invalid_argument", "Provide profile, revision and request UUID.", 2, nil)
 	}
-	master, vaultID, err := s.scope(ctx)
+	master, vaultID, validate, err := s.writeScope(ctx)
 	if err != nil {
 		return out, VaultError(ctx, err)
 	}
 	defer master.Destroy()
-	release, err := maintenance.AcquireExclusive(ctx, s.root())
-	if err != nil {
-		return out, VaultError(ctx, err)
-	}
-	held := true
-	defer func() {
-		if held {
-			release()
-		}
-	}()
-	p, key, exists, err := s.readHeld(ctx, master, vaultID)
+	p, key, base, err := s.readForEdit(ctx, master, vaultID)
 	if err != nil {
 		return out, VaultError(ctx, err)
 	}
 	defer key.Destroy()
-	if replay, found, e := s.replayHeld(ctx, c, p, key, master, vaultID); e != nil {
-		return out, e
-	} else if found {
-		return replay, nil
-	}
-	if c.Revision != editRevision(s.Profile, p, exists) {
-		return out, failure("revision_conflict", "Profile changed; reload before editing.")
-	}
-	original, err := p.Encode()
+	// Receipt reads share one gate with the original profile used for replay.
+	releaseRead, err := maintenance.AcquireShared(ctx, s.root())
 	if err != nil {
 		return out, VaultError(ctx, err)
+	}
+	current, currentKey, currentExists, err := s.readHeld(ctx, master, vaultID)
+	if err != nil {
+		releaseRead()
+		return out, VaultError(ctx, err)
+	}
+	replay, found, replayErr := s.replayHeld(ctx, c, current, currentKey, master, vaultID)
+	currentKey.Destroy()
+	releaseRead()
+	if replayErr != nil {
+		return out, replayErr
+	}
+	if found {
+		return replay, nil
+	}
+	if e := s.checkBase(base, current, currentExists); e != nil {
+		return out, e
+	}
+	if c.Revision != editRevision(s.Profile, p, base.exists) {
+		return out, failure("revision_conflict", "Profile changed; reload before editing.")
 	}
 	var editor *Editor
 	defer func() {
@@ -400,37 +402,29 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	}
 	if editor.promoted {
 		key = editor.key
-		release()
-		held = false
-		finish, err := vault.AcquireLaunchMutation(ctx, filepath.Join(s.root(), "vault"))
-		if err != nil {
-			return out, VaultError(ctx, err)
-		}
-		defer finish()
-		release, err = maintenance.AcquireExclusive(ctx, s.root())
-		if err != nil {
-			return out, VaultError(ctx, err)
-		}
-		held = true
-		current, currentKey, currentExists, err := s.readHeld(ctx, master, vaultID)
-		if err != nil {
-			return out, VaultError(ctx, err)
-		}
-		if replay, found, e := s.replayHeld(ctx, c, current, currentKey, master, vaultID); e != nil {
-			currentKey.Destroy()
-			return out, e
-		} else if found {
-			currentKey.Destroy()
-			return replay, nil
-		}
-		currentKey.Destroy()
-		observed, err := current.Encode()
-		if err != nil {
-			return out, VaultError(ctx, err)
-		}
-		if exists != currentExists || exists && !bytes.Equal(original, observed) {
-			return out, failure("revision_conflict", "Profile changed during protection setup.")
-		}
+	}
+	if s.beforeCommit != nil {
+		s.beforeCommit()
+	}
+	release, err := s.lockCommit(ctx, base, editor.promoted, validate)
+	if err != nil {
+		return out, VaultError(ctx, err)
+	}
+	defer release()
+	current, currentKey, currentExists, err = s.readHeld(ctx, master, vaultID)
+	if err != nil {
+		return out, VaultError(ctx, err)
+	}
+	replay, found, replayErr = s.replayHeld(ctx, c, current, currentKey, master, vaultID)
+	currentKey.Destroy()
+	if replayErr != nil {
+		return out, replayErr
+	}
+	if found {
+		return replay, nil
+	}
+	if e := s.checkBase(base, current, currentExists); e != nil {
+		return out, e
 	}
 	out.Revision = editRevision(s.Profile, p, true)
 	var fingerprintKey *vault.Material

@@ -25,16 +25,16 @@ func (g *directoryGuard) close() error {
 
 func privatePath(path string) (string, error) {
 	if path == "" || strings.HasPrefix(path, `\\`) {
-		return "", ErrUnsafe
+		return "", fsError("validate_path", path, "invalid_path", ErrUnsafe)
 	}
 	// Reject drive-relative, device, stream and Win32-normalized aliases before
 	// adding an internal extended path prefix for long-path operations.
 	if len(filepath.VolumeName(path)) != 2 || !filepath.IsAbs(path) {
-		return "", ErrUnsafe
+		return "", fsError("validate_path", path, "invalid_path", ErrUnsafe)
 	}
 	for _, part := range strings.FieldsFunc(path[2:], func(r rune) bool { return r == '\\' || r == '/' }) {
 		if reservedComponent(part) || strings.ContainsRune(part, ':') || strings.TrimRight(part, " .") != part {
-			return "", ErrUnsafe
+			return "", fsError("validate_path", path, "invalid_path", ErrUnsafe)
 		}
 	}
 	absolute, err := filepath.Abs(path)
@@ -42,7 +42,7 @@ func privatePath(path string) (string, error) {
 		return "", err
 	}
 	if !filepath.IsLocal(strings.TrimPrefix(absolute, filepath.VolumeName(absolute)+`\`)) {
-		return "", ErrUnsafe
+		return "", fsError("validate_path", path, "invalid_path", ErrUnsafe)
 	}
 	return absolute, nil
 }
@@ -79,7 +79,8 @@ func userSecurity() (*windows.SID, *windows.SECURITY_DESCRIPTOR, error) {
 	return sid, sd, err
 }
 
-func checkPrivate(h windows.Handle, directory bool) error {
+func checkPrivate(h windows.Handle, directory bool) (err error) {
+	defer func() { err = securityError(directory, "", err) }()
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
 		return err
@@ -97,21 +98,21 @@ func checkPrivate(h windows.Handle, directory bool) error {
 		return err
 	}
 	if owner == nil || !windows.EqualSid(owner, user.User.Sid) {
-		return ErrUnsafe
+		return securityError(directory, "owner_mismatch", ErrUnsafe)
 	}
 	control, _, err := sd.Control()
 	if err != nil {
 		return err
 	}
 	if directory && control&windows.SE_DACL_PROTECTED == 0 {
-		return ErrUnsafe
+		return securityError(directory, "inheritance_enabled", ErrUnsafe)
 	}
 	acl, _, err := sd.DACL()
 	if err != nil {
 		return err
 	}
 	if acl == nil || acl.AceCount != 2 {
-		return ErrUnsafe
+		return securityError(directory, "unexpected_acl", ErrUnsafe)
 	}
 	own, sys := false, false
 	for i := uint32(0); i < uint32(acl.AceCount); i++ {
@@ -120,7 +121,7 @@ func checkPrivate(h windows.Handle, directory bool) error {
 			return err
 		}
 		if header.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || header.Header.AceFlags&windows.INHERIT_ONLY_ACE != 0 || header.Mask&0x1f01ff != 0x1f01ff {
-			return ErrUnsafe
+			return securityError(directory, "unexpected_acl", ErrUnsafe)
 		}
 		sid := (*windows.SID)(unsafe.Pointer(&header.SidStart))
 		if windows.EqualSid(sid, user.User.Sid) {
@@ -128,16 +129,17 @@ func checkPrivate(h windows.Handle, directory bool) error {
 		} else if windows.EqualSid(sid, system) {
 			sys = true
 		} else {
-			return ErrUnsafe
+			return securityError(directory, "unexpected_acl", ErrUnsafe)
 		}
 	}
 	if !own || !sys {
-		return ErrUnsafe
+		return securityError(directory, "unexpected_acl", ErrUnsafe)
 	}
 	return nil
 }
 
 func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, err error) {
+	defer func() { err = fsError("open_directory", path, "", err) }()
 	guard = &directoryGuard{}
 	defer func(g *directoryGuard) {
 		if err != nil {
@@ -167,32 +169,32 @@ func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, er
 			}
 			sa := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sd}
 			if e = windows.CreateDirectory(ptr, &sa); e != nil && !errors.Is(e, windows.ERROR_ALREADY_EXISTS) {
-				return nil, e
+				return nil, fsError("create_directory", current, "", e)
 			}
 		}
 		h, e := windows.CreateFile(ptr, windows.FILE_LIST_DIRECTORY|windows.FILE_READ_ATTRIBUTES|windows.READ_CONTROL, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
 		if e != nil {
-			return nil, e
+			return nil, fsError("open_directory", current, "", e)
 		}
 		guard.handles = append(guard.handles, h)
 		var info windows.ByHandleFileInformation
 		if e = windows.GetFileInformationByHandle(h, &info); e != nil {
-			return nil, e
+			return nil, fsError("inspect_directory", current, "", e)
 		}
 		if info.FileAttributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 || info.FileAttributes&windows.FILE_ATTRIBUTE_DIRECTORY == 0 {
-			return nil, ErrUnsafe
+			return nil, fsError("inspect_directory", current, "reparse_or_non_directory", ErrUnsafe)
 		}
 		if i == -1 {
 			fs := make([]uint16, 32)
 			if e = windows.GetVolumeInformationByHandle(h, nil, 0, nil, nil, nil, &fs[0], uint32(len(fs))); e != nil {
-				return nil, e
+				return nil, fsError("inspect_filesystem", current, "", e)
 			}
 			drive, e := windows.UTF16PtrFromString(filepath.VolumeName(path) + `\`)
 			if e != nil {
 				return nil, e
 			}
 			if windows.UTF16ToString(fs) != "NTFS" || windows.GetDriveType(drive) == windows.DRIVE_REMOTE {
-				return nil, ErrUnsafe
+				return nil, fsError("inspect_filesystem", current, "unsupported_filesystem", ErrUnsafe)
 			}
 		}
 		if current == anchor || strings.HasPrefix(current, anchor+`\`) {
@@ -267,15 +269,18 @@ func openPrivateFileWithShare(path string, flags int, share uint32) (*os.File, e
 	sa := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sd}
 	h, err := windows.CreateFile(ptr, access, share, &sa, disposition, windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
 	if err != nil {
-		return nil, &os.PathError{Op: "open", Path: path, Err: err}
+		return nil, fsError("open_file", path, "", &os.PathError{Op: "open", Path: path, Err: err})
 	}
 	fail := func(e error) (*os.File, error) { _ = windows.CloseHandle(h); return nil, e }
 	var info windows.ByHandleFileInformation
 	if err = windows.GetFileInformationByHandle(h, &info); err != nil {
 		return fail(err)
 	}
-	if info.FileAttributes&(windows.FILE_ATTRIBUTE_REPARSE_POINT|windows.FILE_ATTRIBUTE_DIRECTORY) != 0 || info.NumberOfLinks != 1 {
-		return fail(ErrUnsafe)
+	if info.FileAttributes&(windows.FILE_ATTRIBUTE_REPARSE_POINT|windows.FILE_ATTRIBUTE_DIRECTORY) != 0 {
+		return fail(fsError("inspect_file", path, "reparse_or_non_regular_file", ErrUnsafe))
+	}
+	if info.NumberOfLinks != 1 {
+		return fail(fsError("inspect_file", path, "hard_link", ErrUnsafe))
 	}
 	if err = checkPrivate(h, false); err != nil {
 		return fail(err)
@@ -284,7 +289,8 @@ func openPrivateFileWithShare(path string, flags int, share uint32) (*os.File, e
 	return f, nil
 }
 
-func publish(ctx context.Context, from, to string, replace bool) error {
+func publish(ctx context.Context, from, to string, replace bool) (err error) {
+	defer func() { err = fsError("publish_file", to, "", err) }()
 	fromPtr, err := pathPtr(from)
 	if err != nil {
 		return err
@@ -361,7 +367,7 @@ func containedFile(r *Root, f *os.File) error {
 	// Both names come from normalized handles, preserving NTFS case-sensitive
 	// directories rather than lowercasing user-supplied paths.
 	if !strings.HasPrefix(actual, strings.TrimRight(base, `\`)+`\`) {
-		return ErrUnsafe
+		return fsError("verify_file_identity", f.Name(), "path_mismatch", ErrUnsafe)
 	}
 	return nil
 }

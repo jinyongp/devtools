@@ -26,7 +26,7 @@ func CheckFile(f *os.File) error {
 		return err
 	}
 	if info.FileAttributes&(windows.FILE_ATTRIBUTE_DIRECTORY|windows.FILE_ATTRIBUTE_REPARSE_POINT) != 0 || info.NumberOfLinks != 1 {
-		return ErrUnsafe
+		return securityError(false, "reparse_or_non_regular_file", ErrUnsafe)
 	}
 	return checkPrivate(h, false)
 }

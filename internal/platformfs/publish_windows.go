@@ -14,7 +14,8 @@ import (
 // replacing an existing execution. It pins both parents, closes the staging
 // directory handles before rename, and leaves the source intact on failure.
 // Callers flush/close their files first and own their journal/recovery policy.
-func (r *Root) PublishDirectory(ctx context.Context, from, to string) error {
+func (r *Root) PublishDirectory(ctx context.Context, from, to string) (err error) {
+	defer func() { err = fsError("publish_directory", to, "", err) }()
 	source, err := r.child(from)
 	if err != nil {
 		return err
@@ -117,7 +118,8 @@ func (r *Root) PublishFile(ctx context.Context, from, to string, replace bool) e
 }
 
 // RemoveFile checks the private file and pins its parents through bounded deletion.
-func (r *Root) RemoveFile(ctx context.Context, name string) error {
+func (r *Root) RemoveFile(ctx context.Context, name string) (err error) {
+	defer func() { err = fsError("remove_file", name, "", err) }()
 	path, err := r.child(name)
 	if err != nil {
 		return err

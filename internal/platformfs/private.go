@@ -69,7 +69,7 @@ func (r *Root) child(name string) (string, error) {
 		return "", os.ErrClosed
 	}
 	if !filepath.IsLocal(name) {
-		return "", fmt.Errorf("%w: relative child path required", ErrUnsafe)
+		return "", fsError("validate_path", r.path, "invalid_path", fmt.Errorf("%w: relative child path required", ErrUnsafe))
 	}
 	path := filepath.Join(r.path, name)
 	if _, err := privatePath(path); err != nil {
@@ -103,7 +103,7 @@ func (r *Root) openFile(name string, flags int, open func(string, int) (*os.File
 		return nil, err
 	}
 	if path == r.path {
-		return nil, ErrUnsafe
+		return nil, fsError("validate_path", path, "invalid_path", ErrUnsafe)
 	}
 	guard, err := guardDirectory(filepath.Dir(path), r.path, false)
 	if err != nil {
@@ -125,7 +125,8 @@ func (r *Root) openFile(name string, flags int, open func(string, int) (*os.File
 	return &File{File: f, guard: guard}, nil
 }
 
-func (r *Root) ReadFile(name string, limit int64) ([]byte, error) {
+func (r *Root) ReadFile(name string, limit int64) (body []byte, err error) {
+	defer func() { err = fsError("read_file", name, "", err) }()
 	if limit < 0 || limit == int64(^uint64(0)>>1) {
 		return nil, fmt.Errorf("invalid read limit")
 	}
@@ -139,11 +140,11 @@ func (r *Root) ReadFile(name string, limit int64) ([]byte, error) {
 		return nil, err
 	}
 	if info.Size() > limit {
-		return nil, fmt.Errorf("private file exceeds read limit")
+		return nil, fsError("read_file", name, "size_limit", fmt.Errorf("private file exceeds read limit"))
 	}
-	body, err := io.ReadAll(io.LimitReader(f, limit+1))
+	body, err = io.ReadAll(io.LimitReader(f, limit+1))
 	if int64(len(body)) > limit {
-		return nil, fmt.Errorf("private file exceeds read limit")
+		return nil, fsError("read_file", name, "size_limit", fmt.Errorf("private file exceeds read limit"))
 	}
 	return body, err
 }
@@ -151,7 +152,8 @@ func (r *Root) ReadFile(name string, limit int64) ([]byte, error) {
 // WriteFile flushes and closes a same-directory private temp before publishing.
 // replace=false never overwrites an existing target. Callers still own their
 // journal's before-image and phase transitions; directory durability differs by OS.
-func (r *Root) WriteFile(ctx context.Context, name string, body []byte, replace bool) error {
+func (r *Root) WriteFile(ctx context.Context, name string, body []byte, replace bool) (err error) {
+	defer func() { err = fsError("write_file", name, "", err) }()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -175,10 +177,12 @@ func (r *Root) WriteFile(ctx context.Context, name string, body []byte, replace 
 	}
 	tempPath := f.Name()
 	defer os.Remove(tempPath)
-	if _, err = f.Write(body); err == nil {
-		err = f.Sync()
+	_, err = f.Write(body)
+	err = fsError("write_file", path, "", err)
+	if err == nil {
+		err = fsError("sync_file", path, "", f.Sync())
 	}
-	err = errors.Join(err, f.Close())
+	err = errors.Join(err, fsError("close_file", path, "", f.Close()))
 	if err != nil {
 		return err
 	}

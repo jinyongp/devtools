@@ -239,7 +239,7 @@ Windows의 실행 근거는 Actions이며 실제 PC·WSL2 연계 한계는 [Wind
 
 게시 job은 준비된 `release-assets` artifact를 내려받아 태그를 생성하고,
 고정 SHA의 `releaseway/actions`로 immutable GitHub Release를 게시한다.
-현재 Releaseway pin과 적용한 기능, 게시 전에 해결할 업스트림 오류는
+현재 Releaseway pin과 적용한 기능, 업스트림 오류의 해결·검증 결과는
 [연동 업데이트 기록](releases/releaseway-upgrade.md)을 확인한다.
 같은 버전의 태그가 이미 있으면 동일 커밋인지 확인해 재사용하며, 다른 커밋의 태그는
 교체하지 않는다. 릴리즈 노트는 `notes: standard` 기본 템플릿으로

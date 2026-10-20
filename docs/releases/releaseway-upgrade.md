@@ -3,15 +3,15 @@
 기존 작업 `319d4a3`까지 로컬 main에 fast-forward 병합했다. 제품 소스와 기존 검증 SHA를
 보존하고 아래 릴리스 도구 변경을 main에서 진행했다. 실제 릴리스·tap·Pages 게시는 실행하지 않았다.
 
-**게시 전 해결할 문제:** 공개 `releaseway/actions v0.6.0`도 이 저장소의 릴리스 목록을
-읽다가 `spawnSync gh ENOBUFS`로 실패한다. 아래 소비자 업데이트만으로 실제 게시가
-준비됐다고 판단하지 않는다. 업스트림 수정이 포함된 공개 버전으로 pin을 바꾸고
-미리보기를 다시 통과해야 한다.
+**업스트림 오류 해결 확인:** 공개 `releaseway/actions v0.6.1`로 두 pin을 갱신했다.
+수정하지 않은 공개 bundle로 기존 실패 조건의 릴리스 노트 미리보기를 다시 실행해
+`state=preview`, 진단 `status=success`를 확인했다. 기존 `spawnSync gh ENOBUFS`는
+재현되지 않았다. 실제 게시·Homebrew 갱신·Pages 배포는 아직 실행하지 않았다.
 
 ## 반영한 변경
 
-- [Actions v0.6.0](https://github.com/releaseway/actions/releases/tag/v0.6.0)의
-  `804562f2eb9d7662810298835f7339bd6f26fcfa`로 게시 액션을 갱신했다.
+- [Actions v0.6.1](https://github.com/releaseway/actions/releases/tag/v0.6.1)의
+  `1b1d72999b59f03d334845f5accb982c38f4afe1`로 게시 액션을 갱신했다.
   새 `diagnostics-path` 출력은 성공·실패 후 `release-diagnostics` artifact로 보존한다.
   진단 업로드 실패는 게시 성공과 후속 Homebrew·Pages 실행을 막지 않는다.
   진단 파일이 없는 runner/filesystem 실패까지 기록을 보장하지는 않는다.
@@ -28,7 +28,28 @@
   추려 Node.js에 전달한다. 본문·자산 metadata로 subprocess 버퍼를 채우지 않으며
   실패·미게시 태그 제외와 기존 0.x breaking 변경의 minor 증가 정책을 유지한다.
 
-## 발견한 업스트림 문제와 준비한 패치
+## v0.6.1 재검증
+
+업스트림은 릴리스 목록과 PR 목록을 `gh --jq`에서 필요한 필드로 줄이고,
+릴리스 본문 조회도 불필요한 자산 metadata를 제외하도록 수정했다. JSON으로 이스케이프한
+본문을 수용하도록 CLI 출력 한도는 8MiB로 명시했다. 페이지 수와 잘못된 응답 검증은 유지한다.
+
+[v0.6.1 검증 기록](evidence/releaseway-v0.6.1-readonly.json)에 공개 bundle의 SHA-256과
+실제 미리보기·installer 검증 결과를 보존했다. Node 24.22.0에서 확인했다.
+
+- 기존 실패와 같은 `v0.28.0`, 원본 `3ca717a`, `notes: standard`로 실제 미리보기 성공.
+  `notes-state=prepared`, 원격 태그 일치와 진단 `operation=preview`, `status=success` 확인.
+- 같은 공개 Release의 installer 두 개를 새 배포 액션으로 준비해 commit, digest·크기,
+  저장소 script와의 byte 일치 확인.
+- 업스트림 GitHub adapter 회귀·계약·액션·진단·배포 테스트 49개 통과.
+  큰 응답, 페이지 경계, 잘못된 응답, 출력 한도, UTF-8 본문 보존 검사를 포함한다.
+- devtools 릴리스 테스트 10개와 변경한 두 workflow의 actionlint v1.7.12 통과.
+  별도 shellcheck·pyflakes는 실행하지 않았다.
+
+Homebrew Actions 최신 버전은 기존 pin의 v0.4.2여서 변경하지 않았다.
+아래 v0.6.0 제안 패치는 당시 조사 기록이며 현재 workflow에는 적용하지 않는다.
+
+## v0.6.0에서 발견한 업스트림 문제와 제안 패치
 
 [업스트림 GitHub API 구현](https://github.com/releaseway/actions/blob/804562f2eb9d7662810298835f7339bd6f26fcfa/src/github.ts)은
 `spawnSync`의 기본 1MiB 버퍼로 릴리스 목록 전체를 받는다. 실제 첫 페이지의 43개
@@ -44,7 +65,7 @@ subprocess의 허용 크기는 바꾸지 않는다. v0.6.0 원본에 `git apply 
 패치를 적용한 bundle은 같은 `v0.28.0`·원본 SHA·`notes: standard`로
 `state=preview`, 진단 `status=success`를 반환했다. 게시 동작은 수행하지 않았다.
 
-## 검증과 한계
+## 이전 v0.6.0 검증과 공통 한계
 
 [읽기 전용 근거](evidence/releaseway-v0.6.0-readonly.json)에 버전 SHA, installer digest와
 업스트림 오류·수정 검증을 기록했다.
@@ -70,6 +91,7 @@ v0.6.0의 `prepare`는 `strategy: source-tag`와 plan/resume/tag를 제공한다
 현재의 실제 게시된 안정 버전 기준과 0.x breaking 변경 정책을 보존해야 한다.
 따라서 이번에는 버전 계산·태그 생성 전체를 교체하지 않았다.
 
-업스트림의 전체 연동 예제에는 미공개 npm 입력과 교체할 placeholder SHA도 있다.
-devtools에는 npm 게시가 없으며 Homebrew의 기존 commit/version 연동은 호환된다.
+v0.6.1의 전체 연동 예제는 공개된 Actions v0.6.0·npm Actions v0.7.0·Homebrew v0.4.2의
+고정 SHA를 사용하도록 갱신됐다. devtools에는 npm 게시가 없으며 Homebrew의 기존
+commit/version 연동은 호환된다.
 Pages reusable workflow로 전체를 옮기는 대신 현재 배포 단계에 검증 step만 적용했다.

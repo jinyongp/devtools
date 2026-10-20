@@ -508,7 +508,7 @@ jobs:
         run: sh scripts/publish-release-tag.sh
       - name: Publish release
         id: publication
-        uses: releaseway/actions@804562f2eb9d7662810298835f7339bd6f26fcfa # v0.6.0
+        uses: releaseway/actions@1b1d72999b59f03d334845f5accb982c38f4afe1 # v0.6.1
         with:
           tag: ${{ needs.validate-release.outputs.tag }}
           commit: ${{ inputs.commit }}

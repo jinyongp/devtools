@@ -18,7 +18,9 @@ owned binary copy. Native update journals old/main/alias replacement and keeps
 mapped old images for later cleanup. It never automatically stops active daemons.
 
 Windows private config/data/cache/runtime use Known Folder LocalAppData/devtools,
-local NTFS, current-user+SYSTEM protected ACLs. Do not repair foreign ACLs or use
+local NTFS, protected ACLs for the current user and SYSTEM. In an AppContainer,
+creation and validation also grant its specific container SID; broad package
+permissions and other containers' SIDs are rejected. Do not repair foreign ACLs or use
 UNC/SMB/reparse/cloud-sync active private storage. Native and WSL stores, daemons,
 CAs and ownership are separate. Use encrypted profile transfer; no active process
 ownership migrates. WSL uses Linux tools/storage, including appendWindowsPath=false.
@@ -28,9 +30,10 @@ firewall or portproxy automatically; managed Win32 servers in WSL are unsupporte
 Protocol 8 adds diagnostics.paths.source, diagnostics.platform.isolation and safe
 storage details on failed issues. Read error.details for operation, resource,
 reason and an optional numeric os_error; raw paths and OS messages are excluded.
-Known Folder can select a separate sandbox store. Compare actual paths before
+Known Folders can select a separate sandbox store. Compare actual paths before
 interpreting an empty list as missing data. Access denied alone does not identify
-the exact ACL or sandbox rule. AppContainer storage creation remains unverified.
+the exact ACL or sandbox rule. AppContainer storage uses the same identity policy
+for directories, files and locks; this does not override host sandbox restrictions.
 Queries and diagnostics can create private lock directories/files.
 
 Read diagnostics.platform and its schema. Unknown interop does not imply failure

@@ -59,7 +59,8 @@ all `schema` responses also report the CLI protocol version. Keep `devtools.toml
 versionless: do not add `version` or `schema_version` fields to project configuration.
 Help returns text; completion returns a raw script; `command run` forwards the
 child's output and exit code. The shorter `run` form remains a supported alias.
-Devtools errors, including help errors, use JSON stderr; child errors stay raw.
+Devtools errors, including help errors, use JSON stderr. Child output is not wrapped
+in JSON and follows the execution's output-protection policy.
 Dashboard startup returns JSON with its login link in `data.item.url`, without
 an output-format option. Treat this link as a credential.
 

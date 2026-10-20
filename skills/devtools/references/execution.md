@@ -104,8 +104,8 @@ shell arguments containing spaces or shell syntax. Profile, env, port, and proxy
 names keep their separate identifier rules. Check `devtools schema command run`
 for the installed command-name contract; CLI and Skill updates are separate.
 On older protocol v5 builds such as v0.22.3, pass child arguments after an explicit separator:
-`devtools run --env local dev:docs -- --port 3000`. This form also works on v6/v7.
-For CLI protocol v6/v7/v8 (v6 begins at devtools v0.23.0), put all devtools options before the configured command name:
+`devtools run --env local dev:docs -- --port 3000`. This form also works on later protocols.
+From devtools v0.23.0 (protocol v6), put all devtools options before the configured command name:
 `devtools run --env local dev:docs --port 3000`. Every token after the name is a
 child argument, including `--env`, `--profile`, `--dir`, `--help`, and `-h`.
 Use `devtools run --help` for devtools help and `devtools run dev:docs --help`

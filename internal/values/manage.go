@@ -111,14 +111,14 @@ func (s Store) inspect(ctx context.Context, env string, exclusive bool) (Managed
 		release, gateErr = maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	}
 	if gateErr != nil {
-		return out, gateError(ctx)
+		return out, gateError(ctx, gateErr)
 	}
 	if ctx.Err() != nil {
 		release()
-		return out, canceledError()
+		return out, protocol.ContextError(ctx.Err())
 	}
 
-	info, statErr := os.Lstat(s.Directory)
+	_, statErr := os.Lstat(s.Directory)
 	if errors.Is(statErr, os.ErrNotExist) {
 		if !exclusive {
 			release()
@@ -126,11 +126,16 @@ func (s Store) inspect(ctx context.Context, env string, exclusive bool) (Managed
 		}
 		if err := privateDirectory(s.Directory); err != nil {
 			release()
-			return out, storageError()
+			return out, storageErrorAt("create_directory", err)
 		}
-	} else if statErr != nil || !platformfs.DirectoryPrivate(s.Directory, info) {
-		release()
-		return out, storageError()
+	} else {
+		if statErr == nil {
+			statErr = platformfs.CheckDirectory(s.Directory)
+		}
+		if statErr != nil {
+			release()
+			return out, storageErrorAt("check_directory", statErr)
+		}
 	}
 
 	key, keyErr := s.managementKey(exclusive)
@@ -140,7 +145,7 @@ func (s Store) inspect(ctx context.Context, env string, exclusive bool) (Managed
 	}
 	if keyErr != nil {
 		release()
-		return out, storageError()
+		return out, storageErrorAt("read_management_key", keyErr)
 	}
 	defer release()
 
@@ -176,21 +181,21 @@ func (s Store) Apply(ctx context.Context, c Change) (ChangeResult, *protocol.Err
 	}
 	release, e := maintenance.Acquire(ctx, maintenance.Root(s.Directory))
 	if e != nil {
-		return out, gateError(ctx)
+		return out, gateError(ctx, e)
 	}
 	defer release()
 	if e = privateDirectory(s.Directory); e != nil {
-		return out, storageError()
+		return out, storageErrorAt("create_directory", e)
 	}
 	key, e := s.managementKey(true)
 	if e != nil {
-		return out, storageError()
+		return out, storageErrorAt("read_management_key", e)
 	}
 	fingerprint := signed(key, c)
 	receiptPath := s.receiptRelative(c.RequestID)
 	previous, found, receiptErr := s.readReceipt(c.RequestID)
 	if receiptErr != nil {
-		return out, storageError()
+		return out, storageErrorAt("read_receipt", receiptErr)
 	}
 	if found {
 		if previous.Fingerprint != fingerprint {
@@ -271,22 +276,22 @@ func (s Store) Apply(ctx context.Context, c Change) (ChangeResult, *protocol.Err
 	out.Revision = signed(key, state)
 	data, e := json.Marshal(state)
 	if e != nil {
-		return out, storageError()
+		return out, storageErrorAt("encode_profile", e)
 	}
 	receipt, e := json.Marshal(changeReceipt{Fingerprint: fingerprint, Result: out})
 	if e != nil {
-		return out, storageError()
+		return out, storageErrorAt("encode_receipt", e)
 	}
 	if ctx.Err() != nil {
-		return out, canceledError()
+		return out, protocol.ContextError(ctx.Err())
 	}
 	files, e := profilekey.Replacement(s.Directory, s.Profile, "values", data)
 	if e != nil {
-		return out, storageError()
+		return out, storageErrorAt("prepare_replacement", e)
 	}
 	files[receiptPath] = receipt
 	if e = maintenance.Replace(maintenance.Root(s.Directory), files); e != nil {
-		return out, storageError()
+		return out, storageErrorAt("replace_profile", e)
 	}
 	return out, nil
 }

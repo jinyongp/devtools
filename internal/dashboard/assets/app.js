@@ -48,6 +48,29 @@ function rememberSession(value) {
     else sessionStorage.removeItem("devtools.session");
   } catch {}
 }
+function storageFailureDetails(input) {
+  if (!input || typeof input !== "object") return undefined;
+  const safe = {};
+  for (const key of ["domain", "operation", "resource", "reason", "os_error_domain"]) {
+    if (typeof input[key] === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(input[key])) safe[key] = input[key];
+  }
+  if (Number.isSafeInteger(input.os_error) && input.os_error > 0) safe.os_error = input.os_error;
+  return Object.keys(safe).length ? safe : undefined;
+}
+function storageFailureMessage(details) {
+  if (!details?.reason || details.reason === "unknown") return "";
+  const reason = {
+    access_denied:"access denied", not_found:"storage item missing", already_exists:"storage item already exists",
+    sharing_violation:"storage item in use", disk_full:"disk full", read_only:"read-only storage",
+    path_too_long:"path too long", invalid_path:"unsupported path", unsupported_filesystem:"unsupported filesystem",
+    owner_mismatch:"storage owner mismatch", inheritance_enabled:"storage permissions inherited",
+    unexpected_acl:"unexpected storage permissions", public_permissions:"storage permissions too broad",
+    invalid_storage:"stored data failed validation",
+  }[details.reason] || "storage validation failed";
+  const operation = details.operation ? details.operation.replaceAll("_", " ") : "storage access";
+  const os = details.os_error ? `; ${details.os_error_domain === "win32" ? "Windows error" : "OS error"} ${details.os_error}` : "";
+  return ` ${operation}: ${reason}${os}.`;
+}
 async function api(path, body, signal, track = true) {
   const readVersion = generation, readDetailVersion = detailGeneration;
   if (!sessionToken) throw Error("Open the full link printed by devtools dashboard to connect this tab.");
@@ -66,14 +89,16 @@ async function api(path, body, signal, track = true) {
   }
   if (!response.ok) {
     let message = await response.text();
-    let code;
+    let code, details;
     try {
       const failure = JSON.parse(message).error;
       message = failure.message; code = failure.code;
+      details = storageFailureDetails(failure.details);
+      message += storageFailureMessage(details);
       const related = failure.details?.related || [];
       if (related.length) message += " " + related.map(item => `${item.title}: ${(item.blockers || []).map(blocker => `${blocker.title || ""} ${blocker.message || ""}`).join(" ")}`).join(" ");
     } catch {}
-    const error = Error(message); error.responded = true; error.code = code; throw error;
+    const error = Error(message); error.responded = true; error.code = code; error.details = details; throw error;
   }
   const data = await response.json();
   if (track && body === undefined && generation === readVersion && detailGeneration === readDetailVersion) rememberRefreshRead(path, data);

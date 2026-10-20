@@ -63,7 +63,8 @@ An existing external `dvt` is preserved and reported as `skipped_conflict`.
 - **Policy blocks execution:** follow your organization's PowerShell policy. The
   installer does not change execution policy or shell profiles.
 - **Storage rejected:** keep private data on local NTFS with permissions for the
-  current user and SYSTEM. Network shares and cloud-synced storage are unsupported.
+  current user and SYSTEM; an AppContainer also needs its own container SID.
+  Network shares and cloud-synced storage are unsupported.
 
 <a id="지원과-검증-범위"></a>
 
@@ -86,7 +87,24 @@ success does not establish actual-PC coverage for every supported OS/CPU combina
 
 Config, data, cache, and runtime directories are separate under LocalAppData's
 `devtools` directory. Private storage requires local NTFS with access restricted to
-the current user and SYSTEM. Unsupported ACLs are not repaired automatically.
+the current user and SYSTEM. Inside an AppContainer, the private storage policy
+also grants access to that process's specific container SID. Creation and ACL
+validation use the same identity policy for directories, files and locks; broad
+application-package grants and other containers' SIDs are rejected. Known Folders
+may select an AppContainer's separate LocalAppData directory, so its storage can
+differ from an ordinary PowerShell session. This storage behavior does not imply
+that the sandbox permits every command or external resource.
+Unsupported ACLs, including existing objects created with a different identity
+policy, are not repaired automatically.
+For paths inside the container's OS-selected LocalAppData, ancestor pinning starts
+at that Known Folder. Its resolved handle must match the selected path; every
+component below it is pinned and checked for reparse points. The owning host user
+and SYSTEM remain trusted. File containment compares normalized NT device paths,
+including volume identity, without requiring DOS drive-letter translation.
+Paths outside this boundary and ordinary processes
+retain the drive-root traversal. Access denial never causes a traversal check to
+be skipped. Explicit isolated roots use this same boundary policy during path
+resolution, without creating directories or changing the environment.
 UNC/SMB, device paths, alternate data streams, reparse points/symlinks, and cloud-synced
 folders are unsupported for active private storage. In the current var/sec source,
 secret values use local encryption with user DPAPI protection; public variables and

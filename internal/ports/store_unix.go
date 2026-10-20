@@ -19,8 +19,8 @@ import (
 
 func (s Store) lock(ctx context.Context, name string, wait bool, create bool) (io.Closer, *protocol.Error) {
 	if create {
-		if os.MkdirAll(s.Directory, 0700) != nil {
-			return nil, storageError()
+		if err := os.MkdirAll(s.Directory, 0700); err != nil {
+			return nil, storageError(err)
 		}
 	}
 	i, e := os.Lstat(s.Directory)
@@ -39,7 +39,7 @@ func (s Store) lock(ctx context.Context, name string, wait bool, create bool) (i
 		return nil, nil
 	}
 	if e != nil {
-		return nil, storageError()
+		return nil, storageError(e)
 	}
 	if !private(f) {
 		f.Close()
@@ -48,7 +48,7 @@ func (s Store) lock(ctx context.Context, name string, wait bool, create bool) (i
 	for {
 		if ctx.Err() != nil {
 			f.Close()
-			return nil, protocol.NewError("canceled", "Execution canceled.", 130, nil)
+			return nil, protocol.ContextError(ctx.Err())
 		}
 		e = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		if e == nil {
@@ -56,7 +56,7 @@ func (s Store) lock(ctx context.Context, name string, wait bool, create bool) (i
 		}
 		if !errors.Is(e, syscall.EWOULDBLOCK) && !errors.Is(e, syscall.EINTR) {
 			f.Close()
-			return nil, storageError()
+			return nil, storageError(e)
 		}
 		if !wait {
 			f.Close()

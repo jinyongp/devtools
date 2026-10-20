@@ -208,8 +208,8 @@ func TestMaintenanceGateCancellationAcrossTaskAPIs(t *testing.T) {
 		defer cancel()
 		started := time.Now()
 		apiErr := call(ctx)
-		if apiErr == nil || apiErr.Code != "canceled" || apiErr.ExitCode != 130 {
-			t.Fatalf("%s: expected canceled, got %v", name, apiErr)
+		if apiErr == nil || apiErr.Code != "deadline_exceeded" || apiErr.ExitCode != 3 {
+			t.Fatalf("%s: expected deadline_exceeded, got %v", name, apiErr)
 		}
 		if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
 			t.Fatalf("%s: cancellation waited too long: %v", name, elapsed)

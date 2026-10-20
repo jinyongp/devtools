@@ -25,6 +25,14 @@ ownership migrates. WSL uses Linux tools/storage, including appendWindowsPath=fa
 Only explicit .exe lookup selects Windows tools. Never modify WSLENV, WSL config,
 firewall or portproxy automatically; managed Win32 servers in WSL are unsupported.
 
+Protocol 8 adds diagnostics.paths.source, diagnostics.platform.isolation and safe
+storage details on failed issues. Read error.details for operation, resource,
+reason and an optional numeric os_error; raw paths and OS messages are excluded.
+Known Folder can select a separate sandbox store. Compare actual paths before
+interpreting an empty list as missing data. Access denied alone does not identify
+the exact ACL or sandbox rule. AppContainer storage creation remains unverified.
+Queries and diagnostics can create private lock directories/files.
+
 Read diagnostics.platform and its schema. Unknown interop does not imply failure
 or availability; diagnosis never executes Windows children. Linux trust does not
 establish Windows browser trust. Export only the public CA, verify its fingerprint,

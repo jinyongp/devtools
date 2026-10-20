@@ -14,6 +14,7 @@ import (
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/storageerr"
 )
 
 type Receipt struct {
@@ -41,19 +42,27 @@ type Store struct {
 func (s Store) path() string {
 	return profilekey.CanonicalPath(s.Directory, s.Profile)
 }
-func storageError() *protocol.Error {
-	return protocol.NewError("storage_error", "Cannot access private task storage.", 1, nil)
-}
-
-func canceledError() *protocol.Error {
-	return protocol.NewError("canceled", "Request canceled.", 130, nil)
-}
-
-func gateError(ctx context.Context) *protocol.Error {
-	if ctx.Err() != nil {
-		return canceledError()
+func storageError(causes ...error) *protocol.Error {
+	var cause error
+	if len(causes) != 0 {
+		cause = causes[0]
 	}
-	return storageError()
+	return storageErrorAt("access_storage", "task_store", cause)
+}
+
+func storageErrorAt(operation, resource string, cause error) *protocol.Error {
+	return protocol.WithStorageDetails(protocol.NewError("storage_error", "Cannot access private task storage.", 1, nil), "tasks", operation, resource, cause)
+}
+
+func corruptStorage(operation, resource string) *protocol.Error {
+	return storageErrorAt(operation, resource, storageerr.ErrCorrupt)
+}
+
+func gateError(ctx context.Context, cause error) *protocol.Error {
+	if e := protocol.ContextError(ctx.Err()); e != nil {
+		return e
+	}
+	return storageErrorAt("acquire_lock", "task_store", cause)
 }
 
 func ReadPrivate(path string, v any) error {
@@ -68,10 +77,10 @@ func ReadPrivate(path string, v any) error {
 	d := json.NewDecoder(f)
 	d.DisallowUnknownFields()
 	if e := d.Decode(v); e != nil {
-		return e
+		return storageerr.Decode("decode_document", "private_document", e)
 	}
 	if e := d.Decode(new(any)); e != io.EOF {
-		return errors.New("expected one stored document")
+		return storageerr.Wrap("decode_document", "private_document", "invalid_storage", errors.New("expected one stored document"))
 	}
 	return nil
 }
@@ -95,10 +104,10 @@ func (s Store) emptyJournal() *Journal {
 func (s Store) loadPath(path string) (*Journal, *State, *protocol.Error) {
 	j := s.emptyJournal()
 	if e := ReadPrivate(path, j); e != nil {
-		return nil, nil, storageError()
+		return nil, nil, storageErrorAt("read_journal", "task_journal", e)
 	}
 	if j.Profile != s.Profile || j.Receipts == nil || j.Contexts == nil {
-		return nil, nil, storageError()
+		return nil, nil, storageErrorAt("validate_journal", "task_journal", storageerr.ErrCorrupt)
 	}
 	state, err := replayJournal(j)
 	return j, state, err
@@ -125,7 +134,7 @@ func (s Store) loadResolved() (*Journal, *State, taskStorageInfo, *protocol.Erro
 		journal, state, err := s.loadPath(info.Profile.CanonicalPath)
 		return journal, state, info, err
 	default:
-		return nil, nil, info, storageError()
+		return nil, nil, info, corruptStorage("resolve_profile", "task_store")
 	}
 }
 
@@ -145,7 +154,7 @@ func safeApply(s *State, e Event) (err error) {
 func (s Store) Read(ctx context.Context) (*State, *protocol.Error) {
 	release, e := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	if e != nil {
-		return nil, gateError(ctx)
+		return nil, gateError(ctx, e)
 	}
 	defer release()
 	return s.ReadHeld(ctx)
@@ -155,11 +164,11 @@ func (s Store) Read(ctx context.Context) (*State, *protocol.Error) {
 // the profile shared lock needed by correctness-bearing task reads.
 func (s Store) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
 	if ctx.Err() != nil {
-		return nil, canceledError()
+		return nil, protocol.ContextError(ctx.Err())
 	}
 	release, e := LockShared(ctx, s.path()+".lock")
 	if e != nil {
-		return nil, gateError(ctx)
+		return nil, gateError(ctx, e)
 	}
 	defer release()
 	return s.loadHistory()
@@ -168,7 +177,7 @@ func (s Store) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
 func (s Store) ReadCurrent(ctx context.Context) (*State, *protocol.Error) {
 	release, e := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	if e != nil {
-		return nil, gateError(ctx)
+		return nil, gateError(ctx, e)
 	}
 	defer release()
 	return s.ReadCurrentHeld(ctx)
@@ -179,11 +188,11 @@ func (s Store) ReadCurrent(ctx context.Context) (*State, *protocol.Error) {
 // materializes only compact current state plus the bounded WAL tail.
 func (s Store) ReadCurrentHeld(ctx context.Context) (*State, *protocol.Error) {
 	if ctx.Err() != nil {
-		return nil, canceledError()
+		return nil, protocol.ContextError(ctx.Err())
 	}
 	release, e := LockShared(ctx, s.path()+".lock")
 	if e != nil {
-		return nil, gateError(ctx)
+		return nil, gateError(ctx, e)
 	}
 	defer release()
 	return s.loadCurrent()
@@ -213,12 +222,12 @@ func (s Store) CompletionIDs(kind, workstream string) ([]string, *protocol.Error
 func (s Store) Profiles(ctx context.Context) ([]string, *protocol.Error) {
 	release, gateErr := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	if gateErr != nil {
-		return nil, gateError(ctx)
+		return nil, gateError(ctx, gateErr)
 	}
 	defer release()
 	items, err := profilekey.Enumerate(s.Directory, "tasks")
 	if err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("enumerate_profiles", "task_store", err)
 	}
 	return items, nil
 }
@@ -243,7 +252,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		releaseGate, gateErr = maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	}
 	if gateErr != nil {
-		return nil, gateError(ctx)
+		return nil, gateError(ctx, gateErr)
 	}
 	defer func() {
 		if releaseGate != nil {
@@ -293,7 +302,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	if r.Action == "workstream.edited" && r.Options["dry-run"] == "true" {
 		profileRelease, lockErr := LockShared(ctx, s.path()+".lock")
 		if lockErr != nil {
-			return nil, gateError(ctx)
+			return nil, gateError(ctx, lockErr)
 		}
 		defer profileRelease()
 		state, e := s.loadCurrent()
@@ -326,10 +335,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	}
 	releaseProfile, e := LockExclusive(ctx, s.path()+".lock")
 	if e != nil {
-		if ctx.Err() != nil {
-			return nil, canceledError()
-		}
-		return nil, storageError()
+		return nil, gateError(ctx, e)
 	}
 	defer func() {
 		if releaseProfile != nil {
@@ -337,7 +343,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		}
 	}()
 	if orphanErr := s.CollectOrphanGenerationsHeld(); orphanErr != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("collect_orphans", "task_store", orphanErr)
 	}
 	probed, probeErr := s.resolveStorage()
 	if probeErr != nil {
@@ -356,10 +362,10 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 			startOffset = snapshot.WALOffset
 		}
 		if prepareErr := prepareWALForMutationAtOffset(*probed.V3, startOffset); prepareErr != nil {
-			return nil, storageError()
+			return nil, storageErrorAt("prepare_wal", "task_wal", prepareErr)
 		}
 		if recoverErr := recoverPendingV3AtOffset(*probed.V3, startOffset); recoverErr != nil {
-			return nil, storageError()
+			return nil, storageErrorAt("recover_pending", "task_wal", recoverErr)
 		}
 	}
 	var (
@@ -372,11 +378,11 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		storage = probed
 		current, needsCheckpoint, currentErr := loadMutationV3Snapshot(*probed.V3, snapshot, snapshotState, snapshotErr)
 		if currentErr != nil {
-			return nil, storageError()
+			return nil, storageErrorAt("load_current", "task_wal", currentErr)
 		}
 		if needsCheckpoint {
 			if checkpointErr := checkpointV3(*probed.V3, current); checkpointErr != nil {
-				return nil, storageError()
+				return nil, storageErrorAt("checkpoint", "task_store", checkpointErr)
 			}
 		}
 		state = current
@@ -412,7 +418,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 			contextHash := hash(token)
 			payload, exists, readErr := readCommittedContext(*storage.V3, contextHash)
 			if readErr != nil {
-				return nil, storageError()
+				return nil, storageErrorAt("read_context", "task_context", readErr)
 			}
 			if exists {
 				contextRunID = payload.RunID
@@ -426,7 +432,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		}
 		old, exists, readErr := readCommittedReceipt(*storage.V3, r.Options["request-id"])
 		if readErr != nil {
-			return nil, storageError()
+			return nil, storageErrorAt("read_receipt", "task_receipt", readErr)
 		}
 		if exists {
 			if old.Fingerprint != fingerprint || contextUsed && old.ContextHash != hash(token) {
@@ -506,7 +512,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		return nil, prepared.noChangeFailure(r, s.Profile)
 	}
 	if ctx.Err() != nil {
-		return nil, canceledError()
+		return nil, protocol.ContextError(ctx.Err())
 	}
 	previousRevision := state.Revision
 	before := state.clone()
@@ -588,12 +594,12 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	}
 	if storage.V3 != nil {
 		if err := commitActiveV3(*storage.V3, state, committedEvents, previousRevision, r.Options["request-id"], fingerprint, contextHash, result, newContexts, s.commitV3); err != nil {
-			return nil, storageError()
+			return nil, storageErrorAt("commit_wal", "task_wal", err)
 		}
 		return result, nil
 	}
 	if err := s.migrateToV3(j, state, storage, previousRevision, r.Options["request-id"], triggerContextHash); err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("migrate_storage", "task_store", err)
 	}
 	return result, nil
 }
@@ -640,12 +646,12 @@ func normalizeReceipt(result Object, state *State) (Object, *protocol.Error) {
 
 func snapshotAt(state *State, revision int) (*State, *protocol.Error) {
 	if revision < 0 || revision > state.Revision {
-		return nil, storageError()
+		return nil, corruptStorage("validate_revision", "task_journal")
 	}
 	out := NewState()
 	for _, event := range state.Events[:revision] {
 		if safeApply(out, event) != nil {
-			return nil, storageError()
+			return nil, corruptStorage("replay_event", "task_journal")
 		}
 	}
 	return out, nil

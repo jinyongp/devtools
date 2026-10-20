@@ -10,7 +10,8 @@ import (
 
 // RemoveFile validates the private leaf and keeps its parent chain pinned until
 // deletion and directory synchronization complete. It never removes directories.
-func (r *Root) RemoveFile(ctx context.Context, name string) error {
+func (r *Root) RemoveFile(ctx context.Context, name string) (err error) {
+	defer func() { err = fsError("remove_file", name, "", err) }()
 	if err := ctx.Err(); err != nil {
 		return err
 	}

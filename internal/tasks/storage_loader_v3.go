@@ -8,6 +8,7 @@ import (
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/storageerr"
 )
 
 type taskStorageInfo struct {
@@ -58,38 +59,41 @@ func (s Store) journalFromV3Scan(resolution v3Resolution, scan walScan) (*Journa
 	expectedRevision := 0
 	for _, frame := range scan.Frames {
 		if frame.Meta.PreviousRevision != expectedRevision {
-			return nil, storageError()
+			return nil, storageErrorAt("validate_wal_revision", "task_wal", storageerr.ErrCorrupt)
 		}
 		receipt, hasReceipt, receiptErr := readFrameReceipt(resolution, frame)
 		if receiptErr != nil {
-			return nil, storageError()
+			return nil, storageErrorAt("validate_receipt", "task_receipt", receiptErr)
 		}
 		for _, event := range frame.Events {
 			if safeApplyEventSequence(journal.Events, event) != nil {
-				return nil, storageError()
+				return nil, storageErrorAt("validate_event_sequence", "task_wal", storageerr.ErrCorrupt)
 			}
 			journal.Events = append(journal.Events, event)
 		}
 		if hasReceipt {
 			if _, duplicate := journal.Receipts[receipt.RequestID]; duplicate {
-				return nil, storageError()
+				return nil, storageErrorAt("validate_receipt", "task_receipt", storageerr.ErrCorrupt)
 			}
 			journal.Receipts[receipt.RequestID] = Receipt{Fingerprint: receipt.Fingerprint, ContextHash: receipt.ContextHash, Result: copyObject(receipt.Result)}
 		}
 		for _, ref := range frame.Contexts {
 			payload, exists, err := readCommittedContext(resolution, ref.Key)
 			if err != nil || !exists || payload.PayloadDigest != ref.PayloadDigest || payload.FrameDigest != frame.Digest {
-				return nil, storageError()
+				if err == nil {
+					err = storageerr.ErrCorrupt
+				}
+				return nil, storageErrorAt("validate_context", "task_context", err)
 			}
 			if existing, duplicate := journal.Contexts[payload.ContextHash]; duplicate && existing != payload.RunID {
-				return nil, storageError()
+				return nil, storageErrorAt("validate_context", "task_context", storageerr.ErrCorrupt)
 			}
 			journal.Contexts[payload.ContextHash] = payload.RunID
 		}
 		expectedRevision = frame.Meta.FinalRevision
 	}
 	if len(journal.Events) != expectedRevision {
-		return nil, storageError()
+		return nil, storageErrorAt("validate_wal_revision", "task_wal", storageerr.ErrCorrupt)
 	}
 	journal.Version = logicalVersionFromEvents(journal.Events)
 	return journal, nil
@@ -98,7 +102,7 @@ func (s Store) journalFromV3Scan(resolution v3Resolution, scan walScan) (*Journa
 func (s Store) loadJournalV3(resolution v3Resolution) (*Journal, *protocol.Error) {
 	scan, err := scanWAL(resolution.WAL, 0, true)
 	if err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("read_wal", "task_wal", err)
 	}
 	return s.journalFromV3Scan(resolution, scan)
 }
@@ -106,7 +110,7 @@ func (s Store) loadJournalV3(resolution v3Resolution) (*Journal, *protocol.Error
 func (s Store) loadJournalV3ForExport(resolution v3Resolution) (*Journal, *protocol.Error) {
 	scan, err := scanWAL(resolution.WAL, 0, true)
 	if err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("read_wal", "task_wal", err)
 	}
 	journal, journalErr := s.journalFromV3Scan(resolution, scan)
 	if journalErr != nil {
@@ -134,7 +138,7 @@ func (s Store) loadJournalV3ForExport(resolution v3Resolution) (*Journal, *proto
 	}
 	state, replayErr := replayJournal(journal)
 	if replayErr != nil || state.Revision != len(journal.Events) {
-		return nil, storageError()
+		return nil, corruptStorage("validate_replay", "task_wal")
 	}
 	return journal, nil
 }
@@ -149,7 +153,7 @@ func (s Store) loadV3(resolution v3Resolution) (*Journal, *State, *protocol.Erro
 		return nil, nil, replayErr
 	}
 	if state.Revision != len(journal.Events) {
-		return nil, nil, storageError()
+		return nil, nil, corruptStorage("validate_replay", "task_wal")
 	}
 	return journal, state, nil
 }
@@ -166,22 +170,25 @@ func (s Store) resolveStorage() (taskStorageInfo, *protocol.Error) {
 	if !project.ValidProfile(s.Profile) {
 		return info, failure("invalid_argument", "Invalid profile.")
 	}
-	stat, err := os.Lstat(s.Directory)
+	_, err := os.Lstat(s.Directory)
 	if errors.Is(err, os.ErrNotExist) {
 		return info, nil
 	}
-	if err != nil || !platformfs.DirectoryPrivate(s.Directory, stat) {
-		return info, storageError()
+	if err != nil {
+		return info, storageErrorAt("inspect_directory", "task_store", err)
+	}
+	if err := platformfs.CheckDirectory(s.Directory); err != nil {
+		return info, storageErrorAt("check_directory", "task_store", err)
 	}
 	resolution, err := profilekey.Resolve(s.Directory, s.Profile, "tasks")
 	if err != nil {
-		return info, storageError()
+		return info, storageErrorAt("resolve_profile", "task_store", err)
 	}
 	info.Profile = resolution
 	if resolution.Mode == profilekey.ModeCanonical {
 		v3, isV3, err := resolveV3(s.Directory, s.Profile)
 		if err != nil {
-			return info, storageError()
+			return info, storageErrorAt("resolve_generation", "task_store", err)
 		}
 		if isV3 {
 			info.V3 = &v3

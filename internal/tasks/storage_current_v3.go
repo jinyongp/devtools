@@ -124,7 +124,7 @@ func (s Store) loadCurrentResolved() (*State, taskStorageInfo, *protocol.Error) 
 	if info.V3 != nil {
 		state, err := loadCurrentV3(*info.V3)
 		if err != nil {
-			return nil, info, storageError()
+			return nil, info, storageErrorAt("load_current", "task_wal", err)
 		}
 		return state, info, nil
 	}
@@ -228,7 +228,7 @@ func (s Store) loadHistory() (*State, *protocol.Error) {
 	if info.V3 != nil {
 		state, err := loadHistoryV3(*info.V3)
 		if err != nil {
-			return nil, storageError()
+			return nil, storageErrorAt("load_history", "task_wal", err)
 		}
 		return state, nil
 	}

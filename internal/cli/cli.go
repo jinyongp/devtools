@@ -177,7 +177,7 @@ func (a *App) inspect(ctx context.Context, streams IO, request Request) (any, *p
 	}
 	dirs, pathErr := a.currentPaths()
 	if pathErr != nil {
-		return nil, protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil)
+		return nil, directoryError(pathErr)
 	}
 	return struct {
 		Item  project.Context   `json:"item"`
@@ -288,7 +288,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	if root != "" {
 		dirs, err := paths.Isolated(root)
 		if err != nil {
-			return fail(argumentError("Cannot resolve isolation root.", "isolated-root"))
+			return fail(protocol.WithStorageDetails(argumentError("Cannot resolve isolation root.", "isolated-root"), "paths", "resolve_isolation_root", "isolated_root", err))
 		}
 		oldRoot, oldDirectory := a.isolatedRoot, a.dataDirectory
 		a.isolatedRoot = dirs.IsolatedRoot

@@ -329,8 +329,8 @@ func TestApplyCanceledWhileWaitingForOperationsLock(t *testing.T) {
 	defer cancel()
 	request := tasks.ID()
 	_, failure := s.Apply(ctx, Request{Action: "stop", ID: tasks.ID(), RequestID: request})
-	if failure == nil || failure.Code != "canceled" || failure.ExitCode != 130 {
-		t.Fatalf("lock cancellation became storage failure: %v", failure)
+	if failure == nil || failure.Code != "deadline_exceeded" || failure.ExitCode != 3 {
+		t.Fatalf("lock deadline lost: %v", failure)
 	}
 	if _, err := os.Stat(filepath.Join(s.root(), "receipts", request+".json")); !os.IsNotExist(err) {
 		t.Fatalf("canceled operation wrote receipt: %v", err)

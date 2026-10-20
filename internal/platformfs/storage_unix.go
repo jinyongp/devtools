@@ -24,7 +24,7 @@ func CheckFile(f *os.File) error {
 		return err
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-		return ErrUnsafe
+		return securityError(false, "public_or_non_regular_file", ErrUnsafe)
 	}
 	return nil
 }
@@ -34,7 +34,7 @@ func CheckDirectory(path string) error {
 		return err
 	}
 	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-		return ErrUnsafe
+		return securityError(true, "public_or_non_directory", ErrUnsafe)
 	}
 	return nil
 }

@@ -18,7 +18,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/archiveproof"
@@ -172,20 +171,18 @@ func failure(code string) *protocol.Error {
 	}
 	return protocol.NewError(code, "Process operation could not satisfy the requested condition.", exit, nil)
 }
-func storageError() *protocol.Error {
-	return protocol.NewError("io_error", "Cannot access private process storage.", 1, nil)
+func storageError(causes ...error) *protocol.Error {
+	var cause error
+	if len(causes) != 0 {
+		cause = causes[0]
+	}
+	return protocol.WithStorageDetails(protocol.NewError("io_error", "Cannot access private process storage.", 1, nil), "services", "access_storage", "process_store", cause)
 }
 
 // Safe failure metadata retains the operation and numeric OS error without
 // exposing a path, record, argv, or control credential.
 func storageErrorAt(operation string, cause error) *protocol.Error {
-	failure := storageError()
-	failure.Details = map[string]any{"operation": operation}
-	var code syscall.Errno
-	if errors.As(cause, &code) {
-		failure.Details["os_error"] = uint64(code)
-	}
-	return failure
+	return protocol.WithStorageDetails(protocol.NewError("io_error", "Cannot access private process storage.", 1, nil), "services", operation, "process_store", cause)
 }
 func validID(s string) bool {
 	b, e := hex.DecodeString(strings.ReplaceAll(s, "-", ""))
@@ -275,7 +272,7 @@ func (s Store) inspectLocal(id string) (storedExecution, *protocol.Error) {
 func (s Store) legacyProofs(ids []string) (map[string]archiveproof.Proof, *protocol.Error) {
 	proofs, err := archiveproof.CompletedProcesses(s.Data, ids)
 	if err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("read_archive_proof", err)
 	}
 	return proofs, nil
 }
@@ -448,7 +445,7 @@ func (s Store) WriteArchiveMarker(record Record, archiveID string, archivedAt ti
 		return nil
 	}
 	if err := writePrivate(s.path(record.ID, "record.archive.json"), marker); err != nil {
-		return storageError()
+		return storageErrorAt("write_archive_marker", err)
 	}
 	return nil
 }
@@ -474,11 +471,11 @@ func (s Store) RemoveArchiveMarker(id, archiveID string) *protocol.Error {
 			return failure("revision_conflict")
 		}
 	} else if !errors.Is(recordErr, os.ErrNotExist) {
-		return storageError()
+		return storageErrorAt("read_execution_record", recordErr)
 	}
 	path := s.path(id, "record.archive.json")
 	if removeErr := removePrivateImage(context.Background(), path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-		return storageError()
+		return storageErrorAt("remove_archive_marker", removeErr)
 	}
 
 	return nil
@@ -694,7 +691,7 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	unlock, e := tasks.Lock(ctx, filepath.Join(s.root(), "operations.lock"))
 	if e != nil {
 		if ctx.Err() != nil {
-			return out, failure("canceled")
+			return out, protocol.ContextError(ctx.Err())
 		}
 		return out, storageErrorAt("lock_process_operation", e)
 	}
@@ -1021,7 +1018,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 	}
 	exe, err := os.Executable()
 	if err != nil {
-		return out, storageError()
+		return out, storageErrorAt("resolve_executable", err)
 	}
 	lease, launchErr := s.prepareLaunch(r, q.Network)
 	if launchErr != nil {
@@ -1038,7 +1035,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		channel, err = newLauncherInputChannel(ctx, cmd)
 		if err != nil {
 			lease.unlockClose()
-			return out, storageError()
+			return out, storageErrorAt("create_launcher_channel", err)
 		}
 		defer channel.close()
 	}
@@ -1056,7 +1053,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 		writeErr := writePrivate(s.path(r.ID, "record.json"), r)
 		leaseErr := lease.unlockClose()
 		if writeErr != nil || leaseErr != nil {
-			return Result{Item: r, Changed: true}, storageError()
+			return Result{Item: r, Changed: true}, storageErrorAt("finalize_launch", errors.Join(writeErr, leaseErr))
 		}
 		return Result{Item: r, Changed: true}, nil
 	}
@@ -1086,8 +1083,8 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 			return Result{Item: r}, handoffErr
 		}
 		r.LaunchPhase = "admitted"
-		if writePrivate(s.path(r.ID, "record.json"), r) != nil {
-			return Result{Item: r}, storageError()
+		if err := writePrivate(s.path(r.ID, "record.json"), r); err != nil {
+			return Result{Item: r}, storageErrorAt("write_execution_record", err)
 		}
 		changed := false
 		if q.stopPrevious != nil {
@@ -1097,8 +1094,8 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 			changed = true
 		}
 		r.LaunchPhase = "committed"
-		if writePrivate(s.path(r.ID, "record.json"), r) != nil {
-			return Result{Item: r, Changed: changed}, storageError()
+		if err := writePrivate(s.path(r.ID, "record.json"), r); err != nil {
+			return Result{Item: r, Changed: changed}, storageErrorAt("write_execution_record", err)
 		}
 		if e := channel.commit(); e != nil {
 			return Result{Item: r, Changed: changed}, e

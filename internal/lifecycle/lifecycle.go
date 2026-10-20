@@ -115,8 +115,8 @@ func fail(code, message string, exit int, details map[string]any) *protocol.Erro
 	return protocol.NewError(code, message, exit, details)
 }
 
-func storageError() *protocol.Error {
-	return fail("io_error", "Cannot access project lifecycle operation storage.", 1, nil)
+func storageError(cause error) *protocol.Error {
+	return protocol.WithStorageDetails(fail("io_error", "Cannot access project lifecycle operation storage.", 1, nil), "lifecycle", "access_storage", "lifecycle_store", cause)
 }
 
 func fingerprint(request Request) string {
@@ -215,10 +215,10 @@ func (m Manager) readReceipt(id string) (receipt, error) {
 
 func writeReceipt(path string, value receipt) *protocol.Error {
 	if err := tasks.PrivateDir(filepath.Dir(path)); err != nil {
-		return storageError()
+		return storageError(err)
 	}
 	if err := tasks.WritePrivate(path, value); err != nil {
-		return storageError()
+		return storageError(err)
 	}
 	return nil
 }
@@ -673,17 +673,17 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 	requestUnlock, err := tasks.Lock(ctx, m.requestLock(request.RequestID))
 	if err != nil {
 		if ctx.Err() != nil {
-			return Result{}, fail("canceled", "Project lifecycle operation was canceled.", 130, nil)
+			return Result{}, protocol.ContextError(ctx.Err())
 		}
-		return Result{}, storageError()
+		return Result{}, storageError(err)
 	}
 	defer requestUnlock()
 	projectUnlock, err := tasks.Lock(ctx, m.projectLock(request.Project))
 	if err != nil {
 		if ctx.Err() != nil {
-			return Result{}, fail("canceled", "Project lifecycle operation was canceled.", 130, nil)
+			return Result{}, protocol.ContextError(ctx.Err())
 		}
-		return Result{}, storageError()
+		return Result{}, storageError(err)
 	}
 	defer projectUnlock()
 
@@ -696,7 +696,7 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 			return Result{}, fail("request_conflict", "The request ID was already used with different project lifecycle input.", 3, nil)
 		}
 	} else if !errors.Is(readErr, os.ErrNotExist) {
-		return Result{}, storageError()
+		return Result{}, storageError(readErr)
 	} else {
 		var initErr *protocol.Error
 		switch request.Action {

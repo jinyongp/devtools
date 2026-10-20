@@ -14,6 +14,7 @@ import (
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/project"
+	"github.com/jinyongp/devtools/internal/storageerr"
 )
 
 const (
@@ -90,14 +91,7 @@ func MarkerBytes(profile string) ([]byte, error) {
 }
 
 func privateDirectory(path string) error {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return err
-	}
-	if !platformfs.DirectoryPrivate(path, info) {
-		return errors.New("private directory required")
-	}
-	return nil
+	return platformfs.CheckDirectory(path)
 }
 
 func privateFile(path string) (*platformfs.File, error) {
@@ -107,7 +101,7 @@ func privateFile(path string) (*platformfs.File, error) {
 	}
 	if err := platformfs.CheckFile(file.File); err != nil {
 		_ = file.Close()
-		return nil, errors.New("private file required")
+		return nil, err
 	}
 	return file, nil
 }
@@ -153,11 +147,11 @@ func ReadIdentity(directory, profile, domain string) (bool, error) {
 	decoder.DisallowUnknownFields()
 	var identity Identity
 	if err := decoder.Decode(&identity); err != nil || decoder.Decode(new(any)) != io.EOF {
-		return false, errors.New("invalid profile identity")
+		return false, storageerr.Wrap("validate_profile_identity", "private_document", "invalid_storage", errors.New("invalid profile identity"))
 	}
 	expected := Key(profile)
 	if identity.Version != Version || identity.Key != expected || identity.Profile != profile || identity.Domain != domain {
-		return false, errors.New("profile identity mismatch")
+		return false, storageerr.Wrap("validate_profile_identity", "private_document", "invalid_storage", errors.New("profile identity mismatch"))
 	}
 	return true, nil
 }
@@ -187,12 +181,15 @@ func ReadMarker(path, profile string) (bool, error) {
 
 func EnumerateIdentities(directory, domain string) ([]string, error) {
 	identityDir := filepath.Join(directory, ".identity")
-	info, err := os.Lstat(identityDir)
+	_, err := os.Lstat(identityDir)
 	if errors.Is(err, os.ErrNotExist) {
 		return []string{}, nil
 	}
-	if err != nil || !platformfs.DirectoryPrivate(identityDir, info) {
-		return nil, errors.New("invalid identity directory")
+	if err != nil {
+		return nil, err
+	}
+	if err := platformfs.CheckDirectory(identityDir); err != nil {
+		return nil, err
 	}
 	entries, err := os.ReadDir(identityDir)
 	if err != nil {
@@ -291,7 +288,7 @@ func Resolve(directory, profile, domain string) (Resolution, error) {
 		return result, err
 	}
 	if canonical != identity {
-		return result, errors.New("incomplete canonical profile pair")
+		return result, storageerr.Wrap("resolve_profile", "private_document", "invalid_storage", errors.New("incomplete canonical profile pair"))
 	}
 	status, err := LegacyPathStatus(directory, profile)
 	if err != nil {
@@ -312,12 +309,12 @@ func Resolve(directory, profile, domain string) (Resolution, error) {
 			return result, nil
 		case LegacyExisting:
 			if !result.Marker {
-				return result, errors.New("canonical and legacy profile states conflict")
+				return result, storageerr.Wrap("resolve_profile", "private_document", "invalid_storage", errors.New("canonical and legacy profile states conflict"))
 			}
 			result.Mode = ModeCanonical
 			return result, nil
 		case LegacyMissing:
-			return result, errors.New("canonical profile is missing downgrade marker")
+			return result, storageerr.Wrap("resolve_profile", "private_document", "invalid_storage", errors.New("canonical profile is missing downgrade marker"))
 		default:
 			return result, errors.New("invalid legacy status")
 		}
@@ -325,7 +322,7 @@ func Resolve(directory, profile, domain string) (Resolution, error) {
 	switch status {
 	case LegacyExisting:
 		if result.Marker {
-			return result, errors.New("orphan profile migration marker")
+			return result, storageerr.Wrap("resolve_profile", "private_document", "invalid_storage", errors.New("orphan profile migration marker"))
 		}
 		result.Mode = ModeLegacy
 	case LegacyMissing, LegacyUnaddressable:
@@ -352,12 +349,15 @@ func Enumerate(directory, domain string) ([]string, error) {
 	if domain != "values" && domain != "tasks" {
 		return nil, errors.New("invalid profile domain")
 	}
-	info, err := os.Lstat(directory)
+	_, err := os.Lstat(directory)
 	if errors.Is(err, os.ErrNotExist) {
 		return []string{}, nil
 	}
-	if err != nil || !platformfs.DirectoryPrivate(directory, info) {
-		return nil, errors.New("private directory required")
+	if err != nil {
+		return nil, err
+	}
+	if err := platformfs.CheckDirectory(directory); err != nil {
+		return nil, err
 	}
 	identityProfiles, err := EnumerateIdentities(directory, domain)
 	if err != nil {

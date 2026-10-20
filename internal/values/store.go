@@ -21,19 +21,23 @@ type Store struct {
 	completionHook func()
 }
 
-func storageError() *protocol.Error {
-	return protocol.NewError("storage_error", "Cannot access private profile storage.", 1, nil)
-}
-
-func canceledError() *protocol.Error {
-	return protocol.NewError("canceled", "Execution canceled.", 130, nil)
-}
-
-func gateError(ctx context.Context) *protocol.Error {
-	if ctx.Err() != nil {
-		return canceledError()
+func storageError(causes ...error) *protocol.Error {
+	var cause error
+	if len(causes) != 0 {
+		cause = causes[0]
 	}
-	return storageError()
+	return storageErrorAt("access_storage", cause)
+}
+
+func storageErrorAt(operation string, cause error) *protocol.Error {
+	return protocol.WithStorageDetails(protocol.NewError("storage_error", "Cannot access private profile storage.", 1, nil), "values", operation, "profile_store", cause)
+}
+
+func gateError(ctx context.Context, cause error) *protocol.Error {
+	if e := protocol.ContextError(ctx.Err()); e != nil {
+		return e
+	}
+	return storageErrorAt("acquire_lock", cause)
 }
 
 func (s Store) file() string {
@@ -47,11 +51,11 @@ func privateFile(file *platformfs.File) bool {
 func (s Store) readPath(path string) (*State, *protocol.Error) {
 	file, err := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
 	if err != nil {
-		return nil, storageError()
+		return nil, storageErrorAt("open_profile", err)
 	}
 	defer file.Close()
-	if !privateFile(file) {
-		return nil, storageError()
+	if err := platformfs.CheckFile(file.File); err != nil {
+		return nil, storageErrorAt("check_file", err)
 	}
 	decoder := json.NewDecoder(file)
 	decoder.DisallowUnknownFields()
@@ -71,7 +75,7 @@ func (s Store) readResolved() (*State, profilekey.Resolution, *protocol.Error) {
 	}
 	resolution, err := profilekey.Resolve(s.Directory, s.Profile, "values")
 	if err != nil {
-		return nil, resolution, storageError()
+		return nil, resolution, storageErrorAt("resolve_profile", err)
 	}
 	switch resolution.Mode {
 	case profilekey.ModeNone:
@@ -136,7 +140,7 @@ func (s Store) completionState() (*State, *protocol.Error) {
 func (s Store) Read(ctx context.Context) (*State, *protocol.Error) {
 	release, gateErr := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	if gateErr != nil {
-		return nil, gateError(ctx)
+		return nil, gateError(ctx, gateErr)
 	}
 	defer release()
 	return s.ReadHeld(ctx)
@@ -145,17 +149,20 @@ func (s Store) Read(ctx context.Context) (*State, *protocol.Error) {
 // ReadHeld requires the caller to hold the data-root maintenance gate.
 func (s Store) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
 	if ctx.Err() != nil {
-		return nil, canceledError()
+		return nil, protocol.ContextError(ctx.Err())
 	}
 	if !project.ValidProfile(s.Profile) {
 		return nil, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
-	info, err := os.Lstat(s.Directory)
+	_, err := os.Lstat(s.Directory)
 	if errors.Is(err, os.ErrNotExist) {
 		return newState(s.Profile), nil
 	}
-	if err != nil || !platformfs.DirectoryPrivate(s.Directory, info) {
-		return nil, storageError()
+	if err != nil {
+		return nil, storageErrorAt("inspect_directory", err)
+	}
+	if err := platformfs.CheckDirectory(s.Directory); err != nil {
+		return nil, storageErrorAt("check_directory", err)
 	}
 	return s.read()
 }
@@ -166,12 +173,15 @@ func (s Store) CompletionNames(kind Kind, env string) ([]string, *protocol.Error
 	if !project.ValidProfile(s.Profile) {
 		return nil, storageError()
 	}
-	info, err := os.Lstat(s.Directory)
+	_, err := os.Lstat(s.Directory)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
-	if err != nil || !platformfs.DirectoryPrivate(s.Directory, info) {
-		return nil, storageError()
+	if err != nil {
+		return nil, storageErrorAt("inspect_directory", err)
+	}
+	if err := platformfs.CheckDirectory(s.Directory); err != nil {
+		return nil, storageErrorAt("check_directory", err)
 	}
 	state, e := s.completionState()
 	if e != nil {
@@ -210,14 +220,14 @@ func (s Store) update(ctx context.Context, change func(*State) (bool, *protocol.
 		releaseGate, gateErr = maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
 	}
 	if gateErr != nil {
-		return false, gateError(ctx)
+		return false, gateError(ctx, gateErr)
 	}
 	if ctx.Err() != nil {
 		releaseGate()
-		return false, canceledError()
+		return false, protocol.ContextError(ctx.Err())
 	}
 
-	info, dirErr := os.Lstat(s.Directory)
+	_, dirErr := os.Lstat(s.Directory)
 	if errors.Is(dirErr, os.ErrNotExist) {
 		if !exclusive {
 			releaseGate()
@@ -225,17 +235,22 @@ func (s Store) update(ctx context.Context, change func(*State) (bool, *protocol.
 		}
 		if err := privateDirectory(s.Directory); err != nil {
 			releaseGate()
-			return false, storageError()
+			return false, storageErrorAt("create_directory", err)
 		}
-	} else if dirErr != nil || !platformfs.DirectoryPrivate(s.Directory, info) {
-		releaseGate()
-		return false, storageError()
+	} else {
+		if dirErr == nil {
+			dirErr = platformfs.CheckDirectory(s.Directory)
+		}
+		if dirErr != nil {
+			releaseGate()
+			return false, storageErrorAt("check_directory", dirErr)
+		}
 	}
 
 	releaseProfile, lockErr := maintenance.LockExclusive(ctx, s.file()+".lock")
 	if lockErr != nil {
 		releaseGate()
-		return false, gateError(ctx)
+		return false, gateError(ctx, lockErr)
 	}
 	state, resolution, readErr := s.readResolved()
 	if readErr != nil {
@@ -256,19 +271,19 @@ func (s Store) update(ctx context.Context, change func(*State) (bool, *protocol.
 		return changed, changeErr
 	}
 	if ctx.Err() != nil {
-		return false, canceledError()
+		return false, protocol.ContextError(ctx.Err())
 	}
 	if !state.valid(s.Profile) {
 		return false, failure("invalid_storage", "Profile update is invalid.")
 	}
 	data, err := json.Marshal(state)
 	if err != nil {
-		return false, storageError()
+		return false, storageErrorAt("encode_profile", err)
 	}
 	if resolution.Mode != profilekey.ModeCanonical {
 		identity, identityErr := profilekey.IdentityBytes(s.Profile, "values")
 		if identityErr != nil {
-			return false, storageError()
+			return false, storageErrorAt("encode_identity", identityErr)
 		}
 		files := map[string][]byte{
 			profilekey.StateRelative("profiles", s.Profile):    data,
@@ -277,17 +292,17 @@ func (s Store) update(ctx context.Context, change func(*State) (bool, *protocol.
 		if resolution.LegacyStatus != profilekey.LegacyUnaddressable {
 			migrationMarker, markerErr := profilekey.MarkerBytes(s.Profile)
 			if markerErr != nil {
-				return false, storageError()
+				return false, storageErrorAt("encode_migration_marker", markerErr)
 			}
 			files[profilekey.LegacyRelative("profiles", s.Profile)] = migrationMarker
 		}
 		if err := maintenance.Replace(maintenance.Root(s.Directory), files); err != nil {
-			return false, storageError()
+			return false, storageErrorAt("migrate_profile", err)
 		}
 		return true, nil
 	}
 	if err := maintenance.Write(resolution.CanonicalPath, data); err != nil {
-		return false, storageError()
+		return false, storageErrorAt("write_profile", err)
 	}
 	return true, nil
 }

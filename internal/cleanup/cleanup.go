@@ -83,7 +83,7 @@ func validID(id string) bool {
 	b, e := hex.DecodeString(strings.ReplaceAll(id, "-", ""))
 	return e == nil && len(b) == 16 && len(id) == 36 && id[8] == '-' && id[13] == '-' && id[18] == '-' && id[23] == '-'
 }
-func fail(code string) *protocol.Error {
+func fail(code string, causes ...error) *protocol.Error {
 	exit := 3
 	switch code {
 	case "invalid_argument":
@@ -91,7 +91,15 @@ func fail(code string) *protocol.Error {
 	case "storage_error":
 		exit = 1
 	}
-	return protocol.NewError(code, "Cleanup condition changed or could not be satisfied. Refresh the preview.", exit, nil)
+	failure := protocol.NewError(code, "Cleanup condition changed or could not be satisfied. Refresh the preview.", exit, nil)
+	if code == "storage_error" {
+		var cause error
+		if len(causes) != 0 {
+			cause = causes[0]
+		}
+		return protocol.WithStorageDetails(failure, "cleanup", "access_storage", "cleanup_store", cause)
+	}
+	return failure
 }
 func write(path string, v any) error {
 	b, e := json.Marshal(v)
@@ -101,6 +109,13 @@ func write(path string, v any) error {
 	return maintenance.Write(path, b)
 }
 func digest(b []byte) string { return fmt.Sprintf("%x", sha256.Sum256(b)) }
+
+func (e Engine) writeArchive(id string, payload []byte, archive Archive) error {
+	if err := maintenance.Write(e.archivePath(id, "payload"), payload); err != nil {
+		return err
+	}
+	return write(e.archivePath(id, "entry.json"), archive)
+}
 
 func recordLogOwner(record services.Record) services.ArchivedOwner {
 	capture := record.Capture
@@ -196,12 +211,12 @@ func (e Engine) validItem(i Item) bool {
 func (e Engine) lock(ctx context.Context) (func(), *protocol.Error) {
 	a, err := (services.Store{Data: e.Data}).Lock(ctx)
 	if err != nil {
-		return nil, fail("storage_error")
+		return nil, fail("storage_error", err)
 	}
 	b, err := maintenance.Acquire(ctx, e.Data)
 	if err != nil {
 		a()
-		return nil, fail("storage_error")
+		return nil, fail("storage_error", err)
 	}
 	return func() { b(); a() }, nil
 }
@@ -219,7 +234,7 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 	for _, dir := range []string{filepath.Join(e.Cache, "task-queries"), filepath.Join(e.Cache, "dashboard", "queries")} {
 		entries, err := os.ReadDir(dir)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fail("storage_error")
+			return nil, fail("storage_error", err)
 		}
 		for _, entry := range entries {
 			if !validID(strings.TrimSuffix(entry.Name(), ".json")) {
@@ -241,7 +256,7 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 	taskDirectory := filepath.Join(e.Data, "tasks")
 	profiles, err := profilekey.Enumerate(taskDirectory, "tasks")
 	if err != nil {
-		return nil, fail("storage_error")
+		return nil, fail("storage_error", err)
 	}
 	for _, p := range profiles {
 		if profile != "" && profile != p {
@@ -249,7 +264,7 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 		}
 		snapshot, err := e.taskSnapshot(p)
 		if err != nil {
-			return nil, fail("storage_error")
+			return nil, fail("storage_error", err)
 		}
 		if snapshot.Data != nil && tasks.ArchiveReady(snapshot.Data, p, cutoff) {
 			addWithStamp("completed_tasks", p, snapshot.Source, snapshot.Data, snapshot.Digest)
@@ -318,7 +333,7 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 	if profile == "" && tasks.ReadPrivate(filepath.Join(e.Config, "backup.json"), &config) == nil && filepath.IsAbs(config.Directory) {
 		entries, err := os.ReadDir(config.Directory)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fail("storage_error")
+			return nil, fail("storage_error", err)
 		}
 		type backupFile struct {
 			path string
@@ -408,8 +423,8 @@ func (e Engine) Preview(ctx context.Context, profile string) (Plan, *protocol.Er
 		return out, err
 	}
 	s := snapshot{ID: tasks.ID(), Expires: time.Now().UTC().Add(retention.CleanupPreviewTTL), Profile: profile, Items: items}
-	if write(filepath.Join(e.Cache, "cleanup", s.ID+".json"), s) != nil {
-		return out, fail("storage_error")
+	if err := write(filepath.Join(e.Cache, "cleanup", s.ID+".json"), s); err != nil {
+		return out, fail("storage_error", err)
 	}
 	out = Plan{ID: s.ID, Expires: s.Expires, Items: []Item{}}
 	for _, c := range items {
@@ -508,7 +523,7 @@ func (e Engine) archivedCandidate(c candidate) (Archive, []byte, bool, *protocol
 	}
 	payload, err := maintenance.Read(e.archivePath(c.ID, "payload"), 128<<20)
 	if err != nil {
-		return archive, nil, false, fail("storage_error")
+		return archive, nil, false, fail("storage_error", err)
 	}
 	if c.Kind == "expired_log" {
 		executionID := e.executionIDFromProcessSource(c.Source)
@@ -560,7 +575,7 @@ func (e Engine) Apply(ctx context.Context, planID string, ids []string, requestI
 			return previous.Result, nil
 		}
 	} else if !errors.Is(readErr, os.ErrNotExist) {
-		return out, fail("storage_error")
+		return out, fail("storage_error", readErr)
 	}
 
 	var selected []candidate
@@ -576,8 +591,8 @@ func (e Engine) Apply(ctx context.Context, planID string, ids []string, requestI
 				return out, err
 			}
 			previous.Items = append([]candidate{}, selected...)
-			if write(receiptPath, previous) != nil {
-				return out, fail("storage_error")
+			if err := write(receiptPath, previous); err != nil {
+				return out, fail("storage_error", err)
 			}
 		} else {
 			if !sameCandidateIDs(selected, ids) {
@@ -633,8 +648,8 @@ func (e Engine) Apply(ctx context.Context, planID string, ids []string, requestI
 			}
 		}
 		previous = receipt{Plan: planID, IDs: ids, Items: append([]candidate{}, selected...), Result: out}
-		if write(receiptPath, previous) != nil {
-			return out, fail("storage_error")
+		if err := write(receiptPath, previous); err != nil {
+			return out, fail("storage_error", err)
 		}
 	}
 
@@ -647,13 +662,13 @@ func (e Engine) Apply(ctx context.Context, planID string, ids []string, requestI
 			return out, mergeErr
 		}
 		progress := receipt{Plan: planID, IDs: ids, Items: append([]candidate{}, selected...), Result: out}
-		if write(receiptPath, progress) != nil {
-			return out, fail("storage_error")
+		if err := write(receiptPath, progress); err != nil {
+			return out, fail("storage_error", err)
 		}
 	}
 	final := receipt{Plan: planID, IDs: ids, Items: append([]candidate{}, selected...), Done: true, Result: out}
-	if write(receiptPath, final) != nil {
-		return out, fail("storage_error")
+	if err := write(receiptPath, final); err != nil {
+		return out, fail("storage_error", err)
 	}
 	return out, nil
 }
@@ -702,15 +717,15 @@ func (e Engine) retireCompletedProcess(c candidate, archive Archive, already boo
 		return archive, fail("storage_error")
 	}
 	if !already {
-		if maintenance.Write(e.archivePath(c.ID, "payload"), body) != nil || write(e.archivePath(c.ID, "entry.json"), archive) != nil {
-			return archive, fail("storage_error")
+		if err := e.writeArchive(c.ID, body, archive); err != nil {
+			return archive, fail("storage_error", err)
 		}
 	}
 	if markerErr := manager.WriteArchiveMarker(record, c.ID, archive.ArchivedAt); markerErr != nil {
 		return archive, cleanupProcessError(markerErr)
 	}
 	if err := removeAndSync(c.Source); err != nil {
-		return archive, fail("storage_error")
+		return archive, fail("storage_error", err)
 	}
 	return archive, nil
 }
@@ -731,8 +746,8 @@ func (e Engine) retireExpiredLog(ctx context.Context, c candidate, archive Archi
 			return fail("revision_conflict")
 		}
 		if !already {
-			if maintenance.Write(e.archivePath(c.ID, "payload"), body) != nil || write(e.archivePath(c.ID, "entry.json"), archive) != nil {
-				return fail("storage_error")
+			if err := e.writeArchive(c.ID, body, archive); err != nil {
+				return fail("storage_error", err)
 			}
 		}
 		return nil
@@ -797,8 +812,8 @@ func (e Engine) retire(ctx context.Context, c candidate) (Archive, *protocol.Err
 				return false, fail("revision_conflict")
 			}
 			if !already {
-				if maintenance.Write(e.archivePath(c.ID, "payload"), body) != nil || write(e.archivePath(c.ID, "entry.json"), archive) != nil {
-					return false, fail("storage_error")
+				if err := e.writeArchive(c.ID, body, archive); err != nil {
+					return false, fail("storage_error", err)
 				}
 			}
 			instances := []ports.Instance{}
@@ -828,12 +843,12 @@ func (e Engine) retire(ctx context.Context, c candidate) (Archive, *protocol.Err
 		return archive, fail("revision_conflict")
 	}
 	if !already {
-		if maintenance.Write(e.archivePath(c.ID, "payload"), body) != nil || write(e.archivePath(c.ID, "entry.json"), archive) != nil {
-			return archive, fail("storage_error")
+		if err := e.writeArchive(c.ID, body, archive); err != nil {
+			return archive, fail("storage_error", err)
 		}
 	}
 	if err := removeAndSync(c.Source); err != nil {
-		return archive, fail("storage_error")
+		return archive, fail("storage_error", err)
 	}
 	return archive, nil
 }
@@ -845,15 +860,15 @@ func (e Engine) Archives() ([]Archive, *protocol.Error) {
 		return items, nil
 	}
 	if err != nil {
-		return nil, fail("storage_error")
+		return nil, fail("storage_error", err)
 	}
 	for _, entry := range entries {
 		if !validID(entry.Name()) {
 			continue
 		}
 		var a Archive
-		if tasks.ReadPrivate(e.archivePath(entry.Name(), "entry.json"), &a) != nil {
-			return nil, fail("storage_error")
+		if err := tasks.ReadPrivate(e.archivePath(entry.Name(), "entry.json"), &a); err != nil {
+			return nil, fail("storage_error", err)
 		}
 		items = append(items, a)
 	}
@@ -875,9 +890,9 @@ func (e Engine) restoreCompletedProcess(archive Archive, payload []byte) *protoc
 			return fail("revision_conflict")
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return fail("storage_error")
-	} else if maintenance.Write(archive.Source, payload) != nil {
-		return fail("storage_error")
+		return fail("storage_error", err)
+	} else if err := maintenance.Write(archive.Source, payload); err != nil {
+		return fail("storage_error", err)
 	}
 	if markerErr := (services.Store{Data: e.Data}).RemoveArchiveMarker(executionID, archive.ID); markerErr != nil {
 		return cleanupProcessError(markerErr)
@@ -918,7 +933,7 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 	}
 	b, er := maintenance.Read(e.archivePath(id, "payload"), 128<<20)
 	if er != nil {
-		return a, false, fail("storage_error")
+		return a, false, fail("storage_error", er)
 	}
 	switch a.Kind {
 	case "missing_instance":
@@ -979,16 +994,18 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 			return a, false, fail("revision_conflict")
 		}
 		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
-			return a, false, fail("storage_error")
+			return a, false, fail("storage_error", readErr)
 		}
-		if readErr != nil && restoreCleanupSource(a.Kind, a.Source, b) != nil {
-			return a, false, fail("storage_error")
+		if readErr != nil {
+			if err := restoreCleanupSource(a.Kind, a.Source, b); err != nil {
+				return a, false, fail("storage_error", err)
+			}
 		}
 	}
 	now := time.Now().UTC()
 	a.RestoredAt = &now
-	if write(e.archivePath(id, "entry.json"), a) != nil {
-		return a, false, fail("storage_error")
+	if err := write(e.archivePath(id, "entry.json"), a); err != nil {
+		return a, false, fail("storage_error", err)
 	}
 	return a, true, nil
 }
@@ -1012,12 +1029,12 @@ func (e Engine) Purge(ctx context.Context, id string) (Archive, bool, *protocol.
 		return a, false, fail("retention_active")
 	}
 	if er := os.Remove(e.archivePath(id, "payload")); er != nil && !errors.Is(er, os.ErrNotExist) {
-		return a, false, fail("storage_error")
+		return a, false, fail("storage_error", er)
 	}
 	now := time.Now().UTC()
 	a.PurgedAt = &now
-	if write(e.archivePath(id, "entry.json"), a) != nil {
-		return a, false, fail("storage_error")
+	if err := write(e.archivePath(id, "entry.json"), a); err != nil {
+		return a, false, fail("storage_error", err)
 	}
 	return a, true, nil
 }

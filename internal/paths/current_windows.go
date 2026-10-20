@@ -5,6 +5,7 @@ import (
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"golang.org/x/sys/windows"
 	"path/filepath"
+	"strings"
 )
 
 func currentPlatformDirectories() (Directories, error) {
@@ -28,6 +29,10 @@ func absoluteIsolatedPath(root string) (string, error) {
 }
 
 func canonicalIsolation(path string) (string, error) {
+	boundary, err := platformfs.WindowsPrivatePathBoundary(path)
+	if err != nil {
+		return "", err
+	}
 	for ancestor := path; ; ancestor = filepath.Dir(ancestor) {
 		ptr, err := windows.UTF16PtrFromString(`\\?\` + ancestor)
 		if err != nil {
@@ -40,7 +45,7 @@ func canonicalIsolation(path string) (string, error) {
 		if err != nil && !errors.Is(err, windows.ERROR_FILE_NOT_FOUND) && !errors.Is(err, windows.ERROR_PATH_NOT_FOUND) {
 			return "", err
 		}
-		if parent := filepath.Dir(ancestor); parent == ancestor {
+		if strings.EqualFold(ancestor, boundary) {
 			break
 		}
 	}

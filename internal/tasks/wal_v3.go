@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/storageerr"
 	"io"
 	"os"
 )
@@ -17,8 +18,8 @@ func privateTaskFileInfo(file *platformfs.File) (os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	if platformfs.CheckFile(file.File) != nil {
-		return nil, errors.New("private file required")
+	if err := platformfs.CheckFile(file.File); err != nil {
+		return nil, err
 	}
 	return info, nil
 }
@@ -341,7 +342,7 @@ func scanWAL(path string, startOffset int64, collect bool) (walScan, error) {
 		return result, err
 	}
 	if startOffset < 0 || startOffset > info.Size() {
-		return result, errors.New("invalid WAL offset")
+		return result, storageerr.Wrap("validate_wal_offset", "task_wal", "invalid_storage", errors.New("invalid WAL offset"))
 	}
 	if _, err := file.Seek(startOffset, io.SeekStart); err != nil {
 		return result, err
@@ -359,11 +360,11 @@ func scanWAL(path string, startOffset int64, collect bool) (walScan, error) {
 			return result, err
 		}
 		if !bytes.Equal(header[:4], walMagic[:]) || binary.BigEndian.Uint16(header[4:6]) != walFrameVersion || header[6] != 0 || header[7] != 0 {
-			return result, errors.New("invalid WAL frame header")
+			return result, storageerr.Wrap("validate_wal_header", "task_wal", "invalid_storage", errors.New("invalid WAL frame header"))
 		}
 		bodyLength := int64(binary.BigEndian.Uint64(header[8:16]))
 		if bodyLength <= 0 {
-			return result, errors.New("invalid WAL frame length")
+			return result, storageerr.Wrap("validate_wal_length", "task_wal", "invalid_storage", errors.New("invalid WAL frame length"))
 		}
 		if bodyLength > info.Size()-(offset+walHeaderSize) {
 			result.IncompleteTail = true
@@ -376,17 +377,17 @@ func scanWAL(path string, startOffset int64, collect bool) (walScan, error) {
 		tee := io.TeeReader(bodyReader, io.MultiWriter(bodyHash, frameHash))
 		frame, err := parseFrameBody(tee)
 		if err != nil {
-			return result, err
+			return result, storageerr.Decode("decode_wal_frame", "task_wal", err)
 		}
 		trailing, err := io.Copy(io.Discard, tee)
 		if err != nil {
 			return result, err
 		}
 		if trailing != 0 {
-			return result, errors.New("WAL frame has trailing body data")
+			return result, storageerr.Wrap("validate_wal_frame", "task_wal", "invalid_storage", errors.New("WAL frame has trailing body data"))
 		}
 		if !bytes.Equal(bodyHash.Sum(nil), header[16:48]) {
-			return result, errors.New("WAL checksum mismatch")
+			return result, storageerr.Wrap("validate_wal_checksum", "task_wal", "invalid_storage", errors.New("WAL checksum mismatch"))
 		}
 		end := offset + walHeaderSize + bodyLength
 		frame.Digest = hex.EncodeToString(frameHash.Sum(nil))

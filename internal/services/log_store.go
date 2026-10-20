@@ -257,14 +257,14 @@ func (s boundedLogStore) retire(ctx context.Context, beforeRemove func([]byte) *
 	release, err := acquireLogLock(ctx, s.path, true)
 	if err != nil {
 		if ctx.Err() != nil {
-			return false, failure("canceled")
+			return false, protocol.ContextError(ctx.Err())
 		}
-		return false, storageError()
+		return false, storageErrorAt("acquire_log_lock", err)
 	}
 	defer release()
 	body, exists, err := readPhysicalLog(s.path, s.stats)
 	if err != nil {
-		return false, storageError()
+		return false, storageErrorAt("read_log", err)
 	}
 	if !exists {
 		return false, nil
@@ -276,7 +276,7 @@ func (s boundedLogStore) retire(ctx context.Context, beforeRemove func([]byte) *
 		}
 	}
 	if err := removePrivateImage(ctx, s.path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return true, storageError()
+		return true, storageErrorAt("remove_log", err)
 	}
 
 	return true, nil
@@ -289,14 +289,14 @@ func (s boundedLogStore) restore(ctx context.Context, payload []byte) *protocol.
 	release, err := acquireLogLock(ctx, s.path, true)
 	if err != nil {
 		if ctx.Err() != nil {
-			return failure("canceled")
+			return protocol.ContextError(ctx.Err())
 		}
-		return storageError()
+		return storageErrorAt("acquire_log_lock", err)
 	}
 	defer release()
 	body, exists, err := readPhysicalLog(s.path, s.stats)
 	if err != nil {
-		return storageError()
+		return storageErrorAt("read_log", err)
 	}
 	if exists {
 		if !bytes.Equal(logicalTail(body), payload) {
@@ -305,7 +305,7 @@ func (s boundedLogStore) restore(ctx context.Context, payload []byte) *protocol.
 		return nil
 	}
 	if err := maintenance.Write(s.path, payload); err != nil {
-		return storageError()
+		return storageErrorAt("restore_log", err)
 	}
 	return nil
 }
@@ -321,9 +321,9 @@ func (s Store) LogSnapshot(ctx context.Context, id string) ([]byte, bool, *proto
 	body, exists, err := s.logStore(id).snapshot(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, false, failure("canceled")
+			return nil, false, protocol.ContextError(ctx.Err())
 		}
-		return nil, false, storageError()
+		return nil, false, storageErrorAt("read_log_snapshot", err)
 	}
 	return body, exists, nil
 }

@@ -97,7 +97,10 @@ private data, 원자적 publish, corruption detection 계약을 보존한다. �
 - `DEVTOOLS_ISOLATED_ROOT`와 `--isolated-root`는 유지한다. isolation에서도 ACL 검사는 생략하지 않는다.
 - private storage는 로컬 NTFS만 지원한다. 지원 불가 root는 write 전에 기존 `storage_error`/
   `io_error` 계열로 실패하고 filesystem·위치 수정 안내를 제공한다. 사용자 디렉터리를 자동 이동하지 않는다.
-- private 디렉터리는 생성 시점부터 protected DACL: 현재 사용자와 SYSTEM만 full access.
+- private 디렉터리는 생성 시점부터 protected DACL: 현재 사용자와 SYSTEM에 full access.
+  AppContainer에서는 사용자 권한과 컨테이너 권한의 교집합으로 접근이 결정되므로 현재
+  프로세스의 정확한 AppContainer SID도 포함한다. 전체 앱·다른 컨테이너 SID는 허용하지 않는다.
+  생성과 검증은 같은 보안 주체 정책을 사용하며 파일·잠금·임시 파일에도 적용한다.
   디렉터리 ACE는 child file/directory에 상속한다. 기존 root를 발견하면 owner/DACL/파일 종류를
   검사하며 permissive root를 자동으로 재권한 설정하지 않는다. 관리자·SYSTEM을 보안 경계 밖 공격자로 간주하지 않는다.
 - `0600/0700` 검사에 Windows mode bits를 대입하지 않는다. 모든 private I/O 호출자가 공통
@@ -105,6 +108,10 @@ private data, 원자적 publish, corruption detection 계약을 보존한다. �
 - private root 아래 junction/symlink/reparse point를 거부한다. `FILE_FLAG_OPEN_REPARSE_POINT`는
   최종 요소만 제어하므로 이것만으로 부모 경로 방어가 완료됐다고 간주하지 않는다. 검증된 부모
   디렉터리 handle을 rename 불가로 유지하고 생성·열기 뒤 identity와 실제 경로 containment를 재검증한다.
+  AppContainer의 OS 선택 LocalAppData 내부 경로는 해당 Known Folder를 신뢰 경계로 삼아
+  resolved handle 경로가 일치하는지 검증하고 그 아래 전체 경로를 고정한다. 프로필을 관리하는
+  호스트 사용자·SYSTEM은 기존과 같이 신뢰한다. 경계 밖 경로와 일반 프로세스는 drive root부터
+  검사한다. 접근 거부를 이유로 중간 검사를 생략하지 않는다.
 - project 경로는 private root와 다르다. WSL project는 `/home`과 `/mnt/c`를 허용하고 private data는
   Linux filesystem에 둔다. 네이티브 첫 배포의 managed project 경로는 로컬 NTFS이며 UNC project는
   실행 전에 거부한다. cmd가 UNC cwd를 Windows 디렉터리로 바꾸는 동작을 허용하지 않는다.

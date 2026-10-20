@@ -22,11 +22,12 @@ func (g *directoryGuard) close() error {
 }
 func privatePath(path string) (string, error) {
 	if path == "" {
-		return "", ErrUnsafe
+		return "", fsError("validate_path", path, "invalid_path", ErrUnsafe)
 	}
 	return filepath.Abs(path)
 }
 func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, err error) {
+	defer func() { err = fsError("open_directory", path, "", err) }()
 	guard = &directoryGuard{}
 	defer func(g *directoryGuard) {
 		if err != nil {
@@ -41,12 +42,12 @@ func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, er
 		current = filepath.Join(current, part)
 		if create {
 			if e := os.Mkdir(current, 0700); e != nil && !errors.Is(e, os.ErrExist) {
-				return nil, e
+				return nil, fsError("create_directory", current, "", e)
 			}
 		}
 		f, e := os.OpenFile(current, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 		if e != nil {
-			return nil, e
+			return nil, fsError("open_directory", current, "", e)
 		}
 		guard.files = append(guard.files, f)
 		info, e := f.Stat()
@@ -54,11 +55,11 @@ func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, er
 			return nil, e
 		}
 		if !info.IsDir() {
-			return nil, ErrUnsafe
+			return nil, fsError("inspect_directory", current, "not_directory", ErrUnsafe)
 		}
 		if current == anchor || strings.HasPrefix(current, anchor+string(filepath.Separator)) {
 			if info.Mode().Perm()&0077 != 0 {
-				return nil, ErrUnsafe
+				return nil, securityError(true, "public_permissions", ErrUnsafe)
 			}
 		}
 	}
@@ -69,7 +70,7 @@ func openPrivateFile(path string, flags int) (*os.File, error) {
 	// from waiting before the regular-file check.
 	f, err := os.OpenFile(path, (flags&^os.O_TRUNC)|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
 	if err != nil {
-		return nil, err
+		return nil, fsError("open_file", path, "", err)
 	}
 	fail := func(e error) (*os.File, error) { _ = f.Close(); return nil, e }
 	info, err := f.Stat()
@@ -77,18 +78,19 @@ func openPrivateFile(path string, flags int) (*os.File, error) {
 		return fail(err)
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-		return fail(ErrUnsafe)
+		return fail(securityError(false, "public_or_non_regular_file", ErrUnsafe))
 	}
 	return f, nil
 }
-func publish(ctx context.Context, from, to string, replace bool) error {
+func publish(ctx context.Context, from, to string, replace bool) (err error) {
+	defer func() { err = fsError("publish_file", to, "", err) }()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if replace {
 		if info, err := os.Lstat(to); err == nil {
 			if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-				return ErrUnsafe
+				return fsError("inspect_file", to, "public_or_non_regular_file", ErrUnsafe)
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -123,7 +125,7 @@ func containedFile(r *Root, f *os.File) error {
 			return err
 		}
 		if !os.SameFile(held, named) {
-			return ErrUnsafe
+			return fsError("verify_directory_identity", parent.Name(), "path_mismatch", ErrUnsafe)
 		}
 	}
 	held, err := f.Stat()
@@ -135,7 +137,7 @@ func containedFile(r *Root, f *os.File) error {
 		return err
 	}
 	if !os.SameFile(held, named) {
-		return ErrUnsafe
+		return fsError("verify_file_identity", f.Name(), "path_mismatch", ErrUnsafe)
 	}
 	return nil
 }

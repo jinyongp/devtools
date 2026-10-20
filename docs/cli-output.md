@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v7 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v8 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
@@ -55,7 +55,7 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 7`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
+`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 8`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
 
 실행 준비 중 사용자 취소는 `canceled`와 종료 코드 130, 준비 기한 초과는
 `deadline_exceeded`와 종료 코드 3으로 구분합니다. 저장이 완료된 뒤 도착한 취소는
@@ -127,6 +127,47 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v8 마이그레이션
+
+공통 envelope는 `schema_version: 1`을 유지합니다. `diagnostics.paths.source`와
+`diagnostics.platform.isolation`이 추가되고, 실패한 `issues`에는 안전한 저장소
+`details`가 추가될 수 있습니다. 엄격한 응답 파서는 설치본의 schema를 다시 조회하세요.
+저장 파일 형식, 기존 저장소 오류 코드·메시지·종료 코드는 유지합니다.
+task·저장소 잠금의 기한 초과는 `deadline_exceeded`/3으로 통일하고,
+명시적 취소는 계속 `canceled`/130으로 반환합니다.
+
+저장소 오류의 `details`는 다음 공통 진단 규칙을 따릅니다. 기능별 `remedies`,
+부분 결과 등의 기존 필드는 함께 보존합니다.
+
+| 필드 | 의미 |
+| --- | --- |
+| `domain` | 실패가 발생한 기능 영역: `tasks`, `values`, `services` 등 |
+| `operation` | 최초 확인된 실패 작업: `create_directory`, `open_file`, `validate_wal_checksum` 등 |
+| `resource` | 경로 대신 대상 역할: `data_root`, `task_store`, `query_cache` 등 |
+| `reason` | 원인 분류: `access_denied`, `invalid_storage`, `unexpected_acl`, `disk_full` 등. 분류 근거가 없으면 `unknown` |
+| `os_error`, `os_error_domain` | 원본 OS 오류가 있는 경우에만 숫자와 `win32`/`errno`를 제공 |
+
+예를 들어 유지보수 잠금을 준비하다 data 폴더 생성이 거부되면 다음처럼 반환합니다.
+
+```json
+{"schema_version":1,"ok":false,"error":{"code":"storage_error","message":"Cannot access private task storage.","details":{"domain":"tasks","operation":"create_directory","resource":"data_root","reason":"access_denied","os_error_domain":"win32","os_error":5}}}
+```
+
+오류에는 실제 경로, 원본 OS 오류 문자열, ACL 원문, 저장된 값·키·credential을
+추가하지 않습니다. 실제 경로는 `project inspect` 또는 `diagnostics.paths`에서 확인하세요.
+`paths.source`는 `isolated_root`, `windows_known_folder`, `user_directories` 중 하나입니다.
+집계 호출자가 기본 경로와 다른 경로를 전달하면 `provided`로 표시합니다.
+Windows `platform.isolation`은 현재 프로세스 토큰으로 확인한 `appcontainer`,
+`restricted`, `unrestricted` 또는 `unknown`입니다. `unrestricted`는 모든 호스트
+정책이나 외부 제한이 없다는 보장이 아닙니다. 다른 OS에서는 `unknown`을 반환합니다.
+
+조회와 diagnostics는 일관성 확보를 위해 저장소·잠금 디렉터리와 잠금 파일을 만들 수
+있습니다. 파일 쓰기가 전혀 없는 동작으로 해석하지 마세요. 오류 개선을 위해 세션 해제,
+ACL 교정이나 저장소 자동 전환을 수행하지 않습니다.
+Windows Known Folder는 격리 환경에서 별도 경로를 반환할 수 있으므로 빈 목록의 저장소
+출처도 확인하세요. 오류 5만으로 특정 ACL이나 샌드박스 규칙을 원인으로 단정하지 않습니다.
+이 변경은 AppContainer에서 새 저장소를 생성할 수 있다는 지원 보장이 아닙니다.
 
 ## protocol v7 마이그레이션
 

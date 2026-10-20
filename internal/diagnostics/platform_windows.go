@@ -3,7 +3,29 @@ package diagnostics
 import (
 	"golang.org/x/sys/windows"
 	"strings"
+	"unsafe"
 )
+
+func platformIsolation() string {
+	// TokenIsAppContainer (29) is defined by the Windows SDK but is absent from
+	// x/sys's TOKEN_INFORMATION_CLASS constants. Inspect the process, not its path.
+	var appContainer, size uint32
+	token := windows.GetCurrentProcessToken()
+	if windows.GetTokenInformation(token, 29, (*byte)(unsafe.Pointer(&appContainer)), uint32(unsafe.Sizeof(appContainer)), &size) != nil {
+		return "unknown"
+	}
+	if appContainer != 0 {
+		return "appcontainer"
+	}
+	restricted, err := token.IsRestricted()
+	if err != nil {
+		return "unknown"
+	}
+	if restricted {
+		return "restricted"
+	}
+	return "unrestricted"
+}
 
 func storageFilesystem(path string) (string, bool, bool) {
 	parent, err := existingPlatformAncestor(path)

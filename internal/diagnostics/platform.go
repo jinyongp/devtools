@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/jinyongp/devtools/internal/paths"
 )
 
 type Platform struct {
+	Isolation         string   `json:"isolation"`
 	OS                string   `json:"os"`
 	Arch              string   `json:"arch"`
 	Runtime           string   `json:"runtime"`
@@ -23,10 +26,12 @@ type Platform struct {
 // Only bounded, fixed metadata sources are inspected. No child process, shell,
 // network probe, raw environment dump or WSL configuration read is performed.
 func inspectPlatform(input Input) (Platform, bool) {
-	return platformSnapshot(input, runtime.GOOS, runtime.GOARCH, os.Getenv, readPlatformMetadata, storageFilesystem)
+	platform, unsupported := platformSnapshot(input, runtime.GOOS, runtime.GOARCH, os.Getenv, readPlatformMetadata, storageFilesystem)
+	platform.Isolation = platformIsolation()
+	return platform, unsupported
 }
 func platformSnapshot(input Input, goos, arch string, getenv func(string) string, read func(string) (string, error), filesystem func(string) (string, bool, bool)) (Platform, bool) {
-	p := Platform{OS: goos, Arch: arch, Runtime: "native", Interop: "not_applicable", ClientTrust: "local_only", Limitations: []string{}}
+	p := Platform{OS: goos, Arch: arch, Runtime: "native", Isolation: "unknown", Interop: "not_applicable", ClientTrust: "local_only", Limitations: []string{}}
 	if isWSL(goos, getenv, read) {
 		p.Runtime = "wsl"
 		p.Interop = wslInterop(read)
@@ -48,6 +53,20 @@ func platformSnapshot(input Input, goos, arch string, getenv func(string) string
 		}
 	}
 	return p, unsupported
+}
+
+func storagePathSource(input Input) string {
+	if input.IsolatedRoot != "" {
+		return "isolated_root"
+	}
+	current, err := paths.Current()
+	if err != nil || current.Data != input.Data || current.Config != input.Config || current.Cache != input.Cache {
+		return "provided"
+	}
+	if runtime.GOOS == "windows" {
+		return "windows_known_folder"
+	}
+	return "user_directories"
 }
 func containsPlatformLimit(items []string, value string) bool {
 	for _, item := range items {

@@ -15,6 +15,7 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/proxy"
 	"github.com/jinyongp/devtools/internal/services"
+	"github.com/jinyongp/devtools/internal/storageerr"
 	"github.com/jinyongp/devtools/internal/vault"
 )
 
@@ -26,6 +27,7 @@ type Input struct {
 }
 
 type Paths struct {
+	Source string `json:"source"`
 	Data   string "json:\"data\""
 	Config string "json:\"config\""
 	Cache  string "json:\"cache\""
@@ -82,8 +84,9 @@ type Backup struct {
 }
 
 type Issue struct {
-	Section string "json:\"section\""
-	Code    string "json:\"code\""
+	Section string         "json:\"section\""
+	Code    string         "json:\"code\""
+	Details map[string]any `json:"details,omitempty"`
 }
 
 type Vault struct {
@@ -117,14 +120,18 @@ func (r *Report) issue(section string, err *protocol.Error) {
 	if err != nil && err.Code != "" {
 		code = err.Code
 	}
-	r.Issues = append(r.Issues, Issue{Section: section, Code: code})
+	var details map[string]any
+	if err != nil {
+		details = storageerr.SafeDetails(err.Details)
+	}
+	r.Issues = append(r.Issues, Issue{Section: section, Code: code, Details: details})
 }
 
 func canceled(ctx context.Context) *protocol.Error {
 	if ctx.Err() == nil {
 		return nil
 	}
-	return protocol.NewError("canceled", "Diagnostics canceled.", 130, nil)
+	return protocol.ContextError(ctx.Err())
 }
 
 // Inspect reads aggregate subsystem state without creating sessions, mutations,
@@ -132,7 +139,7 @@ func canceled(ctx context.Context) *protocol.Error {
 func Inspect(ctx context.Context, input Input) (Report, *protocol.Error) {
 	report := Report{
 		Ready:     true,
-		Paths:     Paths{Data: input.Data, Config: input.Config, Cache: input.Cache},
+		Paths:     Paths{Source: storagePathSource(input), Data: input.Data, Config: input.Config, Cache: input.Cache},
 		Profiles:  Profiles{Section: healthy(), Items: []profilecatalog.Summary{}},
 		Ports:     Ports{Section: healthy()},
 		Processes: Processes{Section: healthy()},

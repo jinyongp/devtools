@@ -25,10 +25,11 @@ func diagnosticsOutputSchema() map[string]any {
 		"active_process_count": map[string]any{"type": "integer", "minimum": 0},
 	}, "profile", "values", "tasks", "env_count", "instance_count", "process_count", "active_process_count")
 	pathsSchema := object(map[string]any{
+		"source": stringSchema(),
 		"data":   stringSchema(),
 		"config": stringSchema(),
 		"cache":  stringSchema(),
-	}, "data", "config", "cache")
+	}, "data", "config", "cache", "source")
 	profiles := diagnosticsSectionSchema(map[string]any{
 		"items": map[string]any{"type": "array", "items": profile},
 	}, "items")
@@ -69,6 +70,7 @@ func diagnosticsOutputSchema() map[string]any {
 	issue := object(map[string]any{
 		"section": stringSchema(),
 		"code":    stringSchema(),
+		"details": storageDetailsSchema(),
 	}, "section", "code")
 	return object(map[string]any{
 		"ready":     map[string]any{"type": "boolean"},
@@ -94,7 +96,7 @@ func (a *App) registerDiagnostics() {
 		Run: func(ctx context.Context, _ IO, _ Request) (any, *protocol.Error) {
 			dirs, err := a.currentPaths()
 			if err != nil {
-				return nil, protocol.NewError("io_error", "Cannot resolve user directories.", 1, nil)
+				return nil, directoryError(err)
 			}
 			profilesDirectory, failure := a.dataDirectory()
 			if failure != nil {
@@ -112,11 +114,19 @@ func (a *App) registerDiagnostics() {
 
 func platformDiagnosticsSchema() map[string]any {
 	return object(map[string]any{
-		"os": stringSchema(), "arch": stringSchema(),
+		"isolation": map[string]any{"enum": []string{"unknown", "unrestricted", "restricted", "appcontainer"}},
+		"os":        stringSchema(), "arch": stringSchema(),
 		"runtime":            map[string]any{"enum": []string{"native", "wsl"}},
 		"storage_filesystem": stringSchema(), "storage_supported": boolSchema(),
 		"interop":      map[string]any{"enum": []string{"available", "unavailable", "not_applicable", "unknown"}},
 		"client_trust": map[string]any{"enum": []string{"local_only", "separate_windows_store"}},
 		"limitations":  arraySchema(stringSchema()),
-	}, "os", "arch", "runtime", "storage_filesystem", "storage_supported", "interop", "client_trust", "limitations")
+	}, "os", "arch", "runtime", "storage_filesystem", "storage_supported", "interop", "client_trust", "limitations", "isolation")
+}
+
+func storageDetailsSchema() map[string]any {
+	return object(map[string]any{
+		"domain": stringSchema(), "operation": stringSchema(), "resource": stringSchema(), "reason": stringSchema(),
+		"os_error": map[string]any{"type": "integer", "minimum": 0}, "os_error_domain": stringSchema(),
+	})
 }

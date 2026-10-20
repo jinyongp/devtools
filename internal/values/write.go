@@ -4,11 +4,20 @@ import (
 	"bytes"
 	"context"
 	"path/filepath"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/vault"
 )
+
+func (s ModernStore) measure(phase string) func() {
+	if s.observe == nil {
+		return func() {}
+	}
+	started := time.Now()
+	return func() { s.observe(phase, time.Since(started)) }
+}
 
 type writeBase struct {
 	original   []byte
@@ -30,16 +39,20 @@ func (s ModernStore) writeScope(ctx context.Context) (*vault.Material, string, f
 }
 func (s ModernStore) readForEdit(ctx context.Context, master *vault.Material, vaultID string) (*vault.Profile, *vault.Material, writeBase, error) {
 	var base writeBase
+	stopWait := s.measure("read-wait")
 	release, err := maintenance.AcquireShared(ctx, s.root())
+	stopWait()
 	if err != nil {
 		return nil, nil, base, err
 	}
+	stopHeld := s.measure("read-held")
 	p, key, exists, err := s.readHeld(ctx, master, vaultID)
 	if err == nil {
 		base.exists = exists
 		base.protection, err = (vault.KeyFileStore{Directory: filepath.Join(s.root(), "vault")}).WriteIdentity()
 	}
 	release()
+	stopHeld()
 	if err != nil {
 		key.Destroy()
 		return nil, nil, base, err
@@ -79,12 +92,15 @@ func (s ModernStore) lockCommit(ctx context.Context, base writeBase, promoted bo
 			return nil, err
 		}
 	}
+	stopWait := s.measure("commit-wait")
 	releaseGate, err := maintenance.AcquireExclusive(ctx, s.root())
+	stopWait()
 	if err != nil {
 		releaseAll()
 		return nil, err
 	}
-	release := func() { releaseGate(); releaseAll() }
+	stopHeld := s.measure("commit-held")
+	release := func() { releaseGate(); stopHeld(); releaseAll() }
 	identity, err := (vault.KeyFileStore{Directory: directory}).WriteIdentity()
 	if err != nil {
 		release()

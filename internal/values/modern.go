@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/profilekey"
@@ -24,6 +25,8 @@ type ModernStore struct {
 	WriteMaster func(context.Context) (*vault.Material, func(context.Context) error, error)
 	// Test seam after candidate computation, before commit lease acquisition.
 	beforeCommit func()
+	// Optional scoped measurement seam; never included in CLI responses.
+	observe func(string, time.Duration)
 }
 
 func (s ModernStore) root() string { return maintenance.Root(s.Directory) }
@@ -284,6 +287,7 @@ func (s ModernStore) Update(ctx context.Context, change func(*Editor) (bool, *pr
 		}
 	}()
 	requested := false
+	stopPrepare := s.measure("prepare")
 	changed, err := p.Batch(ctx, key, func(m *vault.Mutation) error {
 		editor = newEditor(ctx, p, m, key, master, vaultID)
 		var e *protocol.Error
@@ -296,6 +300,7 @@ func (s ModernStore) Update(ctx context.Context, change func(*Editor) (bool, *pr
 		}
 		return nil
 	})
+	stopPrepare()
 	if errors.Is(err, errUnchanged) {
 		changed = false
 		err = nil

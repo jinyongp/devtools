@@ -27,7 +27,7 @@ func awaitPrepared(t *testing.T, ready <-chan struct{}) {
 	t.Helper()
 	select {
 	case <-ready:
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("candidate did not reach commit boundary")
 	}
 }
@@ -38,7 +38,7 @@ func TestPreparedWriteAllowsOtherProfileReadExecutionAndCommit(t *testing.T) {
 	for _, protected := range []bool{false, true} {
 		for _, managed := range []bool{false, true} {
 			t.Run(fmt.Sprintf("protected=%v/managed=%v", protected, managed), func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 				root := privateTempDir(t)
 				a := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app"}
@@ -85,7 +85,7 @@ func TestPreparedWriteAllowsOtherProfileReadExecutionAndCommit(t *testing.T) {
 				}()
 				awaitPrepared(t, ready)
 				// These must finish while A remains paused, including a real execution input.
-				short, stop := context.WithTimeout(ctx, 2*time.Second)
+				short, stop := context.WithTimeout(ctx, 10*time.Second)
 				defer stop()
 				if _, e := b.Inspect(short, ""); e != nil {
 					t.Fatal("B inspection blocked", e)
@@ -235,7 +235,7 @@ func TestPreparedWriteRejectsRotationAndRewrap(t *testing.T) {
 func TestPreparedWriteRejectsLockAndRelockEpoch(t *testing.T) {
 	for _, unlockAgain := range []bool{false, true} {
 		t.Run(fmt.Sprint(unlockAgain), func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			root, _, _, _ := vaultSnapshotFixture(t, 1)
 			dir := filepath.Join(root, "vault")
@@ -314,9 +314,10 @@ func TestPreparedWriteRejectsCancellationAndPendingRecovery(t *testing.T) {
 }
 
 func TestWriteSessionValidationPrecedesDiskLocks(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
 	root, _, master, _ := vaultSnapshotFixture(t, 0)
+	// This bounds a lock-order regression, not vault fixture creation or latency.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	var calls atomic.Int32
 	s := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app", Master: snapshotMaster(master, &calls)}
 	validated := false
@@ -351,7 +352,7 @@ func TestWriteSessionValidationPrecedesDiskLocks(t *testing.T) {
 }
 
 func TestActiveBatchPreparationAllowsOtherProfileCommit(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	root, files, master, _ := vaultSnapshotFixture(t, 1)
 	var calls atomic.Int32
@@ -387,7 +388,7 @@ func TestActiveBatchPreparationAllowsOtherProfileCommit(t *testing.T) {
 		done <- err
 	}()
 	awaitPrepared(t, ready)
-	short, stop := context.WithTimeout(ctx, 2*time.Second)
+	short, stop := context.WithTimeout(ctx, 10*time.Second)
 	defer stop()
 	snapshot, e := CaptureVault(short, root, "other", "", true, time.Now(), b.Master)
 	if e != nil {

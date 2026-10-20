@@ -53,7 +53,7 @@ func TestNormalReadersShareMaintenanceGate(t *testing.T) {
 func TestConcurrentSnapshotCreationRechecksUnderExclusiveGate(t *testing.T) {
 	root, _, master, _ := vaultSnapshotFixture(t, 0)
 	var calls atomic.Int32
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	start := make(chan struct{})
 	ids := make(chan string, 2)

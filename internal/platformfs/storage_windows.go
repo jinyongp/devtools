@@ -55,7 +55,7 @@ func MkdirPrivate(path string) error {
 	if err != nil {
 		return err
 	}
-	_, sd, err := userSecurity()
+	_, sd, err := privateSecurity()
 	if err != nil {
 		return err
 	}

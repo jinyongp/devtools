@@ -69,23 +69,9 @@ func reservedComponent(part string) bool {
 
 func pathPtr(path string) (*uint16, error) { return windows.UTF16PtrFromString(`\\?\` + path) }
 
-func userSecurity() (*windows.SID, *windows.SECURITY_DESCRIPTOR, error) {
-	user, err := windows.GetCurrentProcessToken().GetTokenUser()
-	if err != nil {
-		return nil, nil, err
-	}
-	sid := user.User.Sid
-	sd, err := windows.SecurityDescriptorFromString("O:" + sid.String() + "D:P(A;OICI;FA;;;" + sid.String() + ")(A;OICI;FA;;;SY)")
-	return sid, sd, err
-}
-
 func checkPrivate(h windows.Handle, directory bool) (err error) {
 	defer func() { err = securityError(directory, "", err) }()
-	user, err := windows.GetCurrentProcessToken().GetTokenUser()
-	if err != nil {
-		return err
-	}
-	system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	identity, err := currentStorageIdentity()
 	if err != nil {
 		return err
 	}
@@ -93,49 +79,7 @@ func checkPrivate(h windows.Handle, directory bool) (err error) {
 	if err != nil {
 		return err
 	}
-	owner, _, err := sd.Owner()
-	if err != nil {
-		return err
-	}
-	if owner == nil || !windows.EqualSid(owner, user.User.Sid) {
-		return securityError(directory, "owner_mismatch", ErrUnsafe)
-	}
-	control, _, err := sd.Control()
-	if err != nil {
-		return err
-	}
-	if directory && control&windows.SE_DACL_PROTECTED == 0 {
-		return securityError(directory, "inheritance_enabled", ErrUnsafe)
-	}
-	acl, _, err := sd.DACL()
-	if err != nil {
-		return err
-	}
-	if acl == nil || acl.AceCount != 2 {
-		return securityError(directory, "unexpected_acl", ErrUnsafe)
-	}
-	own, sys := false, false
-	for i := uint32(0); i < uint32(acl.AceCount); i++ {
-		var header *windows.ACCESS_ALLOWED_ACE
-		if err := windows.GetAce(acl, i, &header); err != nil {
-			return err
-		}
-		if header.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || header.Header.AceFlags&windows.INHERIT_ONLY_ACE != 0 || header.Mask&0x1f01ff != 0x1f01ff {
-			return securityError(directory, "unexpected_acl", ErrUnsafe)
-		}
-		sid := (*windows.SID)(unsafe.Pointer(&header.SidStart))
-		if windows.EqualSid(sid, user.User.Sid) {
-			own = true
-		} else if windows.EqualSid(sid, system) {
-			sys = true
-		} else {
-			return securityError(directory, "unexpected_acl", ErrUnsafe)
-		}
-	}
-	if !own || !sys {
-		return securityError(directory, "unexpected_acl", ErrUnsafe)
-	}
-	return nil
+	return identity.check(sd, directory)
 }
 
 func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, err error) {
@@ -146,11 +90,23 @@ func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, er
 			_ = g.close()
 		}
 	}(guard)
-	current := filepath.VolumeName(path) + `\`
-	parts := strings.Split(strings.TrimPrefix(path, current), `\`)
-	// Every ancestor remains open without FILE_SHARE_DELETE, including public
-	// ancestors above the private root. Checking only the leaf would permit a
-	// junction/rename race in a previously checked parent.
+	start, err := storageDirectoryStart(path)
+	if err != nil {
+		return nil, err
+	}
+	current := start
+	relative, err := filepath.Rel(start, path)
+	if err != nil {
+		return nil, err
+	}
+	parts := strings.Split(relative, `\`)
+	if relative == "." {
+		parts = nil
+	}
+	// Pin the complete chain from the trusted boundary without share-delete.
+	// Usually that is the drive root. AppContainer-local paths instead start at
+	// the OS-provided container Known Folder; its host ancestors are inaccessible
+	// to the container. Never skip a failed intermediate open or reparse check.
 	for i := -1; i < len(parts); i++ {
 		if i >= 0 {
 			if parts[i] == "" {
@@ -163,7 +119,7 @@ func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, er
 			return nil, e
 		}
 		if create && i >= 0 {
-			_, sd, e := userSecurity()
+			_, sd, e := privateSecurity()
 			if e != nil {
 				return nil, e
 			}
@@ -185,6 +141,13 @@ func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, er
 			return nil, fsError("inspect_directory", current, "reparse_or_non_directory", ErrUnsafe)
 		}
 		if i == -1 {
+			actual, e := handlePath(h)
+			if e != nil {
+				return nil, fsError("inspect_directory", current, "", e)
+			}
+			if !strings.EqualFold(strings.TrimPrefix(actual, `\\?\`), start) {
+				return nil, fsError("inspect_directory", current, "path_identity_mismatch", ErrUnsafe)
+			}
 			fs := make([]uint16, 32)
 			if e = windows.GetVolumeInformationByHandle(h, nil, 0, nil, nil, nil, &fs[0], uint32(len(fs))); e != nil {
 				return nil, fsError("inspect_filesystem", current, "", e)
@@ -197,7 +160,7 @@ func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, er
 				return nil, fsError("inspect_filesystem", current, "unsupported_filesystem", ErrUnsafe)
 			}
 		}
-		if current == anchor || strings.HasPrefix(current, anchor+`\`) {
+		if storagePathWithin(anchor, current) {
 			if e = checkPrivate(h, true); e != nil {
 				return nil, e
 			}
@@ -262,7 +225,7 @@ func openPrivateFileWithShare(path string, flags int, share uint32) (*os.File, e
 			disposition = windows.OPEN_ALWAYS
 		}
 	}
-	_, sd, err := userSecurity()
+	_, sd, err := privateSecurity()
 	if err != nil {
 		return nil, err
 	}

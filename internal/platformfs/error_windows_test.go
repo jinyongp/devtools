@@ -15,7 +15,7 @@ func TestWindowsDirectoryCreationDeniedRetainsOriginalFailure(t *testing.T) {
 	if err := os.Mkdir(parent, 0700); err != nil {
 		t.Fatal(err)
 	}
-	user, full, err := userSecurity()
+	user, full, err := privateSecurity()
 	if err != nil {
 		t.Fatal(err)
 	}

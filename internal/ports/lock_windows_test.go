@@ -26,7 +26,15 @@ func TestWindowsRegistryLockWaitAndNonblockingRunLease(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	if other, e := store.lock(ctx, "run.lock", true, true); e == nil || e.Code != "canceled" {
+	if other, e := store.lock(ctx, "run.lock", true, true); e == nil || e.Code != "deadline_exceeded" || e.ExitCode != 3 {
+		if other != nil {
+			other.Close()
+		}
+		t.Fatalf("wait deadline: %v", e)
+	}
+	canceled, stop := context.WithCancel(context.Background())
+	stop()
+	if other, e := store.lock(canceled, "run.lock", true, true); e == nil || e.Code != "canceled" || e.ExitCode != 130 {
 		if other != nil {
 			other.Close()
 		}

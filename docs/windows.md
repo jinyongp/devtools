@@ -99,7 +99,9 @@ policy, are not repaired automatically.
 For paths inside the container's OS-selected LocalAppData, ancestor pinning starts
 at that Known Folder. Its resolved handle must match the selected path; every
 component below it is pinned and checked for reparse points. The owning host user
-and SYSTEM remain trusted. Paths outside this boundary and ordinary processes
+and SYSTEM remain trusted. File containment compares normalized NT device paths,
+including volume identity, without requiring DOS drive-letter translation.
+Paths outside this boundary and ordinary processes
 retain the drive-root traversal. Access denial never causes a traversal check to
 be skipped. Explicit isolated roots use this same boundary policy during path
 resolution, without creating directories or changing the environment.

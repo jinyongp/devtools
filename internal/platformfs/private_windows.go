@@ -141,11 +141,14 @@ func guardDirectory(path, anchor string, create bool) (guard *directoryGuard, er
 			return nil, fsError("inspect_directory", current, "reparse_or_non_directory", ErrUnsafe)
 		}
 		if i == -1 {
-			actual, e := handlePath(h)
+			// Validate normalized components on this already opened NTFS volume.
+			// Asking Windows to translate its device into a DOS drive name can
+			// require access outside an AppContainer's trusted profile boundary.
+			actual, e := normalizedHandlePath(h, volumeNameNone)
 			if e != nil {
 				return nil, fsError("inspect_directory", current, "", e)
 			}
-			if !strings.EqualFold(strings.TrimPrefix(actual, `\\?\`), start) {
+			if !strings.EqualFold(actual, strings.TrimPrefix(start, filepath.VolumeName(start))) {
 				return nil, fsError("inspect_directory", current, "path_identity_mismatch", ErrUnsafe)
 			}
 			fs := make([]uint16, 32)
@@ -305,10 +308,21 @@ func publish(ctx context.Context, from, to string, replace bool) (err error) {
 	}
 }
 
+const (
+	volumeNameNT   = 0x2
+	volumeNameNone = 0x4
+)
+
 func handlePath(h windows.Handle) (string, error) {
+	// Keep normalized physical volume identity for containment checks without
+	// requiring a DOS drive-letter mapping. Both compared names use this form.
+	return normalizedHandlePath(h, volumeNameNT)
+}
+
+func normalizedHandlePath(h windows.Handle, volume uint32) (string, error) {
 	buffer := make([]uint16, 512)
 	for {
-		n, err := windows.GetFinalPathNameByHandle(h, &buffer[0], uint32(len(buffer)), 0)
+		n, err := windows.GetFinalPathNameByHandle(h, &buffer[0], uint32(len(buffer)), volume)
 		if err != nil {
 			return "", err
 		}

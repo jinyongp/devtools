@@ -162,7 +162,6 @@ func testAppContainerStorage(t *testing.T) {
 		if unsafe != nil {
 			unsafe.Close()
 		}
-		probeAppContainerRoot(t, base)
 		t.Fatalf("AppContainer reparse rejection failed: %v; details=%v", err, storageerr.Details(err, "test", "open_directory", "fixture"))
 	}
 	if _, err := os.Stat(filepath.Join(base, "outside", "private")); !os.IsNotExist(err) {
@@ -288,30 +287,4 @@ func testAppContainerStorage(t *testing.T) {
 		t.Fatalf("isolated reparse ancestor accepted: %v", err)
 	}
 	fmt.Fprintln(os.Stdout, "private directories, publication, reopening, locks, leases, reparse rejection and unsafe ACL preservation passed")
-}
-
-func probeAppContainerRoot(t *testing.T, base string) {
-	t.Helper()
-	p, err := windows.UTF16PtrFromString(`\\?\` + base)
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := windows.CreateFile(p, windows.FILE_LIST_DIRECTORY|windows.FILE_READ_ATTRIBUTES|windows.READ_CONTROL,
-		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING,
-		windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
-	if err != nil {
-		t.Logf("fixture open: %v", err)
-		return
-	}
-	defer windows.CloseHandle(h)
-	var info windows.ByHandleFileInformation
-	t.Logf("fixture info: %v", windows.GetFileInformationByHandle(h, &info))
-	for _, flags := range []uint32{0, 8, 2, 10, 4, 12} { // normalized/opened names with DOS/NT/no volume prefix
-		buffer := make([]uint16, 32768)
-		_, err := windows.GetFinalPathNameByHandle(h, &buffer[0], uint32(len(buffer)), flags)
-		t.Logf("fixture final path flags=%d: %q error=%v", flags, windows.UTF16ToString(buffer), err)
-	}
-	fs := make([]uint16, 32)
-	err = windows.GetVolumeInformationByHandle(h, nil, 0, nil, nil, nil, &fs[0], uint32(len(fs)))
-	t.Logf("fixture volume: %q error=%v", windows.UTF16ToString(fs), err)
 }

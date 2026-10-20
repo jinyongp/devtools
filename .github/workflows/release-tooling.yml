@@ -1,0 +1,95 @@
+name: Release tooling validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release-tooling.yml
+      - .github/workflows/release.yml
+      - .github/workflows/pages.yml
+      - scripts/release.mjs
+      - scripts/publish_release_tag.py
+  pull_request:
+    paths:
+      - .github/workflows/release-tooling.yml
+      - .github/workflows/release.yml
+      - .github/workflows/pages.yml
+      - scripts/release.mjs
+      - scripts/publish_release_tag.py
+
+# Preview and distribution preparation must work with read access only. This
+# exercises the publishing action even when Release's publish=false skips it.
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    name: Release tooling validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Select the latest published release
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag=$(gh release view --json tagName --jq .tagName)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Resolve and verify the stable release tag
+        id: release
+        uses: releaseway/actions/prepare@2abdf26c6f01c1e49da4ba5d85253847fe721fd9 # v0.6.3
+        with:
+          mode: resolve
+          tag: ${{ steps.source.outputs.tag }}
+          tag-prefix: v
+      - name: Preview release notes without publishing
+        id: preview
+        uses: releaseway/actions@2abdf26c6f01c1e49da4ba5d85253847fe721fd9 # v0.6.3
+        with:
+          tag: ${{ steps.release.outputs.tag }}
+          commit: ${{ steps.release.outputs.commit }}
+          notes: standard
+          notes-preview: 'true'
+      - name: Require prepared release notes
+        env:
+          STATE: ${{ steps.preview.outputs.state }}
+          NOTES_STATE: ${{ steps.preview.outputs.notes-state }}
+        run: |
+          test "$STATE" = preview
+          test "$NOTES_STATE" = prepared
+      - name: Prepare published installers without deploying
+        id: installers
+        uses: releaseway/actions/distribute@2abdf26c6f01c1e49da4ba5d85253847fe721fd9 # v0.6.3
+        with:
+          tag: ${{ steps.release.outputs.tag }}
+          commit: ${{ steps.release.outputs.commit }}
+          files: |
+            install.sh
+            install.ps1
+          verification: digest
+      - name: Compare installer bytes with their tagged sources
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          SITE: ${{ steps.installers.outputs.path }}
+        run: |
+          for file in install.sh install.ps1; do
+            git show "$TAG:scripts/$file" | cmp - "$SITE/$file"
+          done
+          sh -n "$SITE/install.sh"
+      - name: Preserve read-only verification reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: releaseway-readonly-validation
+          path: |
+            ${{ steps.release.outputs.diagnostics-path }}
+            ${{ steps.preview.outputs.diagnostics-path }}
+            ${{ steps.preview.outputs.notes-report }}
+            ${{ steps.installers.outputs.report }}
+          if-no-files-found: error
+          retention-days: 7

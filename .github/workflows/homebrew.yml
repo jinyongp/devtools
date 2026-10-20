@@ -1,6 +1,12 @@
 name: Homebrew
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/homebrew.yml
+      - .github/workflows/release.yml
+      - .github/homebrew/**
   pull_request:
   workflow_dispatch:
 
@@ -9,7 +15,7 @@ permissions:
 
 jobs:
   homebrew:
-    uses: releaseway/homebrew-actions/.github/workflows/check.yml@c1be213c09e18836142bbad3561a0feda507536a # v0.4.2
+    uses: releaseway/homebrew-actions/.github/workflows/check.yml@8fe42d36a7f93a3c399461efbe571fc695d4cdc6 # v0.4.3
     with:
       tap-repository: jinyongp/homebrew-tap
 

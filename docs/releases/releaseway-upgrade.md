@@ -1,5 +1,67 @@
 # Releaseway 연동 업데이트 — 2026-10-20
 
+## 현재 적용: Actions v0.6.3 / Homebrew Actions v0.4.3
+
+공개 안정 릴리스와 annotated tag가 가리키는 커밋을 확인해 다음 SHA로 갱신했다.
+업스트림 README의 일부 예제에는 이전 버전이 남아 있어 공개 Release·태그·실제 소스를
+기준으로 선택했다. 프로젝트 패키지 의존성이나 lockfile 변경은 없다.
+
+- [Actions v0.6.3](https://github.com/releaseway/actions/releases/tag/v0.6.3):
+  `2abdf26c6f01c1e49da4ba5d85253847fe721fd9`.
+  게시 액션과 설치기 준비용 `distribute` 액션을 함께 갱신했다.
+- [Homebrew Actions v0.4.3](https://github.com/releaseway/homebrew-actions/releases/tag/v0.4.3):
+  `8fe42d36a7f93a3c399461efbe571fc695d4cdc6`.
+  check/publish reusable workflow를 함께 갱신했다.
+
+### 소비자에 적용되는 변경
+
+릴리스 노트 준비는 checkout의 조건부 include 인증을 임시 Git 저장소에 전달하고,
+성공·실패 모두 임시 증거 저장소를 정리한다. 긴 first-parent 이력과 merge graph는
+상한이 있는 묶음으로 읽는다. 기존 `notes: standard`, 원본 태그·commit 검증,
+`diagnostics-path` 등 입력·출력은 호환되므로 호출 계약은 유지했다.
+
+Homebrew는 생성한 Formula의 SHA-256을 native 검증부터 commit·rebase·push까지 전달한다.
+작업 파일과 `HEAD`의 Formula blob이 모두 그 바이트와 같아야 게시한다. 동일 Formula의
+동시 변경이 Git에서 충돌 없이 합쳐져도 중단할 수 있다. 이 경우 push job만 재시도하지 않고,
+현재 tap에서 Formula를 다시 생성하고 native 검증부터 게시까지 전체 단계를 재실행한다.
+`allow-downgrade`는 이 바이트 검증을 우회하지 않는다. 현재 소스 빌드 Formula와
+macOS ARM64 게시 검증 범위는 유지하며 Linux·Intel 설치 검증으로 해석하지 않는다.
+
+### 조사 후 유지한 경계
+
+큰 이전 Pages 응답을 재시도하고 스트림을 취소하는 수정은 업스트림의 reusable Pages
+workflow에 적용된다. devtools는 `distribute`로 준비한 설치기를 태그 소스와 byte 비교한 뒤
+별도 Pages 단계로 게시하므로 그 served-verification 경로를 사용하지 않는다.
+내부 action을 직접 호출하거나 전체 Pages 흐름을 교체하지 않았다.
+
+양쪽 저장소의 `distribution-run` 증거 강화는 Releaseway 자체 릴리스용 workflow 변경이다.
+devtools가 호출하는 공개 게시 액션·Homebrew workflow에 새 필수 입력을 추가하지 않는다.
+
+### 검증
+
+[읽기 전용 검증 기록](evidence/releaseway-v0.6.3-readonly.json)에 공개 bundle의 SHA-256과
+실제 `v0.29.0` 노트 미리보기·설치기 검증 결과를 보존했다.
+Node 24.22.0에서 수정하지 않은 공개 bundle로 `state=preview`, 진단 성공,
+임시 증거 저장소 정리와 설치기 두 파일의 태그 소스 byte 일치를 확인했다.
+업스트림 Actions 테스트 159개와 공개 bundle 재빌드 일치, Homebrew 게시 script·workflow
+계약 검사, devtools 릴리스 테스트 10개·Windows 검증 재사용 테스트 7개,
+변경한 네 workflow의 actionlint v1.7.12를 통과했다.
+
+`.github/workflows/release-tooling.yml`은 main의 관련 변경과 PR·수동 실행에서 같은
+미리보기·설치기 준비·소스 비교를 `contents: read` 권한으로 검증한다.
+최신 공개 릴리스 이름만 GitHub CLI로 조회하고, 안정 버전·태그의 원격 바인딩과
+main ancestry 검증은 공개 `prepare` 액션의 `mode: resolve`에 맡긴다.
+현재 릴리스의 두 설치기를 검사하며 과거 Unix-only 태그용 분기는 넣지 않았다.
+임시 Git 저장소의 내부 정리 방식은 소비자 CI에서 검사하지 않고 업스트림 테스트에 맡긴다.
+게시 액션이 `publish=false`에서 생략되는 기존 Release 검증의 빈 부분을 보완한다.
+Homebrew 사전 검사도 관련 main push에서 실행한다. 새 제품 릴리스·tap·Pages 게시는
+이번 업데이트의 검증에 포함하지 않는다.
+
+## 이전 v0.6.1 업데이트 기록
+
+이하 내용은 당시 조사·검증 기록이다. 이후 v0.29.0의 실제 게시·Homebrew·Pages 배포는
+[Release 실행](https://github.com/jinyongp/devtools/actions/runs/39428641454)에서 성공했다.
+
 기존 작업 `319d4a3`까지 로컬 main에 fast-forward 병합했다. 제품 소스와 기존 검증 SHA를
 보존하고 아래 릴리스 도구 변경을 main에서 진행했다. 실제 릴리스·tap·Pages 게시는 실행하지 않았다.
 
@@ -46,7 +108,7 @@
 - devtools 릴리스 테스트 10개와 변경한 두 workflow의 actionlint v1.7.12 통과.
   별도 shellcheck·pyflakes는 실행하지 않았다.
 
-Homebrew Actions 최신 버전은 기존 pin의 v0.4.2여서 변경하지 않았다.
+v0.6.1 재검증 당시 Homebrew Actions 최신 버전은 기존 pin의 v0.4.2여서 변경하지 않았다.
 아래 v0.6.0 제안 패치는 당시 조사 기록이며 현재 workflow에는 적용하지 않는다.
 
 ## v0.6.0에서 발견한 업스트림 문제와 제안 패치

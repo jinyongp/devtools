@@ -58,7 +58,7 @@ jobs:
 
       - name: Verify published installer files
         id: installers
-        uses: releaseway/actions/distribute@1b1d72999b59f03d334845f5accb982c38f4afe1 # v0.6.1
+        uses: releaseway/actions/distribute@2abdf26c6f01c1e49da4ba5d85253847fe721fd9 # v0.6.3
         with:
           tag: ${{ steps.release.outputs.tag }}
           commit: ${{ steps.source.outputs.commit }}

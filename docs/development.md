@@ -335,6 +335,9 @@ Pull Request에서는 `.github/workflows/homebrew.yml`이 고정 SHA의
 
 배포에는 devtools 저장소의 `HOMEBREW_TAP_DEPLOY_KEY` Actions secret을 사용한다.
 Homebrew 단계가 실패해도 이미 게시된 GitHub Release는 유지되며 해당 job을 다시 실행할 수 있다.
+단, 검증된 Formula SHA-256과 게시 후보가 달라 중단됐다면 push job만 재시도하지 않는다.
+현재 tap을 기준으로 Formula 생성·native 검증·게시를 모두 다시 실행해야 한다.
+Git이 같은 Formula의 변경을 충돌 없이 합쳤더라도 검증하지 않은 바이트는 게시하지 않는다.
 Dependabot은 GitHub Actions 의존성을 매주 그룹으로 갱신하므로 Releaseway full-SHA pin도
 일반 Actions 업데이트와 함께 검토한다. Formula 빌드는 `updateManager=homebrew`를 기록해
 업데이트를 Homebrew로 안내한다. 빌드 도구는 `go.mod`에 선언한 정확한 Go 버전을 사용하며,

@@ -2,6 +2,7 @@ name: Homebrew
 
 on:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,3 +12,15 @@ jobs:
     uses: releaseway/homebrew-actions/.github/workflows/check.yml@c1be213c09e18836142bbad3561a0feda507536a # v0.4.2
     with:
       tap-repository: jinyongp/homebrew-tap
+
+  validation:
+    name: Homebrew validation
+    if: ${{ always() }}
+    needs: homebrew
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require Formula generation and validation
+        env:
+          HOMEBREW_RESULT: ${{ needs.homebrew.result }}
+        run: test "$HOMEBREW_RESULT" = success

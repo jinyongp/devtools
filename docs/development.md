@@ -179,6 +179,23 @@ CLI에서 확인한 최종 값을 한 흐름으로 검증한다. Release의 Linu
 - packaging·저장 호환성·분리된 프로세스 수명이 기능에 포함되면 installed-release 검증을 추가한다.
 
 
+## main 병합 검사
+
+main의 필수 상태 검사는 GitHub Actions가 생성하는 `Windows validation`과
+`Homebrew validation`이다. GitHub의 branch protection 설정에서 관리하며,
+실행 workflow가 없는 과거 `auto-merge / auto-merge` 항목은 사용하지 않는다.
+자동 병합 기능 자체와 필수 검사는 별개다.
+
+두 workflow는 문서만 바뀐 PR을 포함해 모든 PR에서 실행된다.
+Windows 검사는 x64·ARM64 전체 lane의 성공을, Homebrew 검사는 Formula 생성·검증의
+성공을 요구한다. 선행 job이 실패·취소·skip돼도 최종 검사는 실행되어 실패를 반환한다.
+Windows focused 실행과 릴리스의 소스 검사 재사용 실행은 `Windows focused validation`으로
+구분하므로 전체 PR 검사를 대신하지 않는다. Homebrew는 비게시 수동 검사도 지원한다.
+
+관리자 예외는 기존 설정을 유지한다. 관리자의 직접 push는 필수 검사를 우회할 수 있으므로
+일반 변경은 PR의 두 검사 결과를 확인한 뒤 병합한다. 문서 변경에도 Windows 전체 검사를
+실행하며, push의 경로 필터는 PR 검사 적용 범위에 영향을 주지 않는다.
+
 ## 릴리스
 
 ```sh

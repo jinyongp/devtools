@@ -16,12 +16,20 @@ func TestNormalReadersShareMaintenanceGate(t *testing.T) {
 	root, _, master, _ := vaultSnapshotFixture(t, 1)
 	var calls atomic.Int32
 	store := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app", Master: snapshotMaster(master, &calls)}
+	publicRoot := privateTempDir(t)
+	public := ModernStore{Directory: filepath.Join(publicRoot, "profiles"), Profile: "public"}
+	if _, e := public.Update(context.Background(), func(e *Editor) (bool, *protocol.Error) { return e.Set(Variable, "URL", "", "public") }); e != nil {
+		t.Fatal(e)
+	}
 	release, err := maintenance.AcquireShared(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer release()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// The held leases prove sharing; this deadline only bounds a lock regression.
+	// Keep durable fixture writes outside it and allow loaded native runners time
+	// to read. This test does not impose a latency SLA.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	snapshot, e := CaptureVault(ctx, root, "app", "", true, time.Now(), store.Master)
 	if e != nil {
@@ -30,11 +38,6 @@ func TestNormalReadersShareMaintenanceGate(t *testing.T) {
 	snapshot.Destroy()
 	if _, e = store.Inspect(ctx, ""); e != nil {
 		t.Fatal("inspection requested exclusive gate", e)
-	}
-	publicRoot := privateTempDir(t)
-	public := ModernStore{Directory: filepath.Join(publicRoot, "profiles"), Profile: "public"}
-	if _, e := public.Update(ctx, func(e *Editor) (bool, *protocol.Error) { return e.Set(Variable, "URL", "", "public") }); e != nil {
-		t.Fatal(e)
 	}
 	publicRelease, err := maintenance.AcquireShared(ctx, publicRoot)
 	if err != nil {

@@ -1,69 +1,15 @@
 package vault
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
-func (p *Profile) mutate(key *Material, change func(*Profile) (bool, error)) (bool, error) {
-	if err := p.Verify(key); err != nil {
-		return false, err
-	}
-	q, err := p.clone()
-	if err != nil {
-		return false, err
-	}
-	changed, err := change(q)
-	if err != nil || !changed {
-		return false, err
-	}
-	if q.Revision == ^uint64(0) {
-		return false, ErrInvalid
-	}
-	q.Revision++
-	if err = q.Sign(key); err != nil {
-		return false, err
-	}
-	if _, err = q.Encode(); err != nil {
-		return false, err
-	}
-	*p = *q
-	return true, nil
-}
 func (p *Profile) CreateEnv(env string, key *Material) (bool, error) {
-	return p.mutate(key, func(q *Profile) (bool, error) {
-		if !namePattern.MatchString(env) {
-			return false, ErrInvalid
-		}
-		for _, e := range q.Envs {
-			if e == env {
-				return false, nil
-			}
-		}
-		q.Envs = append(q.Envs, env)
-		return true, nil
-	})
+	return p.Batch(context.Background(), key, func(m *Mutation) error { _, err := m.CreateEnv(env); return err })
 }
 func (p *Profile) Unset(name string, kind ValueKind, env string, key *Material) (bool, error) {
-	return p.mutate(key, func(q *Profile) (bool, error) {
-		if err := q.checkEnv(env); err != nil {
-			return false, err
-		}
-		for i := range q.Values {
-			v := &q.Values[i]
-			if v.Name != name {
-				continue
-			}
-			if v.Kind != kind {
-				return false, errorsNamed("kind_conflict")
-			}
-			for j, s := range v.Slots {
-				if s.Env == env {
-					v.Slots = append(v.Slots[:j], v.Slots[j+1:]...)
-					return true, nil
-				}
-			}
-			return false, nil
-		}
-		return false, nil
-	})
+	return p.Batch(context.Background(), key, func(m *Mutation) error { _, err := m.Unset(name, kind, env); return err })
 }
 
 // PublicValue permits explicit unverified reads while a sealed profile is locked.

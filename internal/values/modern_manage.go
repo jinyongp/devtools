@@ -189,7 +189,7 @@ func (s ModernStore) receiptHeld(ctx context.Context, master *vault.Material, va
 	}
 	return receipt, result, found, nil
 }
-func mutateChange(state *State, c Change) (ChangeResult, *protocol.Error) {
+func mutateChange(state *Editor, c Change) (ChangeResult, *protocol.Error) {
 	out := ChangeResult{Profile: state.Profile}
 	if c.Import != nil && c.Action != "import" {
 		return out, protocol.NewError("invalid_argument", "Import input requires the import action.", 2, nil)
@@ -321,7 +321,7 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	if err != nil {
 		return out, VaultError(ctx, err)
 	}
-	defer func() { key.Destroy() }()
+	defer key.Destroy()
 	if replay, found, e := s.replayHeld(ctx, c, p, key, master, vaultID); e != nil {
 		return out, e
 	} else if found {
@@ -330,48 +330,53 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	if c.Revision != editRevision(s.Profile, p, exists) {
 		return out, failure("revision_conflict", "Profile changed; reload before editing.")
 	}
-	before, err := profileState(p, key)
+	original, err := p.Encode()
 	if err != nil {
 		return out, VaultError(ctx, err)
 	}
-	after := before.Clone()
-	var changeErr *protocol.Error
-	if c.Bundle != nil {
-		changed, err := mutateBundle(p, key, c)
-		if err != nil {
-			return out, VaultError(ctx, err)
+	var editor *Editor
+	defer func() {
+		if editor != nil && editor.promoted {
+			editor.key.Destroy()
 		}
-		out.Changed, out.Bundle = changed, c.Bundle.Name
-	} else {
-		out, changeErr = mutateChange(after, c)
-		if changeErr != nil {
-			return out, changeErr
+	}()
+	_, err = p.Batch(ctx, key, func(m *vault.Mutation) error {
+		editor = newEditor(ctx, p, m, key, master, vaultID)
+		if c.Bundle != nil {
+			changed, err := editor.bundle(c)
+			if err != nil {
+				return err
+			}
+			out.Changed, out.Bundle = changed, c.Bundle.Name
+		} else {
+			var e *protocol.Error
+			out, e = mutateChange(editor, c)
+			if e != nil {
+				return e
+			}
 		}
-	}
-	if c.Bundle != nil && c.Bundle.Preview {
-		out.Changed = false
-		out.Revision = c.Revision
-		return out, nil
-	}
-	if c.Import != nil && c.Import.Preview {
-		out.Changed = false
-		out.Revision = c.Revision
-		return out, nil
-	}
-	if err := ctx.Err(); err != nil {
+		if c.Import != nil && c.Import.Bundle != "" && !c.Import.Preview {
+			changed, err := editor.importBundle(c.Import.Bundle, out.Items)
+			if err != nil {
+				return err
+			}
+			out.Changed = out.Changed || changed
+		}
+		return nil
+	})
+	if err != nil {
+		if e, ok := err.(*protocol.Error); ok {
+			return out, e
+		}
 		return out, VaultError(ctx, err)
 	}
-	if !after.valid(s.Profile) {
-		return out, storageError()
+	if c.Bundle != nil && c.Bundle.Preview || c.Import != nil && c.Import.Preview {
+		out.Changed = false
+		out.Revision = c.Revision
+		return out, nil
 	}
-	if !p.Sealed && hasSecret(after) {
-		if master == nil {
-			return out, VaultError(ctx, vault.ErrKeyMissing)
-		}
-		original, err := p.Encode()
-		if err != nil {
-			return out, VaultError(ctx, err)
-		}
+	if editor.promoted {
+		key = editor.key
 		release()
 		held = false
 		finish, err := vault.AcquireLaunchMutation(ctx, filepath.Join(s.root(), "vault"))
@@ -403,20 +408,6 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 		if exists != currentExists || exists && !bytes.Equal(original, observed) {
 			return out, failure("revision_conflict", "Profile changed during protection setup.")
 		}
-		key, err = p.Seal(vaultID, master)
-		if err != nil {
-			return out, VaultError(ctx, err)
-		}
-	}
-	if err = applyProfileDiff(ctx, p, key, before, after); err != nil {
-		return out, VaultError(ctx, err)
-	}
-	if c.Import != nil && c.Import.Bundle != "" {
-		changed, err := importBundle(p, key, c.Import.Bundle, out.Items)
-		if err != nil {
-			return out, VaultError(ctx, err)
-		}
-		out.Changed = out.Changed || changed
 	}
 	out.Revision = editRevision(s.Profile, p, true)
 	var fingerprintKey *vault.Material

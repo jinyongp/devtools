@@ -36,7 +36,7 @@ func TestPassivePublicInspectionMatchesDeliveryAndDoesNotMigrate(t *testing.T) {
 		t.Fatal("passive inspection published a profile")
 	}
 	store := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app"}
-	if _, e := store.Update(ctx, func(s *State) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "synthetic-public-value") }); e != nil {
+	if _, e := store.Update(ctx, func(s *Editor) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "synthetic-public-value") }); e != nil {
 		t.Fatal(e)
 	}
 	before, err := os.ReadFile(filepath.Join(store.Directory, profilekey.CanonicalFilename("app")))

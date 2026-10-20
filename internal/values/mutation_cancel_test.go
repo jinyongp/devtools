@@ -38,7 +38,7 @@ func TestModernCancellationBeforePublication(t *testing.T) {
 	s := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "cancelled"}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	changed, e := s.Update(ctx, func(state *State) (bool, *protocol.Error) {
+	changed, e := s.Update(ctx, func(state *Editor) (bool, *protocol.Error) {
 		result, e := state.Set(Variable, "URL", "", "synthetic-cancelled")
 		cancel()
 		return result, e

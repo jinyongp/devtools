@@ -1,7 +1,7 @@
 package vault
 
 import (
-	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -408,117 +408,7 @@ func (p *Profile) Set(name string, kind ValueKind, env, value string, key *Mater
 	return p.set(name, kind, env, value, key, rand.Reader)
 }
 func (p *Profile) set(name string, kind ValueKind, env, value string, key *Material, r io.Reader) (bool, error) {
-	if err := p.Verify(key); err != nil {
-		return false, err
-	}
-	if !valueNamePattern.MatchString(name) || !validText(value) || (kind != Public && kind != Secret) {
-		return false, ErrInvalid
-	}
-	if len(value) > MaxDocumentBytes {
-		return false, ErrTooLarge
-	}
-	if err := p.checkEnv(env); err != nil {
-		return false, err
-	}
-	if kind == Secret && !p.Sealed {
-		return false, ErrLocked
-	}
-	q, err := p.clone()
-	if err != nil {
-		return false, err
-	}
-	vi := -1
-	for i, v := range q.Values {
-		if v.Name == name {
-			if v.Kind != kind {
-				return false, errorsNamed("kind_conflict")
-			}
-			vi = i
-			break
-		}
-	}
-	if vi < 0 {
-		id, err := randomID(r)
-		if err != nil {
-			return false, err
-		}
-		q.Values = append(q.Values, Value{ID: id, Name: name, Kind: kind, Slots: []Slot{}})
-		vi = len(q.Values) - 1
-	}
-	v := &q.Values[vi]
-	si := -1
-	var slot Slot
-	for i, s := range v.Slots {
-		if s.Env == env {
-			si = i
-			slot = s
-			break
-		}
-	}
-	if si >= 0 {
-		old, err := q.open(*v, slot, key)
-		if err != nil {
-			return false, err
-		}
-		same := bytes.Equal(old, []byte(value))
-		clear(old)
-		if same {
-			return false, nil
-		}
-	} else {
-		slot.ID, err = randomID(r)
-		if err != nil {
-			return false, err
-		}
-		slot.Env = env
-	}
-	slot.Version, err = randomID(r)
-	if err != nil {
-		return false, err
-	}
-	if kind == Public {
-		s := value
-		slot.PublicValue = &s
-	} else {
-		k, err := derive(key, q.VaultID, q.ID, "encryption")
-		if err != nil {
-			return false, err
-		}
-		defer clear(k)
-		a, err := chacha20poly1305.NewX(k)
-		if err != nil {
-			return false, ErrIntegrity
-		}
-		nonce := make([]byte, a.NonceSize())
-		if _, err = io.ReadFull(r, nonce); err != nil {
-			return false, err
-		}
-		aad, err := q.aad(*v, slot)
-		if err != nil {
-			return false, err
-		}
-		plain := []byte(value)
-		defer clear(plain)
-		slot.Nonce = nonce
-		slot.Ciphertext = a.Seal(nil, nonce, plain, aad)
-	}
-	if si >= 0 {
-		v.Slots[si] = slot
-	} else {
-		v.Slots = append(v.Slots, slot)
-	}
-	if q.Revision == ^uint64(0) {
-		return false, ErrInvalid
-	}
-	q.Revision++
-	if err = q.Sign(key); err != nil {
-		return false, err
-	}
-	if _, err = q.Encode(); err != nil {
-		return false, err
-	}
-	*p = *q
-	return true, nil
+	return p.batch(context.Background(), key, r, func(m *Mutation) error { _, err := m.Set(name, kind, env, value); return err }, nil)
 }
 
 // Environment verifies the whole snapshot before resolving a common/env layer.

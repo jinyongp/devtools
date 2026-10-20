@@ -110,7 +110,7 @@ func (a *App) registerTools() {
 				}
 				return map[string]any{"profile": store.Profile, "items": state.EnvNames()}, nil
 			}
-			changed, err := store.Update(ctx, func(state *values.State) (bool, *protocol.Error) {
+			changed, err := store.Update(ctx, func(state *values.Editor) (bool, *protocol.Error) {
 				if action == "create" {
 					return state.CreateEnv(request.Args[0])
 				}
@@ -162,7 +162,7 @@ func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kin
 			return nil, err
 		}
 	}
-	changed, err := store.Update(ctx, func(state *values.State) (bool, *protocol.Error) {
+	changed, err := store.Update(ctx, func(state *values.Editor) (bool, *protocol.Error) {
 		if action == "set" {
 			return state.Set(kind, request.Args[0], env, value)
 		}

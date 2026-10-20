@@ -17,7 +17,7 @@ func TestPublicSnapshotPinsGenerationAndActualValuesWithoutSession(t *testing.T)
 	ctx := context.Background()
 	root := privateTempDir(t)
 	store := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app"}
-	if _, e := store.Update(ctx, func(s *State) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "https://before.invalid") }); e != nil {
+	if _, e := store.Update(ctx, func(s *Editor) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "https://before.invalid") }); e != nil {
 		t.Fatal(e)
 	}
 	snapshot, e := CapturePublic(ctx, root, "app", "", true, time.Now())
@@ -35,7 +35,7 @@ func TestPublicSnapshotPinsGenerationAndActualValuesWithoutSession(t *testing.T)
 	if snapshot.Metadata().Public.Profile != "app" {
 		t.Fatal("ticket metadata aliased")
 	}
-	if _, e = store.Update(ctx, func(s *State) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "https://after.invalid") }); e != nil {
+	if _, e = store.Update(ctx, func(s *Editor) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "https://after.invalid") }); e != nil {
 		t.Fatal(e)
 	}
 	id, _ := vault.NewID()
@@ -137,7 +137,7 @@ func TestAbsentPublicSnapshotsHaveStableRevisionAndRejectNewStorage(t *testing.T
 	if first.Metadata().Identity.Revision != second.Metadata().Identity.Revision {
 		t.Fatal("absent input revision changed")
 	}
-	if _, e := (ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app"}).Update(ctx, func(s *State) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "new") }); e != nil {
+	if _, e := (ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app"}).Update(ctx, func(s *Editor) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "new") }); e != nil {
 		t.Fatal(e)
 	}
 	id, _ := vault.NewID()

@@ -18,7 +18,7 @@ func TestModernPublicValuesNeedNoVaultAndKeepVersions(t *testing.T) {
 	ctx := context.Background()
 	root := privateTempDir(t)
 	store := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app"}
-	changed, e := store.Update(ctx, func(s *State) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "https://example.invalid") })
+	changed, e := store.Update(ctx, func(s *Editor) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "https://example.invalid") })
 	if e != nil || !changed {
 		t.Fatal(e)
 	}
@@ -31,7 +31,7 @@ func TestModernPublicValuesNeedNoVaultAndKeepVersions(t *testing.T) {
 	if err != nil || p.Sealed || p.ID == "" || p.Values[0].Slots[0].Version == "" {
 		t.Fatal("public logical profile", err)
 	}
-	changed, e = store.Update(ctx, func(s *State) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "https://example.invalid") })
+	changed, e = store.Update(ctx, func(s *Editor) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "https://example.invalid") })
 	if e != nil || changed {
 		t.Fatal("same public value changed", e)
 	}
@@ -42,7 +42,7 @@ func TestModernPublicValuesNeedNoVaultAndKeepVersions(t *testing.T) {
 	if _, err = os.Stat(filepath.Join(root, "vault", "key-slot.json")); !os.IsNotExist(err) {
 		t.Fatal("public variable initialized a vault")
 	}
-	if _, e = store.Update(ctx, func(s *State) (bool, *protocol.Error) {
+	if _, e = store.Update(ctx, func(s *Editor) (bool, *protocol.Error) {
 		return s.Set(Secret, "TOKEN", "", "synthetic-denied-plaintext-secret")
 	}); e == nil || e.Code != "key_missing" {
 		t.Fatal("secret write did not require protection", e)
@@ -57,7 +57,7 @@ func TestModernFirstSecretPromotionAndMetadataNeverInjectsPlaceholders(t *testin
 	ctx := context.Background()
 	root := privateTempDir(t)
 	store := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app"}
-	if _, e := store.Update(ctx, func(s *State) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "https://example.invalid") }); e != nil {
+	if _, e := store.Update(ctx, func(s *Editor) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "https://example.invalid") }); e != nil {
 		t.Fatal(e)
 	}
 	path := filepath.Join(store.Directory, profilekey.CanonicalFilename("app"))
@@ -87,7 +87,7 @@ func TestModernFirstSecretPromotionAndMetadataNeverInjectsPlaceholders(t *testin
 		return vault.NewMaterial(b), nil
 	}
 	invoked := 0
-	if _, e := store.Update(ctx, func(s *State) (bool, *protocol.Error) {
+	if _, e := store.Update(ctx, func(s *Editor) (bool, *protocol.Error) {
 		invoked++
 		return s.Set(Secret, "TOKEN", "", "synthetic-modern-encrypted-secret")
 	}); e != nil {
@@ -124,7 +124,7 @@ func TestModernFirstSecretPromotionAndMetadataNeverInjectsPlaceholders(t *testin
 	if value, _, e := metadata.GetVariable("URL", ""); e != nil || value != "https://example.invalid" {
 		t.Fatal("locked public read failed", e)
 	}
-	if _, e = store.Update(ctx, func(s *State) (bool, *protocol.Error) { return s.Unset(Secret, "TOKEN", "") }); e != nil {
+	if _, e = store.Update(ctx, func(s *Editor) (bool, *protocol.Error) { return s.Unset(Secret, "TOKEN", "") }); e != nil {
 		t.Fatal(e)
 	}
 	current, currentKey, err := (vault.FileStore{Root: root, VaultID: vid, CatalogKey: master}).ReadWithMaster(ctx, "app", master)
@@ -164,7 +164,7 @@ func TestModernFirstSecretOnPreviouslyAbsentProfile(t *testing.T) {
 		defer clear(b)
 		return vault.NewMaterial(b), nil
 	}}
-	if _, e := store.Update(ctx, func(s *State) (bool, *protocol.Error) {
+	if _, e := store.Update(ctx, func(s *Editor) (bool, *protocol.Error) {
 		return s.Set(Secret, "TOKEN", "", "synthetic-new-profile-secret")
 	}); e != nil {
 		t.Fatal("new profile promotion", e)

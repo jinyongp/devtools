@@ -60,7 +60,7 @@ func (a *App) importCommand(ctx context.Context, streams IO, request Request) (a
 	} else if dryRun {
 		items, applicable, err = store.PlanImport(ctx, parsed, request.ListOptions["var"], env, overwrite)
 	} else {
-		changed, err = store.Update(ctx, func(current *values.State) (bool, *protocol.Error) {
+		changed, err = store.Update(ctx, func(current *values.Editor) (bool, *protocol.Error) {
 			var updated bool
 			var failure *protocol.Error
 			items, updated, failure = current.Import(parsed, request.ListOptions["var"], env, overwrite)

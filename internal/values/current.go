@@ -67,11 +67,24 @@ func (s ModernStore) PlanImport(ctx context.Context, input map[string]string, va
 		return nil, false, VaultError(ctx, err)
 	}
 	defer key.Destroy()
-	state, err := profileState(p, key)
+	var items []ImportItem
+	var applicable bool
+	var failure *protocol.Error
+	_, err = p.Batch(ctx, key, func(m *vault.Mutation) error {
+		editor := newEditor(ctx, p, m, key, master, id)
+		items, applicable, failure = editor.PlanImport(input, variables, env, overwrite)
+		if failure != nil {
+			return failure
+		}
+		return nil
+	})
 	if err != nil {
+		if failure != nil {
+			return nil, false, failure
+		}
 		return nil, false, VaultError(ctx, err)
 	}
-	return state.PlanImport(input, variables, env, overwrite)
+	return items, applicable, nil
 }
 
 // CompletionNames reads only names from stable atomic profile images. It never

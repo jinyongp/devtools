@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"sort"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/profilekey"
@@ -128,21 +127,6 @@ func (s ModernStore) readHeld(ctx context.Context, master *vault.Material, vault
 	}
 	return p, key, true, nil
 }
-func profileState(p *vault.Profile, key *vault.Material) (*State, error) {
-	logical, err := p.ExportLogical(key)
-	if err != nil {
-		return nil, err
-	}
-	defer logical.Destroy()
-	private, err := vault.LogicalLegacyView(logical, p.Name)
-	if err != nil {
-		return nil, err
-	}
-	defer private.Destroy()
-	raw := private.CopyBytes()
-	defer clear(raw)
-	return InspectSnapshot(raw, p.Name)
-}
 func metadataState(p *vault.Profile) (*State, error) {
 	// DecodeProfile validated structure. Secret plaintext is neither requested
 	// from the session nor recovered for list/get/locked metadata responses.
@@ -249,83 +233,6 @@ func hasSecret(state *State) bool {
 	return false
 }
 
-func applyProfileDiff(ctx context.Context, p *vault.Profile, key *vault.Material, before, after *State) error {
-	for _, env := range after.EnvNames() {
-		if !before.Envs[env] {
-			if _, err := p.CreateEnv(env, key); err != nil {
-				return err
-			}
-		}
-	}
-	names := make([]string, 0, len(after.Keys))
-	for name := range after.Keys {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		entry := after.Keys[name]
-		old := before.Keys[name]
-		if old != nil && old.Kind != entry.Kind {
-			return vault.ErrInvalid
-		}
-		if old == nil && entry.Common == nil && len(entry.Envs) == 0 {
-			if _, err := p.Register(name, vault.ValueKind(entry.Kind), key); err != nil {
-				return err
-			}
-		}
-		if entry.Common != nil {
-			if old == nil || old.Common == nil || *old.Common != *entry.Common {
-				if _, err := p.Set(name, vault.ValueKind(entry.Kind), "", *entry.Common, key); err != nil {
-					return err
-				}
-			}
-		} else if old != nil && old.Common != nil {
-			if _, err := p.Unset(name, vault.ValueKind(entry.Kind), "", key); err != nil {
-				return err
-			}
-		}
-		envs := make([]string, 0, len(entry.Envs))
-		for env := range entry.Envs {
-			envs = append(envs, env)
-		}
-		sort.Strings(envs)
-		for _, env := range envs {
-			if old != nil {
-				if previous, exists := old.Envs[env]; exists && previous == entry.Envs[env] {
-					continue
-				}
-			}
-			if _, err := p.Set(name, vault.ValueKind(entry.Kind), env, entry.Envs[env], key); err != nil {
-				return err
-			}
-		}
-		if old != nil {
-			for env := range old.Envs {
-				if _, exists := entry.Envs[env]; !exists {
-					if _, err := p.Unset(name, vault.ValueKind(entry.Kind), env, key); err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
-	for name := range before.Keys {
-		if after.Keys[name] == nil {
-			return vault.ErrInvalid
-		}
-	}
-	for _, env := range before.EnvNames() {
-		if !after.Envs[env] {
-			if _, err := p.RemoveEnv(env, key); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
 func (s ModernStore) publishHeld(ctx context.Context, p *vault.Profile, key, master *vault.Material, vaultID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -349,7 +256,10 @@ func (s ModernStore) publishHeld(ctx context.Context, p *vault.Profile, key, mas
 	}
 	return maintenance.Replace(s.root(), files)
 }
-func (s ModernStore) Update(ctx context.Context, change func(*State) (bool, *protocol.Error)) (bool, *protocol.Error) {
+
+var errUnchanged = errors.New("mutation unchanged")
+
+func (s ModernStore) Update(ctx context.Context, change func(*Editor) (bool, *protocol.Error)) (bool, *protocol.Error) {
 	if !project.ValidProfile(s.Profile) {
 		return false, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
@@ -373,42 +283,54 @@ func (s ModernStore) Update(ctx context.Context, change func(*State) (bool, *pro
 	if err != nil {
 		return false, VaultError(ctx, err)
 	}
-	defer func() { key.Destroy() }()
-	before, err := profileState(p, key)
+	defer key.Destroy()
+	original, err := p.Encode()
 	if err != nil {
 		return false, VaultError(ctx, err)
 	}
-	after := before.Clone()
-	changed, changeErr := change(after)
-	if changeErr != nil {
-		return false, changeErr
+	var editor *Editor
+	defer func() {
+		if editor != nil && editor.promoted {
+			editor.key.Destroy()
+		}
+	}()
+	requested := false
+	changed, err := p.Batch(ctx, key, func(m *vault.Mutation) error {
+		editor = newEditor(ctx, p, m, key, master, vaultID)
+		var e *protocol.Error
+		requested, e = change(editor)
+		if e != nil {
+			return e
+		}
+		if !requested {
+			return errUnchanged
+		}
+		return nil
+	})
+	if errors.Is(err, errUnchanged) {
+		if e := protocol.ContextError(ctx.Err()); e != nil {
+			return false, e
+		}
+		return false, nil
 	}
-	if err := ctx.Err(); err != nil {
+	if err != nil {
+		if e, ok := err.(*protocol.Error); ok {
+			return false, e
+		}
 		return false, VaultError(ctx, err)
-	}
-	if !after.valid(s.Profile) {
-		return false, storageError()
 	}
 	if !changed {
 		return false, nil
 	}
-	if !p.Sealed && hasSecret(after) {
-		if master == nil {
-			return false, VaultError(ctx, vault.ErrKeyMissing)
-		}
-		// Freeze the callback result exactly once, then establish the physical
-		// promotion barrier outside disk maintenance. A concurrent writer conflicts.
-		original, err := p.Encode()
-		if err != nil {
-			return false, VaultError(ctx, err)
-		}
+	if editor.promoted {
+		key = editor.key
 		release()
 		held = false
-		launchRelease, err := vault.AcquireLaunchMutation(ctx, filepath.Join(s.root(), "vault"))
+		finish, err := vault.AcquireLaunchMutation(ctx, filepath.Join(s.root(), "vault"))
 		if err != nil {
 			return false, VaultError(ctx, err)
 		}
-		defer launchRelease()
+		defer finish()
 		release, err = maintenance.AcquireExclusive(ctx, s.root())
 		if err != nil {
 			return false, VaultError(ctx, err)
@@ -426,13 +348,6 @@ func (s ModernStore) Update(ctx context.Context, change func(*State) (bool, *pro
 		if existed != currentExists || existed && !bytes.Equal(original, observed) {
 			return false, failure("revision_conflict", "Profile changed during protection setup; retry with current state.")
 		}
-		key, err = p.Seal(vaultID, master)
-		if err != nil {
-			return false, VaultError(ctx, err)
-		}
-	}
-	if err = applyProfileDiff(ctx, p, key, before, after); err != nil {
-		return false, VaultError(ctx, err)
 	}
 	if err = s.publishHeld(ctx, p, key, master, vaultID); err != nil {
 		return false, VaultError(ctx, err)

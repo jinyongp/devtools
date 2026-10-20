@@ -18,7 +18,7 @@ func TestCommitHintsFollowRealProfilePublicationWithoutValues(t *testing.T) {
 	store := ModernStore{Directory: filepath.Join(root, "profiles"), Profile: "app"}
 	set := func(value string) bool {
 		t.Helper()
-		changed, e := store.Update(ctx, func(s *State) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", value) })
+		changed, e := store.Update(ctx, func(s *Editor) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", value) })
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -58,7 +58,7 @@ func TestCommitHintsFollowRealProfilePublicationWithoutValues(t *testing.T) {
 	if err := os.Mkdir(path, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if _, e := store.Update(ctx, func(s *State) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "must-not-publish") }); e == nil {
+	if _, e := store.Update(ctx, func(s *Editor) (bool, *protocol.Error) { return s.Set(Variable, "URL", "", "must-not-publish") }); e == nil {
 		t.Fatal("invalid hint destination accepted")
 	}
 	state, e := store.Read(ctx)

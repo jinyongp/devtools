@@ -69,7 +69,7 @@ func TestDashboardPreparesFrozenPublicInputBeforeManagedRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := values.ModernStore{Directory: filepath.Join(data, "profiles"), Profile: "app"}
-	if _, e := store.Update(ctx, func(s *values.State) (bool, *protocol.Error) {
+	if _, e := store.Update(ctx, func(s *values.Editor) (bool, *protocol.Error) {
 		return s.Set(values.Variable, "URL", "", "https://before.invalid")
 	}); e != nil {
 		t.Fatal(e)
@@ -83,7 +83,7 @@ func TestDashboardPreparesFrozenPublicInputBeforeManagedRestart(t *testing.T) {
 	if prepared.Input.Metadata().Values.Public == nil {
 		t.Fatal("dashboard bypassed generation admission")
 	}
-	if _, e = store.Update(ctx, func(s *values.State) (bool, *protocol.Error) {
+	if _, e = store.Update(ctx, func(s *values.Editor) (bool, *protocol.Error) {
 		return s.Set(values.Variable, "URL", "", "https://after.invalid")
 	}); e != nil {
 		t.Fatal(e)

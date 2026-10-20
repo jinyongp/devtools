@@ -7,15 +7,15 @@ this checkout also documents source features that may not yet be published.
 
 ## Check feature availability
 
-`devtools version` identifies the executable you actually run. Protocol v7 alone
+`devtools version` identifies the executable you actually run. A protocol number alone
 does not establish vault support: discover each feature with `devtools schema`,
 for example `devtools schema vault init`, `devtools schema bundle set`, and
 `devtools schema command run`. A release or Skill update does not update an
 already-installed CLI, migrate old secret files, or restart existing services.
 
-The [release preparation guide](releases/v0.28.0.md) describes the candidate changes
-and publication checks. The [var/sec review index](var-sec/README.md) links completed
-implementation evidence and earlier checkpoints; neither page is proof of publication.
+For release preparation and publication checks, use the
+[development guide](development.md#릴리스). For existing secret storage, follow the
+[migration procedure](secret-protection.md#기존-저장소를-전환하기).
 
 <a id="문서-버전과-예제-읽기"></a>
 
@@ -89,21 +89,11 @@ Design background is separate from public command availability.
 - [Development](development.md): checkout setup, checks, dashboard changes, packaging, and releases.
 - [Installed-release verification](../verify/README.md): Unix scenarios and native Windows Actions.
 - [Network coverage](../verify/network-coverage.md): checks and unverified environments.
-- [Plan-editing regression verification](task-edit-verification.md): E01–E49 and historical criteria.
+- [Plan-editing regression verification](task-edit-verification.md): coverage and isolated test commands.
 - [Performance](../perf/README.md) (English): Linux/WSL measurements and baselines.
 - [Agent Skill source](../skills/devtools/SKILL.md): operational guidance read by agents.
 
-## Design and historical records
+## Architecture
 
-These records preserve decisions and evidence for their stated source and date.
-Use the guides above for current installation and behavior.
-
-- [Current documentation review](documentation-audit.md), [previous documentation review](documentation-review.md).
-- [var/sec release preparation](releases/v0.28.0.md), [historical Windows preparation](releases/v0.25.0.md).
-- [var/sec final reviews and implementation history](var-sec/README.md).
-- [Task/workstream design](task-workstream-design.md), [management roadmap](management-roadmap.md).
-- [Proxy MVP](proxy-plan.md), [profile/project lifecycle](profile-project-lifecycle-plan.md).
-- [Hardening](devtools-hardening-plan.md), [storage correctness](correctness-recovery-storage-plan.md), [process/cleanup recovery](process-lifecycle-recovery-plan.md).
-- [Profile retirement proposal](profile-retirement-contract.md): a proposal, not an installed feature list.
-- [Agent Skill installation plan](agent-skill-install-plan.md), [installer Pages plan](pages-installer-plan.md).
-- [Windows plan](windows-support-plan.md), [research](windows-support/research.md), [validation policy](windows-support/implementation/validation-policy.md), [final implementation review](windows-support/implementation/W9.md), [completion record](windows-support/implementation/completion.json).
+- [Task and workstream design](task-workstream-design.md): shared state, execution contexts, and completion rules.
+- [Storage and recovery](storage-design.md): private files, locking, journals, and recoverable replacement.

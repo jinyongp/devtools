@@ -1,6 +1,0 @@
-{
-  "full_go_vet_race_source": "616f07e",
-  "later_changes": "Production Go changes after616 are Windows-only; common network_runtime_test helper was rerun on Linux after2e2c284. Native evidence includes all final Windows changes.",
-  "native_source": "aafed1a17d3385f0ec77f33619893925c8dfcebc",
-  "actual_pc": "NOT RUN; no local Windows runtime used"
-}

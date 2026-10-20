@@ -118,13 +118,13 @@ and manage a native Windows CA separately if needed.
 
 ## Validation limits
 
-Product validation uses Linux CI and WSL diagnostic fixtures. The current var/sec
-candidate also passed an actual owned WSL2 distro stop/restart and durable manual-lock
-check on disposable Actions hosts; see [the native acceptance record](var-sec/A12-final-review.md).
+Product validation uses Linux CI and WSL diagnostic fixtures. The Release workflow
+also checks vault sessions across an owned WSL2 distro stop/restart and durable
+manual lock on disposable Actions hosts. See [native validation](development.md#varsec-통합-수용-검증).
 That vault test does not validate cross-OS networking. Final WSL2 NAT/mirrored
 networking, Windows browser access, IPv6, reverse connections, other distros, LAN,
 ARM64 WSL2, and the manual certificate procedure above have not been tested on an
-actual PC. Historical primitive NAT probes apply only to their recorded source.
+actual PC. Standalone loopback probes do not establish coverage for these environments.
 The presence of `wsl.exe` on an Actions runner does not prove WSL2 startup or network
 behavior. Validation does not stop the current distro or change its networking mode.
 

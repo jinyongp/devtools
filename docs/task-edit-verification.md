@@ -1,42 +1,47 @@
 # 계획 편집 회귀 검증
 
-workstream `97b9d991-f326-49dc-b3c1-3d9b49413bfa`의 E01–E49 검토 항목을 아래 검증과 연결한다. task 저장소는 임시 디렉터리에서 검증하며 개발 중 바이너리를 사용자 전역 journal에 적용하지 않는다.
+[문서 목록](README.md) · [계획 편집 API](task-edit-api.md) · [개발 환경](development.md)
 
-| 항목 | 검증 위치와 확인 범위 |
+계획 편집을 수정할 때 확인할 계약과 검증 진입점이다.
+테스트는 임시 저장소를 사용하며 사용자 전역 journal에 개발 바이너리를 적용하지 않는다.
+
+## 변경 영역별 검사
+
+파일은 별도 표기가 없으면 `internal/tasks/` 아래에 있다.
+
+| 변경 영역 | 검증 위치와 판정 기준 |
 | --- | --- |
-| E01–E02 | edit_test: 모든 lifecycle에서 편집·순서 변경, metadata의 근거 보존 |
-| E03–E06 | assessment_test: 무관 작업·조건 보존, 직접 참조와 task/workstream 후행 전파, 자기 fingerprint 순환 방지 |
-| E07–E09 | edit_test: 제외·복원, 의존성 정리, 문서 제거, validation의 명시 제외와 owner 제외 구분 |
-| E10–E13 | edit_test: 앞·뒤 ref, 최종 DAG, 명시 제외 참조 거절, lifecycle 모순·표시 순서 |
-| E14–E16 | edit_test / task_edit_test: preview의 journal 무변경, commit/replay, operation 200/201 경계; Decode와 저장 전 응답 크기 검사 코드 대조 |
-| E17–E20 | execution_current_test: stale run sync, checkpoint/release, done+stale 원자 claim, 점유 보존; assessment_test의 draft/coverage 차단 |
-| E21–E22 | execution_current_test / edit_concurrency_test: late record, takeover 후 현재 basis와 명시 accept, 이전 context 거절 |
-| E23–E24 | edit_concurrency_test / edit_test: A→B→A의 epoch·waiver 무효화, required 검증 제외 감사, 검증 정의 복원 |
-| E25–E28 | assessment_test / execution_current_test / backup_current_test: 완료 직후 proof, workstream 재마감, canceled/removed/current 구분 |
-| E29–E32 | query_current_test: 필터·next 일치, 과거 계획, 제외 상세, 간접 영향 history; edit_test의 표시 순서 |
-| E33–E35 | replay_test: 진짜 v1 fixture baseline, 유효 근거·현재 run 보존, stale 미승격, version/action/sequence·중간 요청 경계 거절 |
-| E36 | task_edit_test / tasks_test / edit_legacy_test: 공개 CLI 입력·schema·preview/retry, legacy 정의 편집과 membership 검증 |
-| E37 | dashboard/edit_test + Browser Plugin: 실행 중·완료 후 편집, preview/저장, stale·removed-running·복원; 실행 action 권한 거절 |
-| E38 | edit_legacy_test / diagnostics.go: 대상 이름·조건·remedy argv; Dashboard는 사용자 문자열을 textContent로 표시 |
-| E39 | query_current_test / dashboard/compatibility_test: 구 cursor 및 인증·UI·task protocol 불일치 거절 |
-| E40–E41 | backup_current_test / backup·cleanup 패키지 및 설치된 release 시나리오: v2 이력·scope 보존, context/receipt 폐기, stale/running archive 거절, excluded open 허용 |
-| E42–E44 | edit_concurrency_test: edit와 edit/claim/done/record/sync/takeover/unclaim/close 경쟁, 점유 단일성·완료 유효성 |
-| E45 | edit_concurrency_test: 원자 교체 전 실패의 byte 보존, 교체 후 오류와 영수증 복구. WritePrivate의 temp-write/fsync/rename 순서 코드 대조 |
-| E46 | TestEditHonorsMaintenanceGate 및 maintenance_test: 복원·cleanup과 공유하는 gate 우선 잠금, 대기 취소·해제 후 실행, 복구 후 reader 일관성 |
-| E47 | assessment_test: 1,000 task DAG의 반복 위상 계산과 결정론적 영향 |
-| E48 | CLI 전체 및 설치된 release tasks/workflow/completion/discovery 시나리오: 기존 독립 task, 설치된 명령·도움말·schema, 독립 Agent Skill, shell completion |
-| E49 | execution_current_test: close 후 basis 교체·fail/blocked/skipped·unwaive, pass 회복 후에도 명시 close 필요 |
+| 정의 편집과 범위 | `edit_test.go`: lifecycle과 독립적인 편집, 삽입·제외·복원, 의존성·참조 검사. |
+| 영향과 완료 기준 | `assessment_test.go`: 무관 항목 보존, 후행 전파, 의미 epoch, coverage와 마감 차단. |
+| 점유와 실행 | `execution_current_test.go`: stale run sync, 점유 보존, 인계, 과거 컨텍스트 거절과 재마감. |
+| 동시 변경 | `edit_concurrency_test.go`: 편집·claim·done·takeover 경쟁, 단일 점유와 원자적 게시. |
+| 조회와 재생 | `query_current_test.go`, `replay_test.go`: 과거 계획, 제외 항목, cursor와 이벤트 순서·형식 검증. |
+| 백업과 복원 | `backup_current_test.go`: 이력 보존, 실행 권한 폐기와 stale/running 보호. |
+| 공개 CLI | `internal/cli/task_edit_test.go`: 입력·schema·preview·retry와 오류 계약. |
+| Dashboard | `internal/dashboard/edit_test.go`, `compatibility_test.go`: 편집·미리보기·저장과 인증·protocol 불일치 거절. |
 
-구버전 호환성은 변경 전 commit `75fa433bc3c6834163c0888e6441bc8a122330b0`을 별도 임시 디렉터리에 추출해 subprocess로 컴파일·실행했다. 새 v2 fixture의 Read와 Execute가 모두 거절되고 journal 바이트가 바뀌지 않는 것을 확인했다.
+preview는 journal을 변경하지 않아야 한다. 저장 실패는 원자 교체 전·후를 나눠 확인하고,
+같은 요청을 다시 보낼 때 중복 적용하지 않아야 한다. 복원·cleanup과 공유하는 maintenance
+gate의 대기 취소와 복구 후 일관성도 확인한다.
 
-Browser Plugin 검증은 `TestEditBrowserFixture`가 만드는 격리 profile을 사용한다. 선택적으로 `DEVTOOLS_EDIT_FIXTURE_OUTPUT`에 접속 링크를 저장할 private 파일 경로를 지정하고 해당 테스트를 실행한다. 테스트는 20분 후 서버와 임시 데이터를 정리한다. 링크와 실행 context는 공유 문서에 기록하지 않는다.
+## 실행
 
-필수 통합 명령:
+개발 환경을 준비한 뒤 관련 Go 패키지 검사를 실행한다.
 
 ```sh
-devtools run check:all
+go test ./internal/tasks ./internal/cli ./internal/dashboard
 devtools run check:dashboard
 devtools run test:installed tasks workflow backup cleanup completion discovery
 ```
 
-실제 검증 결과와 코드 기준은 workstream의 task별 validation 및 통합 validation에 기록한다. syscall별 커널 장애를 모두 재현한 것으로 해석하지 않으며 저장 실패는 원자 교체 전·후 경계로 검증한다.
+통합 gate는 `devtools run check:all`이다. 지원 플랫폼별 추가 검사는
+[개발 안내](development.md#변경에-맞는-검사-선택)를 따른다.
+syscall별 모든 커널 장애를 위 명령만으로 검증했다고 해석하지 않는다.
+
+## 수동 브라우저 검사
+
+`internal/dashboard`의 `TestEditBrowserFixture`가 격리 profile과 서버를 만든다.
+`DEVTOOLS_EDIT_FIXTURE_OUTPUT`에 접속 링크를 저장할 private 파일 경로를 지정하고
+해당 테스트를 실행한다. 실행 중·완료 후 편집, 미리보기와 저장, stale 표시,
+제외된 running task와 복원을 확인한다. 테스트는 20분 후 서버와 임시 데이터를 정리한다.
+접속 링크와 실행 컨텍스트를 공유 문서나 커밋에 넣지 않는다.

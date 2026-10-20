@@ -1,8 +1,0 @@
-{"Time":"2026-10-17T05:32:28.7808231Z","Action":"start","Package":"github.com/jinyongp/devtools/internal/ports"}
-{"Time":"2026-10-17T05:32:28.8011879Z","Action":"run","Package":"github.com/jinyongp/devtools/internal/ports","Test":"TestWindowsRegistryLockWaitAndNonblockingRunLease"}
-{"Time":"2026-10-17T05:32:28.8017205Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/ports","Test":"TestWindowsRegistryLockWaitAndNonblockingRunLease","Output":"=== RUN   TestWindowsRegistryLockWaitAndNonblockingRunLease\n","OutputType":"frame"}
-{"Time":"2026-10-17T05:32:28.8622301Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/ports","Test":"TestWindowsRegistryLockWaitAndNonblockingRunLease","Output":"--- PASS: TestWindowsRegistryLockWaitAndNonblockingRunLease (0.06s)\n","OutputType":"frame"}
-{"Time":"2026-10-17T05:32:28.8622301Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/ports","Test":"TestWindowsRegistryLockWaitAndNonblockingRunLease","Elapsed":0.06}
-{"Time":"2026-10-17T05:32:28.8622301Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/ports","Output":"PASS\n","OutputType":"frame"}
-{"Time":"2026-10-17T05:32:28.8647138Z","Action":"output","Package":"github.com/jinyongp/devtools/internal/ports","Output":"ok  \tgithub.com/jinyongp/devtools/internal/ports\t0.083s\n"}
-{"Time":"2026-10-17T05:32:28.8647138Z","Action":"pass","Package":"github.com/jinyongp/devtools/internal/ports","Elapsed":0.084}

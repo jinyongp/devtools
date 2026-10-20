@@ -1,9 +1,0 @@
-Installed 5 packages in 6ms
-Valid skill: skills/devtools
-...inspect canonical skill: lstat /tmp/tmp1po5eo0i/missing.md: no such file or directory
-exit status 1
-....
-----------------------------------------------------------------------
-Ran 7 tests in 2.261s
-
-OK

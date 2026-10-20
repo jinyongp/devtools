@@ -1,13 +1,10 @@
 # 로컬 var/sec 저장·실행 계약
 
-[문서 목록](README.md) · [사용자 설정](secret-protection.md) · [최종 검증과 이력](var-sec/README.md)
+[문서 목록](README.md) · [사용자 설정](secret-protection.md) · [개발과 검증](development.md#varsec-통합-수용-검증)
 
-구현 전 baseline: `89100eb98888895a450b2ebd403e4e1c9b5f52d2`.
-Workstream: `1888bdf7-3f14-4eeb-8782-329795103204`.
-이 문서는 현재 소스의 구현 계약이다. 저장·실행 보호의 실제 OS 수용 근거는
-[A12](var-sec/A12-final-review.md), bundle·사용처는 [B03](var-sec/B03-final-review.md),
-자동 반영은 [C03](var-sec/C03-final-review.md)에 기록한다. 이 검증과 릴리스 게시,
-설치한 CLI의 기능 지원, 기존 사용자 저장소의 실제 전환은 별도다.
+이 문서는 현재 소스의 저장·실행 보호 계약이다. 설치한 CLI의 지원 여부는
+`devtools version`과 `devtools schema`에서 확인한다. 기존 사용자 저장소의 전환은
+[명시적인 migration 절차](secret-protection.md#기존-저장소를-전환하기)를 따른다.
 
 ## 호환성과 공개 경계
 
@@ -132,14 +129,15 @@ keyset/generation으로 저장하며 live session/handle을 이전하지 않는�
 초과·선택 누락·snapshot 만료를 구분한다. noninteractive 입력 대기 없음,
 raw detail 없음, 명시 action 없는 위험한 자동 retry 없음이 기본이다.
 
-Bundle/uses/notify는 단계 B, opt-in managed 자동 restart는 단계 C에서 구현했다.
 같은 사용자 악성 agent·이미 실행된 앱·직접 파일/네트워크 출력·root·전체
 과거 상태 복원·모든 메모리 사본 삭제는 이 계약의 격리 보장 밖이다.
-각 작업은 검증→리뷰/수정/재검증→단위 커밋과 근거 기록 후 완료하고,
-전체 구현 후 Z01 종합 리뷰를 완료했다. 결과와 과거 중간 기록은 [검증 색인](var-sec/README.md)에서
-구분한다. 모델 통과는 OS/제품 통과가 아니다.
-
 
 ## 수명 연장 없는 metadata 인증
 
-B02의 상태/사용처 검증은 이미 warm인 키만 inspect로 잠깐 빌린다. idle deadline을 연장하거나 native UI/KDF/자동 OS 재해제를 실행하지 않는다. cold/expired/manual/recovery 상태는 pending/오류로 남긴다. inspection도 user/peer/vault/session/challenge/lock epoch를 확인하고 lock의 in-flight delivery drain에 포함한다. launch ticket은 발급하지 않는다. 새 inspect wire operation 때문에 session protocol만 3으로 올리며 storage/HKDF version 1은 유지한다. 실제 값 작업이 이전 daemon을 만나면 기존 stable control retirement 후 새 session을 사용하고 필요한 명시 해제를 다시 받는다. passive inspection은 이전 daemon을 재시작하지 않는다.
+상태/사용처 검증은 이미 warm인 키만 inspect로 잠깐 빌린다. idle deadline을 연장하거나
+native UI/KDF/자동 OS 재해제를 실행하지 않는다. cold/expired/manual/recovery 상태는
+pending/오류로 남긴다. inspection도 user/peer/vault/session/challenge/lock epoch를 확인하고
+lock의 in-flight delivery drain에 포함한다. launch ticket은 발급하지 않는다.
+inspect는 session protocol 3을 사용하며 storage/HKDF version 1과 독립적이다.
+실제 값 작업이 이전 daemon을 만나면 기존 stable control retirement 후 새 session을 사용하고
+필요한 명시 해제를 다시 받는다. passive inspection은 이전 daemon을 재시작하지 않는다.

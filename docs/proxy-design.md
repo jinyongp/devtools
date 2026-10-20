@@ -6,8 +6,8 @@ HTTPS·도메인·listener·공유 확장의 현재 계약은
 [local network contract](network-design.md)를 따른다. 아래는 기존 HTTP 동작의 호환성 기준이다.
 
 이 문서는 `devtools proxy` MVP의 프로젝트 설정, route 해석, CLI, daemon 수명과
-HTTP 전달 계약을 정의한다. 구현 순서와 검증 범위는 [proxy 구현 계획](proxy-plan.md)을
-따른다.
+HTTP 전달 계약을 정의한다. 설치된 실행 파일의 검증은
+[검증 안내](../verify/README.md)를 따른다.
 
 ## 사용 목적
 

@@ -1,8 +1,0 @@
-{"Time":"2026-10-17T05:35:55.2611682Z","Action":"start","Package":"github.com/jinyongp/devtools/cmd/devtools"}
-{"Time":"2026-10-17T05:35:55.2827202Z","Action":"run","Package":"github.com/jinyongp/devtools/cmd/devtools","Test":"TestPackageIdentityIsTheRuntimeVersionSource"}
-{"Time":"2026-10-17T05:35:55.2832774Z","Action":"output","Package":"github.com/jinyongp/devtools/cmd/devtools","Test":"TestPackageIdentityIsTheRuntimeVersionSource","Output":"=== RUN   TestPackageIdentityIsTheRuntimeVersionSource\n","OutputType":"frame"}
-{"Time":"2026-10-17T05:35:55.2832774Z","Action":"output","Package":"github.com/jinyongp/devtools/cmd/devtools","Test":"TestPackageIdentityIsTheRuntimeVersionSource","Output":"--- PASS: TestPackageIdentityIsTheRuntimeVersionSource (0.00s)\n","OutputType":"frame"}
-{"Time":"2026-10-17T05:35:55.2832774Z","Action":"pass","Package":"github.com/jinyongp/devtools/cmd/devtools","Test":"TestPackageIdentityIsTheRuntimeVersionSource","Elapsed":0}
-{"Time":"2026-10-17T05:35:55.2832774Z","Action":"output","Package":"github.com/jinyongp/devtools/cmd/devtools","Output":"PASS\n","OutputType":"frame"}
-{"Time":"2026-10-17T05:35:55.2856733Z","Action":"output","Package":"github.com/jinyongp/devtools/cmd/devtools","Output":"ok  \tgithub.com/jinyongp/devtools/cmd/devtools\t0.025s\n"}
-{"Time":"2026-10-17T05:35:55.2856733Z","Action":"pass","Package":"github.com/jinyongp/devtools/cmd/devtools","Elapsed":0.025}

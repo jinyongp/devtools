@@ -1,7 +1,0 @@
-/tmp/devtools-verify-releases-uvn3bfcz/releases/devtools_0.0.0-test.1_linux_amd64.tar.gz
-/tmp/devtools-verify-releases-uvn3bfcz/releases/devtools_0.0.0-test.2_linux_amd64.tar.gz
-/tmp/devtools-verify-releases-uvn3bfcz/releases/devtools-skill_0.0.0-test.1.tar.gz
-Running scenario: processes
-Installed process lifetime, idempotency, concurrent starts, env conflict, restart, ports and bounded logs verified
-Running scenario: project_lifecycle
-Installed project multi-start, readiness, singleton reuse, worktree isolation, partial retry and down replay passed

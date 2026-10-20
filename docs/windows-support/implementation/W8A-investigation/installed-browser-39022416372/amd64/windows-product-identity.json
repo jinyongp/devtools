@@ -1,8 +1,0 @@
-{
-  "zip_sha256": "77220717fccd180b862753882386f278f68c182a2b53719726bb2d9dafcb7460",
-  "commit": "949c58b17884dd602718f643bbd2ea0f5dc00c1a",
-  "zip": "devtools_0.0.0-windows-candidate_windows_amd64.zip",
-  "exe_sha256": "dd9c585c4e1de5cfe21cc6830310ceee89a1776e31b5c9e5585f9986de2a3e5f",
-  "architecture": "amd64",
-  "version": "0.0.0-windows-candidate"
-}

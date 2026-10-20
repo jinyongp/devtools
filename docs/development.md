@@ -63,13 +63,9 @@ IPC 검사의 기존 기한을 넘길 수 있기 때문이다. x64·ARM64와 제
 
 로컬 `check:all`은 disposable Actions의 사용자·ACL·OS 경계 검사를 대체하지 않는다.
 Release 검증은 macOS 15, Ubuntu 24.04, Windows Server 2025 x64(테스트 호스트),
-Windows 11 ARM64와 Go 1.27.1을 사용한다. 현재 runner와 실행 근거·실제 PC 미검증 한계는
-[Windows 안내](windows.md)와 [최종 리뷰](windows-support/implementation/W9.md)를 따른다.
-Windows 구현 결정의 배경은 [지원 계획](windows-support-plan.md)과
-[사전 조사](windows-support/research.md)에 보존한다. 이 기록이 Windows 출시를 의미하지는 않는다.
-Windows 최초 검증의 W9와 현재 var/sec 검증은 별도 소스 기준이다.
-최신 var/sec 근거는 아래 [통합 수용 검증](#varsec-통합-수용-검증)과
-[검증 색인](var-sec/README.md)에서 확인한다.
+Windows 11 ARM64와 Go 1.27.1을 사용한다. 지원 범위와 실제 PC 미검증 한계는
+[Windows 안내](windows.md)를 따른다. 실행별 결과는 해당 커밋의 Actions run과
+artifact에서 확인한다.
 
 변경 영역만 먼저 확인할 때는 다음 검사를 사용한다.
 
@@ -94,10 +90,10 @@ Go 단위 테스트는 OS가 고른 포트를 먼저 닫은 뒤 재사용하지 
 
 ## var/sec 통합 수용 검증
 
-저장·세션·실행 보호의 실제 OS 검증은 [A12 수용 기록](var-sec/A12-final-review.md)과
-[검사별 연결표](var-sec/A12-acceptance-ledger.md)를 따른다. Keychain Intel/ARM,
-Windows DPAPI x64/ARM64·UID/SID/pipe·설치/업데이트, Linux Secret Service 가용/부재·logout,
-별도 소유 WSL2 배포판 종료·재시작, 12방향 profile/bundle 전송을 구분해 기록한다.
+저장·세션·실행 보호는 Release workflow의 native OS job으로 검증한다.
+Keychain Intel/ARM, Windows DPAPI x64/ARM64·UID/SID/pipe·설치/업데이트,
+Linux Secret Service 가용/부재·logout, 별도 소유 WSL2 배포판 종료·재시작,
+12방향 profile/bundle 전송을 각각 확인한다.
 로컬 test나 cross compile로 이 실제 검증을 대체하지 않는다. WSL vault 검증은
 WSL/Windows 네트워크나 실제 사용자 저장소 이전까지 검증했다는 뜻이 아니다.
 
@@ -225,8 +221,8 @@ devtools run release:publish
 추려 Node.js로 전달하므로 릴리스 본문·자산 metadata가 커져도 버전 조회 버퍼를 채우지 않는다.
 `release:publish`도 같은 조회를 사용한다. API 조회가 실패하면 버전 계산도 중단하며
 게시되지 않은 태그만으로 기준 버전을 대체하지 않는다.
-저장소 전환 안내는 [v0.28.0 준비서](releases/v0.28.0.md), 이후 batch 변경 후보의 검증은
-[D02 기록](var-sec/D02-release-validation.md)을 따른다.
+저장 형식이 바뀌는 릴리스는 [저장 호환성](profiles.md#저장-형식-업그레이드와-구버전-실행)과
+[vault 전환](secret-protection.md#기존-저장소를-전환하기)의 백업·복구 절차를 확인한다.
 명시 workflow 입력으로 게시할 때는 공개 안정 릴리스 목록을 좁혀 조회하고,
 그 태그가 후보의 ancestor인지와 이후 커밋의 feature/breaking 변경을 확인해 버전을 정한다.
 최신 공개 태그가 후보에 포함되지 않으면 단순히 버전 숫자만 올리지 않는다.
@@ -269,8 +265,8 @@ Windows의 실행 근거는 Actions이며 실제 PC·WSL2 연계 한계는 [Wind
 
 게시 job은 준비된 `release-assets` artifact를 내려받아 태그를 생성하고,
 고정 SHA의 `releaseway/actions`로 immutable GitHub Release를 게시한다.
-현재 Releaseway pin과 적용한 기능, 업스트림 오류의 해결·검증 결과는
-[연동 업데이트 기록](releases/releaseway-upgrade.md)을 확인한다.
+Releaseway의 고정 SHA와 입력은 `.github/workflows/release.yml`,
+설치기 배포 입력은 `.github/workflows/pages.yml`에서 관리한다.
 같은 버전의 태그가 이미 있으면 동일 커밋인지 확인해 재사용하며, 다른 커밋의 태그는
 교체하지 않는다. 릴리즈 노트는 `notes: standard` 기본 템플릿으로
 게시된 이전 릴리즈 이후의 커밋을 Features·Fixes 등으로 분류한다. 이 경로를 사용하려면
@@ -323,7 +319,7 @@ Skill 패키징 자체에는 `uvx`·`skills-ref`가 필요 없지만 게시 전 
 
 ### Homebrew 배포
 
-Pull Request에서는 `.github/workflows/homebrew.yml`이 고정 SHA의
+Pull Request와 관련 파일의 main push에서는 `.github/workflows/homebrew.yml`이 고정 SHA의
 `releaseway/homebrew-actions` 검사 워크플로를 호출해
 `.github/homebrew/formula.yml`을 렌더링하고 Formula 계약을 검증한다.
 
@@ -342,3 +338,13 @@ Dependabot은 GitHub Actions 의존성을 매주 그룹으로 갱신하므로 Re
 일반 Actions 업데이트와 함께 검토한다. Formula 빌드는 `updateManager=homebrew`를 기록해
 업데이트를 Homebrew로 안내한다. 빌드 도구는 `go.mod`에 선언한 정확한 Go 버전을 사용하며,
 Homebrew의 Go 패치 버전이 다르면 Go toolchain 다운로드 기능으로 필요한 버전을 준비한다.
+
+## 문서 작성과 유지
+
+`docs/`에는 사용법, API 계약, 현재 구조와 운영·복구 절차를 둔다.
+기능을 바꾸면 해당 문서를 현재 동작으로 수정한다. 구현 전 제안이나 완료된 작업 목록을
+현행 사용법과 섞지 않는다. 문서의 진입점은 [문서 목록](README.md)이다.
+
+작업 진행, 리뷰 판정, 일회성 검증 결과와 원시 로그는 task/workstream, 커밋 설명,
+Actions run·artifact에서 관리한다. 로컬 시험 결과는 임시 경로에 두며 `docs/`에 추가하지 않는다.
+검증 문서는 실행 방법과 판정 기준을 설명하고, 특정 실행의 통과 이력을 누적하지 않는다.

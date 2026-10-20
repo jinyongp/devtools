@@ -4,6 +4,7 @@
 [Release 실행 39374333363](https://github.com/jinyongp/devtools/actions/runs/39374333363)은
 `publish=false`, `system_network_smoke=true`로 요청했다. 검증과 패키징을 수행하며
 태그·GitHub Release·Homebrew·installer Pages를 게시하지 않는다.
+이후 main 병합과 릴리스 도구 변경은 [Releaseway 업데이트 기록](../releases/releaseway-upgrade.md)에 구분한다.
 
 ## 현재 상태
 

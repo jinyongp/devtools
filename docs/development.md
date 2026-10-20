@@ -239,6 +239,8 @@ Windows의 실행 근거는 Actions이며 실제 PC·WSL2 연계 한계는 [Wind
 
 게시 job은 준비된 `release-assets` artifact를 내려받아 태그를 생성하고,
 고정 SHA의 `releaseway/actions`로 immutable GitHub Release를 게시한다.
+현재 Releaseway pin과 적용한 기능, 게시 전에 해결할 업스트림 오류는
+[연동 업데이트 기록](releases/releaseway-upgrade.md)을 확인한다.
 같은 버전의 태그가 이미 있으면 동일 커밋인지 확인해 재사용하며, 다른 커밋의 태그는
 교체하지 않는다. 릴리즈 노트는 `notes: standard` 기본 템플릿으로
 게시된 이전 릴리즈 이후의 커밋을 Features·Fixes 등으로 분류한다. 이 경로를 사용하려면
@@ -246,11 +248,15 @@ Windows의 실행 근거는 Actions이며 실제 PC·WSL2 연계 한계는 [Wind
 게시 단계가 실패하면 같은 실행의 실패한 job을 재실행한다. 준비한 artifact를 그대로
 사용하므로 새 버전이나 태그 교체 없이 Releaseway의 게시 재시도를 사용할 수 있다.
 artifact는 30일간 보관한다. GitHub Release 게시 이후 Homebrew와 installer 배포는
-독립적으로 실행한다. installer job은 `.github/workflows/pages.yml`에 게시된 태그를
+독립적으로 실행한다. 게시 액션의 `diagnostics-path`는 가능한 경우 `release-diagnostics`
+artifact로 남기며 진단 파일이 없다고 원격 변경이 없었다고 판단하지 않는다.
+installer job은 `.github/workflows/pages.yml`에 게시된 태그를
 전달하고, 해당 workflow가 릴리스의
 `install.sh`와 해당 태그에 존재하는 `install.ps1`을 각각
 `jinyongp.dev/devtools/install.sh`, `jinyongp.dev/devtools/install.ps1`에 배포한다.
 각 파일은 선택한 태그의 소스와 정확히 대조하며 과거 Unix-only 태그에는 Windows 파일을 요구하지 않는다.
+Releaseway `distribute` step은 해당 태그의 commit SHA와 GitHub asset digest·크기를 먼저
+검증하고 `installer-distribution` artifact에 보고서를 남긴다.
 Pages source는 저장소
 설정에서 GitHub Actions로 한 번 활성화해야 하며, workflow를 수동 실행하면 최신 안정
 릴리스를 바로 게시할 수 있다.

@@ -1,0 +1,14 @@
+--- a/src/github.ts
++++ b/src/github.ts
+@@ -169,2 +169,3 @@
+     context: string,
++    projection?: string,
+   ): unknown[] {
+@@ -182,2 +183,3 @@
+           "X-GitHub-Api-Version: 2026-03-10",
++          ...(projection ? ["--jq", projection] : []),
+           endpoint(page),
+@@ -344,2 +346,3 @@
+       "release-list response",
++      "map({tag_name, draft, prerelease})",
+     );

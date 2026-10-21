@@ -145,10 +145,10 @@ common profile values and the configured env; explicit --env enables injection
 even when inject is false and overrides the configured env. Direct execution
 injects profile values. Inspect the command before choosing an env override.
 
-## Approved external execution (unreleased source capability)
+## Approved external execution (v0.30.0+)
 
 Discover `schema values execution prepare` and `schema values runner register`
-before use; older installed builds do not expose these source commands. See
+before use; older installed builds do not expose these commands. See
 `docs/secret-automation.md` in the devtools repository for the complete integration
 contract. Registrations are root-wide; execution records select a profile.
 Prepare requires explicit `selection.keys`, with the full allowed key ceiling

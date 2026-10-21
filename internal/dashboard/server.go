@@ -36,7 +36,7 @@ import (
 //go:embed assets/*
 var assets embed.FS
 
-const authProtocol = 8
+const authProtocol = 9
 
 // Embedded assets identify the UI even for local builds without a release version.
 var assetVersion = func() string {

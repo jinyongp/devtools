@@ -76,6 +76,9 @@ func (a *App) catalog() map[string]any {
 		if command.InputOneOf != nil {
 			input["oneOf"] = command.InputOneOf
 		}
+		if command.InputAllOf != nil {
+			input["allOf"] = command.InputAllOf
+		}
 		if command.ChildArgs {
 			input["anyOf"] = []any{
 				map[string]any{"required": []string{"args"}, "properties": map[string]any{"args": map[string]any{"minItems": 1}}},

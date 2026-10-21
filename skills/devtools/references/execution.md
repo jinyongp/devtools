@@ -21,6 +21,23 @@ arguments. Preview dotenv import with --dry-run; existing key kinds are retained
 new keys named by --var are public, and other new keys become secrets. Different
 stored values require explicit --overwrite; failed import preserves all values.
 
+Discover `schema values revision` before using opt-in automation guards. On supported
+builds, set/unset, env create/remove and import accept --revision and --request-id
+only as a pair. Read the edit token with `values revision`; preserve the UUID,
+revision and exact input for response-loss retries. Same ID/different input conflicts;
+successful no-ops also bind IDs. Guardless calls preserve their old contract but
+cannot express a caller-observed stale editing intent. Guarded set additionally accepts
+--create-only: an empty/expired exact slot exists, while inherited common is not an
+env slot. Guarded import preserves CLI layer comparison with 500,000-byte/5,000-key limits.
+Preview binds no receipt. Do not put secret values in argv or workspace files.
+
+`values request show UUID` returns saved metadata using only an existing warm key,
+without starting/unlocking a daemon or extending idle. Missing means request_not_found,
+not permission to guess success or issue a different request. Successful retries replay
+for 30 days; expired IDs return request_expired and stay spent. Metadata remains for the
+data root's lifetime. Timestamp-free legacy receipts remain unlimited. Root deletion,
+historical full rollback and transfer to another root end this local deduplication scope.
+
 ## Local key protection (discover installed support first)
 
 Check `schema vault status` and `schema vault init`; older installed builds may not

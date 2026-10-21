@@ -83,6 +83,9 @@ func (a *App) registerTools() {
 					}
 				}
 			}
+			if action == "set" || action == "unset" {
+				guardMutation(&command, action == "set")
+			}
 			if action == "list" {
 				command.Output = object(map[string]any{"profile": stringSchema(), "items": map[string]any{"type": "array", "items": metadataSchema()}, "integrity_verified": map[string]any{"type": "boolean"}}, "profile", "items", "integrity_verified")
 			}
@@ -99,10 +102,15 @@ func (a *App) registerTools() {
 		command := Command{Name: "env " + action, Description: action + " environments in the selected profile.", Options: profileOptions(false), Output: changedSchema()}
 		if action != "list" {
 			command.Arguments = []Argument{{Name: "env", Required: true, Pattern: project.ProfilePattern}}
+			guardMutation(&command, false)
 		} else {
 			command.Output = object(map[string]any{"profile": stringSchema(), "items": map[string]any{"type": "array", "items": stringSchema()}}, "profile", "items")
 		}
 		command.Run = func(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
+			guarded, err := mutationGuard(request.Options)
+			if err != nil {
+				return nil, err
+			}
 			store, err := a.store(request.Options)
 			if err != nil {
 				return nil, err
@@ -114,6 +122,9 @@ func (a *App) registerTools() {
 				}
 				return map[string]any{"profile": store.Profile, "items": state.EnvNames()}, nil
 			}
+			if guarded {
+				return store.Apply(ctx, values.Change{Action: "env." + action, Env: request.Args[0], Revision: request.Options["revision"], RequestID: request.Options["request-id"]})
+			}
 			changed, err := store.Update(ctx, func(state *values.Editor) (bool, *protocol.Error) {
 				if action == "create" {
 					return state.CreateEnv(request.Args[0])
@@ -124,9 +135,14 @@ func (a *App) registerTools() {
 		}
 		a.commands = append(a.commands, command)
 	}
+	a.registerValueManagement()
 }
 
 func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kind values.Kind, action string) (any, *protocol.Error) {
+	guarded, err := mutationGuard(request.Options)
+	if err != nil {
+		return nil, err
+	}
 	store, err := a.store(request.Options)
 	if err != nil {
 		return nil, err
@@ -151,12 +167,14 @@ func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kin
 			return nil, argumentError("Select exactly one secret input: --file or --stdin.", "")
 		}
 		// Check scope before consuming a potentially blocking input stream.
-		state, err := store.Read(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if err := state.CheckEnv(env); err != nil {
-			return nil, err
+		if !guarded {
+			state, err := store.Read(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if err := state.CheckEnv(env); err != nil {
+				return nil, err
+			}
 		}
 		if err = store.RequireSecretWrite(ctx); err != nil {
 			return nil, err
@@ -165,6 +183,13 @@ func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kin
 		if err != nil {
 			return nil, err
 		}
+	}
+	if guarded {
+		change := values.Change{Action: string(kind) + "." + action, Key: request.Args[0], Env: env, Revision: request.Options["revision"], RequestID: request.Options["request-id"], CreateOnly: request.Options["create-only"] == "true"}
+		if action == "set" {
+			change.Value = &value
+		}
+		return store.Apply(ctx, change)
 	}
 	changed, err := store.Update(ctx, func(state *values.Editor) (bool, *protocol.Error) {
 		if action == "set" {

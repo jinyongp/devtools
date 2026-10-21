@@ -102,6 +102,46 @@ profile에는 모든 env가 공유하는 공통 값과 env별 값이 있다. env
 
 local의 덮어쓰기 값을 제거하면 공통 값이 다시 적용된다. `unset`은 부모 프로세스의 환경변수를 제거하는 명령이 아니다.
 
+### 조건부 변경과 응답 유실 복구
+
+`variable/secret set/unset`, `env create/remove`, `import`는 선택적으로
+`--revision REVISION --request-id UUID`를 함께 받는다. 먼저 `values revision`
+으로 profile 전체의 불투명한 편집 revision을 조회한다. 이 토큰은 값 사용 권한이 아니다.
+guard 없는 기존 호출은 기존 입력·출력과 변경 동작을 유지하지만, 호출자가 관측한
+과거 상태를 기준으로 한 편집 의도까지 검사하지는 않는다. CLI와 dashboard의
+writer는 같은 저장소 revision과 commit 경합 검사를 사용한다.
+
+```sh
+devtools values revision --profile app
+devtools secret set TOKEN --stdin --profile app --revision REVISION --request-id UUID --create-only
+devtools values request show UUID --profile app
+```
+
+예시의 REVISION과 UUID는 조회한 revision과 호출자가 보존할 새 요청 UUID로 바꾼다.
+성공한 변경과 성공한 no-op은 결과와 요청 식별값을 한 transaction으로 저장한다.
+응답이 유실되면 같은 UUID·revision·입력 바이트로 재시도한다. file/stdin의 출처는
+identity에 포함하지 않지만 읽은 값과 action·env·모든 변경 옵션은 포함한다.
+같은 ID의 다른 입력은 `request_conflict`, 새 요청의 오래된 revision은
+`revision_conflict`다. 재시도는 원래 결과를 반환하므로 현재 값은 따로 조회한다.
+권한·검증·commit 전 실패는 ID를 소비하지 않는다. 입력을 고칠 때에는 새 UUID를 사용한다.
+
+`--create-only`는 guard를 지정한 set에서만 지원하며 선택 계층의 빈 값·만료 값도
+기존 값으로 판단해 `value_exists`로 거절한다. 공통 값을 상속하던 env에 새 override를
+만드는 것은 허용한다. unset은 해당 계층만 제거하고 kind·ValueID·bundle membership을 유지한다.
+
+`values request show`는 `{profile,item:{request_id,state,result?,created_at,expires_at}}`를
+반환한다. state는 `completed` 또는 `expired`이며 만료되면 result를 생략한다.
+시각은 UTC RFC3339 문자열이며 기존 시각 없는 receipt는 null과 무기한 재시도를 유지한다.
+보호된 root에서는 기존 warm session만 빌리고 daemon 시작·해제·idle 연장을 하지 않는다.
+누락은 `request_not_found`/3이며 자동 실행하지 않는다. 새 성공의 replay 기한은 저장부터
+30일, `now >= expires_at`부터 `request_expired`/3이다. 메타데이터는 root 수명 동안
+보존하므로 만료된 ID도 다시 실행하지 않는다. root 삭제·전체 과거 rollback·다른 root로
+profile 이동 이후의 중복 방지는 보장하지 않는다.
+
+guarded import는 CLI의 선택 계층 비교를 유지하며 500,000 bytes·5,000 keys로 제한한다.
+dashboard의 유효 값 유지/skip 동작은 별개다. `--dry-run`은 receipt를 만들지 않으므로
+같은 UUID로 실제 apply를 할 수 있다. 실제 저장 뒤에는 preview를 포함한 입력 변경에 새 ID가 필요하다.
+
 ### env 생성과 삭제
 
 env는 값을 등록하거나 실행에 선택하기 전에 명시적으로 생성한다.

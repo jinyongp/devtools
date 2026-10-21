@@ -45,6 +45,7 @@ type Command struct {
 	UniqueArgs  bool                                                      `json:"-"`
 	OutputMode  OutputMode                                                `json:"output_mode"`
 	InputOneOf  []map[string]any                                          `json:"-"`
+	InputAllOf  []map[string]any                                          `json:"-"`
 	Name        string                                                    `json:"name"`
 	Description string                                                    `json:"description"`
 	Options     []Option                                                  `json:"options"`

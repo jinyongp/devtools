@@ -78,6 +78,13 @@ task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, 
 
 값 action은 `variable.set`, `secret.set`, `variable.unset`, `secret.unset`, `env.create`, `env.remove`다. set은 빈 문자열을 포함한 `value`를 받는다. unset은 `key`와 `env`, env action은 `env`를 받는다. `env`의 빈 문자열은 공통 영역이다. env 삭제는 override를 먼저 정리한 상태에서 가능하다.
 
+set은 선택적으로 `create_only:true`를 받는다. 선택 계층에 빈 값이나 만료된 값이
+있어도 `value_exists`로 거절하며 상속된 공통 값만 있는 env override 생성은 허용한다.
+CLI의 guard 지정 변경과 같은 Apply·revision·receipt 계약이다. 새 성공 receipt는 30일
+재사용할 수 있고 만료 후 `request_expired`다. 메타데이터는 root 수명 동안 보존하며
+성공한 no-op도 ID를 소비한다. 잠금 해제 없이 저장 결과를 확인하는 CLI는
+`values request show UUID`다. 상세 경계는 [조건부 변경](cli-contract.md#조건부-변경과-응답-유실-복구)을 따른다.
+
 bundle 변경도 같은 `domain:"values"`와 `change.revision`·`request_id`를 사용한다.
 action은 `bundle.set`, `bundle.rename`, `bundle.remove`다. `change.bundle`은
 `{name, members?, new_name?, preview?}`이며 members는 키 이름 배열이다.

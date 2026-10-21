@@ -18,22 +18,30 @@ func (a *App) registerImport() {
 		Option{Name: "dry-run", Boolean: true, Description: "Preview classification and conflicts with no storage changes or value output."},
 	)
 	item := object(map[string]any{"key": stringSchema(), "kind": map[string]any{"enum": []string{"variable", "secret"}}, "action": map[string]any{"enum": []string{"add", "update", "unchanged", "conflict", "kind_conflict"}}}, "key", "kind", "action")
-	a.commands = append(a.commands, Command{Name: "import", Description: "Import dotenv values atomically; new keys default to secret. Return metadata only.", Options: options,
-		Output: object(map[string]any{"profile": stringSchema(), "env": stringSchema(), "dry_run": map[string]any{"type": "boolean"}, "changed": map[string]any{"type": "boolean"}, "applicable": map[string]any{"type": "boolean"}, "items": map[string]any{"type": "array", "items": item}, "warnings": warningsSchema(), "bundle": stringSchema()}, "profile", "env", "dry_run", "changed", "applicable", "items"), Run: a.importCommand})
+	command := Command{Name: "import", Description: "Import dotenv values atomically; new keys default to secret. Return metadata only.", Options: options,
+		Output: object(map[string]any{"profile": stringSchema(), "env": stringSchema(), "dry_run": map[string]any{"type": "boolean"}, "changed": map[string]any{"type": "boolean"}, "applicable": map[string]any{"type": "boolean"}, "items": map[string]any{"type": "array", "items": item}, "warnings": warningsSchema(), "bundle": stringSchema()}, "profile", "env", "dry_run", "changed", "applicable", "items"), Run: a.importCommand}
+	guardMutation(&command, false)
+	a.commands = append(a.commands, command)
 }
 
 func (a *App) importCommand(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
+	guarded, err := mutationGuard(request.Options)
+	if err != nil {
+		return nil, err
+	}
 	store, err := a.store(request.Options)
 	if err != nil {
 		return nil, err
 	}
 	env := request.Options["env"]
-	state, err := store.Read(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := state.CheckEnv(env); err != nil {
-		return nil, err
+	if !guarded {
+		state, err := store.Read(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if err := state.CheckEnv(env); err != nil {
+			return nil, err
+		}
 	}
 	input, err := readSecret(ctx, streams, map[string]string{"file": request.Options["file"]})
 	if err != nil {
@@ -43,20 +51,30 @@ func (a *App) importCommand(ctx context.Context, streams IO, request Request) (a
 	if err != nil {
 		return nil, err
 	}
+	if guarded && len(parsed) > 5000 {
+		return nil, argumentError("Import is limited to 5,000 keys in guarded mode.", "file")
+	}
 	dryRun := request.Options["dry-run"] == "true"
 	overwrite := request.Options["overwrite"] == "true"
 	var items []values.ImportItem
 	changed, applicable := false, true
-	if bundle := request.Options["bundle"]; bundle != "" {
-		view, e := store.Inspect(ctx, env)
-		if e != nil {
-			return nil, e
+	var revision string
+	var replayed bool
+	if bundle := request.Options["bundle"]; bundle != "" || guarded {
+		expected, id := request.Options["revision"], request.Options["request-id"]
+		if !guarded {
+			view, e := store.Inspect(ctx, env)
+			if e != nil {
+				return nil, e
+			}
+			expected, id = view.Revision, tasks.ID()
 		}
-		result, e := store.Apply(ctx, values.Change{Action: "import", Env: env, Revision: view.Revision, RequestID: tasks.ID(), Import: &values.BatchImport{LayerOnly: true, Content: input, Variables: request.ListOptions["var"], Overwrite: overwrite, Preview: dryRun, Bundle: bundle}})
+		result, e := store.Apply(ctx, values.Change{Action: "import", Env: env, Revision: expected, RequestID: id, Import: &values.BatchImport{LayerOnly: true, Content: input, Variables: request.ListOptions["var"], Overwrite: overwrite, Preview: dryRun, Bundle: bundle}})
 		if e != nil {
 			return nil, e
 		}
 		items, changed, applicable = result.Items, result.Changed, result.Applicable
+		revision, replayed = result.Revision, result.Replayed
 	} else if dryRun {
 		items, applicable, err = store.PlanImport(ctx, parsed, request.ListOptions["var"], env, overwrite)
 	} else {
@@ -71,6 +89,9 @@ func (a *App) importCommand(ctx context.Context, streams IO, request Request) (a
 		return nil, err
 	}
 	result := map[string]any{"profile": store.Profile, "env": env, "dry_run": dryRun, "changed": changed, "applicable": applicable, "items": items}
+	if guarded {
+		result["revision"], result["replayed"] = revision, replayed
+	}
 	if bundle := request.Options["bundle"]; bundle != "" {
 		result["bundle"] = bundle
 	}

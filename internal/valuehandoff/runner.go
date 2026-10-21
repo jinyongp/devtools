@@ -127,6 +127,9 @@ func (s Store) runnerMutation(ctx context.Context, input RunnerInput, requestID 
 			return RunnerResult{}, values.VaultError(ctx, err)
 		}
 		if err = probeRunner(ctx, s.Root, address); err != nil {
+			if ctx.Err() != nil {
+				return RunnerResult{}, values.VaultError(ctx, ctx.Err())
+			}
 			return RunnerResult{}, failure("runner_protocol_mismatch")
 		}
 	}

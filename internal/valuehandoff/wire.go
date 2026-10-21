@@ -182,6 +182,8 @@ func connectRunner(ctx context.Context, root string, address RunnerAddress) (vau
 	if err != nil {
 		return nil, helloFrame{}, "", err
 	}
+	stop := context.AfterFunc(ctx, func() { c.Close() })
+	defer stop()
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		deadline = time.Now().Add(5 * time.Second)
@@ -212,6 +214,8 @@ func probeRunner(ctx context.Context, root string, address RunnerAddress) error 
 		return err
 	}
 	defer c.Close()
+	stop := context.AfterFunc(ctx, func() { c.Close() })
+	defer stop()
 	p := probeFrame{1, "probe", address.RootID, address.VaultID, address.RunnerID, address.InstanceID, h.ServerChallenge, challenge}
 	if err = writeFrame(c, p, maxControlFrame); err != nil {
 		return err

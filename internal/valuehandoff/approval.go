@@ -61,6 +61,9 @@ func (s Store) controlFiles(ctx context.Context, id, requestID, action string, i
 	}
 	if preflight != nil {
 		if err = preflight(ctx); err != nil {
+			if ctx.Err() != nil {
+				return Result{}, values.VaultError(ctx, ctx.Err())
+			}
 			return Result{}, failure("runner_protocol_mismatch")
 		}
 	}

@@ -87,8 +87,9 @@ set은 선택적으로 `create_only:true`를 받는다. 선택 계층에 빈 값
 있어도 `value_exists`로 거절하며 상속된 공통 값만 있는 env override 생성은 허용한다.
 CLI의 guard 지정 변경과 같은 Apply·revision·receipt 계약이다. 새 성공 receipt는 30일
 재사용할 수 있고 만료 후 `request_expired`다. 메타데이터는 root 수명 동안 보존하며
-성공한 no-op도 ID를 소비한다. 잠금 해제 없이 저장 결과를 확인하는 CLI는
-`values request show UUID`다. 상세 경계는 [조건부 변경](cli-contract.md#조건부-변경과-응답-유실-복구)을 따른다.
+성공한 no-op도 ID를 소비한다. `values request show UUID`는 저장 결과를 수동 해제나
+idle 연장 없이 조회하지만, 보호된 root에서는 이미 해제된 warm session이 필요하다.
+잠긴 세션을 우회하지 않는다. 상세 경계는 [조건부 변경](cli-contract.md#조건부-변경과-응답-유실-복구)을 따른다.
 
 bundle 변경도 같은 `domain:"values"`와 `change.revision`·`request_id`를 사용한다.
 action은 `bundle.set`, `bundle.rename`, `bundle.remove`다. `change.bundle`은
@@ -102,6 +103,10 @@ CLI의 `bundle list`와 HTTP `/api/values`에서 얻은 revision은 같은 값 �
 `overwrite:false`는 선택 env의 유효 값과 상속한 공통 값을 유지하고 `skip`으로 표시한다. `overwrite:true`는 선택한 계층에 값을 저장하며 공통 값을 상속하던 키에는 env override를 만든다. 미리 보기와 적용은 기존 CLI의 `.env` 파서를 사용한다. 화면은 최대 500 KB의 파일 또는 붙여넣기를 받고, 변경 API는 전체 JSON 요청을 1 MiB로 제한한다.
 
 변경 성공은 `{ok: true, data: ...}`, 실패는 기존 오류 envelope를 반환한다. task 변경의 `no_change`와 리비전·요청 ID·점유 충돌의 HTTP 상태는 409다. task 변경 성공은 CLI와 같은 before/after 리비전과 affected 항목을 반환한다. 값 변경 결과에는 `profile`, `changed`, `revision`, `replayed`가 포함된다. 값 재시도 기록에는 입력 원문 대신 서명된 식별값과 결과 메타데이터를 보관한다.
+
+외부 실행기의 준비·승인·전달·보고는 이 HTTP API로 제공하지 않는다.
+[승인된 로컬 실행기 계약](secret-automation.md)의 `values execution`·`values runner`
+CLI와 비공개 채널을 사용한다. 일반 HTTP 응답으로 값이나 로그 보호 패턴을 조회하는 endpoint는 없다.
 
 ## 프로세스·백업·정리 API
 

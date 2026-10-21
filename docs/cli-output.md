@@ -109,6 +109,13 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `process check/wait/logs` | readiness 또는 로그 보고서 |
 | `vault status`, init/recover/lock/unlock | 각각 `item`, `item`·`changed`; 상태 조회는 키를 해제하지 않음 |
 | `bundle set/rename/remove` | `profile`, `bundle`, `revision`, `changed`, `replayed` |
+| `secret generate` | `profile`, `changed`, `revision`, `replayed`; 해당하면 값 없는 `warnings` |
+| `values revision` | `profile`, `env`, 불투명 문자열 `revision`, `integrity_verified` |
+| `values request show` | `profile`, 저장된 요청 결과 메타데이터 `item` |
+| `values execution prepare/approve/deliver/cancel/report` | `profile`, `item`, `changed`, `replayed`; `item.revision`은 실행 record의 정수 |
+| `values execution status/list` | 각각 `profile`·`item`, `profile`·`items`·`next_cursor` |
+| `values runner address` | `root_id`, `vault_id`, `runner_id`, `instance_id`, `endpoint`, `protocol`, `redaction_protocol` |
+| `values runner show/register/unregister` | `profile: ""`, `item`; 변경에는 `changed`, `replayed` 추가 |
 | `values inspect`, `values uses` | 각각 `profile`·`env`·`selection`·`values`, `profile`·`items`; 원문 없는 관찰 보고서 |
 | `proxy` 목록·상태·변경 | `items`, `item`, 또는 `item`·`changed`·`replayed` |
 | `dashboard`·`dashboard start`, status, stop | 각각 `item`·`changed`, `item`, `changed` |
@@ -136,6 +143,11 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 `values request show UUID`는 저장된 결과 메타데이터를 반환합니다.
 set의 `--create-only`는 두 guard가 모두 있어야 사용할 수 있습니다.
 dashboard 재사용 인증 프로토콜도 9이며 key-session 프로토콜 3과 저장 형식 1은 유지합니다.
+
+`values execution` 결과의 `delivery_state`와 `execution_state`는 별개입니다.
+`delivered`는 수신 확인이며 앱 실행·값 사용·외부 인증 성공을 뜻하지 않습니다.
+원문 값·패턴·키 세션 ticket은 공개 결과에 없습니다. 원래 요청의 replay와 현재 status가
+다를 수 있으므로 [복구 계약](secret-automation.md#recover-an-uncertain-delivery-or-execution)을 따릅니다.
 
 ## protocol v8에서 유지하는 규칙
 

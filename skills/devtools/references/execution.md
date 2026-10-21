@@ -165,6 +165,14 @@ Started/finished reports require a stable engine reference, finished also needs
 an exit code. Report does not start work. A registered successor may reconcile
 the same job/input but cannot rebind the original delivery recipient.
 
+Mutation edit revisions are opaque profile-wide strings; execution control bodies
+use the positive integer `item.revision` of one execution record. For an identical
+retry keep the original body/revision; for a new decision inspect current status
+and use a fresh UUID. Status selected by a prepare UUID returns current metadata,
+while repeating prepare replays its original result without extending the deadline.
+Unlock does not renew old input authority. Never replace an uncertain attempt
+with a new preparation solely to obtain a successful response.
+
 Only an authenticated same-OS-user receiver receives values and masking patterns
 over the private local channel. Never route them through ordinary JSON, argv,
 workspace files or provider stdout masking commands. The receiver must protect

@@ -152,8 +152,8 @@ dashboard의 유효 값 유지/skip 동작은 별개다. `--dry-run`은 receipt�
 보호 저장소에 crypto/rand의 32바이트를 padding 없는 base64url 43자로 저장한다.
 profile/env 선택은 set과 같고 원문 대신 변경 메타데이터만 반환한다.
 기본은 선택 계층의 생성 전용이며, 기존 빈 값·만료 값에도 `value_exists`로 거절한다.
-`--replace`는 secret 교체를 허용하되 기존 만료 시각을 보존하며 이미 만료된 slot에는
-`value_expired`로 실패한다. variable의 종류를 secret으로 바꾸지 않는다.
+`--replace`는 없는 slot의 생성과 기존 secret 교체를 허용하되 만료 시각을 보존한다.
+이미 만료된 slot에는 `value_expired`로 실패한다. variable의 종류를 secret으로 바꾸지 않는다.
 
 응답 유실 뒤 같은 요청을 재시도하면 원래 메타데이터를 반환하고 새 난수를 만들거나
 나중 writer의 값을 덮어쓰지 않는다. 실제 commit 전 실패로 사라진 후보는 다음 시도에서

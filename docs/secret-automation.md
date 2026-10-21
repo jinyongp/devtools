@@ -1,5 +1,8 @@
 # Secret automation and approved local execution
 
+[Documentation index](README.md) · [CLI contract](cli-contract.md) ·
+[Local protection](secret-protection.md) · [Output protection](output-protection.md)
+
 This checkout adds opt-in mutation guards and an approved execution interface for
 cooperating runners owned by the same OS user. These are unreleased source
 features. Check `devtools version` and the installed command's `schema` before
@@ -12,6 +15,12 @@ policy, engine deduplication and cancellation. Selecting a profile, env, bundle 
 key does not grant permission to execute. A delivery receipt proves neither
 application consumption nor successful authentication to an external service.
 
+Use mutation guards to change stored values safely. Use approved execution when
+a caller-owned engine needs a frozen input for one authorized job. The latter
+requires an existing protected data root even when all selected values are public
+or the explicit selection is empty. The reference receiver is built from this
+checkout; it is not an installed Docker or remote CI integration.
+
 ## Retry a mutation safely
 
 Read `values revision --profile app`, then pass its opaque revision together with
@@ -22,7 +31,8 @@ editing intent. A guarded stale request fails with `revision_conflict`.
 
 Keep the UUID, revision and exact logical input until recovery completes. After
 response loss, retry that same request. A completed receipt is checked before the
-old revision, so an intervening writer does not prevent recovery. Different input
+old revision, so an intervening writer does not prevent recovery. Preserve the
+UUID's exact spelling, including case, for mutation requests. Different input
 under the same ID fails with `request_conflict`. The mutation and its successful
 receipt publish in one transaction. Failed validation does not consume the ID.
 
@@ -30,16 +40,24 @@ receipt publish in one transaction. Failed validation does not consume the ID.
 slot. `secret generate KEY --revision REVISION --request-id UUID` generates
 32 random bytes encoded as 43 unpadded base64url characters. It returns metadata,
 never the new value. Its retry returns the original result without generating a
-replacement. Use `--replace` explicitly when replacing an existing slot.
+replacement. `--replace` permits secret upsert: it also creates a missing slot,
+preserves an existing live slot's expiry, and rejects an expired slot. It cannot
+change a public variable into a secret.
 
 `values request show UUID` passively authenticates the saved mutation result. It
-requires an already unlocked cached session and does not unlock or renew idle
-expiry. Saved results describe the original operation; inspect current state
+requires an already unlocked cached session in a protected root and does not
+start a daemon, unlock or renew idle expiry. Public-only roots without vault
+protection can authenticate their mutation receipts without a key session.
+Saved results describe the original operation; inspect current state
 separately. New receipts permit replay for 30 days from creation. Afterward,
 `request_expired` prevents the ID from becoming new work. Spent metadata stays for
 the data-root lifetime. Older receipts without an expiry retain their existing
 unlimited replay behavior. See [the CLI contract](cli-contract.md) for supported
 writers, env layering and input byte rules.
+
+Root deletion, restoring a complete historical root or moving a profile to
+another root ends this local deduplication scope. Keep the original root and
+caller request metadata available during recovery.
 
 ## Prepare and approve a local execution
 
@@ -49,6 +67,13 @@ metadata. Send them through exactly one of `--stdin` or `--file`; explicit nulls
 unknown fields and malformed IDs fail. Execution and runner request UUIDs use
 canonical lowercase spelling. Preserve all request bodies and IDs in the caller's
 own metadata storage. Never put a value or passphrase in those IDs or bodies.
+
+Before starting, discover `devtools schema values execution prepare` and
+`devtools schema values runner register`. Create the profile, selected keys and
+any env or bundle first. Build and start the [reference caller](#run-the-reference-caller)
+or an implementation of the private receiver protocol before registering it.
+Use the same devtools data root for both processes; `--root` takes the data
+directory itself, not the project directory or its `vault` subdirectory.
 
 1. Start the caller's receiver with a new process instance UUID. Obtain its
    computed transport metadata using `values runner address RUNNER_ID --instance INSTANCE_ID`.
@@ -90,6 +115,22 @@ with SID checks and remote clients rejected. Arbitrary endpoint URLs and delegat
 to another service account are outside this version. WSL and native Windows use
 separate data roots and identity boundaries.
 
+### Keep identifiers and revisions separate
+
+| Field | Meaning and use |
+| --- | --- |
+| Mutation `--revision` | Opaque string for the whole profile, returned by `values revision`; use only for value, env and bundle edits. |
+| Execution body `revision` | Positive integer for one execution record, returned in `data.item.revision`; use the latest value for a new approve, cancel, deliver or report operation. |
+| `--request-id` | Caller-owned UUID for one operation and its exact input; preserve it for retries. Execution operations share a profile's request namespace; runner operations use a separate root-wide namespace. |
+| `execution_id`, `input_id` | Two distinct 32-character lowercase hexadecimal IDs returned by prepare. They are not request UUIDs or local process IDs. |
+| `runner_id`, `instance_id` | Canonical lowercase UUIDs for a logical caller and one receiver instance. A successor keeps the runner ID and gets a new instance ID. |
+| `external_execution_id`, `external_ref` | Caller job identity and stable engine reference. Keep them free of secrets; reports and status expose them as metadata. |
+
+For an identical retry, preserve the original body revision even if status now
+shows a newer revision. Read current status and use a fresh UUID when making a
+new control decision. A `values revision` token cannot replace the execution's
+integer revision.
+
 ## Recover an uncertain delivery or execution
 
 Recover a lost prepare response using `values execution status --profile app
@@ -97,6 +138,26 @@ Recover a lost prepare response using `values execution status --profile app
 EXECUTION_ID --profile app`, or `values execution list --profile app --limit 50`.
 List pages use revision-bound cursors; restart pagination after `cursor_invalid`.
 Status, list and reports never submit an external job.
+The prepare UUID selects the execution's **current** status, not an immutable
+copy of the prepare response. Repeating prepare itself returns its saved result
+without refreshing the input or deadline. A later unlock also does not renew
+the original input's session authority.
+
+Use the observed error to choose recovery:
+
+| Observation | Next action |
+| --- | --- |
+| Lost mutation response | Retry the saved mutation input, revision and UUID; `values request show` inspects the saved result without executing it. |
+| Lost prepare response | Resolve the original prepare UUID with execution status; retain the returned execution/input IDs. |
+| `revision_conflict` | Inspect current state before a new decision and use a fresh UUID; do not rewrite a saved retry body. |
+| `request_conflict` | Find the original operation/input for that UUID. Give a genuinely new operation a fresh UUID. |
+| `request_expired` | The old UUID stays spent. Inspect current state and the original engine job; a new UUID is not evidence that repeating an external effect is safe. |
+| `execution_input_expired` or `vault_locked` | Inspect execution status and unlock explicitly when needed. Pending inputs may be canceled; any replacement needs a new prepare and approval after the caller checks that no prior attempt/job would be duplicated. |
+| `delivery_pending` | Inspect current status and query the original engine job. The active sender still owns the attempt. |
+| `delivery_outcome_unknown` or `delivery_already_started` | Query the engine by the original job/reference, then report verified facts. Never create a replacement delivery just to obtain a successful response. |
+
+An absent engine result is not proof that the job never started. Keep the outcome
+unknown when the engine cannot provide a trustworthy lookup.
 
 Delivery state and execution state are separate. `delivered` means the receiver
 acknowledged acceptance and installed log protection; it does not mean started.
@@ -124,15 +185,31 @@ finalized atomically with the report. Already completed request results remain
 unchanged, so replay may still return an old unknown result while status shows the
 reconciled state. Finished/failed outcomes are terminal; conflicting facts and
 regressions fail with `execution_state_conflict`.
+In particular, a reported start cannot regress to `unknown`; a finished or failed
+report cannot be replaced by a different terminal outcome.
 
 ## Run the reference caller
 
-Build `go build -o /ABS/PATH/value-handoff-runner ./examples/value-handoff-runner`.
-Choose a canonical, caller-owned private ledger directory outside the devtools data root and
-workspace. Initialize it once with `value-handoff-runner --ledger /PRIVATE/LEDGER
---init-ledger`. Run the receiver with `--root /PRIVATE/DEVTOOLS_DATA --runner-id
-RUNNER_ID --instance-id INSTANCE_ID --ledger /PRIVATE/LEDGER --program
-/ABS/HELPER -- ARG...`. These are metadata and fixed helper arguments. Selected
+From this checkout, build the receiver:
+
+```sh
+go build -o /ABS/PATH/value-handoff-runner ./examples/value-handoff-runner
+```
+
+Replace the absolute paths, canonical runner/instance UUIDs and fixed helper
+arguments below with your own. Choose a canonical, caller-owned private ledger
+directory outside the devtools data root and workspace. Initialize it once,
+then run the receiver. These examples use POSIX shell line continuation; on
+Windows use the built `.exe` path and put each command on one line.
+
+```sh
+/ABS/PATH/value-handoff-runner --ledger /PRIVATE/LEDGER --init-ledger
+/ABS/PATH/value-handoff-runner --root /PRIVATE/DEVTOOLS_DATA \
+  --runner-id RUNNER_ID --instance-id INSTANCE_ID \
+  --ledger /PRIVATE/LEDGER --program /ABS/HELPER -- ARG...
+```
+
+These are metadata and fixed helper arguments. Selected
 values cross only the dedicated child environment boundary, never argv, workspace
 files or ordinary JSON responses. The example does not inherit the parent env.
 
@@ -145,6 +222,11 @@ job IDs can be retried. The example is conservative about progress and makes no
 universal exactly-once guarantee. A production engine can provide stronger lookup
 and lifecycle control behind the same contract. Invoke the devtools report command
 separately with verified metadata; the receiver receives no vault master key.
+
+The lookup JSON uses `external_execution_id`, `input_id`, `external_ref`, `state`
+and, for a completed helper, `exit_code`. Add the latest devtools record revision
+and logical `runner_id` to build the report body. A lookup's `unknown` state also
+needs one of the fixed report reasons; do not send the lookup JSON unchanged.
 
 ## Logs, retention and observation
 

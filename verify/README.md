@@ -9,6 +9,10 @@ HOME·XDG 경로·작업 디렉터리에서 실행한다. Windows native는 아�
 GitHub Actions에서는 fresh hosted runner가 OS 환경 격리를 담당한다. 로컬 실행도 사용자 데이터와
 Git 전역 설정을 별도 임시 경로로 분리하므로 현재 devtools 상태를 건드리지 않는다.
 
+Windows의 간헐적인 저장소 신원 검사 실패는 별도 [storage identity trace 도구](probes/storage-identity/README.md)로
+조사한다. 배포 없이 고정 소스의 진단 빌드를 만들고, 원래 비교값과 파일 신원을 기록할 수 있다.
+실제 저장소 조회와 일회용 fixture 검사는 구분하며 결과는 대상 프로젝트의 `.tmp` 안에 둔다.
+
 ## 실행
 
 저장소 루트에서 현재 소스로 CLI를 빌드하고 PATH에 먼저 등록한다.

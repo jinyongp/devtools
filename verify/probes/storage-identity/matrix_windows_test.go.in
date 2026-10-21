@@ -1,0 +1,142 @@
+package platformfs
+
+import (
+    "context"
+    "encoding/json"
+    "errors"
+    "flag"
+    "os"
+    "path/filepath"
+    "strings"
+    "testing"
+    "unsafe"
+
+    "github.com/jinyongp/devtools/internal/storageerr"
+    "golang.org/x/sys/windows"
+)
+
+var storageMatrixRoot = flag.String("storage-matrix-root", "", "Existing .tmp evidence folder for disposable fixtures")
+
+func TestStorageTraceEnvironment(t *testing.T) {
+    var app, size uint32
+    token := windows.GetCurrentProcessToken()
+    if err := windows.GetTokenInformation(token, 29, (*byte)(unsafe.Pointer(&app)), uint32(unsafe.Sizeof(app)), &size); err != nil { t.Fatal(err) }
+    isolation := "unrestricted"
+    if app != 0 { isolation = "appcontainer" } else if restricted, err := token.IsRestricted(); err != nil { t.Fatal(err) } else if restricted { isolation = "restricted" }
+    base, err := windows.KnownFolderPath(windows.FOLDERID_LocalAppData, windows.KF_FLAG_DONT_VERIFY)
+    if err != nil { t.Fatal(err) }
+    body, _ := json.Marshal(map[string]any{"isolation": isolation, "known_folder_local_app_data": base, "default_data_path": filepath.Join(base, "devtools", "data"), "isolated_root_set": os.Getenv("DEVTOOLS_ISOLATED_ROOT") != ""})
+    t.Log("STORAGE_TRACE_ENV " + string(body))
+}
+
+func storageMatrixFixture(t *testing.T) string {
+    t.Helper()
+    if *storageMatrixRoot == "" { t.Fatal("-storage-matrix-root must name the evidence folder") }
+    path, err := os.MkdirTemp(*storageMatrixRoot, "fixture-")
+    if err != nil { t.Fatal(err) }
+    t.Cleanup(func() { if err := os.RemoveAll(path); err != nil { t.Error(err) } })
+    return path
+}
+
+func storageMatrixResult(t *testing.T, err error) {
+    t.Helper()
+    result := map[string]any{"case": t.Name(), "mode": "@MODE@", "ok": err == nil}
+    if err != nil { result["details"] = storageerr.Details(err, "matrix", "read_file", "fixture") }
+    body, _ := json.Marshal(result)
+    t.Log("STORAGE_MATRIX_CASE " + string(body))
+}
+
+func TestStorageTraceMatrix(t *testing.T) {
+    for _, scenario := range []string{"plain", "root_case_alias", "file_case_alias", "short_root_alias", "long_nested_path", "renamed_parent_with_live_file", "case_sensitive_entries"} {
+        t.Run(scenario, func(t *testing.T) {
+            parent := storageMatrixFixture(t)
+            path := filepath.Join(parent, "MixedCaseRoot")
+            root, err := OpenRoot(path, true)
+            if err != nil { t.Fatal(err) }
+            if scenario == "case_sensitive_entries" {
+                ptr, _ := pathPtr(path)
+                handle, err := windows.CreateFile(ptr, windows.FILE_WRITE_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+                if err != nil { root.Close(); t.Fatal(err) }
+                enabled := uint32(1)
+                err = windows.SetFileInformationByHandle(handle, 23, (*byte)(unsafe.Pointer(&enabled)), 4)
+                windows.CloseHandle(handle)
+                if err != nil { root.Close() }
+                if errors.Is(err, windows.ERROR_NOT_SUPPORTED) || errors.Is(err, windows.ERROR_INVALID_PARAMETER) { t.Skip("case-sensitive directory unavailable") }
+                if err != nil { t.Fatal(err) }
+            }
+            name := "MixedCaseFile"
+            if scenario == "long_nested_path" {
+                nested := strings.Repeat(strings.Repeat("a", 75)+`\`, 7)
+                if err = root.MkdirAll(nested); err != nil { root.Close(); t.Fatal(err) }
+                name = filepath.Join(nested, name)
+            }
+            if err = root.WriteFile(context.Background(), name, []byte("owned-fixture"), false); err != nil { root.Close(); t.Fatal(err) }
+            if err = root.Close(); err != nil { t.Fatal(err) }
+            switch scenario {
+            case "root_case_alias": path = strings.ToUpper(path)
+            case "file_case_alias": name = strings.ToUpper(name)
+            case "short_root_alias":
+                ptr, _ := windows.UTF16PtrFromString(path)
+                buffer := make([]uint16, 32768)
+                n, err := windows.GetShortPathName(ptr, &buffer[0], uint32(len(buffer)))
+                if err != nil { t.Fatal(err) }
+                if n >= uint32(len(buffer)) { t.Fatal("short path buffer exhausted") }
+                short := windows.UTF16ToString(buffer[:n])
+                if short == path { t.Skip("8.3 alias unavailable on this volume") }
+                path = short
+            case "renamed_parent_with_live_file":
+                ptr, _ := pathPtr(filepath.Join(path, name))
+                handle, err := windows.CreateFile(ptr, windows.FILE_READ_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
+                if err != nil { t.Fatal(err) }
+                defer windows.CloseHandle(handle)
+                moved := filepath.Join(parent, "RenamedRoot")
+                if err = os.Rename(path, moved); err != nil {
+                    if errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_SHARING_VIOLATION) { t.Skipf("Windows blocks renaming a parent with a live child: %v", err) }
+                    t.Fatal(err)
+                }
+                path = moved
+            }
+            root, err = OpenRoot(path, false)
+            if err != nil { storageMatrixResult(t, err); return }
+            defer root.Close()
+            if scenario == "case_sensitive_entries" {
+                if err = root.WriteFile(context.Background(), strings.ToLower(name), []byte("other-entry"), false); err != nil { t.Fatal(err) }
+            }
+            body, err := root.ReadFile(name, 100)
+            storageMatrixResult(t, err)
+            if err == nil && string(body) != "owned-fixture" { t.Fatal("read a different entry") }
+        })
+    }
+}
+
+func TestStorageTraceControlledNegative(t *testing.T) {
+    parent := storageMatrixFixture(t)
+    root, err := OpenRoot(filepath.Join(parent, "expected"), true)
+    if err != nil { t.Fatal(err) }
+    defer root.Close()
+    outside, err := OpenRoot(filepath.Join(parent, "outside"), true)
+    if err != nil { t.Fatal(err) }
+    defer outside.Close()
+    for _, r := range []*Root{root, outside} {
+        if err = r.WriteFile(context.Background(), "state", []byte("STORAGE_TRACE_CONTENT_CANARY"), false); err != nil { t.Fatal(err) }
+    }
+    file, err := outside.OpenFile("state", os.O_RDONLY)
+    if err != nil { t.Fatal(err) }
+    defer file.Close()
+    // Deliberate outside-root handle: proves trace capture, not the incident.
+    // Give it the expected label so the diagnostic ID comparison proves that
+    // the objects differ even though a caller supplied the same textual label.
+    var duplicate windows.Handle
+    process := windows.CurrentProcess()
+    if err = windows.DuplicateHandle(process, windows.Handle(file.Fd()), process, &duplicate, 0, false, windows.DUPLICATE_SAME_ACCESS); err != nil { t.Fatal(err) }
+    expected := filepath.Join(root.path, "state")
+    label := os.NewFile(uintptr(duplicate), expected)
+    defer label.Close()
+    file = &File{File: label}
+    // A scan can handle many missing entries before the decisive failure.
+    // Those events must not exhaust the comparison capture budget.
+    for i := 0; i < 200; i++ { storageTraceFailure("open_file", "controlled-missing-entry", "", windows.ERROR_FILE_NOT_FOUND) }
+    err = @VERIFY_CALL@
+    if !errors.Is(err, ErrUnsafe) { t.Fatalf("outside handle accepted: %v", err) }
+    storageMatrixResult(t, err)
+}

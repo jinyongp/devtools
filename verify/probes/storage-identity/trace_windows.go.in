@@ -1,0 +1,131 @@
+// Instrumentation-only input. Copied into a disposable source export by build.py.
+package platformfs
+
+import (
+    "encoding/json"
+    "errors"
+    "fmt"
+    "os"
+    "path/filepath"
+    "strings"
+    "sync/atomic"
+    "syscall"
+    "time"
+    "unsafe"
+
+    "github.com/jinyongp/devtools/internal/storageerr"
+    "golang.org/x/sys/windows"
+)
+
+var storageTraceCount atomic.Uint32
+var storageTraceGenericCount atomic.Uint32
+
+func storageTraceEmit(event map[string]any) {
+    sequence := storageTraceCount.Add(1)
+    if sequence > 128 { return }
+    event["format"] = "devtools-storage-trace-v1"
+    event["source_commit"] = "@SOURCE_COMMIT@"
+    event["verification_mode"] = "@MODE@"
+    event["sequence"] = sequence
+    event["time_utc"] = time.Now().UTC().Format(time.RFC3339Nano)
+    if sequence == 128 { event["trace_limit_reached"] = true }
+    // The launcher separates these diagnostic records from the ordinary error
+    // envelope. No stored contents, ACL strings, SIDs or environment are read.
+    body, err := json.Marshal(event)
+    if err == nil { _, _ = fmt.Fprintln(os.Stderr, "DEVTOOLS_STORAGE_TRACE_V1 " + string(body)) }
+}
+
+func storageTraceFailure(operation, path, reason string, cause error) {
+    // Reserve room for the target comparison even after many handled misses.
+    generic := storageTraceGenericCount.Add(1)
+    if generic > 64 { return }
+    storageTraceEmit(map[string]any{"event": "observed_storage_error", "requested_path": path, "generic_error_limit_reached": generic == 64,
+        "details": storageerr.Details(storageerr.Wrap(operation, storageResource(path), reason, cause), "platformfs", operation, storageResource(path)),
+        "note": "This error may be handled by the caller; use the command exit and final envelope for its outcome."})
+}
+
+func storageTraceError(err error) any {
+    if err == nil { return nil }
+    var nt windows.NTStatus
+    if errors.As(err, &nt) { err = nt.Errno() }
+    var code syscall.Errno
+    if errors.As(err, &code) { return map[string]any{"os_error": uint64(code), "os_error_domain": "win32"} }
+    return map[string]any{"reason": "metadata_unavailable"}
+}
+
+func storageTraceInfo(handle windows.Handle) map[string]any {
+    result := map[string]any{}
+    var info windows.ByHandleFileInformation
+    if err := windows.GetFileInformationByHandle(handle, &info); err != nil {
+        result["identity_error"] = storageTraceError(err)
+    } else {
+        // Hex strings survive JSON consumers that round integers above 2^53.
+        result["volume_serial"] = fmt.Sprintf("%08x", info.VolumeSerialNumber)
+        result["file_index"] = fmt.Sprintf("%016x", uint64(info.FileIndexHigh)<<32 | uint64(info.FileIndexLow))
+        result["attributes"] = info.FileAttributes
+        result["link_count"] = info.NumberOfLinks
+    }
+    for _, form := range []struct { name string; flags uint32 }{{"final_nt_path", 2}, {"final_volume_relative_path", 4}} {
+        buffer := make([]uint16, 32768)
+        n, err := windows.GetFinalPathNameByHandle(handle, &buffer[0], uint32(len(buffer)), form.flags)
+        if err != nil { result[form.name + "_error"] = storageTraceError(err) } else if n < uint32(len(buffer)) {
+            result[form.name] = windows.UTF16ToString(buffer[:n])
+        } else { result[form.name + "_error"] = map[string]any{"reason": "path_exceeds_trace_limit"} }
+    }
+    return result
+}
+
+func storageTraceExpected(root windows.Handle, relative string) (map[string]any, error) {
+    parent := root
+    var handles []windows.Handle
+    defer func() { for i:=len(handles)-1; i>=0; i-- { _ = windows.CloseHandle(handles[i]) } }()
+    parts := strings.Split(relative, `\`)
+    for i, part := range parts {
+        name, err := windows.NewNTUnicodeString(part)
+        if err != nil { return nil, err }
+        oa := windows.OBJECT_ATTRIBUTES{RootDirectory: parent, ObjectName: name, Attributes: windows.OBJ_CASE_INSENSITIVE}
+        oa.Length = uint32(unsafe.Sizeof(oa))
+        share := uint32(windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE)
+        if i < len(parts)-1 { share &^= windows.FILE_SHARE_DELETE }
+        var handle windows.Handle
+        var status windows.IO_STATUS_BLOCK
+        err = windows.NtCreateFile(&handle, windows.FILE_READ_ATTRIBUTES, &oa, &status, nil, 0, share, windows.FILE_OPEN, windows.FILE_OPEN_REPARSE_POINT, 0, 0)
+        if err != nil { return nil, err }
+        handles = append(handles, handle)
+        var info windows.ByHandleFileInformation
+        if err = windows.GetFileInformationByHandle(handle, &info); err != nil { return nil, err }
+        if info.FileAttributes & windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 { return map[string]any{"reparse_rejected": true}, nil }
+        if i == len(parts)-1 { return storageTraceInfo(handle), nil }
+        if info.FileAttributes & windows.FILE_ATTRIBUTE_DIRECTORY == 0 { return map[string]any{"non_directory_rejected": true}, nil }
+        parent = handle
+    }
+    return nil, windows.ERROR_INVALID_NAME
+}
+
+func storageTraceContainment(r *Root, f *os.File, path, comparedRoot, comparedFile string, cause error) {
+    root := r.guard.handles[len(r.guard.handles)-1]
+    actual := storageTraceInfo(windows.Handle(f.Fd()))
+    event := map[string]any{"event": "containment_failure", "requested_root": r.path, "requested_entry": path,
+        "root_handle": storageTraceInfo(root), "opened_file": actual,
+        "details": storageerr.Details(cause, "platformfs", "verify_file_identity", "private_storage")}
+    if "@MODE@" == "legacy" && comparedRoot != "" && comparedFile != "" {
+        prefix := strings.TrimRight(comparedRoot, `\`) + `\`
+        event["exact_compared_root"] = comparedRoot
+        event["exact_compared_file"] = comparedFile
+        event["legacy_prefix_matches"] = strings.HasPrefix(comparedFile, prefix)
+        event["casefold_prefix_matches"] = strings.HasPrefix(strings.ToLower(comparedFile), strings.ToLower(prefix))
+    }
+    relative, err := filepath.Rel(r.path, path)
+    if err != nil || !filepath.IsAbs(path) || relative == "." || !filepath.IsLocal(relative) {
+        event["expected_entry_unavailable"] = "entry_label_is_not_a_root_child"
+    } else {
+        expected, err := storageTraceExpected(root, relative)
+        if err != nil { event["expected_entry_error"] = storageTraceError(err) } else {
+            event["expected_entry"] = expected
+            if expected["file_index"] != nil && actual["file_index"] != nil {
+                event["expected_entry_matches_opened_file"] = expected["volume_serial"] == actual["volume_serial"] && expected["file_index"] == actual["file_index"]
+            }
+        }
+    }
+    storageTraceEmit(event)
+}

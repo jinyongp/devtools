@@ -28,6 +28,8 @@ type ModernStore struct {
 	beforeCommit func()
 	// Test-only source for generated secret bytes, separate from slot crypto/IDs.
 	generateReader io.Reader
+	// Test-only clock for generation's precondition and final expiry fence.
+	generateNow func() time.Time
 	// Optional scoped measurement seam; never included in CLI responses.
 	observe func(string, time.Duration)
 }

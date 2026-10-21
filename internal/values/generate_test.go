@@ -272,7 +272,9 @@ func TestSecretGenerateExpiryAtCommitRejectsWithoutReceipt(t *testing.T) {
 	}); e != nil {
 		t.Fatal(e)
 	}
-	expiry := time.Now().Add(2 * time.Second).Unix()
+	now := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
+	expiry := now.Add(time.Hour).Unix()
+	store.generateNow = func() time.Time { return now }
 	if _, err := files.Update(ctx, "app", profileKey, func(p *vault.Profile) (bool, error) {
 		p.Values[0].Slots[0].ExpiresAt = &expiry
 		p.Revision++
@@ -291,7 +293,7 @@ func TestSecretGenerateExpiryAtCommitRejectsWithoutReceipt(t *testing.T) {
 		t.Fatal(err)
 	}
 	reached := false
-	store.beforeCommit = func() { reached = true; time.Sleep(time.Until(time.Unix(expiry, 0))) }
+	store.beforeCommit = func() { reached = true; now = time.Unix(expiry, 0) }
 	if _, e := store.Apply(ctx, c); e == nil || e.Code != "value_expired" || !reached {
 		t.Fatal("expired during preparation was published", e)
 	}

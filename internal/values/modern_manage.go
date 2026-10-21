@@ -396,6 +396,7 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	stopPrepare := s.measure("prepare")
 	_, err = p.Batch(ctx, key, func(m *vault.Mutation) error {
 		editor = newEditor(ctx, p, m, key, master, vaultID)
+		editor.generateNow = s.generateNow
 		if c.Bundle != nil {
 			changed, err := editor.bundle(c)
 			if err != nil {

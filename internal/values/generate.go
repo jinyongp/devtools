@@ -49,5 +49,9 @@ func (e *Editor) generateSecret(name, env string, replace bool, reader io.Reader
 
 func (e *Editor) expiredExactSlot(name, env string) bool {
 	expiry, exists := e.state.expiries[name][env]
-	return exists && time.Now().Unix() >= expiry
+	now := time.Now
+	if e.generateNow != nil {
+		now = e.generateNow
+	}
+	return exists && now().Unix() >= expiry
 }

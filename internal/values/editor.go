@@ -3,6 +3,7 @@ package values
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/vault"
@@ -19,6 +20,7 @@ type Editor struct {
 	key, master *vault.Material
 	vaultID     string
 	promoted    bool
+	generateNow func() time.Time
 }
 
 func newEditor(ctx context.Context, p *vault.Profile, m *vault.Mutation, key, master *vault.Material, vaultID string) *Editor {

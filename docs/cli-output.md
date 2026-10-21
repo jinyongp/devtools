@@ -188,6 +188,9 @@ Windows `platform.isolation`은 현재 프로세스 토큰으로 확인한 `appc
 ACL 교정이나 저장소 자동 전환을 수행하지 않습니다.
 Windows Known Folder는 격리 환경에서 별도 경로를 반환할 수 있으므로 빈 목록의 저장소
 출처도 확인하세요. 오류 5만으로 특정 ACL이나 샌드박스 규칙을 원인으로 단정하지 않습니다.
+AppContainer에서 Known Folder 기본 저장소를 선택하면 `platform.limitations`에
+`appcontainer_known_folder_store`가 포함됩니다. 별도 저장소 범위를 알리는 정보이며
+그 자체로 `ready: false`가 되지는 않습니다. 명시적 격리 저장소에는 이 표시를 붙이지 않습니다.
 AppContainer의 저장소 생성·ACL 검증 정책은 [Windows 안내](windows.md#storage-and-processes)를
 따릅니다. 해당 identity 정책이 있어도 호스트 샌드박스가 접근을 거부할 수 있습니다.
 

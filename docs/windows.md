@@ -99,8 +99,10 @@ policy, are not repaired automatically.
 For paths inside the container's OS-selected LocalAppData, ancestor pinning starts
 at that Known Folder. Its resolved handle must match the selected path; every
 component below it is pinned and checked for reparse points. The owning host user
-and SYSTEM remain trusted. File containment compares normalized NT device paths,
-including volume identity, without requiring DOS drive-letter translation.
+and SYSTEM remain trusted. File containment resolves each requested component
+relative to the pinned root handle, rejects reparse points, and compares the
+opened file's volume and file ID with the requested entry. It does not infer
+identity from a normalized path string or require DOS drive-letter translation.
 Paths outside this boundary and ordinary processes
 retain the drive-root traversal. Access denial never causes a traversal check to
 be skipped. Explicit isolated roots use this same boundary policy during path
@@ -111,6 +113,37 @@ secret values use local encryption with user DPAPI protection; public variables 
 metadata remain readable. Check [vault setup and build availability](secret-protection.md).
 Backups and profile exports are encrypted separately. Use [profile transfer](profiles.md) to
 move data between computers or operating systems.
+
+### Identify the selected store and investigate a rejection
+
+Run `devtools diagnostics` in the same execution environment as the failing
+command. Compare `paths.data`, `paths.source`, and `platform.isolation` between
+sessions. `isolated_root` means an explicitly selected store;
+`windows_known_folder` means the OS selected the default location.
+`platform.limitations` includes `appcontainer_known_folder_store` when the default
+store is selected inside an AppContainer. This note does not make `ready` false.
+An empty profile or task list there does not establish that the host store is empty
+or repaired. The same profile name in two paths does not make them the same store.
+
+`verify_file_identity / file_identity_mismatch` means the handle and the entry
+resolved through the pinned root have different volume/file IDs.
+`verify_file_identity / path_mismatch` means the requested entry is not a valid
+child of that root. Older binaries also used `path_mismatch` for a failed normalized
+path-prefix comparison; that result alone does not prove corruption or an ACL fault.
+`check_security / unexpected_acl` is a separate security-policy rejection. A store
+created for the host user is not automatically shareable with an AppContainer.
+
+Keep the original store, ACLs and vault material intact. Record the failing binary's
+`version`, the selected-store fields and safe error `details`; omit full paths when
+sharing publicly. Investigation of an unresolved identity failure should open only
+existing objects for metadata and must not create files, acquire storage locks,
+follow reparse points or change ACLs. Normal CLI queries can create lock files and
+enter recovery, so they are not a substitute for a strictly read-only probe.
+Do not delete the store, widen its ACL, or silently select a different store to make
+the command succeed. A comparison defect can be fixed without migrating data;
+repair or migration requires evidence of a separate on-disk problem.
+
+### Managed processes and project commands
 
 Managed processes join an owned Job at creation. Shutdown requests graceful exit,
 then terminates the remaining tree after three seconds. A parent host Job still

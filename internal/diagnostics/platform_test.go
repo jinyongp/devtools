@@ -10,6 +10,25 @@ import (
 	"testing"
 )
 
+func TestStorageScopeDoesNotConfuseExplicitAndDefaultStores(t *testing.T) {
+	for _, tc := range []struct {
+		os, isolation, source string
+		containerDefault      bool
+	}{
+		{"windows", "appcontainer", "windows_known_folder", true},
+		{"windows", "appcontainer", "isolated_root", false},
+		{"windows", "appcontainer", "provided", false},
+		{"windows", "unrestricted", "windows_known_folder", false},
+		{"windows", "restricted", "windows_known_folder", false},
+		{"linux", "unknown", "user_directories", false},
+	} {
+		p := describeStorageScope(Platform{OS: tc.os, Isolation: tc.isolation, Limitations: []string{"existing_limit"}}, tc.source)
+		if containsPlatformLimit(p.Limitations, "appcontainer_known_folder_store") != tc.containerDefault || p.Limitations[0] != "existing_limit" {
+			t.Fatal(tc, p)
+		}
+	}
+}
+
 func TestPlatformWSLReadOnlyUnknownAndSeparateTrust(t *testing.T) {
 	reads := []string{}
 	read := func(path string) (string, error) {

@@ -28,7 +28,17 @@ type Platform struct {
 func inspectPlatform(input Input) (Platform, bool) {
 	platform, unsupported := platformSnapshot(input, runtime.GOOS, runtime.GOARCH, os.Getenv, readPlatformMetadata, storageFilesystem)
 	platform.Isolation = platformIsolation()
+	platform = describeStorageScope(platform, storagePathSource(input))
 	return platform, unsupported
+}
+
+func describeStorageScope(platform Platform, source string) Platform {
+	// Preserve the public shape: this is a scope limitation, not a health
+	// failure. An empty container store says nothing about the host store.
+	if platform.OS == "windows" && platform.Isolation == "appcontainer" && source == "windows_known_folder" {
+		platform.Limitations = append(platform.Limitations, "appcontainer_known_folder_store")
+	}
+	return platform
 }
 func platformSnapshot(input Input, goos, arch string, getenv func(string) string, read func(string) (string, error), filesystem func(string) (string, bool, bool)) (Platform, bool) {
 	p := Platform{OS: goos, Arch: arch, Runtime: "native", Isolation: "unknown", Interop: "not_applicable", ClientTrust: "local_only", Limitations: []string{}}

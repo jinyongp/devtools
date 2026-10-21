@@ -19,6 +19,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) == 2 && os.Args[1] == "__handoff-deliver-fixture" {
+		os.Exit(runDeliveryFixture())
+	}
 	if len(os.Args) == 3 && os.Args[1] == "__vault-session" {
 		if vault.ServeKeySession(context.Background(), os.Args[2]) != nil {
 			os.Exit(91)
@@ -87,7 +90,7 @@ func fixture(t *testing.T) (Store, *vault.SessionClient) {
 	if err = client.Unlock(ctx, pass, false); err != nil {
 		t.Fatal(err)
 	}
-	return Store{root, "app"}, client
+	return Store{Root: root, Profile: "app"}, client
 }
 func requestID(n int) string { return fmt.Sprintf("00000000-0000-4000-8000-%012x", n) }
 func TestPrepareImmutableReplayPassiveLookupAndPrivacy(t *testing.T) {

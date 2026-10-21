@@ -102,6 +102,7 @@ type receipt struct {
 	CreatedAt   time.Time `json:"created_at"`
 	ExpiresAt   time.Time `json:"expires_at"`
 	Pending     bool      `json:"pending"`
+	ErrorCode   string    `json:"error_code,omitempty"`
 	Result      Result    `json:"result"`
 }
 

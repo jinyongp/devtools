@@ -8,6 +8,7 @@ import (
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/valuehandoff"
+	"github.com/jinyongp/devtools/internal/values"
 )
 
 func executionSchema() map[string]any {
@@ -27,7 +28,11 @@ func (a *App) executionStore(r Request) (valuehandoff.Store, *protocol.Error) {
 	if e != nil {
 		return valuehandoff.Store{}, e
 	}
-	return valuehandoff.Store{Root: filepath.Dir(s.Directory), Profile: s.Profile}, nil
+	root, err := valuehandoff.CanonicalRoot(filepath.Dir(s.Directory))
+	if err != nil {
+		return valuehandoff.Store{}, values.VaultError(context.Background(), err)
+	}
+	return valuehandoff.Store{Root: root, Profile: s.Profile}, nil
 }
 func executionOptions() []Option {
 	return append(profileOptions(false), Option{Name: "request-id", Required: true, Pattern: valuehandoff.UUIDPattern, Description: "Canonical lowercase operation UUID; retry identical input."}, Option{Name: "file", Description: "Strict JSON control body file; contains no secret values."}, Option{Name: "stdin", Boolean: true, Description: "Read strict JSON control body from a pipe."})
@@ -50,6 +55,7 @@ func inputSourceSchema() []map[string]any {
 }
 func (a *App) registerValueExecutions() {
 	a.registerExecutionControls()
+	a.registerExecutionDelivery()
 	selection := object(map[string]any{"keys": map[string]any{"type": "array", "items": map[string]any{"type": "string", "pattern": `^[A-Za-z_][A-Za-z0-9_]*$`}, "uniqueItems": true, "maxItems": 5000}, "bundle": map[string]any{"type": "string", "pattern": project.ProfilePattern, "maxLength": 128}}, "keys")
 	opaque := map[string]any{"type": "string", "minLength": 1, "maxLength": 128, "pattern": `^[ -~]+$`}
 	body := object(map[string]any{"external_execution_id": opaque, "selection": selection, "env": stringSchema()}, "external_execution_id", "selection")
@@ -89,6 +95,20 @@ func (a *App) registerValueExecutions() {
 			}
 		}
 		return s.List(ctx, limit, r.Options["cursor"])
+	}})
+}
+
+func (a *App) registerExecutionDelivery() {
+	a.commands = append(a.commands, Command{Name: "values execution deliver", Description: "Initiate at most one approved private send; uncertain attempts never resend.", Options: executionOptions(), Arguments: []Argument{{Name: "execution-id", Required: true, Pattern: valuehandoff.IDPattern}}, InputOneOf: inputSourceSchema(), BodySchema: object(map[string]any{"revision": map[string]any{"type": "integer", "minimum": 1, "maximum": uint64(1<<64 - 1)}}, "revision"), Output: executionResultSchema(), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+		var input valuehandoff.RevisionInput
+		if e := executionInput(ctx, streams, r, &input); e != nil {
+			return nil, e
+		}
+		s, e := a.executionStore(r)
+		if e != nil {
+			return nil, e
+		}
+		return s.Deliver(ctx, r.Args[0], r.Options["request-id"], input)
 	}})
 }
 

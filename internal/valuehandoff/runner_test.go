@@ -12,10 +12,13 @@ import (
 )
 
 func receiverFixture(t *testing.T, s Store, runner, instance string) {
+	receiverConfigFixture(t, s, Receiver{Root: s.Root, RunnerID: runner, InstanceID: instance})
+}
+func receiverConfigFixture(t *testing.T, s Store, config Receiver) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- ServeRunner(ctx, s.Root, runner, instance) }()
+	go func() { done <- config.Serve(ctx) }()
 	t.Cleanup(func() {
 		cancel()
 		select {
@@ -24,7 +27,7 @@ func receiverFixture(t *testing.T, s Store, runner, instance string) {
 			t.Error("owned receiver did not stop")
 		}
 	})
-	address, err := Address(s.Root, runner, instance)
+	address, err := Address(s.Root, config.RunnerID, config.InstanceID)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,9 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -27,23 +29,36 @@ type RunnerAddress struct {
 	RedactionProtocol int    `json:"redaction_protocol"`
 }
 
+// CanonicalRoot is shared by CLI control and receiver construction so Windows
+// case aliases and Unix symlink aliases cannot compute different pipe identities.
+func CanonicalRoot(root string) (string, error) {
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	abs, err = filepath.EvalSymlinks(abs)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", vault.ErrKeyMissing
+	}
+	if err != nil {
+		return "", err
+	}
+	guard, err := platformfs.OpenRoot(abs, false)
+	if err != nil {
+		return "", err
+	}
+	guard.Close()
+	return abs, nil
+}
+
 func Address(root, runner, instance string) (RunnerAddress, error) {
 	if !uuidRE.MatchString(runner) || !uuidRE.MatchString(instance) {
 		return RunnerAddress{}, vault.ErrInvalid
 	}
-	abs, err := filepath.Abs(root)
+	abs, err := CanonicalRoot(root)
 	if err != nil {
 		return RunnerAddress{}, err
 	}
-	abs, err = filepath.EvalSymlinks(abs)
-	if err != nil {
-		return RunnerAddress{}, err
-	}
-	guard, err := platformfs.OpenRoot(abs, false)
-	if err != nil {
-		return RunnerAddress{}, err
-	}
-	guard.Close()
 	k, err := (vault.KeyFileStore{Directory: filepath.Join(abs, "vault")}).Read()
 	if err != nil {
 		return RunnerAddress{}, err

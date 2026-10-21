@@ -17,7 +17,11 @@ func (a *App) runnerStore() (valuehandoff.Store, *protocol.Error) {
 	if e != nil {
 		return valuehandoff.Store{}, e
 	}
-	return valuehandoff.Store{Root: filepath.Dir(dir)}, nil
+	root, err := valuehandoff.CanonicalRoot(filepath.Dir(dir))
+	if err != nil {
+		return valuehandoff.Store{}, values.VaultError(context.Background(), err)
+	}
+	return valuehandoff.Store{Root: root}, nil
 }
 func (a *App) registerValueRunners() {
 	id := Argument{Name: "runner-id", Required: true, Pattern: valuehandoff.UUIDPattern}

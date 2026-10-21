@@ -20,7 +20,10 @@ import (
 	"github.com/jinyongp/devtools/internal/vault"
 )
 
-type Store struct{ Root, Profile string }
+type Store struct {
+	Root, Profile string
+	deliveryHook  func(string)
+}
 type access struct {
 	master   *vault.Material
 	client   *vault.SessionClient
@@ -171,14 +174,20 @@ func (s Store) replay(ctx context.Context, a *access, id, fp string) (Result, bo
 		return Result{}, true, failure("request_conflict")
 	}
 	if r.Pending {
-		return Result{}, true, failure("delivery_outcome_unknown")
+		return r.Result, true, failure("delivery_outcome_unknown")
+	}
+	if r.ErrorCode != "" {
+		if r.ErrorCode != "delivery_outcome_unknown" {
+			return Result{}, true, failure(vault.ErrIntegrity.Error())
+		}
+		return r.Result, true, failure(r.ErrorCode)
 	}
 	r.Result.Replayed = true
 	return r.Result, true, nil
 }
 func (s Store) requestFile(ctx context.Context, a *access, id, fp, action string, result Result, pending bool) ([]byte, error) {
 	now := time.Now().UTC()
-	return s.encode(ctx, a, s.path("value-execution-requests", id), id, vault.MaterialExecutionRequest, receipt{action, fp, now, now.Add(30 * 24 * time.Hour), pending, result})
+	return s.encode(ctx, a, s.path("value-execution-requests", id), id, vault.MaterialExecutionRequest, receipt{Action: action, Fingerprint: fp, CreatedAt: now, ExpiresAt: now.Add(30 * 24 * time.Hour), Pending: pending, Result: result})
 }
 func (s Store) readRecord(ctx context.Context, a *access, id string) (record, error) {
 	var r record

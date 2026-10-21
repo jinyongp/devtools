@@ -156,6 +156,16 @@ timeout = "3s"
         assert api("vault", "status")["item"]["idle_expires_at"] == idle
         steps.append("guarded_mutation_replay_generation_and_passive_lookup")
 
+        # Exercise the installed package through the same portable scenario as
+        # Unix; only the cooperating caller executable is built from this SHA.
+        receiver = root / "value-handoff-runner.exe"
+        subprocess.run(["go", "build", "-o", str(receiver), "./examples/value-handoff-runner"],
+                       cwd=repository, check=True, timeout=90)
+        sys.path.insert(0, str(repository / "verify"))
+        from value_handoff_fixture import run as run_value_handoff
+        run_value_handoff(binary, receiver, root / "handoff", base_env)
+        steps.append("installed_private_value_handoff_and_successor_recovery")
+
         # Exercise the packaged CLI's default OS provider as well as the
         # explicit passphrase roots used by the portable-transfer journey.
         # Native mutation is intentionally forbidden in isolated product roots.

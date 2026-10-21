@@ -128,6 +128,8 @@ func New(version, commit string) *App {
 	a.registerImport()
 	a.registerBundles()
 	a.registerValueUsage()
+	a.registerValueExecutions()
+	a.registerValueRunners()
 	a.registerTasks()
 	a.registerDashboard()
 	a.registerDoctor()

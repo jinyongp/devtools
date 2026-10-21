@@ -148,4 +148,41 @@ func TestNativeUnixPeersRejectOtherUID(t *testing.T) {
 			t.Fatal("server did not reject foreign client UID", err)
 		}
 	})
+	t.Run("runner transport rejects other-user client", func(t *testing.T) {
+		runner, instance := "01234567-89ab-4cde-8fab-0123456789ab", "01234567-89ab-4cde-8fab-0123456789ac"
+		transportRoot := filepath.Join(root, "runner-private")
+		listener, err := ListenPeer(ctx, transportRoot, runner, instance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer listener.Close()
+		address, err := PeerAddress(transportRoot, runner, instance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		attempt, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		done := make(chan error, 1)
+		go func() {
+			connection, err := listener.Accept(attempt)
+			if connection != nil {
+				connection.Close()
+				done <- nil
+				return
+			}
+			done <- err
+		}()
+		cmd := child("client", address)
+		err = cmd.Run()
+		if err != nil {
+			var exit *exec.ExitError
+			if !errors.As(err, &exit) || exit.ExitCode() != 6 {
+				t.Fatal("unexpected foreign client failure", err)
+			}
+		}
+		cancel()
+		if err := <-done; err == nil {
+			t.Fatal("new runner channel admitted foreign client", err)
+		}
+	})
 }

@@ -9,8 +9,6 @@ import (
 
 func TestExecutionControlsRejectAmbiguousOrSecretBodies(t *testing.T) {
 	a := testApp(t)
-	// Commands remain unadvertised until D's complete delivery gate is wired.
-	a.registerValueExecutions()
 	id := "01234567-89ab-4cde-8fab-0123456789ab"
 	for _, body := range []string{
 		`{"external_execution_id":"job","selection":{}}`,

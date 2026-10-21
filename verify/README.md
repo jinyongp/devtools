@@ -58,6 +58,9 @@ devtools run test:installed vault
 # 저장값 변경 알림·명시 자동 restart·TLS proxy·readiness
 devtools run test:installed value_updates
 
+# 승인된 로컬 실행기 전달·응답 유실·로그 보호·교체 실행기의 결과 복구
+devtools run test:installed value_handoff
+
 # 실제 두 PTY의 공유 세션·daemon crash 뒤 수동 잠금 유지
 devtools run test:installed vault_session
 

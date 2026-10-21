@@ -207,6 +207,44 @@ func TestNativeWindowsPipePeersRejectOtherSID(t *testing.T) {
 		}
 		return `\\.\pipe\devtools-vault-peer-` + id
 	}
+	t.Run("runner transport client rejects other-user server", func(t *testing.T) {
+		root := privateTempDir(t)
+		runner, instance := "01234567-89ab-4cde-8fab-0123456789ab", "01234567-89ab-4cde-8fab-0123456789ac"
+		listener, err := ListenPeer(ctx, root, runner, instance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := listener.Close(); err != nil {
+			t.Fatal(err)
+		}
+		name, err := PeerAddress(root, runner, instance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		child(t, "server", name)
+		connection, err := DialPeer(ctx, root, runner, instance)
+		if connection != nil {
+			connection.Close()
+		}
+		if !errors.Is(err, ErrDenied) {
+			t.Fatal("runner client accepted foreign server SID", err)
+		}
+	})
+	t.Run("runner transport private ACL rejects other-user client", func(t *testing.T) {
+		root := privateTempDir(t)
+		runner, instance := "01234567-89ab-4cde-8fab-0123456789ab", "01234567-89ab-4cde-8fab-0123456789ac"
+		listener, err := ListenPeer(ctx, root, runner, instance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer listener.Close()
+		name, err := PeerAddress(root, runner, instance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		process := child(t, "denied-client", name)
+		wait(t, process)
+	})
 	t.Run("client rejects other-user server", func(t *testing.T) {
 		name := endpoint()
 		child(t, "server", name)

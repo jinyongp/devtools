@@ -189,7 +189,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Actual different-SID pipe preflight failed' }
             $events = @(Get-Content windows-native-peer-results.jsonl | ForEach-Object { $_ | ConvertFrom-Json })
             $passed = @($events | Where-Object Action -eq 'pass' | ForEach-Object { $_.Test })
-            foreach ($test in @('TestNativeWindowsPipePeersRejectOtherSID', 'TestNativeWindowsPipePeersRejectOtherSID/client_rejects_other-user_server', 'TestNativeWindowsPipePeersRejectOtherSID/server_rejects_other-user_client', 'TestNativeWindowsPipePeersRejectOtherSID/private_pipe_ACL_rejects_other-user_client', 'TestNativeWindowsPipePeersRejectOtherSID/remote_UNC_clients_are_rejected')) {
+            foreach ($test in @('TestNativeWindowsPipePeersRejectOtherSID', 'TestNativeWindowsPipePeersRejectOtherSID/client_rejects_other-user_server', 'TestNativeWindowsPipePeersRejectOtherSID/server_rejects_other-user_client', 'TestNativeWindowsPipePeersRejectOtherSID/private_pipe_ACL_rejects_other-user_client', 'TestNativeWindowsPipePeersRejectOtherSID/remote_UNC_clients_are_rejected', 'TestNativeWindowsPipePeersRejectOtherSID/runner_transport_client_rejects_other-user_server', 'TestNativeWindowsPipePeersRejectOtherSID/runner_transport_private_ACL_rejects_other-user_client')) {
               if ($passed -notcontains $test) { throw 'Required different-SID native assertion did not actually pass' }
             }
             if (@($events | Where-Object Action -eq 'skip').Count -ne 0) { throw 'Native peer preflight was skipped' }

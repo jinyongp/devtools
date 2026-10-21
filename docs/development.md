@@ -75,6 +75,20 @@ commit 후 응답 유실·나중 writer 보존을 검증한다. production 환�
 새 시나리오는 파일 이름으로 자동 등록된다. Windows 설치물은 native product journey에서
 같은 guard·생성·lookup을 검사하며, 해당 native job 결과를 로컬 Linux 결과로 대신하지 않는다.
 
+`python3 -B verify/run.py value_handoff`는 설치한 CLI와 별도로 빌드한 호출자 소유 실행기를
+연결한다. 준비·명시 승인·1회 전달·응답 유실 재시도·로그 마스킹·실행기 교체 후 결과 보고를
+실제 helper 실행 횟수와 비교한다. 잠금 뒤 이전 ticket을 재사용할 수 없는지도 확인한다.
+외부 계정이나 실제 사용자 keyring은 사용하지 않고, 생성한 실행기와 세션만 정리한다.
+
+main의 Unix validation은 기존 전체 race 작업에 더해 Ubuntu 24.04 x64·ARM64,
+macOS 15 ARM64·Intel에서 설치 시나리오와 전달·실행기 race 검사를 실행한다.
+disposable 호스트의 sudo 검사는 실제 다른 UID를 사용하며 skip을 통과로 인정하지 않는다.
+Windows x64·ARM64의 native product 작업도 같은 설치 시나리오를 사용한다.
+실제 다른 SID의 새 runner 채널 접근 거절은 vault preflight에서 필수로 확인한다.
+runner 이미지별 아키텍처는 [GitHub 공식 표](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)를
+기준으로 선택하고, 작업 안에서도 `GOHOSTARCH`를 확인한다. Windows ARM64의 일반 검사는
+x64 race 결과나 교차 컴파일로 대체하지 않는다. 각 커밋의 전체 Actions가 통과해야 통합 검증이 완료된다.
+
 Release 검증은 macOS 15, Ubuntu 24.04, Windows Server 2025 x64(테스트 호스트),
 Windows 11 ARM64와 Go 1.27.1을 사용한다. 지원 범위와 실제 PC 미검증 한계는
 [Windows 안내](windows.md)를 따른다. 실행별 결과는 해당 커밋의 Actions run과

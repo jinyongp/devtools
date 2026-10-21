@@ -110,6 +110,11 @@ func (a *App) registerExecutionReport() {
 		"exit_code": map[string]any{"type": "integer"},
 		"reason":    map[string]any{"type": "string", "enum": []string{"runner_start_failed", "runner_lost", "execution_failed", "canceled", "outcome_unavailable"}},
 	}, "revision", "runner_id", "external_execution_id", "input_id", "state")
+	body["oneOf"] = []map[string]any{
+		{"properties": map[string]any{"state": map[string]any{"const": "started"}}, "required": []string{"external_ref"}, "not": map[string]any{"anyOf": []map[string]any{{"required": []string{"exit_code"}}, {"required": []string{"reason"}}}}},
+		{"properties": map[string]any{"state": map[string]any{"const": "finished"}}, "required": []string{"external_ref", "exit_code"}},
+		{"properties": map[string]any{"state": map[string]any{"enum": []string{"failed", "unknown"}}}, "required": []string{"reason"}, "not": map[string]any{"required": []string{"exit_code"}}},
+	}
 	a.commands = append(a.commands, Command{Name: "values execution report", Description: "Record runner-reported engine facts without delivering or starting work.", Options: executionOptions(), Arguments: []Argument{{Name: "execution-id", Required: true, Pattern: valuehandoff.IDPattern}}, InputOneOf: inputSourceSchema(), BodySchema: body, Output: executionResultSchema(), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 		var input valuehandoff.ReportInput
 		if e := executionInput(ctx, streams, r, &input); e != nil {

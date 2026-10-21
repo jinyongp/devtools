@@ -49,9 +49,11 @@ It does not compare the candidate when the legacy failure is not reproduced.
 
 Add `-MatrixOnly` to the same command. This performs no default-store query. All
 fixtures are created below the evidence folder and removed by the test binary.
-Cases cover ordinary names, case aliases, available 8.3 aliases, long nested paths,
-parent renaming with a live metadata handle, and case-sensitive directories.
-Unavailable OS features are reported as skipped.
+Cases cover ordinary and Unicode names, case aliases, available directory and file
+8.3 aliases, long nested paths, and case-sensitive directories. Live metadata
+handles exercise case aliases and parent renaming, including case-only directory
+renaming. Rename cases record handle identity before and after the operation.
+Unavailable OS features and renames blocked by Windows are reported as skipped.
 
 The controlled outside-root handle is a **negative control**, not an incident
 reproduction. It checks rejection and trace capture on both source snapshots.

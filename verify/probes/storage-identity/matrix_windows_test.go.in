@@ -47,10 +47,11 @@ func storageMatrixResult(t *testing.T, err error) {
 }
 
 func TestStorageTraceMatrix(t *testing.T) {
-    for _, scenario := range []string{"plain", "root_case_alias", "file_case_alias", "short_root_alias", "long_nested_path", "renamed_parent_with_live_file", "case_sensitive_entries"} {
+    for _, scenario := range []string{"plain", "root_case_alias", "file_case_alias", "short_root_alias", "short_file_alias", "long_nested_path", "unicode_names", "held_case_alias", "renamed_parent_with_live_file", "renamed_parent_with_live_directory", "case_renamed_parent_with_live_directory", "case_sensitive_entries"} {
         t.Run(scenario, func(t *testing.T) {
             parent := storageMatrixFixture(t)
             path := filepath.Join(parent, "MixedCaseRoot")
+            if scenario == "unicode_names" { path = filepath.Join(parent, "저장소-É-名前") }
             root, err := OpenRoot(path, true)
             if err != nil { t.Fatal(err) }
             if scenario == "case_sensitive_entries" {
@@ -65,6 +66,7 @@ func TestStorageTraceMatrix(t *testing.T) {
                 if err != nil { t.Fatal(err) }
             }
             name := "MixedCaseFile"
+            if scenario == "unicode_names" { name = "항목-é-記録" }
             if scenario == "long_nested_path" {
                 nested := strings.Repeat(strings.Repeat("a", 75)+`\`, 7)
                 if err = root.MkdirAll(nested); err != nil { root.Close(); t.Fatal(err) }
@@ -84,6 +86,38 @@ func TestStorageTraceMatrix(t *testing.T) {
                 short := windows.UTF16ToString(buffer[:n])
                 if short == path { t.Skip("8.3 alias unavailable on this volume") }
                 path = short
+            case "short_file_alias":
+                full := filepath.Join(path, name)
+                ptr, _ := windows.UTF16PtrFromString(full)
+                buffer := make([]uint16, 32768)
+                n, err := windows.GetShortPathName(ptr, &buffer[0], uint32(len(buffer)))
+                if err != nil { t.Fatal(err) }
+                if n >= uint32(len(buffer)) { t.Fatal("short path buffer exhausted") }
+                short := filepath.Base(windows.UTF16ToString(buffer[:n]))
+                if short == name { t.Skip("8.3 file alias unavailable on this volume") }
+                name = short
+            case "held_case_alias":
+                ptr, _ := pathPtr(strings.ToUpper(filepath.Join(path, name)))
+                handle, err := windows.CreateFile(ptr, windows.FILE_READ_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
+                if err != nil { t.Fatal(err) }
+                defer windows.CloseHandle(handle)
+            case "renamed_parent_with_live_directory", "case_renamed_parent_with_live_directory":
+                ptr, _ := pathPtr(path)
+                handle, err := windows.CreateFile(ptr, windows.FILE_READ_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
+                if err != nil { t.Fatal(err) }
+                defer windows.CloseHandle(handle)
+                before := storageTraceInfo(handle)
+                moved := filepath.Join(parent, "RenamedRoot")
+                if scenario == "case_renamed_parent_with_live_directory" { moved = filepath.Join(parent, "mixedcaseroot") }
+                target, _ := pathPtr(moved)
+                if err = windows.MoveFileEx(ptr, target, 0); err != nil {
+                    if errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_SHARING_VIOLATION) { t.Skipf("Windows blocks this live-directory rename: %v", err) }
+                    t.Fatal(err)
+                }
+                after := storageTraceInfo(handle)
+                metadata, _ := json.Marshal(map[string]any{"case": scenario, "before": before, "after": after})
+                t.Log("STORAGE_MATRIX_RENAME " + string(metadata))
+                path = moved
             case "renamed_parent_with_live_file":
                 ptr, _ := pathPtr(filepath.Join(path, name))
                 handle, err := windows.CreateFile(ptr, windows.FILE_READ_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)

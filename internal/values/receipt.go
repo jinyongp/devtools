@@ -1,6 +1,7 @@
 package values
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,42 @@ import (
 
 func (s Store) receiptRelative(requestID string) string {
 	return "backup-receipts/values-" + profilekey.Key(s.Profile) + "-" + requestID + ".json"
+}
+
+// New managed receipts map exact UUID text to lowercase filenames. A UUID-shaped
+// scope suffix keeps historical vault receipt enumeration/pruning compatible.
+func (s ModernStore) receiptRelative(requestID string) string {
+	key := valueRequestKey(requestID)
+	scope := key[:32]
+	id := scope[:8] + "-" + scope[8:12] + "-" + scope[12:16] + "-" + scope[16:20] + "-" + scope[20:]
+	return "backup-receipts/values-" + profilekey.Key(s.Profile) + "-s2-" + key + "-" + id + ".json"
+}
+
+func valueRequestKey(id string) string {
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:])
+}
+
+func valueReceiptScope(id string) string { return valueRequestKey(id)[:32] }
+
+// Ordinary file lookup can alias a differently cased historical UUID filename.
+// Enumerate only when an old path exists; new receipt reads remain direct.
+func exactLegacyReceipt(path string) (bool, error) {
+	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if entry.Name() == filepath.Base(path) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // readReceipt preserves replay for pre-migration requests. Conflicting copies

@@ -134,7 +134,7 @@ func TestManagedRequestLookupPublicRetentionAndNoPublication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	receiptPath := (Store{Directory: store.Directory, Profile: store.Profile}).receiptRelative(id)
+	receiptPath := store.receiptRelative(id)
 	receiptBefore, err := os.ReadFile(filepath.Join(root, receiptPath))
 	if err != nil {
 		t.Fatal(err)
@@ -228,7 +228,7 @@ func TestManagedRequestLookupRejectsConflictingReceiptExpiry(t *testing.T) {
 	if _, e := store.Apply(ctx, c); e != nil {
 		t.Fatal(e)
 	}
-	canonical := (Store{Directory: store.Directory, Profile: store.Profile}).receiptRelative(id)
+	canonical := store.receiptRelative(id)
 	raw, err := maintenance.Read(filepath.Join(store.root(), canonical), vault.MaxDocumentBytes)
 	if err != nil {
 		t.Fatal(err)

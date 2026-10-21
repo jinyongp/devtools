@@ -149,7 +149,7 @@ func TestModernManagedReplaySurvivesRotationAndNewIncarnation(t *testing.T) {
 			t.Fatal("replacement lost historical replay", e)
 		}
 	}
-	receipt, err := os.ReadFile(filepath.Join(root, (Store{Directory: store.Directory, Profile: store.Profile}).receiptRelative(c.RequestID)))
+	receipt, err := os.ReadFile(filepath.Join(root, store.receiptRelative(c.RequestID)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,8 +189,8 @@ func TestModernReplayRetiresOnlyExpiredVerificationKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	relative := (Store{Directory: store.Directory, Profile: store.Profile}).receiptRelative(c.RequestID)
-	id := strings.ReplaceAll(c.RequestID, "-", "")
+	relative := store.receiptRelative(c.RequestID)
+	id := valueReceiptScope(c.RequestID)
 	receipt, _, err := files.ReadValueReceiptHeld(ctx, relative, id)
 	if err != nil {
 		release()

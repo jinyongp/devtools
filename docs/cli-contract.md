@@ -124,6 +124,10 @@ identity에 포함하지 않지만 읽은 값과 action·env·모든 변경 옵�
 같은 ID의 다른 입력은 `request_conflict`, 새 요청의 오래된 revision은
 `revision_conflict`다. 재시도는 원래 결과를 반환하므로 현재 값은 따로 조회한다.
 권한·검증·commit 전 실패는 ID를 소비하지 않는다. 입력을 고칠 때에는 새 UUID를 사용한다.
+UUID 문자열은 대소문자까지 동일하게 보존한다. 서로 다른 표기는 별개 요청이며
+새 receipt의 저장 경로도 파일시스템의 대소문자 비교에 의존하지 않는다.
+기존 receipt는 옮기지 않고 함께 조회한다. 새 protocol 9 변경의 재시도에는
+그 계약을 지원하는 실행 파일을 계속 사용한다.
 
 `--create-only`는 guard를 지정한 set에서만 지원하며 선택 계층의 빈 값·만료 값도
 기존 값으로 판단해 `value_exists`로 거절한다. 공통 값을 상속하던 env에 새 override를

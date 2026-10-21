@@ -118,7 +118,7 @@ func TestSecretGenerateFaultLeavesNoProfileOrReceipt(t *testing.T) {
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatal("RNG failure changed profile", err)
 	}
-	receipt := (Store{Directory: store.Directory, Profile: store.Profile}).receiptRelative(c.RequestID)
+	receipt := store.receiptRelative(c.RequestID)
 	if _, err := os.Stat(filepath.Join(root, receipt)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("RNG failure bound request ID")
 	}
@@ -299,7 +299,7 @@ func TestSecretGenerateExpiryAtCommitRejectsWithoutReceipt(t *testing.T) {
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatal("expired candidate changed stored value", err)
 	}
-	receipt := (Store{Directory: store.Directory, Profile: store.Profile}).receiptRelative(c.RequestID)
+	receipt := store.receiptRelative(c.RequestID)
 	if _, err := os.Stat(filepath.Join(root, receipt)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("expired candidate bound request")
 	}

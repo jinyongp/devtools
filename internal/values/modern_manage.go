@@ -184,17 +184,34 @@ func requestMAC(key *vault.Material, c Change) (string, error) {
 }
 func (s ModernStore) receiptHeld(ctx context.Context, master *vault.Material, vaultID, id string) (vault.ValueReceipt, ChangeResult, bool, error) {
 	legacy := Store{Directory: s.Directory, Profile: s.Profile}
-	paths := []string{legacy.receiptRelative(id), "backup-receipts/values-" + hex.EncodeToString([]byte(s.Profile)) + "-" + id + ".json"}
+	legacyScope := strings.ToLower(strings.ReplaceAll(id, "-", ""))
+	paths := []struct {
+		path, scope string
+		legacy      bool
+	}{
+		{s.receiptRelative(id), valueReceiptScope(id), false},
+		{legacy.receiptRelative(id), legacyScope, true},
+		{"backup-receipts/values-" + hex.EncodeToString([]byte(s.Profile)) + "-" + id + ".json", legacyScope, true},
+	}
 	var receipt vault.ValueReceipt
 	var result ChangeResult
 	found := false
 	store := vault.FileStore{Root: s.root(), VaultID: vaultID, CatalogKey: master}
-	scope := strings.ToLower(strings.ReplaceAll(id, "-", ""))
-	for index, path := range paths {
-		if index == 1 && len(filepath.Base(path)) > 255 {
+	for _, entry := range paths {
+		path := entry.path
+		if len(filepath.Base(path)) > 255 {
 			continue
 		}
-		candidate, present, err := store.ReadValueReceiptHeld(ctx, path, scope)
+		if entry.legacy {
+			exact, err := exactLegacyReceipt(filepath.Join(s.root(), path))
+			if err != nil {
+				return receipt, result, false, err
+			}
+			if !exact {
+				continue
+			}
+		}
+		candidate, present, err := store.ReadValueReceiptHeld(ctx, path, entry.scope)
 		if err != nil {
 			return receipt, result, false, err
 		}
@@ -471,7 +488,7 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	if master != nil {
 		plain := vault.NewMaterial(body)
 		clear(body)
-		body, err = vault.SealProtected(ctx, master, vaultID, strings.ToLower(strings.ReplaceAll(c.RequestID, "-", "")), vault.MaterialValueReceipt, plain)
+		body, err = vault.SealProtected(ctx, master, vaultID, valueReceiptScope(c.RequestID), vault.MaterialValueReceipt, plain)
 		plain.Destroy()
 		if err != nil {
 			return out, VaultError(ctx, err)
@@ -489,7 +506,7 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 			extra[path] = data
 		}
 	}
-	extra[(Store{Directory: s.Directory, Profile: s.Profile}).receiptRelative(c.RequestID)] = body
+	extra[s.receiptRelative(c.RequestID)] = body
 	if master != nil {
 		err = (vault.FileStore{Root: s.root(), VaultID: vaultID, CatalogKey: master}).PublishManagedWithFilesHeld(ctx, p, key, extra)
 	} else {

@@ -28,6 +28,11 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 			}
 		}
 	}
+	names := make([]string, 0, len(children))
+	for name := range children {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 	if exact != nil {
 		if schema {
 			catalog := a.catalog()
@@ -74,6 +79,9 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 			b.WriteString(" [args...]")
 		}
 		fmt.Fprintf(&b, "\n\n%s\n", exact.Description)
+		if len(exact.Options) > 0 {
+			b.WriteString("\nOptions:\n")
+		}
 		for _, o := range exact.Options {
 			label := "--" + o.Name
 			if !o.Boolean {
@@ -91,17 +99,16 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 			}
 			b.WriteByte('\n')
 		}
+		if len(names) > 0 {
+			b.WriteByte('\n')
+			b.WriteString(a.commandHelp(target, names))
+		}
 		fmt.Fprintf(&b, "\nJSON schema: devtools schema %s\n", exact.Name)
 		return nil, b.String(), true
 	}
 	if len(children) == 0 {
 		return nil, "", false
 	}
-	names := make([]string, 0, len(children))
-	for name := range children {
-		names = append(names, name)
-	}
-	sort.Strings(names)
 	if schema {
 		return map[string]any{"protocol_version": protocol.ProtocolVersion, "items": names, "scope": target, "usage": "devtools schema <command>; --all for full catalog"}, "", true
 	}
@@ -110,17 +117,8 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 		heading += " " + target
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s — developer tools\n\nCommands:\n", heading)
-	width := 0
-	for _, name := range names {
-		if len(name) > width {
-			width = len(name)
-		}
-	}
-	for _, name := range names {
-		full := strings.TrimSpace(target + " " + name)
-		fmt.Fprintf(&b, "  %-*s  %s\n", width, name, a.commandSummary(full))
-	}
+	fmt.Fprintf(&b, "%s — developer tools\n\n", heading)
+	b.WriteString(a.commandHelp(target, names))
 	fmt.Fprintf(&b, "\nUsage: %s <command> --help\nSchema: devtools schema %s<command>\n", heading, strings.TrimPrefix(heading+" ", "devtools "))
 	return nil, b.String(), true
 }
@@ -128,6 +126,9 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 func (a *App) commandSummary(name string) string {
 	groups := map[string]string{
 		"dashboard":               "Open the local management dashboard.",
+		"dashboard start":         "Open or reuse the local management dashboard.",
+		"dashboard status":        "Inspect the local dashboard server state.",
+		"dashboard stop":          "Stop the local dashboard server.",
 		"doctor":                  "Check project tools, settings, and required values.",
 		"import":                  "Import variables and secrets from a dotenv file.",
 		"init":                    "Create devtools.toml for a project.",
@@ -136,6 +137,16 @@ func (a *App) commandSummary(name string) string {
 		"update":                  "Update the installed executable.",
 		"backup":                  "Back up and restore profile data.",
 		"cleanup":                 "Preview and clean up stored data.",
+		"bundle":                  "Group values for scoped execution.",
+		"values":                  "Inspect value inputs and approve external execution.",
+		"vault":                   "Configure and control local key protection.",
+		"expose":                  "Share local endpoints through exposure providers.",
+		"values execution":        "Prepare, approve, deliver, and report external execution inputs.",
+		"values runner":           "Register and inspect same-user execution receivers.",
+		"values request":          "Inspect saved value mutation results.",
+		"proxy ca":                "Manage the local certificate authority.",
+		"proxy hosts":             "Preview and apply local hostname mappings.",
+		"profile transfer":        "Prepare encrypted profile transfers.",
 		"command":                 "List, inspect, and run configured project commands.",
 		"cmd":                     "List, inspect, and run configured project commands (alias of command).",
 		"env":                     "Manage profile environments.",

@@ -53,6 +53,10 @@ worktree는 체크아웃한 자신의 설정 파일을 사용한다. 같은 prof
 
 ## 프로젝트 준비와 명령 탐색
 
+`devtools --help`는 명령을 기능별로 묶어 보여 준다. `cmd`, `var`, `sec` 별칭은
+원래 명령 옆에 표시한다. `devtools GROUP --help`로 해당 명령군의 작업 흐름과 옵션을
+확인하고, 자동화에 필요한 입력·출력 계약은 `devtools schema GROUP COMMAND`로 조회한다.
+
 ```sh
 devtools init --profile myapp
 devtools project inspect

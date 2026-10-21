@@ -62,6 +62,19 @@ IPC 검사의 기존 기한을 넘길 수 있기 때문이다. x64·ARM64와 제
 병렬 실행, 전체 테스트 범위와 각 테스트의 제한 시간은 유지한다.
 
 로컬 `check:all`은 disposable Actions의 사용자·ACL·OS 경계 검사를 대체하지 않는다.
+
+조건부 값 변경·생성의 복구 경계는 다음 검사로 확인한다.
+`go test -race ./internal/maintenance ./internal/values -run 'Test(ValueReceiptTransactionSurvivesRealProcessKill|ManagedMutationRealProcessResponseLossAndCandidateKill|SecretGenerate)'`는
+저장 엔진의 candidate·journal 준비·첫 교체·전체 교체·durable commit·응답 전 경계에서
+owned 프로세스를 강제 종료하고 새 reader로 복구한다. 저장 엔진 검사는 opaque
+profile/receipt 쌍의 원자성을, 실제 values/session 프로세스 검사는 생성 후보와
+commit 후 응답 유실·나중 writer 보존을 검증한다. production 환경변수 failpoint는 없다.
+프로세스 종료 검사는 갑작스러운 전원 제거를 검증한 결과가 아니다.
+`python3 -B verify/run.py secret_mutations`는 같은 소스의 패키지를 설치한 뒤 CLI guard,
+응답 유실 재시도, 생성값의 실제 child 전달과 passive lookup을 검사한다.
+새 시나리오는 파일 이름으로 자동 등록된다. Windows 설치물은 native product journey에서
+같은 guard·생성·lookup을 검사하며, 해당 native job 결과를 로컬 Linux 결과로 대신하지 않는다.
+
 Release 검증은 macOS 15, Ubuntu 24.04, Windows Server 2025 x64(테스트 호스트),
 Windows 11 ARM64와 Go 1.27.1을 사용한다. 지원 범위와 실제 PC 미검증 한계는
 [Windows 안내](windows.md)를 따른다. 실행별 결과는 해당 커밋의 Actions run과

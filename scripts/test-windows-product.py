@@ -134,6 +134,28 @@ timeout = "3s"
         assert api("task", "show", task)["item"]["id"] == task
         steps.append("values_secret_and_task_journal")
 
+        # Guarded mutations share the legacy writer's revision and replay the
+        # original outcome after another installed CLI invocation changes it.
+        edit = api("values", "revision")["revision"]
+        guarded_id = str(uuid.uuid4())
+        guarded = ["var", "set", "GUARDED", "--value", "committed", "--revision", edit]
+        mutate(*guarded, request=guarded_id)
+        api("var", "set", "GUARDED", "--value", "later")
+        assert mutate(*guarded, request=guarded_id)["replayed"] is True
+        assert api("var", "get", "GUARDED")["value"] == "later"
+        assert api("values", "request", "show", guarded_id)["item"]["state"] == "completed"
+        generate_id = str(uuid.uuid4())
+        generate = ["secret", "generate", "GENERATED", "--revision", api("values", "revision")["revision"]]
+        generated = mutate(*generate, request=generate_id)
+        assert generated["changed"] is True and set(generated) == {"profile", "changed", "revision", "replayed"}
+        assert mutate(*generate, request=generate_id)["replayed"] is True
+        consumer = "const v=process.env.GENERATED;if(!/^[A-Za-z0-9_-]{43}$/.test(v)||Buffer.from(v,'base64url').length!==32)process.exit(1);process.stdout.write('generated-ok')"
+        assert raw(["run", "--", node, "-e", consumer]) == "generated-ok"
+        idle = api("vault", "status")["item"]["idle_expires_at"]
+        assert api("values", "request", "show", generate_id)["item"]["result"]["revision"] == generated["revision"]
+        assert api("vault", "status")["item"]["idle_expires_at"] == idle
+        steps.append("guarded_mutation_replay_generation_and_passive_lookup")
+
         # Exercise the packaged CLI's default OS provider as well as the
         # explicit passphrase roots used by the portable-transfer journey.
         # Native mutation is intentionally forbidden in isolated product roots.

@@ -24,6 +24,9 @@ type inputWatchFixture struct {
 }
 
 func TestMain(m *testing.M) {
+	if len(os.Args) == 2 && os.Args[1] == "__managed-mutation-fixture" {
+		os.Exit(runManagedMutationFixture())
+	}
 	if len(os.Args) == 3 && os.Args[1] == "__vault-session" {
 		if vault.ServeKeySession(context.Background(), os.Args[2]) != nil {
 			os.Exit(91)

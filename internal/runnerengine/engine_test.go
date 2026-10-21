@@ -30,6 +30,11 @@ func TestEngineHelper(t *testing.T) {
 }
 func newEngine(t *testing.T, directory string) *Engine {
 	t.Helper()
+	parent, err := filepath.EvalSymlinks(filepath.Dir(directory))
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory = filepath.Join(parent, filepath.Base(directory))
 	program, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

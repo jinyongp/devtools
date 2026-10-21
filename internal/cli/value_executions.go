@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/valuehandoff"
-	"github.com/jinyongp/devtools/internal/vault"
 )
 
 func executionSchema() map[string]any {
@@ -40,7 +40,7 @@ func executionInput(ctx context.Context, streams IO, r Request, out any) *protoc
 	if e != nil {
 		return e
 	}
-	if len(body) > 128<<10 || vault.StrictDecode([]byte(body), out) != nil {
+	if valuehandoff.DecodeControl([]byte(body), out) != nil {
 		return argumentError("Provide a valid strict JSON execution control body.", "")
 	}
 	return nil
@@ -49,7 +49,7 @@ func inputSourceSchema() []map[string]any {
 	return []map[string]any{{"required": []string{"file"}, "not": map[string]any{"required": []string{"stdin"}}}, {"required": []string{"stdin"}, "properties": map[string]any{"stdin": map[string]any{"const": true}}, "not": map[string]any{"required": []string{"file"}}}}
 }
 func (a *App) registerValueExecutions() {
-	selection := object(map[string]any{"keys": map[string]any{"type": "array", "items": map[string]any{"type": "string", "pattern": `^[A-Za-z_][A-Za-z0-9_]*$`}, "uniqueItems": true, "maxItems": 5000}, "bundle": stringSchema()}, "keys")
+	selection := object(map[string]any{"keys": map[string]any{"type": "array", "items": map[string]any{"type": "string", "pattern": `^[A-Za-z_][A-Za-z0-9_]*$`}, "uniqueItems": true, "maxItems": 5000}, "bundle": map[string]any{"type": "string", "pattern": project.ProfilePattern, "maxLength": 128}}, "keys")
 	opaque := map[string]any{"type": "string", "minLength": 1, "maxLength": 128, "pattern": `^[ -~]+$`}
 	body := object(map[string]any{"external_execution_id": opaque, "selection": selection, "env": stringSchema()}, "external_execution_id", "selection")
 	a.commands = append(a.commands, Command{Name: "values execution prepare", Description: "Freeze explicit scoped inputs for 30 seconds; selection does not approve delivery.", Options: executionOptions(), InputOneOf: inputSourceSchema(), BodySchema: body, Output: executionResultSchema(), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {

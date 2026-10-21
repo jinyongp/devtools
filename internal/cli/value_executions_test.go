@@ -19,6 +19,9 @@ func TestExecutionControlsRejectAmbiguousOrSecretBodies(t *testing.T) {
 		`{"external_execution_id":"job","selection":{"keys":[]},"value":"forbidden"}`,
 		`{"external_execution_id":"job","external_execution_id":"other","selection":{"keys":[]}}`,
 		`{"external_execution_id":"job","selection":{"keys":[]}} {}`,
+		`{"external_execution_id":"job","selection":{"keys":[]},"env":null}`,
+		`{"external_execution_id":"job","selection":{"keys":[],"bundle":""}}`,
+		`{"external_execution_id":"job","selection":{"keys":[null]}}`,
 	} {
 		code, _, diagnostic := invoke(t, a, body, "values", "execution", "prepare", "--stdin", "--request-id", id, "--profile", "app")
 		if code != 2 || !strings.Contains(diagnostic, "invalid_argument") {

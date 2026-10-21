@@ -114,7 +114,7 @@ func publish(ctx context.Context, from, to string, replace bool) (err error) {
 	return dir.Sync()
 }
 
-func containedFile(r *Root, f *os.File) error {
+func containedFile(r *Root, f *os.File, _ string) error {
 	for _, parent := range r.guard.files {
 		held, err := parent.Stat()
 		if err != nil {

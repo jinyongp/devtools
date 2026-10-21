@@ -114,7 +114,7 @@ func (r *Root) openFile(name string, flags int, open func(string, int) (*os.File
 		_ = guard.close()
 		return nil, err
 	}
-	if err = containedFile(r, f); err == nil && flags&os.O_TRUNC != 0 {
+	if err = containedFile(r, f, path); err == nil && flags&os.O_TRUNC != 0 {
 		err = f.Truncate(0)
 	}
 	if err != nil {

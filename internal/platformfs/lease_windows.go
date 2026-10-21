@@ -84,29 +84,10 @@ func (r *Root) checkedInheritedFile(name string, f *os.File) (*directoryGuard, e
 		return nil, err
 	}
 	fail := func(e error) (*directoryGuard, error) { _ = guard.close(); return nil, e }
-	ptr, err := pathPtr(path)
-	if err != nil {
+	if err = checkPrivate(windows.Handle(f.Fd()), false); err != nil {
 		return fail(err)
 	}
-	h, err := windows.CreateFile(ptr, windows.READ_CONTROL|windows.FILE_READ_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
-	if err != nil {
-		return fail(err)
-	}
-	defer windows.CloseHandle(h)
-	var expected, actual windows.ByHandleFileInformation
-	if err = windows.GetFileInformationByHandle(h, &expected); err != nil {
-		return fail(err)
-	}
-	if err = windows.GetFileInformationByHandle(windows.Handle(f.Fd()), &actual); err != nil {
-		return fail(err)
-	}
-	if expected.FileAttributes&(windows.FILE_ATTRIBUTE_DIRECTORY|windows.FILE_ATTRIBUTE_REPARSE_POINT) != 0 || expected.NumberOfLinks != 1 || actual.NumberOfLinks != 1 || expected.VolumeSerialNumber != actual.VolumeSerialNumber || expected.FileIndexHigh != actual.FileIndexHigh || expected.FileIndexLow != actual.FileIndexLow {
-		return fail(ErrUnsafe)
-	}
-	if err = checkPrivate(h, false); err != nil {
-		return fail(err)
-	}
-	if err = containedFile(r, f); err != nil {
+	if err = containedFile(r, f, path); err != nil {
 		return fail(err)
 	}
 	return guard, nil

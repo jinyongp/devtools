@@ -46,7 +46,7 @@ func OpenPublicNoFollow(path string, writable bool) (*File, error) {
 	if info.FileAttributes&(windows.FILE_ATTRIBUTE_DIRECTORY|windows.FILE_ATTRIBUTE_REPARSE_POINT) != 0 || info.NumberOfLinks != 1 {
 		return fail(ErrUnsafe)
 	}
-	if err = containedFile(&Root{path: filepath.Dir(absolute), guard: guard}, file); err != nil {
+	if err = containedFile(&Root{path: filepath.Dir(absolute), guard: guard}, file, absolute); err != nil {
 		return fail(err)
 	}
 	return &File{File: file, guard: guard}, nil

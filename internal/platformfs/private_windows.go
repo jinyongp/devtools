@@ -308,16 +308,7 @@ func publish(ctx context.Context, from, to string, replace bool) (err error) {
 	}
 }
 
-const (
-	volumeNameNT   = 0x2
-	volumeNameNone = 0x4
-)
-
-func handlePath(h windows.Handle) (string, error) {
-	// Keep normalized physical volume identity for containment checks without
-	// requiring a DOS drive-letter mapping. Both compared names use this form.
-	return normalizedHandlePath(h, volumeNameNT)
-}
+const volumeNameNone = 0x4
 
 func normalizedHandlePath(h windows.Handle, volume uint32) (string, error) {
 	buffer := make([]uint16, 512)
@@ -331,22 +322,6 @@ func normalizedHandlePath(h windows.Handle, volume uint32) (string, error) {
 		}
 		buffer = make([]uint16, n+1)
 	}
-}
-func containedFile(r *Root, f *os.File) error {
-	base, err := handlePath(r.guard.handles[len(r.guard.handles)-1])
-	if err != nil {
-		return err
-	}
-	actual, err := handlePath(windows.Handle(f.Fd()))
-	if err != nil {
-		return err
-	}
-	// Both names come from normalized handles, preserving NTFS case-sensitive
-	// directories rather than lowercasing user-supplied paths.
-	if !strings.HasPrefix(actual, strings.TrimRight(base, `\`)+`\`) {
-		return fsError("verify_file_identity", f.Name(), "path_mismatch", ErrUnsafe)
-	}
-	return nil
 }
 
 func checkPublicationImages(from, to string) error {

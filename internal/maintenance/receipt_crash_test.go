@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -47,7 +48,7 @@ func TestValueReceiptTransactionCrashHelper(t *testing.T) {
 			if err != nil || string(body) != "saved-result-new" {
 				t.Fatal("committed profile lost matching receipt", err)
 			}
-		} else if !os.IsNotExist(err) {
+		} else if !errors.Is(err, os.ErrNotExist) {
 			t.Fatal("uncommitted receipt survived", err)
 		}
 		fmt.Println("verified")
@@ -161,7 +162,7 @@ func TestValueReceiptTransactionSurvivesRealProcessKill(t *testing.T) {
 			}
 			out, err := command(mode).CombinedOutput()
 			if err != nil || !bytes.Contains(out, []byte("verified")) {
-				t.Fatal("fresh reader did not recover atomic profile/receipt pair", err)
+				t.Fatalf("fresh reader did not recover atomic profile/receipt pair: %v\n%s", err, out)
 			}
 		})
 	}

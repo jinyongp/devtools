@@ -14,7 +14,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 SOURCES = {
     "legacy": ("c14191b84475b583d9a480139157fb25ba71c713", "0.29.0-storage-trace"),
-    "candidate": ("2432f9c75d5a90971b4453accc1a35353c50ee6c", "0.30.0-storage-trace"),
+    "candidate": ("96fd9e91f6b8ccb75ceb0504fb191ce3da79a6f3", "0.30.0-storage-trace"),
 }
 
 

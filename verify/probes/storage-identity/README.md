@@ -45,6 +45,14 @@ If comparison is wanted, add `-CompareCandidate`. On a legacy failure, the scrip
 persists that evidence before running the same failing command with the candidate.
 It does not compare the candidate when the legacy failure is not reproduced.
 
+After a failure and candidate comparison have already been captured, use
+`-DiagnosticsOnly` to check a newer candidate's diagnostics in the same execution
+context without repeating task queries. It verifies the environment, hashes and
+candidate version, then runs diagnostics once. Only `ready`, `platform`, `paths`
+and `issues` are saved from its data; profile items and other payloads are omitted.
+The verdict means results were captured; inspect readiness, errors and limitations.
+Package identity alone does not establish whether file paths were redirected.
+
 ## Exercise disposable fixtures
 
 Add `-MatrixOnly` to the same command. This performs no default-store query. All

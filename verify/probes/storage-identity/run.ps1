@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory = $true)][ValidateSet('unrestricted', 'appcontainer')][string]$ExpectedIsolation,
     [switch]$MatrixOnly,
     [switch]$ObserveOnly,
+    [switch]$DiagnosticsOnly,
     [string]$ObserveDataRoot,
     [switch]$CompareCandidate
 )
@@ -16,6 +17,7 @@ $report = [ordered]@{
     project = $ProjectDirectory
     matrix_only = [bool]$MatrixOnly
     observe_only = [bool]$ObserveOnly
+    diagnostics_only = [bool]$DiagnosticsOnly
     checks = @()
     note = 'Trace records contain local paths and file IDs. No stored values or task bodies are saved. CLI queries may create locks or perform normal recovery. Handled storage errors are not necessarily command failures.'
 }
@@ -69,6 +71,7 @@ function Invoke-Trace([string]$file, [string[]]$arguments, [string]$kind) {
             if ($response.ok -eq $false) {
                 $record.error = [ordered]@{ code = $response.error.code; message = $response.error.message; details = $response.error.details | Select-Object domain, operation, resource, reason, os_error, os_error_domain }
             } elseif ($kind -eq 'version') { $record.data = $response.data }
+            elseif ($kind -eq 'diagnostics') { $record.data = $response.data | Select-Object ready, platform, paths, issues }
             else { $record.data = [ordered]@{ profile = $response.data.profile; revision = $response.data.revision; item_count = $(if ($null -eq $response.data.items) { 0 } else { @($response.data.items).Count }) } }
         }
         return $record
@@ -88,7 +91,8 @@ try {
     $tmp = [IO.Path]::GetFullPath((Join-Path $ProjectDirectory '.tmp')).TrimEnd('\') + '\'
     if (-not ([IO.Path]::GetFullPath($BundleDirectory)).StartsWith($tmp, [StringComparison]::OrdinalIgnoreCase)) { throw 'Evidence must stay inside the project .tmp directory.' }
     $canSave = $true
-    if ($ObserveOnly -and $MatrixOnly) { throw 'Choose only one of ObserveOnly and MatrixOnly.' }
+    if (([int][bool]$ObserveOnly + [int][bool]$MatrixOnly + [int][bool]$DiagnosticsOnly) -gt 1) { throw 'Choose only one of ObserveOnly, MatrixOnly and DiagnosticsOnly.' }
+    if ($CompareCandidate -and ($ObserveOnly -or $MatrixOnly -or $DiagnosticsOnly)) { throw 'CompareCandidate requires the original-query mode.' }
     if ($ObserveDataRoot -and -not $ObserveOnly) { throw 'ObserveDataRoot requires ObserveOnly.' }
     $manifest = Get-Content -LiteralPath (Join-Path $BundleDirectory 'build.json') -Raw | ConvertFrom-Json
     foreach ($artifact in $manifest.artifacts) {
@@ -106,6 +110,12 @@ try {
         $observation = Invoke-Trace 'candidate-matrix.exe' $arguments 'observation'
         $report.checks += $observation
         $report.verdict = if ($observation.ok) { 'store_view_observed_inspect_metadata' } else { 'store_view_observation_failed' }
+    } elseif ($DiagnosticsOnly) {
+        $version = Invoke-Trace 'candidate-cli.exe' @('version') 'version'
+        $report.checks += $version
+        if (-not $version.ok -or $version.data.commit -ne '96fd9e91f6b8ccb75ceb0504fb191ce3da79a6f3') { throw 'Candidate source identity mismatch.' }
+        $report.checks += Invoke-Trace 'candidate-cli.exe' @('diagnostics') 'diagnostics'
+        $report.verdict = 'candidate_diagnostics_captured_check_storage_scope'
     } elseif ($MatrixOnly) {
         foreach ($mode in @('legacy', 'candidate')) {
             $matrix = Invoke-Trace "$mode-matrix.exe" @('-test.run=^TestStorageTrace(Matrix|ControlledNegative|Compatibility)$', '-test.v', '-test.timeout=50s', "-storage-matrix-root=$BundleDirectory") 'matrix'
@@ -137,7 +147,7 @@ try {
             Save-Report
             $candidateVersion = Invoke-Trace 'candidate-cli.exe' @('version') 'version'
             $report.checks += $candidateVersion
-            if (-not $candidateVersion.ok -or $candidateVersion.data.commit -ne '2432f9c75d5a90971b4453accc1a35353c50ee6c') { throw 'Candidate source identity mismatch.' }
+            if (-not $candidateVersion.ok -or $candidateVersion.data.commit -ne '96fd9e91f6b8ccb75ceb0504fb191ce3da79a6f3') { throw 'Candidate source identity mismatch.' }
             $report.checks += Invoke-Trace 'candidate-cli.exe' $command 'query'
             $report.verdict = 'legacy_and_candidate_results_captured_compare_traces'
         }

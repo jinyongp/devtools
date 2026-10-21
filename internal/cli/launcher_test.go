@@ -29,6 +29,8 @@ import (
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "__generated-secret-check":
+			os.Exit(checkGeneratedSecretInput())
 		case "__values-restart":
 			if len(os.Args) != 4 || ServeValueRestart(context.Background(), os.Args[2], os.Args[3]) != nil {
 				os.Exit(96)

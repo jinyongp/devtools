@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -211,13 +212,15 @@ func (s ModernStore) receiptHeld(ctx context.Context, master *vault.Material, va
 	}
 	return receipt, result, found, nil
 }
-func mutateChange(state *Editor, c Change) (ChangeResult, *protocol.Error) {
+func mutateChange(state *Editor, c Change, generateReader io.Reader) (ChangeResult, *protocol.Error) {
 	out := ChangeResult{Profile: state.Profile}
 	if c.Import != nil && c.Action != "import" {
 		return out, protocol.NewError("invalid_argument", "Import input requires the import action.", 2, nil)
 	}
 	var err *protocol.Error
 	switch c.Action {
+	case "secret.generate":
+		out.Changed, err = state.generateSecret(c.Key, c.Env, c.Generate.Replace, generateReader)
 	case "import":
 		if c.Import == nil || c.Key != "" || c.Value != nil || len(c.Import.Content) > 500000 || (c.Import.Bundle != "" && !vault.ValidBundleName(c.Import.Bundle)) {
 			return out, protocol.NewError("invalid_argument", "Provide bounded import input and options.", 2, nil)
@@ -271,7 +274,7 @@ func mutateChange(state *Editor, c Change) (ChangeResult, *protocol.Error) {
 		return out, protocol.NewError("invalid_argument", "Unknown value action.", 2, nil)
 	}
 	if err == nil {
-		if c.Action == "secret.set" {
+		if c.Action == "secret.set" || c.Action == "secret.generate" {
 			if warning := FrontendSecretWarning(c.Key); warning != nil {
 				out.Warnings = []Warning{*warning}
 			}
@@ -384,7 +387,7 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 			out.Changed, out.Bundle = changed, c.Bundle.Name
 		} else {
 			var e *protocol.Error
-			out, e = mutateChange(editor, c)
+			out, e = mutateChange(editor, c, s.generateReader)
 			if e != nil {
 				return e
 			}
@@ -435,6 +438,9 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	}
 	if e := s.checkBase(base, currentExists); e != nil {
 		return out, e
+	}
+	if c.Generate != nil && c.Generate.Replace && editor.expiredExactSlot(c.Key, c.Env) {
+		return out, failure("value_expired", "The selected layer has expired.")
 	}
 	out.Revision = editRevision(s.Profile, p, true)
 	var fingerprintKey *vault.Material

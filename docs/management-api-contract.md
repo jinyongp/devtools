@@ -76,7 +76,12 @@ task 허용 action은 `task.add`, `task.update`, `task.depends`, `task.cancel`, 
 }
 ```
 
-값 action은 `variable.set`, `secret.set`, `variable.unset`, `secret.unset`, `env.create`, `env.remove`다. set은 빈 문자열을 포함한 `value`를 받는다. unset은 `key`와 `env`, env action은 `env`를 받는다. `env`의 빈 문자열은 공통 영역이다. env 삭제는 override를 먼저 정리한 상태에서 가능하다.
+값 action은 `variable.set`, `secret.set`, `secret.generate`, `variable.unset`, `secret.unset`, `env.create`, `env.remove`다. set은 빈 문자열을 포함한 `value`를 받는다. unset은 `key`와 `env`, env action은 `env`를 받는다. `env`의 빈 문자열은 공통 영역이다. env 삭제는 override를 먼저 정리한 상태에서 가능하다.
+
+`secret.generate`는 `key`, `env`, `generate:{replace:false}`와 필수 revision/request_id를 받으며
+value/import/bundle/create_only는 함께 전달할 수 없다. crypto/rand 32바이트를 padding 없는
+base64url 43자로 저장하고 메타데이터만 반환한다. replace는 기존 secret 교체를 허용하되
+살아 있는 TTL을 보존하고 만료된 slot을 거절한다. CLI의 `secret generate`와 같은 원자 저장·재시도 계약이다.
 
 set은 선택적으로 `create_only:true`를 받는다. 선택 계층에 빈 값이나 만료된 값이
 있어도 `value_exists`로 거절하며 상속된 공통 값만 있는 env override 생성은 허용한다.

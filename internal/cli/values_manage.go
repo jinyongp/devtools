@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/values"
 )
 
 func guardMutation(command *Command, createOnly bool) {
@@ -46,6 +47,17 @@ func managedChangeResultSchema() map[string]any {
 }
 
 func (a *App) registerValueManagement() {
+	options := append(profileOptions(true),
+		Option{Name: "revision", Required: true, Pattern: "^[0-9a-f]{64}$", Description: "Expected profile edit revision from values revision."},
+		Option{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "Replay UUID bound to this generation recipe; no value is printed."},
+		Option{Name: "replace", Boolean: true, Description: "Permit replacing a nonexpired secret slot; preserve its expiry."})
+	a.commands = append(a.commands, Command{Name: "secret generate", Aliases: []string{"sec generate"}, Description: "Store 32 cryptographically random bytes as unpadded base64url; return metadata only. Exact-layer creation is the default.", Options: options, Arguments: []Argument{{Name: "key", Required: true, Pattern: values.KeyPattern}}, Output: managedChangeResultSchema(), Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
+		store, e := a.store(r.Options)
+		if e != nil {
+			return nil, e
+		}
+		return store.Apply(ctx, values.Change{Action: "secret.generate", Key: r.Args[0], Env: r.Options["env"], Revision: r.Options["revision"], RequestID: r.Options["request-id"], Generate: &values.GenerateChange{Replace: r.Options["replace"] == "true"}})
+	}})
 	a.commands = append(a.commands, Command{Name: "values revision", Description: "Read the profile edit revision without values or unlocking; this token is not permission.", Options: profileOptions(true), Output: object(map[string]any{"profile": stringSchema(), "env": stringSchema(), "revision": stringSchema(), "integrity_verified": map[string]any{"const": false}}, "profile", "env", "revision", "integrity_verified"), Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 		store, e := a.store(r.Options)
 		if e != nil {

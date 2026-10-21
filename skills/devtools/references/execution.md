@@ -38,6 +38,13 @@ for 30 days; expired IDs return request_expired and stay spent. Metadata remains
 data root's lifetime. Timestamp-free legacy receipts remain unlimited. Root deletion,
 historical full rollback and transfer to another root end this local deduplication scope.
 
+`secret generate KEY --revision REVISION --request-id UUID` stores 32 random bytes
+as 43 unpadded base64url characters and returns metadata only. Protection must already
+be initialized/unlocked. It creates an exact-layer slot by default; --replace permits
+upsert while preserving a live slot's expiry and rejecting an expired slot. It never
+changes a variable's kind. Retry identical committed requests without regenerating;
+there are no length/encoding/seed options or plaintext output.
+
 ## Local key protection (discover installed support first)
 
 Check `schema vault status` and `schema vault init`; older installed builds may not

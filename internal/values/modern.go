@@ -3,6 +3,7 @@ package values
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -25,6 +26,8 @@ type ModernStore struct {
 	WriteMaster func(context.Context) (*vault.Material, func(context.Context) error, error)
 	// Test seam after candidate computation, before commit lease acquisition.
 	beforeCommit func()
+	// Test-only source for generated secret bytes, separate from slot crypto/IDs.
+	generateReader io.Reader
 	// Optional scoped measurement seam; never included in CLI responses.
 	observe func(string, time.Duration)
 }

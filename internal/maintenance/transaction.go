@@ -76,6 +76,20 @@ func validReplacementPath(path string) bool {
 		return false
 	}
 	parts := strings.Split(path, "/")
+	if len(parts) == 3 && (parts[0] == "value-executions" || parts[0] == "value-execution-payloads" || parts[0] == "value-execution-requests") {
+		name := strings.TrimSuffix(parts[2], ".json")
+		if !validKey(parts[1]) || parts[1] != strings.ToLower(parts[1]) || name != strings.ToLower(name) || !strings.HasSuffix(parts[2], ".json") {
+			return false
+		}
+		if parts[0] == "value-execution-requests" {
+			return name == strings.ToLower(name) && validTransactionID(name)
+		}
+		return validVaultID(name)
+	}
+	if len(parts) == 2 && (parts[0] == "value-runners" || parts[0] == "value-runner-requests") {
+		name := strings.TrimSuffix(parts[1], ".json")
+		return strings.HasSuffix(parts[1], ".json") && name == strings.ToLower(name) && validTransactionID(name)
+	}
 	if len(parts) == 2 && parts[0] == "vault" {
 		if parts[1] == "legacy-verification.json" {
 			return true

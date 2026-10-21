@@ -19,6 +19,10 @@ const (
 	MaterialBackupReceipt      = "backup-receipt"
 	MaterialValueReceipt       = "value-receipt"
 	MaterialReceiptHistory     = "receipt-history"
+	MaterialExecutionRecord    = "execution-record"
+	MaterialExecutionSnapshot  = "execution-snapshot"
+	MaterialExecutionRequest   = "execution-request"
+	MaterialRunnerRegistration = "runner-registration"
 	MaxProtectedPlainBytes     = 64 << 20
 )
 
@@ -32,7 +36,7 @@ type protectedMaterial struct {
 }
 
 func validMaterialPurpose(purpose string) bool {
-	return purpose == MaterialRecovery || purpose == MaterialLegacyVerification || purpose == MaterialReceipt || purpose == MaterialRewrap || purpose == MaterialBackupReceipt || purpose == MaterialValueReceipt || purpose == MaterialReceiptHistory
+	return purpose == MaterialRecovery || purpose == MaterialLegacyVerification || purpose == MaterialReceipt || purpose == MaterialRewrap || purpose == MaterialBackupReceipt || purpose == MaterialValueReceipt || purpose == MaterialReceiptHistory || purpose == MaterialExecutionRecord || purpose == MaterialExecutionSnapshot || purpose == MaterialExecutionRequest || purpose == MaterialRunnerRegistration
 }
 func (p protectedMaterial) aad() ([]byte, error) {
 	if p.Format != StorageVersion || !validID(p.VaultID) || !validID(p.Scope) || !validMaterialPurpose(p.Purpose) {

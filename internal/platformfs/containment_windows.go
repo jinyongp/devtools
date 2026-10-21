@@ -69,6 +69,10 @@ func containedFile(r *Root, f *os.File, path string) (err error) {
 }
 
 func openRelativeMetadata(parent windows.Handle, name string, directory bool) (windows.Handle, error) {
+	return openRelativeMetadataAccess(parent, name, directory, windows.FILE_READ_ATTRIBUTES)
+}
+
+func openRelativeMetadataAccess(parent windows.Handle, name string, directory bool, access uint32) (windows.Handle, error) {
 	objectName, err := windows.NewNTUnicodeString(name)
 	if err != nil {
 		return 0, err
@@ -87,7 +91,7 @@ func openRelativeMetadata(parent windows.Handle, name string, directory bool) (w
 	}
 	var handle windows.Handle
 	var status windows.IO_STATUS_BLOCK
-	err = windows.NtCreateFile(&handle, windows.FILE_READ_ATTRIBUTES, &attributes, &status,
+	err = windows.NtCreateFile(&handle, access, &attributes, &status,
 		nil, 0, share, windows.FILE_OPEN, windows.FILE_OPEN_REPARSE_POINT, 0, 0)
 	if err != nil {
 		var nt windows.NTStatus

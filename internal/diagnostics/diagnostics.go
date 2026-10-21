@@ -283,5 +283,11 @@ func Inspect(ctx context.Context, input Input) (Report, *protocol.Error) {
 		report.Network.Section = Section{Status: "fail", ErrorCode: networkErr.Code}
 		report.issue("network", networkErr)
 	}
+	// Observe existing structural entries after normal subsystem inspection.
+	// This bounded metadata probe neither creates entries nor changes readiness.
+	report.Platform.Limitations = append(report.Platform.Limitations, storageMappingLimits(input.Data)...)
+	if err := canceled(ctx); err != nil {
+		return Report{}, err
+	}
 	return report, nil
 }

@@ -201,6 +201,14 @@ Windows 패키지 신원이 있는 프로세스에서 기본 저장소를 선택
 AppData 재지정이 적용될 수 있으며, 같은 논리 경로가 같은 물리 저장소를
 보장하지 않습니다. 패키지 이름과 사용자 SID는 출력하지 않습니다.
 
+`windows_storage_path_aliases`는 기존 구조 항목의 핸들에서 관측한 최종 경로와
+고정한 data 루트 아래의 예상 경로가 다르다는 뜻입니다. 패키지 신원과 독립적으로
+확인하며, 경로 문자열을 보안 판정에 사용하지 않습니다.
+`windows_storage_mapping_unobserved`는 검사할 항목이 없거나 일부 메타데이터를
+확인하지 못했다는 뜻입니다. 고정 항목만 검사하므로 표시가 없다는 이유로 모든
+파일의 위치나 기존 데이터 연속성을 보장하지 않습니다. 두 표시 모두 `ready`를
+바꾸지 않으며, [Windows 저장소 안내](windows.md#storage-and-processes)를 따릅니다.
+
 ## protocol v7 마이그레이션
 
 CLI protocol v7은 Windows 지원과 함께 도입되었습니다. `version`/`schema`의

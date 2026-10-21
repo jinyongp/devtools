@@ -1,11 +1,46 @@
 package diagnostics
 
 import (
+	"errors"
+	"os"
 	"strings"
 	"unsafe"
 
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"golang.org/x/sys/windows"
 )
+
+func storageMappingLimits(path string) []string {
+	root, err := platformfs.OpenRoot(path, false)
+	if err != nil {
+		return []string{"windows_storage_mapping_unobserved"}
+	}
+	defer root.Close()
+	return observeStorageMapping(root.EntryPathAliased)
+}
+
+func observeStorageMapping(observe func(string) (bool, error)) []string {
+	var limits []string
+	observed, incomplete, aliased := false, false, false
+	for _, name := range []string{"profiles", "tasks", `.maintenance\lock.turnstile`} {
+		different, err := observe(name)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			incomplete = true
+			continue
+		}
+		observed, aliased = true, aliased || different
+	}
+	if aliased {
+		limits = append(limits, "windows_storage_path_aliases")
+	}
+	if !observed || incomplete {
+		limits = append(limits, "windows_storage_mapping_unobserved")
+	}
+	return limits
+}
 
 func platformPackageIdentity() string {
 	proc := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetCurrentPackageFullName")

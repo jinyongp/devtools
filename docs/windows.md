@@ -138,6 +138,16 @@ the same files. See Microsoft's
 Compare file identities from the failing execution context when investigating
 this difference. Do not merge or migrate stores based only on path spelling.
 
+Diagnostics also samples existing `profiles`, `tasks` and
+`.maintenance\lock.turnstile` entries through a pinned data root, without creating
+entries or reading their contents. `windows_storage_path_aliases` means an
+observed entry's final name differs from the name expected below that root,
+including cases where the process reports no package identity.
+`windows_storage_mapping_unobserved` means no sample was available or a sample
+could not be inspected. These notes do not change `ready` or relax security
+checks. An absent alias note describes only the bounded sample, not every file
+in the store; it does not establish historical data continuity.
+
 `verify_file_identity / file_identity_mismatch` means the handle and the entry
 resolved through the pinned root have different volume/file IDs.
 `verify_file_identity / path_mismatch` means the requested entry is not a valid

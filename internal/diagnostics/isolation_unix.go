@@ -6,3 +6,5 @@ package diagnostics
 func platformIsolation() string { return "unknown" }
 
 func platformPackageIdentity() string { return "not_applicable" }
+
+func storageMappingLimits(string) []string { return nil }

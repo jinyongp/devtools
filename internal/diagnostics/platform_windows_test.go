@@ -1,10 +1,43 @@
 package diagnostics
 
 import (
+	"errors"
+	"os"
+	"reflect"
 	"testing"
 
 	"golang.org/x/sys/windows"
 )
+
+func TestObservedMappingDoesNotDependOnPackageIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		observe func(string) (bool, error)
+		want    []string
+	}{
+		{"same_names", func(string) (bool, error) { return false, nil }, nil},
+		{"redirected_lock", func(name string) (bool, error) { return name == `.maintenance\lock.turnstile`, nil }, []string{"windows_storage_path_aliases"}},
+		{"missing_entries", func(string) (bool, error) { return false, os.ErrNotExist }, []string{"windows_storage_mapping_unobserved"}},
+		{"denied_lock", func(name string) (bool, error) {
+			if name == `.maintenance\lock.turnstile` {
+				return false, os.ErrPermission
+			}
+			return false, nil
+		}, []string{"windows_storage_mapping_unobserved"}},
+		{"mixed", func(name string) (bool, error) {
+			if name == "profiles" {
+				return false, errors.New("metadata unavailable")
+			}
+			return true, nil
+		}, []string{"windows_storage_path_aliases", "windows_storage_mapping_unobserved"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := observeStorageMapping(tc.observe); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("got %v want %v", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestWindowsPackageIdentityProbe(t *testing.T) {
 	got := platformPackageIdentity()

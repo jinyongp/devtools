@@ -49,6 +49,7 @@ func inputSourceSchema() []map[string]any {
 	return []map[string]any{{"required": []string{"file"}, "not": map[string]any{"required": []string{"stdin"}}}, {"required": []string{"stdin"}, "properties": map[string]any{"stdin": map[string]any{"const": true}}, "not": map[string]any{"required": []string{"file"}}}}
 }
 func (a *App) registerValueExecutions() {
+	a.registerExecutionControls()
 	selection := object(map[string]any{"keys": map[string]any{"type": "array", "items": map[string]any{"type": "string", "pattern": `^[A-Za-z_][A-Za-z0-9_]*$`}, "uniqueItems": true, "maxItems": 5000}, "bundle": map[string]any{"type": "string", "pattern": project.ProfilePattern, "maxLength": 128}}, "keys")
 	opaque := map[string]any{"type": "string", "minLength": 1, "maxLength": 128, "pattern": `^[ -~]+$`}
 	body := object(map[string]any{"external_execution_id": opaque, "selection": selection, "env": stringSchema()}, "external_execution_id", "selection")
@@ -89,4 +90,36 @@ func (a *App) registerValueExecutions() {
 		}
 		return s.List(ctx, limit, r.Options["cursor"])
 	}})
+}
+
+func (a *App) registerExecutionControls() {
+	for _, action := range []string{"approve", "cancel"} {
+		fields := map[string]any{"revision": map[string]any{"type": "integer", "minimum": 1, "maximum": uint64(1<<64 - 1)}}
+		required := []string{"revision"}
+		if action == "approve" {
+			fields["runner_id"] = map[string]any{"type": "string", "pattern": valuehandoff.UUIDPattern}
+			fields["runner_instance_id"] = map[string]any{"type": "string", "pattern": valuehandoff.UUIDPattern}
+			fields["input_id"] = map[string]any{"type": "string", "pattern": valuehandoff.IDPattern}
+			fields["external_execution_id"] = map[string]any{"type": "string", "pattern": `^[ -~]+$`, "minLength": 1, "maxLength": 128}
+			required = append(required, "runner_id", "runner_instance_id", "external_execution_id", "input_id")
+		}
+		a.commands = append(a.commands, Command{Name: "values execution " + action, Description: "Explicitly " + action + " a frozen execution input; this does not start or cancel an external job.", Options: executionOptions(), Arguments: []Argument{{Name: "execution-id", Required: true, Pattern: valuehandoff.IDPattern}}, InputOneOf: inputSourceSchema(), BodySchema: object(fields, required...), Output: executionResultSchema(), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+			s, e := a.executionStore(r)
+			if e != nil {
+				return nil, e
+			}
+			if action == "approve" {
+				var input valuehandoff.ApprovalInput
+				if e := executionInput(ctx, streams, r, &input); e != nil {
+					return nil, e
+				}
+				return s.Approve(ctx, r.Args[0], r.Options["request-id"], input)
+			}
+			var input valuehandoff.RevisionInput
+			if e := executionInput(ctx, streams, r, &input); e != nil {
+				return nil, e
+			}
+			return s.Cancel(ctx, r.Args[0], r.Options["request-id"], input)
+		}})
+	}
 }

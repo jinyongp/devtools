@@ -3,8 +3,8 @@
 [Documentation index](README.md) · [CLI contract](cli-contract.md) ·
 [Local protection](secret-protection.md) · [Output protection](output-protection.md)
 
-Version v0.30.0 introduces opt-in mutation guards and an approved execution
-interface for cooperating runners owned by the same OS user. Check
+Use opt-in mutation guards and an approved execution interface for cooperating
+runners owned by the same OS user. Check
 `devtools version` and the installed command's `schema` before using them.
 CLI protocol is 9; JSON envelope, storage and key-session versions
 remain 1, 1 and 3 respectively.

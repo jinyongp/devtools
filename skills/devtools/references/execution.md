@@ -145,7 +145,7 @@ common profile values and the configured env; explicit --env enables injection
 even when inject is false and overrides the configured env. Direct execution
 injects profile values. Inspect the command before choosing an env override.
 
-## Approved external execution (v0.30.0+)
+## Approved external execution
 
 Discover `schema values execution prepare` and `schema values runner register`
 before use; older installed builds do not expose these commands. See

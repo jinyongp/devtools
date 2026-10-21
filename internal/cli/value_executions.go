@@ -56,6 +56,7 @@ func inputSourceSchema() []map[string]any {
 func (a *App) registerValueExecutions() {
 	a.registerExecutionControls()
 	a.registerExecutionDelivery()
+	a.registerExecutionReport()
 	selection := object(map[string]any{"keys": map[string]any{"type": "array", "items": map[string]any{"type": "string", "pattern": `^[A-Za-z_][A-Za-z0-9_]*$`}, "uniqueItems": true, "maxItems": 5000}, "bundle": map[string]any{"type": "string", "pattern": project.ProfilePattern, "maxLength": 128}}, "keys")
 	opaque := map[string]any{"type": "string", "minLength": 1, "maxLength": 128, "pattern": `^[ -~]+$`}
 	body := object(map[string]any{"external_execution_id": opaque, "selection": selection, "env": stringSchema()}, "external_execution_id", "selection")
@@ -95,6 +96,30 @@ func (a *App) registerValueExecutions() {
 			}
 		}
 		return s.List(ctx, limit, r.Options["cursor"])
+	}})
+}
+
+func (a *App) registerExecutionReport() {
+	opaque := map[string]any{"type": "string", "minLength": 1, "maxLength": 128, "pattern": `^[ -~]+$`}
+	body := object(map[string]any{
+		"revision":              map[string]any{"type": "integer", "minimum": 1, "maximum": uint64(1<<64 - 1)},
+		"runner_id":             map[string]any{"type": "string", "pattern": valuehandoff.UUIDPattern},
+		"input_id":              map[string]any{"type": "string", "pattern": valuehandoff.IDPattern},
+		"external_execution_id": opaque, "external_ref": opaque,
+		"state":     map[string]any{"type": "string", "enum": []string{"started", "finished", "failed", "unknown"}},
+		"exit_code": map[string]any{"type": "integer"},
+		"reason":    map[string]any{"type": "string", "enum": []string{"runner_start_failed", "runner_lost", "execution_failed", "canceled", "outcome_unavailable"}},
+	}, "revision", "runner_id", "external_execution_id", "input_id", "state")
+	a.commands = append(a.commands, Command{Name: "values execution report", Description: "Record runner-reported engine facts without delivering or starting work.", Options: executionOptions(), Arguments: []Argument{{Name: "execution-id", Required: true, Pattern: valuehandoff.IDPattern}}, InputOneOf: inputSourceSchema(), BodySchema: body, Output: executionResultSchema(), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+		var input valuehandoff.ReportInput
+		if e := executionInput(ctx, streams, r, &input); e != nil {
+			return nil, e
+		}
+		s, e := a.executionStore(r)
+		if e != nil {
+			return nil, e
+		}
+		return s.Report(ctx, r.Args[0], r.Options["request-id"], input)
 	}})
 }
 

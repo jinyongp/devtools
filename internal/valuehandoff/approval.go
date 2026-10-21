@@ -27,6 +27,10 @@ type ApprovalInput struct {
 // control uses only a warm cached key. Its callback runs under the final
 // maintenance gate; preflight runs before any operation/disk gate is held.
 func (s Store) control(ctx context.Context, id, requestID, action string, input any, revision uint64, preflight func(context.Context) error, change func(*access, *record) (bool, bool, *protocol.Error)) (Result, *protocol.Error) {
+	return s.controlFiles(ctx, id, requestID, action, input, revision, preflight, change, nil)
+}
+
+func (s Store) controlFiles(ctx context.Context, id, requestID, action string, input any, revision uint64, preflight func(context.Context) error, change func(*access, *record) (bool, bool, *protocol.Error), extra func(context.Context, *access, record, Result, map[string][]byte) error) (Result, *protocol.Error) {
 	if !idRE.MatchString(id) || !uuidRE.MatchString(requestID) || revision == 0 {
 		return Result{}, invalid()
 	}
@@ -92,6 +96,9 @@ func (s Store) control(ctx context.Context, id, requestID, action string, input 
 	files, err := s.recordFiles(ctx, a, r, requestID, fp, action, result, false)
 	if err == nil && erase {
 		files[s.path("value-execution-payloads", id)] = nil
+	}
+	if err == nil && extra != nil {
+		err = extra(ctx, a, r, result, files)
 	}
 	if err == nil {
 		err = maintenance.Replace(s.Root, files)

@@ -158,7 +158,7 @@ jobs:
       - name: Native external value handoff component contracts
         if: ${{ matrix.lane == 'suite' && (github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'suite') }}
         run: |
-          & go test -json -count=1 -timeout 8m ./internal/valuehandoff | Tee-Object -FilePath windows-value-handoff-results.jsonl
+          & go test -json -count=1 -timeout 8m ./internal/valuehandoff ./internal/runnerengine | Tee-Object -FilePath windows-value-handoff-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native external value handoff component contract failed' }
 
       - name: Complete native Go product suite
@@ -312,7 +312,7 @@ jobs:
           @{ architecture = 'amd64'; compiler = $compiler; target = $target; synchronization_library = $library; arm64_race = 'not_supported'; gorace = 'halt_on_error=1 atexit_sleep_ms=0' } | ConvertTo-Json | Set-Content -Encoding utf8 windows-race-toolchain.json
           $env:CC = $compiler; $env:CGO_ENABLED = '1'; $env:GORACE = 'halt_on_error=1 atexit_sleep_ms=0'
           try {
-            & go test -race -json -count=1 -timeout 8m ./internal/tasks ./internal/values ./internal/valuehandoff ./internal/services ./internal/lifecycle ./internal/profiles ./internal/diagnostics | Tee-Object -FilePath windows-race-results.jsonl
+            & go test -race -json -count=1 -timeout 8m ./internal/tasks ./internal/values ./internal/valuehandoff ./internal/runnerengine ./internal/services ./internal/lifecycle ./internal/profiles ./internal/diagnostics | Tee-Object -FilePath windows-race-results.jsonl
             if ($LASTEXITCODE -ne 0) { throw 'Native amd64 race contract failed' }
           } finally { Remove-Item Env:CC; Remove-Item Env:CGO_ENABLED; Remove-Item Env:GORACE }
 

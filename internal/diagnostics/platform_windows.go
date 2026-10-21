@@ -1,10 +1,34 @@
 package diagnostics
 
 import (
-	"golang.org/x/sys/windows"
 	"strings"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
+
+func platformPackageIdentity() string {
+	proc := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetCurrentPackageFullName")
+	if err := proc.Find(); err != nil {
+		return "unknown"
+	}
+	// The sizing call establishes identity without fetching or exposing a package
+	// name. This API returns its status directly, not through GetLastError.
+	var size uint32
+	status, _, _ := proc.Call(uintptr(unsafe.Pointer(&size)), 0)
+	return packageIdentityFromStatus(status, size)
+}
+
+func packageIdentityFromStatus(status uintptr, size uint32) string {
+	switch {
+	case status == uintptr(windows.ERROR_INSUFFICIENT_BUFFER) && size > 0:
+		return "packaged"
+	case status == uintptr(windows.APPMODEL_ERROR_NO_PACKAGE):
+		return "unpackaged"
+	default:
+		return "unknown"
+	}
+}
 
 func platformIsolation() string {
 	// TokenIsAppContainer (29) is defined by the Windows SDK but is absent from

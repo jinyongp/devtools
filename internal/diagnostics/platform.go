@@ -28,15 +28,25 @@ type Platform struct {
 func inspectPlatform(input Input) (Platform, bool) {
 	platform, unsupported := platformSnapshot(input, runtime.GOOS, runtime.GOARCH, os.Getenv, readPlatformMetadata, storageFilesystem)
 	platform.Isolation = platformIsolation()
-	platform = describeStorageScope(platform, storagePathSource(input))
+	platform = describeStorageScope(platform, storagePathSource(input), platformPackageIdentity())
 	return platform, unsupported
 }
 
-func describeStorageScope(platform Platform, source string) Platform {
+func describeStorageScope(platform Platform, source, packageIdentity string) Platform {
 	// Preserve the public shape: this is a scope limitation, not a health
 	// failure. An empty container store says nothing about the host store.
 	if platform.OS == "windows" && platform.Isolation == "appcontainer" && source == "windows_known_folder" {
 		platform.Limitations = append(platform.Limitations, "appcontainer_known_folder_store")
+	}
+	// Package identity and token isolation are independent. A full-trust packaged
+	// process can see redirected AppData even with an unrestricted token.
+	if platform.OS == "windows" && source == "windows_known_folder" {
+		switch packageIdentity {
+		case "packaged":
+			platform.Limitations = append(platform.Limitations, "packaged_windows_default_store")
+		case "unknown":
+			platform.Limitations = append(platform.Limitations, "windows_package_identity_unknown")
+		}
 	}
 	return platform
 }

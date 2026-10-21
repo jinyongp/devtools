@@ -194,6 +194,13 @@ AppContainer에서 Known Folder 기본 저장소를 선택하면 `platform.limit
 AppContainer의 저장소 생성·ACL 검증 정책은 [Windows 안내](windows.md#storage-and-processes)를
 따릅니다. 해당 identity 정책이 있어도 호스트 샌드박스가 접근을 거부할 수 있습니다.
 
+Windows 패키지 신원이 있는 프로세스에서 기본 저장소를 선택하면
+`packaged_windows_default_store`가 포함됩니다. 패키지 신원 확인에 실패하면
+`windows_package_identity_unknown`으로 표시합니다. 두 표시는 건강 실패가 아니며,
+실제 파일의 재지정 여부를 확정하지 않습니다. `unrestricted`여도 패키지의
+AppData 재지정이 적용될 수 있으며, 같은 논리 경로가 같은 물리 저장소를
+보장하지 않습니다. 패키지 이름과 사용자 SID는 출력하지 않습니다.
+
 ## protocol v7 마이그레이션
 
 CLI protocol v7은 Windows 지원과 함께 도입되었습니다. `version`/`schema`의

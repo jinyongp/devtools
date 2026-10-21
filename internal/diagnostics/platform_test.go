@@ -22,9 +22,33 @@ func TestStorageScopeDoesNotConfuseExplicitAndDefaultStores(t *testing.T) {
 		{"windows", "restricted", "windows_known_folder", false},
 		{"linux", "unknown", "user_directories", false},
 	} {
-		p := describeStorageScope(Platform{OS: tc.os, Isolation: tc.isolation, Limitations: []string{"existing_limit"}}, tc.source)
+		p := describeStorageScope(Platform{OS: tc.os, Isolation: tc.isolation, Limitations: []string{"existing_limit"}}, tc.source, "unpackaged")
 		if containsPlatformLimit(p.Limitations, "appcontainer_known_folder_store") != tc.containerDefault || p.Limitations[0] != "existing_limit" {
 			t.Fatal(tc, p)
+		}
+	}
+}
+
+func TestPackageStorageScopeIsIndependentOfTokenIsolation(t *testing.T) {
+	for _, tc := range []struct {
+		os, isolation, source, identity, want string
+	}{
+		{"windows", "unrestricted", "windows_known_folder", "packaged", "packaged_windows_default_store"},
+		{"windows", "appcontainer", "windows_known_folder", "packaged", "packaged_windows_default_store"},
+		{"windows", "unrestricted", "windows_known_folder", "unknown", "windows_package_identity_unknown"},
+		{"windows", "unrestricted", "windows_known_folder", "unpackaged", ""},
+		{"windows", "unrestricted", "isolated_root", "packaged", ""},
+		{"windows", "unrestricted", "provided", "packaged", ""},
+		{"linux", "unknown", "user_directories", "packaged", ""},
+	} {
+		p := describeStorageScope(Platform{OS: tc.os, Isolation: tc.isolation, Limitations: []string{"existing_limit"}}, tc.source, tc.identity)
+		for _, code := range []string{"packaged_windows_default_store", "windows_package_identity_unknown"} {
+			if containsPlatformLimit(p.Limitations, code) != (tc.want == code) {
+				t.Fatal(tc, p)
+			}
+		}
+		if p.Isolation != tc.isolation || p.Limitations[0] != "existing_limit" {
+			t.Fatal("storage scope changed token isolation or existing limitations", tc, p)
 		}
 	}
 }

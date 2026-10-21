@@ -125,6 +125,19 @@ store is selected inside an AppContainer. This note does not make `ready` false.
 An empty profile or task list there does not establish that the host store is empty
 or repaired. The same profile name in two paths does not make them the same store.
 
+Token isolation does not identify package virtualization. Even `unrestricted`
+processes can have Windows package identity. For a packaged process using the
+default store, `platform.limitations` includes `packaged_windows_default_store`;
+`windows_package_identity_unknown` means the package-identity query was inconclusive.
+Neither note makes `ready` false or proves that a particular file was redirected.
+Windows can present a merged AppData view: a logical path can open a file under a
+package's `LocalCache` while an existing parent resolves outside that directory.
+Thus matching `paths.data` between sessions is necessary but does not prove that
+both sessions opened the same files. See Microsoft's
+[packaged desktop app file-system behavior](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes#appdata-operations-on-windows-10-version-1903-and-later).
+Compare file identities from the failing execution context when investigating
+this difference. Do not merge or migrate stores based only on path spelling.
+
 `verify_file_identity / file_identity_mismatch` means the handle and the entry
 resolved through the pinned root have different volume/file IDs.
 `verify_file_identity / path_mismatch` means the requested entry is not a valid

@@ -172,7 +172,9 @@ func TestPrepareImmutableReplayPassiveLookupAndPrivacy(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if !d.Type().IsRegular() {
+		// OS coordination locks never store value bytes. Windows byte-range
+		// locks intentionally deny reads while the owned daemon is running.
+		if !d.Type().IsRegular() || filepath.Ext(path) == ".lock" {
 			return nil
 		}
 		b, err := os.ReadFile(path)

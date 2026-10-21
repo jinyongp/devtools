@@ -37,6 +37,8 @@ class InstrumentationContract(unittest.TestCase):
                 else:
                     self.assertIn('return fsError("verify_file_identity", path, "file_identity_mismatch", ErrUnsafe)', changed)
                     self.assertIn("expected.VolumeSerialNumber != actual.VolumeSerialNumber", changed)
+                    decision = 'return fsError("verify_file_identity", path, "file_identity_mismatch", ErrUnsafe)\n\t\t}\n\t\tstorageTraceVerified(r, f, path, h)'
+                    self.assertIn(decision, changed)
                 for name in hashes:
                     self.assertNotIn("@SOURCE_COMMIT@", (root / name).read_text())
                     self.assertNotIn("@VERIFY_CALL@", (root / name).read_text())

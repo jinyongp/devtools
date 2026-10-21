@@ -16,6 +16,37 @@ import (
 )
 
 var storageMatrixRoot = flag.String("storage-matrix-root", "", "Existing .tmp evidence folder for disposable fixtures")
+var storageObserveRoot = flag.String("storage-observe-root", "", "Optional existing data root for metadata-only observation")
+
+func TestStorageTraceStoreView(t *testing.T) {
+    path := *storageObserveRoot
+    source := "explicit_metadata_target"
+    if path == "" {
+        base, err := windows.KnownFolderPath(windows.FOLDERID_LocalAppData, windows.KF_FLAG_DONT_VERIFY)
+        if err != nil { t.Fatal(err) }
+        path, source = filepath.Join(base, "devtools", "data"), "windows_known_folder"
+    }
+    result := map[string]any{"requested_data_root": path, "source": source, "metadata_only": true}
+    root, err := OpenRoot(path, false)
+    if err != nil {
+        result["root_error"] = storageerr.Details(err, "observation", "open_directory", "data_root")
+    } else {
+        defer root.Close()
+        handle := root.guard.handles[len(root.guard.handles)-1]
+        result["root_handle"] = storageTraceInfo(handle)
+        entries := map[string]any{}
+        // Fixed structural entries only: no enumeration, file contents, locks,
+        // profile names, ACL strings, secrets or dynamically discovered targets.
+        for _, name := range []string{"profiles", "tasks", `.maintenance\lock.turnstile`} {
+            info, err := storageTraceExpected(handle, name)
+            if err != nil { entries[name] = map[string]any{"error": storageTraceError(err)} } else { entries[name] = info }
+        }
+        result["entries"] = entries
+    }
+    body, err := json.Marshal(result)
+    if err != nil { t.Fatal(err) }
+    t.Log("STORAGE_STORE_VIEW " + string(body))
+}
 
 func TestStorageTraceEnvironment(t *testing.T) {
     var app, size uint32
@@ -25,7 +56,7 @@ func TestStorageTraceEnvironment(t *testing.T) {
     if app != 0 { isolation = "appcontainer" } else if restricted, err := token.IsRestricted(); err != nil { t.Fatal(err) } else if restricted { isolation = "restricted" }
     base, err := windows.KnownFolderPath(windows.FOLDERID_LocalAppData, windows.KF_FLAG_DONT_VERIFY)
     if err != nil { t.Fatal(err) }
-    body, _ := json.Marshal(map[string]any{"isolation": isolation, "known_folder_local_app_data": base, "default_data_path": filepath.Join(base, "devtools", "data"), "isolated_root_set": os.Getenv("DEVTOOLS_ISOLATED_ROOT") != ""})
+    body, _ := json.Marshal(map[string]any{"isolation": isolation, "package_identity": storageTracePackageIdentity(), "known_folder_local_app_data": base, "default_data_path": filepath.Join(base, "devtools", "data"), "isolated_root_set": os.Getenv("DEVTOOLS_ISOLATED_ROOT") != ""})
     t.Log("STORAGE_TRACE_ENV " + string(body))
 }
 

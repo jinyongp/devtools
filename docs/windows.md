@@ -132,8 +132,8 @@ default store, `platform.limitations` includes `packaged_windows_default_store`;
 Neither note makes `ready` false or proves that a particular file was redirected.
 Windows can present a merged AppData view: a logical path can open a file under a
 package's `LocalCache` while an existing parent resolves outside that directory.
-Thus matching `paths.data` between sessions is necessary but does not prove that
-both sessions opened the same files. See Microsoft's
+Matching `paths.data` between sessions does not prove that both sessions opened
+the same files. See Microsoft's
 [packaged desktop app file-system behavior](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes#appdata-operations-on-windows-10-version-1903-and-later).
 Compare file identities from the failing execution context when investigating
 this difference. Do not merge or migrate stores based only on path spelling.

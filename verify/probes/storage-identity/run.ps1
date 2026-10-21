@@ -3,6 +3,8 @@ param(
     [Parameter(Mandatory = $true)][string]$ProjectDirectory,
     [Parameter(Mandatory = $true)][ValidateSet('unrestricted', 'appcontainer')][string]$ExpectedIsolation,
     [switch]$MatrixOnly,
+    [switch]$ObserveOnly,
+    [string]$ObserveDataRoot,
     [switch]$CompareCandidate
 )
 $ErrorActionPreference = 'Stop'
@@ -13,6 +15,7 @@ $report = [ordered]@{
     expected_isolation = $ExpectedIsolation
     project = $ProjectDirectory
     matrix_only = [bool]$MatrixOnly
+    observe_only = [bool]$ObserveOnly
     checks = @()
     note = 'Trace records contain local paths and file IDs. No stored values or task bodies are saved. CLI queries may create locks or perform normal recovery. Handled storage errors are not necessarily command failures.'
 }
@@ -53,6 +56,9 @@ function Invoke-Trace([string]$file, [string[]]$arguments, [string]$kind) {
         if ($kind -eq 'environment') {
             if ($stdout -match 'STORAGE_TRACE_ENV (\{[^\r\n]+\})') { $record.data = $Matches[1] | ConvertFrom-Json }
             $record.ok = ($process.ExitCode -eq 0 -and $null -ne $record.data)
+        } elseif ($kind -eq 'observation') {
+            if ($stdout -match 'STORAGE_STORE_VIEW (\{[^\r\n]+\})') { $record.data = $Matches[1] | ConvertFrom-Json }
+            $record.ok = ($process.ExitCode -eq 0 -and $null -ne $record.data -and -not $record.timeout)
         } elseif ($kind -eq 'matrix') {
             $record.fixture_output = $stdout
             $record.ok = ($process.ExitCode -eq 0 -and -not $record.timeout)
@@ -82,6 +88,8 @@ try {
     $tmp = [IO.Path]::GetFullPath((Join-Path $ProjectDirectory '.tmp')).TrimEnd('\') + '\'
     if (-not ([IO.Path]::GetFullPath($BundleDirectory)).StartsWith($tmp, [StringComparison]::OrdinalIgnoreCase)) { throw 'Evidence must stay inside the project .tmp directory.' }
     $canSave = $true
+    if ($ObserveOnly -and $MatrixOnly) { throw 'Choose only one of ObserveOnly and MatrixOnly.' }
+    if ($ObserveDataRoot -and -not $ObserveOnly) { throw 'ObserveDataRoot requires ObserveOnly.' }
     $manifest = Get-Content -LiteralPath (Join-Path $BundleDirectory 'build.json') -Raw | ConvertFrom-Json
     foreach ($artifact in $manifest.artifacts) {
         $actual = (Get-FileHash -LiteralPath (Join-Path $BundleDirectory $artifact.file) -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -92,13 +100,24 @@ try {
     $report.checks += $environment
     if (-not $environment.ok -or $environment.data.isolation -ne $ExpectedIsolation) { throw 'Execution environment mismatch; stop without retrying elsewhere.' }
     if ($environment.data.isolated_root_set) { throw 'An isolated root override is set; stop without changing the environment.' }
-    if ($MatrixOnly) {
+    if ($ObserveOnly) {
+        $arguments = @('-test.run=^TestStorageTraceStoreView$', '-test.v', '-test.timeout=30s')
+        if ($ObserveDataRoot) { $arguments += "-storage-observe-root=$ObserveDataRoot" }
+        $observation = Invoke-Trace 'candidate-matrix.exe' $arguments 'observation'
+        $report.checks += $observation
+        $report.verdict = if ($observation.ok) { 'store_view_observed_inspect_metadata' } else { 'store_view_observation_failed' }
+    } elseif ($MatrixOnly) {
         foreach ($mode in @('legacy', 'candidate')) {
-            $matrix = Invoke-Trace "$mode-matrix.exe" @('-test.run=^TestStorageTrace(Matrix|ControlledNegative)$', '-test.v', '-test.timeout=50s', "-storage-matrix-root=$BundleDirectory") 'matrix'
+            $matrix = Invoke-Trace "$mode-matrix.exe" @('-test.run=^TestStorageTrace(Matrix|ControlledNegative|Compatibility)$', '-test.v', '-test.timeout=50s', "-storage-matrix-root=$BundleDirectory") 'matrix'
             $control = @($matrix.traces | Where-Object { $_.event -eq 'containment_failure' -and $_.requested_root -match '\\expected$' -and $_.expected_entry_matches_opened_file -eq $false })
             $matrix.capture_contract_ok = ($control.Count -ge 1)
             $matrix.trace_omits_content = -not (($matrix.traces | ConvertTo-Json -Depth 24) -match 'STORAGE_TRACE_CONTENT_CANARY')
             $matrix.ok = ($matrix.ok -and $matrix.capture_contract_ok -and $matrix.trace_omits_content)
+            if ($mode -eq 'candidate') {
+                $verified = @($matrix.traces | Where-Object { $_.event -eq 'verified_entry' -and $_.expected_entry_matches_opened_file -eq $true })
+                $matrix.verified_entry_capture_ok = ($verified.Count -ge 1)
+                $matrix.ok = ($matrix.ok -and $matrix.verified_entry_capture_ok)
+            }
             $report.checks += $matrix
         }
         $report.verdict = if (@($report.checks | Where-Object { -not $_.ok }).Count) { 'fixture_matrix_failed' } else { 'fixture_matrix_completed_check_case_results' }
@@ -118,7 +137,7 @@ try {
             Save-Report
             $candidateVersion = Invoke-Trace 'candidate-cli.exe' @('version') 'version'
             $report.checks += $candidateVersion
-            if (-not $candidateVersion.ok -or $candidateVersion.data.commit -ne '3ecae453c64a45023f6bf044504875fdbdd0c8ae') { throw 'Candidate source identity mismatch.' }
+            if (-not $candidateVersion.ok -or $candidateVersion.data.commit -ne '2432f9c75d5a90971b4453accc1a35353c50ee6c') { throw 'Candidate source identity mismatch.' }
             $report.checks += Invoke-Trace 'candidate-cli.exe' $command 'query'
             $report.verdict = 'legacy_and_candidate_results_captured_compare_traces'
         }

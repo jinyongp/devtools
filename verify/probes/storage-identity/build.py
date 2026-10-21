@@ -14,7 +14,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 SOURCES = {
     "legacy": ("c14191b84475b583d9a480139157fb25ba71c713", "0.29.0-storage-trace"),
-    "candidate": ("3ecae453c64a45023f6bf044504875fdbdd0c8ae", "0.30.0-storage-trace"),
+    "candidate": ("2432f9c75d5a90971b4453accc1a35353c50ee6c", "0.30.0-storage-trace"),
 }
 
 
@@ -46,6 +46,8 @@ def instrument(root, mode, commit):
     defer func() {
         if err != nil { storageTraceContainment(r, f, path, "", "", err) }
     }()""")
+        anchor = 'return fsError("verify_file_identity", path, "file_identity_mismatch", ErrUnsafe)\n\t\t}'
+        text = replace_once(text, anchor, anchor + '\n\t\tstorageTraceVerified(r, f, path, h)')
     target.write_text(text)
     changed.append(str(target.relative_to(root)))
     target = private / "error.go"
@@ -53,7 +55,7 @@ def instrument(root, mode, commit):
         "return storageerr.Wrap(operation, storageResource(path), reason, cause)",
         "if cause != nil { storageTraceFailure(operation, path, reason, cause) }\n\treturn storageerr.Wrap(operation, storageResource(path), reason, cause)"))
     changed.append(str(target.relative_to(root)))
-    for template, filename in [("trace_windows.go.in", "storage_trace_windows.go"), ("matrix_windows_test.go.in", "storage_trace_windows_test.go")]:
+    for template, filename in [("trace_windows.go.in", "storage_trace_windows.go"), ("matrix_windows_test.go.in", "storage_trace_windows_test.go"), ("compatibility_windows_test.go.in", "storage_compatibility_windows_test.go")]:
         content = (HERE / template).read_text().replace("@SOURCE_COMMIT@", commit).replace("@MODE@", mode)
         call = "containedFile(root, file.File)" if mode == "legacy" else "containedFile(root, file.File, expected)"
         content = content.replace("@VERIFY_CALL@", call)

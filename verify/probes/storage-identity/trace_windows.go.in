@@ -19,6 +19,33 @@ import (
 
 var storageTraceCount atomic.Uint32
 var storageTraceGenericCount atomic.Uint32
+var storageTraceVerifiedCount atomic.Uint32
+
+func storageTracePackageIdentity() string {
+    proc := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetCurrentPackageFullName")
+    if err := proc.Find(); err != nil { return "unknown" }
+    var size uint32
+    status, _, _ := proc.Call(uintptr(unsafe.Pointer(&size)), 0)
+    if status == uintptr(windows.ERROR_INSUFFICIENT_BUFFER) && size > 0 { return "packaged" }
+    if status == uintptr(windows.APPMODEL_ERROR_NO_PACKAGE) { return "unpackaged" }
+    return "unknown"
+}
+
+func storageTraceVerified(r *Root, f *os.File, path string, expected windows.Handle) {
+    // Successes have a separate budget so they cannot hide later failures.
+    sequence := storageTraceVerifiedCount.Add(1)
+    if sequence > 16 { return }
+    root := r.guard.handles[len(r.guard.handles)-1]
+    actualInfo := storageTraceInfo(windows.Handle(f.Fd()))
+    expectedInfo := storageTraceInfo(expected)
+    event := map[string]any{"event": "verified_entry", "requested_root": r.path, "requested_entry": path,
+        "root_handle": storageTraceInfo(root), "opened_file": actualInfo, "expected_entry": expectedInfo,
+        "verified_entry_limit_reached": sequence == 16}
+    if expectedInfo["file_index"] != nil && actualInfo["file_index"] != nil {
+        event["expected_entry_matches_opened_file"] = expectedInfo["volume_serial"] == actualInfo["volume_serial"] && expectedInfo["file_index"] == actualInfo["file_index"]
+    }
+    storageTraceEmit(event)
+}
 
 func storageTraceEmit(event map[string]any) {
     sequence := storageTraceCount.Add(1)

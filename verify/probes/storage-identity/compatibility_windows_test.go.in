@@ -1,0 +1,85 @@
+package platformfs
+
+import (
+    "context"
+    "crypto/sha256"
+    "encoding/json"
+    "io/fs"
+    "os"
+    "os/exec"
+    "path/filepath"
+    "reflect"
+    "strings"
+    "testing"
+    "time"
+)
+
+// Both CLIs operate only on an owned fixture, never the selected default store.
+func TestStorageTraceCompatibility(t *testing.T) {
+    if "@MODE@" != "candidate" { t.Skip("cross-version check runs once in candidate harness") }
+    fixture := storageMatrixFixture(t)
+    project := filepath.Join(fixture, "project")
+    if err := os.Mkdir(project, 0700); err != nil { t.Fatal(err) }
+    isolated := filepath.Join(fixture, "isolated")
+    var env []string
+    for _, value := range os.Environ() {
+        key, _, _ := strings.Cut(value, "=")
+        if !strings.EqualFold(key, "DEVTOOLS_ISOLATED_ROOT") && !strings.EqualFold(key, "DEVTOOLS_TASK_CONTEXT") { env = append(env, value) }
+    }
+    env = append(env, "DEVTOOLS_ISOLATED_ROOT=" + isolated)
+    type item struct { ID string `json:"id"`; Title string `json:"title"` }
+    type data struct { Item item `json:"item"`; Items []item `json:"items"`; Revision uint64 `json:"revision"` }
+    api := func(mode string, args ...string) data {
+        t.Helper()
+        ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+        defer cancel()
+        command := exec.CommandContext(ctx, filepath.Join(*storageMatrixRoot, mode+"-cli.exe"), args...)
+        command.Dir, command.Env = project, env
+        output, err := command.Output()
+        if err != nil { t.Fatalf("%s %v: %v", mode, args, err) }
+        var result struct { OK bool `json:"ok"`; Data data `json:"data"` }
+        if err = json.Unmarshal(output, &result); err != nil || !result.OK { t.Fatalf("invalid %s fixture response: %v", mode, err) }
+        return result.Data
+    }
+    snapshot := func() map[string][32]byte {
+        t.Helper()
+        result := map[string][32]byte{}
+        base := filepath.Join(isolated, "data")
+        err := filepath.WalkDir(base, func(path string, entry fs.DirEntry, err error) error {
+            if err != nil { return err }
+            if entry.IsDir() { return nil }
+            if !entry.Type().IsRegular() { t.Fatalf("unexpected fixture entry: %s", path) }
+            body, err := os.ReadFile(path)
+            if err != nil { return err }
+            name, err := filepath.Rel(base, path)
+            if err != nil { return err }
+            result[name] = sha256.Sum256(body)
+            return nil
+        })
+        if err != nil { t.Fatal(err) }
+        return result
+    }
+    const profile = "storage-compatibility"
+    api("legacy", "init", "--profile", profile)
+    oldTask := api("legacy", "task", "add", "--profile", profile, "--title", "Existing task", "--request-id", "ef107501-9bf3-4a53-a660-406bc64e7591")
+    oldStream := api("legacy", "task", "workstream", "create", "--profile", profile, "--title", "Existing workstream", "--request-id", "ef107501-9bf3-4a53-a660-406bc64e7592")
+    if oldTask.Item.ID == "" || oldTask.Item.Title != "Existing task" || oldStream.Item.ID == "" || oldStream.Item.Title != "Existing workstream" { t.Fatal("legacy fixture creation returned incomplete data") }
+    legacyTasks := api("legacy", "task", "list", "--profile", profile)
+    legacyStreams := api("legacy", "task", "workstream", "list", "--profile", profile)
+    before := snapshot()
+    candidateTasks := api("candidate", "task", "list", "--profile", profile)
+    candidateStreams := api("candidate", "task", "workstream", "list", "--profile", profile)
+    if len(candidateTasks.Items) != 1 || candidateTasks.Items[0] != oldTask.Item || !reflect.DeepEqual(candidateTasks, legacyTasks) { t.Fatal("candidate changed or lost existing task data") }
+    if len(candidateStreams.Items) != 1 || candidateStreams.Items[0] != oldStream.Item || !reflect.DeepEqual(candidateStreams, legacyStreams) { t.Fatal("candidate changed or lost existing workstream data") }
+    if !reflect.DeepEqual(before, snapshot()) { t.Fatal("candidate query changed fixture storage bytes or file set") }
+    added := api("candidate", "task", "add", "--profile", profile, "--title", "Candidate task", "--request-id", "ef107501-9bf3-4a53-a660-406bc64e7593")
+    if added.Item.ID == "" || added.Item.Title != "Candidate task" { t.Fatal("candidate fixture creation returned incomplete data") }
+    reread := api("legacy", "task", "list", "--profile", profile)
+    found, preserved := false, false
+    for _, entry := range reread.Items {
+        if entry == added.Item { found = true }
+        if entry == oldTask.Item { preserved = true }
+    }
+    if len(reread.Items) != 2 || !found || !preserved || reread.Revision != added.Revision { t.Fatal("candidate mutation is not readable by the original CLI") }
+    t.Log("STORAGE_COMPATIBILITY existing_tasks_preserved=true existing_workstreams_preserved=true query_bytes_unchanged=true legacy_reads_candidate_write=true")
+}

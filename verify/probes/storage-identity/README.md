@@ -55,12 +55,30 @@ handles exercise case aliases and parent renaming, including case-only directory
 renaming. Rename cases record handle identity before and after the operation.
 Unavailable OS features and renames blocked by Windows are reported as skipped.
 
+The candidate harness also creates a populated fixture using the legacy CLI,
+checks that candidate queries preserve its task/workstream IDs and titles, and
+compares the fixture's complete data-file set and bytes before and after queries.
+It then checks that the legacy CLI can read a candidate-created task. Only these
+child processes receive a fixture-specific isolated-root override; the invoking
+environment and real stores are unchanged. Fixture hashes and contents are not
+written to the evidence report. This tests compatibility, not historical user data.
+
 The controlled outside-root handle is a **negative control**, not an incident
 reproduction. It checks rejection and trace capture on both source snapshots.
 `fixture_matrix_completed_check_case_results` means the fixture harness finished;
 inspect each `STORAGE_MATRIX_CASE` verdict to see whether a real path variant failed.
 
 ## Evidence and interpretation
+
+To observe the current default-store view without CLI queries or lock creation,
+add `-ObserveOnly` to the invocation. This opens an existing data root and fixed
+structural entries (`profiles`, `tasks`, `.maintenance\lock.turnstile`) for metadata.
+It does not enumerate entries, read contents or follow reparse points. To compare
+an existing physical data root already identified in a trace, also pass
+`-ObserveDataRoot 'C:\existing\data'`. This selects a metadata target only; it does
+not change CLI storage selection. A missing or rejected root is recorded without
+creating or repairing it. `store_view_observed_inspect_metadata` means observation
+completed, not that storage is healthy or historical data has been verified.
 
 `trace-*.json` files use unique names. They include token-derived isolation,
 selected default-path information, binary identity, exact argv, command outcomes
@@ -76,9 +94,16 @@ It opens existing entries only and rejects intermediate reparse points. Compare
 the **expected entry and opened file** IDs; a directory and its child normally have
 different IDs. The case-folded comparison is evidence only, never a fallback.
 
+The candidate also records up to 16 `verified_entry` events per process, using the
+actual handles from successful identity checks. Compare their requested paths,
+final paths and file IDs to identify the files used by a successful query. This
+does not establish that another execution context sees the same store or that
+expected historical data exists. No file contents or content hashes are recorded.
+
 Trace events can describe errors later handled by callers. A trace alone does not
 establish command failure. Generic errors are capped at 64, reserving space for the
-target comparison; all logging is capped at 128 events per process. The last
+target comparison; successful checks have a separate 16-event budget. All logging
+is capped at 128 events per process. The last
 event of each budget marks that limit. Output failure or unavailable metadata can leave evidence
 incomplete. Instrumentation can affect timing, so non-reproduction cannot disprove
 the original report or prove a repair. Preserve the store and ACLs; do not reset

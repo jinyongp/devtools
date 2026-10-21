@@ -42,14 +42,19 @@ type BundleChange struct {
 	Preview bool     `json:"preview,omitempty"`
 }
 type Change struct {
-	Bundle    *BundleChange `json:"bundle,omitempty"`
-	Import    *BatchImport  `json:"import,omitempty"`
-	Action    string        `json:"action"`
-	Key       string        `json:"key"`
-	Env       string        `json:"env"`
-	Value     *string       `json:"value,omitempty"`
-	Revision  string        `json:"revision"`
-	RequestID string        `json:"request_id"`
+	Bundle     *BundleChange   `json:"bundle,omitempty"`
+	Import     *BatchImport    `json:"import,omitempty"`
+	Action     string          `json:"action"`
+	Key        string          `json:"key"`
+	Env        string          `json:"env"`
+	Value      *string         `json:"value,omitempty"`
+	Revision   string          `json:"revision"`
+	RequestID  string          `json:"request_id"`
+	CreateOnly bool            `json:"create_only,omitempty"`
+	Generate   *GenerateChange `json:"generate,omitempty"`
+}
+type GenerateChange struct {
+	Replace bool `json:"replace"`
 }
 type ChangeResult struct {
 	Bundle     string       `json:"bundle,omitempty"`

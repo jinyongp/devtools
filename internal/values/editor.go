@@ -26,6 +26,26 @@ func newEditor(ctx context.Context, p *vault.Profile, m *vault.Mutation, key, ma
 	return &Editor{Profile: p.Name, state: state, source: p, mutation: m, ctx: ctx, key: key, master: master, vaultID: vaultID}
 }
 func (e *Editor) Set(kind Kind, name, env, value string) (bool, *protocol.Error) {
+	return e.set(kind, name, env, value, false)
+}
+
+func (e *Editor) set(kind Kind, name, env, value string, createOnly bool) (bool, *protocol.Error) {
+	if createOnly {
+		if !keyPattern.MatchString(name) || !validValue(value) || (kind != Variable && kind != Secret) {
+			return false, protocol.NewError("invalid_argument", "Use a valid environment key and UTF-8 value without NUL bytes.", 2, nil)
+		}
+		if err := e.state.CheckEnv(env); err != nil {
+			return false, err
+		}
+		if entry := e.state.Keys[name]; entry != nil {
+			if entry.Kind != kind {
+				return false, failure("kind_conflict", "The key has a different kind in this profile.")
+			}
+			if e.hasExactSlot(name, env) {
+				return false, failure("value_exists", "The selected layer already has a value.")
+			}
+		}
+	}
 	if _, err := e.state.Set(kind, name, env, value); err != nil {
 		return false, err
 	}
@@ -45,6 +65,20 @@ func (e *Editor) Set(kind Kind, name, env, value string) (bool, *protocol.Error)
 		return false, VaultError(e.ctx, err)
 	}
 	return changed, nil
+}
+
+// hasExactSlot uses authenticated metadata, including empty and expired slots.
+// Inherited common values are not an environment override.
+func (e *Editor) hasExactSlot(name, env string) bool {
+	entry := e.state.Keys[name]
+	if entry == nil {
+		return false
+	}
+	if env == "" {
+		return entry.Common != nil
+	}
+	_, exists := entry.Envs[env]
+	return exists
 }
 func (e *Editor) Unset(kind Kind, name, env string) (bool, *protocol.Error) {
 	if _, err := e.state.Unset(kind, name, env); err != nil {

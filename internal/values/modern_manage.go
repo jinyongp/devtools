@@ -204,7 +204,7 @@ func (s ModernStore) receiptHeld(ctx context.Context, master *vault.Material, va
 		if vault.StrictDecode(candidate.Result, &value) != nil || value.Profile != s.Profile {
 			return receipt, result, false, vault.ErrInvalid
 		}
-		if found && (candidate.Fingerprint != receipt.Fingerprint || candidate.ProfileID != receipt.ProfileID || candidate.KeyEpoch != receipt.KeyEpoch || !reflect.DeepEqual(value, result)) {
+		if found && (candidate.Fingerprint != receipt.Fingerprint || candidate.ProfileID != receipt.ProfileID || candidate.KeyEpoch != receipt.KeyEpoch || candidate.CreatedAt != receipt.CreatedAt || candidate.ExpiresAt != receipt.ExpiresAt || !reflect.DeepEqual(value, result)) {
 			return receipt, result, false, vault.ErrIntegrity
 		}
 		receipt, result, found = candidate, value, true
@@ -248,7 +248,7 @@ func mutateChange(state *Editor, c Change) (ChangeResult, *protocol.Error) {
 		if c.Action == "secret.set" {
 			kind = Secret
 		}
-		out.Changed, err = state.Set(kind, c.Key, c.Env, *c.Value)
+		out.Changed, err = state.set(kind, c.Key, c.Env, *c.Value, c.CreateOnly)
 	case "variable.unset", "secret.unset":
 		if c.Value != nil || !keyPattern.MatchString(c.Key) {
 			return out, protocol.NewError("invalid_argument", "Provide a key for removal.", 2, nil)
@@ -323,6 +323,12 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protoc
 	out := ChangeResult{Profile: s.Profile}
 	if !project.ValidProfile(s.Profile) || !modernRequestID.MatchString(c.RequestID) || c.Revision == "" {
 		return out, protocol.NewError("invalid_argument", "Provide profile, revision and request UUID.", 2, nil)
+	}
+	if c.CreateOnly && (c.Action != "variable.set" && c.Action != "secret.set" || c.Bundle != nil || c.Import != nil) {
+		return out, protocol.NewError("invalid_argument", "Create-only requires a value set action.", 2, nil)
+	}
+	if c.Generate != nil && c.Action != "secret.generate" || c.Action == "secret.generate" && (c.Generate == nil || c.Value != nil || c.Import != nil || c.Bundle != nil || c.CreateOnly) {
+		return out, protocol.NewError("invalid_argument", "Provide generation options only for a secret generation action.", 2, nil)
 	}
 	master, vaultID, validate, err := s.writeScope(ctx)
 	if err != nil {

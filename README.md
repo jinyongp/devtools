@@ -129,6 +129,7 @@ the [task and workstream guide](docs/tasks.md) is in English.
 
 - Values and configuration: [variables, secrets, and commands](docs/cli-contract.md),
   [local secret protection](docs/secret-protection.md), [output protection](docs/output-protection.md),
+  [guarded automation and approved local runners](docs/secret-automation.md),
   [environment diagnostics](docs/doctor.md).
 - Servers and URLs: [ports](docs/ports.md), [server lifecycle](docs/processes.md),
   [readiness](docs/process-readiness.md), [local domains, HTTPS, and sharing](docs/local-network.md).

@@ -52,6 +52,11 @@ func (s Store) controlFiles(ctx context.Context, id, requestID, action string, i
 	saved, found, e := s.replay(ctx, a, requestID, fp)
 	read()
 	if found || e != nil {
+		if found && e == nil {
+			if err = s.cleanupReplay(ctx, a, saved.Item.ID); err != nil {
+				return Result{}, values.VaultError(ctx, err)
+			}
+		}
 		return saved, e
 	}
 	if preflight != nil {

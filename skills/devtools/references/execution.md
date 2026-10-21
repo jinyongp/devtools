@@ -145,6 +145,40 @@ common profile values and the configured env; explicit --env enables injection
 even when inject is false and overrides the configured env. Direct execution
 injects profile values. Inspect the command before choosing an env override.
 
+## Approved external execution (unreleased source capability)
+
+Discover `schema values execution prepare` and `schema values runner register`
+before use; older installed builds do not expose these source commands. See
+`docs/secret-automation.md` in the devtools repository for the complete integration
+contract. Registrations are root-wide; execution records select a profile.
+Prepare requires explicit `selection.keys`, with the full allowed key ceiling
+when a bundle is selected. Preparation freezes bytes but grants no execution
+permission. Approve the exact input/job and registered runner instance explicitly.
+Deliver permits at most one sensitive send. A lost ACK or sender termination
+after intent remains unknown and must never trigger a replacement send/job.
+
+Save each lowercase request UUID and exact metadata body. Recover a prepare with
+`values execution status --request-id PREPARE_UUID`; inspect current execution
+status separately from immutable replay results. The caller must look up its
+engine by the original external job ID/reference and report verified facts.
+Started/finished reports require a stable engine reference, finished also needs
+an exit code. Report does not start work. A registered successor may reconcile
+the same job/input but cannot rebind the original delivery recipient.
+
+Only an authenticated same-OS-user receiver receives values and masking patterns
+over the private local channel. Never route them through ordinary JSON, argv,
+workspace files or provider stdout masking commands. The receiver must protect
+both streams before ACK and retain old patterns through output EOF, even after
+lock/value edits. Docker/remote CI adapters and other-account delegation are
+outside this capability. The caller owns approval, isolation, network and cancel.
+Delivery does not prove application use/authentication or process readiness.
+
+Runtime grants/snapshots/registrations are excluded from portable backups.
+Completed replay lasts 30 days; expired IDs stay spent. Status/diagnostics do not
+unlock or renew idle, and locked snapshot cleanup can wait for authenticated
+mutation. Never delete unknown records or recreate a missing caller engine ledger
+as recovery. External records belong in execution list, not synthetic process IDs.
+
 ## Managed server lifecycle
 
 Process start/stop/restart require request UUIDs. Save the returned execution ID

@@ -32,6 +32,11 @@ func (s Store) Prepare(ctx context.Context, input PrepareInput, requestID string
 	result, found, e := s.replay(ctx, a, requestID, fp)
 	if found || e != nil {
 		read()
+		if found && e == nil {
+			if err = s.cleanupReplay(ctx, a, result.Item.ID); err != nil {
+				return Result{}, values.VaultError(ctx, err)
+			}
+		}
 		return result, e
 	}
 	p, key, err := (vault.FileStore{Root: s.Root, VaultID: a.vaultID, CatalogKey: a.master}).ReadAnyWithMasterHeld(ctx, s.Profile, a.master)

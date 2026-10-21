@@ -23,7 +23,7 @@ func TestPortableSnapshotExcludesHostNetworkState(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"ca", "exposure-auth", "exposures", "exposure-providers", "networkops", "hosts", "netsetup", "ports", "proxy"} {
+	for _, name := range []string{"ca", "exposure-auth", "exposures", "exposure-providers", "networkops", "hosts", "netsetup", "ports", "proxy", "value-executions", "value-execution-payloads", "value-execution-requests", "value-execution-locks", "value-runners", "value-runner-requests", "value-runner-transports"} {
 		dir := filepath.Join(e.Data, name)
 		if err := fixtureMkdirAll(dir, 0700); err != nil {
 			t.Fatal(err)

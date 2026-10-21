@@ -73,6 +73,12 @@ func diagnosticsOutputSchema() map[string]any {
 		"details": storageDetailsSchema(),
 	}, "section", "code")
 	return object(map[string]any{
+		"external_executions": object(map[string]any{
+			"verification":     map[string]any{"type": "string", "enum": []string{"verified", "verification_pending"}},
+			"total":            map[string]any{"type": "integer", "minimum": 0},
+			"pending_inputs":   map[string]any{"type": "integer", "minimum": 0},
+			"attempted_inputs": map[string]any{"type": "integer", "minimum": 0},
+		}, "verification"),
 		"ready":     map[string]any{"type": "boolean"},
 		"paths":     pathsSchema,
 		"profiles":  profiles,

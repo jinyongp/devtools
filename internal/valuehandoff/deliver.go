@@ -70,6 +70,11 @@ func (s Store) Deliver(ctx context.Context, id, requestID string, input Revision
 	}
 	read()
 	if found || e != nil {
+		if found && (e == nil || e.Code == "delivery_outcome_unknown") {
+			if err = s.cleanupReplay(ctx, a, saved.Item.ID); err != nil {
+				return Result{}, values.VaultError(ctx, err)
+			}
+		}
 		if e != nil && e.Code == "delivery_outcome_unknown" && idRE.MatchString(saved.Item.ID) {
 			v, se := s.Status(ctx, saved.Item.ID, "")
 			if se == nil && v.Item.DeliveryState == "delivering" {

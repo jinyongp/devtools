@@ -16,6 +16,7 @@ import (
 	"github.com/jinyongp/devtools/internal/proxy"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/storageerr"
+	"github.com/jinyongp/devtools/internal/valuehandoff"
 	"github.com/jinyongp/devtools/internal/vault"
 )
 
@@ -98,18 +99,19 @@ type Vault struct {
 }
 
 type Report struct {
-	Vault     Vault     `json:"vault"`
-	Platform  Platform  `json:"platform"`
-	Network   Network   `json:"network"`
-	Ready     bool      "json:\"ready\""
-	Paths     Paths     "json:\"paths\""
-	Profiles  Profiles  "json:\"profiles\""
-	Ports     Ports     "json:\"ports\""
-	Processes Processes "json:\"processes\""
-	Proxy     Proxy     "json:\"proxy\""
-	Dashboard Dashboard "json:\"dashboard\""
-	Backup    Backup    "json:\"backup\""
-	Issues    []Issue   "json:\"issues\""
+	ExternalExecutions valuehandoff.Summary `json:"external_executions"`
+	Vault              Vault                `json:"vault"`
+	Platform           Platform             `json:"platform"`
+	Network            Network              `json:"network"`
+	Ready              bool                 "json:\"ready\""
+	Paths              Paths                "json:\"paths\""
+	Profiles           Profiles             "json:\"profiles\""
+	Ports              Ports                "json:\"ports\""
+	Processes          Processes            "json:\"processes\""
+	Proxy              Proxy                "json:\"proxy\""
+	Dashboard          Dashboard            "json:\"dashboard\""
+	Backup             Backup               "json:\"backup\""
+	Issues             []Issue              "json:\"issues\""
 }
 
 func healthy() Section { return Section{Status: "pass"} }
@@ -163,6 +165,7 @@ func Inspect(ctx context.Context, input Input) (Report, *protocol.Error) {
 	}
 
 	session, sessionErr := vault.InspectSession(ctx, filepath.Join(input.Data, "vault"))
+	report.ExternalExecutions = valuehandoff.InspectSummary(ctx, input.Data)
 	report.Vault.State = session.State
 	report.Vault.Backend = session.Backend
 	report.Vault.IdleExpiresAt = session.IdleExpiresAt

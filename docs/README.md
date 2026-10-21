@@ -13,6 +13,10 @@ for example `devtools schema vault init`, `devtools schema bundle set`, and
 `devtools schema command run`. A release or Skill update does not update an
 already-installed CLI, migrate old secret files, or restart existing services.
 
+For source-only guarded mutations and approved same-user runner delivery, see
+[secret automation](secret-automation.md). Check command discovery before using
+an older installed release.
+
 For release preparation and publication checks, use the
 [development guide](development.md#릴리스). For existing secret storage, follow the
 [migration procedure](secret-protection.md#기존-저장소를-전환하기).

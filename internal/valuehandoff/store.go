@@ -98,24 +98,35 @@ func (s Store) encode(ctx context.Context, a *access, path, id, purpose string, 
 	return vault.SealProtected(ctx, a.master, a.vaultID, scope(id), purpose, m)
 }
 func (s Store) decode(ctx context.Context, a *access, path, id, purpose string, out any) error {
-	raw, err := maintenance.Read(filepath.Join(s.Root, filepath.FromSlash(path)), vault.MaxDocumentBytes)
+	v, err := s.openBound(ctx, a, path, id, purpose)
 	if err != nil {
 		return err
+	}
+	defer clear(v.Data)
+	if v.Profile != s.Profile {
+		return vault.ErrIntegrity
+	}
+	return vault.StrictDecode(v.Data, out)
+}
+func (s Store) openBound(ctx context.Context, a *access, path, id, purpose string) (bound, error) {
+	raw, err := maintenance.Read(filepath.Join(s.Root, filepath.FromSlash(path)), vault.MaxDocumentBytes)
+	if err != nil {
+		return bound{}, err
 	}
 	defer clear(raw)
 	m, err := vault.OpenProtected(ctx, a.master, a.vaultID, scope(id), purpose, raw)
 	if err != nil {
-		return err
+		return bound{}, err
 	}
 	defer m.Destroy()
 	b := m.CopyBytes()
 	defer clear(b)
 	var v bound
-	if vault.StrictDecode(b, &v) != nil || v.Version != 1 || v.Root != filepath.Clean(s.Root) || v.Path != path || v.Profile != s.Profile {
-		return vault.ErrIntegrity
+	if vault.StrictDecode(b, &v) != nil || v.Version != 1 || v.Root != filepath.Clean(s.Root) || v.Path != path {
+		clear(v.Data)
+		return bound{}, vault.ErrIntegrity
 	}
-	defer clear(v.Data)
-	return vault.StrictDecode(v.Data, out)
+	return v, nil
 }
 
 // Final publication never performs session IPC under key-slot/maintenance gates.

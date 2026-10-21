@@ -17,6 +17,10 @@ type privateRedaction struct {
 	Patterns [][]byte `json:"patterns"`
 }
 
+func (privateRedaction) MarshalJSON() ([]byte, error) { return nil, vault.ErrDenied }
+func (privateRedaction) MarshalText() ([]byte, error) { return nil, vault.ErrDenied }
+func (privateRedaction) Format(s fmt.State, _ rune)   { io.WriteString(s, "[REDACTED]") }
+
 func (v *storedValue) UnmarshalJSON(body []byte) error {
 	var input struct {
 		Key   string          `json:"key"`
@@ -96,8 +100,13 @@ func encodePayload(p privatePayload) ([]byte, error) {
 	if err := p.validate(); err != nil {
 		return nil, err
 	}
+	type encodedRedaction privateRedaction
 	type encoded privatePayload
-	b, err := json.Marshal(encoded(p))
+	// Override the protected pattern field only at this private wire boundary.
+	b, err := json.Marshal(struct {
+		encoded
+		Redaction encodedRedaction `json:"redaction"`
+	}{encoded(p), encodedRedaction(p.Redaction)})
 	if err != nil {
 		return nil, err
 	}

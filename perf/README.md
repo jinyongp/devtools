@@ -159,6 +159,46 @@ timings. The suite runs packages serially without the race detector to avoid
 instrumentation and package contention. Use `devtools run check:perf` for runner regression
 tests; performance runs are deliberately separate from correctness checks.
 
+## Protected automation receipts and handoff
+
+The Unix validation workflow runs `automation.py` on Linux with the Go version
+from `go.mod`. It measures fresh secret edits, replay, request lookup, legacy
+receipt lookup, input preparation and private delivery at 1,000 and 10,000
+authenticated receipts. To reproduce with clean checkouts:
+
+```sh
+python3 -B perf/automation.py --candidate /path/to/current \
+  --mutation-baseline /path/to/f3cb3b15 --handoff-baseline /path/to/7c5811f1 \
+  --output /tmp/devtools-automation-results
+```
+
+The pinned baselines already implement their measured API; this compares later
+integration changes with completed feature units. A version without those APIs
+cannot provide an equivalent pre-feature sample. Both arms use the same benchmark
+compiler overlays, `CGO_ENABLED=0`, `-trimpath`, no race instrumentation and one Go
+processor. The overlays add private gate timing and adapt test fixtures, without
+editing either checkout. Results record source identities and compiler input
+hashes. Real encryption, authentication, filesystem sync, expiry checks and
+receiver masking remain enabled.
+
+Each arm/case/size owns one private authenticated corpus, seeded and unlocked
+outside timing. Three operations share that corpus; only their newly created
+target metadata is removed between samples. Fresh edits use new UUIDs and the
+current revision. Deliveries prepare and approve a new frozen input immediately
+before timing, preserving its real deadline. Arm order alternates across workload
+blocks. Warm caches and shared corpora make the three samples correlated.
+
+`results.json` preserves every raw operation, median and full range; individual
+logs retain the synthetic benchmark output. `ns/op` measures the actual API call,
+`B/op` and `allocs/op` measure Go allocations in the benchmark process (including
+its receiver), and `maintenance-held-ns/op` measures exclusive gate ownership.
+The separate key daemon and C allocations are excluded. These descriptive samples
+do not establish statistical significance, a latency SLO, process RSS or bounded
+storage growth. Legacy lookup's directory scan is a separate workload. The run
+has a 20-minute budget, rejects incomplete samples, and retires only its owned
+sessions. A cleanup failure retains its private fixture. CI uploads only numeric
+results and synthetic logs, with 30-day artifact retention.
+
 ## Add a workload
 
 Add a `Case` in `cases_for()` in `run.py`, including its canonical commands for

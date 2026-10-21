@@ -30,7 +30,7 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(m.Run())
 }
-func fixture(t *testing.T) (Store, *vault.SessionClient) {
+func fixture(t testing.TB) (Store, *vault.SessionClient) {
 	t.Helper()
 	ctx := context.Background()
 	base, err := filepath.EvalSymlinks(t.TempDir())

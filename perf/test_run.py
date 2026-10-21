@@ -9,6 +9,41 @@ import unittest
 from unittest import mock
 
 import run
+import automation
+
+
+class AutomationMeasurementTests(unittest.TestCase):
+    def sample(self, index=0, **updates):
+        metrics = {"ns/op": 100, "B/op": 12, "allocs/op": 2, "maintenance-held-ns/op": 30}
+        metrics.update(updates)
+        return "bench.go:1: AUTOMATION_SAMPLE " + json.dumps({"sample": index, "metrics": metrics})
+
+    def test_preserves_each_raw_operation_and_rejects_incomplete_or_duplicate_samples(self):
+        text = "\n".join(self.sample(n) for n in range(3))
+        self.assertEqual(len(automation.parse_samples(text, 3)), 3)
+        for invalid in (self.sample(), text + "\n" + self.sample(), self.sample(1)):
+            with self.assertRaises(ValueError):
+                automation.parse_samples(invalid, 3)
+
+    def test_rejects_missing_nonfinite_negative_or_impossible_metrics(self):
+        for updates in ({"ns/op": 0}, {"B/op": float("nan")}, {"allocs/op": -1}, {"maintenance-held-ns/op": 101}, {"B/op": True}):
+            with self.subTest(updates=updates), self.assertRaises(ValueError):
+                automation.parse_samples(self.sample(**updates), 1)
+        with self.assertRaises(ValueError):
+            automation.parse_samples('AUTOMATION_SAMPLE {"sample":0,"metrics":{}}', 1)
+
+    def test_timing_overlay_refuses_missing_or_ambiguous_gate_anchor(self):
+        self.assertEqual(automation.replace_once("before gate after", "gate", "timed"), "before timed after")
+        for text in ("absent", "gate gate"):
+            with self.assertRaises(ValueError):
+                automation.replace_once(text, "gate", "timed")
+
+    def test_summary_keeps_spread_and_does_not_invent_zero_baseline_percent(self):
+        rows = [{"case": "lookup", "receipts": 1000, "arm": arm, "metrics": {"ns/op": n, "maintenance-held-ns/op": 0}}
+                for arm, ns in (("baseline", [10, 20, 300]), ("candidate", [20, 30, 400])) for n in ns]
+        result = automation.summarize(rows)[0]
+        self.assertEqual(result["arms"]["baseline"]["ns/op"], {"median": 20, "min": 10, "max": 300, "n": 3})
+        self.assertEqual(result["candidate_change_percent"], {"ns/op": 50})
 
 
 class PerformanceTests(unittest.TestCase):

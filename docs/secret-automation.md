@@ -111,6 +111,8 @@ stable engine reference. Report verified facts with `values execution report
 EXECUTION_ID --profile app --request-id UUID --stdin` and fields `revision`,
 `runner_id`, `external_execution_id`, `input_id`, `state`. `started` requires a
 stable `external_ref`; `finished` also requires `exit_code`. `failed` and `unknown`
+must repeat an already recorded `external_ref` when one exists; omitting or
+changing it conflicts with the saved execution facts. These two states
 require a fixed `reason`: `runner_start_failed`, `runner_lost`, `execution_failed`,
 `canceled` or `outcome_unavailable`. Raw engine exceptions are not accepted.
 

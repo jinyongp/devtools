@@ -121,10 +121,42 @@ jobs:
       - name: Installed guarded mutations and cooperative runner
         run: python3 -B verify/run.py secret_mutations value_handoff
 
+  automation-performance:
+    name: Protected automation measurements
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          path: candidate
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: f3cb3b15c8f92371c0a14dff6cff29cf341bbd84
+          path: mutation-baseline
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 7c5811f1830b08922c5c7f2ffbc89307bcb81cfa
+          path: handoff-baseline
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: candidate/go.mod
+          cache: false
+      - name: Matched protected receipt and handoff workloads
+        run: python3 -B candidate/perf/automation.py --candidate candidate --mutation-baseline mutation-baseline --handoff-baseline handoff-baseline --output automation-results
+      - name: Preserve numeric samples and synthetic benchmark logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: protected-automation-measurements
+          path: automation-results
+          if-no-files-found: error
+          retention-days: 30
+
   validation:
     name: Unix validation
     if: always()
-    needs: [source, handoff]
+    needs: [source, handoff, automation-performance]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -132,4 +164,5 @@ jobs:
         env:
           RESULT: ${{ needs.source.result }}
           HANDOFF_RESULT: ${{ needs.handoff.result }}
-        run: test "$RESULT" = success && test "$HANDOFF_RESULT" = success
+          PERFORMANCE_RESULT: ${{ needs.automation-performance.result }}
+        run: test "$RESULT" = success && test "$HANDOFF_RESULT" = success && test "$PERFORMANCE_RESULT" = success

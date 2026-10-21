@@ -14,7 +14,7 @@ import (
 func receiverFixture(t *testing.T, s Store, runner, instance string) {
 	receiverConfigFixture(t, s, Receiver{Root: s.Root, RunnerID: runner, InstanceID: instance})
 }
-func receiverConfigFixture(t *testing.T, s Store, config Receiver) {
+func receiverConfigFixture(t testing.TB, s Store, config Receiver) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)

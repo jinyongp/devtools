@@ -227,6 +227,11 @@ func ValidateNetwork(command Command, dependencies Dependencies) *protocol.Error
 			return fail()
 		}
 	}
+	for _, expected := range snapshot.Activations {
+		if !st.ActivationMatches(expected) {
+			return fail()
+		}
+	}
 	return nil
 }
 

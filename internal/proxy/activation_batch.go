@@ -27,6 +27,7 @@ type batchListener struct {
 }
 type activationBatch struct {
 	Routes    []routeCandidate
+	Disabled  []network.Activation
 	DNS       []batchDNS
 	Listeners []batchListener
 	Rollback  bool
@@ -34,15 +35,17 @@ type activationBatch struct {
 
 // ActivateProjectBatch prepares every DNS mapping and socket before atomically
 // activating the routes. Backend assignment is an earlier, independent commit.
-func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, activations []network.Activation, hm hosts.Manager, id string) *protocol.Error {
+func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, activations []network.Activation, hm hosts.Manager, id string, preserveDisabled ...bool) *protocol.Error {
+	guardDisabled := len(preserveDisabled) > 0 && preserveDisabled[0]
 	resources := []string{}
 	for _, a := range activations {
 		resources = append(resources, "route/"+a.Route.Key())
 	}
 	_, e := (netops.Store{Data: m.Data}).Apply(ctx, id, struct {
-		Action string
-		Routes []network.Activation
-	}{"batch-activate", activations}, resources, func(j *netops.Journal) (any, *protocol.Error) {
+		Action           string
+		Routes           []network.Activation
+		PreserveDisabled bool `json:"preserve_disabled,omitempty"`
+	}{"batch-activate", activations, guardDisabled}, resources, func(j *netops.Journal) (any, *protocol.Error) {
 		var batch activationBatch
 		present, e := j.Get("batch", &batch)
 		if e != nil {
@@ -55,7 +58,18 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 			}
 			listeners := map[string]bool{}
 			for _, a := range activations {
-				if st.Pinned(a.Route) {
+				current := st.Activation(a.Route)
+				if a.Mode == "disabled" {
+					if current == nil || *current != a {
+						return nil, proxyFailure("network_snapshot_changed")
+					}
+					batch.Disabled = append(batch.Disabled, a)
+					continue
+				}
+				if guardDisabled && current != nil && current.Mode == "disabled" {
+					return nil, proxyFailure("network_snapshot_changed")
+				}
+				if st.Pinned(a.Route) && !st.ActivationMatches(a) {
 					return nil, proxyFailure("pinned")
 				}
 				definition, ok := p.Proxies[a.Route.Proxy]
@@ -176,14 +190,33 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 		if e != nil {
 			return nil, e
 		}
+		if e := validateDisabledActivations(st, batch.Disabled); e != nil {
+			return nil, e
+		}
+		if len(batch.Routes) == 0 {
+			return map[string]any{"changed": false}, nil
+		}
 		committed := len(batch.Routes) > 0
 		for _, route := range batch.Routes {
-			current := st.Activation(route.Activation.Route)
-			if current == nil || *current != route.Activation {
+			if !st.ActivationMatches(route.Activation) {
 				committed = false
 				if st.Pinned(route.Activation.Route) {
 					return nil, proxyFailure("pinned")
 				}
+			}
+		}
+		for _, listener := range batch.Listeners {
+			status, e := m.NetworkStatus(ctx, listener.Target.Definition.Name)
+			if e != nil {
+				return nil, e
+			}
+			if status["running"] != true {
+				committed = false
+			}
+		}
+		for _, mapping := range batch.DNS {
+			if !reflect.DeepEqual(mapping.Desired, mapping.Previous) || len(mapping.Desired) > 0 && !hm.Prepared(mapping.Owner, mapping.Desired[0]) {
+				committed = false
 			}
 		}
 		if committed {
@@ -260,15 +293,25 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 			}
 		}
 		e = m.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
+			if e := validateDisabledActivations(st, batch.Disabled); e != nil {
+				return false, e
+			}
+			changed := false
 			for _, route := range batch.Routes {
+				if current := st.Activation(route.Activation.Route); guardDisabled && current != nil && current.Mode == "disabled" {
+					return false, proxyFailure("network_snapshot_changed")
+				}
 				if e := m.validateCandidate(st, route, p); e != nil {
 					return false, e
 				}
-				if e := st.SetActivation(route.Activation); e != nil {
-					return false, e
+				if !st.ActivationMatches(route.Activation) {
+					if e := st.SetActivation(route.Activation); e != nil {
+						return false, e
+					}
+					changed = true
 				}
 			}
-			return true, nil
+			return changed, nil
 		})
 		if e != nil {
 			return fail(e)
@@ -288,4 +331,13 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 		return map[string]any{"changed": len(batch.Routes) > 0}, nil
 	})
 	return e
+}
+
+func validateDisabledActivations(st *ports.State, disabled []network.Activation) *protocol.Error {
+	for _, expected := range disabled {
+		if current := st.Activation(expected.Route); current == nil || *current != expected {
+			return proxyFailure("network_snapshot_changed")
+		}
+	}
+	return nil
 }

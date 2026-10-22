@@ -31,9 +31,17 @@ type networkCandidateFields struct {
 	Alias                                      string
 	DefaultID, DefaultGeneration, ActivationID string
 	SnapshotIDs                                map[string]string
+	Routes                                     []string
+	Disabled                                   []network.Activation
 }
 
 func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names []string, originals []services.Record, overrides map[string]*string, streams IO, id string, selections ...map[string]string) (map[string]*network.ExecutionSnapshot, *protocol.Error) {
+	return a.prepareNetwork(ctx, p, names, originals, overrides, streams, id, network.PrepareOn, true, selections...)
+}
+
+// prepareNetwork also supports mixed and route-free snapshots for new requests.
+// Legacy preparation retains its exact journal input and per-command guards.
+func (a *App) prepareNetwork(ctx context.Context, p project.Context, names []string, originals []services.Record, overrides map[string]*string, streams IO, id string, mode network.PreparationMode, legacy bool, selections ...map[string]string) (map[string]*network.ExecutionSnapshot, *protocol.Error) {
 	m, e := a.proxyStore()
 	if e != nil {
 		return nil, e
@@ -54,12 +62,20 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 	if len(selections) > 0 {
 		bundleSelections = selections[0]
 	}
-	result, e := (netops.Store{Data: m.Data}).Apply(ctx, id, struct {
+	input := struct {
 		Action, Profile, Root string
 		Names                 []string
 		Overrides             map[string]*string
 		Selections            map[string]string `json:"selections,omitempty"`
-	}{"prepare-execution", p.Profile, p.Root, names, overrides, bundleSelections}, []string{"project-network/" + p.Profile + "/" + p.Root}, func(j *netops.Journal) (any, *protocol.Error) {
+	}{"prepare-execution", p.Profile, p.Root, names, overrides, bundleSelections}
+	var journalInput any = input
+	if !legacy {
+		journalInput = struct {
+			Input any
+			Mode  network.PreparationMode
+		}{input, mode}
+	}
+	result, e := (netops.Store{Data: m.Data}).Apply(ctx, id, journalInput, []string{"project-network/" + p.Profile + "/" + p.Root}, func(j *netops.Journal) (any, *protocol.Error) {
 		var fields networkCandidateFields
 		present, e := j.Get("fields", &fields)
 		if e != nil {
@@ -82,7 +98,7 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 					}
 				}
 			}
-			if len(command.Serve) == 0 || !matched {
+			if legacy && (len(command.Serve) == 0 || !matched) {
 				return nil, protocol.NewError("proxy_route_required", "--proxy requires a served service with a matching proxy declaration.", 3, map[string]any{"command": name})
 			}
 			commands = append(commands, command)
@@ -99,22 +115,48 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 				return nil, e
 			}
 			alias := ""
-			if instance := st.Find(p.Profile, "", p.Root); instance != nil && instance.Alias != nil {
+			instance := st.Find(p.Profile, "", p.Root)
+			if instance != nil && instance.Alias != nil {
 				alias = *instance.Alias
 			}
-			resolved, e := p.ResolveNetwork(os.Environ(), alias, selectedProxies...)
+			disabled := []network.Activation{}
+			if mode == network.PrepareAuto && instance != nil {
+				active := []string{}
+				for _, name := range selectedProxies {
+					ref := network.RouteRef{Scope: "project", Profile: p.Profile, InstanceID: instance.ID, Proxy: name}
+					if activation := st.Activation(ref); activation != nil && activation.Mode == "disabled" {
+						disabled = append(disabled, *activation)
+					} else {
+						active = append(active, name)
+					}
+				}
+				selectedProxies = active
+			}
+			// ResolveNetwork's empty argument list means all routes. Here an empty
+			// selection must not expand unrelated or explicitly disabled routes.
+			resolved := project.ResolvedNetwork{Context: p, EnvironmentBacked: map[string]bool{}}
+			resolved.SourceDigest, e = p.NetworkSources()
 			if e != nil {
 				return nil, e
+			}
+			if len(selectedProxies) > 0 {
+				resolved, e = p.ResolveNetwork(os.Environ(), alias, selectedProxies...)
+				if e != nil {
+					return nil, e
+				}
 			}
 			services := []string{}
 			for service := range selectedServices {
 				services = append(services, service)
 			}
-			resolved.Context, e = resolved.Context.ResolvePorts(os.Environ(), services)
-			if e != nil {
-				return nil, e
+			if len(services) > 0 {
+				resolved.Context, e = resolved.Context.ResolvePorts(os.Environ(), services)
+				if e != nil {
+					return nil, e
+				}
 			}
 			fields = networkCandidateFields{Ports: map[string]project.Port{}, Proxies: map[string]project.Proxy{}, Backed: resolved.EnvironmentBacked, SourceDigest: resolved.SourceDigest, Alias: alias, DefaultID: tasks.ID(), DefaultGeneration: tasks.ID(), ActivationID: tasks.ID(), SnapshotIDs: map[string]string{}}
+			fields.Routes, fields.Disabled = selectedProxies, disabled
 			for service := range selectedServices {
 				fields.Ports[service] = resolved.Context.Ports[service]
 			}
@@ -128,6 +170,9 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 				return nil, e
 			}
 		}
+		if !legacy {
+			selectedProxies = fields.Routes
+		}
 		source, e := p.NetworkSources()
 		if e != nil {
 			return nil, e
@@ -136,7 +181,7 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 			return nil, portFailure("network_snapshot_changed")
 		}
 		for _, original := range originals {
-			if !original.ProxyMode {
+			if legacy && !original.ProxyMode {
 				return nil, protocol.NewError("process_conflict", "An existing execution uses a different network mode; stop it before starting with --proxy.", 3, map[string]any{"command": original.Command})
 			}
 		}
@@ -200,7 +245,12 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 				}
 				previous := append([]network.Activation{}, st.Network.Activations...)
 				defer func() { st.Network.Activations = previous }()
-				activations := []network.Activation{}
+				activations := append([]network.Activation{}, fields.Disabled...)
+				for _, disabled := range fields.Disabled {
+					if current := st.Activation(disabled.Route); current == nil || *current != disabled {
+						return portFailure("network_snapshot_changed")
+					}
+				}
 				listeners := map[string]string{}
 				portNumbers := map[string]int{}
 				for service := range selectedServices {
@@ -213,12 +263,18 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 				for _, name := range selectedProxies {
 					definition := p.Proxies[name]
 					ref := network.RouteRef{Scope: "project", Profile: p.Profile, InstanceID: instance.ID, Proxy: name}
+					current := st.Activation(ref)
+					if mode == network.PrepareAuto && current != nil && current.Mode == "disabled" {
+						return portFailure("network_snapshot_changed")
+					}
 					activation, e := proxy.BuildProjectActivation(st, ref, definition, fields.Proxies[name].Host, fields.SourceDigest, fields.Backed[name])
 					if e != nil {
 						return e
 					}
-					if e := st.SetActivation(activation); e != nil {
-						return e
+					if !st.ActivationMatches(activation) {
+						if e := st.SetActivation(activation); e != nil {
+							return e
+						}
 					}
 					activations = append(activations, activation)
 					listeners[activation.Listener] = st.Listener(activation.Listener).Generation
@@ -283,7 +339,7 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 		if len(names) > 0 {
 			activations = snapshots[names[0]].Activations
 		}
-		if e := m.ActivateProjectBatch(ctx, p, activations, hm, fields.ActivationID); e != nil {
+		if e := m.ActivateProjectBatch(ctx, p, activations, hm, fields.ActivationID, mode == network.PrepareAuto); e != nil {
 			return nil, e
 		}
 		return map[string]any{"snapshots": snapshots, "changed": true}, nil

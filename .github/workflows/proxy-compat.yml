@@ -213,9 +213,9 @@ jobs:
           hostname: dvt-origin-${{ github.run_id }}-${{ github.run_attempt }}
           version: 1.104.2
           retry: '1'
-          args: --accept-routes=false
-      - name: Allow this disposable runner to manage its Serve handlers
-        run: sudo tailscale set --operator="$USER"
+      # The action already passes --accept-routes to up, which rejects repeats.
+      - name: Prepare Serve access without accepting subnet routes
+        run: sudo tailscale set --operator="$USER" --accept-routes=false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod

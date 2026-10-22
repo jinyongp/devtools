@@ -104,7 +104,8 @@ OIDC 권한은 Tailscale job과 이를 호출하는 reusable workflow job에만 
 GitHub token과 OIDC token 발급 환경 변수를 전달하지 않는다. peer의 등록 권한은 `docker exec`의
 일시적 환경으로만 전달하며 container 설정에 저장하지 않는다. 종료 시 peer는 로그아웃·제거하고
 runner는 Tailscale Action의 종료 처리에서 로그아웃한다. 일회용 runner의 현재 사용자만
-Tailscale operator로 지정해 Serve LocalAPI를 변경할 수 있게 한다.
+Tailscale operator로 지정해 Serve LocalAPI를 변경할 수 있게 한다. Action은 `up`에
+`--accept-routes`를 이미 넣으므로 중복 전달하지 않고, 접속 직후 `set --accept-routes=false`로 끈다.
 
 ### 플랫폼별 브라우저와 evidence
 

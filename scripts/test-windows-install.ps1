@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory=$true)][string]$Commit,
     [ValidateSet('all', 'ps5', 'ps7', 'x64')][string]$Engine = 'all',
     [ValidateRange(1, 20)][int]$Repeat = 1,
-    [ValidateRange(0, 1000)][int]$StartupProbes = 0
+    [ValidateRange(0, 1000)][int]$StartupProbes = 0,
+    [ValidatePattern('^(|[0-9a-f]{40})$')][string]$PackageCommit = ''
 )
 $ErrorActionPreference = 'Stop'
 $temporaryBase = $env:RUNNER_TEMP
@@ -31,17 +32,26 @@ function Save-InvocationFailure([string]$Executable, [string[]]$Arguments, [int]
         script_line = $caller.ScriptLineNumber
         iteration = $iteration
         startup_probe = $probe
+        probe_kind = $probeKind
         argument_flags = @($Arguments | Where-Object { $_ -match '^--?[A-Za-z][A-Za-z0-9-]*$' } | Select-Object -First 16)
         stderr_bytes = $bytes
     }
     [IO.File]::WriteAllText((Join-Path $PWD 'windows-install-context.json'), ($context | ConvertTo-Json -Depth 3), [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText((Join-Path $PWD 'windows-install-stdout.txt'), $Output, [Text.UTF8Encoding]::new($false))
     try {
-        $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Id = @(1000, 1001, 1026); StartTime = $Started } -ErrorAction Stop |
+        $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Id = @(1000, 1001, 1023, 1026); StartTime = $Started } -ErrorAction Stop |
             Select-Object -First 20 TimeCreated, Id, ProviderName, Message)
         ConvertTo-Json -InputObject $events -Depth 4 | Set-Content -Encoding utf8 windows-install-events.json
     } catch {
         $_.Exception.Message | Set-Content -Encoding utf8 windows-install-event-error.txt
+    }
+    try {
+        $cache = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Microsoft\PowerShell\StartupProfileData-NonInteractive'
+        if ((Test-Path -LiteralPath $cache) -and (Get-Item -LiteralPath $cache).Length -le 4MB) {
+            Copy-Item -LiteralPath $cache -Destination windows-install-startup-cache.bin
+        }
+    } catch {
+        $_.Exception.Message | Set-Content -Encoding utf8 windows-install-cache-error.txt
     }
 }
 function Invoke-Json([string]$Executable, [string[]]$Arguments) {
@@ -70,12 +80,28 @@ function Require-HumanGuidance([string]$Text, [string]$Directory) {
     Require ($Text.Contains('--help')) 'Installer guidance omitted an executable next step.'
 }
 try {
-    $env:OUTPUT_DIR = $releases; $env:COMMIT = $Commit; $env:TARGET_OS = 'windows'; $env:TARGET_ARCH = $Arch
-    foreach ($version in @('0.0.0-test.1', '0.0.0-test.2')) {
-        $env:VERSION = $version
-        & python -B scripts/package.py
-        Require ($LASTEXITCODE -eq 0) 'Cannot prepare native install release.'
+    $packageRoot = $PWD.Path
+    if ($PackageCommit) {
+        & git fetch --no-tags --depth=1 origin $PackageCommit
+        Require ($LASTEXITCODE -eq 0) 'Cannot fetch the original package source.'
+        $packageRoot = Join-Path $root 'package-source'
+        & git clone --shared --no-checkout --quiet $PWD.Path $packageRoot
+        Require ($LASTEXITCODE -eq 0) 'Cannot prepare the original package checkout.'
+        & git -C $packageRoot checkout --quiet --detach $PackageCommit
+        Require ($LASTEXITCODE -eq 0) 'Cannot select the original package commit.'
+        Require ((& git -C $packageRoot rev-parse HEAD).Trim() -ceq $PackageCommit) 'Original package source identity mismatch.'
+        $Commit = $PackageCommit
     }
+    @{ package_commit = $Commit; workflow_commit = $env:DEVTOOLS_SOURCE_COMMIT } | ConvertTo-Json | Set-Content -Encoding utf8 windows-install-package-source.json
+    $env:OUTPUT_DIR = $releases; $env:COMMIT = $Commit; $env:TARGET_OS = 'windows'; $env:TARGET_ARCH = $Arch
+    Push-Location $packageRoot
+    try {
+        foreach ($version in @('0.0.0-test.1', '0.0.0-test.2')) {
+            $env:VERSION = $version
+            & python -B scripts/package.py
+            Require ($LASTEXITCODE -eq 0) 'Cannot prepare native install release.'
+        }
+    } finally { Pop-Location }
     $shells = @()
     if ($Engine -in @('all', 'ps5')) { $shells += (Get-Command powershell.exe).Source }
     if ($Engine -in @('all', 'ps7')) { $shells += (Get-Command pwsh.exe).Source }
@@ -95,17 +121,38 @@ try {
         $shells += $emulatedShell
     }
     if ($StartupProbes -gt 0) {
+        $interopProbe = @'
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class NativeArchitectureControl {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool IsWow64Process2(IntPtr process, out ushort processMachine, out ushort nativeMachine);
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetCurrentProcess();
+}
+"@
+[UInt16]$processMachine = 0
+[UInt16]$nativeMachine = 0
+if (-not [NativeArchitectureControl]::IsWow64Process2([NativeArchitectureControl]::GetCurrentProcess(), [ref]$processMachine, [ref]$nativeMachine)) { throw 'Native architecture control failed.' }
+[pscustomobject]@{native_machine=$nativeMachine;process_machine=$processMachine} | ConvertTo-Json -Compress
+'@
         $startupResults = @()
         foreach ($shell in $shells) {
             for ($probe = 1; $probe -le $StartupProbes; $probe++) {
                 # No installer or devtools process runs in this control.
+                $probeKind = 'startup'
                 $control = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-Command', '[pscustomobject]@{value=[Math]::Sqrt(144);version=$PSVersionTable.PSVersion.ToString()} | ConvertTo-Json -Compress')
                 Require ($control.value -eq 12 -and $control.version) 'Minimal PowerShell startup control failed.'
+                $probeKind = 'native_interop'
+                $control = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-Command', $interopProbe)
+                Require ($control.native_machine -eq @{ amd64 = 34404; arm64 = 43620 }[$Arch]) 'Native architecture control returned the wrong OS architecture.'
                 if ($probe % 25 -eq 0) { Write-Output ('PowerShell startup controls: ' + $probe + '/' + $StartupProbes + ' (' + $shell + ')') }
             }
-            $startupResults += @{ shell = $shell; probes = $StartupProbes; result = 'pass' }
+            $startupResults += @{ shell = $shell; probes = $StartupProbes; native_interop_probes = $StartupProbes; result = 'pass' }
         }
         $probe = $null
+        $probeKind = $null
         ConvertTo-Json -InputObject $startupResults -Depth 3 | Set-Content -Encoding utf8 windows-powershell-startup-results.json
     }
     $results = @()

@@ -28,9 +28,13 @@ on:
         type: number
         default: 1
       powershell_startup_probes:
-        description: Minimal PowerShell 7 startup controls before installer tests (0-1000)
+        description: PowerShell 7 startup and native API controls before installer tests (0-1000)
         type: number
         default: 0
+      installer_package_commit:
+        description: Optional original 40-character package commit for installer diagnostics
+        type: string
+        default: ''
   push:
     paths:
       - .github/workflows/windows-platform.yml
@@ -319,6 +323,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native installer vet failed' }
       - name: Test selected native PowerShell installer and running-image updates
         if: ${{ startsWith(matrix.lane, 'installer-') }}
+        env:
+          INSTALLER_PACKAGE_COMMIT: ${{ inputs.installer_package_commit }}
         run: |
           $dumpFolder = Join-Path $PWD 'windows-install-crashes'
           New-Item -ItemType Directory -Force $dumpFolder | Out-Null
@@ -330,7 +336,12 @@ jobs:
           $engine = '${{ matrix.lane }}'.Substring(10)
           $repeat = if ($engine -eq 'x64') { [int]'${{ inputs.installer_repetitions || 1 }}' } else { 1 }
           $startupProbes = if ($engine -in @('ps7', 'x64')) { [int]'${{ inputs.powershell_startup_probes || 0 }}' } else { 0 }
-          & pwsh -NoProfile -NonInteractive -File scripts/test-windows-install.ps1 -Arch '${{ matrix.arch }}' -Commit $env:DEVTOOLS_SOURCE_COMMIT -Engine $engine -Repeat $repeat -StartupProbes $startupProbes
+          $packageArguments = @()
+          if ($env:INSTALLER_PACKAGE_COMMIT) {
+            if ('${{ inputs.focus }}' -ne 'installer') { throw 'An original package is only allowed in focused installer diagnostics' }
+            $packageArguments = @('-PackageCommit', $env:INSTALLER_PACKAGE_COMMIT)
+          }
+          & pwsh -NoProfile -NonInteractive -File scripts/test-windows-install.ps1 -Arch '${{ matrix.arch }}' -Commit $env:DEVTOOLS_SOURCE_COMMIT -Engine $engine -Repeat $repeat -StartupProbes $startupProbes @packageArguments
           if ($LASTEXITCODE -ne 0) { throw 'Native PowerShell installer/update tests failed' }
 
       - name: Native amd64 race detector
@@ -452,6 +463,9 @@ jobs:
             windows-install-events.json
             windows-install-event-error.txt
             windows-install-emulated-runtime.json
+            windows-install-package-source.json
+            windows-install-startup-cache.bin
+            windows-install-cache-error.txt
             windows-powershell-startup-results.json
             windows-install-crashes/
             project-release-results.tap

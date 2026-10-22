@@ -204,7 +204,7 @@ func TestSecretInputCancellation(t *testing.T) {
 	defer writer.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	_, err := readSecret(ctx, IO{In: reader}, map[string]string{"stdin": "true"})
+	_, err := readValueInput(ctx, IO{In: reader}, map[string]string{"stdin": "true"}, "secret")
 	if err == nil || err.Code != "canceled" {
 		t.Fatal(err)
 	}

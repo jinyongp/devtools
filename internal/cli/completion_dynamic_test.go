@@ -136,6 +136,7 @@ func TestDynamicCompletion(t *testing.T) {
 		{[]string{"task", "checkpoint", ""}, []string{runID}},
 		{[]string{"task", "checkpoint", "list", ""}, []string{runID}},
 		{[]string{"var", "set", "KEY", "--value", ""}, nil},
+		{[]string{"var", "set", "KEY", "--file", ""}, nil},
 		{[]string{"sec", "set", "KEY", "--file", ""}, nil},
 		{[]string{"run", "--", ""}, nil},
 		{[]string{"var", "get", "--profile", "missing", ""}, nil},

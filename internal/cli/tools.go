@@ -74,13 +74,17 @@ func (a *App) registerTools() {
 			}
 			if action == "set" {
 				if kind == values.Variable {
-					command.Options = append(command.Options, Option{Name: "value", Required: true, Description: "Literal variable value; empty strings are allowed."})
-				} else {
-					command.Options = append(command.Options, Option{Name: "file", Description: "Read a UTF-8 secret from this file, preserving whitespace.", MinLength: 1}, Option{Name: "stdin", Description: "Read a UTF-8 secret from piped stdin, preserving whitespace.", Boolean: true})
-					command.InputOneOf = []map[string]any{
-						{"required": []string{"file"}, "properties": map[string]any{"stdin": map[string]any{"const": false}}},
-						{"required": []string{"stdin"}, "properties": map[string]any{"stdin": map[string]any{"const": true}}, "not": map[string]any{"required": []string{"file"}}},
-					}
+					command.Options = append(command.Options, Option{Name: "value", Description: "Literal variable value; empty strings are allowed."})
+				}
+				command.Options = append(command.Options, Option{Name: "file", Description: "Read a UTF-8 " + string(kind) + " from this file, preserving whitespace.", MinLength: 1}, Option{Name: "stdin", Description: "Read a UTF-8 " + string(kind) + " from piped stdin, preserving whitespace.", Boolean: true})
+				command.InputOneOf = []map[string]any{
+					{"required": []string{"file"}, "properties": map[string]any{"stdin": map[string]any{"const": false}}},
+					{"required": []string{"stdin"}, "properties": map[string]any{"stdin": map[string]any{"const": true}}, "not": map[string]any{"required": []string{"file"}}},
+				}
+				if kind == values.Variable {
+					command.InputOneOf[0]["not"] = map[string]any{"required": []string{"value"}}
+					command.InputOneOf[1]["not"] = map[string]any{"anyOf": []any{map[string]any{"required": []string{"file"}}, map[string]any{"required": []string{"value"}}}}
+					command.InputOneOf = append(command.InputOneOf, map[string]any{"required": []string{"value"}, "properties": map[string]any{"stdin": map[string]any{"const": false}}, "not": map[string]any{"required": []string{"file"}}})
 				}
 			}
 			if action == "set" || action == "unset" {
@@ -160,12 +164,24 @@ func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kin
 		value, metadata, err := state.GetVariable(request.Args[0], env)
 		return map[string]any{"profile": store.Profile, "value": value, "metadata": metadata, "integrity_verified": false}, err
 	}
-	value := request.Options["value"]
-	if action == "set" && kind == values.Secret {
+	value, literal := request.Options["value"]
+	if action == "set" {
 		_, fromFile := request.Options["file"]
-		if fromFile == (request.Options["stdin"] == "true") {
+		fromStdin := request.Options["stdin"] == "true"
+		inputs := 0
+		for _, present := range []bool{literal, fromFile, fromStdin} {
+			if present {
+				inputs++
+			}
+		}
+		if inputs != 1 {
+			if kind == values.Variable {
+				return nil, argumentError("Select exactly one variable input: --value, --file or --stdin.", "")
+			}
 			return nil, argumentError("Select exactly one secret input: --file or --stdin.", "")
 		}
+	}
+	if action == "set" && !literal {
 		// Check scope before consuming a potentially blocking input stream.
 		if !guarded {
 			state, err := store.Read(ctx)
@@ -176,10 +192,12 @@ func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kin
 				return nil, err
 			}
 		}
-		if err = store.RequireSecretWrite(ctx); err != nil {
-			return nil, err
+		if kind == values.Secret {
+			if err = store.RequireSecretWrite(ctx); err != nil {
+				return nil, err
+			}
 		}
-		value, err = readSecret(ctx, streams, request.Options)
+		value, err = readValueInput(ctx, streams, request.Options, string(kind))
 		if err != nil {
 			return nil, err
 		}
@@ -209,15 +227,11 @@ func warningsSchema() map[string]any {
 	return map[string]any{"type": "array", "items": object(map[string]any{"code": stringSchema(), "key": stringSchema(), "message": stringSchema()}, "code", "key", "message")}
 }
 
-func readSecret(ctx context.Context, streams IO, options map[string]string) (string, *protocol.Error) {
-	return readValueInput(ctx, streams, options, "secret")
-}
-
 func readValueInput(ctx context.Context, streams IO, options map[string]string, role string) (string, *protocol.Error) {
 	filePath, fromFile := options["file"]
 	fromStdin := options["stdin"] == "true"
 	if fromFile == fromStdin {
-		return "", argumentError("Select exactly one secret input: --file or --stdin.", "")
+		return "", argumentError("Select exactly one "+role+" input: --file or --stdin.", "")
 	}
 	var reader io.Reader
 	if fromFile {
@@ -228,18 +242,18 @@ func readValueInput(ctx context.Context, streams IO, options map[string]string, 
 		defer file.Close()
 		info, err := file.Stat()
 		if err != nil || !info.Mode().IsRegular() {
-			return "", argumentError("Secret file input requires a regular file.", "file")
+			return "", argumentError("File input requires a regular file.", "file")
 		}
 		reader = file
 	} else {
 		reader = streams.In
 		if reader == nil {
-			return "", argumentError("Provide secret data through piped stdin.", "stdin")
+			return "", argumentError("Provide "+role+" data through piped stdin.", "stdin")
 		}
 		if file, ok := reader.(*os.File); ok {
 			info, err := file.Stat()
 			if err != nil || info.Mode()&os.ModeCharDevice != 0 {
-				return "", argumentError("Provide secret data through a pipe or file redirect.", "stdin")
+				return "", argumentError("Provide "+role+" data through a pipe or file redirect.", "stdin")
 			}
 		}
 	}

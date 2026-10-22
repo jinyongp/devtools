@@ -55,6 +55,9 @@ func commandExamples(c Command) []string {
 	if c.Name == "secret set" {
 		line += " --stdin"
 	}
+	if c.Name == "variable set" {
+		line += " --value sample"
+	}
 	if c.Name == "task workstream edit" {
 		line += " --dry-run"
 	}

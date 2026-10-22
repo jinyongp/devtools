@@ -88,10 +88,20 @@ OIDC 설정이나 HTTPS/Serve 권한이 없으면 전제 부재로 실패하며 
    |---|---|
    | Description | `devtools-ci` |
    | Issuer | GitHub: `https://token.actions.githubusercontent.com` |
-   | Subject | `repo:jinyongp/devtools:ref:refs/heads/*` |
+   | Subject | `repo:jinyongp@21158729/devtools@1359600141:ref:refs/heads/*` |
    | Custom claim | `event_name` = `workflow_dispatch` |
    | Scope | Auth Keys의 Write (`auth_keys`) |
    | Tags | 목록에서 `tag:ci`를 선택한다. 검색 칸에 입력만 한 상태로는 등록할 수 없다. |
+
+   Subject의 저장소 접두어는 현재 GitHub 설정을 조회해 확인한다.
+
+   ```sh
+   gh api repos/jinyongp/devtools/actions/oidc/customization/sub
+   ```
+
+   이 저장소는 `use_immutable_subject: true`이며 `sub_claim_prefix`에 소유자·저장소 ID가
+   포함된다. 다른 저장소에 적용할 때도 그 저장소의 실제 접두어에 `:ref:refs/heads/*`를 붙인다.
+   이름만 넣은 구 형식은 [immutable Subject](https://github.blog/changelog/2026-04-23-immutable-subject-claims-for-github-actions-oidc-tokens/)와 일치하지 않는다.
 
 3. 생성된 Client ID를 GitHub 저장소 Settings → Secrets and variables → Actions → Variables의
    `TS_OAUTH_CLIENT_ID`로 저장한다. Client ID는 비밀이 아니다. Audience는 Tailscale의 생성 규칙인

@@ -103,7 +103,11 @@ func testExposureBackendPools(t *testing.T, collision bool) {
 		}
 		result, e := m.ExposeStart(ctx, ExposureRequest{Route: st.GlobalRoute(name).Ref(), Provider: "cloudflared", NoAuth: true, RequestID: tasks.ID()}, project.Context{}, nil, hosts.Manager{Data: m.Data, Isolated: true})
 		if e != nil {
-			t.Fatalf("start exposure %s: code=%s details=%v", name, e.Code, e.Details)
+			var control proxyControl
+			controlErr := tasks.ReadPrivate(m.path("control.json"), &control)
+			record, recordErr := m.readRecord()
+			// Select metadata explicitly: the control token must never be logged.
+			t.Fatalf("start exposure %s: code=%s details=%v frontend_port=%d control_address=%q control_read_ok=%t daemon_state=%q daemon_reason=%q daemon_read_ok=%t", name, e.Code, e.Details, listener, control.Address, controlErr == nil, record.State, record.Reason, recordErr == nil)
 		}
 		shares = append(shares, result.(map[string]any)["item"].(expose.Public))
 	}

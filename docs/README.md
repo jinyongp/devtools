@@ -96,6 +96,7 @@ Design background is separate from public command availability.
 ## Development and verification
 
 - [Development](development.md): checkout setup, checks, dashboard changes, packaging, and releases.
+- [Verification layout](verification.md) (Korean): recurring CI, local checks, diagnostics, and maintenance rationale.
 - [Installed-release verification](../verify/README.md): Unix scenarios and native Windows Actions.
 - [Network coverage](../verify/network-coverage.md): checks and unverified environments.
 - [Plan-editing regression verification](task-edit-verification.md): coverage and isolated test commands.

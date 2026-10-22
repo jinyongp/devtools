@@ -13,14 +13,6 @@ import (
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
-func appendLogical(history, payload []byte) []byte {
-	history = append(history, payload...)
-	if len(history) > logLogicalCap {
-		history = append([]byte{}, history[len(history)-logLogicalCap:]...)
-	}
-	return history
-}
-
 func TestBoundedLogCompactionStructural(t *testing.T) {
 	path := filepath.Join(privateTempDir(t), "output.log")
 	stats := &logIOStats{}
@@ -36,8 +28,11 @@ func TestBoundedLogCompactionStructural(t *testing.T) {
 		if n, err := writer.Write(chunk); err != nil || n != len(chunk) {
 			t.Fatalf("write %d: n=%d err=%v", i, n, err)
 		}
-		expected = appendLogical(expected, chunk)
+		expected = append(expected, chunk...)
 	}
+	// Compute the independent logical tail once. The writer still receives all
+	// 512 append calls while the reference input grows to a bounded 3 MiB.
+	expected = expected[len(expected)-logLogicalCap:]
 
 	body, exists, err := (boundedLogStore{path: path}).snapshot(context.Background())
 	if err != nil || !exists || !bytes.Equal(body, expected) {

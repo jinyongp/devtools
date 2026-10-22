@@ -9,6 +9,10 @@ on:
       live_provider:
         type: string
         default: none
+      measure_automation:
+        description: Collect matched historical automation measurements
+        type: boolean
+        default: true
   workflow_dispatch:
     inputs:
       live_provider:
@@ -16,6 +20,10 @@ on:
         type: choice
         default: none
         options: [none, cloudflared, tailscale]
+      measure_automation:
+        description: Also collect descriptive historical performance samples
+        type: boolean
+        default: false
   pull_request:
     paths:
       - .github/workflows/unix-platform.yml
@@ -143,7 +151,7 @@ jobs:
           EXPECTED_ARCH: ${{ matrix.arch }}
         run: test "$(go env GOHOSTARCH)" = "$EXPECTED_ARCH"
       - name: Native handoff and engine race contracts
-        run: go test -race -count=1 -timeout 8m ./internal/valuehandoff ./internal/runnerengine
+        run: python3 -B scripts/project.py test-go-lane handoff
       - name: Actual different-UID peer boundary
         run: |
           go test -c -o bin/vault-native.test ./internal/vault
@@ -154,6 +162,9 @@ jobs:
 
   automation-performance:
     name: Protected automation measurements
+    # Descriptive comparisons have no regression threshold. Keep them in
+    # Release and explicit measurements, outside the default PR feedback path.
+    if: inputs.measure_automation
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -206,5 +217,14 @@ jobs:
           RESULT: ${{ needs.source.result }}
           HANDOFF_RESULT: ${{ needs.handoff.result }}
           PERFORMANCE_RESULT: ${{ needs.automation-performance.result }}
+          PERFORMANCE_REQUIRED: ${{ inputs.measure_automation && 'true' || 'false' }}
           PROXY_RESULT: ${{ needs.proxy-compat.result }}
-        run: test "$RESULT" = success && test "$HANDOFF_RESULT" = success && test "$PERFORMANCE_RESULT" = success && test "$PROXY_RESULT" = success
+        run: |
+          test "$RESULT" = success
+          test "$HANDOFF_RESULT" = success
+          test "$PROXY_RESULT" = success
+          if [ "$PERFORMANCE_REQUIRED" = true ]; then
+            test "$PERFORMANCE_RESULT" = success
+          else
+            test "$PERFORMANCE_RESULT" = skipped
+          fi

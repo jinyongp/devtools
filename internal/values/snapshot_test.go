@@ -46,10 +46,17 @@ func vaultSnapshotFixture(t *testing.T, count int) (string, vault.FileStore, *va
 	if _, err = p.CreateEnv("local", profileKey); err != nil {
 		t.Fatal(err)
 	}
-	for i := range count {
-		if _, err = p.Set(fmt.Sprintf("SECRET_%04d", i), vault.Secret, "", fmt.Sprintf("synthetic-slot-value-%04d", i), profileKey); err != nil {
-			t.Fatal(err)
+	// Prepare snapshot inputs in one authenticated batch; single-slot writes
+	// have their own writer tests. Setup signs the complete profile once.
+	if _, err = p.Batch(context.Background(), profileKey, func(m *vault.Mutation) error {
+		for i := range count {
+			if _, err := m.Set(fmt.Sprintf("SECRET_%04d", i), vault.Secret, "", fmt.Sprintf("synthetic-slot-value-%04d", i)); err != nil {
+				return err
+			}
 		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 	store := vault.FileStore{Root: root, VaultID: id, CatalogKey: master}
 	if err = store.Initialize(context.Background()); err != nil {

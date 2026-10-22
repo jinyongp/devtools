@@ -16,6 +16,8 @@ class GoTestLanes(unittest.TestCase):
         self.assertEqual(Counter(package for group in partition.values() for package in group), Counter(packages))
         for lane in ("cli", "values", "vault"):
             self.assertEqual(partition[lane], ["github.com/jinyongp/devtools/internal/" + lane])
+        self.assertCountEqual(partition["handoff"], ["github.com/jinyongp/devtools/internal/" + name
+                                                  for name in ("valuehandoff", "runnerengine")])
         self.assertIn(packages[-1], partition["rest"])
 
     def test_invalid_and_empty_lanes_fail_closed(self):
@@ -32,6 +34,15 @@ class GoTestLanes(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 project.main(["test-go-lane", "cli"])
             run.assert_called_once_with(["go", "test", "-race", package])
+
+    def test_native_handoff_does_not_reuse_cached_process_results(self):
+        packages = ["github.com/jinyongp/devtools/internal/" + name
+                    for name in ("valuehandoff", "runnerengine")]
+        with patch.object(project.os, "name", "posix"), \
+             patch.object(project.subprocess, "check_output", return_value="\n".join(packages)), \
+             patch.object(project, "run") as run:
+            project.main(["test-go-lane", "handoff"])
+        run.assert_called_once_with(["go", "test", "-race", "-count=1", "-timeout", "8m", *packages])
 
     def test_bad_arguments_never_start_go(self):
         with patch.object(project.subprocess, "check_output") as output:

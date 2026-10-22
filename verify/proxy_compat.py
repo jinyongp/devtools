@@ -258,6 +258,7 @@ def consumer_environment():
 
 
 def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
+    started = time.monotonic()
     artifacts.mkdir(parents=True)
     result = {"target": target, "case": case, "scheme": scheme, "policy": policy, "browser": browser, "provider": options.provider, "auth_mode": options.auth_mode}
     environment = consumer_environment()
@@ -493,6 +494,7 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
                     result.update(status="fail", trust_cleanup_error=redact(error))
             if log.exists():
                 (artifacts / "server.log").write_text(redact(log.read_text(errors="replace")), encoding="utf8")
+    result["elapsed_ms"] = round((time.monotonic() - started) * 1000)
     (artifacts / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf8")
     print(json.dumps({k: v for k, v in result.items() if k not in {"browser_result"}}), flush=True)
     return result

@@ -22,7 +22,7 @@ on:
         description: Focused feedback; full remains the final completion gate
         type: choice
         default: full
-        options: [full, network, installer, providers, completion, lifecycle, suite, product, race, config]
+        options: [full, network, installer, providers, completion, lifecycle, suite, product, race, config, api]
   push:
     paths:
       - .github/workflows/windows-platform.yml
@@ -52,7 +52,7 @@ jobs:
       fail-fast: false
       matrix:
         runner: [windows-2025, windows-11-arm]
-        lane: ${{ fromJSON(inputs.reuse-source && '["product","installer-ps5","installer-ps7","installer-x64"]' || (inputs.focus == 'config' && '["suite-rest"]') || (inputs.focus == 'suite' && '["suite-cli","suite-values","suite-tasks","suite-handoff","suite-runtime","suite-rest"]') || (inputs.focus == 'race' && '["race"]') || (inputs.focus == 'installer' && '["installer-ps5","installer-ps7","installer-x64"]') || ((inputs.focus == 'completion' || inputs.focus == 'product') && '["product"]') || ((inputs.focus == 'network' || inputs.focus == 'providers' || inputs.focus == 'lifecycle') && '["boundaries"]') || '["suite-cli","suite-values","suite-tasks","suite-handoff","suite-runtime","suite-rest","boundaries","product","race","installer-ps5","installer-ps7","installer-x64"]') }}
+        lane: ${{ fromJSON(inputs.reuse-source && '["product","installer-ps5","installer-ps7","installer-x64"]' || (inputs.focus == 'config' && '["suite-rest"]') || (inputs.focus == 'suite' && '["suite-cli","suite-values","suite-tasks","suite-handoff","suite-runtime","suite-rest"]') || (inputs.focus == 'race' && '["race"]') || (inputs.focus == 'installer' && '["installer-ps5","installer-ps7","installer-x64"]') || ((inputs.focus == 'completion' || inputs.focus == 'product') && '["product"]') || ((inputs.focus == 'network' || inputs.focus == 'providers' || inputs.focus == 'lifecycle' || inputs.focus == 'api') && '["boundaries"]') || '["suite-cli","suite-values","suite-tasks","suite-handoff","suite-runtime","suite-rest","boundaries","product","race","installer-ps5","installer-ps7","installer-x64"]') }}
         include:
           - runner: windows-2025
             arch: amd64
@@ -91,9 +91,11 @@ jobs:
             go.sum
             bin/.devtools-ci-cache-scope
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: ${{ matrix.lane == 'product' || matrix.lane == 'suite-cli' || matrix.lane == 'suite-runtime' || matrix.lane == 'suite-rest' }}
         with:
           node-version: '24'
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        if: matrix.lane == 'product'
         with:
           enable-cache: false
       - name: Record native runner and lane
@@ -104,6 +106,13 @@ jobs:
           $release = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
           $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
           @{ elevated = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); commit = $env:DEVTOOLS_SOURCE_COMMIT; workflow_commit = $env:GITHUB_SHA; runner_image = $env:ImageVersion; image_os = $env:ImageOS; os = $os.Caption; version = $os.Version; build = $os.BuildNumber; display_version = $release.DisplayVersion; architecture = $actual; focus = '${{ inputs.focus || 'full' }}'; lane = '${{ matrix.lane }}'; powershell = $PSVersionTable.PSVersion.ToString() } | ConvertTo-Json | Set-Content -Encoding utf8 runner.json
+      - name: Standalone native Windows API diagnostics
+        if: ${{ matrix.lane == 'boundaries' && inputs.focus == 'api' }}
+        run: |
+          & go build -o "$env:RUNNER_TEMP/native-probe.exe" verify/probes/native_windows.go
+          if ($LASTEXITCODE -ne 0) { throw 'Probe build failed' }
+          & "$env:RUNNER_TEMP/native-probe.exe" | Tee-Object -FilePath windows-api-results.json
+          if ($LASTEXITCODE -ne 0) { throw 'A native API assertion failed' }
       - name: Prepare native installer package
         if: ${{ matrix.lane == 'installer-ps7' && !inputs.reuse-source }}
         run: |
@@ -155,14 +164,9 @@ jobs:
           & go test -json -count=1 -run '^TestWindowsReadWaitsForPublication' ./internal/platformfs | Tee-Object -FilePath windows-publication-read-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Publication sharing reader regression failed' }
 
-      - name: Native external value handoff component contracts
-        if: ${{ matrix.lane == 'suite-handoff' && (github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'suite') }}
-        run: |
-          & go test -json -count=1 -timeout 8m ./internal/valuehandoff ./internal/runnerengine | Tee-Object -FilePath windows-value-handoff-results.jsonl
-          if ($LASTEXITCODE -ne 0) { throw 'Native external value handoff component contract failed' }
-
       - name: Native configuration publication
-        if: ${{ matrix.lane == 'suite-rest' && !inputs.reuse-source }}
+        # Full suite-rest already runs both packages and vet with native peers.
+        if: ${{ matrix.lane == 'suite-rest' && inputs.focus == 'config' && !inputs.reuse-source }}
         run: |
           & go test -json -count=1 -timeout 2m ./internal/projectfile ./internal/configedit | Tee-Object -FilePath windows-config-publication-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native configuration publication failed' }
@@ -397,6 +401,7 @@ jobs:
           name: windows-platform-${{ matrix.arch }}-${{ matrix.lane }}
           path: |
             runner.json
+            windows-api-results.json
             windows-race-toolchain.json
             windows-race-results.jsonl
             windows-product-identity.json
@@ -412,7 +417,6 @@ jobs:
             windows-product-suite-results.jsonl
             windows-go-packages.json
             windows-config-publication-results.jsonl
-            windows-value-handoff-results.jsonl
             windows-native-peer-results.jsonl
             project-lifecycle-repeat-results.jsonl
             project-lifecycle-diagnostic-results.jsonl

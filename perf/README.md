@@ -161,8 +161,11 @@ tests; performance runs are deliberately separate from correctness checks.
 
 ## Protected automation receipts and handoff
 
-The Unix validation workflow runs `automation.py` on Linux with the Go version
-from `go.mod`. It measures fresh secret edits, replay, request lookup, legacy
+Release requests this measurement from Unix validation on Linux with the Go version
+from `go.mod`. For an independent run, dispatch Unix validation with
+`measure_automation=true`. PRs and default manual runs keep the performance
+runner's unit checks, without repeating this descriptive historical comparison.
+It measures fresh secret edits, replay, request lookup, legacy
 receipt lookup, input preparation and private delivery at 1,000 and 10,000
 authenticated receipts. To reproduce with clean checkouts:
 
@@ -194,7 +197,9 @@ logs retain the synthetic benchmark output. `ns/op` measures the actual API call
 its receiver), and `maintenance-held-ns/op` measures exclusive gate ownership.
 The separate key daemon and C allocations are excluded. These descriptive samples
 do not establish statistical significance, a latency SLO, process RSS or bounded
-storage growth. Legacy lookup's directory scan is a separate workload. The run
+storage growth. There is no latency regression threshold; the job checks that
+measurement and cleanup complete. An explicitly requested measurement must pass
+before the Unix aggregate succeeds. Legacy lookup's directory scan is a separate workload. The run
 has a 20-minute budget, rejects incomplete samples, and retires only its owned
 sessions. A cleanup failure retains its private fixture. CI uploads only numeric
 results and synthetic logs, with 30-day artifact retention.

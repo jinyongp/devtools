@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 from vault_fixture import retire_home_sessions
@@ -164,6 +165,7 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
     canonical_skill = repository / "skills/devtools/SKILL.md"
 
     for name in selected:
+        started = time.monotonic()
         with tempfile.TemporaryDirectory(prefix=f"devtools-{name}-") as temporary:
             home = Path(temporary).resolve() / "home"
             home.mkdir(mode=0o700)
@@ -198,6 +200,7 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
                 return 124
             finally:
                 cleaned = cleanup_managed_processes(home, env)
+                print(f"Scenario duration (including cleanup): {name}: {time.monotonic() - started:.3f}s", flush=True)
             if result.returncode:
                 return result.returncode if result.returncode > 0 else 128 - result.returncode
             if not cleaned:
@@ -241,7 +244,9 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="devtools-verify-releases-") as temporary:
         releases = Path(temporary).resolve() / "releases"
+        started = time.monotonic()
         package_test_releases(repository, releases)
+        print(f"Test release preparation: {time.monotonic() - started:.3f}s", flush=True)
         return run_scenarios(selected, scenarios, repository, releases)
 
 

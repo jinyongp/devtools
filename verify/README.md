@@ -2,6 +2,8 @@
 
 [Documentation index](../docs/README.md) · [Development](../docs/development.md)
 
+CI·로컬 검사 선택과 수동 진단의 구분은 [검증 구성](../docs/verification.md)을 따른다.
+
 ## Framework·Library·Provider 호환성
 
 protocol 12의 기본 준비는 `devtools run test:installed proxy_auto`로 검사한다.
@@ -34,6 +36,12 @@ Origin 경고를 검사한다. 의도적인 다른 Origin probe의 경고는 별
 React/Vue/Next/webpack의 counter 상태와 문서 유지, SvelteKit의 module-store 상태·SSR·탐색·form,
 ws echo/close, Socket.IO polling→upgrade·websocket-first·ack·재연결을 확인한다.
 브라우저 WS가 backend 포트로 직접 연결하면 실패한다.
+
+CI는 기존 `--scheme http`·`--scheme https`로 나누어 각 작업에서 모든 소비자를 실행한다.
+각 작업은 baseline 8개·candidate 16개이며 총 48개 조합을 유지한다.
+같은 scheme의 baseline과 candidate rewrite/preserve는 같은 작업에 둔다.
+로컬에서는 `--scheme`을 생략하면 전체를 실행하고 `--case`로 범위를 먼저 좁힐 수도 있다.
+새 소비자도 두 작업에서 자동 실행한다. 각 결과의 `elapsed_ms`에는 준비·정리 시간도 포함한다.
 
 Firefox·WebKit의 핵심 subset은 다음처럼 실행한다.
 
@@ -292,9 +300,10 @@ WSL vault 재시작 통과를 Windows 브라우저 네트워크 검증으로 확
 ## 독립 플랫폼 probe
 
 `verify/probes/native_windows.go`는 제품 코드와 분리한 Windows API 검사다.
-`.github/workflows/windows-preflight.yml`을 수동 실행하면 x64·ARM64 runner에서
+`.github/workflows/windows-platform.yml`을 `focus=api`로 수동 실행하면 x64·ARM64 runner에서
 이 파일을 직접 빌드·실행하고 결과를 artifact에 보관한다. 기본 Go test graph에는 포함하지 않는다.
-이 probe의 성공이 제품의 full native gate를 대체하지는 않는다.
+이 probe의 성공이 제품의 full native gate를 대체하지는 않는다. 지원 전 build blocker를
+수집하던 별도 `Windows support preflight` workflow는 이 진단으로 통합했다.
 
 `verify/probes/wsl.py`는 WSL에서 Windows PowerShell interop와 임시 loopback 연결을 관찰한다.
 현재 WSL 배포판을 종료하거나 네트워크 설정을 바꾸지 않는다.
@@ -311,6 +320,9 @@ python3 verify/run.py --releases /path/to/releases all
 
 `--releases` 디렉터리에는 선택한 호스트용 CLI archive와 checksum이 있어야 한다.
 `discovery` 시나리오를 실행한다면 Agent Skill archive와 checksum도 포함한다.
+한 번의 실행에서는 release를 한 번 준비하고 시나리오별 HOME·XDG·프로세스 정리는 유지한다.
+로그의 `Test release preparation`과 `Scenario duration (including cleanup)`으로
+빌드 비용과 시나리오 비용을 구분한다. 재사용할 release의 소스·버전·호스트 일치는 호출자가 확인한다.
 
 ## 검증 경계
 

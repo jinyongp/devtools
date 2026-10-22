@@ -4,6 +4,7 @@
 
 저장소에서 devtools 자체를 수정하는 개발자를 위한 안내다. 사용자 설치와 첫 실행은
 [README](../README.ko.md), 설치된 배포물의 통합 검증은 [검증 안내](../verify/README.md)를 따른다.
+CI·로컬 검사의 역할과 수동 진단 구분은 [검증 구성](verification.md)에서 확인한다.
 
 ## 개발 도구와 첫 빌드
 
@@ -49,9 +50,11 @@ devtools run check:all
 | WSL | Linux 빌드와 검사 | 실제 WSL2/Windows 네트워크는 별도 미검증 범위 |
 
 macOS·Linux CI는 OS마다 정적 검사와 네 개의 Go race 작업(`cli`, `values`, `vault`,
-`rest`)을 병렬로 실행한다. 긴 세 패키지를 분리하고 새 패키지는 자동으로 `rest`에
-포함한다. 각 작업은 `devtools run check:static` 또는
-`devtools run test:go-lane cli`처럼 로컬에서도 실행할 수 있다. `check:all`의 범위는 유지한다.
+`rest`)을 병렬로 실행한다. `valuehandoff`·`runnerengine`은 별도 `handoff` 작업이
+네 개의 Unix OS·아키텍처에서 실행하며 `rest`에는 중복 포함하지 않는다.
+새 패키지는 자동으로 `rest`에 포함한다. 각 작업은 `devtools run check:static` 또는
+`devtools run test:go-lane cli`·`handoff`처럼 로컬에서도 실행할 수 있다.
+`handoff`는 캐시된 테스트 결과를 재사용하지 않으며 `check:all`의 전체 패키지 범위는 유지한다.
 Release에서는 설치 시나리오·프로필 교환용 export도 Go 검사와 병렬로 실행하며,
 Linux의 Chromium·Skill discovery 검사는 별도 작업이다. 모든 작업이 성공해야
 패키징·게시로 진행한다. Go 캐시는 검사 작업별로 분리한다.
@@ -274,7 +277,8 @@ Windows focused 실행과 릴리스의 소스 검사 재사용 실행은 `Window
 
 Windows 설정 파일의 권한 보존·원자적 교체만 재현하려면 `windows-platform.yml`을
 `focus=config`로 수동 실행한다. x64·ARM64에서 `projectfile`과 `configedit` 검사 및 vet를
-수행하고 결과를 artifact에 보관한다. 전체 suite도 같은 검사를 먼저 실행한다.
+수행하고 결과를 artifact에 보관한다. 전체 실행에서는 `suite-rest`가 같은 패키지와 vet를
+한 번 검사한다. 독립 Windows API 관찰은 같은 workflow의 `focus=api`를 사용한다.
 
 관리자 예외는 기존 설정을 유지한다. 관리자의 직접 push는 필수 검사를 우회할 수 있으므로
 일반 변경은 PR의 두 검사 결과를 확인한 뒤 병합한다. 문서 변경에도 Windows 전체 검사를

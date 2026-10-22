@@ -190,6 +190,7 @@ jobs:
     uses: ./.github/workflows/unix-platform.yml
     with:
       commit: ${{ inputs.commit }}
+      measure_automation: true
 
   ci-macos:
     needs: validate-release

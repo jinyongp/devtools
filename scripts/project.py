@@ -48,16 +48,19 @@ def check_skill_release():
     run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "scripts", "-p", "test_package.py"])
 
 
-GO_TEST_LANES = ("cli", "values", "vault", "rest")
+GO_TEST_LANES = ("cli", "values", "vault", "handoff", "rest")
 WINDOWS_GO_TEST_LANES = ("suite-cli", "suite-values", "suite-tasks", "suite-handoff", "suite-runtime", "suite-rest")
 
 
 def go_test_lane(packages, lane):
     if lane not in GO_TEST_LANES:
         raise ValueError("Go test lane must be one of: " + ", ".join(GO_TEST_LANES))
-    # Isolate the three longest native race suites. Newly added packages always
-    # enter rest, so the CI partition cannot silently omit them.
-    dedicated = {"github.com/jinyongp/devtools/internal/" + name: name for name in GO_TEST_LANES[:-1]}
+    # Handoff runs on all four native Unix architectures; do not repeat those
+    # packages in rest. Newly added packages still enter rest automatically.
+    groups = {"cli": ("cli",), "values": ("values",), "vault": ("vault",),
+              "handoff": ("valuehandoff", "runnerengine")}
+    dedicated = {"github.com/jinyongp/devtools/internal/" + name: group
+                 for group, names in groups.items() for name in names}
     selected = [package for package in packages if dedicated.get(package, "rest") == lane]
     if not selected:
         raise ValueError("Empty Go test lane: " + lane)
@@ -129,7 +132,11 @@ def main(args):
         if len(extra) != 1 or extra[0] not in GO_TEST_LANES:
             raise ValueError("test-go-lane requires one of: " + ", ".join(GO_TEST_LANES))
         packages = subprocess.check_output(["go", "list", "./..."], text=True).splitlines()
-        run(["go", "test", *([] if os.name == "nt" else ["-race"]), *go_test_lane(packages, extra[0])])
+        # Native handoff jobs require fresh process/transport evidence, even when
+        # setup-go restores a successful test cache from an earlier run.
+        fresh = ["-count=1", "-timeout", "8m"] if extra[0] == "handoff" else []
+        run(["go", "test", *([] if os.name == "nt" else ["-race"]), *fresh,
+             *go_test_lane(packages, extra[0])])
     elif action == "windows-go-packages":
         if len(extra) != 1 or extra[0] not in WINDOWS_GO_TEST_LANES:
             raise ValueError("windows-go-packages requires one of: " + ", ".join(WINDOWS_GO_TEST_LANES))

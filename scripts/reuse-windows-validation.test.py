@@ -77,6 +77,16 @@ class TrustTests(unittest.TestCase):
         run.update(status='in_progress', conclusion=None, run_attempt=2)
         self.assertIsNone(self.find(latest=run))
 
+    def test_duplicate_component_steps_cannot_replace_complete_native_suites(self):
+        for arch in ('amd64', 'arm64'):
+            for lane, legacy_step in (('suite-handoff', 'Native external value handoff component contracts'),
+                                      ('suite-rest', 'Native configuration publication')):
+                with self.subTest(arch=arch, lane=lane):
+                    _, jobs = fixture()
+                    job = next(job for job in jobs if job['name'] == f'Windows {arch} / {lane}')
+                    job['steps'] = [dict(name=legacy_step, status='completed', conclusion='success')]
+                    self.assertIsNone(self.find(jobs=jobs))
+
     def test_different_workflow_sha_or_forced_full_never_queries_evidence(self):
         def unexpected_api(_):
             self.fail('must rerun source checks without consulting another workflow revision')

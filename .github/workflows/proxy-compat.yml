@@ -35,7 +35,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        lane: [chromium, browsers, lan-none, lan-basic]
+        include:
+          - lane: chromium-http
+            scheme: http
+          - lane: chromium-https
+            scheme: https
+          - lane: browsers
+          - lane: lan-none
+          - lane: lan-basic
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,15 +68,17 @@ jobs:
           mkdir -p bin/candidate
           tar -xzf dist/devtools_0.0.0-proxy-compat_linux_amd64.tar.gz -C bin/candidate
       - name: Fetch immutable release baseline and verify checksum
-        if: matrix.lane == 'chromium'
+        if: startsWith(matrix.lane, 'chromium-')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release download v0.31.0 --pattern 'devtools_0.31.0_linux_amd64.tar.gz*' --dir bin/baseline
           (cd bin/baseline && sha256sum -c devtools_0.31.0_linux_amd64.tar.gz.sha256 && tar -xzf devtools_0.31.0_linux_amd64.tar.gz)
-      - name: Full Chromium baseline and candidate matrix
-        if: matrix.lane == 'chromium'
-        run: ./bin/candidate/devtools run check:proxy-compat --binary bin/candidate/devtools --baseline bin/baseline/devtools --client-mode docker --artifacts bin/proxy-evidence
+      - name: Chromium baseline and candidate partition
+        if: startsWith(matrix.lane, 'chromium-')
+        env:
+          SCHEME: ${{ matrix.scheme }}
+        run: ./bin/candidate/devtools run check:proxy-compat --binary bin/candidate/devtools --baseline bin/baseline/devtools --scheme "$SCHEME" --client-mode docker --artifacts bin/proxy-evidence
       - name: Firefox and WebKit functional subset
         if: matrix.lane == 'browsers'
         run: ./bin/candidate/devtools run check:proxy-compat --binary bin/candidate/devtools --case nuxt --case vite-react --case ws --case socketio --scheme https --browser firefox --browser webkit --client-mode docker --artifacts bin/proxy-evidence

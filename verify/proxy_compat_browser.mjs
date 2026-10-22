@@ -29,7 +29,7 @@ if (config.case === 'nuxt') {
   const socketRequire = createRequire(realpathSync(path.join(config.fixturePackages, 'ws/package.json')));
   NuxtSocket = socketRequire('ws');
 }
-async function probeNuxtOrigin(originHeader) {
+async function probeNuxtOrigin(originHeader, expectsRpc) {
   return new Promise(resolve => {
     const id = `probe-${Math.random()}`;
     const options = {};
@@ -42,9 +42,13 @@ async function probeNuxtOrigin(originHeader) {
     const socket = new NuxtSocket(nuxtSocketUrl, 'vite-hmr', options);
     let finished = false;
     const finish = result => { if (finished) return; finished = true; clearTimeout(timer); socket.terminate(); resolve(result); };
-    const timer = setTimeout(() => finish('no-rpc-response'), 2_000);
-    socket.on('error', () => finish('rejected'));
-    socket.on('open', () => socket.send(JSON.stringify({ type: 'custom', event: 'nuxt:devtools:rpc', data: stringifyRpc({ t: 'q', m: 'getServerPages', a: [], i: id }) })));
+    let timer = setTimeout(() => finish('handshake-timeout'), 20_000);
+    socket.on('error', error => finish(`rejected: ${redact(error.message)}`));
+    socket.on('open', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => finish('no-rpc-response'), expectsRpc ? 20_000 : 5_000);
+      socket.send(JSON.stringify({ type: 'custom', event: 'nuxt:devtools:rpc', data: stringifyRpc({ t: 'q', m: 'getServerPages', a: [], i: id }) }));
+    });
     socket.on('message', payload => {
       try {
         const envelope = JSON.parse(String(payload));
@@ -183,10 +187,10 @@ try {
     if (config.case === 'nuxt') {
       report.originProbes = [];
       for (const supplied of [undefined, origin.origin, `${origin.protocol}//different.localhost`, `${origin.protocol}//${origin.hostname}:1`, 'null']) {
-        const result = await probeNuxtOrigin(supplied);
         const allowed = supplied === undefined || (supplied === origin.origin && config.policy === 'preserve');
-        assert.equal(result === 'rpc-response', allowed, `Nuxt origin guard ${supplied}`);
+        const result = await probeNuxtOrigin(supplied, allowed);
         report.originProbes.push({ origin: supplied ?? '(absent)', result });
+        assert.equal(result === 'rpc-response', allowed, `Nuxt origin guard ${supplied}: ${result}`);
       }
       await page.waitForFunction(() => !!window.__NUXT_DEVTOOLS_HOST__);
       await page.evaluate(() => window.__NUXT_DEVTOOLS_HOST__.devtools.navigate('/modules/pages'));

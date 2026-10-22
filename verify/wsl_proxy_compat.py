@@ -10,6 +10,8 @@ import tempfile
 import urllib.request
 import uuid
 
+from proxy_compat import redact
+
 
 def download(url, destination, expected):
     digest = hashlib.sha256()
@@ -40,6 +42,8 @@ def main():
     def wsl(*words, timeout=120):
         result = subprocess.run(["wsl.exe", *map(str, words)], capture_output=True, timeout=timeout)
         if result.returncode:
+            diagnostic = (result.stdout + b"\n" + result.stderr).replace(b"\0", b"").decode("utf-8-sig", errors="replace")
+            (artifacts / "wsl-command-error.log").write_text(redact(diagnostic[-30000:]), encoding="utf8")
             raise RuntimeError(f"WSL operation {words[0]} exited {result.returncode}")
         return result.stdout.replace(b"\0", b"").decode("utf-8-sig").strip()
 

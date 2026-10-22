@@ -70,7 +70,10 @@ def owned_scratch(result):
         if any(key.endswith("cleanup_error") for key in result):
             result["recovery_root"] = str(scratch)
         else:
-            shutil.rmtree(scratch)
+            try:
+                shutil.rmtree(scratch)
+            except OSError as error:
+                result.update(status="fail", filesystem_cleanup_error=redact(error), recovery_root=str(scratch))
 
 
 def stop_owned(process):
@@ -162,6 +165,58 @@ def public_status(origin, ca=None, auth=None, connect_host=None):
         connection.close()
 
 
+def wait_public(origin, ca=None, auth=None, connect_host=None):
+    started = time.monotonic()
+    deadline = started + 75
+    last = "no response"
+    while time.monotonic() < deadline:
+        try:
+            last = public_status(origin, ca, auth, connect_host)
+            if last == 200:
+                return {"status": 200, "elapsed_ms": round((time.monotonic() - started) * 1000)}
+        except (OSError, http.client.HTTPException) as error:
+            last = type(error).__name__
+        time.sleep(0.1)
+    raise RuntimeError(f"verified public HTTP readiness failed: {last}")
+
+
+def shutdown_owned(root):
+    control_path = root / "data/proxy/control.json"
+    if not control_path.exists():
+        return
+    control = json.loads(control_path.read_text(encoding="utf8"))
+    address = urlparse(control["address"])
+    if address.scheme != "http" or address.hostname != "127.0.0.1" or not address.port or address.path or address.query or address.fragment or address.username:
+        raise RuntimeError("invalid owned daemon control address")
+    connection = http.client.HTTPConnection("127.0.0.1", address.port, timeout=5)
+    try:
+        connection.request("POST", "/stop", headers={"Authorization": "Bearer " + control["token"]})
+        response = connection.getresponse()
+        response.read()
+        if response.status != 200:
+            raise RuntimeError("owned daemon rejected shutdown")
+    finally:
+        connection.close()
+    # Listener stop keeps the daemon alive. Its private lease must actually be
+    # released before deleting state, particularly on Windows with open guards.
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        try:
+            with (root / "data/proxy/lease.lock").open("r+b") as lease:
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(lease.fileno(), msvcrt.LK_NBLCK, 1)
+                    msvcrt.locking(lease.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lease.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(lease.fileno(), fcntl.LOCK_UN)
+            return
+        except OSError:
+            time.sleep(0.1)
+    raise RuntimeError("owned daemon did not release its private lease")
+
+
 def windows_path(path):
     return command(["wslpath", "-w", str(path)]).strip()
 
@@ -229,6 +284,7 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
             result["cli"] = api("version")
             result["binary_sha256"] = hashlib.sha256(binary.read_bytes()).hexdigest()
             result["lock_sha256"] = hashlib.sha256((FIXTURES / "pnpm-lock.yaml").read_bytes()).hexdigest()
+            result["lock_sha256_lf"] = hashlib.sha256((FIXTURES / "pnpm-lock.yaml").read_bytes().replace(b"\r\n", b"\n")).hexdigest()
             api("proxy", "ca", "init", mutate=True)
             api("proxy", "ca", "export", "--output", str(artifacts / "ca.pem"))
             bind = "0.0.0.0" if options.provider == "lan" else "127.0.0.1"
@@ -274,12 +330,15 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
             result["server_node"] = command(["node", "--version"]).strip()
             if options.provider in {"cloudflared", "tailscale"}:
                 result["provider_version"] = command([options.provider, "--version" if options.provider == "cloudflared" else "version"]).splitlines()[0]
+            result["public_ready"] = wait_public(origin, ca, auth, connect_host)
+            if shared:
+                result["sibling_ready"] = wait_public(sibling["url"], ca, auth, connect_host)
             if auth:
                 if public_status(origin, ca, connect_host=connect_host) != 401:
                     raise AssertionError("unauthenticated ingress did not challenge")
                 result["auth_challenge"] = 401
             if options.disposable_trust and ca:
-                command([certutil, "-user", "-addstore", "Root", windows_path(ca) if windows_peer else ca])
+                command([certutil, "-user", "-f", "-addstore", "Root", windows_path(ca) if windows_peer else ca])
                 trusted = True
             browser_config = {
                 "case": case, "origin": origin, "policy": policy, "browser": browser,
@@ -353,6 +412,7 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
             result["status"] = "pass"
         except Exception as error:
             result.update(status="fail", error=redact(error))
+            print(json.dumps({"case": case, "phase": "verification", "error": result["error"]}), flush=True)
         finally:
             if options.client_mode == "docker":
                 subprocess.run(["docker", "rm", "-f", container], capture_output=True, timeout=20)
@@ -379,6 +439,9 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
             if configured:
                 try:
                     api("proxy", "stop", "--all", mutate=True)
+                    if "exposure_cleanup_error" not in result:
+                        shutdown_owned(isolated)
+                        result["daemon_shutdown"] = True
                 except Exception as error:
                     result.update(status="fail", cleanup_error=redact(error))
             stop_owned(server)
@@ -386,7 +449,7 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
             if trusted:
                 thumbprint = hashlib.sha1(ssl.PEM_cert_to_DER_cert((artifacts / "ca.pem").read_text())).hexdigest()
                 try:
-                    command([certutil, "-user", "-delstore", "Root", thumbprint])
+                    command([certutil, "-user", "-f", "-delstore", "Root", thumbprint])
                 except Exception as error:
                     result.update(status="fail", trust_cleanup_error=redact(error))
             if log.exists():

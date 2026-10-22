@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Status}} {{.Title}} · devtools</title>
+  <style>
+    :root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Ubuntu Sans", system-ui, sans-serif; font-synthesis: none; --fg: #24292f; --bg: #fff; --muted: #57606a; --line: #d8dee4; --surface: #f6f8fa; --hover: #eef1f4; --error: #b42318; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 64px 24px; color: var(--fg); background: var(--bg); font-size: 15px; line-height: 1.6; }
+    main { max-width: 600px; margin: 0 auto; }
+    header { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+    .brand { color: var(--fg); font-weight: 600; }
+    h1 { font-size: clamp(20px, 4vw, 24px); font-weight: 600; line-height: 1.4; letter-spacing: -0.025em; margin: 0 0 8px; }
+    h1 span { color: var(--error); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 14px; font-weight: 500; letter-spacing: 0; margin-right: 12px; vertical-align: middle; }
+    p { margin: 0 0 16px; }
+    .description, .note { color: var(--muted); }
+    dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 24px; padding-block: 16px; border-block: 1px solid var(--line); margin: 24px 0; }
+    dt { color: var(--muted); font-size: 14px; }
+    dd { margin: 0; overflow-wrap: anywhere; }
+    code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 13px; }
+    section { margin: 28px 0; }
+    h2 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+    section p { font-size: 14px; margin: 0 0 12px; }
+    pre { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 14px 16px; margin: 12px 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.9; }
+    a { display: inline-block; color: inherit; padding: 7px 14px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; }
+    a:hover { background: var(--hover); }
+    a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+    @media (max-width: 480px) { body { padding: 32px 20px; } }
+    @media (prefers-color-scheme: dark) { :root { --fg: #e6edf3; --bg: #0d1117; --muted: #9da7b3; --line: #30363d; --surface: #161b22; --hover: #21262d; --error: #ff938a; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header><span class="brand">devtools</span> / proxy</header>
+    <h1><span>{{.Status}}</span> {{.Title}}</h1>
+    <p class="description">{{.Description}}</p>
+    <dl>
+      <dt>Host</dt><dd><code>{{.Host}}</code></dd>
+      {{if .Target}}<dt>Backend</dt><dd><code>{{.Target}}</code></dd>{{end}}
+    </dl>
+    <p>{{.Action}}</p>
+    <section aria-labelledby="error-commands">
+      <h2 id="error-commands">{{.CommandTitle}}</h2>
+      <p class="description">{{.CommandContext}}</p>
+      <pre><code>{{.Commands}}</code></pre>
+      {{if .Note}}<p class="note">{{.Note}}</p>{{end}}
+    </section>
+    <a href="">Reload page</a>
+  </main>
+</body>
+</html>

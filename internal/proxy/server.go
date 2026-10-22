@@ -33,28 +33,28 @@ func NewHandler(routes RouteLister) *Handler {
 func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	host, ok := requestHost(request.Host)
 	if !ok {
-		http.Error(response, "route not found", http.StatusNotFound)
+		writeProxyError(response, request, routeNotFoundPage)
 		return
 	}
 	if request.TLS != nil && !strings.EqualFold(request.TLS.ServerName, host) {
-		http.Error(response, "route not found", http.StatusNotFound)
+		writeProxyError(response, request, routeNotFoundPage)
 		return
 	}
 	decision, err := selectRoute(request.Context(), h.Routes, h.Listener, host)
 	if err != nil {
-		http.Error(response, "route unavailable", http.StatusServiceUnavailable)
+		writeProxyError(response, request, routeUnavailablePage)
 		return
 	}
 	if decision.matches == 0 {
-		http.Error(response, "route not found", http.StatusNotFound)
+		writeProxyError(response, request, routeNotFoundPage)
 		return
 	}
 	if decision.matches != 1 || decision.item.Status != StatusReady || decision.item.TargetPort == nil {
-		http.Error(response, "route unavailable", http.StatusServiceUnavailable)
+		writeProxyError(response, request, routeUnavailablePage)
 		return
 	}
 	if h.Guard != nil && !h.Guard(request, decision.item) {
-		http.Error(response, "route is not shared", http.StatusForbidden)
+		writeProxyError(response, request, routeNotSharedPage)
 		return
 	}
 	if h.HTTPSPort > 0 && request.TLS == nil {
@@ -96,7 +96,7 @@ func (h *Handler) forward(response http.ResponseWriter, request *http.Request, p
 		Transport:     h.Transport,
 		FlushInterval: -1,
 		ErrorHandler: func(writer http.ResponseWriter, _ *http.Request, _ error) {
-			http.Error(writer, "backend unavailable", http.StatusBadGateway)
+			writeBackendUnavailable(writer, request, target.Host)
 		},
 	}
 	proxy.ServeHTTP(response, request)

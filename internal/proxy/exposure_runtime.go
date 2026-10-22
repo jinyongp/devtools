@@ -262,18 +262,18 @@ func (x *exposureRuntime) serve(w http.ResponseWriter, request *http.Request) {
 	record := x.record
 	x.mu.Unlock()
 	if !active {
-		http.Error(w, "exposure unavailable", 503)
+		writeProxyError(w, request, exposureUnavailablePage)
 		return
 	}
 	u, e := url.Parse(record.URL)
 	if e != nil {
-		http.Error(w, "exposure authority mismatch", 403)
+		writeProxyError(w, request, exposureAddressMismatchPage)
 		return
 	}
 	if record.Provider == "lan" && u.Scheme == "https" && request.TLS == nil {
 		host, ok := requestHost(request.Host)
 		if !ok || !strings.EqualFold(host, u.Hostname()) {
-			http.Error(w, "exposure authority mismatch", 403)
+			writeProxyError(w, request, exposureAddressMismatchPage)
 			return
 		}
 		// LAN terminates TLS here. Redirect to the committed HTTPS authority
@@ -285,11 +285,11 @@ func (x *exposureRuntime) serve(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if !strings.EqualFold(request.Host, u.Host) {
-		http.Error(w, "exposure authority mismatch", 403)
+		writeProxyError(w, request, exposureAddressMismatchPage)
 		return
 	}
 	if request.TLS != nil && !strings.EqualFold(request.TLS.ServerName, u.Hostname()) {
-		http.Error(w, "exposure authority mismatch", 403)
+		writeProxyError(w, request, exposureAddressMismatchPage)
 		return
 	}
 	x.mu.Lock()
@@ -301,12 +301,12 @@ func (x *exposureRuntime) serve(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if !x.valid() {
-		http.Error(w, "exposure unavailable", 503)
+		writeProxyError(w, request, exposureUnavailablePage)
 		return
 	}
 	writer, req, end, ok := x.sessions.Begin(w, request)
 	if !ok {
-		http.Error(w, "exposure unavailable", 503)
+		writeProxyError(w, request, exposureUnavailablePage)
 		return
 	}
 	defer end()

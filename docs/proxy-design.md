@@ -35,6 +35,21 @@ literal `.localhost` route는 기존 implicit 활성화와 호환된다.
 HTTPS는 명시 설정한 listener에 적용하며 활성 route의 SNI hostname만 허용한다.
 클라이언트의 CA 신뢰와 backend readiness는 listener 실행 여부와 별도로 확인한다.
 공유하지 않은 route는 wildcard listener에서도 loopback 접근만 허용한다.
+TLS handshake에서 거부된 hostname에는 HTTP 안내 페이지를 반환할 수 없다.
+아래 안내는 HTTP 요청 처리까지 도달한 오류에 적용한다.
+
+프록시의 404·403·503·502 오류는 같은 스타일의 안내 페이지를 사용한다.
+`Accept`에 `text/html`을 허용한 브라우저에는 HTML을, 나머지 클라이언트에는
+같은 복구 안내를 plain text로 반환한다. 두 응답 모두 캐시하지 않는다.
+
+- 404는 주소·route·listener 확인 방법을 안내한다. 잘못된 hostname과 TLS SNI 불일치도 같은 안내를 쓴다.
+- 403은 로컬 연결 제한과 공유 주소 불일치를 구분하고, 현재 공유 URL 확인 방법을 안내한다.
+- 503은 route 해석 실패와 공유 사용 불가를 구분하고, route·listener·공유 상태 확인 방법을 안내한다.
+- 502는 backend 응답 실패와 대상 loopback port를 보여주고, 서버 실행·로그 확인 방법을 안내한다.
+
+확인 명령은 항상 표시하며 상태 코드, 새로고침 링크와 요청 hostname을 함께 제공한다.
+backend 주소는 502에만 표시한다. backend가 직접 반환한 오류 응답은 그대로 전달하며,
+관리 API와 공유 Basic 인증 challenge는 기존 응답을 유지한다.
 
 ## Backend와 전달 헤더
 

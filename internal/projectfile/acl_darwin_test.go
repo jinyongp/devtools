@@ -5,9 +5,30 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"runtime"
 	"syscall"
 	"testing"
 )
+
+func TestDarwinACLReadUnderSchedulerLoad(t *testing.T) {
+	path, _ := fileFixture(t)
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+	for range 8 {
+		t.Run("reader", func(t *testing.T) {
+			t.Parallel()
+			for range 128 {
+				runtime.Gosched()
+				if _, err := extendedACL(f); err != nil {
+					t.Fatalf("ACL of an open temporary file became unreadable: %v", err)
+				}
+			}
+		})
+	}
+}
 
 func TestDarwinPublicationPreservesExtendedACL(t *testing.T) {
 	path, _ := fileFixture(t)

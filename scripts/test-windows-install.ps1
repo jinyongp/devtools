@@ -4,6 +4,7 @@ param(
     [ValidateSet('all', 'ps5', 'ps7', 'x64')][string]$Engine = 'all',
     [ValidateRange(1, 20)][int]$Repeat = 1,
     [ValidateRange(0, 1000)][int]$StartupProbes = 0,
+    [ValidateRange(0, 2000)][int]$StdioProbes = 0,
     [ValidatePattern('^(|[0-9a-f]{40})$')][string]$PackageCommit = ''
 )
 $ErrorActionPreference = 'Stop'
@@ -156,6 +157,19 @@ if (-not [NativeArchitectureControl]::IsWow64Process2([NativeArchitectureControl
         $probe = $null
         $probeKind = $null
         ConvertTo-Json -InputObject $startupResults -Depth 3 | Set-Content -Encoding utf8 windows-powershell-startup-results.json
+    }
+    if ($StdioProbes -gt 0) {
+        $stdioDirectory = Join-Path $root 'stdio-candidate'
+        Expand-Archive -LiteralPath (Join-Path $releases ('devtools_0.0.0-test.1_windows_' + $Arch + '.zip')) -DestinationPath $stdioDirectory
+        $stdioResults = @()
+        foreach ($shell in $shells) {
+            $probeKind = 'installer_stdio'
+            $control = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-File', (Join-Path $PWD 'verify/probes/powershell_stdio.ps1'), '-Installer', $installer, '-Binary', (Join-Path $stdioDirectory 'devtools.exe'), '-Commit', $Commit, '-Count', [string]$StdioProbes)
+            Require ($control.result -eq 'pass' -and $control.probes -eq $StdioProbes) 'Installer subprocess control failed.'
+            $stdioResults += $control
+        }
+        $probeKind = $null
+        ConvertTo-Json -InputObject $stdioResults -Depth 3 | Set-Content -Encoding utf8 windows-powershell-stdio-results.json
     }
     $results = @()
     Require (-not (Test-Path -LiteralPath $bootstrapBin)) 'Inline bootstrap fixture requires an unused default installation directory.'

@@ -22,13 +22,17 @@ on:
         description: Focused feedback; full remains the final completion gate
         type: choice
         default: full
-        options: [full, network, installer, providers, completion, lifecycle, suite, product, race, config, api]
+        options: [full, network, installer, powershell, providers, completion, lifecycle, suite, product, race, config, api]
       installer_repetitions:
         description: Repeat the x64-on-ARM64 installer journey to diagnose native crashes (1-20)
         type: number
         default: 1
       powershell_startup_probes:
         description: PowerShell 7 startup and native API controls before installer tests (0-1000)
+        type: number
+        default: 0
+      powershell_stdio_probes:
+        description: Exercise the installer's actual redirected subprocess implementation (0-2000)
         type: number
         default: 0
       installer_package_commit:
@@ -64,7 +68,7 @@ jobs:
       fail-fast: false
       matrix:
         runner: [windows-2025, windows-11-arm]
-        lane: ${{ fromJSON(inputs.reuse-source && '["product","installer-ps5","installer-ps7","installer-x64"]' || (inputs.focus == 'config' && '["suite-rest"]') || (inputs.focus == 'suite' && '["suite-cli","suite-values","suite-tasks","suite-handoff","suite-runtime","suite-rest"]') || (inputs.focus == 'race' && '["race"]') || (inputs.focus == 'installer' && '["installer-ps5","installer-ps7","installer-x64"]') || ((inputs.focus == 'completion' || inputs.focus == 'product') && '["product"]') || ((inputs.focus == 'network' || inputs.focus == 'providers' || inputs.focus == 'lifecycle' || inputs.focus == 'api') && '["boundaries"]') || '["suite-cli","suite-values","suite-tasks","suite-handoff","suite-runtime","suite-rest","boundaries","product","race","installer-ps5","installer-ps7","installer-x64"]') }}
+        lane: ${{ fromJSON(inputs.reuse-source && '["product","installer-ps5","installer-ps7","installer-x64"]' || (inputs.focus == 'config' && '["suite-rest"]') || (inputs.focus == 'suite' && '["suite-cli","suite-values","suite-tasks","suite-handoff","suite-runtime","suite-rest"]') || (inputs.focus == 'race' && '["race"]') || (inputs.focus == 'powershell' && '["installer-ps7","installer-x64"]') || (inputs.focus == 'installer' && '["installer-ps5","installer-ps7","installer-x64"]') || ((inputs.focus == 'completion' || inputs.focus == 'product') && '["product"]') || ((inputs.focus == 'network' || inputs.focus == 'providers' || inputs.focus == 'lifecycle' || inputs.focus == 'api') && '["boundaries"]') || '["suite-cli","suite-values","suite-tasks","suite-handoff","suite-runtime","suite-rest","boundaries","product","race","installer-ps5","installer-ps7","installer-x64"]') }}
         include:
           - runner: windows-2025
             arch: amd64
@@ -126,7 +130,7 @@ jobs:
           & "$env:RUNNER_TEMP/native-probe.exe" | Tee-Object -FilePath windows-api-results.json
           if ($LASTEXITCODE -ne 0) { throw 'A native API assertion failed' }
       - name: Prepare native installer package
-        if: ${{ matrix.lane == 'installer-ps7' && !inputs.reuse-source }}
+        if: ${{ matrix.lane == 'installer-ps7' && !inputs.reuse-source && inputs.focus != 'powershell' }}
         run: |
           $env:VERSION = '0.0.0-native-package'
           $env:COMMIT = $env:DEVTOOLS_SOURCE_COMMIT
@@ -311,7 +315,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native provider vet failed' }
 
       - name: Test native installer recovery
-        if: ${{ matrix.lane == 'installer-ps7' && !inputs.reuse-source }}
+        if: ${{ matrix.lane == 'installer-ps7' && !inputs.reuse-source && inputs.focus != 'powershell' }}
         run: |
           $archive = Get-ChildItem dist -Filter '*.zip' | Select-Object -First 1
           $env:DEVTOOLS_INSTALL_TEST_ZIP = $archive.FullName
@@ -325,6 +329,7 @@ jobs:
         if: ${{ startsWith(matrix.lane, 'installer-') }}
         env:
           INSTALLER_PACKAGE_COMMIT: ${{ inputs.installer_package_commit }}
+          INSTALLER_REPETITIONS: ${{ inputs.installer_repetitions }}
         run: |
           $dumpFolder = Join-Path $PWD 'windows-install-crashes'
           New-Item -ItemType Directory -Force $dumpFolder | Out-Null
@@ -334,14 +339,18 @@ jobs:
           New-ItemProperty -Path $dumpKey -Name DumpType -Value 1 -PropertyType DWord -Force | Out-Null
           New-ItemProperty -Path $dumpKey -Name DumpCount -Value 2 -PropertyType DWord -Force | Out-Null
           $engine = '${{ matrix.lane }}'.Substring(10)
-          $repeat = if ($engine -eq 'x64') { [int]'${{ inputs.installer_repetitions || 1 }}' } else { 1 }
+          $repeat = if ($engine -eq 'x64' -and $env:INSTALLER_REPETITIONS) { [int]$env:INSTALLER_REPETITIONS } else { 1 }
           $startupProbes = if ($engine -in @('ps7', 'x64')) { [int]'${{ inputs.powershell_startup_probes || 0 }}' } else { 0 }
+          $stdioProbes = if ($engine -in @('ps7', 'x64')) { [int]'${{ inputs.powershell_stdio_probes || 0 }}' } else { 0 }
           $packageArguments = @()
+          if ($repeat -ne 1) { $packageArguments += @('-Repeat', [string]$repeat) }
+          if ($startupProbes -ne 0) { $packageArguments += @('-StartupProbes', [string]$startupProbes) }
+          if ($stdioProbes -ne 0) { $packageArguments += @('-StdioProbes', [string]$stdioProbes) }
           if ($env:INSTALLER_PACKAGE_COMMIT) {
-            if ('${{ inputs.focus }}' -ne 'installer') { throw 'An original package is only allowed in focused installer diagnostics' }
-            $packageArguments = @('-PackageCommit', $env:INSTALLER_PACKAGE_COMMIT)
+            if ('${{ inputs.focus }}' -notin @('installer', 'powershell')) { throw 'An original package is only allowed in focused installer diagnostics' }
+            $packageArguments += @('-PackageCommit', $env:INSTALLER_PACKAGE_COMMIT)
           }
-          & pwsh -NoProfile -NonInteractive -File scripts/test-windows-install.ps1 -Arch '${{ matrix.arch }}' -Commit $env:DEVTOOLS_SOURCE_COMMIT -Engine $engine -Repeat $repeat -StartupProbes $startupProbes @packageArguments
+          & pwsh -NoProfile -NonInteractive -File scripts/test-windows-install.ps1 -Arch '${{ matrix.arch }}' -Commit $env:DEVTOOLS_SOURCE_COMMIT -Engine $engine @packageArguments
           if ($LASTEXITCODE -ne 0) { throw 'Native PowerShell installer/update tests failed' }
 
       - name: Native amd64 race detector
@@ -467,6 +476,7 @@ jobs:
             windows-install-startup-cache.bin
             windows-install-cache-error.txt
             windows-powershell-startup-results.json
+            windows-powershell-stdio-results.json
             windows-install-crashes/
             project-release-results.tap
             dist/*.zip

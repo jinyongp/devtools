@@ -58,12 +58,7 @@ func ListenPeer(ctx context.Context, root, runner, instance string) (PeerListene
 		return nil, ErrUnavailable
 	}
 	address, _ := PeerAddress(root, runner, instance)
-	if err = peerEndpointVacant(ctx, address); err != nil {
-		release()
-		guard.Close()
-		return nil, err
-	}
-	listener, err := listenSession(dir, strings.ReplaceAll(instance, "-", ""))
+	listener, err := listenPeerEndpoint(dir, strings.ReplaceAll(instance, "-", ""), address)
 	if err != nil {
 		release()
 		guard.Close()

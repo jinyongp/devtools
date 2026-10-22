@@ -224,6 +224,13 @@ func TestNativeUnixPeersRejectOtherUID(t *testing.T) {
 				if !errors.Is(err, ErrRecovery) {
 					t.Fatal("runner accepted foreign filesystem ownership", err)
 				}
+				competitor, err := ListenPeer(ctx, transportRoot, runner, instance)
+				if competitor != nil {
+					competitor.Close()
+				}
+				if !errors.Is(err, ErrRecovery) {
+					t.Fatal("runner listener changed foreign filesystem ownership", err)
+				}
 			})
 		}
 	})

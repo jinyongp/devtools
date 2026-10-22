@@ -8,8 +8,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
-	"time"
 
 	"github.com/jinyongp/devtools/internal/platformfs"
 )
@@ -19,11 +19,15 @@ func privatePeerPath(path string, mode os.FileMode) (os.FileInfo, error) {
 	if err != nil {
 		return nil, ErrRecovery
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid != uint32(os.Getuid()) || info.Mode()&(os.ModeType|os.ModePerm|os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != mode {
+	if !ownedPeerPath(info) || info.Mode()&(os.ModeType|os.ModePerm|os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != mode {
 		return nil, ErrRecovery
 	}
 	return info, nil
+}
+
+func ownedPeerPath(info os.FileInfo) bool {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && stat.Uid == uint32(os.Getuid())
 }
 
 func dialPeerEndpoint(ctx context.Context, _ string, address string) (PeerConnection, error) {
@@ -58,26 +62,80 @@ func dialPeerEndpoint(ctx context.Context, _ string, address string) (PeerConnec
 	return c, nil
 }
 
-// The vault backend may unlink a stale socket because its daemon lease is
-// exclusive. A runner in another language may not use our lease, so first
-// refuse any live listener rather than unlinking its endpoint.
-func peerEndpointVacant(ctx context.Context, address string) error {
-	info, err := os.Lstat(address)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
+type unixPeerListener struct {
+	*unixSessionListener
+	guard     *platformfs.Root
+	address   string
+	parent    os.FileInfo
+	socket    os.FileInfo
+	temporary bool
+	once      sync.Once
+	err       error
+}
+
+func (l *unixPeerListener) Close() error {
+	l.once.Do(func() {
+		l.err = l.unixSessionListener.Close()
+		parent, parentErr := os.Lstat(filepath.Dir(l.address))
+		socket, socketErr := os.Lstat(l.address)
+		// Closing an old listener must leave a successor's endpoint alone.
+		if parentErr == nil && socketErr == nil && ownedPeerPath(parent) && ownedPeerPath(socket) && os.SameFile(l.parent, parent) && os.SameFile(l.socket, socket) {
+			l.err = errors.Join(l.err, os.Remove(l.address))
+			if l.temporary {
+				_ = os.Remove(filepath.Dir(l.address))
+			}
+		}
+		l.err = errors.Join(l.err, l.guard.Close())
+	})
+	return l.err
+}
+
+func listenPeerEndpoint(directory, _ string, address string) (PeerListener, error) {
+	parentPath := filepath.Dir(address)
+	guard, err := platformfs.OpenRoot(parentPath, true)
+	if err != nil {
+		return nil, ErrRecovery
 	}
-	if err != nil || info.Mode()&os.ModeSocket == 0 {
-		return ErrRecovery
+	parent, err := privatePeerPath(parentPath, os.ModeDir|0700)
+	if err != nil {
+		guard.Close()
+		return nil, err
 	}
-	probe, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-	defer cancel()
-	c, err := (&net.Dialer{}).DialContext(probe, "unix", address)
-	if err == nil {
-		c.Close()
-		return ErrUnavailable
+	if _, err := os.Lstat(address); err == nil {
+		guard.Close()
+		if _, err := privatePeerPath(address, os.ModeSocket|0600); err != nil {
+			return nil, err
+		}
+		return nil, ErrUnavailable
+	} else if !errors.Is(err, os.ErrNotExist) {
+		guard.Close()
+		return nil, ErrRecovery
 	}
-	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, os.ErrNotExist) {
-		return nil
+	// External receivers do not share our internal lease. Bind without unlinking
+	// any existing socket, including an apparently stale one: a probe followed by
+	// unlink could remove a receiver that bound between those two operations.
+	l, err := net.ListenUnix("unix", &net.UnixAddr{Name: address, Net: "unix"})
+	if err != nil {
+		guard.Close()
+		return nil, ErrUnavailable
 	}
-	return ErrRecovery
+	l.SetUnlinkOnClose(false)
+	socket, err := os.Lstat(address)
+	if err != nil || socket.Mode()&os.ModeSocket == 0 || !ownedPeerPath(socket) {
+		l.Close()
+		guard.Close()
+		return nil, ErrRecovery
+	}
+	listener := &unixPeerListener{unixSessionListener: &unixSessionListener{listener: l}, guard: guard, address: address, parent: parent, socket: socket, temporary: parentPath != directory}
+	if err := os.Chmod(address, 0600); err != nil {
+		listener.Close()
+		return nil, ErrRecovery
+	}
+	nextParent, parentErr := privatePeerPath(parentPath, os.ModeDir|0700)
+	nextSocket, socketErr := privatePeerPath(address, os.ModeSocket|0600)
+	if parentErr != nil || socketErr != nil || !os.SameFile(parent, nextParent) || !os.SameFile(socket, nextSocket) {
+		listener.Close()
+		return nil, ErrRecovery
+	}
+	return listener, nil
 }

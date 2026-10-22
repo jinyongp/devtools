@@ -90,3 +90,124 @@ func TestRunnerDialValidatesActualEndpoint(t *testing.T) {
 		})
 	}
 }
+
+func TestRunnerListenerPreservesExternalEndpoint(t *testing.T) {
+	for _, condition := range []string{"live", "stale", "file", "symlink", "public parent", "public socket"} {
+		t.Run(condition, func(t *testing.T) {
+			root := privateTempDir(t)
+			const runner, instance = "01234567-89ab-4cde-8fab-0123456789ab", "01234567-89ab-4cde-8fab-0123456789ac"
+			address, err := PeerAddress(root, runner, instance)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parent := filepath.Dir(address)
+			if err := os.Mkdir(parent, 0700); err != nil {
+				t.Fatal(err)
+			}
+			listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: address, Net: "unix"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			listener.SetUnlinkOnClose(false)
+			t.Cleanup(func() {
+				listener.Close()
+				os.Remove(address)
+				os.Remove(address + ".original")
+				os.Remove(parent)
+			})
+			if err := os.Chmod(address, 0600); err != nil {
+				t.Fatal(err)
+			}
+			switch condition {
+			case "stale":
+				err = listener.Close()
+			case "file", "symlink":
+				if err = os.Rename(address, address+".original"); err == nil {
+					if condition == "file" {
+						err = os.WriteFile(address, nil, 0600)
+					} else {
+						err = os.Symlink(address+".original", address)
+					}
+				}
+			case "public parent":
+				err = os.Chmod(parent, 0755)
+			case "public socket":
+				err = os.Chmod(address, 0666)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			before, err := os.Lstat(address)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parentBefore, err := os.Lstat(parent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			competitor, err := ListenPeer(ctx, root, runner, instance)
+			if competitor != nil {
+				competitor.Close()
+			}
+			if err == nil {
+				t.Fatal("listener took over an existing endpoint")
+			}
+			after, err := os.Lstat(address)
+			if err != nil || !os.SameFile(before, after) || before.Mode() != after.Mode() {
+				t.Fatal("failed listener changed an existing endpoint", err)
+			}
+			parentAfter, err := os.Lstat(parent)
+			if err != nil || !os.SameFile(parentBefore, parentAfter) || parentBefore.Mode() != parentAfter.Mode() {
+				t.Fatal("failed listener changed an existing parent", err)
+			}
+		})
+	}
+}
+
+func TestRunnerListenerClosePreservesReplacement(t *testing.T) {
+	for _, replace := range []string{"socket", "parent"} {
+		t.Run(replace, func(t *testing.T) {
+			root := privateTempDir(t)
+			const runner, instance = "01234567-89ab-4cde-8fab-0123456789ab", "01234567-89ab-4cde-8fab-0123456789ac"
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			original, err := ListenPeer(ctx, root, runner, instance)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer original.Close()
+			address, _ := PeerAddress(root, runner, instance)
+			parent := filepath.Dir(address)
+			old := address
+			if replace == "parent" {
+				old = parent
+			}
+			if err := os.Rename(old, filepath.Join(root, "old-"+replace)); err != nil {
+				t.Fatal(err)
+			}
+			if replace == "parent" {
+				if err := os.Mkdir(parent, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			replacement, err := net.ListenUnix("unix", &net.UnixAddr{Name: address, Net: "unix"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { replacement.Close(); os.Remove(parent) }()
+			if err := os.Chmod(address, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := original.Close(); err != nil {
+				t.Fatal(err)
+			}
+			connection, err := DialPeer(ctx, root, runner, instance)
+			if err != nil {
+				t.Fatal("old listener cleanup removed its replacement", err)
+			}
+			connection.Close()
+		})
+	}
+}

@@ -177,7 +177,7 @@ def wait_public(origin, ca=None, auth=None, connect_host=None):
             if last == 200:
                 return {"status": 200, "elapsed_ms": round((time.monotonic() - started) * 1000)}
         except (OSError, http.client.HTTPException) as error:
-            last = type(error).__name__
+            last = f"{type(error).__name__}: {redact(error)}"
         time.sleep(0.1)
     raise RuntimeError(f"verified public HTTP readiness failed: {last}")
 

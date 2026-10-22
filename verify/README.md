@@ -116,6 +116,8 @@ GitHub token과 OIDC token 발급 환경 변수를 전달하지 않는다. peer�
 runner는 Tailscale Action의 종료 처리에서 로그아웃한다. 일회용 runner의 현재 사용자만
 Tailscale operator로 지정해 Serve LocalAPI를 변경할 수 있게 한다. Action은 `up`에
 `--accept-routes`를 이미 넣으므로 중복 전달하지 않고, 접속 직후 `set --accept-routes=false`로 끈다.
+장치 신원은 기본 `--state=mem:`에 두되, HTTPS 인증서 저장에 필요한 `--statedir`는
+일회용 runner의 임시 경로로 지정한다. 이 경로의 인증서·개인 키는 artifact에 포함하지 않는다.
 
 ### 플랫폼별 브라우저와 evidence
 

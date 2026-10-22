@@ -354,7 +354,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native runner Chromium is unavailable' }
           $env:DEVTOOLS_BROWSER_EXECUTABLE = (& node --input-type=module -e 'import {chromium} from "@playwright/test"; process.stdout.write(chromium.executablePath())').Trim()
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $env:DEVTOOLS_BROWSER_EXECUTABLE)) { throw 'Cannot locate actual Chromium image' }
-          & corepack pnpm exec playwright test scripts/dashboard-browser.spec.mjs --workers=1 --reporter=line | Tee-Object -FilePath windows-browser.log
+          & corepack pnpm exec playwright test scripts/dashboard-browser.spec.mjs --workers=1 --reporter=line --trace=retain-on-failure --output=windows-browser-results | Tee-Object -FilePath windows-browser.log
           if ($LASTEXITCODE -ne 0) { throw 'Packaged native dashboard browser journey failed' }
 
       - name: Test public native CLI and PowerShell completion
@@ -401,6 +401,7 @@ jobs:
             windows-legacy-vault.json
             windows-browser-results.json
             windows-browser.log
+            windows-browser-results/
             handle-cleanup-mutant.log
             storage-recovery-results.jsonl
             windows-record-publication-results.jsonl

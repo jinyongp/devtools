@@ -93,7 +93,12 @@ test("dashboard login, value mutation and navigation survive reload", async ({ p
     await page.getByRole("button",{name:"Preview import",exact:true}).click();
     await expect(page.locator("#editor-fields")).toContainText("Bundle: frontend");
     await page.getByLabel("PUBLIC_URL — Store as public variable",{exact:true}).check();
+    const importResponse = page.waitForResponse(response => response.url().endsWith("/api/actions") &&
+      response.request().method() === "POST" && response.request().postDataJSON()?.change?.import?.preview === false);
     await page.getByRole("button",{name:"Import values",exact:true}).click();
+    const imported = await (await importResponse).json();
+    expect(imported.ok, JSON.stringify(imported.error || {})).toBe(true);
+    await expect(page.locator("#editor")).not.toBeVisible();
     await expect(page.getByRole("button",{name:"Edit PUBLIC_URL",exact:true})).toHaveText("https://bundle.invalid");
     expect(JSON.parse(runCLI(["bundle","list"],project,env)).data.items[0].value_ids).toHaveLength(2);
     await page.getByRole("button", { name: "Rename bundle: frontend", exact: true }).click();

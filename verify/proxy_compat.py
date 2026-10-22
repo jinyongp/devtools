@@ -7,7 +7,7 @@ The harness never modifies the developer host's DNS or certificate stores.
 
 import argparse
 import base64
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 import hashlib
 import http.client
@@ -221,6 +221,28 @@ def windows_path(path):
     return command(["wslpath", "-w", str(path)]).strip()
 
 
+@contextmanager
+def loopback_mapping(hosts, hostname):
+    if not re.fullmatch(r"[A-Za-z0-9.-]+", hostname):
+        raise ValueError("invalid fixture hostname")
+    before = hosts.read_bytes()
+    name = hostname.lower().encode("ascii")
+    for line in before.splitlines():
+        words = line.split(b"#", 1)[0].lower().split()
+        if name in words[1:]:
+            raise RuntimeError("fixture hostname already has an unowned hosts entry")
+    owned = b"\r\n127.0.0.1 " + name + b" # devtools-proxy-" + uuid.uuid4().hex.encode("ascii") + b"\r\n"
+    with hosts.open("ab") as stream:
+        stream.write(owned)
+    try:
+        yield
+    finally:
+        current = hosts.read_bytes()
+        if current.count(owned) != 1:
+            raise RuntimeError("owned fixture hosts entry changed; manual recovery required")
+        hosts.write_bytes(current.replace(owned, b"", 1))
+
+
 def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
     artifacts.mkdir(parents=True)
     result = {"target": target, "case": case, "scheme": scheme, "policy": policy, "browser": browser, "provider": options.provider, "auth_mode": options.auth_mode}
@@ -382,9 +404,14 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
                     if shared and (artifacts / "ready-to-stop").exists() and shared["id"] in exposures:
                         if case in {"ws", "socketio"} and policy == "preserve":
                             result["rejected_origins"] = rejected_origins(origin, ca, case, auth, connect_host)
+                        result["sibling_before_stop"] = public_status(sibling["url"], ca, auth, connect_host)
+                        if result["sibling_before_stop"] != 200:
+                            raise AssertionError("sibling ingress was already unhealthy before stop")
                         stopped = api("expose", "stop", shared["id"], mutate=True)["item"]
                         exposures.remove(shared["id"])
-                        if stopped["state"] != "stopped" or public_status(sibling["url"], ca, auth, connect_host) != 200:
+                        result["selective_stop_states"] = {item["id"]: item["state"] for item in api("expose", "list")["items"]}
+                        result["sibling_after_stop"] = public_status(sibling["url"], ca, auth, connect_host)
+                        if stopped["state"] != "stopped" or result["sibling_after_stop"] != 200:
                             raise AssertionError("stop did not preserve the sibling ingress")
                         result["stop_and_sibling"] = True
                         (artifacts / "stop-done").write_text("stopped", encoding="utf8")
@@ -520,13 +547,17 @@ def main():
     targets = [("candidate", options.binary)]
     if options.baseline:
         targets.insert(0, ("baseline", options.baseline.resolve(strict=True)))
-    for target, binary in targets:
-        for case in options.case or CASES:
-            for scheme in options.scheme or (["https"] if options.provider in {"cloudflared", "tailscale"} else ["http", "https"]):
-                for policy in (["rewrite"] if target == "baseline" else options.policy or ["rewrite", "preserve"]):
-                    for browser in options.browser or ["chromium"]:
-                        destination = run / f"{target}-{case}-{scheme}-{policy}-{browser}"
-                        results.append(run_case(options, binary, target, case, scheme, policy, browser, destination))
+    # Chromium handles *.localhost itself; Windows' system resolver used by the
+    # independent HTTP/RPC clients needs an explicit disposable hosts mapping.
+    dns = loopback_mapping(Path(os.environ["SystemRoot"]) / "System32/drivers/etc/hosts", options.hostname) if options.disposable_trust and os.name == "nt" else nullcontext()
+    with dns:
+        for target, binary in targets:
+            for case in options.case or CASES:
+                for scheme in options.scheme or (["https"] if options.provider in {"cloudflared", "tailscale"} else ["http", "https"]):
+                    for policy in (["rewrite"] if target == "baseline" else options.policy or ["rewrite", "preserve"]):
+                        for browser in options.browser or ["chromium"]:
+                            destination = run / f"{target}-{case}-{scheme}-{policy}-{browser}"
+                            results.append(run_case(options, binary, target, case, scheme, policy, browser, destination))
     (run / "summary.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf8")
     print(f"Evidence: {run}", flush=True)
     return int(any(result["status"] != "pass" for result in results))

@@ -10,7 +10,7 @@ import tempfile
 import urllib.request
 import uuid
 
-from proxy_compat import redact
+from proxy_compat import loopback_mapping, redact
 
 
 def download(url, destination, expected):
@@ -77,7 +77,10 @@ def main():
         command = ["/usr/bin/env", "HOME=/home/dvtfixture", "PATH=/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "DEVTOOLS_DISPOSABLE_HOST=1", "/bin/bash", "-c",
                    "cd /home/dvtfixture/repository && corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts && python3 -B verify/proxy_compat.py \"$@\"", "proxy-compat",
                    "--binary", "/usr/local/bin/devtools", "--case", "nuxt", "--case", "ws", "--scheme", "https", "--policy", "preserve", "--hostname", "wsl-compat.localhost", "--client-mode", "windows-peer", "--windows-node", translate(windows_node), "--windows-runner", translate(repository / "verify/proxy_compat_browser.mjs"), "--peer-packages", translate(repository / "verify/fixtures/proxy-compat/node_modules"), "--disposable-trust", "--artifacts", translate(artifacts)]
-        output = linux(*command, user="dvtfixture", timeout=600)
+        hosts = Path(os.environ["SystemRoot"]) / "System32/drivers/etc/hosts"
+        with loopback_mapping(hosts, "wsl-compat.localhost"):
+            output = linux(*command, user="dvtfixture", timeout=600)
+        report["hosts_mapping_restored"] = True
         (artifacts / "wsl-run.log").write_text(output, encoding="utf8")
         report["checks_passed"] = True
     except Exception as error:

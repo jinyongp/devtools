@@ -53,6 +53,8 @@ Serve 설정의 전후 일치와 소유 handler 정리를 검사한다. 모의 L
 tailnet의 HTTPS/Serve 권한이 필요하다. 비밀이 없는 job은 전제 부재로 실패하며 pass/skip으로 바꾸지 않는다.
 
 Windows는 disposable Actions에서 `--client-mode local --disposable-trust`로 실행한다.
+해당 runner의 hosts에 테스트 hostname의 loopback 항목만 추가하고, 실패 시에도 소유 항목을
+제거한다. Chromium과 별도로 동작하는 HTTP/RPC 클라이언트도 같은 공개 이름을 사용한다.
 관리자 권한의 일회용 runner에서 테스트 CA만 LocalMachine Root에 넣고 정확한 thumbprint로
 제거한다. CurrentUser Root의 사용자 확인 창은 별도 수동 검증 항목이다. 일반 개발 호스트에서
 자동 신뢰 등록하지 않는다. `wsl_proxy_compat.py`는 고유 WSL2 distro에서 Linux CLI·서버를 실행하고

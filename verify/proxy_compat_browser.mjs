@@ -125,11 +125,14 @@ try {
   while (Date.now() < readinessDeadline) {
     try {
       const response = await context.request.get(origin.href, { timeout: 5_000 });
+      report.ingressReadiness = { status: response.status() };
       if (response.status() === 200) { ready = true; break; }
-    } catch { /* DNS, edge startup and TLS are all bounded by this readiness gate. */ }
+    } catch (error) {
+      report.ingressReadiness = { error: redact(error.message.split('\n')[0]) };
+    }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  assert(ready, 'public HTTP ingress did not become ready with verified TLS');
+  assert(ready, `public HTTP ingress did not become ready with verified TLS: ${JSON.stringify(report.ingressReadiness)}`);
   traceEvent('public-ready');
   page = await context.newPage();
   page.setDefaultTimeout(timeout);

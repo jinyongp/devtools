@@ -2,8 +2,9 @@
 import unittest
 from pathlib import Path
 import shutil
+import tempfile
 from unittest.mock import patch
-from proxy_compat import owned_scratch, redact
+from proxy_compat import loopback_mapping, owned_scratch, redact
 
 
 class EvidenceRedaction(unittest.TestCase):
@@ -26,6 +27,24 @@ class EvidenceRedaction(unittest.TestCase):
             self.assertTrue(root.is_dir())
         finally:
             shutil.rmtree(root)
+
+    def test_disposable_dns_cleanup_preserves_unowned_bytes_after_failure(self):
+        with tempfile.TemporaryDirectory() as root:
+            hosts = Path(root) / "hosts"
+            before = b"# existing\r\n127.0.0.1 existing.test"
+            sibling = b"\r\n192.0.2.1 sibling.test\r\n"
+            hosts.write_bytes(before)
+            with self.assertRaisesRegex(RuntimeError, "browser failed"):
+                with loopback_mapping(hosts, "compat.localhost"):
+                    self.assertIn(b"127.0.0.1 compat.localhost", hosts.read_bytes())
+                    with hosts.open("ab") as stream:
+                        stream.write(sibling)
+                    raise RuntimeError("browser failed")
+            self.assertEqual(hosts.read_bytes(), before + sibling)
+            with self.assertRaisesRegex(RuntimeError, "unowned hosts entry"):
+                with loopback_mapping(hosts, "existing.test"):
+                    self.fail("an existing hostname must not be taken over")
+            self.assertEqual(hosts.read_bytes(), before + sibling)
 
 
 if __name__ == "__main__":

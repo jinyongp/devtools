@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:devtools:config-contract:protocol-10",
   "title": "Project configuration, editing and diagnostic contract (protocol 10)",
-  "description": "Protocol-10 configuration, editing and diagnostic structures. Transport requires strict Unicode and signed-64-bit decimal integer tokens. x-maxUtf8Bytes is an asserted UTF-8 byte constraint. Linked normative contracts define references, state and filesystem checks.",
+  "description": "Protocol-10 configuration, editing and diagnostic structures. Transport requires strict Unicode and signed-64-bit decimal integer tokens. x-maxUtf8Bytes asserts a UTF-8 byte constraint; x-npmRange asserts bounded nonempty npm SemVer range syntax. Linked normative contracts define references, state and filesystem checks.",
   "$ref": "#/$defs/Project",
   "$defs": {
     "Name": {
@@ -57,10 +57,13 @@
     },
     "Version": {
       "type": "string",
+      "description": "npm SemVer range. Partial versions select a release family; three-component versions are exact. Empty requirements are invalid; omit version for presence-only inspection.",
+      "minLength": 1,
       "maxLength": 128,
-      "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:-[0-9A-Za-z.-]+)?$",
+      "x-npmRange": true,
+      "pattern": "[^ ]",
       "not": {
-        "pattern": "[^0-9A-Za-z.\\-]"
+        "pattern": "[^0-9A-Za-z.*+<>=~^| \\-]"
       }
     },
     "Tool": {

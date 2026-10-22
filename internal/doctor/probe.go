@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/versionrange"
 	"os"
 	"regexp"
 	"strings"
@@ -28,9 +29,8 @@ func WithCache(ctx context.Context) context.Context {
 	return context.WithValue(ctx, cacheKey{}, &Cache{})
 }
 
-var versions = regexp.MustCompile(`[0-9]+(?:\.[0-9]+)+(?:[-+_][0-9A-Za-z.+_-]+)?`)
+var versions = regexp.MustCompile(`[0-9]+(?:\.[0-9]+)+[0-9A-Za-z.+_-]*`)
 
-func matchesVersion(output, expected string) bool { return versions.FindString(output) == expected }
 func probe(ctx context.Context, path string, args []string, dir string, environment []string) (string, string) {
 	info, _ := os.Stat(path)
 	raw, _ := json.Marshal([]any{args, dir, environment})
@@ -51,7 +51,7 @@ func probe(ctx context.Context, path string, args []string, dir string, environm
 	output := &limitedOutput{}
 	code, e := process.Execute(bounded, append([]string{path}, args...), dir, environment, nil, output, output)
 	reason, observed := "version_token", versions.FindString(output.data.String())
-	if len(observed) > 128 {
+	if !versionrange.Observed(observed) {
 		observed = ""
 	}
 	switch {

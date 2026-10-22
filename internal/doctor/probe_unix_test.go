@@ -69,3 +69,17 @@ func TestProbeUsesBoundSearchEnvironment(t *testing.T) {
 		t.Fatal("probe used the parent instead of the bound search environment", checks)
 	}
 }
+
+func TestProbeDoesNotTruncateInvalidVersionSuffix(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tool")
+	for _, output := range []string{"1.2.3foo", "1.2.3.4", "1.2.3_custom", "1.2.3-01", "1.2.3foo 2.0.0"} {
+		if err := os.WriteFile(path, []byte("#!/bin/sh\nprintf '%s\\n' '"+output+"'\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		reason, observed := probe(context.Background(), path, nil, dir, nil)
+		if reason != "version_unreadable" || observed != "" {
+			t.Fatalf("%q: %s %q", output, reason, observed)
+		}
+	}
+}

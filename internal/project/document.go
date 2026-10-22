@@ -110,8 +110,30 @@ func ParseDocument(data []byte, path, root string) (*Document, *protocol.Error) 
 	if registry {
 		d.Format = "registry"
 	}
-	if !legacy {
-		issues := configcontract.Validate("Project", d.Raw)
+	{
+		var issues []configcontract.Issue
+		if !legacy {
+			issues = configcontract.Validate("Project", d.Raw)
+		} else {
+			// Legacy structure remains readable, but its tool fields follow the
+			// same contract (including explicit empty ranges) as registry tools.
+			validateTools := func(raw any, path []string) {
+				req, _ := raw.(map[string]any)
+				tools, _ := req["tools"].(map[string]any)
+				for name, tool := range tools {
+					for _, issue := range configcontract.Validate("Tool", tool) {
+						issue.Path = append(append(append([]string{}, path...), "tools", name), issue.Path...)
+						issues = append(issues, issue)
+					}
+				}
+			}
+			validateTools(d.Raw["requirements"], []string{"requirements"})
+			commands, _ := d.Raw["commands"].(map[string]any)
+			for name, raw := range commands {
+				command, _ := raw.(map[string]any)
+				validateTools(command["requirements"], []string{"commands", name, "requirements"})
+			}
+		}
 		if len(issues) > 0 {
 			sort.SliceStable(issues, func(i, j int) bool {
 				a, b := d.Source(issues[i].Path), d.Source(issues[j].Path)

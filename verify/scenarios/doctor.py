@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import uuid
 
 home = Path.home()
 env = dict(os.environ, PATH=str(home / ".local/bin") + ":" + os.environ["PATH"])
@@ -79,12 +80,41 @@ assert not api("doctor", "plain")["data"]["ready"]
 api("run", "plain", expected=3)
 assert not api("doctor", "check", "--env", "missing")["data"]["ready"]
 
+# Partial, wildcard, caret, tilde, AND and OR requirements share preflight rules.
+for requirement in ("1", "1.2", "1.x", "^1.2.0", "~1.2.3", ">=1 <2", "1 || 3"):
+    (project / "devtools.toml").write_text(config.replace('version = "1.2.3"', f'version = "{requirement}"'))
+    report = api("doctor", "check")["data"]
+    assert report["ready"], (requirement, report)
+    assert api("doctor", "check", "--mode", "managed")["data"]["ready"]
+    execute(["devtools", "run", "check"])
+(project / "devtools.toml").write_text(config)
+
 # Exact matching, missing executables, and corrupted storage stay actionable.
 (project / "marker").unlink()
 tool.write_text(f"#!/bin/sh\necho 'fixture 1.2.30 {canary}'\n")
 assert not api("doctor", "check")["data"]["ready"]
 api("run", "check", expected=3)
+api("process", "start", "check", "--request-id", str(uuid.uuid4()), expected=3)
 assert not (project / "marker").exists()
+
+# All aliases refer to one file. Every pair overlaps, but all three do not.
+alias_config = '''profile = "fixture"
+[tools]
+a = { executable = "./fixture-tool", version = "1 || 2" }
+b = { executable = "././fixture-tool", version = "1 || 3" }
+c = { executable = "./fixture-tool", version = "2 || 3" }
+[commands.ranges]
+exec = ["true"]
+tools = ["a", "b", "c"]
+'''
+(project / "devtools.toml").write_text(alias_config)
+report = api("doctor", "ranges")["data"]
+checks = [c for c in report["commands"][0]["checks"] if c["id"].startswith("tool:")]
+assert len(checks) == 3 and all(c["reason"] == "version_conflict" for c in checks), report
+(project / "devtools.toml").write_text(alias_config.replace('version = "2 || 3"', 'version = "1 || 3"'))
+assert api("doctor", "ranges")["data"]["ready"]
+execute(["devtools", "run", "ranges"])
+(project / "devtools.toml").write_text(config)
 tool.unlink()
 assert not api("doctor")["data"]["ready"]
 profile_file = next((Path(paths["data"]) / "profiles").glob("p1-*.json"))
@@ -92,4 +122,4 @@ profile_file.write_text(canary)
 report = api("doctor")["data"]
 assert not report["ready"]
 assert any(c["id"] == "value_inputs" and c["status"] == "fail" for row in report['commands'] for c in row['checks'])
-print("Installed doctor metadata, exact versions, safe diagnostics, and run preflight verified")
+print("Installed doctor metadata, npm version ranges, complete alias intersections, safe diagnostics, and run preflight verified")

@@ -17,6 +17,7 @@ import (
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
+	"github.com/jinyongp/devtools/internal/versionrange"
 )
 
 type Check struct {
@@ -235,7 +236,7 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 					facts["observed_version"] = observed
 				}
 				if reason == "version_token" {
-					if observed == t.Version {
+					if versionrange.Matches(t.Version, observed) {
 						reason = "version_match"
 					} else {
 						reason = "version_mismatch"
@@ -256,27 +257,11 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 		checks[i].Facts = facts
 		if identity != nil && t.Version != "" {
 			args, _ := json.Marshal(t.VersionArgs)
-			for _, previous := range lookups {
-				if previous.version != t.Version && previous.args == string(args) && os.SameFile(previous.info, identity) {
-					checks[previous.check].Status = "fail"
-					checks[previous.check].Reason = "version_conflict"
-					checks[previous.check].Message = "The same executable and probe arguments have conflicting exact version requirements."
-					checks[previous.check].Remedies = []protocol.Remedy{{Effect: "config_write", Argv: []string{}, RequiredInputs: []string{}, Message: "Reconcile the exact versions declared for this executable."}}
-					checks[i].Status = "fail"
-					checks[i].Reason = "version_conflict"
-					checks[i].Message = "The same executable and probe arguments have conflicting exact version requirements."
-					status = "fail"
-				}
-			}
 			lookups = append(lookups, lookedUp{info: identity, args: string(args), version: t.Version, check: i})
 		}
 		if status != "pass" {
-			checks[i].Remedies = []protocol.Remedy{Remedy("Make the declared executable and exact version available in the selected environment; verify version_args.", nil)}
+			checks[i].Remedies = []protocol.Remedy{Remedy("Make the declared executable available at a version satisfying the requirement; verify version_args.", nil)}
 			checks[i].Remedies[0].Effect = "system_write"
-			if checks[i].Reason == "version_conflict" {
-				checks[i].Remedies[0].Effect = "config_write"
-				checks[i].Remedies[0].Message = "Reconcile the exact versions declared for this executable."
-			}
 		}
 		if in.Source != nil {
 			path := []string{"tools", name}
@@ -296,6 +281,31 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 	sort.Strings(names)
 	for _, name := range names {
 		tool("tool:"+name, name, in.Requirements.Tools[name])
+	}
+	// Group by resolved file identity, not executable spelling. Check the whole
+	// group: pairwise overlap does not imply a common version for three ranges.
+	grouped := make([]bool, len(lookups))
+	for i, first := range lookups {
+		if grouped[i] {
+			continue
+		}
+		members := []int{}
+		requirements := []string{}
+		for j, item := range lookups {
+			if !grouped[j] && first.args == item.args && os.SameFile(first.info, item.info) {
+				grouped[j] = true
+				members = append(members, item.check)
+				requirements = append(requirements, item.version)
+			}
+		}
+		if !versionrange.Intersects(requirements...) {
+			for _, index := range members {
+				checks[index].Status = "fail"
+				checks[index].Reason = "version_conflict"
+				checks[index].Message = "The same executable and probe arguments have version requirements with no common version."
+				checks[index].Remedies = []protocol.Remedy{{Effect: "config_write", Argv: []string{}, RequiredInputs: []string{}, Message: "Reconcile the version ranges declared for this executable."}}
+			}
+		}
 	}
 	if in.Executable != "" {
 		tool("command_executable", in.Executable, project.Tool{Executable: in.Executable})

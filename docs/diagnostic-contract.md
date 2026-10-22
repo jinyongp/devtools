@@ -162,23 +162,28 @@ public/secret 이름 충돌과 Windows의 대소문자 환경 이름 충돌은 �
 ### 도구 검사
 
 각 probe의 제한은 기존 **3s, 합친 stdout/stderr 16 KiB**다.
-버전은 기존 첫 version token의 정확한 비교를 유지한다. 표시하는 token은 허용된 문법과 128자 범위로 제한한다.
+출력의 첫 version token을 npm SemVer 범위와 비교한다. token은 128 byte 이내의
+숫자 major.minor[.patch]와 SemVer prerelease/build metadata여야 한다. 두 구성요소 출력은
+비교할 때 patch 0으로 정규화하고, 진단에는 원래 관측 token을 유지한다. 임의 숫자 추출·선행 0·
+네 번째 구성요소·비SemVer suffix를 유효한 버전으로 보정하지 않는다.
 
 | 조건 | status / reason |
 | --- | --- |
 | 확정한 환경에서 executable 없음 | fail / not_found |
 | 존재하지만 권한·실행 형식 때문에 사용할 수 없음 | fail / not_executable 또는 permission_denied |
 | 버전 제약 없음, executable 있음 | pass / present |
-| 버전 일치 | pass / version_match |
-| 다른 token | fail / version_mismatch |
-| token 없음 | fail / version_unreadable |
+| 관측 버전이 범위를 만족 | pass / version_match |
+| 유효한 관측 버전이 범위를 만족하지 않음 | fail / version_mismatch |
+| token 없음 또는 잘못된 SemVer token | fail / version_unreadable |
+| 동일 파일 identity·probe argv의 전체 조건 교집합이 빔 | fail / version_conflict |
 | probe 비정상 종료·spawn 실패 | fail / probe_failed |
 | probe의 3s 초과 | fail / timeout |
 | 출력 상한 초과 | fail / output_limit |
 | 환경·인증·상위 deadline 때문에 검사 불가 | unknown / 구체적 reason |
 | 해당 mode에서 요구하지 않는 검사 | not_applicable, required=false |
 
-모든 결과는 도구 이름과 선언 executable을 제공한다. 버전 제약이 있으면 조기 검색 실패에도 expected_version을 보존한다.
+모든 결과는 도구 이름과 선언 executable을 제공한다. 버전 제약이 있으면 조기 검색 실패에도 expected_version에 원래 범위를 보존한다.
+교집합이 있지만 현재 관측 버전이 그 밖인 경우는 선언 충돌과 구분한다. 다른 명령이나 probe argv의 조건은 섞지 않는다.
 조회한 private PATH와 실제 절대 executable 경로를 자동 오류에 덤프하지 않는다.
 
 검사는 이름순으로 실행한다. 동일 실행 내에서만 같은 executable identity·size/mtime·probe argv·cwd·

@@ -12,6 +12,8 @@ import (
 	"sync"
 	"unicode/utf8"
 
+	"github.com/jinyongp/devtools/internal/versionrange"
+
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 	"golang.org/x/text/message"
@@ -261,10 +263,28 @@ var compiled struct {
 	err         error
 }
 
+type npmRange struct{}
+
+func (npmRange) Validate(ctx *jsonschema.ValidatorContext, v any) {
+	if s, ok := v.(string); ok && !versionrange.Valid(s) {
+		ctx.AddError(npmRange{})
+	}
+}
+func (npmRange) KeywordPath() []string { return []string{"x-npmRange"} }
+func (npmRange) LocalizedString(p *message.Printer) string {
+	return p.Sprintf("Expected a nonempty npm SemVer range of at most 128 bytes")
+}
+
 func compile() {
 	c := jsonschema.NewCompiler()
 	c.UseLoader(offlineLoader{})
 	c.AssertVocabs()
+	c.RegisterVocabulary(&jsonschema.Vocabulary{URL: "urn:devtools:npm-range", Compile: func(_ *jsonschema.CompilerContext, obj map[string]any) (jsonschema.SchemaExt, error) {
+		if obj["x-npmRange"] == true {
+			return npmRange{}, nil
+		}
+		return nil, nil
+	}})
 	c.RegisterVocabulary(&jsonschema.Vocabulary{URL: "urn:devtools:utf8-bytes", Compile: func(_ *jsonschema.CompilerContext, obj map[string]any) (jsonschema.SchemaExt, error) {
 		if n, ok := obj["x-maxUtf8Bytes"].(float64); ok {
 			return byteLimit(int(n)), nil

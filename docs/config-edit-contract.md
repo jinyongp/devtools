@@ -5,6 +5,12 @@
 이 문서는 protocol 10 소스의 설정 편집 계약이다. 사용 순서는 [설정 편집 가이드](configuration.md)를 따른다.
 본문의 입력·응답 이름은 [schema의 $defs](../internal/configcontract/schema.json)를 가리킨다.
 JSON envelope는 기존처럼 성공을 stdout, 실패를 stderr에 한 개씩 반환한다.
+범위 지원 소스의 `Version`은 `x-npmRange: true`를 가진다. 런타임은 이 확장 keyword로
+128 byte 이내의 비어 있지 않은 npm SemVer 범위를 검증한다. 일반 JSON Schema 검사기는
+이 keyword를 무시할 수 있으므로 문자/길이 검사만으로 범위 문법이 검증됐다고 간주하지 않는다.
+Tool·ToolPatch·TOML 로드는 같은 범위 검사기를 사용한다. 잘못된 문법이나 전체 조건의 빈 교집합은
+기존 편집 원자성에 따라 원본을 보존한다. 저장·fmt·구조 migrate는 범위 문자열을 유지한다.
+버전 의미 변경과 정확 고정 전환은 [설정 가이드](configuration.md#기존-버전-설정을-옮길-때)를 따른다.
 
 ## 명령과 옵션
 

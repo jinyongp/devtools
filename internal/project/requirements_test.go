@@ -49,7 +49,7 @@ version_args=["version"]
 }
 func TestInvalidRequirements(t *testing.T) {
 	for _, body := range []string{`[requirements.tools.go]
-version="^1.27.1"`, `[requirements]
+version="^no-version"`, `[requirements]
 vars=["TOKEN"]
 secs=["TOKEN"]`, `[requirements.tools.go]
 version_args=["version"]`, `[requirements]

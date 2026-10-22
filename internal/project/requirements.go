@@ -4,9 +4,11 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/jinyongp/devtools/internal/versionrange"
 )
 
-// Requirements describe presence and exact-version prerequisites for a project.
+// Requirements describe presence and npm SemVer prerequisites for a project.
 type Requirements struct {
 	Tools map[string]Tool `toml:"tools,omitempty" json:"tools"`
 	Vars  []string        `toml:"vars,omitempty" json:"vars"`
@@ -30,13 +32,12 @@ func (t Tool) WithDefaults(name string) Tool {
 	return t
 }
 
-var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[0-9A-Za-z.-]+)?$`)
 var requiredKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func (r Requirements) Empty() bool { return len(r.Tools)+len(r.Vars)+len(r.Secs) == 0 }
 func (r Requirements) Valid() bool {
 	for name, t := range r.Tools {
-		if !ValidProfile(name) || strings.ContainsRune(t.Executable, 0) || t.Version != "" && !versionPattern.MatchString(t.Version) || len(t.Version) > 128 || len(t.VersionArgs) > 32 || t.Version == "" && len(t.VersionArgs) > 0 {
+		if !ValidProfile(name) || strings.ContainsRune(t.Executable, 0) || t.Version != "" && !versionrange.Valid(t.Version) || len(t.VersionArgs) > 32 || t.Version == "" && len(t.VersionArgs) > 0 {
 			return false
 		}
 		for _, arg := range t.VersionArgs {

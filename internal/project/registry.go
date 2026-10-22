@@ -8,6 +8,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/configcontract"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/versionrange"
 )
 
 func registryIssue(reason string, path []string, message string) map[string]any {
@@ -66,19 +67,23 @@ func resolveRegistry(c *Config) *protocol.Error {
 				issues = append(issues, registryIssue("kind_conflict", path, fmt.Sprintf("Required key %q is selected as both a variable and a secret.", key)))
 			}
 		}
-		probes := map[string]string{}
+		probes := map[string][]string{}
+		executables := map[string]string{}
 		for _, key := range sortedKeys(effective.Tools) {
 			tool := effective.Tools[key].WithDefaults(key)
 			if tool.Version == "" {
 				continue
 			}
 			identity := tool.Executable + "\x00" + strings.Join(tool.VersionArgs, "\x00")
-			if version, ok := probes[identity]; ok && version != tool.Version {
-				issue := registryIssue("version_conflict", path, fmt.Sprintf("Executable %q has conflicting exact versions for the same version probe.", tool.Executable))
-				issue["facts"] = map[string]any{"executable": tool.Executable, "allowed": []string{version, tool.Version}}
+			probes[identity] = append(probes[identity], tool.Version)
+			executables[identity] = tool.Executable
+		}
+		for _, identity := range sortedKeys(probes) {
+			if !versionrange.Intersects(probes[identity]...) {
+				issue := registryIssue("version_conflict", path, fmt.Sprintf("Executable %q has version requirements with no common version for the same probe.", executables[identity]))
+				issue["facts"] = map[string]any{"executable": executables[identity], "allowed": probes[identity]}
 				issues = append(issues, issue)
 			}
-			probes[identity] = tool.Version
 		}
 		cmd.Requirements = effective
 		c.Commands[name] = cmd

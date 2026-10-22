@@ -21,6 +21,23 @@ Use `config migrate` preview and its revision/apply_digest for explicit conversi
 without running tools or reading stored values. Preservation failures require a
 reviewed edit; do not bypass the editor's source or permission checks.
 
+Discover range support from `config schema`: `$defs.Version` declares
+`x-npmRange: true` on supporting builds. Older 0.30.1 builds compare exact version
+strings. Supported requirements follow npm SemVer: `26`/`26.x`/`26.*` select a
+major family, `26.12`/`26.12.*` select a minor family, and `26.12.3` is exact.
+Caret, tilde, comparisons joined by spaces, hyphen ranges and `||` use npm's
+prerelease and 0.x rules; build metadata does not affect precedence. Empty or
+control-containing requirements are invalid; `*` probes any stable version,
+while omission only checks executable presence. Conditions are at most 128 bytes.
+Two-component observed output is compared with patch zero; diagnostics keep the
+raw token. Multiple requirements for the same executable and probe argv must
+have a common version across the complete set, including resolved file aliases.
+Installing and switching tools remains the external version manager's job.
+The old exact meaning of `26.12` is intentionally replaced. For exact pins,
+inspect the actual release and choose a full version; do not blindly append `.0`.
+`config migrate` converts structure, not the old version meaning. Do not add a
+legacy flag or a top-level config version to preserve the previous interpretation.
+
 Create an env with `env create NAME` before selecting it. Without --env, value
 operations address common scope; with --env, reads merge common and env overrides
 while writes/unsets affect only that env. Removing an override reveals the common

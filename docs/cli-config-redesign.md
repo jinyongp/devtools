@@ -97,7 +97,7 @@ resource 이름과 JSON path를 마침표·콜론으로 다시 분할하지 않�
 `tools`의 각 값은 `Tool`이다. 허용 필드는 `executable`, `version`, `version_args`다.
 
 - executable 생략은 도구 이름을 사용한다. 명시할 때는 비어 있지 않은 NUL 없는 문자열이다.
-- version은 기존 정확한 버전 문법과 128자 상한을 유지한다. 범위·접두 wildcard는 받지 않는다.
+- version은 128 byte 이내의 npm SemVer 범위다. 부분 버전·wildcard·정확 버전·caret·tilde·비교 AND/OR·hyphen을 같은 의미로 해석한다. 빈 값·공백만 있는 값·제어문자는 거절한다. 자세한 예제와 기존 두 구성요소 값의 의미 변경은 [버전 조건](configuration.md#버전-조건-선택하기)을 따른다.
 - version이 있고 version_args가 없거나 빈 배열이면 `["--version"]`이다.
 - version이 없으면 빈 version_args만 허용하고 probe를 실행하지 않는다.
 - version_args는 최대 32개이며 각 인수는 UTF-8 기준 최대 4096 byte, NUL 없음이다.
@@ -168,7 +168,9 @@ tool_overrides.node = { version = "2.0.0" }
 이는 기존 Requirements.Merge의 전체 Tool 교체와 같은 의미다.
 CLI의 `tool.update`는 Tool 필드의 부분 수정이므로 override entry 교체와 구분한다.
 
-버전 충돌은 **동일한 명령 안에서 동일 executable·동일 effective version_args가 서로 다른 정확한 버전을 요구할 때**다.
+버전 충돌은 **동일한 명령 안에서 동일 executable·동일 effective version_args의 모든 조건을 동시에 만족하는 버전이 없을 때**다.
+문자열이 다른 조건도 교집합이 있으면 허용한다. 쌍별 겹침만 검사하지 않고 전체 교집합을 판정한다.
+예를 들어 `26 || 28`, `26 || 30`, `28 || 30`은 각 쌍은 겹치지만 전체 교집합은 비어 있다.
 다른 명령의 다른 버전은 허용한다. 다른 probe argv는 별개의 검사다.
 정적 검사는 같은 executable 표기를, doctor는 실제 해석한 파일 identity와 probe argv를 기준으로 검사한다.
 경로 alias·PATH 차이를 정적 검사에서 확정했다고 표시하지 않는다.

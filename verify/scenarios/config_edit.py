@@ -76,13 +76,37 @@ for body in ('{"version":"PRIVATE-CANARY","version":"1.2.3"}', '{"unexpected":"P
     assert failure["details"]["sources"]
 assert path.read_bytes() == saved
 
-path.write_text("profile='sample'\n# tools\n[requirements.tools.node] # runtime\nversion='1.2.3' # pinned\n[commands.check]\nexec=['node', 'check']\n")
+for requirement in ("26", "26.12", "^26.2.0", "~26.12.3", ">=26 <27", "26 || 28", "26.2 - 28.1"):
+    revision = api("config", "inspect")["revision"]
+    api("config", "tool", "update", "missing-runtime", "--revision", revision,
+        "--stdin", body={"version": requirement})
+    assert requirement in path.read_text()
+    api("config", "fmt")
+    assert requirement in path.read_text() and api("config", "check")["valid"]
+
+revision = api("config", "inspect")["revision"]
+saved = path.read_bytes()
+for requirement in ("", " ", "26 | 28", "^bad", "26.12.3_foo"):
+    api("config", "tool", "update", "missing-runtime", "--revision", revision,
+        "--stdin", body={"version": requirement}, expected=2)
+    assert path.read_bytes() == saved
+
+conflict = {"operations": [
+    {"op": "tool.update", "name": "missing-runtime", "value": {"version": "26"}},
+    {"op": "tool.add", "name": "alias", "value": {"executable": "missing-runtime", "version": "28"}},
+    {"op": "preset.update", "name": "web", "value": {"tools": ["missing-runtime", "alias"]}},
+]}
+api("config", "edit", "--revision", revision, "--stdin", body=conflict, expected=3)
+assert path.read_bytes() == saved and api("config", "inspect")["revision"] == revision
+
+path.write_text("profile='sample'\n# tools\n[requirements.tools.node] # runtime\nversion='1.2 || 3' # pinned\n[commands.check]\nexec=['node', 'check']\n")
 saved = path.read_bytes()
 migration = api("config", "migrate")
 assert migration["equivalent"] and path.read_bytes() == saved
 api("config", "migrate", "--revision", migration["revision"], "--apply", migration["apply_digest"])
 assert api("config", "inspect")["format"] == "registry"
 assert all(comment in path.read_text() for comment in ("# tools", "# runtime", "# pinned"))
+assert "1.2 || 3" in path.read_text()
 api("config", "fmt")
 formatted = path.read_bytes()
 assert not api("config", "fmt")["changed"] and path.read_bytes() == formatted

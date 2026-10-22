@@ -196,7 +196,10 @@ timeout = "3s"
             raw(native_command, env=native_env)
             raise AssertionError("Manual lock silently reopened the native provider")
         except CLIError as error:
-            assert error.code == "vault_locked"
+            assert error.code == "requirements_failed", error
+            assert error.details.get("phase") == "preflight", error
+            assert any(cause.get("code") == "vault_locked"
+                       for cause in error.details.get("causes", [])), error
         assert api("vault", "unlock", env=native_env)["item"]["state"] == "unlocked"
         assert raw(native_command, env=native_env) == "[REDACTED]"
         assert api("vault", "status", env=native_env)["item"]["backend"] == "dpapi"

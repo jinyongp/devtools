@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)][string]$BundleDirectory,
     [Parameter(Mandatory = $true)][string]$ProjectDirectory,
     [Parameter(Mandatory = $true)][ValidateSet('unrestricted', 'appcontainer')][string]$ExpectedIsolation,
+    [string]$Profile,
     [switch]$MatrixOnly,
     [switch]$ObserveOnly,
     [switch]$DiagnosticsOnly,
@@ -94,6 +95,7 @@ try {
     if (([int][bool]$ObserveOnly + [int][bool]$MatrixOnly + [int][bool]$DiagnosticsOnly) -gt 1) { throw 'Choose only one of ObserveOnly, MatrixOnly and DiagnosticsOnly.' }
     if ($CompareCandidate -and ($ObserveOnly -or $MatrixOnly -or $DiagnosticsOnly)) { throw 'CompareCandidate requires the original-query mode.' }
     if ($ObserveDataRoot -and -not $ObserveOnly) { throw 'ObserveDataRoot requires ObserveOnly.' }
+    if (-not ($ObserveOnly -or $MatrixOnly -or $DiagnosticsOnly) -and [string]::IsNullOrWhiteSpace($Profile)) { throw 'Query mode requires -Profile matching the project configuration.' }
     $manifest = Get-Content -LiteralPath (Join-Path $BundleDirectory 'build.json') -Raw | ConvertFrom-Json
     foreach ($artifact in $manifest.artifacts) {
         $actual = (Get-FileHash -LiteralPath (Join-Path $BundleDirectory $artifact.file) -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -136,7 +138,7 @@ try {
         $report.checks += $version
         if (-not $version.ok -or $version.data.commit -ne 'c14191b84475b583d9a480139157fb25ba71c713') { throw 'Legacy diagnostic source identity mismatch.' }
         $legacyFailed = $false
-        foreach ($command in @(@('task', 'workstream', 'list', '--profile', 'sample', '--limit', '5'), @('task', 'current', '--dir', '.'))) {
+        foreach ($command in @(@('task', 'workstream', 'list', '--profile', $Profile, '--limit', '5'), @('task', 'current', '--dir', '.'))) {
             $check = Invoke-Trace 'legacy-cli.exe' $command 'query'
             $report.checks += $check
             if (-not $check.ok) { $legacyFailed = $true; break }

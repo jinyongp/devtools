@@ -19,26 +19,29 @@ hashes and instrumented source hashes. Copy the four executables, `build.json`, 
 evidence there. `build.py` intentionally generates instrumentation in disposable
 exports; no trace code is compiled into normal product builds.
 
-## Capture the original failure
+## Capture a query failure
 
-In the execution environment that originally failed, run the script without
+In the execution environment where the query failed, run the script without
 elevation or environment changes. For example, after placing the toolkit in
 `C:\project\.tmp\storage-trace`:
 
 ```powershell
 $bundle = 'C:\project\.tmp\storage-trace'
 $code = Get-Content -LiteralPath "$bundle\run.ps1" -Raw
-& ([scriptblock]::Create($code)) -BundleDirectory $bundle -ProjectDirectory 'C:\project' -ExpectedIsolation unrestricted
+& ([scriptblock]::Create($code)) -BundleDirectory $bundle -ProjectDirectory 'C:\project' -Profile 'sample' -ExpectedIsolation unrestricted
 ```
 
 Use `appcontainer` only when testing that environment. The token check and Known
 Folder lookup do not open the storage or run `diagnostics`. Environment mismatch
 stops the run. An isolated-root override also stops it without changing that value.
 
-The instrumented v0.29.0 binary runs the two original task queries, in order,
+Replace `sample` with the profile selected by the project's `devtools.toml`.
+Query mode requires `-Profile`; observation, diagnostics and fixture modes do not.
+
+The instrumented v0.29.0 binary runs two task queries, in order,
 without preceding `diagnostics` or candidate queries. It stops after the first
 failure. The project must select the intended default profile for `task current`;
-the workstream query explicitly selects `sample`. Queries retain the original
+the workstream query explicitly selects the supplied `-Profile`. Queries retain the original
 CLI's normal lock creation and recovery behavior; this is not a zero-write probe.
 
 If comparison is wanted, add `-CompareCandidate`. On a legacy failure, the script

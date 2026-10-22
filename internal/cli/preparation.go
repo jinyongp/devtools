@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 
+	"github.com/jinyongp/devtools/internal/lifecycle"
 	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/project"
@@ -22,6 +23,88 @@ func preparationMode(options map[string]string) (network.PreparationMode, *proto
 		noProxy = &disabled
 	}
 	return network.PreparationOptions(proxy, noProxy)
+}
+
+// prepareLifecycle freezes selection before the lifecycle receipt is created.
+// Its parent journal holds no process or network locks during Manager.Apply.
+func (a *App) prepareLifecycle(ctx context.Context, manager *lifecycle.Manager, request *lifecycle.Request, mode network.PreparationMode, streams IO) *protocol.Error {
+	store := netops.Store{Data: manager.Data}
+	exists, intent, e := store.ExecutionKind(request.RequestID)
+	if e != nil {
+		return e
+	}
+	recorded, e := manager.HasRequest(request.RequestID)
+	if e != nil {
+		return e
+	}
+	if !intent && (exists || recorded) {
+		request.ProxyMode = mode == network.PrepareOn
+		a.networkLifecycle(manager, streams)
+		return nil
+	}
+	plan, e := store.ChooseExecution(ctx, request.RequestID, *request, mode, func() (netops.ExecutionPlan, *protocol.Error) {
+		plan := netops.ExecutionPlan{Reused: map[string]*network.ExecutionSnapshot{}, ReuseIDs: map[string]string{}}
+		if request.Action == lifecycle.ActionRestart {
+			return plan, nil // Originals are frozen by the lifecycle receipt.
+		}
+		if mode == network.PrepareOn {
+			if _, e := a.needsProxyPreparation(request.Project, request.Commands, mode); e != nil {
+				return plan, e
+			}
+		}
+		records, e := manager.Status(ctx, request.Project, request.Commands)
+		if e != nil {
+			return plan, e
+		}
+		for _, record := range records {
+			if _, duplicate := plan.ReuseIDs[record.Command]; duplicate {
+				return plan, protocol.NewError("process_conflict", "Multiple active executions exist for the selected command.", 3, nil)
+			}
+			if mode != network.PrepareAuto && record.ProxyMode != (mode == network.PrepareOn) {
+				return plan, protocol.NewError("process_conflict", "Stop the existing execution before changing its network mode.", 3, nil)
+			}
+			var snapshot *network.ExecutionSnapshot
+			if record.ProxyMode {
+				snapshot = &network.ExecutionSnapshot{}
+				if e := tasks.ReadPrivate(networkSnapshotPath(manager.Data, record.ID), snapshot); e != nil {
+					return plan, protocol.NewError("invalid_storage", "Cannot read the active execution network snapshot.", 3, nil)
+				}
+			}
+			plan.Reused[record.Command], plan.ReuseIDs[record.Command] = snapshot, record.ID
+		}
+		fresh := []string{}
+		networkNeeded := false
+		for _, snapshot := range plan.Reused {
+			networkNeeded = networkNeeded || snapshot != nil
+		}
+		for _, name := range request.Commands {
+			if _, reused := plan.Reused[name]; reused {
+				continue
+			}
+			fresh = append(fresh, name)
+			needed := mode == network.PrepareOn // The whole selection has a route.
+			if mode == network.PrepareAuto {
+				needed, e = a.needsProxyPreparation(request.Project, []string{name}, mode)
+			}
+			if e != nil {
+				return plan, e
+			}
+			networkNeeded = networkNeeded || needed
+		}
+		if networkNeeded {
+			plan.Commands = fresh
+		}
+		return plan, nil
+	})
+	if e != nil {
+		return e
+	}
+	request.ProxyMode = len(plan.Commands) > 0
+	for _, snapshot := range plan.Reused {
+		request.ProxyMode = request.ProxyMode || snapshot != nil
+	}
+	a.networkLifecycle(manager, streams, lifecyclePreparation{Mode: mode, Plan: plan})
+	return nil
 }
 
 func (a *App) needsProxyPreparation(p project.Context, names []string, mode network.PreparationMode) (bool, *protocol.Error) {

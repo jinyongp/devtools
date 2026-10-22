@@ -9,10 +9,12 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/execution"
+	"github.com/jinyongp/devtools/internal/lifecycle"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
@@ -75,6 +77,95 @@ func TestAutomaticPreparationSkipsDisabledBeforeEnvironmentAndRetainsPeerPorts(t
 	}
 	if _, e := app.applyNetworkSnapshot(command, snapshot); e == nil || e.Code != "network_snapshot_changed" {
 		t.Fatal(e)
+	}
+}
+
+func TestProjectAutoPreparationUsesWholeFreshUnionAndFreezesMode(t *testing.T) {
+	root := privateTempDir(t)
+	t.Chdir(root)
+	config := "profile='app'\n[ports.web]\n[ports.db]\n[proxies.front]\nhost='batch.localhost'\nport='web'\n[commands.web]\nexec=" + fixtureExec(t, "true") + "\nserve=['web']\n[commands.web.bind]\nDB_PORT={port='db'}\n[commands.db]\nexec=" + fixtureExec(t, "true") + "\nserve=['db']\n[commands.worker]\nexec=" + fixtureExec(t, "true") + "\n[commands.worker.bind]\nAPP_URL={port='web',format='url'}\nDB_PORT={port='db'}\n"
+	if e := os.WriteFile("devtools.toml", []byte(config), 0600); e != nil {
+		t.Fatal(e)
+	}
+	app, _ := preparationTestApp(t)
+	processes := &cliLifecycleProcesses{}
+	app.lifecycleManager = func(data string) lifecycle.Manager { return lifecycle.Manager{Data: data, Processes: processes} }
+	args := []string{"project", "up", "worker", "web", "db", "--request-id", tasks.ID()}
+	result := outputData(t, app, args)
+	if result["changed"] != true || len(processes.calls) != 3 {
+		t.Fatal(result, processes.calls)
+	}
+	var dbPort string
+	for _, call := range processes.calls {
+		if !call.ProxyMode || call.Network == nil || len(call.Network.Ports) != 2 {
+			t.Fatalf("fresh peer missing the union: %#v", call)
+		}
+		if call.Command == "web" {
+			dbPort = fmt.Sprint(call.Network.Ports["db"])
+			if call.Network.Bindings["DB_PORT"] != dbPort {
+				t.Fatal(call.Network)
+			}
+		}
+	}
+	worker := processes.calls[0].Network
+	if worker.Bindings["DB_PORT"] != dbPort || worker.Bindings["APP_URL"] == "" {
+		t.Fatal(worker)
+	}
+	outputData(t, app, args)
+	if len(processes.calls) != 3 {
+		t.Fatal("completed replay relaunched children")
+	}
+	if code, _, diagnostic := invoke(t, app, "", append(args, "--no-proxy")...); code != 3 || !strings.Contains(diagnostic, "request_conflict") {
+		t.Fatal(code, diagnostic)
+	}
+	if code, _, diagnostic := invoke(t, app, "", "project", "up", "db", "--proxy", "--request-id", tasks.ID()); code != 3 || !strings.Contains(diagnostic, "proxy_route_required") {
+		t.Fatal(code, diagnostic)
+	}
+	data, _ := app.dataDirectory()
+	for _, call := range processes.calls {
+		path := networkSnapshotPath(filepath.Dir(data), call.RequestID)
+		if e := tasks.PrivateDir(filepath.Dir(path)); e != nil {
+			t.Fatal(e)
+		}
+		if e := tasks.WritePrivate(path, call.Network); e != nil {
+			t.Fatal(e)
+		}
+	}
+	reused := outputData(t, app, []string{"project", "up", "worker", "web", "db", "--request-id", tasks.ID()})
+	if reused["changed"] != false || len(processes.records) != 3 {
+		t.Fatal("active batch was replaced", reused)
+	}
+}
+
+func TestProjectAutoPreparationPreservesExistingOffMember(t *testing.T) {
+	root := privateTempDir(t)
+	t.Chdir(root)
+	config := "profile='app'\n[ports.web]\n[ports.api]\n[proxies.web]\nhost='old.localhost'\nport='web'\n[proxies.api]\nhost='new.localhost'\nport='api'\n[commands.web]\nexec=" + fixtureExec(t, "true") + "\nserve=['web']\n[commands.api]\nexec=" + fixtureExec(t, "true") + "\nserve=['api']\n"
+	if e := os.WriteFile("devtools.toml", []byte(config), 0600); e != nil {
+		t.Fatal(e)
+	}
+	p, e := project.Resolve(root, "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	now := time.Now().UTC()
+	original := services.Record{ID: tasks.ID(), Profile: p.Profile, Directory: p.Root, Command: "web", State: "running", CreatedAt: now, StartedAt: &now}
+	app, m := preparationTestApp(t)
+	processes := &cliLifecycleProcesses{records: []services.Record{original}}
+	app.lifecycleManager = func(data string) lifecycle.Manager { return lifecycle.Manager{Data: data, Processes: processes} }
+	outputData(t, app, []string{"project", "up", "web", "api", "--request-id", tasks.ID()})
+	if len(processes.calls) != 2 || processes.calls[0].ProxyMode || !processes.calls[1].ProxyMode || processes.records[0].ID != original.ID {
+		t.Fatal(processes.calls)
+	}
+	st, e := managerPortStore(m).Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	instance := st.Find(p.Profile, "", p.Root)
+	for _, activation := range st.Network.Activations {
+		if activation.Route.InstanceID == instance.ID && activation.Route.Proxy == "web" {
+			t.Fatal("existing off member was activated")
+		}
 	}
 }
 

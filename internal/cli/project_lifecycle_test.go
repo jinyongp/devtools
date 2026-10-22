@@ -43,7 +43,7 @@ func (f *cliLifecycleProcesses) Apply(_ context.Context, request services.Reques
 			}
 		}
 		now := time.Now().UTC()
-		record := services.Record{ID: request.RequestID, Profile: "app", Instance: "instance", Directory: request.Directory, Command: request.Command, Env: env, EnvOverride: request.Env, Capture: capture, CreatedAt: now, StartedAt: &now, State: "running"}
+		record := services.Record{ID: request.RequestID, Profile: "app", Instance: "instance", Directory: request.Directory, Command: request.Command, Env: env, EnvOverride: request.Env, Capture: capture, CreatedAt: now, StartedAt: &now, State: "running", ProxyMode: request.ProxyMode}
 		f.records = append(f.records, record)
 		return services.Result{Item: record, Changed: true}, nil
 	case "stop":

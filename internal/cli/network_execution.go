@@ -373,7 +373,12 @@ func networkSnapshotPath(data, id string) string {
 	return filepath.Join(data, "processes", id, "network.json")
 }
 
-func (a *App) networkLifecycle(manager *lifecycle.Manager, streams IO) {
+type lifecyclePreparation struct {
+	Mode network.PreparationMode
+	Plan netops.ExecutionPlan
+}
+
+func (a *App) networkLifecycle(manager *lifecycle.Manager, streams IO, preparation ...lifecyclePreparation) {
 	manager.PrepareNetwork = func(ctx context.Context, request lifecycle.Request, originals []services.Record, id string) (map[string]*network.ExecutionSnapshot, *protocol.Error) {
 		names := append([]string{}, request.Commands...)
 		selected := []services.Record{}
@@ -413,6 +418,38 @@ func (a *App) networkLifecycle(manager *lifecycle.Manager, streams IO) {
 					selections[name] = *request.Bundle
 				}
 			}
+		}
+		if len(preparation) > 0 {
+			policy := preparation[0]
+			if request.Action == lifecycle.ActionUp {
+				names = policy.Plan.Commands
+				for name, originalID := range policy.Plan.ReuseIDs {
+					found := false
+					for _, record := range originals {
+						found = found || record.Command == name && record.ID == originalID
+					}
+					if !found {
+						return nil, protocol.NewError("process_conflict", "The reused execution ended before this batch completed; use a new request UUID.", 3, nil)
+					}
+				}
+				selected = nil
+			}
+			snapshots := map[string]*network.ExecutionSnapshot{}
+			if len(names) > 0 {
+				var e *protocol.Error
+				snapshots, e = a.prepareNetwork(ctx, request.Project, names, selected, overrides, streams, id, policy.Mode, false, selections)
+				if e != nil {
+					return nil, e
+				}
+			}
+			if request.Action == lifecycle.ActionUp {
+				for name, snapshot := range policy.Plan.Reused {
+					if snapshot != nil {
+						snapshots[name] = snapshot
+					}
+				}
+			}
+			return snapshots, nil
 		}
 		return a.prepareProxyNetwork(ctx, request.Project, names, selected, overrides, streams, id, selections)
 	}

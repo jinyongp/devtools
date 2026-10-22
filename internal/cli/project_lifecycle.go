@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/lifecycle"
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
@@ -124,6 +125,7 @@ func (a *App) registerProjectLifecycle() {
 			Options: []Option{
 				directory,
 				{Name: "proxy", Boolean: true, Description: "Prepare the selected serve union, DNS, and listeners before launching the batch."},
+				{Name: "no-proxy", Boolean: true, Description: "Skip proxy preparation without stopping existing routes."},
 				{Name: "bundle", Pattern: project.ProfilePattern, Description: "Select all, none, or one shared value bundle for the batch."},
 				{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment for every selected command."},
 				{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for every selected command."},
@@ -210,8 +212,6 @@ func (a *App) projectUp(ctx context.Context, streams IO, request Request) (any, 
 		return nil, err
 	}
 	input := lifecycle.Request{Action: lifecycle.ActionUp, Project: p, Commands: append([]string{}, request.Args...), Timeout: timeout, RequestID: request.Options["request-id"]}
-	input.ProxyMode = request.Options["proxy"] == "true"
-	a.networkLifecycle(&manager, streams)
 	if bundle, ok := request.Options["bundle"]; ok {
 		input.Bundle = &bundle
 	}
@@ -221,6 +221,13 @@ func (a *App) projectUp(ctx context.Context, streams IO, request Request) (any, 
 	if capture, ok := request.Options["capture-logs"]; ok {
 		value := capture == "true"
 		input.Capture = &value
+	}
+	mode, modeErr := preparationMode(request.Options)
+	if modeErr != nil {
+		return nil, modeErr
+	}
+	if err := a.prepareLifecycle(ctx, &manager, &input, mode, streams); err != nil {
+		return nil, err
 	}
 	return manager.Apply(ctx, input)
 }
@@ -239,7 +246,6 @@ func (a *App) projectRestart(ctx context.Context, streams IO, request Request) (
 		return nil, err
 	}
 	input := lifecycle.Request{Action: lifecycle.ActionRestart, Project: p, Commands: append([]string{}, request.Args...), Timeout: timeout, RequestID: request.Options["request-id"]}
-	a.networkLifecycle(&manager, streams)
 	if bundle, ok := request.Options["bundle"]; ok {
 		input.Bundle = &bundle
 	}
@@ -249,6 +255,9 @@ func (a *App) projectRestart(ctx context.Context, streams IO, request Request) (
 	if capture, ok := request.Options["capture-logs"]; ok {
 		value := capture == "true"
 		input.Capture = &value
+	}
+	if err := a.prepareLifecycle(ctx, &manager, &input, network.PrepareAuto, streams); err != nil {
+		return nil, err
 	}
 	return manager.Apply(ctx, input)
 }

@@ -35,8 +35,12 @@ func freeNetworkPort(t *testing.T) int {
 	return l.Addr().(*net.TCPAddr).Port
 }
 func liveNetworkManager(t *testing.T) Manager {
+	return liveNetworkManagerWithControlListener(t, nil)
+}
+
+func liveNetworkManagerWithControlListener(t *testing.T, listen func() (net.Listener, error)) Manager {
 	t.Helper()
-	m := Manager{Data: t.TempDir(), ExposureProviders: map[string]expose.Provider{}}
+	m := Manager{Data: t.TempDir(), ExposureProviders: map[string]expose.Provider{}, ControlListen: listen}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	started := false

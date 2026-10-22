@@ -61,11 +61,33 @@ func (b *exposureBackend) waitOpen(t *testing.T, want int32) {
 }
 
 func TestExposureReusesAndClosesOnlyItsBackendPool(t *testing.T) {
+	for _, collision := range []bool{false, true} {
+		t.Run(fmt.Sprintf("control_port_collision=%t", collision), func(t *testing.T) {
+			testExposureBackendPools(t, collision)
+		})
+	}
+}
+
+func testExposureBackendPools(t *testing.T, collision bool) {
+	t.Helper()
 	first, second := newExposureBackend(t, nil), newExposureBackend(t, nil)
-	m := liveNetworkManager(t)
+	listener := freeNetworkPort(t)
+	var attempts atomic.Int32
+	var controlListen func() (net.Listener, error)
+	if collision {
+		controlListen = func() (net.Listener, error) {
+			address := "127.0.0.1:0"
+			if attempts.Add(1) == 1 {
+				// The OS can choose a configured but not yet bound frontend
+				// port when allocating the daemon's ephemeral control socket.
+				address = fmt.Sprintf("127.0.0.1:%d", listener)
+			}
+			return net.Listen("tcp4", address)
+		}
+	}
+	m := liveNetworkManagerWithControlListener(t, controlListen)
 	m.ExposureProviders["cloudflared"] = &fakeExposureProvider{}
 	ctx := context.Background()
-	listener := freeNetworkPort(t)
 	if _, e := m.Configure(ctx, "default", fmt.Sprintf("127.0.0.1:%d", listener), "", false, tasks.ID()); e != nil {
 		t.Fatal(e)
 	}
@@ -81,9 +103,12 @@ func TestExposureReusesAndClosesOnlyItsBackendPool(t *testing.T) {
 		}
 		result, e := m.ExposeStart(ctx, ExposureRequest{Route: st.GlobalRoute(name).Ref(), Provider: "cloudflared", NoAuth: true, RequestID: tasks.ID()}, project.Context{}, nil, hosts.Manager{Data: m.Data, Isolated: true})
 		if e != nil {
-			t.Fatal(e)
+			t.Fatalf("start exposure %s: code=%s details=%v", name, e.Code, e.Details)
 		}
 		shares = append(shares, result.(map[string]any)["item"].(expose.Public))
+	}
+	if collision && attempts.Load() < 2 {
+		t.Fatal("control endpoint did not reject the configured frontend port")
 	}
 	// Each frontend request uses a fresh socket; backend keep-alive is independent.
 	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true}

@@ -293,11 +293,7 @@ func (m Manager) serveNetwork(ctx context.Context, attemptID string) error {
 		return errors.New("invalid network daemon attempt")
 	}
 	runtime := &networkRuntime{manager: m, groups: map[string]*listenerGroup{}, resolver: NewResolver(m.portStore()), exposures: map[string]*exposureRuntime{}, attemptID: attemptID}
-	listen := m.ControlListen
-	if listen == nil {
-		listen = func() (net.Listener, error) { return ports.ListenTCP(ctx, "tcp4", "127.0.0.1:0") }
-	}
-	socket, e := listen()
+	socket, e := m.listenControl(ctx)
 	if e != nil {
 		m.failAttempt(attemptID, "control_bind_failed")
 		return e

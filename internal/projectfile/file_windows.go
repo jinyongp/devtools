@@ -22,7 +22,33 @@ func metadata(f *os.File, info os.FileInfo) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	return fmt.Sprintf("%d:%d:%d", id.VolumeSerialNumber, id.FileIndexHigh, id.FileIndexLow), fmt.Sprintf("%s:%d", sd.String(), id.FileAttributes&windows.FILE_ATTRIBUTE_READONLY), nil
+	security, err := comparableSecurity(sd)
+	if err != nil {
+		return "", "", err
+	}
+	return fmt.Sprintf("%d:%d:%d", id.VolumeSerialNumber, id.FileIndexHigh, id.FileIndexLow), fmt.Sprintf("%s:%d", security, id.FileAttributes&windows.FILE_ATTRIBUTE_READONLY), nil
+}
+
+// Windows may clear AUTO_INHERITED when assigning a descriptor to a regular
+// file. It records propagation to children, not the inherited flag on each ACE.
+// Keep every ACE, owner/group and protection flag in the revision comparison.
+func comparableSecurity(sd *windows.SECURITY_DESCRIPTOR) (string, error) {
+	value := sd.String()
+	if value == "" {
+		return "", os.ErrInvalid
+	}
+	copy, err := windows.SecurityDescriptorFromString(value)
+	if err != nil {
+		return "", err
+	}
+	if err = copy.SetControl(windows.SE_DACL_AUTO_INHERITED, 0); err != nil {
+		return "", err
+	}
+	value = copy.String()
+	if value == "" {
+		return "", os.ErrInvalid
+	}
+	return value, nil
 }
 func safeTarget(s *Snapshot) error {
 	i, e := os.Lstat(s.Path)

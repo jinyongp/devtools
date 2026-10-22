@@ -4,7 +4,9 @@ import (
 	"errors"
 	"github.com/ebitengine/purego"
 	"os"
+	"runtime"
 	"sync"
+	"syscall"
 	"unsafe"
 )
 
@@ -15,11 +17,13 @@ const aclExtended = 0x100
 
 var aclAPI struct {
 	sync.Once
-	err  error
-	get  func(int32, uint32) uintptr
-	set  func(int32, uintptr, uint32) int32
-	text func(uintptr, *int64) uintptr
-	free func(uintptr) int32
+	err   error
+	get   func(int32, uint32) uintptr
+	init  func(int32) uintptr
+	errno func() *int32
+	set   func(int32, uintptr, uint32) int32
+	text  func(uintptr, *int64) *byte
+	free  func(uintptr) int32
 }
 
 func loadACL() {
@@ -31,7 +35,7 @@ func loadACL() {
 	for _, symbol := range []struct {
 		name string
 		fn   any
-	}{{"acl_get_fd_np", &aclAPI.get}, {"acl_set_fd_np", &aclAPI.set}, {"acl_to_text", &aclAPI.text}, {"acl_free", &aclAPI.free}} {
+	}{{"acl_get_fd_np", &aclAPI.get}, {"acl_init", &aclAPI.init}, {"__error", &aclAPI.errno}, {"acl_set_fd_np", &aclAPI.set}, {"acl_to_text", &aclAPI.text}, {"acl_free", &aclAPI.free}} {
 		address, err := purego.Dlsym(h, symbol.name)
 		if err != nil {
 			aclAPI.err = err
@@ -45,9 +49,18 @@ func getACL(f *os.File) (uintptr, error) {
 	if aclAPI.err != nil {
 		return 0, aclAPI.err
 	}
+	// errno belongs to the native thread. An absent FILESEC_ACL property is
+	// ENOENT even for an existing descriptor; normalize only that case to an
+	// empty ACL. All other retrieval failures must still prevent publication.
+	// https://github.com/apple-oss-distributions/Libc/blob/main/gen/filesec.c
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	acl := aclAPI.get(int32(f.Fd()), aclExtended)
+	if acl == 0 && syscall.Errno(*aclAPI.errno()) == syscall.ENOENT {
+		acl = aclAPI.init(0)
+	}
 	if acl == 0 {
-		return 0, errors.New("extended ACL unavailable")
+		return 0, syscall.Errno(*aclAPI.errno())
 	}
 	return acl, nil
 }
@@ -59,11 +72,11 @@ func extendedACL(f *os.File) (string, error) {
 	defer aclAPI.free(acl)
 	var n int64
 	p := aclAPI.text(acl, &n)
-	if p == 0 || n < 0 || n > 1<<20 {
+	if p == nil || n < 0 || n > 1<<20 {
 		return "", errors.New("ACL text unavailable")
 	}
-	defer aclAPI.free(p)
-	return string(unsafe.Slice((*byte)(unsafe.Pointer(p)), int(n))), nil
+	defer aclAPI.free(uintptr(unsafe.Pointer(p)))
+	return string(unsafe.Slice(p, int(n))), nil
 }
 func copyExtendedACL(src, dst *os.File) error {
 	acl, err := getACL(src)

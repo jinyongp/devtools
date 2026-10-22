@@ -35,3 +35,35 @@ func TestWindowsPublicationPreservesProtectedACL(t *testing.T) {
 		t.Fatal("protected ACL was changed")
 	}
 }
+
+func TestWindowsSecurityComparisonPreservesPermissionIdentity(t *testing.T) {
+	compare := func(sddl string) string {
+		t.Helper()
+		sd, err := windows.SecurityDescriptorFromString(sddl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		value, err := comparableSecurity(sd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	base := compare("O:SYG:SYD:AI(A;ID;FR;;;SY)")
+	for _, tc := range []struct {
+		name, sddl string
+		equal      bool
+	}{
+		{"propagation marker", "O:SYG:SYD:(A;ID;FR;;;SY)", true},
+		{"ACE inheritance", "O:SYG:SYD:(A;;FR;;;SY)", false},
+		{"protection", "O:SYG:SYD:P(A;ID;FR;;;SY)", false},
+		{"permissions", "O:SYG:SYD:(A;ID;FA;;;SY)", false},
+		{"owner", "O:BAG:SYD:(A;ID;FR;;;SY)", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if equal := compare(tc.sddl) == base; equal != tc.equal {
+				t.Fatalf("permission identity equality=%v, want %v", equal, tc.equal)
+			}
+		})
+	}
+}

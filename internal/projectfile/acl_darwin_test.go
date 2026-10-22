@@ -2,7 +2,10 @@ package projectfile
 
 import (
 	"context"
+	"errors"
+	"os"
 	"os/exec"
+	"syscall"
 	"testing"
 )
 
@@ -21,5 +24,19 @@ func TestDarwinPublicationPreservesExtendedACL(t *testing.T) {
 	}
 	if s.security != next.security {
 		t.Fatal("extended ACL was changed")
+	}
+}
+
+func TestDarwinACLReadRejectsClosedDescriptor(t *testing.T) {
+	path, _ := fileFixture(t)
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = getACL(f); !errors.Is(err, syscall.EBADF) {
+		t.Fatalf("invalid descriptor was treated as an absent ACL: %v", err)
 	}
 }

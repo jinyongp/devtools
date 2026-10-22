@@ -338,8 +338,11 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
                     raise AssertionError("unauthenticated ingress did not challenge")
                 result["auth_challenge"] = 401
             if options.disposable_trust and ca:
-                command([certutil, "-user", "-f", "-addstore", "Root", windows_path(ca) if windows_peer else ca])
+                # The disposable hosted runner is elevated. CurrentUser Root
+                # prompts for consent even with -f and blocks unattended tests.
+                command([certutil, "-f", "-addstore", "Root", windows_path(ca) if windows_peer else ca])
                 trusted = True
+                result["trust_store"] = "Windows LocalMachine Root"
             browser_config = {
                 "case": case, "origin": origin, "policy": policy, "browser": browser,
                 "backendAuthority": f"127.0.0.1:{backend_port}",
@@ -449,7 +452,8 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
             if trusted:
                 thumbprint = hashlib.sha1(ssl.PEM_cert_to_DER_cert((artifacts / "ca.pem").read_text())).hexdigest()
                 try:
-                    command([certutil, "-user", "-f", "-delstore", "Root", thumbprint])
+                    command([certutil, "-f", "-delstore", "Root", thumbprint])
+                    result["trust_removed"] = True
                 except Exception as error:
                     result.update(status="fail", trust_cleanup_error=redact(error))
             if log.exists():
@@ -478,7 +482,7 @@ def main():
     parser.add_argument("--auth-mode", choices=["none", "basic"], default="none")
     parser.add_argument("--peer-network", help="Prepared Docker peer network, e.g. container:tailscale-peer; never host for shared tests")
     parser.add_argument("--tailscale-serve-port", type=int, default=8443, help="Two free dedicated ports are required (this port and the next)")
-    parser.add_argument("--disposable-trust", action="store_true", help="Import/remove the test CA in a disposable Windows runner's CurrentUser root store")
+    parser.add_argument("--disposable-trust", action="store_true", help="Import/remove the test CA in an elevated disposable Windows runner's LocalMachine root store")
     options = parser.parse_args()
     options.binary = options.binary.resolve(strict=True)
     if options.provider != "local" and not options.live:

@@ -127,7 +127,7 @@ jobs:
           python -B scripts/package.py
           if ($LASTEXITCODE -ne 0) { throw 'Package failed' }
           Expand-Archive dist/devtools_0.0.0-proxy-compat_windows_amd64.zip bin/candidate
-      - name: Nuxt RPC and WebSocket with verified CurrentUser trust
+      - name: Nuxt RPC and WebSocket with verified disposable LocalMachine trust
         run: |
           ./bin/candidate/devtools.exe run check:proxy-compat --binary bin/candidate/devtools.exe --case nuxt --case ws --scheme https --client-mode local --disposable-trust --artifacts bin/proxy-evidence
           if ($LASTEXITCODE -ne 0) { throw 'Windows browser contract failed' }

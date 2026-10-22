@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { lookup } from 'node:dns/promises';
 import fs from 'node:fs/promises';
 import { readFileSync, realpathSync } from 'node:fs';
 import os from 'node:os';
@@ -23,6 +24,7 @@ let parseRpc;
 let stringifyRpc;
 let NuxtSocket;
 let nuxtSocketUrl;
+let nuxtSocketAddress;
 if (config.case === 'nuxt') {
   const require = createRequire(realpathSync(path.join(config.fixturePackages, '@nuxt/devtools/package.json')));
   ({ parse: parseRpc, stringify: stringifyRpc } = await import(pathToFileURL(require.resolve('structured-clone-es'))));
@@ -32,7 +34,13 @@ if (config.case === 'nuxt') {
 async function probeNuxtOrigin(originHeader, expectsRpc) {
   return new Promise(resolve => {
     const id = `probe-${Math.random()}`;
-    const options = {};
+    const options = {
+      family: 4,
+      lookup: (hostname, _options, done) => {
+        if (hostname !== origin.hostname) return done(new Error('RPC probe used an unexpected hostname'));
+        done(null, nuxtSocketAddress.address, nuxtSocketAddress.family);
+      },
+    };
     if (originHeader !== undefined) options.origin = originHeader;
     if (config.ca) options.ca = readFileSync(config.ca);
     if (process.env.PROXY_COMPAT_AUTH) {
@@ -185,12 +193,26 @@ try {
     traceEvent('hmr-dom', { marker: 'compat-after', counter: '1', documentPreserved: true });
 
     if (config.case === 'nuxt') {
+      // The independent Node client has its own resolver, separate from the
+      // browser. Resolve once before testing guards; keep the public URL, Host,
+      // SNI and certificate validation unchanged for every probe.
+      assert.equal(new URL(nuxtSocketUrl).hostname, origin.hostname);
+      const dnsDeadline = Date.now() + 60_000;
+      while (!nuxtSocketAddress && Date.now() < dnsDeadline) {
+        try { nuxtSocketAddress = await lookup(origin.hostname, { family: 4 }); }
+        catch (error) {
+          if (!['ENOTFOUND', 'EAI_AGAIN'].includes(error.code)) throw error;
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      assert(nuxtSocketAddress, 'RPC client DNS did not become ready');
+      traceEvent('rpc-dns-ready');
       report.originProbes = [];
       for (const supplied of [undefined, origin.origin, `${origin.protocol}//different.localhost`, `${origin.protocol}//${origin.hostname}:1`, 'null']) {
         const allowed = supplied === undefined || (supplied === origin.origin && config.policy === 'preserve');
         const result = await probeNuxtOrigin(supplied, allowed);
         report.originProbes.push({ origin: supplied ?? '(absent)', result });
-        assert.equal(result === 'rpc-response', allowed, `Nuxt origin guard ${supplied}: ${result}`);
+        assert.equal(result, allowed ? 'rpc-response' : 'no-rpc-response', `Nuxt origin guard ${supplied}: ${result}`);
       }
       await page.waitForFunction(() => !!window.__NUXT_DEVTOOLS_HOST__);
       await page.evaluate(() => window.__NUXT_DEVTOOLS_HOST__.devtools.navigate('/modules/pages'));

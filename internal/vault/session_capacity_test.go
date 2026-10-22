@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -67,17 +68,27 @@ func TestSessionConnectionFloodIsBoundedAndRecovers(t *testing.T) {
 	}()
 	// Reading each hello establishes that the real daemon has admitted the
 	// connection; no sleeps or assumptions about accept scheduling are needed.
-	for i := 0; i < maxSessionConnections; i++ {
+	// Client startup probes the daemon. Its response may arrive before that
+	// worker releases its slot, so allow that existing connection to unwind
+	// while establishing the full set of admitted hostile connections.
+	for len(held) < maxSessionConnections {
 		c, err := dialSession(ctx, client.Endpoint.Endpoint)
 		if err != nil {
 			t.Fatal(err)
 		}
-		held = append(held, c)
 		c.SetDeadline(time.Now().Add(3 * time.Second))
 		var hello sessionHello
 		if err := readSessionFrame(c, &hello); err != nil {
-			t.Fatal(err)
+			c.Close()
+			if !errors.Is(err, io.EOF) {
+				t.Fatal(err)
+			}
+			if err := waitSession(ctx); err != nil {
+				t.Fatal("startup connection capacity did not recover", err)
+			}
+			continue
 		}
+		held = append(held, c)
 	}
 	extra, err := dialSession(ctx, client.Endpoint.Endpoint)
 	if err != nil {

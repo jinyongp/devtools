@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"net"
-	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/jinyongp/devtools/internal/tasks"
 )
 
 func TestControlListenerAvoidsRegisteredPorts(t *testing.T) {
@@ -84,8 +85,12 @@ func TestControlListenerPropagatesListenFailureAndCancellation(t *testing.T) {
 
 func TestControlListenerClosesSocketWhenRegistryCannotBeRead(t *testing.T) {
 	m := testManager(t)
-	m.Data = filepath.Join(t.TempDir(), "file")
-	if err := os.WriteFile(m.Data, nil, 0600); err != nil {
+	// A regular-file ancestor is reported as missing on Windows. Instead use
+	// a private registry with an invalid schema, which fails on every platform.
+	if err := tasks.PrivateDir(m.portStore().Directory); err != nil {
+		t.Fatal(err)
+	}
+	if err := tasks.WritePrivate(filepath.Join(m.portStore().Directory, "registry.json"), "invalid registry"); err != nil {
 		t.Fatal(err)
 	}
 	candidate := newIdleListener(testPort())

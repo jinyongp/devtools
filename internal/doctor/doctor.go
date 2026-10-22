@@ -156,7 +156,8 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 			names[k] = ""
 		}
 		if e := process.ValidateEnvironment(names); e != nil {
-			add("environment:names", "fail", "environment_name_conflict", "Injected environment names conflict.")
+			add("environment:names", "fail", "environment_name_conflict", fmt.Sprintf("Injected environment names conflict: %q.", e.Details["keys"]))
+			checks[len(checks)-1].Facts["keys"] = e.Details["keys"]
 			in.EnvironmentUnknown = "environment_name_conflict"
 		}
 		selected := map[string]string{}

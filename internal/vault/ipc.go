@@ -15,6 +15,16 @@ type sessionConnection interface {
 	io.ReadWriteCloser
 	SetDeadline(time.Time) error
 }
+
+func waitSessionInput(ctx context.Context, c sessionConnection) {
+	if watcher, ok := c.(interface{ waitForInput(context.Context) }); ok {
+		watcher.waitForInput(ctx)
+		return
+	}
+	var extra [1]byte
+	c.Read(extra[:])
+}
+
 type sessionListener interface {
 	Accept(context.Context) (sessionConnection, error)
 	Close() error

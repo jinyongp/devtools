@@ -19,6 +19,71 @@ import (
 
 func init() { nativePeerFixture = runWindowsPeerFixture }
 
+func TestNativeWindowsSessionInputWatchAllowsResponse(t *testing.T) {
+	for _, signal := range []string{"extra-input", "disconnect", "cancel"} {
+		t.Run(signal, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			directory := privateTempDir(t)
+			id, err := NewID()
+			if err != nil {
+				t.Fatal(err)
+			}
+			listener, err := listenSession(directory, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
+			client, err := dialSession(ctx, sessionEndpoint(directory, id))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Close()
+			server, err := listener.Accept(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer server.Close()
+			if err := client.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			if err := server.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan struct{})
+			go func() { defer close(done); waitSessionInput(ctx, server) }()
+			defer func() { cancel(); server.Close(); <-done }()
+			if _, err := server.Write([]byte("response")); err != nil {
+				t.Fatal(err)
+			}
+			var response [8]byte
+			if _, err := io.ReadFull(client, response[:]); err != nil || string(response[:]) != "response" {
+				t.Fatalf("response while monitoring input: %q %v", response, err)
+			}
+			select {
+			case <-done:
+				t.Fatal("outgoing response was mistaken for incoming input")
+			default:
+			}
+			switch signal {
+			case "extra-input":
+				if _, err := client.Write([]byte("extra")); err != nil {
+					t.Fatal(err)
+				}
+			case "disconnect":
+				client.Close()
+			case "cancel":
+				cancel()
+			}
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatal("session input monitor did not stop promptly")
+			}
+		})
+	}
+}
+
 func TestNativeWindowsSessionEndpointSurvivesBetweenAccepts(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

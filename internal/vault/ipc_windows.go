@@ -27,6 +27,42 @@ type windowsSessionListener struct {
 	cancel  context.CancelFunc
 }
 
+type windowsSessionConnection struct{ *os.File }
+
+var peekSessionPipe = windows.NewLazySystemDLL("kernel32.dll").NewProc("PeekNamedPipe")
+
+func (c *windowsSessionConnection) waitForInput(ctx context.Context) {
+	// Go's Windows os.File currently updates a shared offset on both pipe
+	// Read and Write. Observe disconnects/extra input without a concurrent Read.
+	// These handles use FILE_FLAG_OVERLAPPED, so PeekNamedPipe cannot wait for
+	// a concurrent synchronous operation to complete.
+	// https://learn.microsoft.com/windows/win32/api/namedpipeapi/nf-namedpipeapi-peeknamedpipe
+	raw, err := c.SyscallConn()
+	if err != nil {
+		return
+	}
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var available uint32
+		var failure error
+		err := raw.Control(func(handle uintptr) {
+			ok, _, err := peekSessionPipe.Call(handle, 0, 0, 0, uintptr(unsafe.Pointer(&available)), 0)
+			if ok == 0 {
+				failure = err
+			}
+		})
+		if err != nil || failure != nil || available != 0 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
 func newSessionPipe(name string, first bool) (windows.Handle, error) {
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
@@ -114,7 +150,7 @@ func (l *windowsSessionListener) Accept(ctx context.Context) (sessionConnection,
 			f.Close()
 			continue
 		}
-		return f, nil
+		return &windowsSessionConnection{File: f}, nil
 	}
 }
 func connectSessionPipe(ctx context.Context, h windows.Handle) error {

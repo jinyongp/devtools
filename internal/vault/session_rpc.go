@@ -239,7 +239,7 @@ func serveSessionConnection(ctx context.Context, c sessionConnection, endpoint S
 	// One-shot clients send no further input. EOF/extra input cancels native
 	// work promptly instead of leaving an abandoned OS authentication prompt.
 	watchDone := make(chan struct{})
-	go func() { defer close(watchDone); var extra [1]byte; c.Read(extra[:]); cancel() }()
+	go func() { defer close(watchDone); waitSessionInput(ctx, c); cancel() }()
 	defer func() { c.Close(); <-watchDone }()
 	var response sessionResponse
 	if (req.Operation == "admit") != (req.Ticket != nil) {

@@ -53,18 +53,20 @@ func getACL(f *os.File) (uintptr, error) {
 	}
 	// Capture errno inside the native call: even a locked Go thread can run
 	// runtime code that changes errno between separate foreign calls.
+	// Darwin errno is a C int; purego v0.11.2 captures a machine word, so its
+	// upper 32 bits must be discarded before comparing or reporting the code.
 	// An absent FILESEC_ACL property is ENOENT even for an existing descriptor;
 	// normalize only that case to an empty ACL. All other retrieval failures
 	// must still prevent publication.
 	// https://github.com/apple-oss-distributions/Libc/blob/main/gen/filesec.c
 	acl, _, errno := purego.SyscallN(aclAPI.get, f.Fd(), aclExtended)
 	operation := "acl_get_fd_np"
-	if acl == 0 && syscall.Errno(errno) == syscall.ENOENT {
+	if acl == 0 && syscall.Errno(uint32(errno)) == syscall.ENOENT {
 		operation = "acl_init"
 		acl, _, errno = purego.SyscallN(aclAPI.init, 0)
 	}
 	if acl == 0 {
-		return 0, os.NewSyscallError(operation, syscall.Errno(errno))
+		return 0, os.NewSyscallError(operation, syscall.Errno(uint32(errno)))
 	}
 	return acl, nil
 }
@@ -77,7 +79,7 @@ func extendedACL(f *os.File) (string, error) {
 	var n int64
 	p, _, errno := purego.SyscallN(aclAPI.text, acl, uintptr(unsafe.Pointer(&n)))
 	if p == 0 {
-		return "", os.NewSyscallError("acl_to_text", syscall.Errno(errno))
+		return "", os.NewSyscallError("acl_to_text", syscall.Errno(uint32(errno)))
 	}
 	defer aclAPI.free(p)
 	if n < 0 || n > 1<<20 {
@@ -98,7 +100,7 @@ func copyExtendedACL(src, dst *os.File) error {
 	defer aclAPI.free(acl)
 	result, _, errno := purego.SyscallN(aclAPI.set, dst.Fd(), acl, aclExtended)
 	if int32(result) != 0 {
-		return os.NewSyscallError("acl_set_fd_np", syscall.Errno(errno))
+		return os.NewSyscallError("acl_set_fd_np", syscall.Errno(uint32(errno)))
 	}
 	return nil
 }

@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory=$true)][string]$Arch,
     [Parameter(Mandatory=$true)][string]$Commit,
     [ValidateSet('all', 'ps5', 'ps7', 'x64')][string]$Engine = 'all',
-    [ValidateRange(1, 20)][int]$Repeat = 1
+    [ValidateRange(1, 20)][int]$Repeat = 1,
+    [ValidateRange(0, 1000)][int]$StartupProbes = 0
 )
 $ErrorActionPreference = 'Stop'
 $temporaryBase = $env:RUNNER_TEMP
@@ -29,6 +30,7 @@ function Save-InvocationFailure([string]$Executable, [string[]]$Arguments, [int]
         started = $Started.ToUniversalTime().ToString('o')
         script_line = $caller.ScriptLineNumber
         iteration = $iteration
+        startup_probe = $probe
         argument_flags = @($Arguments | Where-Object { $_ -match '^--?[A-Za-z][A-Za-z0-9-]*$' } | Select-Object -First 16)
         stderr_bytes = $bytes
     }
@@ -91,6 +93,20 @@ try {
         Require ($actual.process -eq 'X64' -and $actual.os -eq 'Arm64') 'ARM64 fixture did not run actual x64 emulation.'
         $actual | ConvertTo-Json | Set-Content -Encoding utf8 windows-install-emulated-runtime.json
         $shells += $emulatedShell
+    }
+    if ($StartupProbes -gt 0) {
+        $startupResults = @()
+        foreach ($shell in $shells) {
+            for ($probe = 1; $probe -le $StartupProbes; $probe++) {
+                # No installer or devtools process runs in this control.
+                $control = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-Command', '[pscustomobject]@{value=[Math]::Sqrt(144);version=$PSVersionTable.PSVersion.ToString()} | ConvertTo-Json -Compress')
+                Require ($control.value -eq 12 -and $control.version) 'Minimal PowerShell startup control failed.'
+                if ($probe % 25 -eq 0) { Write-Output ('PowerShell startup controls: ' + $probe + '/' + $StartupProbes + ' (' + $shell + ')') }
+            }
+            $startupResults += @{ shell = $shell; probes = $StartupProbes; result = 'pass' }
+        }
+        $probe = $null
+        ConvertTo-Json -InputObject $startupResults -Depth 3 | Set-Content -Encoding utf8 windows-powershell-startup-results.json
     }
     $results = @()
     Require (-not (Test-Path -LiteralPath $bootstrapBin)) 'Inline bootstrap fixture requires an unused default installation directory.'

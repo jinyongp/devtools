@@ -146,7 +146,7 @@ func TestProfileExportDirectoryOutputUsesProfileFilename(t *testing.T) {
 	testfixture.AssertPrivate(t, want, 0600)
 
 	code, out, diagnostic := invoke(t, app, "", "profile", "export", "--recipient", recipient, "--output", directory)
-	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"output_exists\"") || !strings.Contains(diagnostic, strings.Trim(mustJSON(t, want), "\"")) {
+	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"output_exists\"") || !strings.Contains(diagnostic, `"field":"output"`) || strings.Contains(diagnostic, strings.Trim(mustJSON(t, want), "\"")) {
 		t.Fatalf("directory collision did not fail fast with resolved path: code=%d out=%s err=%s", code, out, diagnostic)
 	}
 }
@@ -173,7 +173,7 @@ func TestProfileExportExistingOutputFailsBeforeSnapshot(t *testing.T) {
 	}
 
 	code, out, diagnostic := invoke(t, app, "", "profile", "export", "--output", output)
-	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"output_exists\"") || !strings.Contains(diagnostic, strings.Trim(mustJSON(t, output), "\"")) || prompted {
+	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"output_exists\"") || !strings.Contains(diagnostic, `"field":"output"`) || strings.Contains(diagnostic, strings.Trim(mustJSON(t, output), "\"")) || prompted {
 		t.Fatalf("existing output did not fail before missing-profile snapshot: code=%d out=%s err=%s", code, out, diagnostic)
 	}
 	body, err := os.ReadFile(output)

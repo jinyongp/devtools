@@ -94,8 +94,11 @@ secret 등록과 프로젝트 명령 설정은
 
 ### 등록한 명령 실행하기
 
-자주 쓰는 명령은 `devtools.toml`에 등록하세요. 프로젝트에 `docs:dev` 스크립트가
-있다면 다음처럼 이름을 붙일 수 있습니다.
+protocol 10 빌드에서는 `devtools command add dev:docs -- pnpm run docs:dev`로도 등록할 수 있습니다.
+수정 전에는 `config inspect`의 revision을 읽고, 여러 변경은 `config edit --dry-run`으로
+함께 검증하세요. [설정 편집 가이드](docs/configuration.md)에서 전체 흐름을 설명합니다.
+
+프로젝트에 `docs:dev` 스크립트가 있다면 `devtools.toml`에 직접 등록할 수도 있습니다.
 
 ```toml
 [commands."dev:docs"]

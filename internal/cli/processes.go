@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"github.com/jinyongp/devtools/internal/doctor"
 	"io"
 	"os"
 	"path/filepath"
@@ -260,14 +261,14 @@ func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 		}
 		dependencies.CaptureOutput = r.Capture
 		dependencies.IsolatedRoot = r.IsolatedRoot
-		prepared, err := execution.PrepareInput(ctx, command, dependencies, os.Environ(), execution.PlanOptions{})
+		prepared, err := execution.PrepareInput(ctx, command, dependencies, os.Environ(), execution.PlanOptions{Mode: "managed"})
 		if err != nil {
 			return err
 		}
 		defer prepared.Release()
 		checks := prepared.Checks(ctx, os.Environ(), false)
 		if !execution.ChecksPassed(checks) {
-			return protocol.NewError("requirements_failed", "Command prerequisites are not satisfied. Run devtools doctor for diagnostics.", 3, map[string]any{"checks": checks})
+			return doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "managed", command.Inject)
 		}
 		ctx = services.WithEnvironmentSelection(ctx, command.Env, command.Inject)
 		_, err = prepared.Execute(ctx, os.Environ(), runner, nil, output, output)

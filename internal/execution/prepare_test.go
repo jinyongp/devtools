@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -92,22 +93,47 @@ func TestPrepareExpandsConfiguredExecButNotExtraArgs(t *testing.T) {
 	}
 }
 
-func TestChecksSkipExecutableWithoutRequirementsUnlessForced(t *testing.T) {
+func TestChecksAlwaysIncludeExecutable(t *testing.T) {
 	command := Command{
 		Project:   project.Context{Profile: "app"},
 		Directory: privateTempDir(t),
 		Exec:      []string{"definitely-missing-devtools-test-executable"},
 	}
 	prepared := Prepared{Command: command, Args: command.Arguments()}
-	if checks := prepared.Checks(context.Background(), nil, false); len(checks) != 0 {
+	if checks := prepared.Checks(context.Background(), nil, false); len(checks) != 1 || checks[0].Reason != "not_found" {
 		t.Fatalf("foreground checks = %#v", checks)
 	}
 	checks := prepared.Checks(context.Background(), nil, true)
-	if len(checks) != 1 || checks[0].ID != "command_executable" || checks[0].Status != "fail" {
+	if len(checks) != 2 || checks[0].ID != "command_executable" || checks[0].Status != "fail" || checks[1].ID != "launcher" {
 		t.Fatalf("forced checks = %#v", checks)
 	}
 	if ChecksPassed(checks) {
 		t.Fatal("failed checks reported as passed")
+	}
+}
+
+func TestPreparedChecksReceiveBoundSearchExtensions(t *testing.T) {
+	root := privateTempDir(t)
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	extensions := ".CUSTOM"
+	command := Command{
+		Project: project.Context{Profile: "sample", Root: root}, Directory: root,
+		Exec: []string{executable}, Bind: map[string]project.Binding{"PATHEXT": {Template: &extensions}},
+	}
+	prepared, failure := Preview(context.Background(), command, nil, Dependencies{Ports: ports.Store{Directory: filepath.Join(root, "ports")}})
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	defer prepared.Release()
+	if prepared.SearchOverrides["PATHEXT"] != ".CUSTOM" {
+		t.Fatal("binding was lost before prerequisite checks", prepared.SearchOverrides)
+	}
+	checks := prepared.Checks(context.Background(), []string{"PATHEXT=.EXE"}, false)
+	if len(checks) == 0 || checks[0].Facts["search_origin"] != "binding" {
+		t.Fatal("prerequisite search did not receive the binding", checks)
 	}
 }
 
@@ -123,7 +149,7 @@ func TestPreflightValidatesSelectedEnvBeforeRequirementChecks(t *testing.T) {
 	err := Preflight(context.Background(), command, Dependencies{
 		ValuesDirectory: filepath.Join(privateTempDir(t), "profiles"),
 	}, nil)
-	if err == nil || err.Code != "env_not_found" {
+	if !hasCauseCode(err, "env_not_found") {
 		t.Fatalf("unexpected preflight error: %v", err)
 	}
 }
@@ -171,7 +197,7 @@ func TestValidateIgnoresRunningServeOwnershipButPreflightDoesNot(t *testing.T) {
 	if failure := Validate(context.Background(), command, dependencies, nil); failure != nil {
 		t.Fatalf("non-destructive validation rejected the running command: %v", failure)
 	}
-	if failure := Preflight(context.Background(), command, dependencies, nil); failure == nil || failure.Code != "port_run_active" {
+	if failure := Preflight(context.Background(), command, dependencies, nil); !hasCauseCode(failure, "port_run_active") {
 		t.Fatalf("full preflight did not preserve runtime ownership check: %v", failure)
 	}
 }
@@ -193,7 +219,7 @@ func TestValidateDetectsMissingExecutableBeforeServeAvailability(t *testing.T) {
 		Serve:     []string{"web"},
 	}
 	failure := Validate(context.Background(), command, dependencies, nil)
-	if failure == nil || failure.Code != "requirements_failed" {
+	if failure == nil || failure.Code != "executable_not_found" || failure.ExitCode != 127 {
 		t.Fatalf("missing executable escaped pre-stop validation: %v", failure)
 	}
 }

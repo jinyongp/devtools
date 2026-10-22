@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"github.com/jinyongp/devtools/internal/doctor"
 	"os"
 	"path/filepath"
 	"sort"
@@ -271,7 +272,7 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 				}
 				checks := prepared.Checks(ctx, os.Environ(), true)
 				if !execution.ChecksPassed(checks) {
-					return nil, protocol.NewError("requirements_failed", "Command prerequisites are not satisfied; original executions remain running.", 3, map[string]any{"command": name, "checks": checks})
+					return nil, doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "managed", command.Inject)
 				}
 			}
 			if e := j.Set("snapshots", snapshots); e != nil {

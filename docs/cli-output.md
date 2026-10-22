@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v9 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v10 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
@@ -45,17 +45,17 @@ JSON 명령은 성공 시 stdout에 응답 한 개를 출력합니다. 성공 �
 {"schema_version":1,"ok":true,"data":{"items":[]}}
 ```
 
-Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며, `data` 대신 `error`를 제공합니다. `error.code`는 분기에 사용하고 `message`는 설명으로 사용합니다. 부가 정보가 있는 오류에만 `details`가 있습니다.
+Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며, `data` 대신 `error`를 제공합니다. `error.code`는 분기에 사용하고 `message`는 설명으로 사용합니다. protocol 10의 오류는 공통 `details`를 항상 제공합니다.
 
 ```json
-{"schema_version":1,"ok":false,"error":{"code":"command_not_found","message":"The selected project command is not defined."}}
+{"schema_version":1,"ok":false,"error":{"code":"command_not_found","message":"The selected project command is not defined.","details":{"operation":"command run","phase":"validate","target":{"kind":"command","name":"dev:web"},"sources":[],"reason":"command_not_found","facts":{},"checks":[],"causes":[],"remedies":[],"retry":"after_input_change","effects":"none"}}}
 ```
 
 이 오류 규칙은 도움말 대상 오류와 completion 생성 오류에도 적용됩니다. `command run`은 실행 준비 오류와 Devtools 자체의 스트림 처리 오류에 JSON stderr를 사용합니다. 자식 프로그램의 출력 보호 정책과 종료 상태를 유지하므로, stderr 전체가 Devtools JSON이라고 가정하면 안 됩니다. 출력 전달 자체가 실패하면 자식의 일부 출력 뒤에 Devtools I/O 오류가 기록될 수 있습니다.
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 9`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
+`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 10`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
 
 실행 준비 중 사용자 취소는 `canceled`와 종료 코드 130, 준비 기한 초과는
 `deadline_exceeded`와 종료 코드 3으로 구분합니다. 저장이 완료된 뒤 도착한 취소는
@@ -134,6 +134,28 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v10 마이그레이션
+
+설정 편집, 설명과 진단은 [설정 가이드](configuration.md), [doctor](doctor.md),
+[공통 진단 계약](diagnostic-contract.md)을 따릅니다. envelope는 1을 유지합니다.
+
+| 대상 | protocol v10 |
+| --- | --- |
+| `config` | inspect/check/schema/fmt/edit/migrate와 tool/preset 편집 제공; 수정·삭제는 revision 필요 |
+| `command` | add/update/remove/rename/explain 제공; 기존 조회·실행 유지 |
+| 오류 | `details.operation/phase/target/sources/reason/facts/checks/causes/remedies/retry/effects` 공통 구조 |
+| 실행 파일 누락 | `executable_not_found`, 종료 127; 다른 독립 검사 결과도 `checks`에 보존 |
+| `doctor` 기본 범위 | 전체 명령; 결과는 공통 `checks`, 명령별 `commands[].checks`, `summary` |
+| 검사 상태 | pass/fail/unknown/not_applicable; 확인하지 못한 상태를 성공으로 간주하지 않음 |
+| `doctor --check` | 미준비·미확인 시 종료 3, 전체 보고서는 `error.details.report` |
+| 하위 원인·부분 성공 | `causes`와 `facts.outcomes`; 이전 `details.items`를 읽던 consumer 변경 필요 |
+| remedy | `effect` 추가: read/config_write/value_write/system_write |
+| help/schema | 명령 예제와 JSON `body_example` 제공 |
+
+기존 legacy requirements 파일은 계속 읽습니다. 새 registry 필드와 혼합하면 거절하며,
+변환은 `config migrate`의 preview digest와 source revision으로 명시 승인합니다.
+설치본의 protocol과 명령 존재를 확인한 뒤 consumer를 전환하세요.
 
 ## protocol v9 마이그레이션
 
@@ -298,7 +320,8 @@ Protocol v2의 자동화는 import 입력과 doctor 응답을 함께 변경해�
 `project up/status/logs/restart/down`은 프로젝트 범위의 managed process 명령입니다. 세부 사용법은 [Profile 관리](profiles.md),
 [백업](backup.md), [프로세스 관리](processes.md), [doctor](doctor.md)를 참고하세요.
 
-Project lifecycle의 부분 실패는 stderr 오류의 `details.items`에서 확인합니다.
+protocol v3의 Project lifecycle 부분 실패는 stderr 오류의 `details.items`에서 확인합니다.
+protocol v10에서는 `details.facts.outcomes`와 `details.causes`를 사용합니다.
 이미 성공한 서버는 유지합니다. 같은 입력과 요청 ID로 재시도하면 완료 항목을 반복하지
 않고 미완료 작업을 이어가므로, `replayed: true`인 재개 응답이 항상 최초 부분 결과와
 동일한 것은 아닙니다. 완료된 작업의 재전송은 저장된 완료 결과를 반환합니다.

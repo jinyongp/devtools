@@ -85,7 +85,11 @@ func apiError(w http.ResponseWriter, e *protocol.Error) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = protocol.Failure(w, e)
+	operation := "dashboard"
+	if value, ok := e.Details["operation"].(string); ok {
+		operation = value
+	}
+	_ = protocol.Failure(w, protocol.Public(e, operation))
 }
 func invalidAction(w http.ResponseWriter) {
 	apiError(w, protocol.NewError("invalid_argument", "Provide a valid structured action request.", 2, nil))

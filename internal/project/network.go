@@ -66,7 +66,7 @@ func (p Context) networkEnvironment(parent []string, load bool) (map[string]stri
 	if p.ConfigPath != "" {
 		data, e := os.ReadFile(p.ConfigPath)
 		if e != nil {
-			return nil, "", ioError(p.ConfigPath)
+			return nil, "", ioError(p.ConfigPath, e)
 		}
 		sources = append(sources, Digest(data))
 	}

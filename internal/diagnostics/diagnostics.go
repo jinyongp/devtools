@@ -15,7 +15,6 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/proxy"
 	"github.com/jinyongp/devtools/internal/services"
-	"github.com/jinyongp/devtools/internal/storageerr"
 	"github.com/jinyongp/devtools/internal/valuehandoff"
 	"github.com/jinyongp/devtools/internal/vault"
 )
@@ -85,6 +84,7 @@ type Backup struct {
 }
 
 type Issue struct {
+	Message string         `json:"message"`
 	Section string         "json:\"section\""
 	Code    string         "json:\"code\""
 	Details map[string]any `json:"details,omitempty"`
@@ -123,10 +123,11 @@ func (r *Report) issue(section string, err *protocol.Error) {
 		code = err.Code
 	}
 	var details map[string]any
+	message := "Subsystem inspection could not complete."
 	if err != nil {
-		details = storageerr.SafeDetails(err.Details)
+		details = protocol.Public(err, "diagnostics "+section).Details
 	}
-	r.Issues = append(r.Issues, Issue{Section: section, Code: code, Details: details})
+	r.Issues = append(r.Issues, Issue{Section: section, Code: code, Details: details, Message: message})
 }
 
 func canceled(ctx context.Context) *protocol.Error {

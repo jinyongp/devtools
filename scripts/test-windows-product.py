@@ -22,9 +22,9 @@ from vault_test_support import retire_vaults
 class CLIError(RuntimeError):
     def __init__(self, arguments, code, details):
         self.code, self.details = code, details or {}
-        safe = {key: self.details.get(key) for key in ("operation", "os_error")}
-        safe["conditions"] = [item.get("condition", {}).get("code")
-                              for item in (self.details.get("items") or []) if item.get("condition")]
+        safe = {key: self.details.get(key) for key in ("operation", "phase", "reason", "effects")}
+        safe["facts"] = {key: self.details.get("facts", {}).get(key) for key in ("stage", "os_code")}
+        safe["conditions"] = [cause.get("code") for cause in self.details.get("causes", [])]
         super().__init__(f"Installed command {arguments[:3]} failed: {code} {safe}")
 
 
@@ -96,7 +96,7 @@ def main():
         ], cwd=repository, env=base_env, text=True, encoding="utf-8", capture_output=True, timeout=180)
         assert install.returncode == 0, "Candidate installer did not complete (raw output withheld)"
         identity = api("version")
-        assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 9
+        assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 10
         alias = binary.with_name("dvt.exe")
         assert hashlib.sha256(alias.read_bytes()).digest() == hashlib.sha256(binary.read_bytes()).digest()
         steps.append("candidate_install_and_alias")

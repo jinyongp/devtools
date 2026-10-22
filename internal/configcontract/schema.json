@@ -1,0 +1,2948 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:devtools:config-contract:protocol-10",
+  "title": "Project configuration, editing and diagnostic contract (protocol 10)",
+  "description": "Protocol-10 configuration, editing and diagnostic structures. Transport requires strict Unicode and signed-64-bit decimal integer tokens. x-maxUtf8Bytes is an asserted UTF-8 byte constraint. Linked normative contracts define references, state and filesystem checks.",
+  "$ref": "#/$defs/Project",
+  "$defs": {
+    "Name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9]",
+      "not": {
+        "pattern": "[^A-Za-z0-9._-]"
+      }
+    },
+    "ValueKey": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z_]",
+      "not": {
+        "pattern": "[^A-Za-z0-9_]"
+      }
+    },
+    "CommandName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^-\\x00-\\x1F\\x7F-\\x9F]",
+      "not": {
+        "pattern": "[\\x00-\\x1F\\x7F-\\x9F]"
+      }
+    },
+    "Revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "minLength": 64,
+      "maxLength": 64
+    },
+    "Arg": {
+      "type": "string",
+      "pattern": "^[^\\x00]*$"
+    },
+    "Argv": {
+      "type": "array",
+      "minItems": 1,
+      "prefixItems": [
+        {
+          "type": "string",
+          "pattern": "^[^\\x00]*$",
+          "minLength": 1
+        }
+      ],
+      "items": {
+        "$ref": "#/$defs/Arg"
+      }
+    },
+    "Version": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:-[0-9A-Za-z.-]+)?$",
+      "not": {
+        "pattern": "[^0-9A-Za-z.\\-]"
+      }
+    },
+    "Tool": {
+      "type": "object",
+      "properties": {
+        "executable": {
+          "type": "string",
+          "pattern": "^[^\\x00]*$",
+          "minLength": 1
+        },
+        "version": {
+          "$ref": "#/$defs/Version"
+        },
+        "version_args": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "pattern": "^[^\\x00]*$",
+            "maxLength": 4096,
+            "x-maxUtf8Bytes": 4096
+          }
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "version_args"
+            ],
+            "properties": {
+              "version_args": {
+                "minItems": 1
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "version"
+            ]
+          }
+        }
+      ]
+    },
+    "ToolPatch": {
+      "type": "object",
+      "properties": {
+        "executable": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[^\\x00]*$",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Version"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version_args": {
+          "anyOf": [
+            {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "type": "string",
+                "pattern": "^[^\\x00]*$",
+                "maxLength": 4096,
+                "x-maxUtf8Bytes": 4096
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "Preset": {
+      "type": "object",
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Name"
+          },
+          "uniqueItems": true
+        },
+        "vars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueKey"
+          },
+          "uniqueItems": true
+        },
+        "secs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueKey"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "PresetPatch": {
+      "type": "object",
+      "properties": {
+        "tools": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Name"
+              },
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "vars": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ValueKey"
+              },
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secs": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ValueKey"
+              },
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "Selection": {
+      "type": "object",
+      "properties": {
+        "requires": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Name"
+          },
+          "uniqueItems": true
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Name"
+          },
+          "uniqueItems": true
+        },
+        "vars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueKey"
+          },
+          "uniqueItems": true
+        },
+        "secs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueKey"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "SelectionPatch": {
+      "type": "object",
+      "properties": {
+        "requires": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Name"
+              },
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Name"
+              },
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "vars": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ValueKey"
+              },
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secs": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ValueKey"
+              },
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "Binding": {
+      "type": "object",
+      "properties": {
+        "port": {
+          "$ref": "#/$defs/Name"
+        },
+        "proxy": {
+          "$ref": "#/$defs/Name"
+        },
+        "format": {
+          "enum": [
+            "number",
+            "url"
+          ]
+        },
+        "profile": {
+          "$ref": "#/$defs/Name"
+        },
+        "instance": {
+          "type": "string",
+          "pattern": "^[^\\x00]*$",
+          "minLength": 1
+        },
+        "template": {
+          "type": "string",
+          "pattern": "^[^\\x00]*$"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "template"
+          ],
+          "maxProperties": 1
+        },
+        {
+          "required": [
+            "port"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "proxy"
+                ]
+              },
+              {
+                "required": [
+                  "template"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "proxy"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "port"
+                ]
+              },
+              {
+                "required": [
+                  "format"
+                ]
+              },
+              {
+                "required": [
+                  "template"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "BindingPatch": {
+      "type": "object",
+      "properties": {
+        "port": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "proxy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "format": {
+          "anyOf": [
+            {
+              "enum": [
+                "number",
+                "url"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "instance": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[^\\x00]*$",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "template": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[^\\x00]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "Ready": {
+      "type": "object",
+      "properties": {
+        "exec": {
+          "$ref": "#/$defs/Argv"
+        },
+        "timeout": {
+          "type": "string",
+          "minLength": 1,
+          "x-semantic": "Go duration, 10ms through 30s"
+        }
+      },
+      "required": [
+        "exec"
+      ],
+      "additionalProperties": false
+    },
+    "ReadyPatch": {
+      "type": "object",
+      "properties": {
+        "exec": {
+          "$ref": "#/$defs/Argv"
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "Command": {
+      "type": "object",
+      "properties": {
+        "exec": {
+          "$ref": "#/$defs/Argv"
+        },
+        "inject": {
+          "type": "boolean",
+          "default": false
+        },
+        "env": {
+          "anyOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/Name"
+            }
+          ],
+          "default": ""
+        },
+        "bundle": {
+          "anyOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/Name"
+            }
+          ],
+          "default": ""
+        },
+        "output": {
+          "enum": [
+            "auto",
+            "redacted",
+            "raw"
+          ],
+          "default": "auto"
+        },
+        "stdout": {
+          "enum": [
+            "auto",
+            "redacted",
+            "raw"
+          ]
+        },
+        "stderr": {
+          "enum": [
+            "auto",
+            "redacted",
+            "raw"
+          ]
+        },
+        "values_update": {
+          "enum": [
+            "notify",
+            "restart"
+          ],
+          "default": "notify"
+        },
+        "ready": {
+          "$ref": "#/$defs/Ready"
+        },
+        "serve": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Name"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "bind": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/ValueKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Binding"
+          },
+          "default": {}
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Name"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Name"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "vars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueKey"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "secs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueKey"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "tool_overrides": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Name"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Tool"
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "exec"
+      ],
+      "additionalProperties": false
+    },
+    "CommandPatch": {
+      "type": "object",
+      "properties": {
+        "exec": {
+          "$ref": "#/$defs/Argv"
+        },
+        "inject": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "env": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "const": ""
+                },
+                {
+                  "$ref": "#/$defs/Name"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bundle": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "const": ""
+                },
+                {
+                  "$ref": "#/$defs/Name"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "output": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto",
+                "redacted",
+                "raw"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stdout": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto",
+                "redacted",
+                "raw"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stderr": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto",
+                "redacted",
+                "raw"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "values_update": {
+          "anyOf": [
+            {
+              "enum": [
+                "notify",
+                "restart"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ready": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReadyPatch"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "serve": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Name"
+              },
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/ValueKey"
+              },
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/BindingPatch"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requires": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Name"
+              },
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Name"
+              },
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "vars": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ValueKey"
+              },
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secs": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ValueKey"
+              },
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tool_overrides": {
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/Name"
+              },
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Tool"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "Port": {
+      "type": "object",
+      "properties": {
+        "port": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            {
+              "type": "string",
+              "pattern": "^[^\\x00]*$"
+            }
+          ]
+        },
+        "strict": {
+          "type": "boolean"
+        },
+        "range": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          }
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "strict"
+            ],
+            "properties": {
+              "strict": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "port"
+            ]
+          }
+        }
+      ]
+    },
+    "PortPatch": {
+      "type": "object",
+      "properties": {
+        "port": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[^\\x00]*$"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "strict": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "range": {
+          "anyOf": [
+            {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "Proxy": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string",
+          "pattern": "^[^\\x00]*$",
+          "minLength": 1
+        },
+        "port": {
+          "$ref": "#/$defs/Name"
+        },
+        "listener": {
+          "$ref": "#/$defs/Name"
+        },
+        "dns": {
+          "enum": [
+            "auto",
+            "hosts",
+            "external"
+          ]
+        }
+      },
+      "required": [
+        "host",
+        "port"
+      ],
+      "additionalProperties": false
+    },
+    "ProxyPatch": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string",
+          "pattern": "^[^\\x00]*$",
+          "minLength": 1
+        },
+        "port": {
+          "$ref": "#/$defs/Name"
+        },
+        "listener": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dns": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto",
+                "hosts",
+                "external"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "Project": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "$ref": "#/$defs/Name"
+        },
+        "bundle": {
+          "anyOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/Name"
+            }
+          ]
+        },
+        "env_files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^\\x00]*$",
+            "minLength": 1
+          }
+        },
+        "tools": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Name"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Tool"
+          }
+        },
+        "presets": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Name"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Preset"
+          }
+        },
+        "defaults": {
+          "$ref": "#/$defs/Selection"
+        },
+        "commands": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/CommandName"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Command"
+          }
+        },
+        "ports": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Name"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Port"
+          }
+        },
+        "proxies": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Name"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Proxy"
+          }
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "additionalProperties": false
+    },
+    "ProjectPatch": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "$ref": "#/$defs/Name"
+        },
+        "bundle": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "const": ""
+                },
+                {
+                  "$ref": "#/$defs/Name"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "env_files": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[^\\x00]*$",
+                "minLength": 1
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "defaults": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SelectionPatch"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "Operation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "project.update"
+            },
+            "value": {
+              "$ref": "#/$defs/ProjectPatch"
+            }
+          },
+          "required": [
+            "op",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "tool.add"
+            },
+            "name": {
+              "$ref": "#/$defs/Name"
+            },
+            "value": {
+              "$ref": "#/$defs/Tool"
+            }
+          },
+          "required": [
+            "op",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "tool.update"
+            },
+            "name": {
+              "$ref": "#/$defs/Name"
+            },
+            "value": {
+              "$ref": "#/$defs/ToolPatch"
+            }
+          },
+          "required": [
+            "op",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "tool.remove"
+            },
+            "name": {
+              "$ref": "#/$defs/Name"
+            }
+          },
+          "required": [
+            "op",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "preset.add"
+            },
+            "name": {
+              "$ref": "#/$defs/Name"
+            },
+            "value": {
+              "$ref": "#/$defs/Preset"
+            }
+          },
+          "required": [
+            "op",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "preset.update"
+            },
+            "name": {
+              "$ref": "#/$defs/Name"
+            },
+            "value": {
+              "$ref": "#/$defs/PresetPatch"
+            }
+          },
+          "required": [
+            "op",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "preset.remove"
+            },
+            "name": {
+              "$ref": "#/$defs/Name"
+            }
+          },
+          "required": [
+            "op",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "command.add"
+            },
+            "name": {
+              "$ref": "#/$defs/CommandName"
+            },
+            "value": {
+              "$ref": "#/$defs/Command"
+            }
+          },
+          "required": [
+            "op",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "command.update"
+            },
+            "name": {
+              "$ref": "#/$defs/CommandName"
+            },
+            "value": {
+              "$ref": "#/$defs/CommandPatch"
+            }
+          },
+          "required": [
+            "op",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "command.remove"
+            },
+            "name": {
+              "$ref": "#/$defs/CommandName"
+            }
+          },
+          "required": [
+            "op",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "port.add"
+            },
+            "name": {
+              "$ref": "#/$defs/Name"
+            },
+            "value": {
+              "$ref": "#/$defs/Port"
+            }
+          },
+          "required": [
+            "op",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "port.update"
+            },
+            "name": {
+              "$ref": "#/$defs/Name"
+            },
+            "value": {
+              "$ref": "#/$defs/PortPatch"
+            }
+          },
+          "required": [
+            "op",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "port.remove"
+            },
+            "name": {
+              "$ref": "#/$defs/Name"
+            }
+          },
+          "required": [
+            "op",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "proxy.add"
+            },
+            "name": {
+              "$ref": "#/$defs/Name"
+            },
+            "value": {
+              "$ref": "#/$defs/Proxy"
+            }
+          },
+          "required": [
+            "op",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "proxy.update"
+            },
+            "name": {
+              "$ref": "#/$defs/Name"
+            },
+            "value": {
+              "$ref": "#/$defs/ProxyPatch"
+            }
+          },
+          "required": [
+            "op",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "proxy.remove"
+            },
+            "name": {
+              "$ref": "#/$defs/Name"
+            }
+          },
+          "required": [
+            "op",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "command.rename"
+            },
+            "name": {
+              "$ref": "#/$defs/CommandName"
+            },
+            "new_name": {
+              "$ref": "#/$defs/CommandName"
+            }
+          },
+          "required": [
+            "op",
+            "name",
+            "new_name"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Edit": {
+      "type": "object",
+      "properties": {
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Operation"
+          }
+        }
+      },
+      "required": [
+        "operations"
+      ],
+      "additionalProperties": false
+    },
+    "Source": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "config",
+            "json",
+            "argv",
+            "default",
+            "system"
+          ]
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "kind",
+        "path"
+      ],
+      "additionalProperties": false,
+      "dependentRequired": {
+        "line": [
+          "column"
+        ],
+        "column": [
+          "line"
+        ]
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "default"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "offset"
+                  ]
+                },
+                {
+                  "required": [
+                    "end_offset"
+                  ]
+                },
+                {
+                  "required": [
+                    "line"
+                  ]
+                },
+                {
+                  "required": [
+                    "column"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Target": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z]",
+          "not": {
+            "pattern": "[^a-z0-9_]"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "env": {
+          "type": "string"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "config_path": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "bundle": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "Remedy": {
+      "type": "object",
+      "properties": {
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "required_inputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effect": {
+          "enum": [
+            "read",
+            "config_write",
+            "value_write",
+            "system_write"
+          ]
+        }
+      },
+      "required": [
+        "argv",
+        "required_inputs",
+        "message",
+        "effect"
+      ],
+      "additionalProperties": false
+    },
+    "Facts": {
+      "type": "object",
+      "properties": {
+        "outcomes": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/Outcome"}
+        },
+        "expected_version": {
+          "type": "string"
+        },
+        "observed_version": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "expected_revision": {
+          "anyOf": [{"$ref": "#/$defs/Revision"}, {"type": "integer", "minimum": 0}]
+        },
+        "observed_revision": {
+          "anyOf": [{"$ref": "#/$defs/Revision"}, {"type": "integer", "minimum": 0}]
+        },
+        "candidate_digest": {
+          "$ref": "#/$defs/Revision"
+        },
+        "backup_name": {
+          "type": "string"
+        },
+        "os_code": {
+          "type": "integer"
+        },
+        "input_role": {
+          "type": "string"
+        },
+        "resource": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "allowed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "actual_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reason": {
+          "type": "string"
+        },
+        "executable": {
+          "type": "string"
+        },
+        "search_origin": {
+          "enum": [
+            "parent",
+            "profile",
+            "binding"
+          ]
+        },
+        "domain": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context_reason": {
+          "type": "string"
+        },
+        "expected_target_kind": {
+          "type": "string"
+        },
+        "actual_target_kind": {
+          "type": "string"
+        },
+        "affected_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "Cause": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Source"
+          }
+        },
+        "facts": {
+          "$ref": "#/$defs/Facts"
+        }
+      },
+      "required": [
+        "code",
+        "reason",
+        "target",
+        "sources",
+        "facts"
+      ],
+      "additionalProperties": false
+    },
+    "Check": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "unknown",
+            "not_applicable"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Source"
+          }
+        },
+        "facts": {
+          "$ref": "#/$defs/Facts"
+        },
+        "remedies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Remedy"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "required",
+        "reason",
+        "message",
+        "target",
+        "sources",
+        "facts",
+        "remedies"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "not_applicable"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "required": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Diagnostic": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Source"
+          }
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "facts": {
+          "$ref": "#/$defs/Facts"
+        },
+        "remedies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Remedy"
+          }
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "target",
+        "sources",
+        "reason",
+        "facts",
+        "remedies"
+      ],
+      "additionalProperties": false
+    },
+    "DoctorSummary": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ready": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_ready": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "required_checks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_checks": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "commands",
+        "ready",
+        "not_ready",
+        "unknown",
+        "required_checks",
+        "passed",
+        "failed",
+        "unknown_checks"
+      ],
+      "additionalProperties": false
+    },
+    "CommandReport": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/CommandName"
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "env": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "enum": [
+            "ready",
+            "not_ready",
+            "unknown"
+          ]
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Check"
+          }
+        },
+        "selection": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "profile",
+        "env",
+        "state",
+        "checks",
+        "selection"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "ready"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "profile": {
+                "$ref": "#/$defs/Name"
+              },
+              "env": {
+                "type": "string"
+              },
+              "selection": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "DoctorReport": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "enum": [
+            "all",
+            "selected",
+            "project",
+            "profile"
+          ]
+        },
+        "config_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "directory": {
+          "type": "string"
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "enum": [
+            "ready",
+            "not_ready",
+            "unknown"
+          ]
+        },
+        "ready": {
+          "type": "boolean"
+        },
+        "selection": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CommandName"
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Check"
+          }
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CommandReport"
+          }
+        },
+        "summary": {
+          "$ref": "#/$defs/DoctorSummary"
+        },
+        "mode": {
+          "enum": [
+            "foreground",
+            "managed"
+          ]
+        }
+      },
+      "required": [
+        "scope",
+        "config_path",
+        "directory",
+        "profile",
+        "state",
+        "ready",
+        "selection",
+        "checks",
+        "commands",
+        "summary",
+        "mode"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "ready"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "ready": {
+                "const": true
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "ready": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ValidationReport": {
+      "type": "object",
+      "properties": {
+        "config_path": {
+          "type": "string"
+        },
+        "revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "valid": {
+          "type": "boolean"
+        },
+        "format": {
+          "enum": [
+            "neutral",
+            "legacy",
+            "registry",
+            "unknown"
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          }
+        }
+      },
+      "required": [
+        "config_path",
+        "revision",
+        "valid",
+        "format",
+        "diagnostics"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "valid": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "diagnostics": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "diagnostics": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Change": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string"
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "to_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "op",
+        "path"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "command.rename"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "to_path"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "to_path"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Impact": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CommandName"
+          }
+        },
+        "command_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "external_usage": {
+          "const": "not_checked"
+        },
+        "running_processes": {
+          "const": "not_checked"
+        }
+      },
+      "required": [
+        "commands",
+        "command_count",
+        "external_usage",
+        "running_processes"
+      ],
+      "additionalProperties": false
+    },
+    "EditResult": {
+      "type": "object",
+      "properties": {
+        "config_path": {
+          "type": "string"
+        },
+        "previous_revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "would_change": {
+          "type": "boolean"
+        },
+        "candidate_digest": {
+          "$ref": "#/$defs/Revision"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Change"
+          }
+        },
+        "impact": {
+          "$ref": "#/$defs/Impact"
+        },
+        "format": {
+          "enum": [
+            "neutral",
+            "legacy",
+            "registry"
+          ]
+        },
+        "candidate_format": {
+          "enum": [
+            "neutral",
+            "legacy",
+            "registry"
+          ]
+        }
+      },
+      "required": [
+        "config_path",
+        "previous_revision",
+        "revision",
+        "changed",
+        "would_change",
+        "candidate_digest",
+        "changes",
+        "impact",
+        "format",
+        "candidate_format"
+      ],
+      "additionalProperties": false
+    },
+    "MigrationResult": {
+      "type": "object",
+      "properties": {
+        "config_path": {
+          "type": "string"
+        },
+        "previous_revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "would_change": {
+          "type": "boolean"
+        },
+        "candidate_digest": {
+          "$ref": "#/$defs/Revision"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Change"
+          }
+        },
+        "impact": {
+          "$ref": "#/$defs/Impact"
+        },
+        "format": {
+          "enum": [
+            "neutral",
+            "legacy",
+            "registry"
+          ]
+        },
+        "candidate_format": {
+          "enum": [
+            "neutral",
+            "legacy",
+            "registry"
+          ]
+        },
+        "equivalent": {
+          "const": true
+        },
+        "apply_digest": {
+          "$ref": "#/$defs/Revision"
+        }
+      },
+      "required": [
+        "config_path",
+        "previous_revision",
+        "revision",
+        "changed",
+        "would_change",
+        "candidate_digest",
+        "changes",
+        "impact",
+        "format",
+        "candidate_format",
+        "equivalent",
+        "apply_digest"
+      ],
+      "additionalProperties": false
+    },
+    "InspectResult": {
+      "type": "object",
+      "properties": {
+        "config_path": {
+          "type": "string"
+        },
+        "revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "format": {
+          "enum": [
+            "neutral",
+            "legacy",
+            "registry"
+          ]
+        },
+        "document": {
+          "$ref": "#/$defs/Project"
+        }
+      },
+      "required": [
+        "config_path",
+        "revision",
+        "format",
+        "document"
+      ],
+      "additionalProperties": false
+    },
+    "Provenance": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Source"
+          }
+        }
+      },
+      "required": [
+        "path",
+        "sources"
+      ],
+      "additionalProperties": false
+    },
+    "EffectiveRequirements": {
+      "type": "object",
+      "properties": {
+        "tools": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Name"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "executable": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "version_args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "executable",
+              "version",
+              "version_args"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "vars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueKey"
+          },
+          "uniqueItems": true
+        },
+        "secs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueKey"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "tools",
+        "vars",
+        "secs"
+      ],
+      "additionalProperties": false
+    },
+    "EffectiveCommand": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/CommandName"
+        },
+        "exec": {
+          "$ref": "#/$defs/Argv"
+        },
+        "inject": {
+          "type": "boolean"
+        },
+        "env": {
+          "type": "string"
+        },
+        "selection": {
+          "type": "string"
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "enum": [
+                "auto",
+                "redacted",
+                "raw"
+              ]
+            },
+            "stdout": {
+              "enum": [
+                "",
+                "auto",
+                "redacted",
+                "raw"
+              ]
+            },
+            "stderr": {
+              "enum": [
+                "",
+                "auto",
+                "redacted",
+                "raw"
+              ]
+            }
+          },
+          "required": [
+            "mode",
+            "stdout",
+            "stderr"
+          ],
+          "additionalProperties": false
+        },
+        "values_update": {
+          "enum": [
+            "notify",
+            "restart"
+          ]
+        },
+        "serve": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Name"
+          },
+          "uniqueItems": true
+        },
+        "bind": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/ValueKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Binding"
+          }
+        },
+        "ready": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EffectiveReady"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requirements": {
+          "$ref": "#/$defs/EffectiveRequirements"
+        }
+      },
+      "required": [
+        "name",
+        "exec",
+        "inject",
+        "env",
+        "selection",
+        "output",
+        "values_update",
+        "serve",
+        "bind",
+        "ready",
+        "requirements"
+      ],
+      "additionalProperties": false
+    },
+    "ExplainResult": {
+      "type": "object",
+      "properties": {
+        "config_path": {
+          "type": "string"
+        },
+        "revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "profile": {
+          "$ref": "#/$defs/Name"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "item": {
+          "$ref": "#/$defs/EffectiveCommand"
+        },
+        "provenance": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Provenance"
+          }
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          }
+        }
+      },
+      "required": [
+        "config_path",
+        "revision",
+        "profile",
+        "directory",
+        "item",
+        "provenance",
+        "unresolved"
+      ],
+      "additionalProperties": false
+    },
+    "ErrorDetails": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "phase": {
+          "enum": [
+            "parse",
+            "resolve",
+            "validate",
+            "preflight",
+            "lock",
+            "prepare",
+            "publish",
+            "observe",
+            "render"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Source"
+          }
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "facts": {
+          "$ref": "#/$defs/Facts"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Check"
+          }
+        },
+        "causes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Cause"
+          }
+        },
+        "remedies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Remedy"
+          }
+        },
+        "retry": {
+          "enum": [
+            "never",
+            "after_input_change",
+            "after_refresh",
+            "after_dependency_change",
+            "inspect_first",
+            "same_request"
+          ]
+        },
+        "effects": {
+          "enum": [
+            "none",
+            "committed",
+            "partial",
+            "unknown"
+          ]
+        },
+        "report": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValidationReport"
+            },
+            {
+              "$ref": "#/$defs/DoctorReport"
+            },
+            {
+              "$ref": "#/$defs/EditResult"
+            }
+          ]
+        }
+      },
+      "required": [
+        "operation",
+        "phase",
+        "target",
+        "sources",
+        "reason",
+        "facts",
+        "checks",
+        "causes",
+        "remedies",
+        "retry",
+        "effects"
+      ],
+      "additionalProperties": false
+    },
+    "Failure": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "ok": {
+          "const": false
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1
+            },
+            "details": {
+              "$ref": "#/$defs/ErrorDetails"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "ok",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "Success": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "ok": {
+          "const": true
+        },
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectResult"
+            },
+            {
+              "$ref": "#/$defs/EditResult"
+            },
+            {
+              "$ref": "#/$defs/MigrationResult"
+            },
+            {
+              "$ref": "#/$defs/ValidationReport"
+            },
+            {
+              "$ref": "#/$defs/ExplainResult"
+            },
+            {
+              "$ref": "#/$defs/DoctorReport"
+            },
+            {
+              "$ref": "#/$defs/SchemaResult"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "ok",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "SchemaResult": {
+      "type": "object",
+      "properties": {
+        "protocol_version": {
+          "const": 10
+        },
+        "schema": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "protocol_version",
+        "schema"
+      ],
+      "additionalProperties": false
+    },
+    "Outcome": {
+      "type": "object",
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "name": {"type": "string"},
+        "id": {"type": "string"},
+        "state": {"type": "string"},
+        "changed": {"type": "boolean"},
+        "code": {"type": "string"}
+      },
+      "required": ["kind", "name", "state", "changed"],
+      "additionalProperties": false
+    },
+    "EffectiveReady": {
+      "type": "object",
+      "properties": {
+        "exec": {
+          "$ref": "#/$defs/Argv"
+        },
+        "timeout": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "exec",
+        "timeout"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,6 +1,9 @@
 package cli
 
-import "github.com/jinyongp/devtools/internal/protocol"
+import (
+	"github.com/jinyongp/devtools/internal/configcontract"
+	"github.com/jinyongp/devtools/internal/protocol"
+)
 
 func (a *App) catalog() map[string]any {
 	commands := make([]map[string]any, 0, len(a.commands))
@@ -86,6 +89,10 @@ func (a *App) catalog() map[string]any {
 			}
 		}
 		entry := map[string]any{"name": command.Name, "aliases": command.Aliases, "description": command.Description, "options": command.Options, "arguments": command.Arguments, "accepts_child_args": command.ChildArgs, "output_mode": command.OutputMode, "input_schema": input, "output_schema": command.Output}
+		entry["examples"] = command.Examples
+		if command.BodyExample != nil {
+			entry["body_example"] = command.BodyExample
+		}
 		if command.OutputMode != OutputJSON {
 			delete(entry, "output_schema")
 		}
@@ -111,7 +118,7 @@ func (a *App) catalog() map[string]any {
 		"response_schema": map[string]any{
 			"$schema":              "https://json-schema.org/draft/2020-12/schema",
 			"type":                 "object",
-			"properties":           map[string]any{"schema_version": map[string]any{"const": protocol.EnvelopeVersion}, "ok": map[string]any{"type": "boolean"}, "data": map[string]any{}, "error": object(map[string]any{"code": stringSchema(), "message": stringSchema(), "details": map[string]any{"type": "object"}}, "code", "message")},
+			"properties":           map[string]any{"schema_version": map[string]any{"const": protocol.EnvelopeVersion}, "ok": map[string]any{"type": "boolean"}, "data": map[string]any{}, "error": object(map[string]any{"code": stringSchema(), "message": stringSchema(), "details": configcontract.Definition("ErrorDetails")}, "code", "message", "details")},
 			"required":             []string{"schema_version", "ok"},
 			"additionalProperties": false,
 			"oneOf": []any{

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/redact"
@@ -18,6 +19,7 @@ import (
 )
 
 type PlanOptions struct {
+	Mode      string
 	Parent    process.ParentPolicy
 	Selection string
 }
@@ -31,6 +33,7 @@ type PlanSummary struct {
 	Parent    process.ParentPolicy `json:"parent"`
 }
 type Plan struct {
+	mode      string
 	command   Command
 	parent    []string
 	summary   PlanSummary
@@ -87,6 +90,12 @@ func ResolvePlan(command Command, parent []string, options PlanOptions) (*Plan, 
 		return nil, protocol.NewError("invalid_argument", "Invalid value bundle selection.", 2, nil)
 	}
 	command.Selection = options.Selection
+	if options.Mode == "" {
+		options.Mode = "foreground"
+	}
+	if options.Mode != "foreground" && options.Mode != "managed" {
+		return nil, protocol.NewError("invalid_argument", "Invalid execution preparation mode.", 2, nil)
+	}
 	selected, e := process.SelectParent(parent, options.Parent)
 	if e != nil {
 		return nil, e
@@ -95,7 +104,7 @@ func ResolvePlan(command Command, parent []string, options PlanOptions) (*Plan, 
 		options.Parent.Mode = process.ParentInherit
 	}
 	options.Parent.Allow = append([]string{}, options.Parent.Allow...)
-	return &Plan{command: cloneCommand(command), parent: process.CompleteEnvironment(selected), summary: PlanSummary{Output: command.Output.Normalize(), Profile: command.Project.Profile, Command: command.Name, Env: command.Env, Inject: command.Inject, Selection: options.Selection, Parent: options.Parent}, created: time.Now()}, nil
+	return &Plan{mode: options.Mode, command: cloneCommand(command), parent: process.CompleteEnvironment(selected), summary: PlanSummary{Output: command.Output.Normalize(), Profile: command.Project.Profile, Command: command.Name, Env: command.Env, Inject: command.Inject, Selection: options.Selection, Parent: options.Parent}, created: time.Now()}, nil
 }
 func loadSnapshot(ctx context.Context, command Command, dependencies Dependencies, includeSecrets bool) (*values.Snapshot, *protocol.Error) {
 	if !command.NeedsValues() {
@@ -214,8 +223,9 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 	plan := snapshot.plan
 	prepared, e := prepareResolved(ctx, cloneCommand(plan.command), snapshot.values.StateCopy(), dependencies, preparationOptions{injectValues: true, parentEnvironment: &plan.parent})
 	if e != nil {
-		return Prepared{}, e
+		return Prepared{}, PreparationFailure(ctx, plan.command, plan.parent, plan.mode, e)
 	}
+	prepared.mode = plan.mode
 	if dependencies.IsolatedRoot != "" {
 		prepared.Injected["DEVTOOLS_ISOLATED_ROOT"] = dependencies.IsolatedRoot
 	}
@@ -224,6 +234,15 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 		prepared.Release()
 		return Prepared{}, e
 	}
+	prepared.probeEnvironment = probeEnvironment(plan.parent, prepared.State, plan.command.Env)
+	pathBefore, _ := process.LookPath(prepared.Args[0], prepared.Command.Directory, environment)
+	stampBefore, stampErr := process.ExecutableStamp(pathBefore)
+	checks := prepared.Checks(ctx, prepared.probeEnvironment, true)
+	if failure := doctor.Failure(checks, plan.command.Name, plan.command.Directory, plan.command.Project.Profile, plan.command.Env, plan.command.Selection, plan.mode, plan.command.Inject); failure != nil {
+		prepared.Release()
+		return Prepared{}, failure
+	}
+	prepared.checks = checks
 	path, e := process.LookPath(prepared.Args[0], prepared.Command.Directory, environment)
 	if e != nil {
 		prepared.Release()
@@ -231,7 +250,12 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 	}
 	if info, err := os.Stat(path); err != nil || !process.IsExecutable(info) {
 		prepared.Release()
-		return Prepared{}, protocol.NewError("command_not_found", "Prepared executable is unavailable.", 127, nil)
+		return Prepared{}, protocol.NewError("executable_not_found", "The executable changed after prerequisite validation; diagnose the command again.", 127, map[string]any{"reason": "executable_changed", "checks": checks})
+	}
+	stamp, err := process.ExecutableStamp(path)
+	if stampErr != nil || err != nil || stamp != stampBefore {
+		prepared.Release()
+		return Prepared{}, protocol.NewError("input_changed", "The executable changed or could not be verified during prerequisite checks. Prepare this command again.", 3, map[string]any{"phase": "preflight", "reason": "executable_changed", "checks": checks, "retry": "after_refresh"})
 	}
 	patterns := [][]byte{}
 	if plan.command.Inject && prepared.State != nil {
@@ -282,7 +306,7 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 		prepared.Release()
 		return Prepared{}, values.VaultError(ctx, err)
 	}
-	prepared.Input, e = newInputPayload(inputWire{VaultDirectory: dependencies.VaultDirectory, Served: prepared.Assignments, Format: 1, Metadata: metadata, Args: prepared.Args, Environment: environment, Directory: prepared.Command.Directory, Executable: path, Ready: cloneReady(prepared.Command.Ready), Patterns: patterns})
+	prepared.Input, e = newInputPayload(inputWire{ExecutableStamp: stamp, VaultDirectory: dependencies.VaultDirectory, Served: prepared.Assignments, Format: 1, Metadata: metadata, Args: prepared.Args, Environment: environment, Directory: prepared.Command.Directory, Executable: path, Ready: cloneReady(prepared.Command.Ready), Patterns: patterns})
 	if e != nil {
 		prepared.Release()
 		return Prepared{}, e
@@ -306,7 +330,7 @@ func PrepareInput(ctx context.Context, command Command, dependencies Dependencie
 	defer plan.Destroy()
 	snapshot, e := AuthenticateSnapshot(ctx, plan, dependencies)
 	if e != nil {
-		return Prepared{}, e
+		return Prepared{}, PreparationFailure(ctx, plan.command, plan.parent, plan.mode, e)
 	}
 	defer snapshot.Destroy()
 	return Materialize(ctx, snapshot, dependencies)

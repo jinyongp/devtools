@@ -43,7 +43,7 @@ func (a *App) importCommand(ctx context.Context, streams IO, request Request) (a
 			return nil, err
 		}
 	}
-	input, err := readSecret(ctx, streams, map[string]string{"file": request.Options["file"]})
+	input, err := readValueInput(ctx, streams, map[string]string{"file": request.Options["file"]}, "dotenv")
 	if err != nil {
 		return nil, err
 	}

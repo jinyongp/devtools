@@ -72,7 +72,9 @@ try:
         except OSError: time.sleep(.05)
     else: raise AssertionError("server did not listen")
     assert api("port", "check", "api")["data"]["item"]["occupancy"] == "in_use"
-    assert api("run", "server", expected=3)["error"]["code"] == "port_run_active"
+    blocked = api("run", "server", expected=3)["error"]
+    assert blocked["code"] == "requirements_failed", blocked
+    assert any(cause["code"] == "port_run_active" for cause in blocked["details"]["causes"]), blocked
     assert api("port", "release", "api", expected=3)["error"]["code"] == "port_run_active"
     assert execute("devtools", "run", "read").stdout.strip() == "http://127.0.0.1:23000/api/v1"
     assert not api("doctor", "server")["data"]["ready"]
@@ -91,7 +93,9 @@ URL={template="http://${var.HOST}:${bind.P}/v1"}
     assert execute("devtools", "run", "read", cwd=frontend).stdout.strip() == "http://localhost:23000/v1"
     api("vault", "init", "--backend", "passphrase", "--passphrase-stdin", input="synthetic-test-vault-passphrase\n", cwd=frontend)
     api("sec", "set", "URL", "--stdin", input="secret-canary", cwd=frontend)
-    assert api("run", "read", cwd=frontend, expected=3)["error"]["code"] == "binding_conflict"
+    blocked = api("run", "read", cwd=frontend, expected=3)["error"]
+    assert blocked["code"] == "requirements_failed", blocked
+    assert any(cause["code"] == "binding_conflict" for cause in blocked["details"]["causes"]), blocked
 finally:
     server.terminate()
     server.communicate(timeout=8)
@@ -102,7 +106,9 @@ assert api("port", "check", "api")["data"]["item"]["occupancy"] == "free"
 with socket.socket() as busy:
     busy.bind(("127.0.0.1", 23000))
     busy.listen()
-    assert api("run", "server", expected=3)["error"]["code"] == "port_in_use"
+    blocked = api("run", "server", expected=3)["error"]
+    assert blocked["code"] == "requirements_failed", blocked
+    assert any(cause["code"] == "port_in_use" for cause in blocked["details"]["causes"]), blocked
     assert api("port", "show", "api")["data"]["item"]["port"] == 23000
 
 # Concurrent locations sharing one profile receive distinct persisted ports.

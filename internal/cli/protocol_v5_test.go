@@ -2,7 +2,6 @@ package cli
 
 import (
 	"os"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -10,9 +9,9 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
-func TestProtocolV9DiscoveryContracts(t *testing.T) {
+func TestProtocolV10DiscoveryContracts(t *testing.T) {
 	app := testApp(t)
-	if protocol.ProtocolVersion != 9 || protocol.EnvelopeVersion != 1 {
+	if protocol.ProtocolVersion != 10 || protocol.EnvelopeVersion != 1 {
 		t.Fatal("unexpected machine/envelope version")
 	}
 	for _, args := range [][]string{
@@ -26,19 +25,20 @@ func TestProtocolV9DiscoveryContracts(t *testing.T) {
 		{"schema", "project", "down"}, {"schema", "run"},
 	} {
 		data := outputData(t, app, args)
-		if data["protocol_version"] != float64(9) {
-			t.Fatalf("%v: missing protocol v9", args)
+		if data["protocol_version"] != float64(10) {
+			t.Fatalf("%v: missing protocol v10", args)
 		}
 	}
 	doctor := outputData(t, app, []string{"schema", "doctor"})
-	checks := doctor["output_schema"].(map[string]any)["properties"].(map[string]any)["checks"].(map[string]any)["items"].(map[string]any)
+	defs := doctor["output_schema"].(map[string]any)["$defs"].(map[string]any)
+	checks := defs["Check"].(map[string]any)
 	props := checks["properties"].(map[string]any)
 	if _, legacy := props["remedy"]; legacy {
 		t.Fatal("legacy string remedy is still advertised")
 	}
 	edit := outputData(t, app, []string{"schema", "task", "workstream", "edit"})
 	next := edit["output_schema"].(map[string]any)["properties"].(map[string]any)["next_actions"]
-	if !reflect.DeepEqual(props["remedies"], next) {
+	if props["remedies"].(map[string]any)["items"].(map[string]any)["$ref"] != "#/$defs/Remedy" || next.(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["effect"] == nil {
 		t.Fatal("doctor/task remedy schemas differ")
 	}
 }

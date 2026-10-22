@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -47,18 +48,13 @@ secs=["TOKEN"]
 		t.Fatalf("doctor failed: code=%d out=%s err=%s", code, out, diagnostic)
 	}
 	var envelope struct {
-		Data struct {
-			Checks []struct {
-				ID       string            `json:"id"`
-				Remedies []protocol.Remedy `json:"remedies"`
-			} `json:"checks"`
-		} `json:"data"`
+		Data doctor.Diagnosis `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
 		t.Fatal(err)
 	}
 	byID := map[string][]protocol.Remedy{}
-	for _, check := range envelope.Data.Checks {
+	for _, check := range envelope.Data.Commands[0].Checks {
 		byID[check.ID] = check.Remedies
 	}
 	variable := byID["var:PORT"]
@@ -74,12 +70,12 @@ secs=["TOKEN"]
 	if code != 0 || diagnostic != "" {
 		t.Fatalf("undefined-command doctor failed: code=%d out=%s err=%s", code, out, diagnostic)
 	}
-	envelope.Data.Checks = nil
+	envelope.Data.Commands = nil
 	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
 		t.Fatal(err)
 	}
 	byID = map[string][]protocol.Remedy{}
-	for _, check := range envelope.Data.Checks {
+	for _, check := range envelope.Data.Commands[0].Checks {
 		byID[check.ID] = check.Remedies
 	}
 	command := byID["command"]
@@ -89,14 +85,13 @@ secs=["TOKEN"]
 
 	schema := outputData(t, app, []string{"schema", "doctor"})
 	output := schema["output_schema"].(map[string]any)
-	checks := output["properties"].(map[string]any)["checks"].(map[string]any)
-	checkProps := checks["items"].(map[string]any)["properties"].(map[string]any)
+	defs := output["$defs"].(map[string]any)
+	checkProps := defs["Check"].(map[string]any)["properties"].(map[string]any)
 	if _, legacy := checkProps["remedy"]; legacy {
 		t.Fatalf("legacy remedy field remains in schema: %#v", checkProps)
 	}
-	remedies := checkProps["remedies"].(map[string]any)
-	remedyProps := remedies["items"].(map[string]any)["properties"].(map[string]any)
-	for _, key := range []string{"argv", "required_inputs", "message"} {
+	remedyProps := defs["Remedy"].(map[string]any)["properties"].(map[string]any)
+	for _, key := range []string{"argv", "required_inputs", "message", "effect"} {
 		if remedyProps[key] == nil {
 			t.Fatalf("missing remedy field %s: %#v", key, remedyProps)
 		}

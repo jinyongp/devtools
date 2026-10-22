@@ -79,7 +79,7 @@ with socket.create_connection(('127.0.0.1', int(os.environ['PORT'])), timeout=.5
 ''')
 
 try:
-    assert api('version')['protocol_version'] == 9
+    assert api('version')['protocol_version'] == 10
     assert api('project', 'status')['items'] == []
 
     # serve-only commands do not require an env that is never injected or bound.
@@ -102,14 +102,14 @@ try:
     assert not same['changed'] and [item['item']['id'] for item in same['items']] == ids
     conflict = api('project', 'up', 'web', '--capture-logs', '--request-id', str(uuid.uuid4()),
                    error='project_operation_failed')
-    assert conflict['details']['items'][0]['condition']['code'] == 'process_conflict'
+    assert any(cause['code'] == 'process_conflict' for cause in conflict['details']['causes'])
 
     broken = config.replace('exec=["python3","server.py"]',
                             'exec=["/definitely-not-an-installed-review-executable"]', 1)
     (root / 'devtools.toml').write_text(broken)
     blocked = api('project', 'restart', 'web', '--request-id', str(uuid.uuid4()),
                   error='project_operation_failed')
-    assert blocked['details']['items'][0]['condition']['code'] == 'requirements_failed', blocked
+    assert any(cause['code'] == 'executable_not_found' for cause in blocked['details']['causes']), blocked
     current = {item['command']: item for item in api('project', 'status')['items']}
     assert current['web']['id'] == ids[0] and current['api']['id'] == ids[1], current
     assert all(item['ended_at'] is None and item['state'] == 'running' for item in current.values()), current
@@ -130,9 +130,9 @@ try:
 
     # Successful siblings remain running while an unfinished readiness wait retries.
     partial_args = ['project', 'up', 'web', 'delayed', '--timeout', '300ms', '--request-id', str(uuid.uuid4())]
-    partial = api(*partial_args, error='project_operation_failed')['details']['items']
-    assert partial[0]['status'] == 'ready' and partial[1]['status'] == 'pending'
-    web_id, delayed_id = (item['item']['id'] for item in partial)
+    partial = api(*partial_args, error='project_operation_failed')['details']['facts']['outcomes']
+    assert partial[0]['state'] == 'ready' and partial[1]['state'] == 'pending'
+    web_id, delayed_id = (item['id'] for item in partial)
     (root / 'ready.flag').touch()
     resumed = api(*partial_args)
     assert resumed['replayed'] and [item['status'] for item in resumed['items']] == ['ready', 'ready']

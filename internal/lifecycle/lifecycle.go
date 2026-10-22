@@ -657,7 +657,13 @@ func batchFailure(result Result) *protocol.Error {
 				code = "canceled"
 				message = "Project lifecycle operation was canceled."
 			}
-			return fail(code, message, exit, map[string]any{"action": result.Action, "items": result.Items})
+			effects := "none"
+			for _, sibling := range result.Items {
+				if sibling.Changed {
+					effects = "partial"
+				}
+			}
+			return fail(code, message, exit, map[string]any{"phase": "observe", "retry": "same_request", "effects": effects, "action": result.Action, "items": result.Items})
 		}
 	}
 	return nil

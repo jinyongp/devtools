@@ -23,6 +23,9 @@ func WithStorageDetails(e *Error, domain, operation, resource string, cause erro
 	for key, value := range storageerr.Details(cause, domain, operation, resource) {
 		copy.Details[key] = value
 	}
+	if copy.Details["phase"] == nil {
+		copy.Details["phase"] = "prepare"
+	}
 	if inner != nil {
 		for key, value := range storageerr.SafeDetails(inner.Details) {
 			copy.Details[key] = value

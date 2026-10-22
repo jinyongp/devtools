@@ -2,10 +2,12 @@
 # Parse the complete installer before executing streamed input.
 {
 set -eu
+installer_stage=input
+installer_effects=none
 
 fail() {
-  printf '{"schema_version":1,"ok":false,"error":{"code":"install_failed","message":"%s"}}\n' "$1" >&2
-  exit 1
+  printf '{"schema_version":1,"ok":false,"error":{"code":"install_failed","message":"%s","details":{"operation":"install","phase":"prepare","target":{"kind":"installer","name":"devtools"},"sources":[],"reason":"stage_failed","facts":{"domain":"installer","stage":"%s"},"checks":[],"causes":[],"remedies":[{"argv":[],"required_inputs":[],"message":"Inspect this stage and any retained installation recovery state before retrying.","effect":"read"}],"retry":"inspect_first","effects":"%s"}}}\n' "$1" "$installer_stage" "$installer_effects" >&2
+  exit "${2:-1}"
 }
 
 usage() {
@@ -18,7 +20,7 @@ case "${1:-}" in
   '') ;;
   install|update) action=$1; shift ;;
   --*) ;;
-  *) usage >&2; exit 2 ;;
+  *) fail 'Unknown installer action; use install or update.' 2 ;;
 esac
 version=
 source=
@@ -43,6 +45,7 @@ download() {
     --connect-timeout 15 --max-time 120 "$@" 2>/dev/null
 }
 if [ -z "$source" ]; then
+  installer_stage=release_lookup
   release_url=${DEVTOOLS_RELEASE_URL:-https://github.com/jinyongp/devtools/releases}
   case "$release_url" in https://*) ;; *) fail 'Release URL must use HTTPS.' ;; esac
   if [ -z "$version" ]; then
@@ -51,20 +54,23 @@ if [ -z "$source" ]; then
   source="${release_url%/}/download/v$version"
 fi
 case "$version" in ''|.|..|*[!a-zA-Z0-9._-]*) fail 'Specify a valid release version; custom sources require --version.' ;; esac
+installer_stage=platform
 case "$(uname -s)" in Linux) platform=linux ;; Darwin) platform=darwin ;; *) fail 'Unsupported operating system.' ;; esac
 case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) fail 'Unsupported architecture.' ;; esac
 
 archive="devtools_${version}_${platform}_${arch}.tar.gz"
-mkdir -p "$bin_dir" || fail 'Cannot create installation directory.'
+installer_stage=installation_directory
+mkdir -p "$bin_dir" 2>/dev/null || fail 'Cannot create installation directory.'
 bin_dir=$(CDPATH='' cd -- "$bin_dir" && pwd -P)
 destination="$bin_dir/devtools"
 alias_destination="$bin_dir/dvt"
 lock="$bin_dir/.devtools-install.lock"
+installer_stage=lock
 mkdir "$lock" 2>/dev/null || fail 'Another installation owns the installation lock.'
 scratch=
 cleanup() {
-  if [ -n "$scratch" ]; then rm -rf "$scratch"; fi
-  rmdir "$lock"
+  if [ -n "$scratch" ]; then rm -rf "$scratch" 2>/dev/null; fi
+  rmdir "$lock" 2>/dev/null || true
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -74,7 +80,8 @@ if [ "$action" = install ]; then
 else
   [ -f "$destination" ] && [ ! -L "$destination" ] || fail 'Update requires an existing regular executable.'
 fi
-scratch=$(mktemp -d "$bin_dir/.devtools-install.XXXXXXXX") || fail 'Cannot prepare installation.'
+installer_stage=private_staging
+scratch=$(mktemp -d "$bin_dir/.devtools-install.XXXXXXXX" 2>/dev/null) || fail 'Cannot prepare installation.'
 
 fetch() {
   case "$source" in
@@ -82,11 +89,13 @@ fetch() {
       download "${source%/}/$1" -o "$2" || fail 'Cannot download release artifact.'
       ;;
     *://*) fail 'Remote release sources must use HTTPS.' ;;
-    *) cp "${source%/}/$1" "$2" || fail 'Cannot read release artifact.' ;;
+    *) cp "${source%/}/$1" "$2" 2>/dev/null || fail 'Cannot read release artifact.' ;;
   esac
 }
+installer_stage=artifact_fetch
 fetch "$archive" "$scratch/package.tar.gz"
 fetch "$archive.sha256" "$scratch/checksum"
+installer_stage=artifact_checksum
 read -r expected checksum_name extra < "$scratch/checksum" || fail 'Cannot read release checksum.'
 [ "$checksum_name" = "$archive" ] && [ -z "$extra" ] || fail 'Checksum names a different artifact.'
 [ "${#expected}" -eq 64 ] || fail 'Invalid release checksum.'
@@ -97,13 +106,15 @@ else
   actual=$(shasum -a 256 "$scratch/package.tar.gz" | awk '{print $1}')
 fi
 [ "$actual" = "$expected" ] || fail 'Release checksum mismatch.'
-[ "$(tar -tzf "$scratch/package.tar.gz")" = devtools ] || fail 'Release must contain exactly one devtools executable.'
-listing=$(tar -tvzf "$scratch/package.tar.gz") || fail 'Cannot inspect release archive.'
+installer_stage=archive
+[ "$(tar -tzf "$scratch/package.tar.gz" 2>/dev/null)" = devtools ] || fail 'Release must contain exactly one devtools executable.'
+listing=$(tar -tvzf "$scratch/package.tar.gz" 2>/dev/null) || fail 'Cannot inspect release archive.'
 case "$listing" in -*) ;; *) fail 'Release executable must be a regular file.' ;; esac
-tar -xzf "$scratch/package.tar.gz" -C "$scratch" devtools || fail 'Cannot extract release executable.'
+tar -xzf "$scratch/package.tar.gz" -C "$scratch" devtools 2>/dev/null || fail 'Cannot extract release executable.'
 [ -f "$scratch/devtools" ] && [ ! -L "$scratch/devtools" ] || fail 'Invalid release executable.'
-chmod 0755 "$scratch/devtools" || fail 'Cannot set executable permissions.'
-"$scratch/devtools" version > "$scratch/version.json" || fail 'Release executable cannot run on this system.'
+chmod 0755 "$scratch/devtools" 2>/dev/null || fail 'Cannot set executable permissions.'
+installer_stage=candidate_version
+"$scratch/devtools" version > "$scratch/version.json" 2> "$scratch/candidate.error" || fail 'Release executable cannot run on this system.'
 grep -F '"version":"'"$version"'"' "$scratch/version.json" >/dev/null || fail 'Release version does not match the request.'
 setup_intent=
 if [ "$platform" = linux ]; then
@@ -114,18 +125,28 @@ elif [ "$platform" = darwin ]; then
 fi
 restore_setup=false
 if [ "$action" = update ] && [ -f "$setup_intent" ] && grep -F '"enabled":true' "$setup_intent" >/dev/null; then
+  installer_stage=prepare_setup
   [ -z "${DEVTOOLS_ISOLATED_ROOT:-}" ] || fail 'Executable permission changes are unavailable in isolated mode.'
-  ln "$destination" "$scratch/previous" || fail 'Cannot preserve the original executable for recovery.'
-  "$scratch/devtools" __install-prepare "$destination" || fail 'Cannot preserve low-port setup; the original executable is unchanged. Retry interactively or use high ports.'
+  ln "$destination" "$scratch/previous" 2>/dev/null || fail 'Cannot preserve the original executable for recovery.'
+  "$scratch/devtools" __install-prepare "$destination" > "$scratch/setup.result" 2> "$scratch/setup.error" || fail 'Cannot preserve low-port setup; the original executable is unchanged. Retry interactively or use high ports.'
   restore_setup=true
 fi
-mv -f "$scratch/devtools" "$destination" || fail 'Cannot publish installed executable.'
-if [ "$restore_setup" = true ] && ! "$destination" __install-commit "$destination"; then
-  mv -f "$scratch/previous" "$destination" || fail 'Update recovery requires restoring the preserved original executable.'
-  "$destination" __install-rollback "$destination" || fail 'Executable restored; setup intent requires repair with proxy setup.'
+installer_stage=publish
+installer_effects=unknown
+mv -f "$scratch/devtools" "$destination" 2>/dev/null || fail 'Cannot publish installed executable.'
+installer_effects=committed
+installer_stage=commit_setup
+if [ "$restore_setup" = true ] && ! "$destination" __install-commit "$destination" > "$scratch/setup.result" 2> "$scratch/setup.error"; then
+  installer_stage=rollback
+  installer_effects=unknown
+  mv -f "$scratch/previous" "$destination" 2>/dev/null || fail 'Update recovery requires restoring the preserved original executable.'
+  installer_effects=partial
+  "$destination" __install-rollback "$destination" > "$scratch/setup.result" 2> "$scratch/setup.error" || fail 'Executable restored; setup intent requires repair with proxy setup.'
+  installer_effects=none
   fail 'Cannot commit low-port setup; the original executable was restored.'
 fi
 alias_status=created
+installer_stage=alias
 if [ -L "$alias_destination" ] && [ "$(readlink "$alias_destination")" = devtools ]; then
   alias_status=unchanged
 elif [ -e "$alias_destination" ] || [ -L "$alias_destination" ] || command -v dvt >/dev/null 2>&1; then

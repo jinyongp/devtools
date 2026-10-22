@@ -11,6 +11,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $stage = $null
 $candidateFailure = $null
+$candidateDetails = $null
+$installationCommitted = $false
 $phase = 'input'
 $previousTls = [Net.ServicePointManager]::SecurityProtocol
 
@@ -102,7 +104,10 @@ function Invoke-Candidate([string]$Executable, [string]$Arguments, [string]$Inpu
             if ($diagnostic.Length -le 65536 -and $Arguments -eq '__windows-install') {
                 try {
                     $failure = $diagnostic | ConvertFrom-Json
-                    if ($failure.error.code -eq 'install_failed') { $script:candidateFailure = [string]$failure.error.message }
+                    if ($failure.error.code -eq 'install_failed') {
+                        $script:candidateFailure = 'The verified installer could not complete. Inspect its stage and retained recovery state before retrying.'
+                        $script:candidateDetails = $failure.error.details
+                    }
                 } catch {}
             }
             throw 'Verified candidate did not complete installation or version verification.'
@@ -214,6 +219,7 @@ public static class DevtoolsInstallerNativeArchitecture {
     $output = Invoke-Candidate $candidate '__windows-install' $request
     $result = $output | ConvertFrom-Json
     if (-not $result.ok -or $result.data.action -notin @('install', 'update') -or $result.data.version -cne $Version) { throw 'Installation result mismatch.' }
+    $installationCommitted = $true
     if (-not $BinDir) { $BinDir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\devtools\bin' }
     $BinDir = [IO.Path]::GetFullPath($BinDir)
     $phase = 'user_path'
@@ -255,10 +261,26 @@ public static class DevtoolsInstallerNativeArchitecture {
 } catch {
     $message = 'Windows installation failed. Check the selected release, installation ownership/lock and any retained recovery journal before retrying.'
     if ($candidateFailure) { $message = $candidateFailure }
+    $reason = 'stage_failed'
+    $facts = @{ domain = 'installer'; stage = $phase }
+    $effects = 'none'
+    if ($phase -eq 'installation') { $effects = 'unknown' }
+    if ($installationCommitted) { $effects = 'partial' }
+    if ($candidateDetails) {
+        if ($candidateDetails.reason -match '^[a-z][a-z0-9_]{0,63}$') { $reason = [string]$candidateDetails.reason }
+        if ($candidateDetails.facts.stage -match '^[a-z][a-z0-9_]{0,63}$') { $facts.stage = [string]$candidateDetails.facts.stage }
+        if ($candidateDetails.facts.os_code -is [ValueType] -and $candidateDetails.facts.os_code -gt 0 -and $candidateDetails.facts.os_code -le [uint32]::MaxValue) { $facts.os_code = $candidateDetails.facts.os_code }
+        if ($candidateDetails.effects -in @('none','committed','partial','unknown')) { $effects = [string]$candidateDetails.effects }
+    } elseif ($_.Exception -is [ComponentModel.Win32Exception]) {
+        $facts.os_code = $_.Exception.NativeErrorCode
+        $reason = 'os_failure'
+    }
     if ($Json) {
-        Write-Utf8Json (@{ schema_version = 1; ok = $false; error = @{ code = 'install_failed'; message = $message; stage = $phase; exception = $_.Exception.GetType().Name; line = $_.InvocationInfo.ScriptLineNumber } } | ConvertTo-Json -Compress) $true
+        $details = @{ operation = 'install'; phase = 'prepare'; target = @{ kind = 'installer'; name = 'devtools' }; sources = @(); reason = $reason; facts = $facts; checks = @(); causes = @(); remedies = @(@{ argv = @(); required_inputs = @(); message = 'Inspect the stage and installation ownership/lock or retained recovery journal before retrying.'; effect = 'read' }); retry = 'inspect_first'; effects = $effects }
+        Write-Utf8Json (@{ schema_version = 1; ok = $false; error = @{ code = 'install_failed'; message = $message; details = $details } } | ConvertTo-Json -Depth 8 -Compress) $true
     } else {
         [Console]::Error.WriteLine('Installation failed.')
+        [Console]::Error.WriteLine(('Stage: ' + $facts.stage + '. Reason: ' + $reason + '.'))
         if ($candidateFailure) {
             [Console]::Error.WriteLine($candidateFailure)
         } else {

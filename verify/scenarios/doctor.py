@@ -54,11 +54,11 @@ api("env", "create", "dev")
 api("var", "set", "PORT", "--value", "3000")
 missing = api("doctor", "check")["data"]
 assert not missing["ready"]
-for check in missing["checks"]:
+for check in missing["checks"] + missing['commands'][0]['checks']:
     assert 'remedy' not in check and isinstance(check['remedies'], list)
     for remedy in check['remedies']:
-        assert set(remedy) == {'argv', 'required_inputs', 'message'}
-secret_check = next(check for check in missing['checks'] if check['id'] == 'sec:TOKEN')
+        assert set(remedy) == {'argv', 'required_inputs', 'message', 'effect'}
+secret_check = next(check for check in missing['commands'][0]['checks'] if check['id'] == 'sec:TOKEN')
 remedy = secret_check['remedies'][0]
 assert remedy['argv'] == ['devtools', 'sec', 'set', 'TOKEN', '--profile', 'fixture', '--env', 'dev', '--stdin']
 assert remedy['required_inputs'] == ['stdin']
@@ -70,9 +70,9 @@ api("sec", "set", "TOKEN", "--env", "dev", "--stdin", input=canary)
 nested = project / "nested"
 nested.mkdir()
 report = api("doctor", "check", cwd=nested)["data"]
-assert report["ready"] and report["env"] == "dev"
+assert report["ready"] and report['commands'][0]['env'] == "dev"
 assert report["directory"] == str(project)
-assert all(c["status"] == "pass" for c in report["checks"])
+assert all(c["status"] == "pass" for c in report["checks"] + report['commands'][0]['checks'])
 execute(["devtools", "run", "check"], cwd=nested)
 assert (project / "marker").read_text() == "completed"
 assert not api("doctor", "plain")["data"]["ready"]
@@ -91,5 +91,5 @@ profile_file = next((Path(paths["data"]) / "profiles").glob("p1-*.json"))
 profile_file.write_text(canary)
 report = api("doctor")["data"]
 assert not report["ready"]
-assert any(c["id"] == "value_storage" and c["status"] == "fail" for c in report["checks"])
+assert any(c["id"] == "value_inputs" and c["status"] == "fail" for row in report['commands'] for c in row['checks'])
 print("Installed doctor metadata, exact versions, safe diagnostics, and run preflight verified")

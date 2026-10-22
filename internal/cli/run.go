@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -75,7 +76,7 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 	defer prepared.Release()
 	checks := prepared.Checks(ctx, os.Environ(), false)
 	if !execution.ChecksPassed(checks) {
-		return nil, protocol.NewError("requirements_failed", "Command prerequisites are not satisfied. Run devtools doctor for diagnostics.", 3, map[string]any{"checks": checks})
+		return nil, doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "foreground", command.Inject)
 	}
 	exit, err := prepared.Execute(ctx, os.Environ(), nil, streams.In, streams.Out, streams.Err)
 	if err != nil {

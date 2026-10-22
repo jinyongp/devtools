@@ -3,6 +3,7 @@
 package process
 
 import (
+	"errors"
 	"os"
 
 	"path/filepath"
@@ -41,8 +42,15 @@ func CompleteEnvironment(environment []string) []string { return append([]string
 
 // LookPath resolves an executable using the command's directory and environment.
 func LookPath(name, dir string, env []string) (string, *protocol.Error) {
+	reason := "not_found"
 	check := func(path string) bool {
 		info, err := os.Stat(path)
+		if errors.Is(err, os.ErrPermission) {
+			reason = "permission_denied"
+		}
+		if err == nil && (!info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0) {
+			reason = "not_executable"
+		}
 		return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0111 != 0
 	}
 	if strings.ContainsRune(name, filepath.Separator) {
@@ -67,7 +75,7 @@ func LookPath(name, dir string, env []string) (string, *protocol.Error) {
 			return candidate, nil
 		}
 	}
-	return "", protocol.NewError("command_not_found", "Executable was not found in the selected PATH.", 127, nil)
+	return "", protocol.NewError("command_not_found", "Executable was not found or usable in the selected PATH.", 127, map[string]any{"reason": reason})
 }
 
 func ValidateEnvironment(injected map[string]string) *protocol.Error { return nil }

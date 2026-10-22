@@ -491,6 +491,7 @@ jobs:
           cp scripts/install.sh dist/install.sh
           cp scripts/install.ps1 dist/install.ps1
           cp LICENSE dist/LICENSE
+          cp internal/notices/NOTICE.txt dist/THIRD_PARTY_NOTICES.txt
           printf '%s\n' "$VERSION" > dist/version.txt
       - name: Verify prepared checksums and binary identity
         run: |

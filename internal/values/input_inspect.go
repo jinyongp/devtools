@@ -17,6 +17,31 @@ import (
 // native helper or migration, decrypting secrets, or extending the key's idle
 // deadline. Cold protection is deliberately an unavailable verification.
 func InspectInput(ctx context.Context, root, profile, env string, spec InputSpec) (*InputVersion, *protocol.Error) {
+	return inspectInput(ctx, root, profile, env, spec, nil)
+}
+
+// InspectSearchInput reads authenticated public values without unlocking,
+// opening secret slots or extending the reusable key session's idle deadline.
+func InspectSearchInput(ctx context.Context, root, profile, env string, spec InputSpec) (*InputVersion, map[string]string, *protocol.Error) {
+	public := map[string]string{}
+	v, e := inspectInput(ctx, root, profile, env, spec, &public)
+	return v, public, e
+}
+
+// DiagnosticPublicState supplies only already authenticated public values to the
+// common template/binding resolver. It performs no storage access.
+func DiagnosticPublicState(profile, env string, public map[string]string) *State {
+	s := newState(profile)
+	if env != "" {
+		_, _ = s.CreateEnv(env)
+	}
+	for key, value := range public {
+		_, _ = s.Set(Variable, key, env, value)
+	}
+	return s
+}
+
+func inspectInput(ctx context.Context, root, profile, env string, spec InputSpec, public *map[string]string) (*InputVersion, *protocol.Error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if !project.ValidProfile(profile) || (env != "" && !project.ValidProfile(env)) || !vault.ValidSelection(spec.Selection) {
@@ -118,6 +143,13 @@ func InspectInput(ctx context.Context, root, profile, env string, spec InputSpec
 		// Match preparation's selected-slot expiry rules without opening values.
 		if (spec.Inject || value.Kind == vault.Public) && value.ExpiresAt != nil && time.Now().Unix() >= *value.ExpiresAt {
 			return nil, protocol.NewError("value_expired", "A selected profile input has expired.", 3, nil)
+		}
+		if public != nil && value.Kind == vault.Public {
+			v, _, err := p.PublicValue(value.Reference.Name, env, key, time.Now())
+			if err != nil {
+				return nil, VaultError(ctx, err)
+			}
+			(*public)[value.Reference.Name] = v
 		}
 	}
 	return version, nil

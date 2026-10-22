@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/configcontract"
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/process"
@@ -56,6 +57,8 @@ func DependenciesFor(command Command, dataRoot, configRoot string) (Dependencies
 // Prepared contains the side-effect-bounded result of command preparation.
 // Release must be called after non-preview port preparation.
 type Prepared struct {
+	mode             string
+	checks           []doctor.Check
 	Assignments      []ports.Assignment
 	Input            *InputPayload
 	probeEnvironment []string
@@ -64,6 +67,7 @@ type Prepared struct {
 	Injected         map[string]string
 	State            *values.State
 	PathOverride     *string
+	SearchOverrides  map[string]string
 	Release          func()
 }
 
@@ -169,6 +173,7 @@ func prepareResolved(ctx context.Context, command Command, state *values.State, 
 	for key, value := range prepared.Bind {
 		out.Injected[key] = value
 	}
+	out.SearchOverrides = bindingSearchEnvironment(prepared.Bind)
 	if command.Network != nil {
 		for key, value := range command.Network.Bindings {
 			if prepared.Bind[key] != value {
@@ -225,31 +230,46 @@ func ValidateNetwork(command Command, dependencies Dependencies) *protocol.Error
 	return nil
 }
 
-// Checks applies the shared structured requirement diagnostics. forceExecutable
-// preserves managed preflight behavior; foreground execution can leave it false
-// so commands without declared requirements fail naturally at exec time.
+// Checks applies the shared structured requirement diagnostics. argv[0] is always
+// checked; forceExecutable is retained for callers using the preparation API.
 func (p Prepared) Checks(ctx context.Context, parentEnvironment []string, forceExecutable bool) []doctor.Check {
+	if p.mode == "" && forceExecutable {
+		p.mode = "managed"
+	}
+	if p.Input != nil && p.checks != nil {
+		return append([]doctor.Check{}, p.checks...)
+	}
 	if p.probeEnvironment != nil {
 		parentEnvironment = append([]string{}, p.probeEnvironment...)
-	}
-	if p.Command.Requirements.Empty() && !forceExecutable {
-		return []doctor.Check{}
 	}
 	executable := ""
 	if len(p.Args) > 0 {
 		executable = p.Args[0]
 	}
 	return doctor.CheckRequirements(ctx, doctor.Input{
-		Profile:      p.Command.Project.Profile,
-		Directory:    p.Command.Directory,
-		Env:          p.Command.Env,
-		Requirements: p.Command.Requirements,
-		State:        p.State,
-		Inject:       p.Command.Inject,
-		Executable:   executable,
-		Environment:  parentEnvironment,
-		PathOverride: p.PathOverride,
+		Command:         p.Command.Name,
+		Args:            p.Args,
+		Mode:            p.mode,
+		ReadyExec:       readyArguments(p.Command),
+		Profile:         p.Command.Project.Profile,
+		Directory:       p.Command.Directory,
+		Env:             p.Command.Env,
+		Requirements:    p.Command.Requirements,
+		State:           p.State,
+		Inject:          p.Command.Inject,
+		Executable:      executable,
+		Environment:     parentEnvironment,
+		PathOverride:    p.PathOverride,
+		SearchOverrides: p.SearchOverrides,
+		Source:          commandSource(p.Command),
 	})
+}
+
+func commandSource(c Command) func([]string) configcontract.Source {
+	if c.Project.Document == nil {
+		return nil
+	}
+	return func(path []string) configcontract.Source { return c.Project.Document.CommandSource(c.Name, path) }
 }
 
 // validateInjectedKeyspace is shared by cold start and live-process validation.
@@ -284,7 +304,7 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 		var err *protocol.Error
 		state, err = readExecutionState(ctx, command, dependencies)
 		if err != nil {
-			return err
+			return PreparationFailure(ctx, command, parentEnvironment, "managed", err)
 		}
 		if envErr := state.CheckEnv(command.Env); envErr != nil {
 			return envErr
@@ -305,6 +325,7 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 	pendingBindings := map[string]bool{}
 	executableDeferred := false
 	var pathOverride *string
+	var searchOverrides map[string]string
 	if len(command.Bind)+len(command.Serve) > 0 {
 		portState, err := dependencies.Ports.Read()
 		if err != nil {
@@ -315,6 +336,7 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 			return bindErr
 		}
 		pendingBindings = pending
+		searchOverrides = bindingSearchEnvironment(bindings)
 		resolvedExec := make([]string, len(command.Exec))
 		for index, argument := range command.Exec {
 			deferred := false
@@ -372,28 +394,29 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 		if err != nil {
 			return err
 		}
-		if err = checkManagedArguments(command, []string{executable}, environment); err != nil {
-			return err
-		}
+		_ = environment
 	}
 
 	checks := doctor.CheckRequirements(ctx, doctor.Input{
-		Profile:        command.Project.Profile,
-		Directory:      command.Directory,
-		Env:            command.Env,
-		Requirements:   requirements,
-		State:          state,
-		Inject:         command.Inject,
-		CheckInjection: true,
-		Executable:     executable,
-		Environment:    parentEnvironment,
-		PathOverride:   pathOverride,
+		Command:         command.Name,
+		Args:            args,
+		Profile:         command.Project.Profile,
+		Directory:       command.Directory,
+		Env:             command.Env,
+		Requirements:    requirements,
+		State:           state,
+		Inject:          command.Inject,
+		CheckInjection:  true,
+		Executable:      executable,
+		Environment:     parentEnvironment,
+		PathOverride:    pathOverride,
+		SearchOverrides: searchOverrides,
+		Mode:            "managed",
+		ReadyExec:       readyArguments(command),
+		Source:          commandSource(command),
 	})
 	if !ChecksPassed(checks) {
-		return protocol.NewError("requirements_failed", "Command prerequisites are not satisfied.", 3, map[string]any{
-			"command": command.Name,
-			"checks":  checks,
-		})
+		return doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "managed", command.Inject)
 	}
 	return nil
 }
@@ -402,25 +425,44 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 func Preflight(ctx context.Context, command Command, dependencies Dependencies, parentEnvironment []string) *protocol.Error {
 	prepared, err := prepare(ctx, command, dependencies, true, &parentEnvironment)
 	if err != nil {
-		return err
+		return PreparationFailure(ctx, command, parentEnvironment, "managed", err)
 	}
+	prepared.mode = "managed"
 	defer prepared.Release()
 	environment, environmentErr := managedEnvironment(command, prepared.State, parentEnvironment, prepared.PathOverride)
 	if environmentErr != nil {
 		return environmentErr
 	}
 	if err := checkManagedArguments(command, prepared.Args, environment); err != nil {
+		checks := prepared.Checks(ctx, parentEnvironment, true)
+		if failure := doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "managed", command.Inject); failure != nil {
+			return failure
+		}
 		return err
 	}
 
 	checks := prepared.Checks(ctx, parentEnvironment, true)
 	if !ChecksPassed(checks) {
-		return protocol.NewError("requirements_failed", "Command prerequisites are not satisfied.", 3, map[string]any{
-			"command": command.Name,
-			"checks":  checks,
-		})
+		return doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "managed", command.Inject)
 	}
 	return nil
+}
+
+func readyArguments(c Command) []string {
+	if c.Ready == nil {
+		return nil
+	}
+	return c.Ready.Exec
+}
+
+func bindingSearchEnvironment(bindings map[string]string) map[string]string {
+	selected := map[string]string{}
+	for _, key := range []string{"PATH", "PATHEXT"} {
+		if value, ok := process.EnvironmentValue(bindings, key); ok {
+			selected[key] = value
+		}
+	}
+	return selected
 }
 
 // Environment overlays injected profile and binding values on the caller's
@@ -461,12 +503,7 @@ func (p Prepared) Execute(ctx context.Context, parentEnvironment []string, runne
 
 // ChecksPassed reports whether every structured check succeeded.
 func ChecksPassed(checks []doctor.Check) bool {
-	for _, check := range checks {
-		if check.Status != "pass" {
-			return false
-		}
-	}
-	return true
+	return doctor.State(checks) == "ready"
 }
 
 // Managed preflight checks run before port probes and repeat after binding

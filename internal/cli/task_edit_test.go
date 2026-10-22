@@ -51,7 +51,7 @@ func TestTaskEditCLI(t *testing.T) {
 	}
 	noChangeError := noChangeEnvelope["error"].(map[string]any)
 	noChangeDetails := noChangeError["details"].(map[string]any)
-	if noChangeError["code"] != "no_change" || noChangeDetails["affected_count"] != float64(0) {
+	if noChangeError["code"] != "no_change" || noChangeDetails["facts"].(map[string]any)["affected_count"] != float64(0) {
 		t.Fatal("no_change diagnostics missing", noChangeEnvelope)
 	}
 	shown := run("", "task", "workstream", "show", id, "--profile", "test")

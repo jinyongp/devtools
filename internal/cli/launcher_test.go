@@ -495,7 +495,7 @@ func TestFrozenLauncherRealProcessRestartAndLock(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("post-stop spawn failure not observed")
 	}
-	if result.err != nil || result.result.Item.State != "failed" || !result.result.Item.Outage || (result.result.Item.Reason != "execution_failed" && result.result.Item.Reason != "command_not_found") {
+	if result.err != nil || result.result.Item.State != "failed" || !result.result.Item.Outage || result.result.Item.Reason != "input_changed" {
 		t.Fatalf("post-stop failure not separated: %v state=%s outage=%v reason=%s", result.err, result.result.Item.State, result.result.Item.Outage, result.result.Item.Reason)
 	}
 	failedReplay, replayErr := service.Apply(ctx, failedRequest)

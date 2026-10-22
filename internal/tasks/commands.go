@@ -34,8 +34,11 @@ func decodeObject(data string, maxBytes int) (Object, *protocol.Error) {
 	}
 	d := json.NewDecoder(strings.NewReader(data))
 	depth := 0
-	var walk func() (any, error)
-	walk = func() (any, error) {
+	location := []string{}
+	reason := "invalid_value"
+	var walk func([]string) (any, error)
+	walk = func(path []string) (any, error) {
+		location = append([]string{}, path...)
 		depth++
 		defer func() { depth-- }()
 		if depth > 64 {
@@ -60,25 +63,29 @@ func decodeObject(data string, maxBytes int) (Object, *protocol.Error) {
 						return nil, io.ErrUnexpectedEOF
 					}
 					if _, ok = m[name]; ok {
+						location = append(append([]string{}, path...), name)
+						reason = "duplicate_field"
 						return nil, io.ErrUnexpectedEOF
 					}
-					x, e := walk()
+					x, e := walk(append(append([]string{}, path...), name))
 					if e != nil {
 						return nil, e
 					}
 					m[name] = x
 				}
+				location = append([]string{}, path...)
 				_, e = d.Token()
 				return m, e
 			case '[':
 				a := []any{}
 				for d.More() {
-					x, e := walk()
+					x, e := walk(append(append([]string{}, path...), strconv.Itoa(len(a))))
 					if e != nil {
 						return nil, e
 					}
 					a = append(a, x)
 				}
+				location = append([]string{}, path...)
 				_, e = d.Token()
 				return a, e
 			}
@@ -87,9 +94,9 @@ func decodeObject(data string, maxBytes int) (Object, *protocol.Error) {
 			return t, nil
 		}
 	}
-	v, e := walk()
+	v, e := walk([]string{})
 	if e != nil {
-		return nil, failure("invalid_argument", "Malformed JSON or duplicate object keys.")
+		return nil, protocol.NewError("invalid_argument", "Malformed JSON or duplicate object keys. Inspect the indicated field.", 2, map[string]any{"phase": "parse", "reason": reason, "sources": []any{map[string]any{"kind": "json", "path": location, "offset": d.InputOffset()}}})
 	}
 	if _, e = d.Token(); e != io.EOF {
 		return nil, failure("invalid_argument", "Expected one JSON object.")

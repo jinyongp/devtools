@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -376,19 +377,22 @@ func (a *App) registerTasks() {
 }
 func taskInput(ctx context.Context, streams IO, r Request) (string, *protocol.Error) {
 	if ctx.Err() != nil {
-		return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
+		return "", protocol.ContextError(ctx.Err())
 	}
 	if r.Options["file"] != "" && r.Options["stdin"] == "true" {
 		return "", argumentError("Choose file or stdin.", "")
 	}
 	reader := streams.In
+	if reader == nil && r.Options["file"] == "" {
+		return "", argumentError("Supply JSON through a file or redirected stdin.", "stdin")
+	}
 	var f *os.File
 	var cancelablePipe *os.File
 	if path := r.Options["file"]; path != "" {
 		var e error
-		f, e = os.Open(path)
+		f, e = os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 		if e != nil {
-			return "", argumentError("Cannot open JSON file.", "file")
+			return "", protocol.InputError("json", "open_input", e)
 		}
 		defer f.Close()
 		info, e := f.Stat()
@@ -408,10 +412,10 @@ func taskInput(ctx context.Context, streams IO, r Request) (string, *protocol.Er
 	if cancelablePipe != nil {
 		if body, err, handled := readTaskPipe(ctx, cancelablePipe, (2<<20)+1); handled {
 			if ctx.Err() != nil {
-				return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
+				return "", protocol.ContextError(ctx.Err())
 			}
 			if err != nil {
-				return "", argumentError("Cannot read JSON input.", "")
+				return "", protocol.InputError("json", "read_input", err)
 			}
 			return string(body), nil
 		}
@@ -433,10 +437,10 @@ func taskInput(ctx context.Context, streams IO, r Request) (string, *protocol.Er
 				_ = cancelablePipe.SetReadDeadline(time.Time{})
 			}
 		}
-		return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
+		return "", protocol.ContextError(ctx.Err())
 	case result := <-done:
 		if result.err != nil {
-			return "", argumentError("Cannot read JSON input.", "")
+			return "", protocol.InputError("json", "read_input", result.err)
 		}
 		return string(result.body), nil
 	}

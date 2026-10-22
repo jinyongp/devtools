@@ -104,6 +104,16 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 			b.WriteString(a.commandHelp(target, names))
 		}
 		fmt.Fprintf(&b, "\nJSON schema: devtools schema %s\n", exact.Name)
+		if len(exact.Examples) > 0 {
+			b.WriteString("\nExamples:\n")
+			for _, example := range exact.Examples {
+				fmt.Fprintf(&b, "  %s\n", example)
+			}
+		}
+		if exact.BodyExample != nil {
+			body, _ := json.MarshalIndent(exact.BodyExample, "  ", "  ")
+			fmt.Fprintf(&b, "\nJSON input example:\n  %s\n", body)
+		}
 		return nil, b.String(), true
 	}
 	if len(children) == 0 {
@@ -125,6 +135,9 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 
 func (a *App) commandSummary(name string) string {
 	groups := map[string]string{
+		"config":                  "Inspect, validate, format, migrate and safely edit devtools.toml.",
+		"config tool":             "Register and edit named executable/version specifications.",
+		"config preset":           "Register and edit reusable prerequisite selections.",
 		"dashboard":               "Open the local management dashboard.",
 		"dashboard start":         "Open or reuse the local management dashboard.",
 		"dashboard status":        "Inspect the local dashboard server state.",

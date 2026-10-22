@@ -271,7 +271,7 @@ func VaultError(ctx context.Context, err error) *protocol.Error {
 	var details map[string]any
 	switch code {
 	case vault.ErrLocked.Error(), vault.ErrInteractionRequired.Error(), vault.ErrBackendLocked.Error():
-		details = map[string]any{"remedies": []protocol.Remedy{{Argv: []string{"devtools", "vault", "unlock"}, RequiredInputs: []string{}, Message: "Explicitly unlock the existing vault. For passphrase protection, use --passphrase-file or --passphrase-stdin in non-interactive use."}}}
+		details = map[string]any{"remedies": []protocol.Remedy{{Effect: "value_write", Argv: []string{"devtools", "vault", "unlock"}, RequiredInputs: []string{}, Message: "Explicitly unlock the existing vault. For passphrase protection, use --passphrase-file or --passphrase-stdin in non-interactive use."}}}
 	case vault.ErrKeyMissing.Error(), vault.ErrRecovery.Error(), vault.ErrIntegrity.Error(), vault.ErrUnavailable.Error(), vault.ErrDenied.Error():
 		details = map[string]any{"remedies": []protocol.Remedy{{Argv: []string{"devtools", "vault", "status"}, RequiredInputs: []string{}, Message: "Inspect existing protection. Initialize only an uninitialized vault; recover existing keys and storage when recovery is required."}}}
 	}

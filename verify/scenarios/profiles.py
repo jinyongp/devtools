@@ -58,7 +58,7 @@ def mutate(command, target_id=None, body=None, guarded=False):
     return api(source, *args, input=json.dumps(body) if body is not None else None)
 
 
-assert api(source, 'version')['protocol_version'] == 9
+assert api(source, 'version')['protocol_version'] == 10
 assert api(source, 'profile', 'list')['items'] == []
 assert api(source, 'backup', 'status')['item']['configured'] is False
 assert api(target, 'backup', 'status')['item']['configured'] is False
@@ -109,7 +109,7 @@ assert canary.encode() not in archive_bytes and transfer_passphrase.encode() not
 assert stat.S_IMODE(source_archive.stat().st_mode) == 0o600
 collision = api(source, 'profile', 'export', '--passphrase-file', str(passphrase_file),
                 '--output', str(outbox), error='output_exists')
-assert collision['details']['path'] == str(source_archive)
+assert collision['details']['facts']['field'] == 'output' and 'path' not in collision['details']
 assert source_archive.read_bytes() == archive_bytes
 
 # Exactly one filesystem payload crosses the device boundary. Never copy a key or config.

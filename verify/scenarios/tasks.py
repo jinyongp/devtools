@@ -66,7 +66,7 @@ assert "context" not in api("schema", "task", "add")["input_schema"]["properties
 ambient_id = ambient_task["item"]["id"]
 err = api("task", "detach", ambient_id, "--if-revision", str(revision()),
           "--request-id", str(uuid.uuid4()), expected=3)
-assert err["code"] == "no_change" and err["details"]["affected_count"] == 0
+assert err["code"] == "no_change" and err["details"]["facts"]["affected_count"] == 0
 mutate("cancel", ambient_id, {"reason": "Context-free fixture complete"}, revision())
 del env["DEVTOOLS_TASK_CONTEXT"]
 w = mutate("workstream create", body={"title": "Installed workflow"})["item"]["id"]
@@ -88,12 +88,12 @@ claim = next(response["data"] for code, response in results if code == 0)
 assert api("task", "current", "--dir", str(worktree))["items"][0]["id"] == claim["run"]["id"]
 err = api("task", "update", t, "--title", "Rejected context", "--if-revision", str(revision()),
           "--context", "unknown-context", "--request-id", str(uuid.uuid4()), expected=3)
-assert err["code"] == "context_invalid" and err["details"]["context_reason"] == "unknown"
+assert err["code"] == "context_invalid" and err["details"]["facts"]["context_reason"] == "unknown"
 guarded = mutate("update", t, {"title": "Implement recovery safely"}, revision(), context=claim["context"])
 assert guarded["changed"] and t in guarded["affected_ids"] and guarded["affected_count"] > 0
 err = api("task", "update", t, "--title", "Implement recovery safely", "--if-revision", str(revision()),
           "--context", claim["context"], "--request-id", str(uuid.uuid4()), expected=3)
-assert err["code"] == "no_change" and err["details"]["affected_count"] == 0
+assert err["code"] == "no_change" and err["details"]["facts"]["affected_count"] == 0
 before_checkpoint = api("task", "show", t)
 checkpoint = mutate("checkpoint", claim["run"]["id"], {"summary": "Implementation saved", "next_action": "Run verification"}, context=claim["context"])
 after_checkpoint = api("task", "show", t)
@@ -103,10 +103,10 @@ assert checkpoint["affected_ids"] == [t] and checkpoint["affected_count"] == 1
 assert before_checkpoint["item"]["definition_revision"] == after_checkpoint["item"]["definition_revision"]
 takeover = mutate("takeover", t, expected_run=claim["run"]["id"])
 err = api("task", "checkpoint", claim["run"]["id"], "--summary", "Stale session", "--context", claim["context"], "--request-id", str(uuid.uuid4()), expected=3)
-assert err["code"] == "context_invalid" and err["details"]["context_reason"] == "inactive"
+assert err["code"] == "context_invalid" and err["details"]["facts"]["context_reason"] == "inactive"
 err = api("task", "validation", "basis", v, "--stdin", "--context", claim["context"],
           "--request-id", str(uuid.uuid4()), input=json.dumps({"code": []}), expected=3)
-assert err["code"] == "context_invalid" and err["details"]["context_reason"] == "inactive"
+assert err["code"] == "context_invalid" and err["details"]["facts"]["context_reason"] == "inactive"
 basis = mutate("validation basis", v, {"code": []}, context=takeover["context"])["basis_id"]
 mutate("validation record", v, {"basis_id": basis, "result": "pass", "summary": "Recovery verified", "evidence": [{"kind": "command", "reference": "installed CLI scenario", "description": "claim, checkpoint, and takeover passed"}]}, context=takeover["context"])
 request_id = str(uuid.uuid4())
@@ -116,7 +116,7 @@ assert repeated["replayed"] and not repeated["context_valid"] and first["revisio
 mutate("workstream close", w, revision=revision())
 err = api("task", "workstream", "close", w, "--if-revision", str(revision()),
           "--request-id", str(uuid.uuid4()), expected=3)
-assert err["code"] == "no_change" and err["details"]["affected_count"] == 0
+assert err["code"] == "no_change" and err["details"]["facts"]["affected_count"] == 0
 history = json.dumps(api("task", "workstream", "export", w))
 assert claim["context"] not in history and takeover["context"] not in history
 assert "Implementation saved" in history

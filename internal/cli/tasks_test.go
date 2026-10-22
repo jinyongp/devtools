@@ -44,7 +44,7 @@ func TestTaskCLIAndSchema(t *testing.T) {
 			Details map[string]any `json:"details"`
 		} `json:"error"`
 	}
-	if err := json.Unmarshal(mismatchErr.Bytes(), &mismatchEnvelope); err != nil || mismatchEnvelope.Error.Code != "context_invalid" || mismatchEnvelope.Error.Details["expected_target_kind"] != "run" || mismatchEnvelope.Error.Details["actual_target_kind"] != "task" {
+	if err := json.Unmarshal(mismatchErr.Bytes(), &mismatchEnvelope); err != nil || mismatchEnvelope.Error.Code != "context_invalid" || mismatchEnvelope.Error.Details["facts"].(map[string]any)["expected_target_kind"] != "run" || mismatchEnvelope.Error.Details["facts"].(map[string]any)["actual_target_kind"] != "task" {
 		t.Fatal("checkpoint mismatch contract", mismatchErr.String(), err)
 	}
 	run(`{"summary":"Saved progress"}`, "task", "checkpoint", runID, "--stdin", "--profile", "test", "--context", claim["context"].(string), "--request-id", tasks.ID())

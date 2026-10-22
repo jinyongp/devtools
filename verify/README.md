@@ -35,6 +35,9 @@ devtools run test:installed tasks
 # 환경 진단·명령 실행 전 필수 조건 시나리오
 devtools run test:installed doctor
 
+# 설정 편집·revision 충돌·주석 보존 migration·전체 명령 진단
+devtools run test:installed config_edit
+
 # 포트 할당·실제 서버 실행·프로젝트 간 참조
 devtools run test:installed ports
 

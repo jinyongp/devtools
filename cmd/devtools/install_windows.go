@@ -21,8 +21,9 @@ func windowsInstallerEntry() bool {
 		result, err = windowsinstall.Bootstrap(ctx, options)
 	}
 	if err != nil {
-		protocol.Failure(os.Stderr, protocol.NewError("install_failed", "Cannot complete standalone installation; recovery artifacts were retained: "+err.Error(), 1, nil))
-		os.Exit(1)
+		diagnostic := windowsinstall.Diagnostic(err, "install")
+		protocol.Failure(os.Stderr, diagnostic)
+		os.Exit(diagnostic.ExitCode)
 	}
 	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"schema_version": 1, "ok": true, "data": result})
 	return true

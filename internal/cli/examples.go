@@ -1,0 +1,197 @@
+package cli
+
+import (
+	"encoding/json"
+	"github.com/jinyongp/devtools/internal/configcontract"
+	"sort"
+	"strings"
+)
+
+func exampleValue(name, pattern string) string {
+	if pattern == positiveIntegerPattern {
+		return "1"
+	}
+	if strings.Contains(pattern, "[0-9a-f]{64}") {
+		return strings.Repeat("0", 64)
+	}
+	if strings.Contains(pattern, "[0-9a-f]{32}") {
+		return strings.Repeat("0", 32)
+	}
+	if strings.Contains(pattern, "{8}-") {
+		return "00000000-0000-4000-8000-000000000000"
+	}
+	if name == "profile" {
+		return "sample"
+	}
+	if name == "shell" {
+		return "bash"
+	}
+	if name == "revision" {
+		return strings.Repeat("0", 64)
+	}
+	if name == "port" {
+		return "3000"
+	}
+	return "sample"
+}
+func commandExamples(c Command) []string {
+	line := "devtools " + c.Name
+	for _, arg := range c.Arguments {
+		if arg.Required {
+			line += " " + exampleValue(arg.Name, arg.Pattern)
+		}
+	}
+	for _, o := range c.Options {
+		if o.Required {
+			line += " --" + o.Name
+			if !o.Boolean {
+				line += " " + exampleValue(o.Name, o.Pattern)
+			}
+		}
+	}
+	if c.BodySchema != nil {
+		line += " --stdin"
+	}
+	if c.Name == "secret set" {
+		line += " --stdin"
+	}
+	if c.Name == "task workstream edit" {
+		line += " --dry-run"
+	}
+	if c.Name == "command run" {
+		line = "devtools run dev:web"
+	}
+	if c.Name == "command add" {
+		line = "devtools command add dev:web -- node scripts/dev.mjs"
+	}
+	return []string{line}
+}
+func bodyExample(c Command) any {
+	// Schemas are assembled from both typed Go slices and decoded JSON. Normalize
+	// them once so example generation follows the same representation as consumers.
+	b, _ := json.Marshal(c.BodySchema)
+	var s map[string]any
+	_ = json.Unmarshal(b, &s)
+	defs, _ := s["$defs"].(map[string]any)
+	if defs == nil {
+		defs = configcontract.Schema()["$defs"].(map[string]any)
+	}
+	var sample func(map[string]any, int) any
+	sample = func(schema map[string]any, depth int) any {
+		if depth > 12 {
+			return nil
+		}
+		if ref, ok := schema["$ref"].(string); ok {
+			if target, ok := defs[strings.TrimPrefix(ref, "#/$defs/")].(map[string]any); ok {
+				return sample(target, depth+1)
+			}
+		}
+		if v, ok := schema["const"]; ok {
+			return v
+		}
+		if v, ok := schema["default"]; ok {
+			return v
+		}
+		if values, ok := schema["enum"].([]any); ok && len(values) > 0 {
+			return values[0]
+		}
+		for _, key := range []string{"oneOf", "anyOf"} {
+			if list, ok := schema[key].([]any); ok && len(list) > 0 {
+				merged := map[string]any{}
+				for k, v := range schema {
+					if k != key {
+						merged[k] = v
+					}
+				}
+				for k, v := range list[0].(map[string]any) {
+					if k == "required" {
+						existing, _ := merged[k].([]any)
+						v = append(append([]any{}, existing...), v.([]any)...)
+					}
+					if k == "properties" {
+						properties := map[string]any{}
+						existing, _ := merged[k].(map[string]any)
+						for name, field := range existing {
+							properties[name] = field
+						}
+						for name, field := range v.(map[string]any) {
+							properties[name] = field
+						}
+						v = properties
+					}
+					merged[k] = v
+				}
+				return sample(merged, depth+1)
+			}
+		}
+		typ := schema["type"]
+		if types, ok := typ.([]any); ok && len(types) > 0 {
+			typ = types[0]
+		}
+		switch typ {
+		case "object":
+			out := map[string]any{}
+			properties, _ := schema["properties"].(map[string]any)
+			required, _ := schema["required"].([]any)
+			for _, key := range required {
+				if field, ok := properties[key.(string)].(map[string]any); ok {
+					out[key.(string)] = sample(field, depth+1)
+				}
+			}
+			minimum, _ := schema["minProperties"].(float64)
+			keys := make([]string, 0, len(properties))
+			for key := range properties {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				if len(out) >= int(minimum) {
+					break
+				}
+				if _, exists := out[key]; !exists {
+					out[key] = sample(properties[key].(map[string]any), depth+1)
+				}
+			}
+			return out
+		case "array":
+			out := []any{}
+			count, _ := schema["minItems"].(float64)
+			item, _ := schema["items"].(map[string]any)
+			for i := 0; i < int(count); i++ {
+				out = append(out, sample(item, depth+1))
+			}
+			return out
+		case "boolean":
+			return false
+		case "integer", "number":
+			if v, ok := schema["minimum"]; ok {
+				return v
+			}
+			return 1
+		case "null":
+			return nil
+		default:
+			if schema["format"] == "uuid" {
+				return "00000000-0000-4000-8000-000000000000"
+			}
+			if pattern, ok := schema["pattern"].(string); ok {
+				return exampleValue("", pattern)
+			}
+			return "sample"
+		}
+	}
+	if c.Name == "config edit" {
+		return map[string]any{"operations": []any{map[string]any{"op": "tool.add", "name": "node", "value": map[string]any{}}}}
+	}
+	switch c.Name {
+	case "command add":
+		return map[string]any{"exec": []any{"node", "scripts/dev.mjs"}}
+	case "config tool update":
+		return map[string]any{"version": "1.2.3"}
+	case "config preset update":
+		return map[string]any{"tools": []any{}}
+	case "command update":
+		return map[string]any{"inject": true}
+	}
+	return sample(s, 0)
+}

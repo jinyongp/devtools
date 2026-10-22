@@ -17,11 +17,13 @@ func passphraseRequiredError(command string) *protocol.Error {
 	return protocol.NewError("passphrase_required", "A profile transfer passphrase is required.", 3, map[string]any{
 		"remedies": []protocol.Remedy{
 			{
+				Effect:         "value_write",
 				Argv:           []string{"devtools", "profile", command, "--passphrase-file", "PATH"},
 				RequiredInputs: []string{"passphrase-file"},
 				Message:        "Provide the passphrase through a regular file for non-interactive use.",
 			},
 			{
+				Effect:         "value_write",
 				Argv:           []string{"devtools", "profile", command, "--passphrase-stdin"},
 				RequiredInputs: []string{"stdin"},
 				Message:        "Pipe the passphrase to stdin for non-interactive use.",
@@ -79,7 +81,7 @@ func readPassphraseReader(ctx context.Context, reader io.Reader) (string, *proto
 			return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
 		}
 		if read.err != nil {
-			return "", protocol.NewError("io_error", "Cannot read passphrase input.", 1, nil)
+			return "", protocol.InputError("passphrase", "read_input", read.err)
 		}
 		passphrase, inputErr := normalizeTransferPassphrase(read.body)
 		for i := range read.body {
@@ -96,7 +98,7 @@ func readPassphraseSource(ctx context.Context, streams IO, filePath string, from
 	if filePath != "" {
 		file, err := os.OpenFile(filePath, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 		if err != nil {
-			return "", protocol.NewError("io_error", "Cannot read passphrase input.", 1, nil)
+			return "", protocol.InputError("passphrase", "open_input", err)
 		}
 		defer file.Close()
 		info, err := file.Stat()

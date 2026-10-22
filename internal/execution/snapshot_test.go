@@ -20,6 +20,43 @@ import (
 
 const snapshotCredential = "synthetic-frozen-credential-only"
 
+func TestPreparedExecutableReplacementRequiresRefresh(t *testing.T) {
+	command, dependencies, _ := executionSnapshotFixture(t)
+	fixture := filepath.Join(command.Directory, "fixture-executable.exe")
+	if err := os.WriteFile(fixture, []byte("synthetic executable before"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	command.Exec = []string{fixture}
+	command.Inject = false
+	prepared, e := PrepareInput(context.Background(), command, dependencies, os.Environ(), PlanOptions{})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer prepared.Release()
+	encoded, e := prepared.Input.EncodeForLauncher()
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer encoded.Destroy()
+	if err := os.Remove(fixture); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fixture, []byte("synthetic executable after"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, e := prepared.Input.Open(); e == nil || e.Code != "input_changed" {
+		t.Fatal("replacement accepted", e)
+	}
+	transported, e := DecodeLauncherInput(encoded)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer transported.Destroy()
+	if _, e := transported.Open(); e == nil || e.Code != "input_changed" {
+		t.Fatal("transport accepted replacement", e)
+	}
+}
+
 func TestFrozenInputChild(t *testing.T) {
 	if os.Getenv("DEVTOOLS_EXEC_SNAPSHOT_CHILD") != "1" {
 		return
@@ -166,11 +203,6 @@ func TestNoValueExecutionDoesNotUnlockAndParentPolicyIsIndependent(t *testing.T)
 func TestVersionProbeDoesNotReceiveKnownSecretOrControlContext(t *testing.T) {
 	command, dependencies, _ := executionSnapshotFixture(t)
 	command.Requirements = project.Requirements{Tools: map[string]project.Tool{"fixture": {Executable: command.Exec[0], Version: "1.2.3", VersionArgs: []string{"--synthetic-version"}}}}
-	prepared, e := PrepareInput(context.Background(), command, dependencies, []string{"TOKEN=synthetic-parent-token", "DEVTOOLS_TASK_CONTEXT=synthetic-control"}, PlanOptions{})
-	if e != nil {
-		t.Fatal(e)
-	}
-	defer prepared.Release()
 	probes := 0
 	ctx := process.WithRunner(context.Background(), func(_ context.Context, _ []string, _ string, env []string, _ io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
 		probes++
@@ -181,6 +213,11 @@ func TestVersionProbeDoesNotReceiveKnownSecretOrControlContext(t *testing.T) {
 		fmt.Fprint(out, "1.2.3")
 		return 0, nil
 	})
+	prepared, e := PrepareInput(ctx, command, dependencies, []string{"TOKEN=synthetic-parent-token", "DEVTOOLS_TASK_CONTEXT=synthetic-control"}, PlanOptions{})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer prepared.Release()
 	if !ChecksPassed(prepared.Checks(ctx, []string{"TOKEN=late-parent-token"}, false)) || probes != 1 {
 		t.Fatal("safe version probe failed")
 	}

@@ -1,16 +1,18 @@
-// Package doctor checks declared prerequisites without exposing variable values
-// or tool output. It is shared by explicit diagnosis and run preflight.
+// Package doctor evaluates prerequisites shared by diagnosis and execution.
 package doctor
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
-	"regexp"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
-	"sync"
-	"time"
 
+	"github.com/jinyongp/devtools/internal/configcontract"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -18,105 +20,273 @@ import (
 )
 
 type Check struct {
-	ID              string            `json:"id"`
-	Status          string            `json:"status"`
-	Message         string            `json:"message"`
-	Remedies        []protocol.Remedy `json:"remedies"`
-	ExpectedVersion string            `json:"expected_version,omitempty"`
-}
-type Report struct {
-	Ready     bool    `json:"ready"`
-	Profile   string  `json:"profile"`
-	Directory string  `json:"directory"`
-	Env       string  `json:"env"`
-	Command   string  `json:"command"`
-	Checks    []Check `json:"checks"`
+	ID       string                  `json:"id"`
+	Status   string                  `json:"status"`
+	Required bool                    `json:"required"`
+	Reason   string                  `json:"reason"`
+	Message  string                  `json:"message"`
+	Target   map[string]any          `json:"target"`
+	Sources  []configcontract.Source `json:"sources"`
+	Facts    map[string]any          `json:"facts"`
+	Remedies []protocol.Remedy       `json:"remedies"`
 }
 
-func Remedy(message string, argv []string, requiredInputs ...string) protocol.Remedy {
+func Remedy(message string, argv []string, inputs ...string) protocol.Remedy {
 	if argv == nil {
 		argv = []string{}
 	}
-	if requiredInputs == nil {
-		requiredInputs = []string{}
+	if inputs == nil {
+		inputs = []string{}
 	}
-	return protocol.Remedy{Argv: argv, RequiredInputs: requiredInputs, Message: message}
+	effect := "read"
+	for _, s := range argv {
+		switch s {
+		case "set", "create", "unlock", "init":
+			effect = "value_write"
+		}
+	}
+	return protocol.Remedy{Argv: argv, RequiredInputs: inputs, Message: message, Effect: effect}
 }
-
-func New() Report { return Report{Ready: true, Checks: []Check{}} }
-func (r *Report) Add(id, status, message string, remedies ...protocol.Remedy) {
-	if remedies == nil {
-		remedies = []protocol.Remedy{}
+func NewCheck(id, status, reason, message string) Check {
+	return Check{ID: id, Status: status, Required: status != "not_applicable", Reason: reason, Message: message, Target: map[string]any{"kind": "prerequisite", "name": id}, Sources: []configcontract.Source{}, Facts: map[string]any{}, Remedies: []protocol.Remedy{}}
+}
+func State(checks []Check) string {
+	state := "ready"
+	for _, c := range checks {
+		if !c.Required {
+			continue
+		}
+		if c.Status == "fail" {
+			return "not_ready"
+		}
+		if c.Status == "unknown" || c.Status == "skipped" {
+			state = "unknown"
+		}
 	}
-	r.Checks = append(r.Checks, Check{ID: id, Status: status, Message: message, Remedies: remedies})
-	if status == "fail" {
-		r.Ready = false
-	}
+	return state
 }
 
 type Input struct {
-	Profile        string
-	Directory      string
-	Env            string
-	Requirements   project.Requirements
-	State          *values.State
-	Inject         bool
-	CheckInjection bool
-	Executable     string
-	Environment    []string
-	PathOverride   *string
+	Command                                string
+	Args                                   []string
+	Profile, Directory, Env                string
+	Requirements                           project.Requirements
+	State                                  *values.State
+	Inject, CheckInjection                 bool
+	Executable                             string
+	Environment                            []string
+	PathOverride                           *string
+	SearchOverrides                        map[string]string
+	Public                                 map[string]string
+	Registration                           map[string]values.Kind
+	RegistrationKnown                      bool
+	EnvironmentUnknown, SearchOrigin, Mode string
+	ReadyExec                              []string
+	Source                                 func([]string) configcontract.Source
 }
 
 func CheckRequirements(ctx context.Context, in Input) []Check {
-	report := New()
-	probeEnv := in.Environment
-	if probeEnv == nil {
-		probeEnv = os.Environ()
+	checks := []Check{}
+	add := func(id, status, reason, message string) int {
+		c := NewCheck(id, status, reason, message)
+		c.Target["profile"] = in.Profile
+		c.Target["env"] = in.Env
+		checks = append(checks, c)
+		return len(checks) - 1
 	}
-	// Use the effective PATH, while keeping profile secrets out of version probes.
-	if in.Inject && in.State != nil {
-		if effective, e := in.State.Environment(in.Env); e == nil {
-			if err := process.ValidateEnvironment(effective); err != nil {
-				message := err.Message
-				if keys, ok := err.Details["keys"].([]string); ok {
-					message += " Keys: " + strings.Join(keys, ", ")
+	parent := in.Environment
+	if parent == nil {
+		parent = os.Environ()
+	}
+	parent, _ = process.SelectParent(parent, process.ParentPolicy{})
+	public := in.Public
+	registered := in.Registration
+	known := in.RegistrationKnown
+	secrets := map[string]string{}
+	if in.State != nil {
+		registered = map[string]values.Kind{}
+		known = true
+		public = map[string]string{}
+		for _, kind := range []values.Kind{values.Variable, values.Secret} {
+			metadata, e := in.State.List(kind, in.Env)
+			if e != nil {
+				known = false
+			}
+			for _, m := range metadata {
+				registered[m.Key] = kind
+				if kind == values.Secret {
+					secrets[m.Key] = ""
 				}
-				report.Add("environment:names", "fail", message, Remedy("Use one spelling for each injected environment name.", nil))
-				return report.Checks
 			}
-			if path, ok := process.EnvironmentValue(effective, "PATH"); ok {
-				probeEnv = process.Environment(probeEnv, map[string]string{"PATH": path})
+		}
+		if effective, e := in.State.Environment(in.Env); e == nil {
+			for k, v := range effective {
+				if _, secret := process.EnvironmentValue(secrets, k); !secret {
+					public[k] = v
+				}
 			}
+		} else {
+			in.EnvironmentUnknown = "environment_unresolved"
+		}
+	}
+	for key, kind := range registered {
+		if kind == values.Secret {
+			secrets[key] = ""
+		}
+	}
+	filtered := []string{}
+	for _, item := range parent {
+		name, _, _ := strings.Cut(item, "=")
+		if _, secret := process.EnvironmentValue(secrets, name); !secret {
+			filtered = append(filtered, item)
+		}
+	}
+	parent = filtered
+	if in.Inject && known {
+		for _, key := range []string{"PATH", "PATHEXT"} {
+			if _, secret := process.EnvironmentValue(secrets, key); secret {
+				in.EnvironmentUnknown = "secret_search_environment"
+			}
+		}
+		names := map[string]string{}
+		for k, v := range public {
+			names[k] = v
+		}
+		for k := range registered {
+			names[k] = ""
+		}
+		if e := process.ValidateEnvironment(names); e != nil {
+			add("environment:names", "fail", "environment_name_conflict", "Injected environment names conflict.")
+			in.EnvironmentUnknown = "environment_name_conflict"
+		}
+		selected := map[string]string{}
+		for _, key := range []string{"PATH", "PATHEXT"} {
+			if v, ok := process.EnvironmentValue(public, key); ok {
+				selected[key] = v
+			}
+		}
+		if len(selected) > 0 {
+			in.SearchOrigin = "profile"
+			parent = process.Environment(parent, selected)
 		}
 	}
 	if in.PathOverride != nil {
-		probeEnv = process.Environment(probeEnv, map[string]string{"PATH": *in.PathOverride})
+		parent = process.Environment(parent, map[string]string{"PATH": *in.PathOverride})
+		in.SearchOrigin = "binding"
 	}
-	checkTool := func(name string, tool project.Tool) {
-		tool = tool.WithDefaults(name)
-		id := "tool:" + name
-		path, e := process.LookPath(tool.Executable, in.Directory, probeEnv)
-		info, statErr := os.Stat(path)
-		if e != nil || statErr != nil || !process.IsExecutable(info) {
-			report.Add(id, "fail", "Required executable is unavailable.", Remedy("Install the declared tool or update the command's PATH.", nil))
-			return
+	if len(in.SearchOverrides) > 0 {
+		parent = process.Environment(parent, in.SearchOverrides)
+		in.SearchOrigin = "binding"
+	}
+	if in.SearchOrigin == "" {
+		in.SearchOrigin = "parent"
+	}
+	type lookedUp struct {
+		info          os.FileInfo
+		args, version string
+		check         int
+	}
+	lookups := []lookedUp{}
+	tool := func(id, name string, t project.Tool) {
+		t = t.WithDefaults(name)
+		status, reason, message := "pass", "present", "Executable "+t.Executable+" is available."
+		facts := map[string]any{"executable": t.Executable, "search_origin": in.SearchOrigin}
+		if t.Version != "" {
+			facts["expected_version"] = t.Version
 		}
-		if tool.Version == "" {
-			report.Add(id, "pass", "Required executable is available.")
-			return
-		}
-		args := tool.VersionArgs
-		probe, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		output := &limitedOutput{}
-		code, err := process.Execute(probe, append([]string{path}, args...), in.Directory, probeEnv, nil, output, output)
-		passed := err == nil && code == 0 && probe.Err() == nil && !output.truncated && matchesVersion(output.data.String(), tool.Version)
-		if passed {
-			report.Add(id, "pass", "Required exact version is available.")
+		var identity os.FileInfo
+		independent := t.Version == "" && !strings.Contains(t.Executable, "${") && strings.ContainsAny(t.Executable, `/\`) && (runtime.GOOS != "windows" || filepath.Ext(t.Executable) != "")
+		if ctx.Err() != nil {
+			status, reason, message = "unknown", "deadline_exceeded", "The diagnosis deadline ended before this check."
+			if errors.Is(ctx.Err(), context.Canceled) {
+				reason = "canceled"
+				message = "Diagnosis was explicitly canceled."
+			}
+		} else if in.EnvironmentUnknown != "" && !independent {
+			status, reason, message = "unknown", in.EnvironmentUnknown, "The selected search environment could not be authenticated."
 		} else {
-			report.Add(id, "fail", "Exact version check failed or the version probe could not finish.", Remedy("Install the declared exact version; check version_args and the selected PATH.", nil))
+			path, e := process.LookPath(t.Executable, in.Directory, parent)
+			info, statErr := os.Stat(path)
+			identity = info
+			if e != nil || statErr != nil || !process.IsExecutable(info) {
+				status, reason, message = "fail", "not_found", "Executable "+t.Executable+" was not found in the selected PATH/PATHEXT."
+				if errors.Is(statErr, os.ErrPermission) {
+					reason = "permission_denied"
+				}
+				if statErr == nil && info != nil && !process.IsExecutable(info) {
+					reason = "not_executable"
+				}
+				if e != nil && e.Code == "invalid_argument" {
+					reason = "invalid_search_environment"
+				}
+				if e != nil {
+					if value, ok := e.Details["reason"].(string); ok {
+						reason = value
+					}
+				}
+				if reason != "not_found" {
+					message = "Executable " + t.Executable + " is unavailable: " + reason + "."
+				}
+			} else if t.Version != "" {
+				var observed string
+				reason, observed = probe(ctx, path, t.VersionArgs, in.Directory, parent)
+				if observed != "" {
+					facts["observed_version"] = observed
+				}
+				if reason == "version_token" {
+					if observed == t.Version {
+						reason = "version_match"
+					} else {
+						reason = "version_mismatch"
+					}
+				}
+				status = "fail"
+				if reason == "version_match" {
+					status = "pass"
+				}
+				if reason == "deadline_exceeded" || reason == "canceled" {
+					status = "unknown"
+				}
+				message = "Executable " + t.Executable + ": " + reason + " (expected " + t.Version + ")."
+			}
 		}
-		report.Checks[len(report.Checks)-1].ExpectedVersion = tool.Version
+		i := add(id, status, reason, message)
+		checks[i].Target = map[string]any{"kind": "tool", "name": name, "profile": in.Profile, "env": in.Env}
+		checks[i].Facts = facts
+		if identity != nil && t.Version != "" {
+			args, _ := json.Marshal(t.VersionArgs)
+			for _, previous := range lookups {
+				if previous.version != t.Version && previous.args == string(args) && os.SameFile(previous.info, identity) {
+					checks[previous.check].Status = "fail"
+					checks[previous.check].Reason = "version_conflict"
+					checks[previous.check].Message = "The same executable and probe arguments have conflicting exact version requirements."
+					checks[previous.check].Remedies = []protocol.Remedy{{Effect: "config_write", Argv: []string{}, RequiredInputs: []string{}, Message: "Reconcile the exact versions declared for this executable."}}
+					checks[i].Status = "fail"
+					checks[i].Reason = "version_conflict"
+					checks[i].Message = "The same executable and probe arguments have conflicting exact version requirements."
+					status = "fail"
+				}
+			}
+			lookups = append(lookups, lookedUp{info: identity, args: string(args), version: t.Version, check: i})
+		}
+		if status != "pass" {
+			checks[i].Remedies = []protocol.Remedy{Remedy("Make the declared executable and exact version available in the selected environment; verify version_args.", nil)}
+			checks[i].Remedies[0].Effect = "system_write"
+			if checks[i].Reason == "version_conflict" {
+				checks[i].Remedies[0].Effect = "config_write"
+				checks[i].Remedies[0].Message = "Reconcile the exact versions declared for this executable."
+			}
+		}
+		if in.Source != nil {
+			path := []string{"tools", name}
+			if id == "command_executable" {
+				path = []string{"commands", in.Command, "exec", "0"}
+			}
+			if id == "readiness_executable" {
+				path = []string{"commands", in.Command, "ready", "exec", "0"}
+			}
+			checks[i].Sources = append(checks[i].Sources, in.Source(path))
+		}
 	}
 	names := []string{}
 	for name := range in.Requirements.Tools {
@@ -124,86 +294,123 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		if ctx.Err() != nil {
-			report.Add("canceled", "fail", "Diagnosis canceled.", Remedy("Retry diagnosis.", nil))
-			return report.Checks
-		}
-		checkTool(name, in.Requirements.Tools[name])
+		tool("tool:"+name, name, in.Requirements.Tools[name])
 	}
 	if in.Executable != "" {
-		checkTool("command", project.Tool{Executable: in.Executable})
-		report.Checks[len(report.Checks)-1].ID = "command_executable"
+		tool("command_executable", in.Executable, project.Tool{Executable: in.Executable})
 	}
-	registrationRemedy := func(label, key string) protocol.Remedy {
-		argv := []string{"devtools", label, "set", key}
-		required := []string{}
-		if in.Profile != "" {
-			argv = append(argv, "--profile", in.Profile)
-		} else {
-			required = append(required, "profile")
+	if in.Mode == "managed" && len(in.ReadyExec) > 0 {
+		tool("readiness_executable", in.ReadyExec[0], project.Tool{Executable: in.ReadyExec[0]})
+	}
+	if in.Mode == "managed" {
+		launcher := func(id string, args []string) {
+			if len(args) == 0 {
+				return
+			}
+			status, reason := "pass", "supported"
+			if in.EnvironmentUnknown != "" {
+				status, reason = "unknown", in.EnvironmentUnknown
+			} else if err := process.ValidateManaged(args, in.Directory, parent); err != nil {
+				status, reason = "fail", err.Code
+			}
+			add(id, status, reason, "Managed launcher constraints were checked without starting the application.")
 		}
-		if in.Env != "" {
-			argv = append(argv, "--env", in.Env)
+		args := in.Args
+		if len(args) == 0 && in.Executable != "" {
+			args = []string{in.Executable}
 		}
-		if label == "sec" {
-			argv = append(argv, "--stdin")
-			required = append(required, "stdin")
-		} else {
-			required = append(required, "value")
-		}
-		return Remedy("Register the required "+map[string]string{"var": "variable", "sec": "secret"}[label]+" in the selected profile and env.", argv, required...)
+		launcher("launcher", args)
+		launcher("readiness_launcher", in.ReadyExec)
 	}
 	for _, kind := range []values.Kind{values.Variable, values.Secret} {
-		keys := in.Requirements.Vars
+		keys := append([]string{}, in.Requirements.Vars...)
 		label := "var"
 		if kind == values.Secret {
-			keys = in.Requirements.Secs
+			keys = append([]string{}, in.Requirements.Secs...)
 			label = "sec"
 		}
-		known := map[string]bool{}
-		available := in.State != nil
-		if available {
-			metadata, e := in.State.List(kind, in.Env)
-			available = e == nil
-			for _, m := range metadata {
-				known[m.Key] = true
-			}
-		}
+		sort.Strings(keys)
 		for _, key := range keys {
-			if !available {
-				report.Add(label+":"+key, "skipped", "Registration check needs readable storage and a valid env.", Remedy("Resolve the storage or env check first.", nil))
-			} else if known[key] {
-				report.Add(label+":"+key, "pass", "Required key is registered in the selected layer.")
-			} else {
-				report.Add(label+":"+key, "fail", "Required key is missing or registered with another kind.", registrationRemedy(label, key))
+			status, reason, message := "pass", "registered", "Required "+label+" "+key+" is registered."
+			if !known {
+				status, reason, message = "unknown", "registration_unverified", "Registration could not be authenticated."
+			} else if registered[key] != kind {
+				status, reason, message = "fail", "not_registered", "Required "+label+" "+key+" is missing or has another kind."
+			}
+			i := add(label+":"+key, status, reason, message)
+			checks[i].Target = map[string]any{"kind": label, "name": key, "profile": in.Profile, "env": in.Env}
+			if status == "fail" {
+				argv := []string{"devtools", label, "set", key, "--profile", in.Profile}
+				required := []string{"value"}
+				if in.Env != "" {
+					argv = append(argv, "--env", in.Env)
+				}
+				if kind == values.Secret {
+					argv = append(argv, "--stdin")
+					required = []string{"stdin"}
+				}
+				checks[i].Remedies = []protocol.Remedy{Remedy("Register the required key in the selected profile and env.", argv, required...)}
 			}
 		}
 	}
-	if (in.CheckInjection || in.Executable != "") && !in.Inject && len(in.Requirements.Vars)+len(in.Requirements.Secs) > 0 {
-		report.Add("injection", "fail", "This command requires registered values and injection is disabled.", Remedy("Set inject = true for this command or select --env.", nil))
+	if in.CheckInjection || in.Executable != "" {
+		if !in.Inject && len(in.Requirements.Vars)+len(in.Requirements.Secs) > 0 {
+			i := add("injection", "fail", "injection_disabled", "Required values are declared but injection is disabled.")
+			checks[i].Remedies = []protocol.Remedy{Remedy("Set inject = true or explicitly select --env.", nil)}
+			checks[i].Remedies[0].Effect = "config_write"
+		}
 	}
-	return report.Checks
+	return checks
 }
 
-var versions = regexp.MustCompile(`[0-9]+(?:\.[0-9]+)+(?:[-+_][0-9A-Za-z.+_-]+)?`)
-
-func matchesVersion(output, expected string) bool { return versions.FindString(output) == expected }
-
-type limitedOutput struct {
-	mu        sync.Mutex
-	data      strings.Builder
-	truncated bool
-}
-
-func (b *limitedOutput) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	n := len(p)
-	remaining := (16 << 10) - b.data.Len()
-	if len(p) > remaining {
-		p = p[:remaining]
-		b.truncated = true
+func Failure(checks []Check, command, dir, profile, env, selection, mode string, inject bool) *protocol.Error {
+	if State(checks) == "ready" {
+		return nil
 	}
-	_, _ = b.data.Write(p)
-	return n, nil
+	code, exit := "requirements_failed", 3
+	for _, c := range checks {
+		if c.ID == "command_executable" && c.Status == "fail" && c.Reason == "not_found" {
+			code, exit = "executable_not_found", 127
+		}
+	}
+	for _, c := range checks {
+		if c.Reason == "canceled" {
+			code, exit = "canceled", 130
+			break
+		}
+	}
+	if selection == "" {
+		selection = "all"
+	}
+	if mode == "" {
+		mode = "foreground"
+	}
+	argv := []string{"devtools", "doctor", "--dir", dir, "--profile", profile, "--bundle", selection, "--mode", mode}
+	if inject {
+		argv = append(argv, "--env", env)
+	}
+	if command != "" {
+		argv = append(argv, command)
+	}
+	problems := []string{}
+	for _, check := range checks {
+		if check.Required && (check.Status == "fail" || check.Status == "unknown") {
+			if len(problems) < 5 {
+				problems = append(problems, check.ID+" ("+check.Reason+")")
+			}
+		}
+	}
+	message := fmt.Sprintf("Command %q prerequisites failed: %s.", command, strings.Join(problems, ", "))
+	if code == "executable_not_found" {
+		for _, check := range checks {
+			if check.ID == "command_executable" {
+				message = fmt.Sprintf("Executable %q was not found for command %q. Other prerequisite results are included in checks.", check.Facts["executable"], command)
+				break
+			}
+		}
+	}
+	if code == "canceled" {
+		message = "Command prerequisite checks were explicitly canceled."
+	}
+	return protocol.NewError(code, message, exit, map[string]any{"phase": "preflight", "reason": code, "target": map[string]any{"kind": "command", "name": command, "profile": profile, "env": env, "command": command, "directory": dir, "bundle": selection}, "checks": checks, "remedies": []protocol.Remedy{Remedy("Diagnose the same command selection and execution mode.", argv)}})
 }

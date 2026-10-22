@@ -18,7 +18,7 @@ func TestIssuesRetainStorageDetailsWithoutDomainPayloads(t *testing.T) {
 		t.Fatal(report)
 	}
 	details := report.Issues[0].Details
-	if details["os_error"] != uint64(5) || details["path"] != nil || details["items"] != nil {
+	if details["facts"].(map[string]any)["os_code"] != uint64(5) || details["path"] != nil || details["items"] != nil || report.Issues[0].Message == "SECRET-MESSAGE" {
 		t.Fatal(details)
 	}
 }

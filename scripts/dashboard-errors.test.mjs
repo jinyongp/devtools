@@ -31,3 +31,26 @@ test('unknown or malformed storage metadata leaves domain message usable', () =>
   vm.runInContext(source, context);
   assert.equal(vm.runInContext('storageFailureMessage(storageFailureDetails({reason:"unknown",operation:"bad/path",os_error:-1}))', context), '');
 });
+
+test('common diagnostics retain failed checks, actions and partial process identifiers', async () => {
+  const context = vm.createContext({
+    generation: 0, detailGeneration: 0, sessionToken: 'private-session',
+    fetch: async () => ({ok:false, status:409, text:async () => JSON.stringify({error:{
+      code:'requirements_failed', message:'Some commands could not be started.', details:{
+        operation:'services up', phase:'preflight', reason:'prerequisites', retry:'after_dependency_change', effects:'partial',
+        target:{kind:'command',name:'api'}, facts:{stage:'prepare',path:'PRIVATE-PATH',outcomes:[{kind:'command',name:'web',id:'sample-process',state:'started',changed:true,token:'PRIVATE-TOKEN'}]},
+        checks:[{id:'tool:node',status:'fail',reason:'not_found',output:'PRIVATE-OUTPUT'}],
+        remedies:[{argv:['devtools','doctor','api'],required_inputs:[],effect:'read',message:'Inspect this command.'}],
+      },
+    }})}),
+  });
+  vm.runInContext(source, context);
+  await assert.rejects(vm.runInContext('api("/api/query")', context), error => {
+    assert.equal(error.details.effects, 'partial');
+    assert.match(error.message, /tool:node: not_found/);
+    assert.match(error.message, /web: started \(sample-process\)/);
+    assert.match(error.message, /Inspect this command/);
+    assert.doesNotMatch(JSON.stringify(error.details), /PRIVATE-/);
+    return true;
+  });
+});

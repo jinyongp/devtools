@@ -8,6 +8,19 @@ configuration. Profile selection is explicit --profile, then nearest devtools.to
 lookup checks the Git root and stops there. No profile is inferred from a remote.
 Keep project declarations tracked and secret values in the user data store.
 
+On protocol 10 builds, discover `schema config edit` before editing. Prefer typed
+`command add/update/remove/rename`, `config tool`, `config preset`, and atomic
+`config edit` over reconstructing TOML. `config inspect` returns the file revision;
+updates, removals, renames and batches require it. Preview with --dry-run, retain
+the same revision for apply, and re-inspect on conflict. Adds are create-only.
+Tools register specifications; presets reuse selections; only defaults affect all
+commands. Do not infer dependencies, install tools, or promote selections globally.
+Legacy requirements remain readable but cannot be mixed with registry fields.
+Use `config migrate` preview and its revision/apply_digest for explicit conversion.
+`config fmt` only formats. `command explain` shows effective fields and provenance
+without running tools or reading stored values. Preservation failures require a
+reviewed edit; do not bypass the editor's source or permission checks.
+
 Create an env with `env create NAME` before selecting it. Without --env, value
 operations address common scope; with --env, reads merge common and env overrides
 while writes/unsets affect only that env. Removing an override reveals the common
@@ -102,12 +115,19 @@ old applications keep their original environment and output patterns until exit.
 
 Use `doctor COMMAND` before a configured command when setup is uncertain.
 A successful diagnosis can still have `data.ready: false`; inspect `checks[].remedies`.
+On protocol 10, bare doctor checks all configured commands. Inspect common checks
+and `commands[].checks`; unknown is unverified, not pass. `--project-only` checks
+defaults, `--mode managed` includes launcher/readiness, and `--check` returns exit 3
+with the full report in `error.details.report` for non-ready results. Diagnosis is
+passive and does not unlock the vault. Retain dir/profile/env/bundle/mode when
+following a scoped remedy. Missing argv[0] is executable_not_found (127), while
+other prerequisite failures are requirements_failed (3); inspect all checks/causes.
 Use `diagnostics` when the question spans the user's devtools installation instead of one
 project command. It reports profile, port, process, proxy, dashboard, and public backup
 metadata without secret values, raw logs, credentials, execution contexts, or backup
 recipient material. A stopped proxy/dashboard or unconfigured backup is a readable state;
 `diagnostics.data.ready: false` means at least one subsystem could not be inspected safely.
-Each remedy has `argv`, `required_inputs`, and `message`. Supply missing inputs before
+Each remedy has `argv`, `required_inputs`, `message`, and (protocol 10) `effect`. Supply missing inputs before
 execution; an empty argv describes a manual action. These are suggestions, not automatic
 permission to install tools or change data. Keep secrets in stdin/files, never remedy argv.
 Secrets enter processes through `command run` or managed commands. On supporting builds,
@@ -222,7 +242,8 @@ the current project's canonical directory, not other worktrees sharing its profi
 `process logs` for ended history. Restart freezes the active execution IDs selected by
 the first request, applies current project configuration and values, and never starts a
 missing command implicitly. Omitted env/capture options inherit the execution's prior
-selection. On partial failure inspect `error.details.items`; successful siblings stay
+selection. On protocol 10 partial failure inspect `error.details.facts.outcomes` and
+`causes` (older builds use `error.details.items`); successful siblings stay
 running. Retry the same input/UUID to continue unfinished children. A resumed batch may
 return updated progress with `replayed: true`. Completed requests replay their saved
 result. Down/restart retries keep the original execution targets. Use a new UUID for a

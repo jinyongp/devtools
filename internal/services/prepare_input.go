@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"github.com/jinyongp/devtools/internal/doctor"
 	"os"
 
 	"github.com/jinyongp/devtools/internal/execution"
@@ -35,14 +36,14 @@ func PrepareFrozenInput(ctx context.Context, r Record, n *network.ExecutionSnaps
 	dependencies.CaptureOutput = r.Capture
 	dependencies.DeferServing = true
 	dependencies.IsolatedRoot = r.IsolatedRoot
-	prepared, e := execution.PrepareInput(ctx, command, dependencies, os.Environ(), execution.PlanOptions{})
+	prepared, e := execution.PrepareInput(ctx, command, dependencies, os.Environ(), execution.PlanOptions{Mode: "managed"})
 	if e != nil {
 		return execution.Prepared{}, e
 	}
 	checks := prepared.Checks(ctx, os.Environ(), false)
 	if !execution.ChecksPassed(checks) {
 		prepared.Release()
-		return execution.Prepared{}, protocol.NewError("requirements_failed", "Command prerequisites are not satisfied. Run devtools doctor for diagnostics.", 3, map[string]any{"checks": checks})
+		return execution.Prepared{}, doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "managed", command.Inject)
 	}
 	return prepared, nil
 }

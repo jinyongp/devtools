@@ -464,11 +464,11 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 			}
 			a := s.Assessment(id)
 			if a.ExecutionStatus == "stale" {
-				next = append(next, protocol.Remedy{Argv: []string{"devtools", "task", "sync", id}, RequiredInputs: []string{"profile", "context", "if-revision", "request-id", "reason"}, Message: "Review the changed definition before syncing this run."})
+				next = append(next, protocol.Remedy{Effect: "value_write", Argv: []string{"devtools", "task", "sync", id}, RequiredInputs: []string{"profile", "context", "if-revision", "request-id", "reason"}, Message: "Review the changed definition before syncing this run."})
 			} else if a.ExecutionStatus == "removed" {
-				next = append(next, protocol.Remedy{Argv: []string{"devtools", "task", "release", s.Current(id).ID}, RequiredInputs: []string{"profile", "context", "request-id"}, Message: "Checkpoint and release excluded work when its execution is finished."})
+				next = append(next, protocol.Remedy{Effect: "value_write", Argv: []string{"devtools", "task", "release", s.Current(id).ID}, RequiredInputs: []string{"profile", "context", "request-id"}, Message: "Checkpoint and release excluded work when its execution is finished."})
 			} else if a.Ready {
-				next = append(next, protocol.Remedy{Argv: []string{"devtools", "task", "claim", id}, RequiredInputs: []string{"profile", "request-id"}, Message: "Claim this task when ready to implement its current definition."})
+				next = append(next, protocol.Remedy{Effect: "value_write", Argv: []string{"devtools", "task", "claim", id}, RequiredInputs: []string{"profile", "request-id"}, Message: "Claim this task when ready to implement its current definition."})
 			}
 		}
 		result["next_actions"] = next

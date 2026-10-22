@@ -95,8 +95,8 @@ read("first")
 assert api("process","logs",id,expected=3)["code"]=="logs_disabled"
 broken=config.replace('exec=["python3","server.py"]','exec=["/definitely-not-an-installed-review-executable"]',1)
 (root/"devtools.toml").write_text(broken)
-blocked=mutate("restart",id,expected=3)
-assert blocked["code"]=="requirements_failed",blocked
+blocked=mutate("restart",id,expected=127)
+assert blocked["code"]=="executable_not_found",blocked
 still=api("process","status",id)["item"]
 assert still["state"]=="running" and still["ended_at"] is None,still
 read("first")

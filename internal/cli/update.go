@@ -49,7 +49,7 @@ func (a *App) registerUpdate() {
 
 func updateExecutable(ctx context.Context, executable string, options map[string]string, streams ...IO) (any, *protocol.Error) {
 	if updateManager == "homebrew" {
-		return nil, protocol.NewError("package_managed", "Update this Homebrew installation with brew upgrade jinyongp/tap/devtools.", 3, map[string]any{"manager": "homebrew", "command": "brew upgrade jinyongp/tap/devtools"})
+		return nil, protocol.NewError("package_managed", "Update this Homebrew installation with brew upgrade jinyongp/tap/devtools.", 3, map[string]any{"manager": "homebrew", "command": "brew upgrade jinyongp/tap/devtools", "remedies": []protocol.Remedy{{Argv: []string{"brew", "upgrade", "jinyongp/tap/devtools"}, RequiredInputs: []string{}, Message: "Update with the package manager that owns this installation.", Effect: "system_write"}}})
 	}
 	return updatePlatform(ctx, executable, options, streams...)
 }

@@ -162,7 +162,7 @@ func TestDashboardProcessRestartPreStopValidationPreservesRunningExecution(t *te
 	request.Header.Set("Authorization", "Bearer session")
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)
-	if response.Code != 400 || !strings.Contains(response.Body.String(), "\"code\":\"requirements_failed\"") {
+	if response.Code != 400 || !strings.Contains(response.Body.String(), "\"code\":\"executable_not_found\"") {
 		t.Fatalf("restart response: %d %s", response.Code, response.Body.String())
 	}
 	storedBytes, err := os.ReadFile(recordPath)

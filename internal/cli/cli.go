@@ -6,7 +6,9 @@ import (
 	"io"
 	"strings"
 
+	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/lifecycle"
+	"github.com/jinyongp/devtools/internal/notices"
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
@@ -38,6 +40,8 @@ type Option struct {
 }
 
 type Command struct {
+	Examples    []string                                                  `json:"examples"`
+	BodyExample any                                                       `json:"body_example,omitempty"`
 	BodySchema  map[string]any                                            `json:"body_schema,omitempty"`
 	Aliases     []string                                                  `json:"aliases"`
 	Arguments   []Argument                                                `json:"arguments"`
@@ -72,11 +76,12 @@ type Argument struct {
 	Pattern    string `json:"pattern,omitempty"`
 }
 type Request struct {
-	Options     map[string]string
-	ListOptions map[string][]string
-	Args        []string
-	Child       []string
-	Help        bool
+	OptionOffsets map[string]int
+	Options       map[string]string
+	ListOptions   map[string][]string
+	Args          []string
+	Child         []string
+	Help          bool
 }
 type processResult struct{ ExitCode int }
 
@@ -99,6 +104,12 @@ func New(version, commit string) *App {
 		},
 	}
 	a.commands = []Command{
+		{Name: "license", Description: "Print third-party license notices included in this standalone executable.", OutputMode: OutputArtifact, Run: func(_ context.Context, streams IO, _ Request) (any, *protocol.Error) {
+			if _, err := io.WriteString(streams.Out, notices.Text); err != nil {
+				return nil, protocol.NewError("io_error", "Cannot write license notices.", 1, nil)
+			}
+			return nil, nil
+		}},
 		{Name: "init", Description: "Create project configuration in the current directory without overwriting existing files.", Options: []Option{
 			{Name: "profile", Description: "Project profile identifier.", Required: true, Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128},
 		}, Output: changedItemOutput(object(map[string]any{"config_path": stringSchema(), "profile": stringSchema()}, "config_path", "profile")), Run: func(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
@@ -125,6 +136,7 @@ func New(version, commit string) *App {
 	a.registerVault()
 	a.registerTools()
 	a.registerCommands()
+	a.registerConfig()
 	a.registerImport()
 	a.registerBundles()
 	a.registerValueUsage()
@@ -168,6 +180,10 @@ func New(version, commit string) *App {
 		if a.commands[i].Arguments == nil {
 			a.commands[i].Arguments = []Argument{}
 		}
+		a.commands[i].Examples = commandExamples(a.commands[i])
+		if a.commands[i].BodySchema != nil {
+			a.commands[i].BodyExample = bodyExample(a.commands[i])
+		}
 	}
 	return a
 }
@@ -189,10 +205,23 @@ func (a *App) inspect(ctx context.Context, streams IO, request Request) (any, *p
 }
 
 func (a *App) Run(ctx context.Context, args []string, streams IO) int {
+	ctx = doctor.WithCache(ctx)
 	if len(args) == 1 && args[0] == "__complete" {
 		return a.completeDynamic(ctx, streams)
 	}
+	operation := "devtools"
+	rootArgumentOffset := 0
 	fail := func(err *protocol.Error) int {
+		if sources, ok := err.Details["sources"].([]any); ok && rootArgumentOffset > 0 {
+			for _, value := range sources {
+				if source, ok := value.(map[string]any); ok && source["kind"] == "argv" {
+					if offset, ok := source["offset"].(int); ok {
+						source["offset"] = offset + rootArgumentOffset
+					}
+				}
+			}
+		}
+		err = protocol.Public(err, operation)
 		if protocol.Failure(streams.Err, err) != nil {
 			return 1
 		}
@@ -208,9 +237,11 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 				return fail(argumentError("Supply an isolation root and command.", "isolated-root"))
 			}
 			rootPrefix = args[1]
+			rootArgumentOffset = 2
 			args = args[2:]
 		} else {
 			rootPrefix = strings.TrimPrefix(args[0], "--isolated-root=")
+			rootArgumentOffset = 1
 			args = args[1:]
 			if rootPrefix == "" || len(args) == 0 {
 				return fail(argumentError("Supply an isolation root and command.", "isolated-root"))
@@ -265,11 +296,23 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		return 0
 	}
 	if selected == nil {
-		return fail(protocol.NewError("invalid_argument", "Unknown command. Run devtools schema to discover commands.", 2, nil))
+		return fail(a.unknownCommand(args))
 	}
+	operation = selected.Name
 	request, parseErr := parseRequest(*selected, rest)
 	if parseErr != nil {
+		if sources, ok := parseErr.Details["sources"].([]any); ok {
+			for _, s := range sources {
+				source := s.(map[string]any)
+				if offset, ok := source["offset"].(int); ok {
+					source["offset"] = offset + len(args) - len(rest)
+				}
+			}
+		}
 		return fail(parseErr)
+	}
+	for name, offset := range request.OptionOffsets {
+		request.OptionOffsets[name] = offset + len(args) - len(rest) + rootArgumentOffset
 	}
 	if request.Help {
 		_, text, _ := a.discovery(selected.Name, false)
@@ -300,6 +343,28 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	}
 	data, err := selected.Run(ctx, streams, request)
 	if err != nil {
+		if err.Details == nil {
+			err.Details = map[string]any{}
+		}
+		if _, ok := err.Details["target"]; !ok {
+			target := map[string]any{"kind": strings.ReplaceAll(strings.Fields(selected.Name)[0], "-", "_"), "name": selected.Name}
+			if len(request.Args) > 0 {
+				target["name"] = request.Args[0]
+			}
+			for _, key := range []string{"profile", "env", "bundle", "dir"} {
+				if value, ok := request.Options[key]; ok {
+					field := key
+					if key == "dir" {
+						field = "directory"
+					}
+					target[field] = value
+				}
+			}
+			err.Details["target"] = target
+		}
+		if id := request.Options["request-id"]; id != "" {
+			err.Details["request_id"] = id
+		}
 		return fail(err)
 	}
 	if selected.OutputMode == OutputPassthrough {

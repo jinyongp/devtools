@@ -61,6 +61,8 @@ Some linked topic guides are currently in Korean.
 
 ## Working in a project
 
+- [Configuration editing](configuration.md) (Korean): tools, presets, typed changes, revision guards, migration, and formatting.
+
 - [Values and commands](cli-contract.md): profiles, environment overrides, variables, secrets, dotenv import, and saved commands.
 - [Local secret protection](secret-protection.md): one-time vault setup, reusable sessions, locking, migration, and recovery.
 - [Reusable value bundles and usage](cli-contract.md#재사용할-값-묶음-bundle): save var/sec selection once and inspect delivery without reading secrets.
@@ -102,3 +104,16 @@ Design background is separate from public command availability.
 
 - [Task and workstream design](task-workstream-design.md): shared state, execution contexts, and completion rules.
 - [Storage and recovery](storage-design.md): private files, locking, journals, and recoverable replacement.
+
+## Implementation contracts
+
+These contracts describe protocol 10 source behavior. Check the installed binary's
+`version` and `schema` before using a new interface. Platform acceptance requires
+native execution; cross compilation alone does not establish publication or ACL behavior.
+
+- [Project configuration and CLI diagnostics](cli-config-redesign.md) (Korean): tool definitions and presets, compatibility, migration, and design rationale.
+- [Configuration editing](config-edit-contract.md) (Korean): command inputs, revision guards, responses, publication, and recovery.
+- [Diagnostics and doctor](diagnostic-contract.md) (Korean): public errors, scoped preflight checks, passive authentication, and acceptance criteria.
+- [Contract schema](../internal/configcontract/schema.json): machine-readable configuration, mutation, response, and diagnostic definitions.
+- [Conformance cases](../internal/configcontract/cases.json): synthetic valid/invalid schema and strict JSON transport examples.
+- [Diagnostic requirements](cli-guidance-audit.md) (Korean): error context, recovery guidance, and acceptance criteria across CLI domains.

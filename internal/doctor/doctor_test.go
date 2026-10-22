@@ -75,7 +75,7 @@ func TestProbeFailureAndCancellation(t *testing.T) {
 	defer cancel()
 	start := time.Now()
 	checks = CheckRequirements(ctx, in)
-	if checks[0].Status != "fail" || time.Since(start) > 4*time.Second {
+	if checks[0].Status != "unknown" || checks[0].Reason != "deadline_exceeded" || time.Since(start) > 4*time.Second {
 		t.Fatal("probe did not cancel", checks)
 	}
 }
@@ -85,5 +85,20 @@ func TestBoundedProbeOutput(t *testing.T) {
 	n, e := b.Write([]byte(input))
 	if e != nil || n != len(input) || b.data.Len() != 16<<10 || !b.truncated {
 		t.Fatal("output bound")
+	}
+}
+
+func TestFailureRemedyPreservesInjectionSelection(t *testing.T) {
+	checks := []Check{NewCheck("command_executable", "fail", "not_found", "The executable is missing.")}
+	for _, inject := range []bool{false, true} {
+		e := Failure(checks, "web", "/project", "sample", "", "none", "foreground", inject)
+		remedy := e.Details["remedies"].([]protocol.Remedy)[0]
+		hasEnv := false
+		for _, arg := range remedy.Argv {
+			hasEnv = hasEnv || arg == "--env"
+		}
+		if hasEnv != inject {
+			t.Fatal("remedy changes injection semantics", remedy.Argv)
+		}
 	}
 }

@@ -2,160 +2,243 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+	"time"
 
+	"github.com/jinyongp/devtools/internal/configcontract"
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
-	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
 )
 
 func (a *App) registerDoctor() {
-	options := profileOptions(true)
-	options = append(options, Option{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory to diagnose."})
-	check := object(map[string]any{
-		"id":               stringSchema(),
-		"status":           map[string]any{"enum": []string{"pass", "fail", "skipped"}},
-		"message":          stringSchema(),
-		"remedies":         map[string]any{"type": "array", "items": remedySchema()},
-		"expected_version": stringSchema(),
-	}, "id", "status", "message", "remedies")
-	a.commands = append(a.commands, Command{Name: "doctor", Description: "Diagnose project prerequisites; inspect data.ready and checks for actionable failures.", Arguments: []Argument{{Name: "command", Pattern: project.CommandPattern}}, Options: options, Output: object(map[string]any{"ready": map[string]any{"type": "boolean"}, "profile": stringSchema(), "directory": stringSchema(), "env": stringSchema(), "command": stringSchema(), "checks": map[string]any{"type": "array", "items": check}}, "ready", "profile", "directory", "env", "command", "checks"), Run: a.diagnose})
+	opts := configOptions()
+	opts = append(opts, Option{Name: "profile", Pattern: project.ProfilePattern, Description: "Override the profile while retaining project configuration lookup."}, Option{Name: "env", Pattern: `^$|` + project.ProfilePattern, Description: "Override every selected command's env and enable injection; empty selects common."}, Option{Name: "bundle", Pattern: project.ProfilePattern, Description: "Override value selection (all, none or one bundle)."}, Option{Name: "project-only", Boolean: true, Description: "Inspect only project defaults; incompatible with command names."}, Option{Name: "check", Boolean: true, Description: "Exit 3 when required checks fail or remain unknown; report is preserved."}, Option{Name: "mode", Default: "foreground", Pattern: `^(foreground|managed)$`, Description: "Use foreground run or managed process preparation constraints."}, Option{Name: "timeout", Default: "30s", Description: "Positive Go duration bounding the complete diagnosis, including all probes."})
+	a.commands = append(a.commands, Command{Name: "doctor", Description: "Diagnose all configured commands by default, or named commands; inspect state, per-command checks and summary.", Arguments: []Argument{{Name: "command", Repeatable: true, Pattern: project.CommandPattern}}, Options: opts, Output: configcontract.Definition("DoctorReport"), Run: a.diagnose})
 }
-
-func (a *App) diagnose(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
-	report := doctor.New()
-	report.Env = r.Options["env"]
-	if len(r.Args) > 0 {
-		report.Command = r.Args[0]
+func (a *App) diagnose(parent context.Context, _ IO, r Request) (any, *protocol.Error) {
+	if r.Options["project-only"] == "true" && len(r.Args) > 0 {
+		return nil, argumentError("--project-only cannot be combined with command names.", "project-only")
 	}
-	dir, e := location.Canonical(r.Options["dir"])
-	report.Directory = dir
-	info, statErr := os.Stat(dir)
-	if e != nil || statErr != nil || !info.IsDir() {
-		report.Add("directory", "fail", "The selected directory is unavailable.", doctor.Remedy("Choose an existing project directory with --dir.", nil, "dir"))
+	timeout, err := time.ParseDuration(r.Options["timeout"])
+	if err != nil || timeout <= 0 {
+		return nil, argumentError("--timeout requires a positive Go duration, such as 30s.", "timeout")
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+	report := doctor.Diagnosis{Scope: "all", Mode: r.Options["mode"], Directory: r.Options["dir"], Selection: []string{}, Checks: []doctor.Check{}, Commands: []doctor.CommandReport{}}
+	if len(r.Args) > 0 {
+		report.Scope = "selected"
+	}
+	if r.Options["project-only"] == "true" {
+		report.Scope = "project"
+	}
+	selected := map[string]bool{}
+	for _, name := range r.Args {
+		selected[name] = true
+	}
+	for name := range selected {
+		report.Selection = append(report.Selection, name)
+	}
+	sort.Strings(report.Selection)
+	finish := func() (any, *protocol.Error) {
+		report.Finalize()
+		if errors.Is(parent.Err(), context.Canceled) {
+			e := protocol.ContextError(parent.Err())
+			e.Details = map[string]any{"reason": "canceled", "report": report}
+			return nil, e
+		}
+		if r.Options["check"] == "true" && !report.Ready {
+			return nil, protocol.NewError("requirements_failed", "Diagnosis found failed or unverified required checks. Inspect the complete report.", 3, map[string]any{"reason": report.State, "report": report})
+		}
 		return report, nil
 	}
-	report.Add("directory", "pass", "Project directory is accessible.")
-	p, err := project.Resolve(dir, "")
-	if err != nil {
-		if err.Code == "project_not_found" && r.Options["profile"] != "" && report.Command == "" {
-			p, err = project.Resolve(dir, r.Options["profile"])
-			report.Add("configuration", "skipped", "Using an explicit profile without project requirements.")
-		} else {
-			report.Add("configuration", "fail", "Project configuration could not be resolved: "+err.Code+".", doctor.Remedy("Check devtools.toml, or use --profile for profile-only diagnosis.", nil))
-			return report, nil
+	unknownRows := func() {
+		for _, name := range report.Selection {
+			report.Commands = append(report.Commands, doctor.CommandReport{Name: name, State: "unknown", Checks: []doctor.Check{doctor.NewCheck("command", "unknown", "configuration_unresolved", "The command cannot be resolved until the configuration is valid.")}})
 		}
 	}
-	if err != nil {
-		return nil, err
+	dir, e := location.ExistingDirectory(r.Options["dir"])
+	if e != nil {
+		report.Checks = append(report.Checks, doctor.NewCheck("directory", "fail", "not_found", "The selected project directory is unavailable."))
+		unknownRows()
+		return finish()
 	}
-	if p.Source == "file" {
-		report.Add("configuration", "pass", "Project configuration is valid.")
+	report.Directory = dir
+	report.Checks = append(report.Checks, doctor.NewCheck("directory", "pass", "accessible", "The selected project directory is accessible."))
+	p, resolveErr := project.Resolve(dir, "")
+	if resolveErr != nil {
+		if resolveErr.Code == "project_not_found" && r.Options["profile"] != "" && len(r.Args) == 0 {
+			p, resolveErr = project.Resolve(dir, r.Options["profile"])
+			p.Root = dir
+			report.Scope = "profile"
+		} else {
+			c := doctor.NewCheck("configuration", "fail", resolveErr.Code, resolveErr.Message)
+			if target, ok := resolveErr.Details["target"].(map[string]any); ok {
+				c.Target = target
+			}
+			if path, ok := resolveErr.Details["path"].(string); ok && path != "" {
+				report.ConfigPath = &path
+			}
+			report.Checks = append(report.Checks, c)
+			unknownRows()
+			return finish()
+		}
+	}
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	if value := r.Options["profile"]; value != "" {
+		p.Profile = value
+	}
+	report.Profile = &p.Profile
+	if p.ConfigPath != "" {
+		report.ConfigPath = &p.ConfigPath
 		report.Directory = p.Root
 	}
-	if explicit := r.Options["profile"]; explicit != "" {
-		p.Profile = explicit
-	}
-	report.Profile = p.Profile
-	report.Add("profile", "pass", "Project profile is selected.")
-
-	command := execution.Command{
-		Project:      p,
-		Directory:    report.Directory,
-		Env:          report.Env,
-		Inject:       true,
-		Requirements: p.Requirements,
-	}
-	if report.Command != "" {
-		var envOverride *string
-		if env, explicit := r.Options["env"]; explicit {
-			envOverride = &env
+	report.Checks = append(report.Checks, doctor.NewCheck("configuration", "pass", "valid", "Project configuration and static references are valid."))
+	if report.Scope == "all" {
+		for name := range p.Commands {
+			report.Selection = append(report.Selection, name)
 		}
-		command, err = execution.ResolveConfigured(p, report.Command, envOverride, nil)
-		if err != nil {
-			if err.Code == "command_not_found" {
-				report.Add("command", "fail", "The named command is undefined.", doctor.Remedy("List configured commands and choose one from devtools.toml.", []string{"devtools", "command", "list", "--dir", report.Directory}))
-				return report, nil
+		sort.Strings(report.Selection)
+	}
+	directory, pathErr := a.dataDirectory()
+	if pathErr != nil {
+		report.Checks = append(report.Checks, doctor.NewCheck("value_storage", "fail", pathErr.Code, pathErr.Message))
+		unknownRows()
+		return finish()
+	}
+	if report.Scope == "project" || report.Scope == "profile" || len(report.Selection) == 0 {
+		command := execution.Command{Project: p, Directory: report.Directory, Requirements: p.Requirements, Selection: p.Bundle, Env: r.Options["env"]}
+		if command.Selection == "" {
+			command.Selection = "all"
+		}
+		if s := r.Options["bundle"]; s != "" {
+			command.Selection = s
+		}
+		checks := a.passiveChecks(ctx, command, directory, report.Mode, false)
+		report.Checks = append(report.Checks, checks...)
+		for _, id := range []string{"injection", "readiness", "launcher"} {
+			report.Checks = append(report.Checks, doctor.NewCheck(id, "not_applicable", "no_command", "This constraint requires a command selection."))
+		}
+		return finish()
+	}
+	for _, name := range report.Selection {
+		var env *string
+		if value, ok := r.Options["env"]; ok {
+			env = &value
+		}
+		command, e := execution.ResolveConfigured(p, name, env, nil)
+		if e != nil {
+			check := doctor.NewCheck("command", "fail", "not_declared", "The selected command is not declared. Run devtools command list.")
+			check.Remedies = []protocol.Remedy{doctor.Remedy("List declared commands in this project.", []string{"devtools", "command", "list", "--dir", report.Directory})}
+			report.Commands = append(report.Commands, doctor.CommandReport{Name: name, Profile: &p.Profile, State: "not_ready", Checks: []doctor.Check{check}})
+			continue
+		}
+		if bundle := r.Options["bundle"]; bundle != "" {
+			command.Selection = bundle
+		}
+		checks := a.passiveChecks(ctx, command, directory, report.Mode, true)
+		profile, envName, bundle := p.Profile, command.Env, command.Selection
+		report.Commands = append(report.Commands, doctor.CommandReport{Name: name, Profile: &profile, Env: &envName, Selection: &bundle, Checks: checks})
+	}
+	return finish()
+}
+
+func (a *App) passiveChecks(ctx context.Context, command execution.Command, directory, mode string, executable bool) []doctor.Check {
+	checks := []doctor.Check{}
+	registered := map[string]values.Kind{}
+	public := map[string]string{}
+	known := true
+	environmentUnknown := ""
+	needs := !executable || command.NeedsValues() || len(command.Requirements.Vars)+len(command.Requirements.Secs) > 0
+	if needs {
+		spec := command.ValueInputSpec()
+		spec.Inject = true
+		version, observed, e := values.InspectSearchInput(ctx, filepath.Dir(directory), command.Project.Profile, command.Env, spec)
+		if e != nil {
+			known = false
+			status := "unknown"
+			switch e.Code {
+			case "env_not_found", "bundle_not_found", "value_expired", "key_not_found", "kind_conflict", "vault_locked_manual", "vault_recovery_required":
+				status = "fail"
 			}
-			return nil, err
-		}
-		report.Env = command.Env
-		report.Directory = command.Directory
-	}
-
-	directory, err := a.dataDirectory()
-	if err != nil {
-		return nil, err
-	}
-	state, err := (values.ModernStore{Directory: directory, Profile: p.Profile}).Read(ctx)
-	if err != nil {
-		report.Add("value_storage", "fail", "Profile value storage could not be read.", doctor.Remedy("Check the data directory and its private file permissions.", nil))
-		state = nil
-	} else {
-		report.Add("value_storage", "pass", "Profile value storage is readable.")
-		if err = state.CheckEnv(report.Env); err != nil {
-			argv := []string{"devtools", "env", "create", report.Env, "--profile", p.Profile}
-			report.Add("env", "fail", "The selected env is undefined.", doctor.Remedy("Create the selected env or choose an existing env.", argv))
+			if e.Code == vault.ErrIntegrity.Error() || e.Code == vault.ErrInvalid.Error() || e.Code == vault.ErrRecovery.Error() || e.Code == vault.ErrKeyMissing.Error() || e.Code == "storage_error" {
+				status = "fail"
+			}
+			if command.Inject {
+				environmentUnknown = "environment_unresolved"
+			}
+			checks = append(checks, doctor.NewCheck("value_inputs", status, e.Code, "Selected value metadata could not be authenticated; inspect the profile, env, bundle and vault state."))
+			if vaultStatus, err := vault.InspectSession(ctx, filepath.Join(filepath.Dir(directory), "vault")); err == nil {
+				vaultCheck := doctor.NewCheck("vault_session", "unknown", string(vaultStatus.State), "The vault is not opened by diagnosis.")
+				if vaultStatus.State == vault.LockedManual || vaultStatus.State == vault.Locking || vaultStatus.State == vault.RecoveryRequired || vaultStatus.State == vault.Locked && vaultStatus.Backend == "passphrase" {
+					vaultCheck.Status = "fail"
+					vaultCheck.Message = "The vault must be explicitly unlocked or recovered before these inputs can be authenticated."
+					vaultCheck.Remedies = []protocol.Remedy{doctor.Remedy("Inspect the protection state and explicitly unlock or recover it.", []string{"devtools", "vault", "status"})}
+				}
+				checks = append(checks, vaultCheck)
+			}
 		} else {
-			report.Add("env", "pass", "The selected common/env layer is available.")
-		}
-	}
-	if command.NeedsValues() {
-		status, statusErr := vault.InspectSession(ctx, filepath.Join(filepath.Dir(directory), "vault"))
-		needsProtection := status.State != vault.Uninitialized
-		if state != nil {
-			for _, item := range state.ScopeInventory() {
-				if item.Kind == values.Secret {
-					needsProtection = true
+			public = observed
+			if version != nil {
+				for _, slot := range version.Slots {
+					kind := values.Variable
+					if slot.Kind == vault.Secret {
+						kind = values.Secret
+					}
+					registered[slot.Name] = kind
 				}
 			}
+			checks = append(checks, doctor.NewCheck("value_inputs", "pass", "authenticated", "Selected value metadata is authenticated without opening secret values."))
 		}
-		if statusErr != nil {
-			return nil, values.VaultError(ctx, statusErr)
+	}
+	input := doctor.Input{Command: command.Name, Args: command.Arguments(), Profile: command.Project.Profile, Directory: command.Directory, Env: command.Env, Requirements: command.Requirements, Inject: command.Inject, CheckInjection: executable, Environment: os.Environ(), Public: public, Registration: registered, RegistrationKnown: known, EnvironmentUnknown: environmentUnknown, Mode: mode}
+	if command.Project.Document != nil {
+		input.Source = func(path []string) configcontract.Source {
+			return command.Project.Document.CommandSource(command.Name, path)
 		}
-		if needsProtection {
-			switch {
-			case status.State == vault.Uninitialized:
-				report.Add("vault_session", "fail", "Secret values require explicit local protection setup.", doctor.Remedy("Initialize native protection, or explicitly select --backend passphrase when a keyring is unavailable.", []string{"devtools", "vault", "init"}))
-			case status.State == vault.RecoveryRequired:
-				report.Add("vault_session", "fail", "Vault storage or key protection needs recovery.", doctor.Remedy("Inspect the vault and recover using its existing key; do not initialize a replacement key.", []string{"devtools", "vault", "status"}))
-			case status.State == vault.LockedManual || status.State == vault.Locking || status.State == vault.Locked && status.Backend == "passphrase":
-				report.Add("vault_session", "fail", "The reusable vault session is locked.", doctor.Remedy("Explicitly unlock the vault; use passphrase file/stdin for non-interactive passphrase use.", []string{"devtools", "vault", "unlock"}))
-			case status.State == vault.Unlocked:
-				report.Add("vault_session", "pass", "The vault key session is unlocked; this metadata check does not authenticate profile values.")
-			default:
-				report.Add("vault_session", "skipped", "Native key availability was not checked; diagnosis does not unlock the vault.")
+	}
+	if executable && len(command.Exec) > 0 {
+		input.Executable = command.Exec[0]
+	}
+	if mode == "managed" && command.Ready != nil {
+		input.ReadyExec = command.Ready.Exec
+	}
+	if len(command.Bind)+len(command.Serve) > 0 {
+		prepared, e := a.previewExecution(ctx, command, values.DiagnosticPublicState(command.Project.Profile, command.Env, public))
+		if e != nil {
+			checks = append(checks, doctor.NewCheck("bindings", "unknown", e.Code, "Network/value bindings could not be resolved without execution."))
+			for key := range command.Bind {
+				if strings.EqualFold(key, "PATH") || strings.EqualFold(key, "PATHEXT") {
+					input.EnvironmentUnknown = "binding_unresolved"
+				}
 			}
-		}
-	}
-	if _, err := (tasks.Store{Directory: filepath.Join(filepath.Dir(directory), "tasks"), Profile: p.Profile}).ReadCurrent(ctx); err != nil {
-		report.Add("task_storage", "fail", "Profile task storage could not be read.", doctor.Remedy("Check task data and its private file permissions.", nil))
-	} else {
-		report.Add("task_storage", "pass", "Profile task storage is readable.")
-	}
-
-	prepared := execution.Prepared{Command: command, Args: command.Arguments(), State: state}
-	if report.Command != "" && (len(command.Bind) > 0 || len(command.Serve) > 0) {
-		var prepareErr *protocol.Error
-		prepared, prepareErr = a.previewExecution(ctx, command, state)
-		if prepareErr != nil {
-			report.Add("ports", "fail", "Port or binding diagnosis failed: "+prepareErr.Code+".", doctor.Remedy("Check service assignments, references, and active runs.", nil))
-			prepared = execution.Prepared{Command: command, Args: command.Arguments(), State: state}
+			if strings.Contains(input.Executable, "${") {
+				input.EnvironmentUnknown = "binding_unresolved"
+			}
 		} else {
-			report.Add("ports", "pass", "Port and binding checks passed; new assignments are finalized by run.")
+			if prepared.Release != nil {
+				defer prepared.Release()
+			}
+			if executable && len(prepared.Args) > 0 {
+				input.Executable = prepared.Args[0]
+			}
+			input.Args = prepared.Args
+			input.PathOverride = prepared.PathOverride
+			input.SearchOverrides = prepared.SearchOverrides
+			checks = append(checks, doctor.NewCheck("bindings", "pass", "resolved", "Public bindings and preview port assignments were resolved without reservation."))
 		}
 	}
-	for _, check := range prepared.Checks(ctx, os.Environ(), report.Command != "") {
-		report.Checks = append(report.Checks, check)
-		if check.Status == "fail" {
-			report.Ready = false
-		}
-	}
-	return report, nil
+	checks = append(checks, doctor.CheckRequirements(ctx, input)...)
+	return checks
 }

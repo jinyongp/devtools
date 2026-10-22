@@ -50,6 +50,18 @@ function rememberSession(value) {
 }
 function storageFailureDetails(input) {
   if (!input || typeof input !== "object") return undefined;
+  if (input.facts && input.target) {
+    const safe = {operation:input.operation, phase:input.phase, reason:input.reason, retry:input.retry, effects:input.effects};
+    safe.target = {};
+    for (const key of ["kind","name","profile","env","command","bundle","id","request_id"]) if (typeof input.target[key] === "string") safe.target[key] = input.target[key];
+    safe.facts = {};
+    for (const key of ["domain","resource","stage","field","state","expected_version","observed_version","reason"]) if (typeof input.facts[key] === "string") safe.facts[key] = input.facts[key];
+    if (Number.isSafeInteger(input.facts.os_code) && input.facts.os_code > 0) safe.facts.os_code = input.facts.os_code;
+    safe.facts.outcomes = (Array.isArray(input.facts.outcomes) ? input.facts.outcomes : []).map(v => ({kind:v.kind,name:v.name,id:v.id,state:v.state,changed:v.changed,code:v.code}));
+    safe.checks = (Array.isArray(input.checks) ? input.checks : []).map(c => ({id:c.id,status:c.status,reason:c.reason}));
+    safe.remedies = (Array.isArray(input.remedies) ? input.remedies : []).filter(r => Array.isArray(r.argv) && r.argv.every(v => typeof v === "string") && Array.isArray(r.required_inputs) && ["read","config_write","value_write","system_write"].includes(r.effect) && typeof r.message === "string").map(r => ({argv:r.argv,required_inputs:r.required_inputs,message:r.message,effect:r.effect}));
+    return safe;
+  }
   const safe = {};
   for (const key of ["domain", "operation", "resource", "reason", "os_error_domain"]) {
     if (typeof input[key] === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(input[key])) safe[key] = input[key];
@@ -59,6 +71,16 @@ function storageFailureDetails(input) {
 }
 function storageFailureMessage(details) {
   if (!details?.reason || details.reason === "unknown") return "";
+  if (details.facts) {
+    const facts = details.facts;
+    const stage = facts.stage || details.phase || details.operation;
+    const target = details.target?.name ? ` (${details.target.name})` : "";
+    const os = facts.os_code ? `; OS error ${facts.os_code}` : "";
+    const checks = details.checks.filter(c => c.status === "fail" || c.status === "unknown").map(c => `${c.id}: ${c.reason}`).join(", ");
+    const remedies = details.remedies.map(r => r.message).join(" ");
+    const outcomes = details.facts.outcomes.map(v => `${v.name}: ${v.state}${v.id ? ` (${v.id})` : ""}`).join(", ");
+    return ` ${stage}${target}: ${details.reason}${os}.${checks ? ` ${checks}.` : ""}${outcomes ? ` ${outcomes}.` : ""}${remedies ? ` ${remedies}` : ""}`;
+  }
   const reason = {
     access_denied:"access denied", not_found:"storage item missing", already_exists:"storage item already exists",
     sharing_violation:"storage item in use", disk_full:"disk full", read_only:"read-only storage",
@@ -95,8 +117,6 @@ async function api(path, body, signal, track = true) {
       message = failure.message; code = failure.code;
       details = storageFailureDetails(failure.details);
       message += storageFailureMessage(details);
-      const related = failure.details?.related || [];
-      if (related.length) message += " " + related.map(item => `${item.title}: ${(item.blockers || []).map(blocker => `${blocker.title || ""} ${blocker.message || ""}`).join(" ")}`).join(" ");
     } catch {}
     const error = Error(message); error.responded = true; error.code = code; error.details = details; throw error;
   }

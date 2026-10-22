@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 
+	"github.com/jinyongp/devtools/internal/configcontract"
 	"github.com/jinyongp/devtools/internal/diagnostics"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -68,10 +69,11 @@ func diagnosticsOutputSchema() map[string]any {
 		"backend": stringSchema(), "idle_expires_at": stringSchema(), "requires_explicit_unlock": map[string]any{"type": "boolean"},
 	}, "state", "requires_explicit_unlock")
 	issue := object(map[string]any{
+		"message": stringSchema(),
 		"section": stringSchema(),
 		"code":    stringSchema(),
-		"details": storageDetailsSchema(),
-	}, "section", "code")
+		"details": configcontract.Definition("ErrorDetails"),
+	}, "section", "code", "message")
 	return object(map[string]any{
 		"external_executions": object(map[string]any{
 			"verification":     map[string]any{"type": "string", "enum": []string{"verified", "verification_pending"}},

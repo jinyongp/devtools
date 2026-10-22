@@ -96,8 +96,11 @@ explore the CLI. Run `devtools command list` to see your configured project comm
 
 ### Run a saved command
 
-To save a command you use often, add it to `devtools.toml`. For example, in a
-project with a `docs:dev` script:
+Protocol 10 builds provide typed editing: `devtools command add dev:docs -- pnpm run docs:dev`.
+Use `config inspect` to obtain a revision before updates, and `config edit --dry-run`
+to preview an atomic batch. See the [configuration guide](docs/configuration.md) (Korean).
+
+To declare it directly in a project with a `docs:dev` script, add:
 
 ```toml
 [commands."dev:docs"]

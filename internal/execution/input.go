@@ -45,29 +45,31 @@ type InputPayload struct {
 	metadata InputMetadata
 }
 type inputWire struct {
-	VaultDirectory string              `json:"vault_directory,omitempty"`
-	Served         []ports.Assignment  `json:"served,omitempty"`
-	Format         int                 `json:"format"`
-	Metadata       InputMetadata       `json:"metadata"`
-	Args           []string            `json:"args"`
-	Environment    []string            `json:"environment"`
-	Directory      string              `json:"directory"`
-	Executable     string              `json:"executable"`
-	Ready          *project.ReadyProbe `json:"ready,omitempty"`
-	Patterns       [][]byte            `json:"patterns"`
+	ExecutableStamp string              `json:"executable_stamp,omitempty"`
+	VaultDirectory  string              `json:"vault_directory,omitempty"`
+	Served          []ports.Assignment  `json:"served,omitempty"`
+	Format          int                 `json:"format"`
+	Metadata        InputMetadata       `json:"metadata"`
+	Args            []string            `json:"args"`
+	Environment     []string            `json:"environment"`
+	Directory       string              `json:"directory"`
+	Executable      string              `json:"executable"`
+	Ready           *project.ReadyProbe `json:"ready,omitempty"`
+	Patterns        [][]byte            `json:"patterns"`
 }
 
 // ProcessInput is an owned, explicit spawn/redactor boundary. Destroy it after
 // use; decoded string copies and OS process environments are not a secure heap.
 type ProcessInput struct {
-	VaultDirectory string
-	Served         []ports.Assignment
-	Args           []string
-	Environment    []string
-	Directory      string
-	Executable     string
-	Ready          *project.ReadyProbe
-	Patterns       [][]byte
+	ExecutableStamp string
+	VaultDirectory  string
+	Served          []ports.Assignment
+	Args            []string
+	Environment     []string
+	Directory       string
+	Executable      string
+	Ready           *project.ReadyProbe
+	Patterns        [][]byte
 }
 
 func (InputPayload) MarshalJSON() ([]byte, error) {
@@ -143,6 +145,12 @@ func newInputPayload(wire inputWire) (*InputPayload, *protocol.Error) {
 	return &InputPayload{consumed: &atomic.Bool{}, body: vault.NewMaterial(b), metadata: cloneInputMetadata(wire.Metadata)}, nil
 }
 func validateInputWire(wire inputWire) *protocol.Error {
+	if wire.ExecutableStamp != "" {
+		b, e := hex.DecodeString(wire.ExecutableStamp)
+		if e != nil || len(b) != 32 || len(wire.ExecutableStamp) != 64 {
+			return snapshotError("invalid_input_snapshot")
+		}
+	}
 	if !wire.Metadata.Output.Valid() {
 		return snapshotError("invalid_input_snapshot")
 	}
@@ -218,7 +226,16 @@ func (p *InputPayload) Open() (*ProcessInput, *protocol.Error) {
 		}
 		return nil, e
 	}
-	return &ProcessInput{VaultDirectory: wire.VaultDirectory, Served: wire.Served, Args: wire.Args, Environment: wire.Environment, Directory: wire.Directory, Executable: wire.Executable, Ready: wire.Ready, Patterns: wire.Patterns}, nil
+	if wire.ExecutableStamp != "" {
+		stamp, err := process.ExecutableStamp(wire.Executable)
+		if err != nil || stamp != wire.ExecutableStamp {
+			for _, pattern := range wire.Patterns {
+				clear(pattern)
+			}
+			return nil, protocol.NewError("input_changed", "The executable changed or could not be verified after preparation. Prepare a new execution.", 3, map[string]any{"phase": "preflight", "reason": "executable_changed", "facts": map[string]any{"resource": "executable"}, "retry": "after_refresh"})
+		}
+	}
+	return &ProcessInput{ExecutableStamp: wire.ExecutableStamp, VaultDirectory: wire.VaultDirectory, Served: wire.Served, Args: wire.Args, Environment: wire.Environment, Directory: wire.Directory, Executable: wire.Executable, Ready: wire.Ready, Patterns: wire.Patterns}, nil
 }
 
 // EncodeForLauncher returns an owned sensitive copy, never a public receipt or
@@ -270,5 +287,6 @@ func (p *ProcessInput) Destroy() {
 	p.VaultDirectory = ""
 	p.Directory = ""
 	p.Executable = ""
+	p.ExecutableStamp = ""
 	p.Ready = nil
 }

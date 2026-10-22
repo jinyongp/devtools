@@ -194,6 +194,14 @@ func failure(code string, causes ...error) *protocol.Error {
 	return failure
 }
 
+func archiveFailure(err error) *protocol.Error {
+	var input *protocol.Error
+	if errors.As(err, &input) {
+		return input
+	}
+	return failure("invalid_backup")
+}
+
 func outputExistsFailure() *protocol.Error {
 	return protocol.NewError("backup_error", "Backup operation could not be completed; check the selected files and target state.", 3, map[string]any{"cause": "output_exists"})
 }
@@ -509,7 +517,7 @@ func decodeWithIdentity(path string, identity age.Identity) (Snapshot, []byte, e
 	}()
 	cipher, err := platformfs.ReadExternalPrivate(path, limit+1<<20)
 	if err != nil {
-		return snapshot, nil, err
+		return snapshot, nil, protocol.InputError("archive", "read_input", err)
 	}
 	reader, err := age.Decrypt(bytes.NewReader(cipher), identity)
 	if err != nil {
@@ -556,7 +564,7 @@ func decode(path, identityPath string) (Snapshot, []byte, string, error) {
 	key, err := platformfs.ReadExternalPrivate(identityPath, 4096)
 	defer clear(key)
 	if err != nil {
-		return snapshot, nil, "", err
+		return snapshot, nil, "", protocol.InputError("identity", "read_input", err)
 	}
 	identity, err := age.ParseX25519Identity(strings.TrimSpace(string(key)))
 	if err != nil {
@@ -575,7 +583,10 @@ func decodePassphrase(path, passphrase string) (Snapshot, []byte, error) {
 		return snapshot, nil, errors.New("empty passphrase")
 	}
 	mode, err := ArchiveEncryptionMode(path)
-	if err != nil || mode != ArchiveEncryptionPassphrase {
+	if err != nil {
+		return snapshot, nil, err
+	}
+	if mode != ArchiveEncryptionPassphrase {
 		return snapshot, nil, errors.New("invalid passphrase archive")
 	}
 	identity, err := age.NewScryptIdentity(passphrase)
@@ -614,11 +625,17 @@ func (archiveProbeIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 func ArchiveEncryptionMode(path string) (string, error) {
 	file, err := platformfs.OpenExternalPrivate(path, os.O_RDONLY, 0)
 	if err != nil {
-		return "", err
+		return "", protocol.InputError("archive", "open_input", err)
 	}
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil || platformfs.CheckFile(file.File) != nil || info.Size() > limit+1<<20 {
+	if err != nil {
+		return "", protocol.InputError("archive", "stat_input", err)
+	}
+	if permissionErr := platformfs.CheckFile(file.File); permissionErr != nil {
+		return "", protocol.InputError("archive", "check_input", permissionErr)
+	}
+	if info.Size() > limit+1<<20 {
 		return "", errors.New("invalid private archive")
 	}
 	// age.Decrypt parses the header and asks the probe identity to unwrap the
@@ -649,7 +666,7 @@ func ArchiveEncryptionMode(path string) (string, error) {
 func Inspect(path, identityPath string) (Metadata, *protocol.Error) {
 	snapshot, _, _, err := decode(path, identityPath)
 	if err != nil {
-		return Metadata{}, failure("invalid_backup")
+		return Metadata{}, archiveFailure(err)
 	}
 	defer destroySnapshot(&snapshot)
 	return Metadata{CreatedAt: snapshot.Created, Profiles: summaries(snapshot)}, nil
@@ -701,7 +718,7 @@ func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult
 		snapshot, cipher, identityRecipient, err = decode(request.Path, request.IdentityPath)
 	}
 	if err != nil {
-		return result, failure("invalid_backup")
+		return result, archiveFailure(err)
 	}
 	defer destroySnapshot(&snapshot)
 	source, selectionErr := selectImportSummary(snapshot, request.Source)
@@ -751,7 +768,7 @@ func (e Engine) Restore(ctx context.Context, path, identityPath, source, target,
 	}
 	snapshot, cipher, _, err := decode(path, identityPath)
 	if err != nil {
-		return plan, failure("invalid_backup")
+		return plan, archiveFailure(err)
 	}
 	defer destroySnapshot(&snapshot)
 	return e.restore(ctx, restoreRequest{Snapshot: snapshot, Cipher: cipher, Source: source, Target: target, Expected: expected, RequestID: requestID, Replace: replace})

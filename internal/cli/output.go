@@ -21,8 +21,9 @@ func changedItemOutput(item map[string]any) map[string]any {
 
 func remedySchema() map[string]any {
 	return object(map[string]any{
+		"effect":          map[string]any{"enum": []string{"read", "config_write", "value_write", "system_write"}},
 		"argv":            map[string]any{"type": "array", "items": stringSchema()},
 		"required_inputs": map[string]any{"type": "array", "items": stringSchema()},
 		"message":         stringSchema(),
-	}, "argv", "required_inputs", "message")
+	}, "argv", "required_inputs", "message", "effect")
 }

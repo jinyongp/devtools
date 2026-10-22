@@ -93,7 +93,7 @@ def managed_api(*args, error=None):
     assert secret not in result.stdout + result.stderr
     if error:
         assert result.returncode and json.loads(result.stderr)['error']['code']==error
-        return
+        return json.loads(result.stderr)['error']
     assert not result.returncode and not result.stderr
     return json.loads(result.stdout)['data']
 def observed():
@@ -164,7 +164,8 @@ try:
     empty={'item':empty_batch['items'][0]['item']}
     managed=empty['item']['id']
     assert empty['item']['selection']=='none' and observed()=={'public':None,'token_present':False}
-    managed_api('process','restart',managed,'--bundle','missing','--request-id',str(uuid.uuid4()),error='bundle_not_found')
+    blocked = managed_api('process','restart',managed,'--bundle','missing','--request-id',str(uuid.uuid4()),error='requirements_failed')
+    assert any(cause['code'] == 'bundle_not_found' for cause in blocked['details']['causes']), blocked
     assert managed_api('process','status',managed)['item']['state']=='running'
 finally:
     if managed is not None:
@@ -181,7 +182,8 @@ for unavailable in [('sec', 'get', 'TOKEN')]:
 result = subprocess.run([binary, 'run', '--bundle', 'none', '--', 'true'], cwd=project,
                         env=env, text=True, capture_output=True, timeout=20)
 assert result.returncode == 0 and not result.stdout and not result.stderr
-invoke('run', '--bundle', 'missing', '--', 'true', error='bundle_not_found')
+blocked = invoke('run', '--bundle', 'missing', '--', 'true', error='requirements_failed')
+assert any(cause['code'] == 'bundle_not_found' for cause in blocked['details']['causes']), blocked
 invoke('vault', 'lock')
 locked = invoke('vault', 'status')['item']
 assert locked['state'] == 'locked_manual'

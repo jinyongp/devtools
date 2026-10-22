@@ -108,7 +108,7 @@ func TestProcessRestartPreStopValidationPreservesRunningExecution(t *testing.T) 
 	}
 
 	code, out, diagnostic := invoke(t, app, "", "process", "restart", id, "--request-id", tasks.ID())
-	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"requirements_failed\"") {
+	if code != 127 || out != "" || !strings.Contains(diagnostic, "\"code\":\"executable_not_found\"") {
 		t.Fatalf("restart: code=%d out=%q err=%q", code, out, diagnostic)
 	}
 	storedBytes, err := os.ReadFile(recordPath)

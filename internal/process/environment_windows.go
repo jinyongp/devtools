@@ -1,6 +1,7 @@
 package process
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -111,10 +112,18 @@ func LookPath(name, dir string, env []string) (string, *protocol.Error) {
 			extensions = append(extensions, ext)
 		}
 	}
+	reason := "not_found"
 	check := func(base string) (string, bool) {
 		for _, ext := range extensions {
 			path := base + ext
-			if info, err := os.Stat(path); err == nil && IsExecutable(info) {
+			info, err := os.Stat(path)
+			if errors.Is(err, os.ErrPermission) {
+				reason = "permission_denied"
+			}
+			if err == nil && !IsExecutable(info) {
+				reason = "not_executable"
+			}
+			if err == nil && IsExecutable(info) {
 				return path, true
 			}
 		}
@@ -144,7 +153,7 @@ func LookPath(name, dir string, env []string) (string, *protocol.Error) {
 			}
 		}
 	}
-	return "", protocol.NewError("command_not_found", "Executable was not found in the selected PATH/PATHEXT.", 127, nil)
+	return "", protocol.NewError("command_not_found", "Executable was not found or usable in the selected PATH/PATHEXT.", 127, map[string]any{"reason": reason})
 }
 
 func EnvironmentValue(values map[string]string, key string) (string, bool) {

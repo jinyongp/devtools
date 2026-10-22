@@ -267,6 +267,7 @@ func transferIdentityError(err error) *protocol.Error {
 		return protocol.NewError("transfer_identity_missing", "No local profile transfer identity is prepared.", 3, map[string]any{
 			"remedies": []protocol.Remedy{{
 				Argv:           []string{"devtools", "profile", "transfer", "prepare"},
+				Effect:         "value_write",
 				RequiredInputs: []string{},
 				Message:        "Prepare this destination installation, then re-export the source profile to the new public recipient before importing.",
 			}},
@@ -275,6 +276,7 @@ func transferIdentityError(err error) *protocol.Error {
 		return protocol.NewError("transfer_identity_invalid", "The local profile transfer identity is invalid or unsafe.", 3, map[string]any{
 			"remedies": []protocol.Remedy{{
 				Argv:           []string{"devtools", "profile", "import"},
+				Effect:         "value_write",
 				RequiredInputs: []string{"file", "identity-file"},
 				Message:        "Use a matching existing private identity with --identity-file, or restore the local identity's private permissions and original contents. A new key cannot decrypt old archives.",
 			}},
@@ -286,7 +288,7 @@ func transferIdentityError(err error) *protocol.Error {
 
 // Transfer shares the archive engine, but not the backup-configuration workflow.
 func transferArchiveError(err *protocol.Error) *protocol.Error {
-	remedy := protocol.Remedy{Argv: []string{}, RequiredInputs: []string{}}
+	remedy := protocol.Remedy{Effect: "value_write", Argv: []string{}, RequiredInputs: []string{}}
 	message := ""
 	switch err.Code {
 	case "invalid_recipient":
@@ -375,6 +377,7 @@ func profileExportOutputExists(path string) *protocol.Error {
 			Argv:           []string{},
 			RequiredInputs: []string{"output"},
 			Message:        "Retry profile export with a different --output path and the same destination recipient.",
+			Effect:         "value_write",
 		}},
 	})
 }
@@ -483,6 +486,10 @@ func (a *App) importProfile(ctx context.Context, streams IO, request Request) (a
 	default:
 		mode, modeErr := backup.ArchiveEncryptionMode(request.Options["file"])
 		if modeErr != nil {
+			var inputError *protocol.Error
+			if errors.As(modeErr, &inputError) {
+				return nil, inputError
+			}
 			return nil, transferArchiveError(protocol.NewError("invalid_backup", "Cannot inspect the profile archive encryption mode.", 3, nil))
 		}
 		if mode == backup.ArchiveEncryptionPassphrase {

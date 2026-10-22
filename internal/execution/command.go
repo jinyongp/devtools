@@ -33,7 +33,7 @@ type Command struct {
 func ResolveConfigured(p project.Context, name string, envOverride *string, extraArgs []string) (Command, *protocol.Error) {
 	definition, ok := p.Commands[name]
 	if !ok {
-		return Command{}, protocol.NewError("command_not_found", "The selected project command is not defined.", 3, map[string]any{"command": name})
+		return Command{}, protocol.NewError("command_not_found", "The selected project command is not defined. List the commands declared in this project.", 3, map[string]any{"command": name, "remedies": []protocol.Remedy{{Argv: []string{"devtools", "command", "list", "--dir", p.Root}, RequiredInputs: []string{}, Message: "List declared commands in the selected project.", Effect: "read"}}})
 	}
 	env := definition.Env
 	inject := definition.Inject

@@ -16,7 +16,7 @@ import (
 func TestOutputModeCatalog(t *testing.T) {
 	app := New("test", "test")
 	catalog := app.catalog()
-	if catalog["protocol_version"] != protocol.ProtocolVersion || protocol.ProtocolVersion != 9 {
+	if catalog["protocol_version"] != protocol.ProtocolVersion || protocol.ProtocolVersion != 10 {
 		t.Fatalf("unexpected CLI protocol version: %v", catalog["protocol_version"])
 	}
 	responseSchema := catalog["response_schema"].(map[string]any)
@@ -24,7 +24,7 @@ func TestOutputModeCatalog(t *testing.T) {
 	if properties["schema_version"].(map[string]any)["const"] != protocol.EnvelopeVersion || protocol.EnvelopeVersion != 1 {
 		t.Fatalf("unexpected envelope version: %#v", properties["schema_version"])
 	}
-	nonJSON := map[string]OutputMode{"help": OutputText, "completion": OutputArtifact, "command run": OutputPassthrough, "proxy run": OutputPassthrough}
+	nonJSON := map[string]OutputMode{"help": OutputText, "license": OutputArtifact, "completion": OutputArtifact, "command run": OutputPassthrough, "proxy run": OutputPassthrough}
 	for _, entry := range catalog["commands"].([]map[string]any) {
 		name := entry["name"].(string)
 		want := OutputJSON
@@ -55,7 +55,7 @@ func TestOutputModeCatalog(t *testing.T) {
 	}
 	for _, args := range [][]string{{"schema", "command", "run"}, {"schema", "run"}} {
 		code, out, diagnostic := invoke(t, app, "", args...)
-		if code != 0 || diagnostic != "" || !strings.Contains(out, `"protocol_version":9`) || !strings.Contains(out, `"output_mode":"passthrough"`) || strings.Contains(out, `"output_schema"`) {
+		if code != 0 || diagnostic != "" || !strings.Contains(out, `"protocol_version":10`) || !strings.Contains(out, `"output_mode":"passthrough"`) || strings.Contains(out, `"output_schema"`) {
 			t.Fatalf("%v: %d %s %s", args, code, out, diagnostic)
 		}
 	}

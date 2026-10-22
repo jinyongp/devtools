@@ -1,0 +1,1335 @@
+{
+  "description": "Synthetic protocol-10 conformance cases; provider execution is a separate required check.",
+  "cases": [
+    {
+      "schema": "Name",
+      "valid": true,
+      "value": "web"
+    },
+    {
+      "schema": "Name",
+      "valid": true,
+      "value": "Web"
+    },
+    {
+      "schema": "Name",
+      "valid": true,
+      "value": "a.b"
+    },
+    {
+      "schema": "Name",
+      "valid": true,
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "schema": "Name",
+      "valid": false,
+      "value": ""
+    },
+    {
+      "schema": "Name",
+      "valid": false,
+      "value": "web:dev"
+    },
+    {
+      "schema": "Name",
+      "valid": false,
+      "value": "_web"
+    },
+    {
+      "schema": "Name",
+      "valid": false,
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "schema": "Name",
+      "valid": false,
+      "value": "도구"
+    },
+    {
+      "schema": "Name",
+      "valid": false,
+      "value": "web\n"
+    },
+    {
+      "schema": "CommandName",
+      "valid": true,
+      "value": "build.web"
+    },
+    {
+      "schema": "CommandName",
+      "valid": true,
+      "value": "검사:web"
+    },
+    {
+      "schema": "CommandName",
+      "valid": true,
+      "value": " web "
+    },
+    {
+      "schema": "CommandName",
+      "valid": true,
+      "value": "가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가"
+    },
+    {
+      "schema": "CommandName",
+      "valid": false,
+      "value": ""
+    },
+    {
+      "schema": "CommandName",
+      "valid": false,
+      "value": "-web"
+    },
+    {
+      "schema": "CommandName",
+      "valid": false,
+      "value": "web\n"
+    },
+    {
+      "schema": "CommandName",
+      "valid": false,
+      "value": "가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가"
+    },
+    {
+      "schema": "Tool",
+      "valid": true,
+      "value": {}
+    },
+    {
+      "schema": "Tool",
+      "valid": true,
+      "value": {
+        "version": "1.2.3"
+      }
+    },
+    {
+      "schema": "Tool",
+      "valid": true,
+      "value": {
+        "version": "1.2.3",
+        "version_args": []
+      }
+    },
+    {
+      "schema": "Tool",
+      "valid": false,
+      "value": {
+        "executable": ""
+      }
+    },
+    {
+      "schema": "Tool",
+      "valid": false,
+      "value": {
+        "version": "^1.2.3"
+      }
+    },
+    {
+      "schema": "Tool",
+      "valid": false,
+      "value": {
+        "version_args": [
+          "-v"
+        ]
+      }
+    },
+    {
+      "schema": "Tool",
+      "valid": false,
+      "value": {
+        "extra": 1
+      }
+    },
+    {
+      "schema": "Tool",
+      "valid": false,
+      "value": {
+        "version": "1.2.3\n"
+      }
+    },
+    {
+      "schema": "Revision",
+      "valid": false,
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+    },
+    {
+      "schema": "Tool",
+      "valid": true,
+      "value": {
+        "version": "1.2.3",
+        "version_args": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    {
+      "schema": "Tool",
+      "valid": false,
+      "value": {
+        "version": "1.2.3",
+        "version_args": [
+          "가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가"
+        ]
+      }
+    },
+    {
+      "schema": "ToolPatch",
+      "valid": true,
+      "value": {
+        "version": null
+      }
+    },
+    {
+      "schema": "ToolPatch",
+      "valid": false,
+      "value": {}
+    },
+    {
+      "schema": "Preset",
+      "valid": true,
+      "value": {
+        "tools": [
+          "node"
+        ],
+        "vars": [
+          "MODE"
+        ],
+        "secs": [
+          "TOKEN"
+        ]
+      }
+    },
+    {
+      "schema": "Preset",
+      "valid": false,
+      "value": {
+        "requires": [
+          "other"
+        ]
+      }
+    },
+    {
+      "schema": "Selection",
+      "valid": false,
+      "value": {
+        "requires": [
+          "web",
+          "web"
+        ]
+      }
+    },
+    {
+      "schema": "Command",
+      "valid": true,
+      "value": {
+        "exec": [
+          "node",
+          "--help"
+        ],
+        "requires": [
+          "web"
+        ]
+      }
+    },
+    {
+      "schema": "Command",
+      "valid": false,
+      "value": {
+        "exec": []
+      }
+    },
+    {
+      "schema": "Command",
+      "valid": false,
+      "value": {
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "schema": "Command",
+      "valid": false,
+      "value": {
+        "exec": [
+          "node",
+          "\u0000"
+        ]
+      }
+    },
+    {
+      "schema": "Command",
+      "valid": false,
+      "value": {
+        "exec": [
+          "node"
+        ],
+        "inject": "false"
+      }
+    },
+    {
+      "schema": "CommandPatch",
+      "valid": true,
+      "value": {
+        "inject": null,
+        "tool_overrides": {
+          "node": {}
+        }
+      }
+    },
+    {
+      "schema": "CommandPatch",
+      "valid": false,
+      "value": {
+        "exec": null
+      }
+    },
+    {
+      "schema": "CommandPatch",
+      "valid": false,
+      "value": {
+        "ready": {
+          "exec": null
+        }
+      }
+    },
+    {
+      "schema": "ProxyPatch",
+      "valid": false,
+      "value": {
+        "host": null
+      }
+    },
+    {
+      "schema": "Port",
+      "valid": false,
+      "value": {
+        "strict": true
+      }
+    },
+    {
+      "schema": "Port",
+      "valid": false,
+      "value": {
+        "port": 65536
+      }
+    },
+    {
+      "schema": "Port",
+      "valid": true,
+      "value": {
+        "range": [
+          4000,
+          4000
+        ]
+      }
+    },
+    {
+      "schema": "Binding",
+      "valid": true,
+      "value": {
+        "port": "web",
+        "format": "url"
+      }
+    },
+    {
+      "schema": "Binding",
+      "valid": false,
+      "value": {
+        "proxy": "web",
+        "port": "web"
+      }
+    },
+    {
+      "schema": "Binding",
+      "valid": false,
+      "value": {
+        "template": "${port.web}",
+        "format": "url"
+      }
+    },
+    {
+      "schema": "ProjectPatch",
+      "valid": false,
+      "value": {
+        "profile": null
+      }
+    },
+    {
+      "schema": "ProjectPatch",
+      "valid": false,
+      "value": {
+        "commands": {}
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "tool.add",
+        "name": "web",
+        "value": {}
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "tool.update",
+        "name": "web",
+        "value": {
+          "version": "1.2.3"
+        }
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "tool.remove",
+        "name": "web"
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "preset.add",
+        "name": "web",
+        "value": {
+          "tools": [
+            "node"
+          ]
+        }
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "preset.update",
+        "name": "web",
+        "value": {
+          "vars": []
+        }
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "preset.remove",
+        "name": "web"
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "command.add",
+        "name": "web",
+        "value": {
+          "exec": [
+            "node"
+          ]
+        }
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "command.update",
+        "name": "web",
+        "value": {
+          "exec": [
+            "node",
+            "--help"
+          ]
+        }
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "command.remove",
+        "name": "web"
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "port.add",
+        "name": "web",
+        "value": {}
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "port.update",
+        "name": "web",
+        "value": {
+          "port": 4000
+        }
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "port.remove",
+        "name": "web"
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "proxy.add",
+        "name": "web",
+        "value": {
+          "host": "app.localhost",
+          "port": "web"
+        }
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "proxy.update",
+        "name": "web",
+        "value": {
+          "host": "api.localhost"
+        }
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "proxy.remove",
+        "name": "web"
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "command.rename",
+        "name": "old",
+        "new_name": "new"
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": true,
+      "value": {
+        "op": "project.update",
+        "value": {
+          "defaults": {
+            "requires": [
+              "web"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": false,
+      "value": {
+        "op": "tool.remove",
+        "name": "node",
+        "value": {}
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": false,
+      "value": {
+        "op": "preset.rename",
+        "name": "old",
+        "new_name": "new"
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": false,
+      "value": {
+        "op": "command.update",
+        "name": "web",
+        "value": {}
+      }
+    },
+    {
+      "schema": "Operation",
+      "valid": false,
+      "value": {
+        "op": "project.update",
+        "name": "project",
+        "value": {
+          "profile": "sample"
+        }
+      }
+    },
+    {
+      "schema": "Edit",
+      "valid": false,
+      "value": {
+        "operations": []
+      }
+    },
+    {
+      "schema": "Check",
+      "valid": true,
+      "value": {
+        "id": "tool:node",
+        "status": "fail",
+        "required": true,
+        "reason": "not_found",
+        "message": "The required node executable was not found.",
+        "target": {
+          "kind": "tool",
+          "name": "node"
+        },
+        "sources": [],
+        "facts": {
+          "executable": "node"
+        },
+        "remedies": []
+      }
+    },
+    {
+      "schema": "Check",
+      "valid": false,
+      "value": {
+        "id": "tool:node",
+        "status": "not_applicable",
+        "required": true,
+        "reason": "not_found",
+        "message": "The required node executable was not found.",
+        "target": {
+          "kind": "tool",
+          "name": "node"
+        },
+        "sources": [],
+        "facts": {
+          "executable": "node"
+        },
+        "remedies": []
+      }
+    },
+    {
+      "schema": "Check",
+      "valid": true,
+      "value": {
+        "id": "tool:node",
+        "status": "not_applicable",
+        "required": false,
+        "reason": "not_found",
+        "message": "The required node executable was not found.",
+        "target": {
+          "kind": "tool",
+          "name": "node"
+        },
+        "sources": [],
+        "facts": {
+          "executable": "node"
+        },
+        "remedies": []
+      }
+    },
+    {
+      "schema": "DoctorReport",
+      "valid": true,
+      "value": {
+        "scope": "selected",
+        "mode": "foreground",
+        "config_path": "/path/to/project/devtools.toml",
+        "directory": "/path/to/project",
+        "profile": "sample",
+        "state": "not_ready",
+        "ready": false,
+        "selection": [
+          "dev:web"
+        ],
+        "checks": [],
+        "commands": [
+          {
+            "name": "dev:web",
+            "profile": "sample",
+            "env": "",
+            "selection": "all",
+            "state": "not_ready",
+            "checks": [
+              {
+                "id": "tool:node",
+                "status": "fail",
+                "required": true,
+                "reason": "not_found",
+                "message": "The required node executable was not found.",
+                "target": {
+                  "kind": "tool",
+                  "name": "node"
+                },
+                "sources": [],
+                "facts": {
+                  "executable": "node"
+                },
+                "remedies": []
+              }
+            ]
+          }
+        ],
+        "summary": {
+          "commands": 1,
+          "ready": 0,
+          "not_ready": 1,
+          "unknown": 0,
+          "required_checks": 1,
+          "passed": 0,
+          "failed": 1,
+          "unknown_checks": 0
+        }
+      }
+    },
+    {
+      "schema": "DoctorReport",
+      "valid": false,
+      "value": {
+        "scope": "selected",
+        "mode": "foreground",
+        "config_path": "/path/to/project/devtools.toml",
+        "directory": "/path/to/project",
+        "profile": "sample",
+        "state": "not_ready",
+        "ready": true,
+        "selection": [
+          "dev:web"
+        ],
+        "checks": [],
+        "commands": [
+          {
+            "name": "dev:web",
+            "profile": "sample",
+            "env": "",
+            "selection": "all",
+            "state": "not_ready",
+            "checks": [
+              {
+                "id": "tool:node",
+                "status": "fail",
+                "required": true,
+                "reason": "not_found",
+                "message": "The required node executable was not found.",
+                "target": {
+                  "kind": "tool",
+                  "name": "node"
+                },
+                "sources": [],
+                "facts": {
+                  "executable": "node"
+                },
+                "remedies": []
+              }
+            ]
+          }
+        ],
+        "summary": {
+          "commands": 1,
+          "ready": 0,
+          "not_ready": 1,
+          "unknown": 0,
+          "required_checks": 1,
+          "passed": 0,
+          "failed": 1,
+          "unknown_checks": 0
+        }
+      }
+    },
+    {
+      "schema": "DoctorReport",
+      "valid": true,
+      "value": {
+        "scope": "selected",
+        "mode": "foreground",
+        "config_path": "/path/to/project/devtools.toml",
+        "directory": "/path/to/project",
+        "profile": null,
+        "state": "not_ready",
+        "ready": false,
+        "selection": [
+          "dev:web"
+        ],
+        "checks": [],
+        "commands": [
+          {
+            "name": "dev:web",
+            "profile": "sample",
+            "env": "",
+            "selection": "all",
+            "state": "not_ready",
+            "checks": [
+              {
+                "id": "tool:node",
+                "status": "fail",
+                "required": true,
+                "reason": "not_found",
+                "message": "The required node executable was not found.",
+                "target": {
+                  "kind": "tool",
+                  "name": "node"
+                },
+                "sources": [],
+                "facts": {
+                  "executable": "node"
+                },
+                "remedies": []
+              }
+            ]
+          }
+        ],
+        "summary": {
+          "commands": 1,
+          "ready": 0,
+          "not_ready": 1,
+          "unknown": 0,
+          "required_checks": 1,
+          "passed": 0,
+          "failed": 1,
+          "unknown_checks": 0
+        }
+      }
+    },
+    {
+      "schema": "CommandReport",
+      "valid": true,
+      "value": {
+        "name": "dev:web",
+        "profile": null,
+        "env": null,
+        "selection": null,
+        "state": "unknown",
+        "checks": []
+      }
+    },
+    {
+      "schema": "CommandReport",
+      "valid": false,
+      "value": {
+        "name": "dev:web",
+        "profile": null,
+        "env": null,
+        "selection": null,
+        "state": "ready",
+        "checks": []
+      }
+    },
+    {
+      "schema": "Target",
+      "valid": false,
+      "value": {
+        "kind": "tool\n",
+        "name": "node"
+      }
+    },
+    {
+      "schema": "EffectiveReady",
+      "valid": false,
+      "value": {
+        "exec": [
+          "node"
+        ]
+      }
+    },
+    {
+      "schema": "EffectiveReady",
+      "valid": true,
+      "value": {
+        "exec": [
+          "node"
+        ],
+        "timeout": "2s"
+      }
+    },
+    {
+      "schema": "Failure",
+      "valid": true,
+      "value": {
+        "schema_version": 1,
+        "ok": false,
+        "error": {
+          "code": "requirements_failed",
+          "message": "Command prerequisites are not satisfied.",
+          "details": {
+            "operation": "doctor",
+            "phase": "preflight",
+            "target": {
+              "kind": "command",
+              "name": "dev:web"
+            },
+            "sources": [],
+            "reason": "checks_failed",
+            "facts": {},
+            "checks": [
+              {
+                "id": "tool:node",
+                "status": "fail",
+                "required": true,
+                "reason": "not_found",
+                "message": "The required node executable was not found.",
+                "target": {
+                  "kind": "tool",
+                  "name": "node"
+                },
+                "sources": [],
+                "facts": {
+                  "executable": "node"
+                },
+                "remedies": []
+              }
+            ],
+            "causes": [],
+            "remedies": [],
+            "retry": "after_dependency_change",
+            "effects": "none",
+            "report": {
+              "scope": "selected",
+              "mode": "foreground",
+              "config_path": "/path/to/project/devtools.toml",
+              "directory": "/path/to/project",
+              "profile": "sample",
+              "state": "not_ready",
+              "ready": false,
+              "selection": [
+                "dev:web"
+              ],
+              "checks": [],
+              "commands": [
+                {
+                  "name": "dev:web",
+                  "profile": "sample",
+                  "env": "",
+                  "selection": "all",
+                  "state": "not_ready",
+                  "checks": [
+                    {
+                      "id": "tool:node",
+                      "status": "fail",
+                      "required": true,
+                      "reason": "not_found",
+                      "message": "The required node executable was not found.",
+                      "target": {
+                        "kind": "tool",
+                        "name": "node"
+                      },
+                      "sources": [],
+                      "facts": {
+                        "executable": "node"
+                      },
+                      "remedies": []
+                    }
+                  ]
+                }
+              ],
+              "summary": {
+                "commands": 1,
+                "ready": 0,
+                "not_ready": 1,
+                "unknown": 0,
+                "required_checks": 1,
+                "passed": 0,
+                "failed": 1,
+                "unknown_checks": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "schema": "Failure",
+      "valid": false,
+      "value": {
+        "schema_version": 1,
+        "ok": false,
+        "error": {
+          "code": "requirements_failed",
+          "message": "Command prerequisites are not satisfied.",
+          "details": {
+            "operation": "doctor",
+            "phase": "preflight",
+            "target": {
+              "kind": "command",
+              "name": "dev:web"
+            },
+            "sources": [],
+            "reason": "checks_failed",
+            "facts": {},
+            "checks": [
+              {
+                "id": "tool:node",
+                "status": "fail",
+                "required": true,
+                "reason": "not_found",
+                "message": "The required node executable was not found.",
+                "target": {
+                  "kind": "tool",
+                  "name": "node"
+                },
+                "sources": [],
+                "facts": {
+                  "executable": "node"
+                },
+                "remedies": []
+              }
+            ],
+            "causes": [],
+            "remedies": [],
+            "retry": "after_dependency_change",
+            "effects": "none",
+            "report": {
+              "scope": "selected",
+              "mode": "foreground",
+              "config_path": "/path/to/project/devtools.toml",
+              "directory": "/path/to/project",
+              "profile": "sample",
+              "state": "not_ready",
+              "ready": false,
+              "selection": [
+                "dev:web"
+              ],
+              "checks": [],
+              "commands": [
+                {
+                  "name": "dev:web",
+                  "profile": "sample",
+                  "env": "",
+                  "selection": "all",
+                  "state": "not_ready",
+                  "checks": [
+                    {
+                      "id": "tool:node",
+                      "status": "fail",
+                      "required": true,
+                      "reason": "not_found",
+                      "message": "The required node executable was not found.",
+                      "target": {
+                        "kind": "tool",
+                        "name": "node"
+                      },
+                      "sources": [],
+                      "facts": {
+                        "executable": "node"
+                      },
+                      "remedies": []
+                    }
+                  ]
+                }
+              ],
+              "summary": {
+                "commands": 1,
+                "ready": 0,
+                "not_ready": 1,
+                "unknown": 0,
+                "required_checks": 1,
+                "passed": 0,
+                "failed": 1,
+                "unknown_checks": 0
+              }
+            }
+          }
+        },
+        "data": {
+          "scope": "selected",
+          "mode": "foreground",
+          "config_path": "/path/to/project/devtools.toml",
+          "directory": "/path/to/project",
+          "profile": "sample",
+          "state": "not_ready",
+          "ready": false,
+          "selection": [
+            "dev:web"
+          ],
+          "checks": [],
+          "commands": [
+            {
+              "name": "dev:web",
+              "profile": "sample",
+              "env": "",
+              "selection": "all",
+              "state": "not_ready",
+              "checks": [
+                {
+                  "id": "tool:node",
+                  "status": "fail",
+                  "required": true,
+                  "reason": "not_found",
+                  "message": "The required node executable was not found.",
+                  "target": {
+                    "kind": "tool",
+                    "name": "node"
+                  },
+                  "sources": [],
+                  "facts": {
+                    "executable": "node"
+                  },
+                  "remedies": []
+                }
+              ]
+            }
+          ],
+          "summary": {
+            "commands": 1,
+            "ready": 0,
+            "not_ready": 1,
+            "unknown": 0,
+            "required_checks": 1,
+            "passed": 0,
+            "failed": 1,
+            "unknown_checks": 0
+          }
+        }
+      }
+    },
+    {
+      "schema": "Facts",
+      "valid": false,
+      "value": {
+        "PATH": "/private/path",
+        "stderr": "secret"
+      }
+    },
+    {
+      "schema": "Source",
+      "valid": false,
+      "value": {
+        "kind": "config",
+        "path": [
+          "commands",
+          "build.web"
+        ],
+        "line": 1
+      }
+    },
+    {
+      "schema": "Source",
+      "valid": false,
+      "value": {
+        "kind": "default",
+        "path": [],
+        "line": 1,
+        "column": 1
+      }
+    },
+    {
+      "schema": "Change",
+      "valid": true,
+      "value": {
+        "op": "command.rename",
+        "path": [
+          "commands",
+          "old"
+        ],
+        "to_path": [
+          "commands",
+          "new"
+        ]
+      }
+    },
+    {
+      "schema": "Change",
+      "valid": false,
+      "value": {
+        "op": "command.rename",
+        "path": [
+          "commands",
+          "old"
+        ]
+      }
+    },
+    {
+      "schema": "ValidationReport",
+      "valid": true,
+      "value": {
+        "config_path": "/path/to/project/devtools.toml",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "valid": true,
+        "format": "neutral",
+        "diagnostics": []
+      }
+    },
+    {
+      "schema": "ValidationReport",
+      "valid": false,
+      "value": {
+        "config_path": "/path/to/project/devtools.toml",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "valid": false,
+        "format": "neutral",
+        "diagnostics": []
+      }
+    },
+    {
+      "schema": "Project",
+      "valid": true,
+      "value": {
+        "profile": "sample",
+        "tools": {
+          "node": {},
+          "pnpm": {
+            "version": "11.24.0"
+          },
+          "go": {}
+        },
+        "presets": {
+          "web": {
+            "tools": [
+              "node",
+              "pnpm"
+            ]
+          }
+        },
+        "commands": {
+          "dev:web": {
+            "exec": [
+              "pnpm",
+              "run",
+              "dev"
+            ],
+            "requires": [
+              "web"
+            ]
+          },
+          "dev:api": {
+            "exec": [
+              "go",
+              "run",
+              "./cmd/api"
+            ],
+            "tools": [
+              "go"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "schema": "Project",
+      "valid": true,
+      "value": {
+        "profile": "sample",
+        "tools": {
+          "node": {
+            "executable": "node-custom",
+            "version": "1.2.3",
+            "version_args": [
+              "-v"
+            ]
+          }
+        },
+        "defaults": {
+          "tools": [
+            "node"
+          ]
+        },
+        "commands": {
+          "check:legacy": {
+            "exec": [
+              "node",
+              "scripts/check.mjs"
+            ],
+            "tool_overrides": {
+              "node": {
+                "version": "2.0.0"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "schema": "Edit",
+      "valid": true,
+      "value": {
+        "operations": [
+          {
+            "op": "tool.add",
+            "name": "node",
+            "value": {}
+          },
+          {
+            "op": "preset.add",
+            "name": "web",
+            "value": {
+              "tools": [
+                "node"
+              ]
+            }
+          },
+          {
+            "op": "command.add",
+            "name": "dev:web",
+            "value": {
+              "exec": [
+                "node",
+                "scripts/dev.mjs"
+              ],
+              "requires": [
+                "web"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "transport": [
+    {
+      "raw": "{\"port\":4000}",
+      "valid": true
+    },
+    {
+      "raw": "{\"exec\":[\"node\"]}",
+      "valid": true
+    },
+    {
+      "raw": "{\"x\":1,\"x\":2}",
+      "valid": false
+    },
+    {
+      "raw": "{\"port\":4e3}",
+      "valid": false
+    },
+    {
+      "raw": "{\"port\":4000.0}",
+      "valid": false
+    },
+    {
+      "raw": "{\"x\":9223372036854775808}",
+      "valid": false
+    },
+    {
+      "raw": "{\"x\":1e999999999}",
+      "valid": false
+    },
+    {
+      "raw": "{\"x\":1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111}",
+      "valid": false
+    },
+    {
+      "raw": "{\"x\":\"\\ud800\"}",
+      "valid": false
+    },
+    {
+      "raw": "{} {}",
+      "valid": false
+    }
+  ]
+}

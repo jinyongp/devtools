@@ -141,7 +141,7 @@ func TestBundleExecutionUsesSelectedPublicSnapshotAndHandoff(t *testing.T) {
 		t.Fatal("none injected values")
 	}
 	command.Selection = "missing"
-	if _, e := PrepareInput(context.Background(), command, deps, nil, PlanOptions{}); e == nil || e.Code != "bundle_not_found" {
+	if _, e := PrepareInput(context.Background(), command, deps, nil, PlanOptions{}); !hasCauseCode(e, "bundle_not_found") {
 		t.Fatal("missing selection fell back", e)
 	}
 }

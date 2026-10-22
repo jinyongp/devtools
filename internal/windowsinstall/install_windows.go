@@ -43,7 +43,13 @@ func Update(ctx context.Context, executable, version, source string) (*Result, e
 		return release(ctx, version, source, arch)
 	})
 }
-func apply(ctx context.Context, options Options, invoked string, load func(context.Context, string) ([]byte, string, error)) (*Result, error) {
+func apply(ctx context.Context, options Options, invoked string, load func(context.Context, string) ([]byte, string, error)) (out *Result, failure error) {
+	stage, effects := "input", "none"
+	defer func() {
+		if failure != nil {
+			failure = &Failure{Stage: stage, Effects: effects, Cause: failure}
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -68,11 +74,13 @@ func apply(ctx context.Context, options Options, invoked string, load func(conte
 	if err != nil {
 		return nil, err
 	}
+	stage = "installation_directory"
 	root, err := platformfs.OpenRoot(directory, options.Action == "install")
 	if err != nil {
 		return nil, err
 	}
 	defer root.Close()
+	stage = "lock"
 	lock, err := root.OpenExclusive(".devtools-install.lock", true, false)
 	if err != nil {
 		return nil, err
@@ -86,9 +94,12 @@ func apply(ctx context.Context, options Options, invoked string, load func(conte
 		return nil, errors.New("install lock must remain empty")
 	}
 	e := engine{root: root, directory: directory, smoke: smoke}
+	stage = "recovery"
 	if err = e.recover(ctx); err != nil {
+		effects = "unknown"
 		return nil, err
 	}
+	stage = "installation_ownership"
 	var before manifest
 	exists, err := e.readJSON(manifestName, &before)
 	if err != nil {
@@ -141,18 +152,22 @@ func apply(ctx context.Context, options Options, invoked string, load func(conte
 			return nil, err
 		}
 	}
+	stage = "native_architecture"
 	arch, err := NativeArchitecture()
 	if err != nil {
 		return nil, err
 	}
+	stage = "artifact_fetch"
 	body, version, err := load(ctx, arch)
 	if err != nil {
 		return nil, err
 	}
+	stage = "image_identity"
 	want, err := inspectImage(body, version, arch)
 	if err != nil {
 		return nil, err
 	}
+	stage, effects = "publish", "unknown"
 	return e.transact(ctx, options, body, want, previous)
 }
 

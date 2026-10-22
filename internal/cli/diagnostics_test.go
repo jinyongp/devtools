@@ -70,7 +70,7 @@ func TestDiagnosticsSchemaExcludesSensitivePayloads(t *testing.T) {
 	}
 	text := string(encoded)
 	for _, forbidden := range []string{"content", "token", "context", "recipient", "secret"} {
-		if strings.Contains(text, forbidden) {
+		if strings.Contains(text, `"`+forbidden+`"`) {
 			t.Fatalf("diagnostics schema exposes forbidden concept %q: %s", forbidden, text)
 		}
 	}

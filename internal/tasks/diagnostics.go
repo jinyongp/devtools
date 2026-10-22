@@ -88,7 +88,7 @@ func (s *State) explain(r Request, e *protocol.Error, profile string) *protocol.
 		argv = append(argv, i.ID, "--profile", profile)
 		remedies = append(remedies, protocol.Remedy{Argv: argv, RequiredInputs: []string{}, Message: "Read the current item and its blocking conditions."})
 		if i.Kind == "task" && a.ExecutionStatus == "stale" {
-			remedies = append(remedies, protocol.Remedy{Argv: []string{"devtools", "task", "sync", i.ID, "--profile", profile}, RequiredInputs: []string{"context", "if-revision", "request-id", "reason"}, Message: "Review the changed definition, then sync with the current execution context."})
+			remedies = append(remedies, protocol.Remedy{Effect: "value_write", Argv: []string{"devtools", "task", "sync", i.ID, "--profile", profile}, RequiredInputs: []string{"context", "if-revision", "request-id", "reason"}, Message: "Review the changed definition, then sync with the current execution context."})
 		}
 	}
 	if len(remedies) == 0 {

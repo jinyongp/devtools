@@ -210,6 +210,10 @@ func warningsSchema() map[string]any {
 }
 
 func readSecret(ctx context.Context, streams IO, options map[string]string) (string, *protocol.Error) {
+	return readValueInput(ctx, streams, options, "secret")
+}
+
+func readValueInput(ctx context.Context, streams IO, options map[string]string, role string) (string, *protocol.Error) {
 	filePath, fromFile := options["file"]
 	fromStdin := options["stdin"] == "true"
 	if fromFile == fromStdin {
@@ -219,7 +223,7 @@ func readSecret(ctx context.Context, streams IO, options map[string]string) (str
 	if fromFile {
 		file, err := os.OpenFile(filePath, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 		if err != nil {
-			return "", protocol.NewError("io_error", "Cannot read secret input.", 1, nil)
+			return "", protocol.InputError(role, "open_input", err)
 		}
 		defer file.Close()
 		info, err := file.Stat()
@@ -253,7 +257,7 @@ func readSecret(ctx context.Context, streams IO, options map[string]string) (str
 		return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
 	case read := <-result:
 		if read.err != nil {
-			return "", protocol.NewError("io_error", "Cannot read secret input.", 1, nil)
+			return "", protocol.InputError(role, "read_input", read.err)
 		}
 		return string(read.data), nil
 	}

@@ -89,7 +89,8 @@ env·로그 설정 충돌을 판정한다. 실제 새 process를 만드는 경�
 전체 `data.changed`·`data.replayed`도 제공한다. 명령별 status는 `ready`, `running`,
 `stopped`, `unchanged`이고, 미완료 항목은 `pending` 또는 `failed`와 `condition`을 갖는다.
 일부 명령이 실패하면 stderr의 `project_operation_failed` 오류에
-`error.details.items`로 성공·실패·미완료 항목을 함께 반환한다. 이미 시작한 서버는
+protocol 10에서는 `error.details.facts.outcomes`로 성공·실패·미완료 항목의 이름·상태·ID를,
+`causes`로 하위 원인을 반환한다. 이전 빌드는 `error.details.items`를 사용한다. 이미 시작한 서버는
 자동으로 종료하지 않는다.
 
 부분 실패나 응답 유실 뒤에는 같은 요청 ID와 같은 입력으로 재시도한다. 완료한

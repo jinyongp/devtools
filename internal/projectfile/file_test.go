@@ -80,7 +80,7 @@ func TestPublicationFailureOutcomes(t *testing.T) {
 		}
 		return true, false, backup, errors.New("injected post-publication sync failure")
 	}})
-	if e == nil || e.Code != "config_commit_uncertain" || e.Details["effects"] != "committed" || e.Details["retry"] != "inspect_first" {
+	if e == nil || e.Code != "config_commit_uncertain" || e.Details["effects"] != "committed" || e.Details["retry"] != "inspect_first" || e.Details["phase"] != "publish" {
 		t.Fatal(e)
 	}
 	data, _ = os.ReadFile(path)
@@ -131,7 +131,7 @@ func TestPublicationDetectsSameBytesReplacementAfterPublish(t *testing.T) {
 		}
 		return committed, uncertain, backup, nil
 	}})
-	if failure == nil || failure.Code != "config_commit_uncertain" || failure.Details["effects"] != "committed" {
+	if failure == nil || failure.Code != "config_commit_uncertain" || failure.Details["effects"] != "committed" || failure.Details["phase"] != "observe" {
 		t.Fatal("later writer's identical bytes were mistaken for our candidate", failure)
 	}
 	if observed, err := os.ReadFile(path); err != nil || !bytes.Equal(observed, data) {

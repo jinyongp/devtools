@@ -34,6 +34,12 @@ func Error(code, reason string, cause error) *protocol.Error {
 		exit = 1
 	}
 	e := protocol.NewError(code, map[string]string{"io_error": "Cannot read or publish the project file.", "config_unsafe_target": "Use a writable regular project file with one hard link.", "config_revision_conflict": "The project file changed. Inspect it and review the intended edit again.", "config_write_unsupported": "This file cannot be published while preserving its permissions.", "config_commit_uncertain": "The publication outcome needs inspection before another edit."}[code], exit, map[string]any{"reason": reason, "effects": "none"})
+	if code == "config_commit_uncertain" {
+		e.Details["phase"] = "observe"
+		if reason == "publication_uncertain" {
+			e.Details["phase"] = "publish"
+		}
+	}
 	var errno syscall.Errno
 	if errors.As(cause, &errno) {
 		e.Details["facts"] = map[string]any{"os_code": uint64(errno)}

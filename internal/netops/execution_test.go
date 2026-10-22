@@ -1,0 +1,74 @@
+package netops
+
+import (
+	"context"
+	"sync"
+	"sync/atomic"
+	"testing"
+
+	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/tasks"
+)
+
+func TestExecutionIntentConcurrentReplayAndChangedMode(t *testing.T) {
+	s := Store{Data: t.TempDir()}
+	id := tasks.ID()
+	var calls atomic.Int32
+	choose := func() ([]string, *protocol.Error) { calls.Add(1); return []string{"web"}, nil }
+	var wg sync.WaitGroup
+	ids := make(chan string, 8)
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			p, e := s.PlanExecution(context.Background(), id, "input", network.PrepareAuto, choose)
+			if e != nil {
+				t.Error(e)
+				return
+			}
+			ids <- p.NetworkID
+		}()
+	}
+	wg.Wait()
+	close(ids)
+	previous := ""
+	for id := range ids {
+		if previous != "" && previous != id {
+			t.Fatal("changed child identity")
+		}
+		previous = id
+	}
+	if calls.Load() != 1 {
+		t.Fatal(calls.Load())
+	}
+	if _, e := s.PlanExecution(context.Background(), id, "input", network.PrepareOff, choose); e == nil || e.Code != "request_conflict" {
+		t.Fatal(e)
+	}
+}
+
+func TestFailedSelectionRetainsNewIntentAndAllowsSameRequestRetry(t *testing.T) {
+	s := Store{Data: t.TempDir()}
+	id := tasks.ID()
+	if exists, intent, e := s.ExecutionKind(id); e != nil || exists || intent {
+		t.Fatal(exists, intent, e)
+	}
+	_, e := s.PlanExecution(context.Background(), id, "input", network.PrepareAuto, func() ([]string, *protocol.Error) { return nil, Failure("permission_required", "not ready") })
+	if e == nil {
+		t.Fatal("expected failure")
+	}
+	if exists, intent, e := s.ExecutionKind(id); e != nil || !exists || !intent {
+		t.Fatal(exists, intent, e)
+	}
+	p, e := s.PlanExecution(context.Background(), id, "input", network.PrepareAuto, func() ([]string, *protocol.Error) { return []string{"web"}, nil })
+	if e != nil || len(p.Commands) != 1 {
+		t.Fatal(p, e)
+	}
+	legacy := tasks.ID()
+	if _, e := s.Apply(context.Background(), legacy, "legacy", nil, func(*Journal) (any, *protocol.Error) { return map[string]any{}, nil }); e != nil {
+		t.Fatal(e)
+	}
+	if exists, intent, e := s.ExecutionKind(legacy); e != nil || !exists || intent {
+		t.Fatal(exists, intent, e)
+	}
+}

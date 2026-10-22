@@ -162,6 +162,11 @@ func (s Store) Apply(ctx context.Context, id string, input any, resources []stri
 	} else {
 		j.Fingerprint = hex.EncodeToString(digest[:])
 		j.Phase = "preparing"
+		if _, execution := input.(executionInput); execution {
+			// Publish the intent marker with the first journal, including when
+			// selection fails or the initiating CLI exits before saving a plan.
+			j.Private = map[string]json.RawMessage{"execution-intent-version": json.RawMessage("1")}
+		}
 		if e := j.Save(); e != nil {
 			return nil, e
 		}

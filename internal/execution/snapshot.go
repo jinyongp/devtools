@@ -160,6 +160,15 @@ func readExecutionState(ctx context.Context, command Command, dependencies Depen
 	defer snapshot.Destroy()
 	return snapshotState(command, snapshot)
 }
+
+// preparationDeadline anchors both transported timestamps to the same clock
+// sample. Parent deadlines may predate a wall-clock adjustment; only their
+// monotonic remaining budget can be carried over without changing the window
+// when JSON drops the monotonic readings.
+func preparationDeadline(created time.Time, budget time.Duration) time.Time {
+	return created.Add(min(budget, DefaultPreparationTimeout))
+}
+
 func AuthenticateSnapshot(ctx context.Context, plan *Plan, dependencies Dependencies) (*AuthenticatedSnapshot, *protocol.Error) {
 	if plan == nil || plan.destroyed {
 		return nil, snapshotError("invalid_input_snapshot")
@@ -167,10 +176,11 @@ func AuthenticateSnapshot(ctx context.Context, plan *Plan, dependencies Dependen
 	if e := protocol.ContextError(ctx.Err()); e != nil {
 		return nil, e
 	}
-	deadline := plan.created.Add(DefaultPreparationTimeout)
-	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
-		deadline = d
+	budget := DefaultPreparationTimeout
+	if d, ok := ctx.Deadline(); ok {
+		budget = d.Sub(plan.created)
 	}
+	deadline := preparationDeadline(plan.created, budget)
 	if !time.Now().Before(deadline) {
 		return nil, snapshotError("input_snapshot_expired")
 	}

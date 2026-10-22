@@ -88,7 +88,8 @@ func TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop(t *testing.T) {
 			})
 			first, e := service.Apply(ctx, services.Request{Action: "start", Command: "web", Directory: root, RequestID: tasks.ID()})
 			if e != nil || first.Item.State != "running" {
-				t.Fatal("old execution did not start", e)
+				diagnostic, _ := json.Marshal(e)
+				t.Fatalf("old execution did not start: error=%s state=%s phase=%s", diagnostic, first.Item.State, first.Item.LaunchPhase)
 			}
 			wait := func(check func() bool) {
 				t.Helper()
@@ -155,7 +156,8 @@ func TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop(t *testing.T) {
 			}
 			result, e := service.Apply(ctx, request)
 			if e != nil || !result.Replayed || result.Item.ID != request.RequestID {
-				t.Fatal("crash retry did not reuse original execution", e)
+				diagnostic, _ := json.Marshal(e)
+				t.Fatalf("crash retry did not reuse original execution: error=%s state=%s phase=%s replayed=%v same_id=%v", diagnostic, result.Item.State, result.Item.LaunchPhase, result.Replayed, result.Item.ID == request.RequestID)
 			}
 			if stage == "old-stop" {
 				if result.Item.StartedAt != nil || !result.Item.Outage {

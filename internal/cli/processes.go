@@ -53,6 +53,7 @@ func (a *App) registerProcesses() {
 			c.Arguments = []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern}}
 			c.Options = append(c.Options, Option{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory."})
 			c.Options = append(c.Options, Option{Name: "proxy", Boolean: true, Description: "Prepare the declared route and DNS before starting."})
+			c.Options = append(c.Options, Option{Name: "no-proxy", Boolean: true, Description: "Skip proxy preparation without stopping existing routes."})
 		}
 		if action == "start" || action == "restart" {
 			c.Options = append(c.Options, Option{Name: "bundle", Pattern: project.ProfilePattern, Description: "Select all, none, or a shared value bundle; restart inherits the previous explicit override."}, Option{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment."}, Option{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for seven days after exit."})
@@ -141,15 +142,20 @@ func (a *App) registerProcesses() {
 			}
 			if action == "start" {
 				command, env := q.Command, q.Env
-				if r.Options["proxy"] == "true" {
-					snapshots, e := a.prepareProxyNetwork(ctx, startProject, []string{command}, nil, map[string]*string{command: env}, streams, q.RequestID, selectedBundleOverride(command, q.Bundle))
-					if e != nil {
-						return nil, e
-					}
-					q.ProxyMode = true
-					q.Network = snapshots[command]
+				mode, e := preparationMode(r.Options)
+				if e != nil {
+					return nil, e
 				}
+				if e := a.prepareManagedNetwork(ctx, startProject, &q, nil, mode, streams); e != nil {
+					return nil, e
+				}
+				reuseCheck := q.BeforeStart
 				q.BeforeStart = func(ctx context.Context) *protocol.Error {
+					if reuseCheck != nil {
+						if e := reuseCheck(ctx); e != nil {
+							return e
+						}
+					}
 					if q.Network != nil {
 						return a.preflightSelectedNetworkSnapshot(ctx, startProject, command, env, q.Network, false, q.Bundle)
 					}
@@ -166,20 +172,9 @@ func (a *App) registerProcesses() {
 					if e != nil {
 						return nil, e
 					}
-					env := q.Env
-					if env == nil {
-						env = original.EnvOverride
-					}
-					bundle := q.Bundle
-					if bundle == nil {
-						bundle = original.BundleOverride
-					}
-					snapshots, e := a.prepareProxyNetwork(ctx, p, []string{original.Command}, []services.Record{original}, map[string]*string{original.Command: env}, streams, q.RequestID, selectedBundleOverride(original.Command, bundle))
-					if e != nil {
+					if e := a.prepareManagedNetwork(ctx, p, &q, &original, network.PrepareAuto, streams); e != nil {
 						return nil, e
 					}
-					q.ProxyMode = true
-					q.Network = snapshots[original.Command]
 				}
 				envOverride := q.Env
 				bundleOverride := q.Bundle

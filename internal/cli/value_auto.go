@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
@@ -52,12 +53,10 @@ func ServeValueRestart(ctx context.Context, data, body string) error {
 		}
 		// Existing network preparation remains noninteractive: no implicit privilege
 		// grant, credential prompt, key backend installation or route policy change.
-		snapshots, failure := app.prepareProxyNetwork(ctx, p, []string{original.Command}, []services.Record{original}, map[string]*string{original.Command: original.EnvOverride}, IO{In: nil, Out: io.Discard, Err: io.Discard}, request.RequestID, selectedBundleOverride(original.Command, original.BundleOverride))
+		failure = app.prepareManagedNetwork(ctx, p, &q, &original, network.PrepareAuto, IO{In: nil, Out: io.Discard, Err: io.Discard})
 		if failure != nil {
 			return finish("", failure.Code)
 		}
-		q.ProxyMode = true
-		q.Network = snapshots[original.Command]
 	}
 	result, failure := store.Apply(ctx, q)
 	if failure != nil {

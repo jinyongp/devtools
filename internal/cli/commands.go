@@ -153,6 +153,7 @@ func (a *App) registerCommands() {
 			a.commands[index].Options = append(a.commands[index].Options, outputOptions()...)
 			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "bundle", Pattern: project.ProfilePattern, Description: "Select all, none, or one shared value bundle; overrides command and project selection."})
 			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "proxy", Boolean: true, Description: "Prepare declared proxy routes and DNS before running the configured server."})
+			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "no-proxy", Boolean: true, Description: "Skip proxy preparation; existing routes and listeners remain unchanged."})
 		}
 	}
 }

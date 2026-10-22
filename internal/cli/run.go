@@ -6,6 +6,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/execution"
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/redact"
@@ -55,15 +56,27 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 	if mode := request.Options["stderr"]; mode != "" {
 		command.Output.Stderr = redact.Mode(mode)
 	}
-	if request.Options["proxy"] == "true" {
-		if command.Name == "" {
-			return nil, argumentError("--proxy requires a configured command with declared serve routes.", "proxy")
+	mode, modeErr := preparationMode(request.Options)
+	if modeErr != nil {
+		return nil, modeErr
+	}
+	if command.Name == "" && mode == network.PrepareOn {
+		return nil, argumentError("--proxy requires a configured command with declared serve routes.", "proxy")
+	}
+	needed := false
+	if command.Name != "" {
+		var e *protocol.Error
+		needed, e = a.needsProxyPreparation(command.Project, []string{command.Name}, mode)
+		if e != nil {
+			return nil, e
 		}
+	}
+	if needed {
 		var override *string
 		if env, explicit := request.Options["env"]; explicit {
 			override = &env
 		}
-		snapshots, e := a.prepareProxyNetwork(ctx, command.Project, []string{command.Name}, nil, map[string]*string{command.Name: override}, streams, tasks.ID(), map[string]string{command.Name: command.Selection})
+		snapshots, e := a.prepareNetwork(ctx, command.Project, []string{command.Name}, nil, map[string]*string{command.Name: override}, streams, tasks.ID(), mode, false, map[string]string{command.Name: command.Selection})
 		if e != nil {
 			return nil, e
 		}

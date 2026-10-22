@@ -16,10 +16,12 @@ import (
 // ExecutionPlan lives in the journal's extensible private payload. Existing
 // supervisors and strict process/lease/receipt readers retain their wire format.
 type ExecutionPlan struct {
-	Version   int                     `json:"version"`
-	Mode      network.PreparationMode `json:"mode"`
-	NetworkID string                  `json:"network_id"`
-	Commands  []string                `json:"commands"`
+	Version   int                                   `json:"version"`
+	Mode      network.PreparationMode               `json:"mode"`
+	NetworkID string                                `json:"network_id"`
+	Commands  []string                              `json:"commands"`
+	Reused    map[string]*network.ExecutionSnapshot `json:"reused,omitempty"`
+	ReuseIDs  map[string]string                     `json:"reuse_ids,omitempty"`
 }
 
 type executionInput struct {
@@ -65,6 +67,14 @@ func (s Store) ExecutionKind(id string) (exists, intent bool, failure *protocol.
 // PlanExecution freezes canonical request intent and the preparation child UUID.
 // Callers launch services only after this returns and all journal locks release.
 func (s Store) PlanExecution(ctx context.Context, id string, input any, mode network.PreparationMode, choose func() ([]string, *protocol.Error)) (ExecutionPlan, *protocol.Error) {
+	return s.ChooseExecution(ctx, id, input, mode, func() (ExecutionPlan, *protocol.Error) {
+		commands, e := choose()
+		return ExecutionPlan{Commands: commands}, e
+	})
+}
+
+// ChooseExecution can retain the exact snapshot of a reused active execution.
+func (s Store) ChooseExecution(ctx context.Context, id string, input any, mode network.PreparationMode, choose func() (ExecutionPlan, *protocol.Error)) (ExecutionPlan, *protocol.Error) {
 	if !mode.Valid() {
 		return ExecutionPlan{}, Failure("invalid_argument", "Invalid preparation mode.")
 	}
@@ -75,11 +85,12 @@ func (s Store) PlanExecution(ctx context.Context, id string, input any, mode net
 			return nil, e
 		}
 		if !found {
-			commands, e := choose()
+			candidate, e := choose()
 			if e != nil {
 				return nil, e
 			}
-			plan = ExecutionPlan{Version: 1, Mode: mode, NetworkID: tasks.ID(), Commands: commands}
+			plan = candidate
+			plan.Version, plan.Mode, plan.NetworkID = 1, mode, tasks.ID()
 			if e := j.Set("execution-plan", plan); e != nil {
 				return nil, e
 			}

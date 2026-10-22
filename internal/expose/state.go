@@ -71,6 +71,11 @@ func (s Store) Write(r Record) *protocol.Error {
 	if !validID(r.ID) || !r.Pin.Valid() {
 		return Failure("invalid_storage")
 	}
+	// A stopped exposure no longer owns a forwarding policy. Keep historical
+	// records readable by pre-policy binaries after all active pins are removed.
+	if r.State == "stopped" {
+		r.Pin.HostPolicy = ""
+	}
 	if tasks.PrivateDir(filepath.Dir(s.Path(r.ID))) != nil || tasks.WritePrivate(s.Path(r.ID), r) != nil {
 		return Failure("io_error")
 	}

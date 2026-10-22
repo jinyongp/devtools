@@ -40,6 +40,11 @@ func inspectNetwork(ctx context.Context, input Input) (Network, *protocol.Error)
 	if e != nil {
 		return out, e
 	}
+	for i := range out.Routes {
+		if out.Routes[i].Kind == "route" {
+			out.Routes[i].HostPolicy = out.Routes[i].HostPolicy.Effective()
+		}
+	}
 	out.Exposures, e = m.ExposureList(ctx)
 	if e != nil {
 		return out, e

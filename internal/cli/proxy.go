@@ -37,6 +37,7 @@ func proxyItemSchema() map[string]any {
 		"target_port": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 65535},
 		"status":      stringSchema(),
 		"listener":    stringSchema(),
+		"host_policy": hostPolicySchema(),
 		"scope":       stringSchema(), "route_id": stringSchema(),
 	}, "kind", "host", "proxy", "profile", "instance_id", "alias", "directory", "service", "target_port", "status")
 }
@@ -135,7 +136,7 @@ func (a *App) registerProxy() {
 					}
 					items = filtered
 				}
-				return map[string]any{"items": items}, listErr
+				return map[string]any{"items": publicHostPolicy(items)}, listErr
 			case "start":
 				if value := request.Options["port"]; value != "" {
 					parsed, parseErr := strconv.Atoi(value)

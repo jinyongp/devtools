@@ -185,7 +185,7 @@ func TestExposureStopClosesBackendPoolOnFailure(t *testing.T) {
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest("GET", "http://app.localhost/", nil)
 			handler := Handler{Transport: x.transport}
-			handler.forward(response, request, record.Pin.Port)
+			handler.forward(response, request, record.Pin.Port, record.Pin.HostPolicy)
 			if response.Code != 200 {
 				t.Fatal(response.Code)
 			}

@@ -80,6 +80,20 @@ func (m Manager) ExposeStart(ctx context.Context, q ExposureRequest, p project.C
 	if e := expose.ValidateAuth(q.Auth, q.NoAuth); e != nil {
 		return nil, e
 	}
+	policy := p.Proxies[q.Route.Proxy].HostPolicy.Canonical()
+	if q.Route.Scope == "global" {
+		st, err := m.portStore().Read()
+		if err != nil {
+			return nil, err
+		}
+		if st.Network != nil {
+			for _, route := range st.Network.Routes {
+				if route.Ref() == q.Route {
+					policy = route.HostPolicy.Canonical()
+				}
+			}
+		}
+	}
 	store := expose.Store{Data: m.Data}
 	commitment, e := store.Commitment(ctx, q.RequestID, q.Auth, q.NoAuth)
 	if e != nil {
@@ -91,7 +105,8 @@ func (m Manager) ExposeStart(ctx context.Context, q ExposureRequest, p project.C
 		Provider, Alias, Commitment string
 		NoAuth                      bool
 		ServePort                   int
-	}{"expose-start", q.Route, q.Provider, q.Alias, commitment, q.NoAuth, q.ServePort}, []string{"exposure-route/" + q.Route.Key(), "exposures"}, func(j *netops.Journal) (any, *protocol.Error) {
+		HostPolicy                  network.HostPolicy `json:",omitempty"`
+	}{"expose-start", q.Route, q.Provider, q.Alias, commitment, q.NoAuth, q.ServePort, policy}, []string{"exposure-route/" + q.Route.Key(), "exposures"}, func(j *netops.Journal) (any, *protocol.Error) {
 		var record expose.Record
 		present, e := j.Get("exposure", &record)
 		if e != nil {
@@ -121,12 +136,15 @@ func (m Manager) ExposeStart(ctx context.Context, q ExposureRequest, p project.C
 			if e != nil {
 				return nil, e
 			}
+			if item.HostPolicy.Canonical() != policy {
+				return nil, proxyFailure("activation_required")
+			}
 			record = expose.Record{Public: expose.Public{ID: tasks.ID(), Route: q.Route, Provider: q.Provider, State: "preparing", Generation: tasks.ID(), Listener: listener.Name, Host: *item.Host, Auth: !q.NoAuth, ServePort: q.ServePort, CreatedAt: time.Now().UTC()}, Identity: digest}
 			service := ""
 			if item.Service != nil {
 				service = *item.Service
 			}
-			record.Pin = network.Pin{ID: record.ID, Route: q.Route, ListenerID: listener.ID, ListenerGeneration: listener.Generation, NetworkDigest: digest, Port: *item.TargetPort, Provider: q.Provider, Service: service}
+			record.Pin = network.Pin{ID: record.ID, Route: q.Route, ListenerID: listener.ID, ListenerGeneration: listener.Generation, NetworkDigest: digest, Port: *item.TargetPort, Provider: q.Provider, Service: service, HostPolicy: policy}
 			if q.Provider == "lan" {
 				if q.Alias != "" {
 					record.Host = strings.ToLower(q.Alias)

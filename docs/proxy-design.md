@@ -57,10 +57,18 @@ backend는 등록된 loopback port로 연결한다. 임의 URL을 대상으로 �
 transport는 부모의 `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`를 사용하지 않는다.
 일반 HTTP body·header, streaming response와 WebSocket upgrade를 전달한다.
 
-upstream `Host`는 loopback target으로 바꾸고 원래 공개 authority는
-`X-Forwarded-Host`로 전달한다. `X-Forwarded-Proto`는 실제 연결의 HTTP/HTTPS를 반영한다.
+`host_policy` 생략 또는 `rewrite`는 upstream `Host`를 loopback target으로 바꾼다.
+`preserve`는 route·SNI·접근 검사를 통과한 요청의 원본 authority를 대소문자와 포트까지
+유지한다. 두 정책 모두 실제 URL/TCP 대상은 `127.0.0.1`의 할당 포트다.
+일반 HTTP와 WebSocket에 같은 정책을 적용하며 `Origin`은 변경하지 않는다.
+원래 공개 authority는 `X-Forwarded-Host`로 전달한다.
+`X-Forwarded-Proto`는 실제 연결의 HTTP/HTTPS를 반영한다.
 외부 provider가 TLS를 종료하는 bridge는 commit한 공개 scheme·authority를 사용한다.
 클라이언트가 보낸 forwarding header를 신뢰 근거로 사용하지 않는다.
+`Forwarded`는 제거하고 `X-Forwarded-*`는 다시 만든다. 공유는 route 정책을 상속한다.
+공유의 `preserve` Host는 commit한 공개 authority이며 클라이언트의 전달 헤더가 아니다.
+소비자의 Host·Origin 검사와 allowlist는 그대로 적용된다.
+설정과 소비자별 검증 범위는 [호환성 가이드](proxy-compatibility.md)를 따른다.
 
 공유 Basic 인증을 소비했으면 `Authorization`을 backend에 넘기지 않는다.
 명시적인 `--no-auth` 공유는 애플리케이션 인증을 위해 해당 헤더를 유지한다.

@@ -176,6 +176,12 @@ project/global 동명이름은 별도 scope다. global 선택에는 `--global`�
 
 ## 다른 장치에 공유하기
 
+개발 도구가 공개 Origin과 backend Host를 비교한다면 해당 route에
+`host_policy = "preserve"`를 설정한다. 생략은 기존 `rewrite` 동작이다.
+전역 route는 `proxy add ... --global --host-policy preserve`로 생성한다.
+공유도 이 정책을 상속한다. TCP 연결은 계속 loopback 할당 포트를 사용한다.
+Framework별 allowlist와 기존 전역 route 전환·복구는 [호환성 가이드](proxy-compatibility.md)를 따른다.
+
 ```sh
 devtools expose start web --provider lan --alias shop.local --auth-file /private/path/basic-auth --request-id UUID
 devtools expose start web --provider cloudflared --auth-file /private/path/basic-auth --request-id UUID

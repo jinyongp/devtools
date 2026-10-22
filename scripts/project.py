@@ -115,9 +115,12 @@ def main(args):
                 shutil.rmtree(path)
     elif action == "dashboard-check":
         node_tests("dashboard-*.test.mjs", extra)
+    elif action == "proxy-compat":
+        run([sys.executable, "-B", "verify/proxy_compat.py", *extra])
     elif action == "project-check":
         node_tests("project.test.mjs", extra)
         run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "scripts", "-p", "test_project.py"])
+        run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "verify", "-p", "test_proxy_compat.py"])
     elif action == "check-static":
         if extra:
             raise ValueError("check-static accepts no arguments")

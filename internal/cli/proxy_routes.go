@@ -41,6 +41,7 @@ func (a *App) registerProxyRoutes() {
 		c.Output = routeMutationSchema(action)
 		if action == "add" {
 			c.Arguments = append(c.Arguments, Argument{Name: "port", Required: true, Pattern: positiveIntegerPattern})
+			c.Options = append(c.Options, Option{Name: "host-policy", Pattern: "^(rewrite|preserve)$", Description: "Backend Host policy; omission preserves the existing rewrite behavior."})
 			c.Options = append(c.Options, Option{Name: "host", Required: true, Description: "DNS hostname."}, Option{Name: "listener", Pattern: project.ProfilePattern, Description: "Listener name; omission selects default."}, Option{Name: "dns", Pattern: "^(auto|hosts|external)$", Description: "DNS preparation policy; omission selects auto."})
 		} else if action == "up" || action == "down" {
 			c.Options = append(c.Options, Option{Name: "dir", MinLength: 1, Description: "Project directory; omission selects current directory."})
@@ -66,10 +67,12 @@ func (a *App) registerProxyRoutes() {
 				if e != nil || port < 1 || port > 65535 {
 					return nil, argumentError("Expected port 1..65535.", "port")
 				}
-				return m.AddGlobal(ctx, r.Args[0], port, r.Options["host"], r.Options["listener"], r.Options["dns"], r.Options["request-id"])
+				result, err := m.AddGlobalWithHostPolicy(ctx, r.Args[0], port, r.Options["host"], r.Options["listener"], r.Options["dns"], network.HostPolicy(r.Options["host-policy"]), r.Options["request-id"])
+				return publicHostPolicy(result), err
 			}
 			if action == "rm" || action == "clear" {
-				return m.RemoveGlobals(ctx, r.Args, all, hm, r.Options["request-id"])
+				result, err := m.RemoveGlobals(ctx, r.Args, all, hm, r.Options["request-id"])
+				return publicHostPolicy(result), err
 			}
 			if !all && len(r.Args) != 1 {
 				return nil, argumentError("Choose a route name or --all.", "")

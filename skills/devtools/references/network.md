@@ -52,6 +52,29 @@ HOST`, then `proxy up NAME --global`; this does not own the backend. Projectless
 NAME --global -- PROGRAM ARG...` claims the exact free port and provides PORT/URL/ROUTE_URL
 and normalized peer DEVTOOLS_* keys. Global scope requires explicit --global.
 
+## Backend Host policy
+
+Protocol 11 adds project `proxies.NAME.host_policy = "rewrite" | "preserve"` and
+global `proxy add --global --host-policy`. Omission/explicit rewrite retain the
+loopback Host; preserve forwards the validated incoming authority, including port
+and case. TCP still targets the assigned 127.0.0.1 port. Origin is unchanged.
+Sharing inherits the route policy; preserve uses the committed public authority.
+Forwarding headers are regenerated, never accepted as authority from the client.
+Keep consumer Host/Origin checks enabled and allow only the intended public hostname.
+Nuxt DevTools compares authority, including port; no-Origin and scheme behavior are
+consumer-specific. Verify a real RPC query and HMR, not just an upgrade or quiet log.
+
+Globals have no policy update command: stop their exposures, down/rm, then add/up
+with the intended policy. Recreating a name creates a new route UUID. Project edits
+use TOML/config edit, then reactivate environment-backed routes and restart affected
+servers if their allowlists/bindings changed. Policy changes revoke old exposure pins.
+Network control version 2 rejects old daemons; stop exposures, then explicitly
+`proxy restart --all --request-id UUID`. Do not restart the user's daemon unasked.
+For downgrade remove preserve from projects, recreate preserve globals as rewrite,
+stop all affected exposures and check pins are gone using the new CLI first.
+Stopped history is readable by old readers; older than registry-v4 readers still
+need their pre-upgrade backup. Do not edit private registry/journal files by hand.
+
 ## HTTPS and host setup
 
 HTTPS preparation creates a private host-local CA. `proxy ca status/export` reads public

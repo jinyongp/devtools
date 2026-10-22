@@ -22,7 +22,7 @@ import (
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
-const networkControlVersion = 1
+const networkControlVersion = 2
 
 type ListenerStatus struct {
 	ID         string     `json:"id"`

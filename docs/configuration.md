@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [개발환경 진단](doctor.md) · [편집 계약](config-edit-contract.md)
 
-protocol 10 빌드는 `devtools.toml`을 검증하면서 편집하는 명령을 제공한다.
+protocol 11 빌드는 `devtools.toml`을 검증하면서 편집하는 명령을 제공한다.
 `devtools version`과 `devtools schema config edit`로 설치본의 지원 여부를 확인한다.
 기존 파일이 없다면 `devtools init --profile sample`로 만든다. 기존 파일은 덮어쓰지 않는다.
 아래 이름·프로그램은 가상의 프로젝트 예시다.

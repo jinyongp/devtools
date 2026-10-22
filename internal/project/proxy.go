@@ -6,13 +6,17 @@ import (
 )
 
 type Proxy struct {
-	Host     string `toml:"host"`
-	Port     string `toml:"port"`
-	Listener string `toml:"listener,omitempty"`
-	DNS      string `toml:"dns,omitempty"`
+	Host       string             `toml:"host"`
+	Port       string             `toml:"port"`
+	Listener   string             `toml:"listener,omitempty"`
+	DNS        string             `toml:"dns,omitempty"`
+	HostPolicy network.HostPolicy `toml:"host_policy,omitempty" json:",omitempty"`
 }
 
 func (p Proxy) Valid(ports map[string]Port) bool {
+	if !p.HostPolicy.Valid() {
+		return false
+	}
 	if p.Listener != "" && !ValidProfile(p.Listener) || p.DNS != "" && p.DNS != "auto" && p.DNS != "hosts" && p.DNS != "external" {
 		return false
 	}

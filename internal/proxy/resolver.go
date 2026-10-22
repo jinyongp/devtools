@@ -31,19 +31,20 @@ const (
 )
 
 type Item struct {
-	Kind       string  `json:"kind"`
-	Host       *string `json:"host"`
-	Proxy      *string `json:"proxy"`
-	Profile    string  `json:"profile"`
-	InstanceID string  `json:"instance_id"`
-	Alias      *string `json:"alias"`
-	Directory  string  `json:"directory"`
-	Service    *string `json:"service"`
-	TargetPort *int    `json:"target_port"`
-	Status     string  `json:"status"`
-	Listener   string  `json:"listener,omitempty"`
-	Scope      string  `json:"scope,omitempty"`
-	RouteID    string  `json:"route_id,omitempty"`
+	Kind       string             `json:"kind"`
+	Host       *string            `json:"host"`
+	Proxy      *string            `json:"proxy"`
+	Profile    string             `json:"profile"`
+	InstanceID string             `json:"instance_id"`
+	Alias      *string            `json:"alias"`
+	Directory  string             `json:"directory"`
+	Service    *string            `json:"service"`
+	TargetPort *int               `json:"target_port"`
+	Status     string             `json:"status"`
+	Listener   string             `json:"listener,omitempty"`
+	Scope      string             `json:"scope,omitempty"`
+	RouteID    string             `json:"route_id,omitempty"`
+	HostPolicy network.HostPolicy `json:"host_policy,omitempty"`
 }
 
 func (i Item) Ref() network.RouteRef {
@@ -365,6 +366,7 @@ func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnaps
 		for _, definition := range state.Network.Routes {
 			name, host := definition.Name, definition.Host
 			item := Item{Kind: "route", Scope: "global", RouteID: definition.ID, Proxy: &name, Host: &host, Listener: definition.Listener, Status: "inactive"}
+			item.HostPolicy = definition.HostPolicy.Canonical()
 			if reservation := state.Reservation(definition.Reservation); reservation != nil {
 				port := reservation.Port
 				item.TargetPort = &port
@@ -427,6 +429,7 @@ func route(state ports.State, instance ports.Instance, name string, definition p
 	service := definition.Port
 	item := Item{Kind: "route", Proxy: &name, Profile: instance.Profile, InstanceID: instance.ID, Alias: instance.Alias, Directory: instance.Directory, Service: &service}
 	item.Listener = network.ListenerName(definition.Listener)
+	item.HostPolicy = definition.HostPolicy.Canonical()
 	activation := state.Activation(item.Ref())
 	disabled := activation != nil && activation.Mode == "disabled"
 	if disabled && project.NetworkEnvironmentBacked(definition.Host) {

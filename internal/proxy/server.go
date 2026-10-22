@@ -49,7 +49,7 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 		writeProxyError(response, request, routeNotFoundPage)
 		return
 	}
-	if decision.matches != 1 || decision.item.Status != StatusReady || decision.item.TargetPort == nil {
+	if decision.matches != 1 || decision.item.Status != StatusReady || decision.item.TargetPort == nil || !decision.item.HostPolicy.Valid() {
 		writeProxyError(response, request, routeUnavailablePage)
 		return
 	}
@@ -68,16 +68,23 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 		http.Redirect(response, request, redirect.String(), http.StatusTemporaryRedirect)
 		return
 	}
-	h.forward(response, request, *decision.item.TargetPort)
+	h.forward(response, request, *decision.item.TargetPort, decision.item.HostPolicy)
 }
 
-func (h *Handler) forward(response http.ResponseWriter, request *http.Request, port int) {
+func (h *Handler) forward(response http.ResponseWriter, request *http.Request, port int, policy network.HostPolicy) {
+	if !policy.Valid() {
+		writeProxyError(response, request, routeUnavailablePage)
+		return
+	}
 	target := &url.URL{Scheme: "http", Host: net.JoinHostPort("127.0.0.1", fmt.Sprint(port))}
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(proxyRequest *httputil.ProxyRequest) {
 			proxyRequest.SetURL(target)
 			proxyRequest.SetXForwarded()
 			proxyRequest.Out.Host = target.Host
+			if policy == network.HostPreserve {
+				proxyRequest.Out.Host = proxyRequest.In.Host
+			}
 			proxyRequest.Out.Header.Set("X-Forwarded-Host", proxyRequest.In.Host)
 			scheme := "http"
 			if proxyRequest.In.TLS != nil {
@@ -85,6 +92,9 @@ func (h *Handler) forward(response http.ResponseWriter, request *http.Request, p
 			}
 			proxyRequest.Out.Header.Set("X-Forwarded-Proto", scheme)
 			if ingress, ok := proxyRequest.In.Context().Value(ingressKey{}).(publicIngress); ok {
+				if policy == network.HostPreserve {
+					proxyRequest.Out.Host = ingress.Authority
+				}
 				proxyRequest.Out.Header.Set("X-Forwarded-Host", ingress.Authority)
 				proxyRequest.Out.Header.Set("X-Forwarded-Proto", ingress.Scheme)
 				if ingress.Authenticated {

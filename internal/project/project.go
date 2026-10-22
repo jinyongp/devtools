@@ -230,6 +230,9 @@ func parseTyped(data []byte, path, root string) (Context, *protocol.Error) {
 		}
 	}
 	for _, name := range sortedKeys(config.Proxies) {
+		proxy := config.Proxies[name]
+		proxy.HostPolicy = proxy.HostPolicy.Canonical()
+		config.Proxies[name] = proxy
 		if !ValidProfile(name) || !config.Proxies[name].Valid(config.Ports) {
 			add("invalid_value", []string{"proxies", name}, "The proxy declaration is invalid.")
 		}

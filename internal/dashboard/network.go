@@ -65,6 +65,7 @@ func (s *Server) networkView(ctx context.Context, profile string) (any, *protoco
 		if route.Kind != "route" || route.Scope != "global" && route.Profile != profile {
 			continue
 		}
+		route.HostPolicy = route.HostPolicy.Effective()
 		var endpoint ports.RouteEndpoint
 		var err *protocol.Error
 		if route.Scope == "global" {

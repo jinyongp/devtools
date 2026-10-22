@@ -16,6 +16,14 @@ import (
 )
 
 func (m Manager) AddGlobal(ctx context.Context, name string, port int, host, listener, dns, id string) (any, *protocol.Error) {
+	return m.AddGlobalWithHostPolicy(ctx, name, port, host, listener, dns, "", id)
+}
+
+func (m Manager) AddGlobalWithHostPolicy(ctx context.Context, name string, port int, host, listener, dns string, policy network.HostPolicy, id string) (any, *protocol.Error) {
+	if !policy.Valid() {
+		return nil, proxyFailure("invalid_argument")
+	}
+	policy = policy.Canonical()
 	listener = network.ListenerName(listener)
 	if dns == "" {
 		dns = "auto"
@@ -27,7 +35,8 @@ func (m Manager) AddGlobal(ctx context.Context, name string, port int, host, lis
 	input := struct {
 		Action, Name, Host, Listener, DNS string
 		Port                              int
-	}{"add", name, host, listener, dns, port}
+		HostPolicy                        network.HostPolicy `json:",omitempty"`
+	}{"add", name, host, listener, dns, port, policy}
 	return (netops.Store{Data: m.Data}).Apply(ctx, id, input, []string{"global-routes"}, func(j *netops.Journal) (any, *protocol.Error) {
 		var routeID string
 		present, e := j.Get("route_id", &routeID)
@@ -40,7 +49,7 @@ func (m Manager) AddGlobal(ctx context.Context, name string, port int, host, lis
 				return nil, e
 			}
 		}
-		route := network.GlobalRoute{ID: routeID, Name: name, Host: host, Reservation: ports.GlobalReservation(routeID), Listener: listener, DNS: dns}
+		route := network.GlobalRoute{ID: routeID, Name: name, Host: host, Reservation: ports.GlobalReservation(routeID), Listener: listener, DNS: dns, HostPolicy: policy}
 		if !route.Valid() {
 			return nil, proxyFailure("invalid_argument")
 		}
@@ -68,6 +77,7 @@ type routeCandidate struct {
 	Port       int                `json:"port"`
 	Service    string             `json:"service"`
 	StartID    string             `json:"start_id"`
+	HostPolicy network.HostPolicy `json:"host_policy,omitempty"`
 }
 
 func publicActivation(a network.Activation) map[string]any {
@@ -95,13 +105,14 @@ func DNSMapping(host, dns string, listener network.Listener) ([]hosts.Mapping, *
 	}
 	return []hosts.Mapping{{Host: host, Address: ip.String()}}, nil
 }
-func routeNetworkDigest(ref network.RouteRef, host, dns string, listener network.Listener, httpPort, httpsPort, backend int) string {
+func routeNetworkDigest(ref network.RouteRef, host, dns string, listener network.Listener, httpPort, httpsPort, backend int, policy network.HostPolicy) string {
 	return project.Digest(struct {
 		Ref                  network.RouteRef
 		Host, DNS            string
 		Listener             network.Listener
 		HTTP, HTTPS, Backend int
-	}{ref, host, dns, listener, httpPort, httpsPort, backend})
+		HostPolicy           network.HostPolicy `json:",omitempty"`
+	}{ref, host, dns, listener, httpPort, httpsPort, backend, policy.Canonical()})
 }
 
 func BuildProjectActivation(st *ports.State, ref network.RouteRef, definition project.Proxy, host, source string, backed bool) (network.Activation, *protocol.Error) {
@@ -122,7 +133,7 @@ func BuildProjectActivation(st *ports.State, ref network.RouteRef, definition pr
 	if e != nil {
 		return network.Activation{}, e
 	}
-	a := network.Activation{Route: ref, Mode: "active", Host: host, Listener: listenerName, DNS: dns, ConfigDigest: project.Digest(definition), SourceDigest: source, EnvironmentBacked: backed, NetworkDigest: routeNetworkDigest(ref, host, dns, *listener, h, t, assignment.Port)}
+	a := network.Activation{Route: ref, Mode: "active", Host: host, Listener: listenerName, DNS: dns, ConfigDigest: project.Digest(definition), SourceDigest: source, EnvironmentBacked: backed, NetworkDigest: routeNetworkDigest(ref, host, dns, *listener, h, t, assignment.Port, definition.HostPolicy)}
 	if !a.Valid() {
 		return a, proxyFailure("host_invalid")
 	}
@@ -151,6 +162,7 @@ func (m Manager) RouteUp(ctx context.Context, ref network.RouteRef, p project.Co
 		}
 		if !present {
 			var host, listener, dns, configDigest, source string
+			var policy network.HostPolicy
 			backed := false
 			port := 0
 			service := ""
@@ -167,6 +179,7 @@ func (m Manager) RouteUp(ctx context.Context, ref network.RouteRef, p project.Co
 					return nil, proxyFailure("route_not_found")
 				}
 				host, listener, dns = route.Host, route.Listener, route.DNS
+				policy = route.HostPolicy.Canonical()
 				configDigest = project.Digest(route)
 				source = configDigest
 				if reservation := st.Reservation(route.Reservation); reservation != nil {
@@ -187,6 +200,7 @@ func (m Manager) RouteUp(ctx context.Context, ref network.RouteRef, p project.Co
 				}
 				definition := resolved.Context.Proxies[ref.Proxy]
 				host, listener, dns = definition.Host, network.ListenerName(definition.Listener), definition.DNS
+				policy = definition.HostPolicy.Canonical()
 				service = definition.Port
 				source = resolved.SourceDigest
 				configDigest = project.Digest(p.Proxies[ref.Proxy])
@@ -232,7 +246,7 @@ func (m Manager) RouteUp(ctx context.Context, ref network.RouteRef, p project.Co
 			if e != nil {
 				return nil, e
 			}
-			candidate = routeCandidate{Activation: network.Activation{Route: ref, Mode: "active", Host: host, Listener: listener, DNS: dns, ConfigDigest: configDigest, SourceDigest: source, NetworkDigest: routeNetworkDigest(ref, host, dns, *definition, httpPort, httpsPort, port), EnvironmentBacked: backed}, Listener: *definition, Port: port, Service: service, StartID: tasks.ID()}
+			candidate = routeCandidate{Activation: network.Activation{Route: ref, Mode: "active", Host: host, Listener: listener, DNS: dns, ConfigDigest: configDigest, SourceDigest: source, NetworkDigest: routeNetworkDigest(ref, host, dns, *definition, httpPort, httpsPort, port, policy), EnvironmentBacked: backed}, Listener: *definition, Port: port, Service: service, StartID: tasks.ID(), HostPolicy: policy}
 			if candidate.Listener.HTTPSReservation != "" {
 				if e := j.ReferenceTLS(candidate.Listener.ID); e != nil {
 					return nil, e
@@ -366,7 +380,7 @@ func (m Manager) validateCandidate(st *ports.State, c routeCandidate, p project.
 			}
 		}
 	}
-	if port != c.Port || routeNetworkDigest(a.Route, a.Host, a.DNS, *listener, h, t, port) != a.NetworkDigest {
+	if port != c.Port || routeNetworkDigest(a.Route, a.Host, a.DNS, *listener, h, t, port, c.HostPolicy) != a.NetworkDigest {
 		return proxyFailure("request_conflict")
 	}
 	return nil

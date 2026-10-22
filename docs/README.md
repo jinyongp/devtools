@@ -71,6 +71,7 @@ Some linked topic guides are currently in Korean.
 - [Processes](processes.md): start, logs, restart, stop, and partial batch failures.
 - [Readiness](process-readiness.md): wait until a server can accept requests.
 - [Local networking and sharing](local-network.md): domains, HTTPS, listeners, external sharing, and cleanup.
+- [Development server compatibility](proxy-compatibility.md): Host policy, framework allowlists, real RPC/HMR and recovery.
 - [Legacy proxy guide](proxy.md): links to the current network guide.
 - [Tasks and workstreams](tasks.md) (English): plans, claims, validation, and handoffs.
 - [Dashboard](dashboard.md) (English): sign in, edit plans and values, and manage resources in a browser.
@@ -108,7 +109,7 @@ Design background is separate from public command availability.
 
 ## Implementation contracts
 
-These contracts describe protocol 10 source behavior. Check the installed binary's
+These contracts describe protocol 11 source behavior. Check the installed binary's
 `version` and `schema` before using a new interface. Platform acceptance requires
 native execution; cross compilation alone does not establish publication or ACL behavior.
 

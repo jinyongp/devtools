@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설정 편집 CLI](config-edit-contract.md) · [진단·doctor](diagnostic-contract.md)
 
-이 문서는 protocol 10 소스의 설정 모델과 구현 계약을 설명한다.
+이 문서는 protocol 11 소스의 설정 모델과 구현 계약을 설명한다.
 설치본에서 `devtools version`과 `devtools schema config edit`로 기능을 확인한다.
 실제 사용 순서는 [설정 편집 가이드](configuration.md), 출력은 [CLI 출력](cli-output.md)을 따른다.
 각 OS의 게시·권한 수용 기준은 해당 OS에서 직접 검증하며 cross compilation으로 대체하지 않는다.
@@ -187,7 +187,7 @@ CLI의 `tool.update`는 Tool 필드의 부분 수정이므로 override entry 교
 빈 requirements 테이블도 선언으로 센다. neutral은 두 모델에서 의미가 같아 직접 편집할 수 있다.
 legacy 읽기·doctor·explain은 유지하고 semantic 편집은 명시적인 migrate를 요구한다.
 legacy의 fmt는 형식만 정리하고 requirements 구조를 바꾸지 않는다.
-구버전 CLI는 새 필드를 거절하므로 reader들을 먼저 protocol 10 지원 빌드로 맞춘다.
+구버전 CLI는 새 필드를 거절하므로 reader들을 먼저 protocol 11 지원 빌드로 맞춘다.
 기능 탐색은 protocol 숫자와 `schema config edit`, `schema config preset add`의 존재를 함께 확인한다.
 
 ## 해석과 출처

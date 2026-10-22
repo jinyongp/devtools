@@ -22,6 +22,7 @@ user registry and are not copied into project files.
 | `proxies.NAME.host` | Complete hostname; existing reserved templates remain supported |
 | `proxies.NAME.listener` | Registered listener name; omitted means `default` |
 | `proxies.NAME.dns` | `auto` by default, or `hosts` / `external` |
+| `proxies.NAME.host_policy` | `rewrite` by default; `preserve` forwards the validated public authority |
 | `bind.KEY.port` | Numeric binding, or loopback URL with `format = "url"` |
 | `bind.KEY.proxy` | Route URL; excludes `port`, `format`, and `template` |
 | `bind.KEY.template` | Existing template; excludes typed selectors |
@@ -163,8 +164,9 @@ explicitly reachable listener and does not claim automatic DNS advertisement.
 Auth enters by stdin/private file and remains in daemon memory. A private host-local
 HMAC commitment compares retries; raw auth/unkeyed password hashes/commitment keys are
 absent from public status, logs, backup, and transfer. A loopback HTTP origin bridge
-dispatches a fixed route, rewrites backend Host as before, and supplies public HTTPS
-authority/scheme from the committed provider record. Forwarded request headers never
+dispatches a fixed route and inherits its Host policy. `rewrite` uses the loopback
+target Host; `preserve` uses the committed public authority, including its port.
+Both supply public authority/scheme from the committed provider record. Forwarded request headers never
 establish trust. Provider bridges skip local redirects. Source checks run per accepted request
 and at most one second apart for streams, preserving other shared HTTP2 streams.
 Each exposure owns its backend transport and reuses its connection pool. Revocation
@@ -178,6 +180,16 @@ listeners. Duplicate matches remain unavailable, and global host conflicts remai
 conflicts even across listeners. Acquiring a table still checks registry/project
 identities and current activation sources on each request; no TTL skips these
 checks. Management output is detached so a caller cannot mutate the routing table.
+
+Host policy participates in activation/source identity and exposure pins. A policy
+change revokes that generation's streams and conflicts with the old start UUID.
+Default rewrite metadata is omitted to preserve existing storage/digest projections;
+only preserve adds optional fields. Successfully stopped exposure records clear the
+inactive pin's policy field so old strict readers can read the history after recovery.
+Protocol 11 uses network control version 2; envelope 1 and registry v4 remain unchanged.
+An older live daemon is rejected until an explicit `proxy restart --all --request-id UUID`.
+Restart affects all selected listeners and in-memory sharing auth; stop exposures first.
+See [policy recovery and downgrade](proxy-compatibility.md#복구와-버전-전환).
 
 Exposure identity calculation uses that listing's registry and source results,
 preserving the persisted digest projection and hostname conflict checks. Inactive,

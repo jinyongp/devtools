@@ -20,6 +20,10 @@ inject = false
 exec = ["./scripts/project", "check-static"]
 inject = false
 
+[commands."check:proxy-compat"]
+exec = ["./scripts/project", "proxy-compat"]
+inject = false
+
 [commands."test:go-lane"]
 exec = ["./scripts/project", "test-go-lane"]
 inject = false

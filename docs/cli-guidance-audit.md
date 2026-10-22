@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설정 모델](cli-config-redesign.md) · [편집 계약](config-edit-contract.md) · [진단 계약](diagnostic-contract.md)
 
-이 문서는 protocol 10의 공개 안내와 회귀 검증에 사용하는 요구사항이다.
+이 문서는 protocol 11의 공개 안내와 회귀 검증에 사용하는 요구사항이다.
 D01–D19와 C01–C03은 동작·검증을 연결하는 안정된 식별자이며 테스트 통과 여부 자체를 뜻하지 않는다.
 설치본의 명령 존재와 protocol은 `devtools version`, `devtools schema COMMAND`로 확인한다.
 

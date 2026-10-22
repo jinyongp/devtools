@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:devtools:config-contract:protocol-10",
-  "title": "Project configuration, editing and diagnostic contract (protocol 10)",
-  "description": "Protocol-10 configuration, editing and diagnostic structures. Transport requires strict Unicode and signed-64-bit decimal integer tokens. x-maxUtf8Bytes asserts a UTF-8 byte constraint; x-npmRange asserts bounded nonempty npm SemVer range syntax. Linked normative contracts define references, state and filesystem checks.",
+  "$id": "urn:devtools:config-contract:protocol-11",
+  "title": "Project configuration, editing and diagnostic contract (protocol 11)",
+  "description": "Protocol-11 configuration, editing and diagnostic structures. Transport requires strict Unicode and signed-64-bit decimal integer tokens. x-maxUtf8Bytes asserts a UTF-8 byte constraint; x-npmRange asserts bounded nonempty npm SemVer range syntax. Linked normative contracts define references, state and filesystem checks.",
   "$ref": "#/$defs/Project",
   "$defs": {
     "Name": {
@@ -1005,6 +1005,9 @@
     "Proxy": {
       "type": "object",
       "properties": {
+        "host_policy": {
+          "enum": ["rewrite", "preserve"]
+        },
         "host": {
           "type": "string",
           "pattern": "^[^\\x00]*$",
@@ -1033,6 +1036,9 @@
     "ProxyPatch": {
       "type": "object",
       "properties": {
+        "host_policy": {
+          "enum": ["rewrite", "preserve", null]
+        },
         "host": {
           "type": "string",
           "pattern": "^[^\\x00]*$",

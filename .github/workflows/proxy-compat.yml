@@ -1,0 +1,309 @@
+name: Proxy consumer compatibility
+
+on:
+  workflow_call:
+    inputs:
+      commit:
+        type: string
+        required: true
+      live_provider:
+        type: string
+        default: none
+    secrets:
+      TS_AUTHKEY:
+        required: false
+  workflow_dispatch:
+    inputs:
+      live_provider:
+        description: Explicit public ingress (never enabled by pull requests)
+        type: choice
+        default: none
+        options: [none, cloudflared, tailscale]
+
+permissions:
+  contents: read
+
+env:
+  DEVTOOLS_SOURCE_COMMIT: ${{ inputs.commit || github.sha }}
+
+concurrency:
+  group: proxy-compat-${{ github.ref }}-${{ inputs.live_provider || 'none' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  linux:
+    name: Linux / ${{ matrix.lane }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [chromium, browsers, lan-none, lan-basic]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.22.2'
+      - name: Install frozen test dependencies
+        run: |
+          corepack pnpm install --frozen-lockfile --ignore-scripts
+          corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts
+          docker build -t devtools-proxy-browser:1.63.0 verify/proxy-browser
+      - name: Package and extract this exact candidate
+        env:
+          VERSION: 0.0.0-proxy-compat
+          COMMIT: ${{ inputs.commit || github.sha }}
+          OUTPUT_DIR: dist
+        run: |
+          python3 -B scripts/package.py
+          mkdir -p bin/candidate
+          tar -xzf dist/devtools_0.0.0-proxy-compat_linux_amd64.tar.gz -C bin/candidate
+      - name: Fetch immutable release baseline and verify checksum
+        if: matrix.lane == 'chromium'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.31.0 --pattern 'devtools_0.31.0_linux_amd64.tar.gz*' --dir bin/baseline
+          (cd bin/baseline && sha256sum -c devtools_0.31.0_linux_amd64.tar.gz.sha256 && tar -xzf devtools_0.31.0_linux_amd64.tar.gz)
+      - name: Full Chromium baseline and candidate matrix
+        if: matrix.lane == 'chromium'
+        run: ./bin/candidate/devtools run check:proxy-compat --binary bin/candidate/devtools --baseline bin/baseline/devtools --client-mode docker --artifacts bin/proxy-evidence
+      - name: Firefox and WebKit functional subset
+        if: matrix.lane == 'browsers'
+        run: ./bin/candidate/devtools run check:proxy-compat --binary bin/candidate/devtools --case nuxt --case vite-react --case ws --case socketio --scheme https --browser firefox --browser webkit --client-mode docker --artifacts bin/proxy-evidence
+      - name: Separate virtual LAN peer and owned sibling lifecycle
+        if: startsWith(matrix.lane, 'lan-')
+        env:
+          AUTH_MODE: ${{ matrix.lane == 'lan-basic' && 'basic' || 'none' }}
+        run: ./bin/candidate/devtools run check:proxy-compat --binary bin/candidate/devtools --case nuxt --case ws --case socketio --scheme https --provider lan --live --auth-mode "$AUTH_MODE" --client-mode docker --artifacts bin/proxy-evidence
+      - name: Preserve sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: proxy-${{ matrix.lane }}
+          path: bin/proxy-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  windows-browser:
+    name: Windows x64 / installed Chromium
+    runs-on: windows-2025
+    timeout-minutes: 25
+    env:
+      DEVTOOLS_DISPOSABLE_HOST: '1'
+      PYTHONUTF8: '1'
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.22.2'
+      - name: Frozen fixtures and real Chromium
+        run: |
+          corepack pnpm install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw 'Root install failed' }
+          corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw 'Fixture install failed' }
+          corepack pnpm exec playwright install chromium
+          if ($LASTEXITCODE -ne 0) { throw 'Chromium install failed' }
+      - name: Native packaged candidate
+        env:
+          VERSION: 0.0.0-proxy-compat
+          COMMIT: ${{ inputs.commit || github.sha }}
+          OUTPUT_DIR: dist
+        run: |
+          python -B scripts/package.py
+          if ($LASTEXITCODE -ne 0) { throw 'Package failed' }
+          Expand-Archive dist/devtools_0.0.0-proxy-compat_windows_amd64.zip bin/candidate
+      - name: Nuxt RPC and WebSocket with verified CurrentUser trust
+        run: |
+          ./bin/candidate/devtools.exe run check:proxy-compat --binary bin/candidate/devtools.exe --case nuxt --case ws --scheme https --client-mode local --disposable-trust --artifacts bin/proxy-evidence
+          if ($LASTEXITCODE -ne 0) { throw 'Windows browser contract failed' }
+      - name: Preserve sanitized native evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: proxy-windows-browser
+          path: bin/proxy-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  cloudflared:
+    name: Explicit real Cloudflared ingress
+    if: github.event_name == 'workflow_dispatch' && inputs.live_provider == 'cloudflared'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        auth: [none, basic]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.22.2'
+      - name: Prepare the explicit live test
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: 0.0.0-proxy-compat
+          COMMIT: ${{ inputs.commit || github.sha }}
+          OUTPUT_DIR: dist
+        run: |
+          corepack pnpm install --frozen-lockfile --ignore-scripts
+          corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts
+          docker build -t devtools-proxy-browser:1.63.0 verify/proxy-browser
+          gh release download 2026.10.3 --repo cloudflare/cloudflared --pattern cloudflared-linux-amd64 --dir bin/providers
+          chmod +x bin/providers/cloudflared-linux-amd64
+          ln -s cloudflared-linux-amd64 bin/providers/cloudflared
+          echo "$PWD/bin/providers" >> "$GITHUB_PATH"
+          python3 -B scripts/package.py
+          mkdir -p bin/candidate
+          tar -xzf dist/devtools_0.0.0-proxy-compat_linux_amd64.tar.gz -C bin/candidate
+      - name: Public RPC, HMR, messages, auth and selective stop
+        run: ./bin/candidate/devtools run check:proxy-compat --binary bin/candidate/devtools --case nuxt --case ws --case socketio --scheme https --provider cloudflared --live --auth-mode '${{ matrix.auth }}' --client-mode docker --artifacts bin/proxy-evidence
+      - name: Preserve real ingress evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: proxy-cloudflared-${{ matrix.auth }}
+          path: bin/proxy-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  tailscale:
+    name: Explicit two-device Tailscale Serve
+    if: github.event_name == 'workflow_dispatch' && inputs.live_provider == 'tailscale'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - name: Require prepared tailnet authorization
+        run: |
+          if [ -z "$TS_AUTHKEY" ]; then
+            echo 'Required precondition missing: reusable ephemeral TS_AUTHKEY and tailnet HTTPS/Serve permissions.' >&2
+            exit 2
+          fi
+      - uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          version: 1.104.2
+          retry: '1'
+          args: --accept-routes=false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.22.2'
+      - name: Prepare a distinct disposable peer and candidate
+        env:
+          VERSION: 0.0.0-proxy-compat
+          COMMIT: ${{ inputs.commit || github.sha }}
+          OUTPUT_DIR: dist
+        run: |
+          corepack pnpm install --frozen-lockfile --ignore-scripts
+          corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts
+          docker build -t devtools-proxy-browser:1.63.0 verify/proxy-browser
+          docker run -d --name tailscale-peer --cap-add NET_ADMIN --device /dev/net/tun -e TS_AUTHKEY -e TS_USERSPACE=false -e TS_HOSTNAME="dvt-peer-$GITHUB_RUN_ID" tailscale/tailscale:v1.104.2
+          python3 -B scripts/package.py
+          mkdir -p bin/candidate
+          tar -xzf dist/devtools_0.0.0-proxy-compat_linux_amd64.tar.gz -C bin/candidate
+      - name: Real tailnet RPC, HMR, messages and owned Serve cleanup
+        run: |
+          python3 - <<'PY'
+          import json, subprocess, time
+          deadline = time.monotonic() + 60
+          while time.monotonic() < deadline:
+              result = subprocess.run(['docker', 'exec', 'tailscale-peer', 'tailscale', 'status', '--json'], capture_output=True, text=True)
+              if result.returncode == 0 and json.loads(result.stdout).get('Self', {}).get('Online'):
+                  break
+              time.sleep(.2)
+          else:
+              raise SystemExit('Required second tailnet device did not become ready')
+          PY
+          for auth in none basic; do
+            ./bin/candidate/devtools run check:proxy-compat --binary bin/candidate/devtools --case nuxt --case ws --case socketio --scheme https --provider tailscale --live --peer-network container:tailscale-peer --auth-mode "$auth" --client-mode docker --artifacts bin/proxy-evidence
+          done
+      - name: Remove only the disposable peer
+        if: always()
+        run: |
+          docker exec tailscale-peer tailscale logout || true
+          docker rm -f tailscale-peer || true
+      - name: Preserve tailnet evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: proxy-tailscale
+          path: bin/proxy-evidence
+          if-no-files-found: warn
+          retention-days: 30
+
+  wsl-browser:
+    name: Actual WSL2 to Windows Chromium
+    runs-on: windows-2025
+    timeout-minutes: 25
+    env:
+      DEVTOOLS_DISPOSABLE_HOST: '1'
+      PYTHONUTF8: '1'
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.22.2'
+      - name: Prepare the Windows browser driver
+        run: |
+          corepack pnpm install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw 'Root install failed' }
+          corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw 'Fixture install failed' }
+          corepack pnpm exec playwright install chromium
+          if ($LASTEXITCODE -ne 0) { throw 'Chromium install failed' }
+      - name: Build the candidate executed inside WSL2
+        run: |
+          New-Item -ItemType Directory -Force bin | Out-Null
+          $env:GOOS = 'linux'
+          $env:GOARCH = 'amd64'
+          $env:CGO_ENABLED = '0'
+          go build -trimpath -ldflags "-X main.commit=$env:DEVTOOLS_SOURCE_COMMIT -X main.version=0.0.0-wsl-proxy" -o bin/devtools-wsl ./cmd/devtools
+          if ($LASTEXITCODE -ne 0) { throw 'WSL build failed' }
+      - name: Verify actual Linux server to Windows HTTPS browser
+        run: |
+          python -B verify/wsl_proxy_compat.py --binary bin/devtools-wsl --artifacts bin/proxy-evidence
+          if ($LASTEXITCODE -ne 0) { throw 'Actual WSL/browser contract failed' }
+      - name: Preserve actual WSL2 evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: proxy-wsl-browser
+          path: bin/proxy-evidence
+          if-no-files-found: error
+          retention-days: 30

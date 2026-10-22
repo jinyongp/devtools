@@ -158,30 +158,38 @@ func (a Activation) Valid() bool {
 }
 
 type GlobalRoute struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Host        string `json:"host"`
-	Reservation string `json:"reservation"`
-	Listener    string `json:"listener"`
-	DNS         string `json:"dns"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Host        string     `json:"host"`
+	Reservation string     `json:"reservation"`
+	Listener    string     `json:"listener"`
+	DNS         string     `json:"dns"`
+	HostPolicy  HostPolicy `json:"host_policy,omitempty"`
 }
 
 func (r GlobalRoute) Ref() RouteRef { return RouteRef{Scope: "global", RouteID: r.ID} }
 func (r GlobalRoute) Valid() bool {
+	if !r.HostPolicy.Valid() {
+		return false
+	}
 	return r.Ref().Valid() && namePattern.MatchString(r.Name) && ValidHost(r.Host) && namePattern.MatchString(r.Reservation) && namePattern.MatchString(r.Listener) && (r.DNS == "auto" || r.DNS == "hosts" || r.DNS == "external")
 }
 
 type Pin struct {
-	ID                 string   `json:"id"`
-	Route              RouteRef `json:"route"`
-	ListenerID         string   `json:"listener_id"`
-	ListenerGeneration string   `json:"listener_generation"`
-	NetworkDigest      string   `json:"network_digest"`
-	Port               int      `json:"port"`
-	Provider           string   `json:"provider"`
-	Service            string   `json:"service,omitempty"`
+	ID                 string     `json:"id"`
+	Route              RouteRef   `json:"route"`
+	ListenerID         string     `json:"listener_id"`
+	ListenerGeneration string     `json:"listener_generation"`
+	NetworkDigest      string     `json:"network_digest"`
+	Port               int        `json:"port"`
+	Provider           string     `json:"provider"`
+	Service            string     `json:"service,omitempty"`
+	HostPolicy         HostPolicy `json:"host_policy,omitempty"`
 }
 
 func (p Pin) Valid() bool {
+	if !p.HostPolicy.Valid() {
+		return false
+	}
 	return uuidPattern.MatchString(p.ID) && p.Route.Valid() && uuidPattern.MatchString(p.ListenerID) && uuidPattern.MatchString(p.ListenerGeneration) && len(p.NetworkDigest) == 64 && isHex(p.NetworkDigest) && p.Port > 0 && p.Port <= 65535 && (p.Provider == "lan" || p.Provider == "cloudflared" || p.Provider == "tailscale") && (p.Route.Scope == "project" && namePattern.MatchString(p.Service) || p.Route.Scope == "global" && p.Service == "")
 }

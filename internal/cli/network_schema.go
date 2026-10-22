@@ -43,7 +43,8 @@ func globalRouteSchema() map[string]any {
 	for _, key := range []string{"id", "name", "host", "reservation", "listener", "dns"} {
 		f[key] = stringSchema()
 	}
-	return object(f, "id", "name", "host", "reservation", "listener", "dns")
+	f["host_policy"] = hostPolicySchema()
+	return object(f, "id", "name", "host", "reservation", "listener", "dns", "host_policy")
 }
 func routeMutationSchema(action string) map[string]any {
 	if action == "add" {

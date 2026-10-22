@@ -2,6 +2,78 @@
 
 [Documentation index](../docs/README.md) · [Development](../docs/development.md)
 
+## Framework·Library·Provider 호환성
+
+Host 정책은 `check:proxy-compat`로 실제 개발 서버·브라우저를 연결해 검사한다.
+Node 22.22.2, pnpm 11.24.0, root의 Playwright 1.63.0과 fixture lockfile이 필요하다.
+직접 의존성 버전은 [fixture manifest](fixtures/proxy-compat/package.json)에 고정되어 있다.
+설치된 candidate archive를 풀어 `--binary`로 지정한다. baseline은 공식 v0.31.0 archive의
+checksum을 검증한 뒤 사용한다. 비교 결과에는 CLI identity·binary/lock hash를 기록한다.
+
+Linux의 DNS·CA 신뢰는 일회용 브라우저 컨테이너에 준비한다. 개발 호스트의 trust store나
+hosts 파일은 변경하지 않는다. HTTPS 검증을 끄는 옵션은 사용하지 않는다.
+
+```sh
+corepack pnpm install --frozen-lockfile --ignore-scripts
+corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts
+docker build -t devtools-proxy-browser:1.63.0 verify/proxy-browser
+devtools run check:proxy-compat --binary /absolute/candidate/devtools --baseline /absolute/baseline/devtools --client-mode docker --artifacts /tmp/proxy-evidence
+```
+
+기본 실행은 8개 소비자 × HTTP/HTTPS × rewrite/preserve의 Chromium matrix다.
+baseline에는 rewrite만 적용한다. Nuxt는 실제 DevTools Pages/Components RPC 응답·HMR·동일
+Origin 경고를 검사한다. 의도적인 다른 Origin probe의 경고는 별도로 센다.
+React/Vue/Next/webpack의 counter 상태와 문서 유지, SvelteKit의 module-store 상태·SSR·탐색·form,
+ws echo/close, Socket.IO polling→upgrade·websocket-first·ack·재연결을 확인한다.
+브라우저 WS가 backend 포트로 직접 연결하면 실패한다.
+
+Firefox·WebKit의 핵심 subset은 다음처럼 실행한다.
+
+```sh
+devtools run check:proxy-compat --binary /absolute/candidate/devtools --case nuxt --case vite-react --case ws --case socketio --scheme https --browser firefox --browser webkit --client-mode docker
+```
+
+실제 공유는 명시 `--live`에서만 시작한다. 아래 LAN 검사는 Docker bridge의 별도 네트워크
+클라이언트를 사용한다. 물리 장치나 다른 OS의 DNS·신뢰·방화벽 상태를 대신 검증하지 않는다.
+
+```sh
+devtools run check:proxy-compat --binary /absolute/candidate/devtools --case nuxt --case ws --case socketio --scheme https --provider lan --live --auth-mode basic --client-mode docker
+```
+
+`--auth-mode none`은 명시 no-auth control이다. Cloudflared 2026.10.3을 미리 준비한 뒤
+`--provider cloudflared --live`로 실제 공개 ingress를 검사한다. Quick Tunnel SSE는 미지원으로
+제외한다. 공개 URL의 DNS·edge readiness도 실제 클라이언트의 검증된 HTTP 응답으로 확인한다.
+실패한 기능 검사를 자동 재시도하지 않는다.
+
+Tailscale은 host와 준비된 두 번째 tailnet 장치 모두 1.104.2여야 한다.
+`--provider tailscale --live --peer-network container:tailscale-peer`를 사용한다.
+두 장치 IP가 같거나 로그인·HTTPS·전용 Serve 포트 8443/8444가 준비되지 않았으면 실패한다.
+Serve 설정의 전후 일치와 소유 handler 정리를 검사한다. 모의 LocalAPI 검사를 실제 tailnet
+결과로 기록하지 않는다. Actions의 명시 tailscale job은 재사용 가능한 ephemeral `TS_AUTHKEY`와
+tailnet의 HTTPS/Serve 권한이 필요하다. 비밀이 없는 job은 전제 부재로 실패하며 pass/skip으로 바꾸지 않는다.
+
+Windows는 disposable Actions에서 `--client-mode local --disposable-trust`로 실행한다.
+테스트 CA만 CurrentUser Root에 넣고 정확한 thumbprint로 제거한다. 일반 개발 호스트에서
+자동 신뢰 등록하지 않는다. `wsl_proxy_compat.py`는 고유 WSL2 distro에서 Linux CLI·서버를 실행하고
+Windows Chromium으로 실제 HTTPS·RPC·WS를 확인한다. 소유 distro만 종료·삭제하며 kernel·가상화
+전제 부재를 WSL1이나 cross compilation의 성공으로 대체하지 않는다.
+
+결과는 `summary.json`, 개별 `result.json`, `browser-result.json`, `browser-trace.json`, 정제한
+서버 로그와 실패 screenshot에 남긴다. trace에는 이벤트 종류·프레임 바이트 수·선택한 RPC/DOM
+사실만 기록한다. 인증 헤더·Vite token·전체 RPC payload를 담는 원본 Playwright trace는 저장하지 않는다.
+정리가 미확정이면 실패로 남기고 private `recovery_root`를 보존한다. 이를 CI artifact에 올리지 않는다.
+
+브라우저 의존성 없이 설치 CLI의 기본값·invalid enum·UUID·실제 HTTP/WS·공유 중지·rewrite 복구는
+`test:installed proxy_policy`로 검사한다. 별도 `python3 -B verify/proxy_policy_contract.py --binary CANDIDATE --baseline BASELINE`은
+실제 구 daemon 거절·명시 restart·구 strict reader의 중지 기록 읽기와 downgrade 후 HTTP/WS도 확인한다.
+
+`.github/workflows/proxy-compat.yml`은 Linux 전체·Firefox/WebKit subset·LAN peer·Windows native browser·
+실제 WSL2 browser를 연결하며 Unix workflow의 필수 gate에서 호출한다.
+공개 Cloudflared/Tailscale job은 Unix 또는 compatibility workflow dispatch의 `live_provider`를
+명시해야 실행한다. macOS arm64·Windows x64/ARM64 Go/CLI는 기존 Unix/Windows native workflow가 담당한다.
+
+## 설치 시나리오의 실행 범위
+
 devtools의 설치 후 공개 CLI 흐름을 실제 패키징된 실행 파일로 검증한다.
 아래 Unix runner는 macOS/Linux/WSL용 테스트 release를 만들고, 각 시나리오를 독립적인
 HOME·XDG 경로·작업 디렉터리에서 실행한다. Windows native는 아래 전용 Actions 검사를 사용한다.

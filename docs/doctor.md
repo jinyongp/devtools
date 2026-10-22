@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설정 편집](configuration.md) · [진단 계약](diagnostic-contract.md)
 
-protocol 10의 `devtools doctor`는 기본적으로 프로젝트의 **모든 명령**을 검사한다.
+protocol 11의 `devtools doctor`는 기본적으로 프로젝트의 **모든 명령**을 검사한다.
 실행 파일이 없거나 필수 조건을 만족하지 못하면 해당 이름과 이유, 선언 위치와 다음 조치를 제공한다.
 도구 설치나 설정 변경은 수행하지 않는다. 설치본의 지원 여부는 `version`과 `schema doctor`로 확인한다.
 

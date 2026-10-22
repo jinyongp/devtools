@@ -214,8 +214,8 @@ func (r *networkRuntime) exposure(q exposureRPCRequest) (expose.Public, *protoco
 func itoa(number int) string { return strconv.Itoa(number) }
 
 func (x *exposureRuntime) valid() bool {
-	_, listener, digest, e := x.owner.manager.exposureIdentity(context.Background(), x.record.Route)
-	if e != nil || digest != x.record.Identity || listener.ID != x.record.Pin.ListenerID || listener.Generation != x.record.Pin.ListenerGeneration {
+	item, listener, digest, e := x.owner.manager.exposureIdentity(context.Background(), x.record.Route)
+	if e != nil || item.HostPolicy.Canonical() != x.record.Pin.HostPolicy.Canonical() || digest != x.record.Identity || listener.ID != x.record.Pin.ListenerID || listener.Generation != x.record.Pin.ListenerGeneration {
 		return false
 	}
 	x.owner.mu.Lock()
@@ -319,7 +319,7 @@ func (x *exposureRuntime) serve(w http.ResponseWriter, request *http.Request) {
 	}
 	req = req.WithContext(context.WithValue(req.Context(), ingressKey{}, publicIngress{Authority: u.Host, Scheme: scheme, Authenticated: record.Auth}))
 	h := Handler{Transport: x.transport}
-	h.forward(writer, req, record.Pin.Port)
+	h.forward(writer, req, record.Pin.Port, record.Pin.HostPolicy)
 }
 
 func (x *exposureRuntime) stop(reason string) (expose.Public, *protocol.Error) {

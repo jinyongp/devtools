@@ -90,6 +90,7 @@ Design background is separate from public command availability.
 - [Port contract](port-design.md), [network contract](network-design.md) (English): identity, declarations, addresses, and ownership.
 - [HTTP proxy contract](proxy-design.md): route selection, forwarding, redirects, and connection lifetime.
 - [Local var/sec contract](var-sec-contract.md): authenticated storage, key sessions, launch snapshots, and lock guarantees.
+- [Runner receiver protocol](runner-receiver-protocol.md): Unix endpoint ownership, private framing, identity checks, and uncertain delivery recovery.
 
 ## Development and verification
 

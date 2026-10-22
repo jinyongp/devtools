@@ -71,12 +71,15 @@ own metadata storage. Never put a value or passphrase in those IDs or bodies.
 Before starting, discover `devtools schema values execution prepare` and
 `devtools schema values runner register`. Create the profile, selected keys and
 any env or bundle first. Build and start the [reference caller](#run-the-reference-caller)
-or an implementation of the private receiver protocol before registering it.
+or an implementation of the [private receiver protocol](runner-receiver-protocol.md)
+before registering it.
 Use the same devtools data root for both processes; `--root` takes the data
 directory itself, not the project directory or its `vault` subdirectory.
 
-1. Start the caller's receiver with a new process instance UUID. Obtain its
-   computed transport metadata using `values runner address RUNNER_ID --instance INSTANCE_ID`.
+1. Choose a new process instance UUID. Obtain its computed transport metadata
+   using `values runner address RUNNER_ID --instance INSTANCE_ID`. On Unix, prepare
+   only the returned endpoint's private parent and socket, then start accepting
+   connections. Address lookup neither prepares nor reserves the transport.
    Register the live instance with `values runner register --request-id UUID
    --stdin` and body
    `{"runner_id":"RUNNER_ID","instance_id":"INSTANCE_ID","protocol":1,"redaction_protocol":1}`.

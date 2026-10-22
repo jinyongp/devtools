@@ -80,6 +80,13 @@ commit 후 응답 유실·나중 writer 보존을 검증한다. production 환�
 실제 helper 실행 횟수와 비교한다. 잠금 뒤 이전 ticket을 재사용할 수 없는지도 확인한다.
 외부 계정이나 실제 사용자 keyring은 사용하지 않고, 생성한 실행기와 세션만 정리한다.
 
+외부 receiver의 Unix transport 계약은 `go test -race ./internal/cli ./internal/vault
+-run 'Test(ExternalRunner|RunnerDial|RunnerListener)'`로 확인한다. Linux의 독립 receiver는
+CLI address 응답만 받아 socket을 만들고 내부 listener·wire helper 없이 등록·전달·ACK 유실과
+재시도를 검사한다. 내부 transport 디렉터리가 끝까지 없는지도 확인한다. Unix listener 검사는
+기존 endpoint와 종료 중 교체된 endpoint를 보존하는지 확인한다. 다른 UID·소유권 검사는
+아래 disposable native peer 작업에서 별도로 실행하며 비특권 로컬 검사로 대체하지 않는다.
+
 main의 Unix validation은 기존 전체 race 작업에 더해 Ubuntu 24.04 x64·ARM64,
 macOS 15 ARM64·Intel에서 설치 시나리오와 전달·실행기 race 검사를 실행한다.
 disposable 호스트의 sudo 검사는 실제 다른 UID를 사용하며 skip을 통과로 인정하지 않는다.

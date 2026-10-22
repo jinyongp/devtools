@@ -1,5 +1,6 @@
 """CI partitions must cover every current and future Go package exactly once."""
 from collections import Counter
+import os
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -37,6 +38,36 @@ class GoTestLanes(unittest.TestCase):
             for args in ([], ["unknown"], ["rest", "-run=Nothing"]):
                 with self.subTest(args=args), self.assertRaises(ValueError):
                     project.main(["test-go-lane", *args])
+            output.assert_not_called()
+
+
+class WindowsGoTestLanes(unittest.TestCase):
+    def test_partition_covers_all_windows_packages_and_future_packages_once(self):
+        packages = subprocess.check_output(["go", "list", "./..."], text=True,
+                                          env=dict(os.environ, GOOS="windows", GOARCH="arm64")).splitlines()
+        packages.append("github.com/jinyongp/devtools/internal/future_package")
+        partition = {lane: project.windows_go_test_lane(packages, lane)
+                     for lane in project.WINDOWS_GO_TEST_LANES}
+        self.assertEqual(Counter(package for group in partition.values() for package in group), Counter(packages))
+        for name in ("cli", "values", "tasks"):
+            self.assertEqual(partition["suite-" + name], ["github.com/jinyongp/devtools/internal/" + name])
+        for name in ("expose", "process", "proxy", "services", "lifecycle"):
+            self.assertIn("github.com/jinyongp/devtools/internal/" + name, partition["suite-runtime"])
+        for name in ("valuehandoff", "runnerengine"):
+            self.assertIn("github.com/jinyongp/devtools/internal/" + name, partition["suite-handoff"])
+        self.assertIn("github.com/jinyongp/devtools/internal/vault", partition["suite-rest"])
+        self.assertIn(packages[-1], partition["suite-rest"])
+
+    def test_invalid_and_empty_lanes_fail_closed(self):
+        for packages, lane in ((["anything"], "suite"), (["anything"], "suite-cli"), ([], "suite-rest")):
+            with self.subTest(lane=lane), self.assertRaises(ValueError):
+                project.windows_go_test_lane(packages, lane)
+
+    def test_bad_arguments_never_start_go(self):
+        with patch.object(project.subprocess, "check_output") as output:
+            for args in ([], ["unknown"], ["suite-rest", "-run=Nothing"]):
+                with self.subTest(args=args), self.assertRaises(ValueError):
+                    project.main(["windows-go-packages", *args])
             output.assert_not_called()
 
 

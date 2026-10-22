@@ -12,7 +12,12 @@ import urllib.request
 
 WORKFLOW = '.github/workflows/windows-platform.yml'
 REQUIRED_STEPS = {
-    'suite': {'Prepare actual package-manager shims', 'Complete native Go product suite'},
+    'suite-cli': {'Complete native Go product suite'},
+    'suite-values': {'Complete native Go product suite'},
+    'suite-tasks': {'Complete native Go product suite'},
+    'suite-handoff': {'Native external value handoff component contracts', 'Complete native Go product suite'},
+    'suite-runtime': {'Prepare actual package-manager shims', 'Complete native Go product suite'},
+    'suite-rest': {'Native configuration publication', 'Complete native Go product suite'},
     'boundaries': {'Verify handle cleanup negative control', 'Test opt-in large storage recovery',
                    'Repeat native project lifecycle', 'Repeat native TLS-only startup'},
     'race': {'Native amd64 race detector'},

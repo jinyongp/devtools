@@ -63,6 +63,15 @@ class TrustTests(unittest.TestCase):
                 changed[0]['steps'][0]['conclusion'] = state
                 self.assertIsNone(self.find(jobs=changed))
 
+    def test_every_windows_suite_shard_is_required_on_both_architectures(self):
+        _, jobs = fixture()
+        for arch in ('amd64', 'arm64'):
+            for lane in ('cli', 'values', 'tasks', 'handoff', 'runtime', 'rest'):
+                name = f'Windows {arch} / suite-{lane}'
+                with self.subTest(job=name):
+                    self.assertIn(name, {job['name'] for job in jobs})
+                    self.assertIsNone(self.find(jobs=[job for job in jobs if job['name'] != name]))
+
     def test_rerun_in_progress_invalidates_old_success(self):
         run, _ = fixture()
         run.update(status='in_progress', conclusion=None, run_attempt=2)

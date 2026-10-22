@@ -65,10 +65,20 @@ Unix의 네 Go race 작업은 성공·실패 모두 `unix-tests-<OS>-<lane>-atte
 프로젝트 파일의 읽기·메타데이터·게시 단계와 macOS ACL 시스템 호출을 구분하며,
 게시 후 관찰 실패는 `causes`에 원래 읽기 오류를 남긴다.
 
-Windows의 전체 Go suite는 한 runner 안에서 패키지를 순차 실행한다(`go test -p 1`).
-실제 Argon2 파생이 여러 패키지에서 runner의 CPU를 동시에 점유하면 프로세스 재시작·
-IPC 검사의 기존 기한을 넘길 수 있기 때문이다. x64·ARM64와 제품·설치·race 작업의
-병렬 실행, 전체 테스트 범위와 각 테스트의 제한 시간은 유지한다.
+Windows의 전체 Go suite는 x64·ARM64 각각 `suite-cli`, `suite-values`, `suite-tasks`,
+`suite-handoff`, `suite-runtime`, `suite-rest` 여섯 작업으로 병렬 실행한다.
+긴 CLI·값 처리·작업 관리 패키지를 따로 실행하고, 값 전달과 프로세스·서버 검사도 분리한다.
+새 패키지는 자동으로 `suite-rest`에 포함한다. 분할한 전체 패키지의 테스트와 vet가
+모두 성공해야 Windows 필수 검사가 통과하며, Release의 소스 검증 재사용도 같은 여섯 작업을
+양쪽 아키텍처에서 확인한다. 실제 사용자·ACL 검사는 `suite-rest`, 패키지 관리자 shim과
+ARM64의 x64 provider fixture는 `suite-runtime`에서 준비한다.
+
+각 runner 안에서는 `go test -p 1`을 유지한다. 실제 Argon2 파생이 runner의 CPU를
+동시에 점유해 프로세스 재시작·IPC 검사의 기한을 넘기는 일을 피하면서, 별도 runner 간에는
+동시에 실행한다. 테스트 범위와 제한 시간은 유지하며, 실행한 패키지 목록은 작업별
+`windows-go-packages.json` 아티팩트에 남긴다.
+로컬 Windows에서는 `python -B scripts/project.py windows-go-packages suite-runtime`으로
+같은 패키지 목록을 확인할 수 있다.
 
 로컬 `check:all`은 disposable Actions의 사용자·ACL·OS 경계 검사를 대체하지 않는다.
 

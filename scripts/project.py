@@ -49,6 +49,7 @@ def check_skill_release():
 
 
 GO_TEST_LANES = ("cli", "values", "vault", "rest")
+WINDOWS_GO_TEST_LANES = ("suite-cli", "suite-values", "suite-tasks", "suite-handoff", "suite-runtime", "suite-rest")
 
 
 def go_test_lane(packages, lane):
@@ -60,6 +61,24 @@ def go_test_lane(packages, lane):
     selected = [package for package in packages if dedicated.get(package, "rest") == lane]
     if not selected:
         raise ValueError("Empty Go test lane: " + lane)
+    return selected
+
+
+def windows_go_test_lane(packages, lane):
+    if lane not in WINDOWS_GO_TEST_LANES:
+        raise ValueError("Windows Go test lane must be one of: " + ", ".join(WINDOWS_GO_TEST_LANES))
+    groups = {
+        "suite-cli": ("cli",),
+        "suite-values": ("values",),
+        "suite-tasks": ("tasks",),
+        "suite-handoff": ("valuehandoff", "runnerengine"),
+        "suite-runtime": ("expose", "lifecycle", "process", "proxy", "services"),
+    }
+    dedicated = {"github.com/jinyongp/devtools/internal/" + name: group
+                 for group, names in groups.items() for name in names}
+    selected = [package for package in packages if dedicated.get(package, "suite-rest") == lane]
+    if not selected:
+        raise ValueError("Empty Windows Go test lane: " + lane)
     return selected
 
 
@@ -108,6 +127,11 @@ def main(args):
             raise ValueError("test-go-lane requires one of: " + ", ".join(GO_TEST_LANES))
         packages = subprocess.check_output(["go", "list", "./..."], text=True).splitlines()
         run(["go", "test", *([] if os.name == "nt" else ["-race"]), *go_test_lane(packages, extra[0])])
+    elif action == "windows-go-packages":
+        if len(extra) != 1 or extra[0] not in WINDOWS_GO_TEST_LANES:
+            raise ValueError("windows-go-packages requires one of: " + ", ".join(WINDOWS_GO_TEST_LANES))
+        packages = subprocess.check_output(["go", "list", "./..."], text=True).splitlines()
+        print("\n".join(windows_go_test_lane(packages, extra[0])))
     elif action == "check":
         check_static()
         # Native ARM64 Windows has no Go race detector. Unix keeps the existing

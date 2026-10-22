@@ -82,11 +82,13 @@ function Require-HumanGuidance([string]$Text, [string]$Directory) {
 try {
     $packageRoot = $PWD.Path
     if ($PackageCommit) {
-        & git fetch --no-tags --depth=1 origin $PackageCommit
-        Require ($LASTEXITCODE -eq 0) 'Cannot fetch the original package source.'
+        $packageOrigin = (& git remote get-url origin).Trim()
+        Require ($LASTEXITCODE -eq 0) 'Cannot resolve the original package repository.'
         $packageRoot = Join-Path $root 'package-source'
-        & git clone --shared --no-checkout --quiet $PWD.Path $packageRoot
+        & git init --quiet $packageRoot
         Require ($LASTEXITCODE -eq 0) 'Cannot prepare the original package checkout.'
+        & git -C $packageRoot fetch --no-tags --depth=1 $packageOrigin $PackageCommit
+        Require ($LASTEXITCODE -eq 0) 'Cannot fetch the original package source.'
         & git -C $packageRoot checkout --quiet --detach $PackageCommit
         Require ($LASTEXITCODE -eq 0) 'Cannot select the original package commit.'
         Require ((& git -C $packageRoot rev-parse HEAD).Trim() -ceq $PackageCommit) 'Original package source identity mismatch.'

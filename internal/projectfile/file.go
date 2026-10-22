@@ -44,40 +44,64 @@ func Error(code, reason string, cause error) *protocol.Error {
 	if errors.As(cause, &errno) {
 		e.Details["facts"] = map[string]any{"os_code": uint64(errno)}
 	}
+	var call *os.SyscallError
+	if errors.As(cause, &call) {
+		e = atStage(e, call.Syscall)
+	}
 	return e
 }
+
+// Stages are code-defined labels. Never copy raw OS error text, paths, file
+// contents, or attribute/ACL values into diagnostic facts.
+func atStage(e *protocol.Error, stage string) *protocol.Error {
+	facts, _ := e.Details["facts"].(map[string]any)
+	if facts == nil {
+		facts = map[string]any{}
+		e.Details["facts"] = facts
+	}
+	if inner, ok := facts["stage"].(string); ok {
+		stage += "." + inner
+	}
+	facts["stage"] = stage
+	return e
+}
+
+func ioFailure(stage string, cause error) *protocol.Error {
+	return atStage(Error("io_error", ioReason(cause), cause), stage)
+}
+
 func Read(path string) (*Snapshot, *protocol.Error) {
 	// Opening a FIFO must not block before the regular-file check below.
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return nil, Error("io_error", ioReason(err), err)
+		return nil, ioFailure("read.open", err)
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil {
-		return nil, Error("io_error", ioReason(err), err)
+		return nil, ioFailure("read.stat", err)
 	}
 	if !info.Mode().IsRegular() {
 		return nil, Error("config_unsafe_target", "not_regular", nil)
 	}
 	data, err := io.ReadAll(io.LimitReader(f, configcontract.Limit+1))
 	if err != nil {
-		return nil, Error("io_error", ioReason(err), err)
+		return nil, ioFailure("read.content", err)
 	}
 	if len(data) > configcontract.Limit {
 		return nil, protocol.NewError("invalid_config", "Project configuration exceeds 2 MiB.", 3, map[string]any{"reason": "limit_exceeded"})
 	}
 	identity, security, err := metadata(f, info)
 	if err != nil {
-		return nil, Error("io_error", ioReason(err), err)
+		return nil, ioFailure("read.metadata", err)
 	}
 	canonical, err := location.Canonical(path)
 	if err != nil {
-		return nil, Error("io_error", ioReason(err), err)
+		return nil, ioFailure("read.canonicalize", err)
 	}
 	parent, err := os.Stat(filepath.Dir(path))
 	if err != nil {
-		return nil, Error("io_error", ioReason(err), err)
+		return nil, ioFailure("read.parent_stat", err)
 	}
 	h := sha256.New()
 	for _, field := range [][]byte{[]byte("devtools-config-revision-v1"), []byte(canonical), []byte(identity), []byte(security), data} {
@@ -136,11 +160,11 @@ func publish(ctx context.Context, s *Snapshot, data []byte, ops publication) (*S
 		return nil, Error("config_unsafe_target", "unsafe_file", err)
 	}
 	if e := s.Recheck(); e != nil {
-		return nil, e
+		return nil, atStage(e, "publish.initial_recheck")
 	}
 	f, err := os.CreateTemp(filepath.Dir(s.Path), ".devtools-edit-*")
 	if err != nil {
-		return nil, Error("io_error", ioReason(err), err)
+		return nil, ioFailure("publish.create_candidate", err)
 	}
 	name := f.Name()
 	cleanup := true
@@ -152,24 +176,27 @@ func publish(ctx context.Context, s *Snapshot, data []byte, ops publication) (*S
 	}()
 	stage("created")
 	if err = copyMetadata(s, f); err != nil {
-		return nil, Error("config_write_unsupported", "permission_preservation", err)
+		return nil, atStage(Error("config_write_unsupported", "permission_preservation", err), "publish.copy_metadata")
 	}
+	writeStage := "publish.write_candidate"
 	if _, err = f.Write(data); err == nil {
 		stage("written")
+		writeStage = "publish.sync_candidate"
 		err = f.Sync()
 		if err == nil {
 			stage("flushed")
 		}
 	}
 	if err == nil {
+		writeStage = "publish.close_candidate"
 		err = f.Close()
 	}
 	if err != nil {
-		return nil, Error("io_error", ioReason(err), err)
+		return nil, ioFailure(writeStage, err)
 	}
 	candidate, e := Read(name)
 	if e != nil {
-		return nil, e
+		return nil, atStage(e, "publish.read_candidate")
 	}
 	if !bytes.Equal(candidate.Bytes, data) || candidate.security != s.security {
 		return nil, Error("config_write_unsupported", "permission_preservation", nil)
@@ -181,7 +208,7 @@ func publish(ctx context.Context, s *Snapshot, data []byte, ops publication) (*S
 		return nil, Error("config_unsafe_target", "unsafe_file", err)
 	}
 	if e := s.Recheck(); e != nil {
-		return nil, e
+		return nil, atStage(e, "publish.final_recheck")
 	}
 	publishFile := ops.replace
 	if publishFile == nil {
@@ -195,7 +222,7 @@ func publish(ctx context.Context, s *Snapshot, data []byte, ops publication) (*S
 	if publishErr != nil || uncertain {
 		if committed || uncertain {
 			cleanup = false
-			e := Error("config_commit_uncertain", "publication_uncertain", publishErr)
+			e := atStage(Error("config_commit_uncertain", "publication_uncertain", publishErr), "publish.replace")
 			effect := "unknown"
 			if committed {
 				effect = "committed"
@@ -222,7 +249,7 @@ func publish(ctx context.Context, s *Snapshot, data []byte, ops publication) (*S
 		if errors.As(publishErr, &specific) {
 			return nil, specific
 		}
-		return nil, Error("io_error", ioReason(publishErr), publishErr)
+		return nil, ioFailure("publish.replace", publishErr)
 	}
 	now, e := Read(s.Path)
 	if e != nil || !bytes.Equal(now.Bytes, data) || now.security != s.security || !os.SameFile(now.Info, candidate.Info) {
@@ -236,10 +263,13 @@ func publish(ctx context.Context, s *Snapshot, data []byte, ops publication) (*S
 		case now.security != s.security:
 			field = "permissions"
 		}
-		failure := Error("config_commit_uncertain", "post_publication_observation", nil)
+		failure := atStage(Error("config_commit_uncertain", "post_publication_observation", nil), "publish.observe")
 		failure.Details["effects"] = "committed"
 		failure.Details["retry"] = "inspect_first"
-		failure.Details["facts"] = map[string]any{"field": field}
+		failure.Details["facts"].(map[string]any)["field"] = field
+		if e != nil {
+			failure.Details["causes"] = []any{map[string]any{"code": e.Code, "details": e.Details}}
+		}
 		if backup != "" {
 			failure.Details["facts"].(map[string]any)["backup_name"] = filepath.Base(backup)
 		}
@@ -247,10 +277,10 @@ func publish(ctx context.Context, s *Snapshot, data []byte, ops publication) (*S
 	}
 	if backup != "" {
 		if err := os.Remove(backup); err != nil {
-			failure := Error("config_commit_uncertain", "backup_cleanup", err)
+			failure := atStage(Error("config_commit_uncertain", "backup_cleanup", err), "publish.backup_cleanup")
 			failure.Details["effects"] = "committed"
 			failure.Details["retry"] = "inspect_first"
-			failure.Details["facts"] = map[string]any{"backup_name": filepath.Base(backup)}
+			failure.Details["facts"].(map[string]any)["backup_name"] = filepath.Base(backup)
 			return nil, failure
 		}
 	}

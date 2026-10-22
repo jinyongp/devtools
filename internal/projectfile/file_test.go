@@ -4,13 +4,42 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/jinyongp/devtools/internal/protocol"
 )
+
+func TestIOFailureRetainsSafeStagesAndErrno(t *testing.T) {
+	cause := os.NewSyscallError("flistxattr.size", &os.PathError{Op: "read", Path: "private-path-and-value", Err: syscall.EIO})
+	failure := atStage(ioFailure("read.metadata", cause), "publish.read_candidate")
+	public := protocol.Public(failure, "config.format")
+	facts := public.Details["facts"].(map[string]any)
+	if public.Code != "io_error" || public.Details["reason"] != "io_failure" || public.Details["effects"] != "none" || facts["os_code"] != uint64(syscall.EIO) || facts["stage"] != "publish.read_candidate.read.metadata.flistxattr.size" {
+		t.Fatalf("I/O diagnosis lost context: code=%s details=%v", public.Code, public.Details)
+	}
+	encoded, err := json.Marshal(public)
+	if err != nil || strings.Contains(string(encoded), "private-path-and-value") {
+		t.Fatal("raw OS cause was exposed", err)
+	}
+}
+
+func TestReadFailureIdentifiesOpenStage(t *testing.T) {
+	_, failure := Read(filepath.Join(t.TempDir(), "absent.toml"))
+	if failure == nil || failure.Code != "io_error" || failure.Details["reason"] != "not_found" {
+		t.Fatal("missing project did not fail", failure)
+	}
+	facts := failure.Details["facts"].(map[string]any)
+	if facts["stage"] != "read.open" || facts["os_code"] == nil {
+		t.Fatal("missing project lost its OS diagnosis", failure.Details)
+	}
+}
 
 func fileFixture(t *testing.T) (string, *Snapshot) {
 	t.Helper()
@@ -20,7 +49,7 @@ func fileFixture(t *testing.T) (string, *Snapshot) {
 	}
 	s, e := Read(path)
 	if e != nil {
-		t.Fatal(e)
+		t.Fatalf("read fixture: code=%s details=%v", e.Code, e.Details)
 	}
 	return path, s
 }
@@ -78,10 +107,13 @@ func TestPublicationFailureOutcomes(t *testing.T) {
 		if err != nil {
 			return committed, uncertain, backup, err
 		}
-		return true, false, backup, errors.New("injected post-publication sync failure")
+		return true, false, backup, os.NewSyscallError("directory_sync", syscall.EIO)
 	}})
 	if e == nil || e.Code != "config_commit_uncertain" || e.Details["effects"] != "committed" || e.Details["retry"] != "inspect_first" || e.Details["phase"] != "publish" {
 		t.Fatal(e)
+	}
+	if facts := e.Details["facts"].(map[string]any); facts["stage"] != "publish.replace.directory_sync" || facts["os_code"] != uint64(syscall.EIO) {
+		t.Fatal("committed sync failure lost its OS diagnosis", e.Details)
 	}
 	data, _ = os.ReadFile(path)
 	if string(data) != "profile='next'\n" {
@@ -92,6 +124,52 @@ func TestPublicationFailureOutcomes(t *testing.T) {
 	}
 	if e = s.Recheck(); e == nil {
 		t.Fatal("later writer was accepted as old state")
+	}
+}
+
+func TestPostPublicationReadFailureRetainsCause(t *testing.T) {
+	path, snapshot := fileFixture(t)
+	_, failure := publish(context.Background(), snapshot, []byte("profile='next'\n"), publication{stage: func(stage string) {
+		if stage == "published" {
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}})
+	if failure == nil || failure.Code != "config_commit_uncertain" || failure.Details["effects"] != "committed" || failure.Details["phase"] != "observe" || failure.Details["retry"] != "inspect_first" {
+		t.Fatal("post-publication failure changed recovery semantics", failure)
+	}
+	public := protocol.Public(failure, "config.format")
+	causes := public.Details["causes"].([]any)
+	if len(causes) != 1 {
+		t.Fatal("post-publication read cause was lost", public.Details)
+	}
+	cause := causes[0].(map[string]any)
+	facts := cause["facts"].(map[string]any)
+	if cause["code"] != "io_error" || cause["reason"] != "not_found" || facts["stage"] != "read.open" || facts["os_code"] == nil {
+		t.Fatal("post-publication read cause lost its diagnosis", cause)
+	}
+}
+
+func TestBackupCleanupFailureRetainsErrno(t *testing.T) {
+	_, snapshot := fileFixture(t)
+	backup := filepath.Join(t.TempDir(), "retained-backup")
+	if err := os.Mkdir(backup, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(backup, "occupied"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, failure := publish(context.Background(), snapshot, []byte("profile='next'\n"), publication{replace: func(ctx context.Context, source, candidate *Snapshot) (bool, bool, string, error) {
+		committed, uncertain, _, err := replace(ctx, source, candidate)
+		return committed, uncertain, backup, err
+	}})
+	if failure == nil || failure.Code != "config_commit_uncertain" || failure.Details["reason"] != "backup_cleanup" || failure.Details["effects"] != "committed" {
+		t.Fatal("backup cleanup did not report its committed outcome", failure)
+	}
+	facts := failure.Details["facts"].(map[string]any)
+	if facts["stage"] != "publish.backup_cleanup" || facts["os_code"] == nil || facts["backup_name"] != "retained-backup" {
+		t.Fatal("backup cleanup lost its OS diagnosis", failure.Details)
 	}
 }
 func TestPublicationRefusesHardlinkAndReadonly(t *testing.T) {

@@ -21,12 +21,12 @@ func attributes(f *os.File) (map[string][]byte, error) {
 		return map[string][]byte{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, os.NewSyscallError("flistxattr.size", err)
 	}
 	buf := make([]byte, n)
 	n, err = unix.Flistxattr(int(f.Fd()), buf)
 	if err != nil {
-		return nil, err
+		return nil, os.NewSyscallError("flistxattr.data", err)
 	}
 	attrs := map[string][]byte{}
 	for _, name := range strings.Split(string(buf[:n]), "\x00") {
@@ -35,12 +35,12 @@ func attributes(f *os.File) (map[string][]byte, error) {
 		}
 		n, err := unix.Fgetxattr(int(f.Fd()), name, nil)
 		if err != nil {
-			return nil, err
+			return nil, os.NewSyscallError("fgetxattr.size", err)
 		}
 		v := make([]byte, n)
 		n, err = unix.Fgetxattr(int(f.Fd()), name, v)
 		if err != nil {
-			return nil, err
+			return nil, os.NewSyscallError("fgetxattr.data", err)
 		}
 		attrs[name] = v[:n]
 	}
@@ -124,9 +124,9 @@ func replace(_ context.Context, s, candidate *Snapshot) (bool, bool, string, err
 	}
 	dir, err := os.Open(filepath.Dir(s.Path))
 	if err != nil {
-		return true, false, "", err
+		return true, false, "", os.NewSyscallError("directory_open", err)
 	}
 	defer dir.Close()
 	err = dir.Sync()
-	return true, false, "", err
+	return true, false, "", os.NewSyscallError("directory_sync", err)
 }

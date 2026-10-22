@@ -56,11 +56,13 @@ func getACL(f *os.File) (uintptr, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	acl := aclAPI.get(int32(f.Fd()), aclExtended)
+	operation := "acl_get_fd_np"
 	if acl == 0 && syscall.Errno(*aclAPI.errno()) == syscall.ENOENT {
+		operation = "acl_init"
 		acl = aclAPI.init(0)
 	}
 	if acl == 0 {
-		return 0, syscall.Errno(*aclAPI.errno())
+		return 0, os.NewSyscallError(operation, syscall.Errno(*aclAPI.errno()))
 	}
 	return acl, nil
 }
@@ -71,11 +73,17 @@ func extendedACL(f *os.File) (string, error) {
 	}
 	defer aclAPI.free(acl)
 	var n int64
+	runtime.LockOSThread()
 	p := aclAPI.text(acl, &n)
-	if p == nil || n < 0 || n > 1<<20 {
-		return "", errors.New("ACL text unavailable")
+	errno := syscall.Errno(*aclAPI.errno())
+	runtime.UnlockOSThread()
+	if p == nil {
+		return "", os.NewSyscallError("acl_to_text", errno)
 	}
 	defer aclAPI.free(uintptr(unsafe.Pointer(p)))
+	if n < 0 || n > 1<<20 {
+		return "", os.NewSyscallError("acl_to_text", errors.New("invalid ACL text length"))
+	}
 	return string(unsafe.Slice(p, int(n))), nil
 }
 func copyExtendedACL(src, dst *os.File) error {
@@ -84,8 +92,12 @@ func copyExtendedACL(src, dst *os.File) error {
 		return err
 	}
 	defer aclAPI.free(acl)
-	if aclAPI.set(int32(dst.Fd()), acl, aclExtended) != 0 {
-		return errors.New("extended ACL copy failed")
+	runtime.LockOSThread()
+	result := aclAPI.set(int32(dst.Fd()), acl, aclExtended)
+	errno := syscall.Errno(*aclAPI.errno())
+	runtime.UnlockOSThread()
+	if result != 0 {
+		return os.NewSyscallError("acl_set_fd_np", errno)
 	}
 	return nil
 }

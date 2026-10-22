@@ -21,7 +21,7 @@ func fixture(t *testing.T, text string) (string, string) {
 	}
 	s, e := projectfile.Read(path)
 	if e != nil {
-		t.Fatal(e)
+		t.Fatalf("read fixture: code=%s details=%v", e.Code, e.Details)
 	}
 	return path, s.Revision
 }
@@ -174,14 +174,17 @@ func TestFormatIdempotentAndSchema(t *testing.T) {
 	path, _ := fixture(t, "profile='sample'\n[commands.check]\nexec=['node'] # preserve\n")
 	out, e := Evaluate(context.Background(), path, Input{Format: true})
 	if e != nil {
-		t.Fatal(e)
+		t.Fatalf("format first pass: code=%s details=%v", e.Code, e.Details)
 	}
 	result := out.(Result)
 	if !result.Changed {
 		t.Fatal(result)
 	}
 	out, e = Evaluate(context.Background(), path, Input{Format: true})
-	if e != nil || out.(Result).WouldChange {
+	if e != nil {
+		t.Fatalf("format second pass: code=%s details=%v", e.Code, e.Details)
+	}
+	if out.(Result).WouldChange {
 		t.Fatal(out, e)
 	}
 }

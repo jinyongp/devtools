@@ -217,6 +217,10 @@ project-file 전용 adapter를 사용한다. private storage의 ACL 강제 helpe
 4. 원본 identity·bytes·권한을 재확인한다. 차이가 있으면 config_revision_conflict다.
 5. POSIX는 같은 filesystem의 rename 후 parent directory sync를 사용한다.
 6. Windows는 같은 volume의 ReplaceFileW를 사용하고 ACL merge 오류 무시 flag는 사용하지 않는다.
+   교체 candidate의 보안 handle을 share-delete로 고정하고 file ID를 확인한다. ReplaceFileW가
+   상속 ACE를 명시 항목으로 복사한 뒤 부모 ACE를 중복 전파할 수 있으므로, 고정한 handle에
+   원본 DACL과 보호 상태를 복원한다. 경로를 다시 열어 후속 작성자의 권한을 변경하지 않는다.
+   복원 실패는 이미 게시된 상태의 결과 불명 오류로 보고하고 backup을 보존한다.
    기존 파일의 복구용 backup 이름을 지정하고, 성공 후 대상·권한을 검증한 뒤 backup을 제거한다.
    sharing violation의 제한된 재시도마다 원본·candidate identity를 재검사한다.
 7. 게시 결과를 확인한 뒤 반환한다. orphan candidate는 원본이나 다른 writer의 파일임이 아닌 것을 확인한 경우만 정리한다.

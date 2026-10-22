@@ -70,7 +70,28 @@ jobs:
         run: ./bin/devtools run check:static
       - name: Native Go race tests
         if: matrix.lane != 'static'
-        run: python3 -B scripts/project.py test-go-lane '${{ matrix.lane }}'
+        shell: bash
+        run: |
+          mkdir -p bin/ci-evidence
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > bin/ci-evidence/started-at.txt
+          git rev-parse HEAD > bin/ci-evidence/source-commit.txt
+          go version > bin/ci-evidence/go-version.txt
+          go env -json GOOS GOARCH GOVERSION CGO_ENABLED > bin/ci-evidence/go-environment.json
+          uname -a > bin/ci-evidence/kernel.txt
+          df -h . "$RUNNER_TEMP" > bin/ci-evidence/disk.txt
+          printf 'run_id=%s\nattempt=%s\nrunner_os=%s\nrunner_arch=%s\nimage_os=%s\nimage_version=%s\n' \
+            "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$RUNNER_OS" "$RUNNER_ARCH" \
+            "${ImageOS:-unknown}" "${ImageVersion:-unknown}" \
+            > bin/ci-evidence/run.txt
+          python3 -B scripts/project.py test-go-lane '${{ matrix.lane }}' 2>&1 | tee bin/ci-evidence/go-tests.log
+      - name: Preserve native test evidence
+        if: ${{ always() && matrix.lane != 'static' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unix-tests-${{ matrix.os }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}
+          path: bin/ci-evidence/
+          if-no-files-found: warn
+          retention-days: 30
 
   handoff:
     name: ${{ matrix.os }} / installed local handoff

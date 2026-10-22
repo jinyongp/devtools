@@ -56,6 +56,15 @@ Release에서는 설치 시나리오·프로필 교환용 export도 Go 검사와
 Linux의 Chromium·Skill discovery 검사는 별도 작업이다. 모든 작업이 성공해야
 패키징·게시로 진행한다. Go 캐시는 검사 작업별로 분리한다.
 
+Unix의 네 Go race 작업은 성공·실패 모두 `unix-tests-<OS>-<lane>-attempt-<번호>`
+아티팩트에 테스트 로그, 실제 소스 SHA, 시작 시각, Go·OS 이미지·CPU 아키텍처·디스크 정보를
+30일간 보존한다.
+재실행은 새 attempt 이름으로 저장하므로 첫 실패의 근거를 덮어쓰지 않는다.
+설정 내용과 전체 환경 변수는 수집하지 않는다. 설정 포맷 테스트가 실패하면
+첫째·둘째 평가를 구분하고 오류 코드·`facts.stage`·`facts.os_code`를 확인한다.
+프로젝트 파일의 읽기·메타데이터·게시 단계와 macOS ACL 시스템 호출을 구분하며,
+게시 후 관찰 실패는 `causes`에 원래 읽기 오류를 남긴다.
+
 Windows의 전체 Go suite는 한 runner 안에서 패키지를 순차 실행한다(`go test -p 1`).
 실제 Argon2 파생이 여러 패키지에서 runner의 CPU를 동시에 점유하면 프로세스 재시작·
 IPC 검사의 기존 기한을 넘길 수 있기 때문이다. x64·ARM64와 제품·설치·race 작업의

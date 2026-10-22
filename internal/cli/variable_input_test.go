@@ -16,28 +16,73 @@ import (
 )
 
 func TestVariableInputPreservesValuesWithoutVault(t *testing.T) {
-	app := testApp(t)
 	file := filepath.Join(privateTempDir(t), "value")
-	for _, value := range []string{"", "  첫 줄\r\n$NAME\n\n"} {
-		if err := os.WriteFile(file, []byte(value), 0600); err != nil {
+	for _, value := range []struct{ name, text string }{{"empty", ""}, {"multiline", "  첫 줄\r\n$NAME\n\n"}} {
+		if err := os.WriteFile(file, []byte(value.text), 0600); err != nil {
 			t.Fatal(err)
 		}
 		for _, input := range []struct {
-			name  string
-			flags []string
+			name, command string
+			flags         []string
 		}{
-			{"var", []string{"--value", value}},
-			{"var", []string{"--stdin"}},
-			{"variable", []string{"--file", file}},
+			{"literal", "var", []string{"--value", value.text}},
+			{"stdin", "var", []string{"--stdin"}},
+			{"file", "variable", []string{"--file", file}},
 		} {
-			args := append([]string{input.name, "set", "TEXT", "--profile", "app"}, input.flags...)
-			if code, _, diagnostic := invoke(t, app, value, args...); code != 0 {
-				t.Fatal(args, code, diagnostic)
-			}
-			got := outputData(t, app, []string{"var", "get", "TEXT", "--profile", "app"})
-			if got["value"] != value {
-				t.Fatalf("%v: value=%q want=%q", input.flags, got["value"], value)
-			}
+			t.Run(value.name+"/"+input.name, func(t *testing.T) {
+				app := testApp(t)
+				args := append([]string{input.command, "set", "TEXT", "--profile", "app"}, input.flags...)
+				for _, changed := range []bool{true, false} {
+					code, out, diagnostic := invoke(t, app, value.text, args...)
+					var envelope struct {
+						Data struct{ Changed bool }
+					}
+					if code != 0 || json.Unmarshal([]byte(out), &envelope) != nil || envelope.Data.Changed != changed {
+						t.Fatalf("changed=%t: code=%d out=%s err=%s", changed, code, out, diagnostic)
+					}
+					got := outputData(t, app, []string{"var", "get", "TEXT", "--profile", "app"})
+					if got["value"] != value.text {
+						t.Fatalf("value=%q want=%q", got["value"], value.text)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestVariableInputCreatesEnvironmentOverride(t *testing.T) {
+	const value = "  local\r\n$NAME\n"
+	file := filepath.Join(privateTempDir(t), "value")
+	if err := os.WriteFile(file, []byte(value), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range []string{"stdin", "file"} {
+		for _, mode := range []string{"legacy", "guarded"} {
+			t.Run(source+"/"+mode, func(t *testing.T) {
+				app := testApp(t)
+				outputData(t, app, []string{"var", "set", "TEXT", "--profile", "app", "--value", "common"})
+				outputData(t, app, []string{"env", "create", "local", "--profile", "app"})
+				args := []string{"var", "set", "TEXT", "--profile", "app", "--env", "local", "--" + source}
+				if source == "file" {
+					args = append(args, file)
+				}
+				if mode == "guarded" {
+					args = append(args, "--revision", editToken(t, app), "--request-id", tasks.ID(), "--create-only")
+				}
+				if code, _, diagnostic := invoke(t, app, value, args...); code != 0 {
+					t.Fatal(code, diagnostic)
+				}
+				if got := outputData(t, app, []string{"var", "get", "TEXT", "--profile", "app", "--env", "local"}); got["value"] != value {
+					t.Fatal("override was not stored", got)
+				}
+				if got := outputData(t, app, []string{"var", "get", "TEXT", "--profile", "app"}); got["value"] != "common" {
+					t.Fatal("override changed common value", got)
+				}
+				outputData(t, app, []string{"var", "unset", "TEXT", "--profile", "app", "--env", "local"})
+				if got := outputData(t, app, []string{"var", "get", "TEXT", "--profile", "app", "--env", "local"}); got["value"] != "common" {
+					t.Fatal("removing override did not restore common value", got)
+				}
+			})
 		}
 	}
 }

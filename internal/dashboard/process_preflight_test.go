@@ -25,7 +25,12 @@ func TestDashboardProcessStartPreflightRejectsBeforeExecutionRecord(t *testing.T
 		sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)},
 	}
 	root := privateTempDir(t)
-	config := "profile='app'\n[requirements]\nvars=['REQUIRED']\n[commands.web]\nexec=['/bin/true']\ninject=true\n"
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	args, _ := json.Marshal([]string{exe, "-test.run=^$"})
+	config := "profile='app'\n[requirements]\nvars=['REQUIRED']\n[commands.web]\nexec=" + string(args) + "\ninject=true\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}

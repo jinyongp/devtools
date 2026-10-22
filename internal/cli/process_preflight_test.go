@@ -24,7 +24,7 @@ func TestProcessStartPreflightRejectsBeforeExecutionRecord(t *testing.T) {
 		return filepath.Join(data, "profiles"), nil
 	}
 	root := privateTempDir(t)
-	config := "profile='app'\n[requirements]\nvars=['REQUIRED']\n[commands.web]\nexec=['/bin/true']\ninject=true\n"
+	config := "profile='app'\n[requirements]\nvars=['REQUIRED']\n[commands.web]\nexec=" + fixtureExec(t, "true") + "\ninject=true\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,8 @@ func TestProjectPreflightReloadsCurrentConfiguration(t *testing.T) {
 		return filepath.Join(data, "profiles"), nil
 	}
 	root := privateTempDir(t)
-	initial := "profile='app'\n[commands.web]\nexec=['/bin/true']\n"
+	command := fixtureExec(t, "true")
+	initial := "profile='app'\n[commands.web]\nexec=" + command + "\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(initial), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +58,7 @@ func TestProjectPreflightReloadsCurrentConfiguration(t *testing.T) {
 	if failure != nil {
 		t.Fatal(failure)
 	}
-	changed := "profile='app'\n[requirements]\nvars=['REQUIRED']\n[commands.web]\nexec=['/bin/true']\ninject=true\n"
+	changed := "profile='app'\n[requirements]\nvars=['REQUIRED']\n[commands.web]\nexec=" + command + "\ninject=true\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(changed), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +75,7 @@ func TestProcessRestartPreStopValidationPreservesRunningExecution(t *testing.T) 
 		return filepath.Join(data, "profiles"), nil
 	}
 	root := privateTempDir(t)
-	initial := "profile='app'\n[commands.web]\nexec=['/bin/true']\n"
+	initial := "profile='app'\n[commands.web]\nexec=" + fixtureExec(t, "true") + "\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(initial), 0600); err != nil {
 		t.Fatal(err)
 	}

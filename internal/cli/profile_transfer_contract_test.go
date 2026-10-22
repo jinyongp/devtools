@@ -29,7 +29,7 @@ func TestProfileTransferFailureRemedies(t *testing.T) {
 	outputData(t, target, append(append([]string{}, base...), "--apply", preview["digest"].(string), "--request-id", tasks.ID()))
 	existing := outputData(t, target, base)
 	invalidArchive := filepath.Join(root, "invalid.age")
-	if err := os.WriteFile(invalidArchive, []byte("not an encrypted archive"), 0600); err != nil {
+	if err := tasks.WritePrivate(invalidArchive, "not an encrypted archive"); err != nil {
 		t.Fatal(err)
 	}
 

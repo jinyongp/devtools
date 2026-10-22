@@ -63,6 +63,9 @@ func init() {
 		fmt.Print("fixture 1.2.30 CANARY-SECRET\n")
 	case "version":
 		fmt.Print("tool 1.2.3 fixture-secret\n")
+	case "version-fail":
+		fmt.Fprint(os.Stderr, "fixture-secret\n")
+		os.Exit(1)
 	case "env":
 		if len(args) != 1 {
 			os.Exit(2)

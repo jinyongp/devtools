@@ -20,7 +20,7 @@ func TestWindowsManagedBridgePreflightBeforePortProbe(t *testing.T) {
 	probes := 0
 	dependencies := Dependencies{Ports: ports.Store{Directory: filepath.Join(dir, "ports"), Probe: func(int) (bool, *protocol.Error) { probes++; return true, nil }}, PortDefaults: []int{23000, 23100}}
 	failure := Preflight(context.Background(), command, dependencies, os.Environ())
-	if failure == nil || failure.Code != "unsupported_platform" || probes != 0 {
+	if failure == nil || failure.Code != "requirements_failed" || !hasCauseCode(failure, "unsupported_platform") || probes != 0 {
 		t.Fatalf("managed bridge reached port probe: %v probes=%d", failure, probes)
 	}
 	if _, err := os.Stat(dependencies.Ports.Directory); !os.IsNotExist(err) {

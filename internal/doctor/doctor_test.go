@@ -3,7 +3,6 @@ package doctor
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -58,19 +57,14 @@ func TestMetadataAndVersionChecks(t *testing.T) {
 }
 func TestProbeFailureAndCancellation(t *testing.T) {
 	dir := privateTempDir(t)
-	tool := filepath.Join(dir, "tool")
-	if e := os.WriteFile(tool, []byte("#!/bin/sh\necho fixture-secret >&2\nexit 1\n"), 0700); e != nil {
-		t.Fatal(e)
-	}
+	tool := doctorProbeFixture(t, dir, false)
 	in := Input{Directory: dir, Requirements: project.Requirements{Tools: map[string]project.Tool{"tool": {Executable: tool, Version: "1.2.3"}}}}
 	checks := CheckRequirements(context.Background(), in)
 	raw, _ := json.Marshal(checks)
 	if checks[0].Status != "fail" || strings.Contains(string(raw), "fixture-secret") {
 		t.Fatal(checks)
 	}
-	if e := os.WriteFile(tool, []byte("#!/bin/sh\nsleep 30\n"), 0700); e != nil {
-		t.Fatal(e)
-	}
+	in.Requirements.Tools["tool"] = project.Tool{Executable: doctorProbeFixture(t, dir, true), Version: "1.2.3"}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	start := time.Now()

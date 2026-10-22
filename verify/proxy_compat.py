@@ -63,7 +63,9 @@ def free_port():
 
 @contextmanager
 def owned_scratch(result):
-    scratch = Path(tempfile.mkdtemp(prefix="devtools-proxy-compat-"))
+    # Windows TEMP can contain an 8.3 alias (RUNNER~1); Vite intentionally rejects
+    # short-name paths even when their parent appears in its filesystem allowlist.
+    scratch = Path(tempfile.mkdtemp(prefix="devtools-proxy-compat-")).resolve()
     try:
         yield scratch
     finally:

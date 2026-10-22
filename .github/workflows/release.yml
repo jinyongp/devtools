@@ -533,7 +533,7 @@ jobs:
         run: sh scripts/publish-release-tag.sh
       - name: Publish release
         id: publication
-        uses: releaseway/actions@2abdf26c6f01c1e49da4ba5d85253847fe721fd9 # v0.6.3
+        uses: releaseway/actions@a188ef51e8e5f9947e770260888b7346d9b68ba8 # v0.7.3
         with:
           tag: ${{ needs.validate-release.outputs.tag }}
           commit: ${{ inputs.commit }}
@@ -557,7 +557,7 @@ jobs:
     needs: [validate-release, release]
     # An optional skipped ancestor must not suppress post-release publication.
     if: ${{ !cancelled() && needs.validate-release.result == 'success' && needs.release.result == 'success' && !contains(inputs.version, '-') }}
-    uses: releaseway/homebrew-actions/.github/workflows/publish.yml@8fe42d36a7f93a3c399461efbe571fc695d4cdc6 # v0.4.3
+    uses: releaseway/homebrew-actions/.github/workflows/publish.yml@7e351bd4f3ea1aa0070e4d6556bb5130df2401e6 # v0.5.3
     with:
       commit: ${{ inputs.commit }}
       version: ${{ needs.validate-release.outputs.tag }}

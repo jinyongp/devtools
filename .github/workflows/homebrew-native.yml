@@ -1,0 +1,103 @@
+name: Homebrew native validation
+
+on:
+  workflow_dispatch:
+
+# Validate the selected commit without publishing a release or changing a tap.
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      matrix: ${{ steps.formula.outputs.runner-matrix }}
+      context: ${{ steps.formula.outputs.formula-context }}
+      formula: ${{ steps.formula.outputs.formula }}
+      formula-path: ${{ steps.formula.outputs.formula-path }}
+      invocation: ${{ steps.invocation.outputs.id }}
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: releaseway/homebrew-actions
+          ref: 7e351bd4f3ea1aa0070e4d6556bb5130df2401e6 # v0.5.3
+          path: automation
+          persist-credentials: false
+      - id: invocation
+        run: echo "id=$(cat /proc/sys/kernel/random/uuid)" >> "$GITHUB_OUTPUT"
+      - id: formula
+        uses: ./automation/internal/formula
+        with:
+          tap-path: tap
+          source-path: source
+          repository: ${{ github.repository }}
+          commit: ${{ github.sha }}
+          version: 0.0.${{ github.run_number }}
+          validation-mode: release
+      - id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-formula
+          path: tap/Formula/*.rb
+          if-no-files-found: error
+          retention-days: 7
+
+  validate:
+    needs: generate
+    runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.generate.outputs.matrix) }}
+    env:
+      FORMULA_CONTEXT: ${{ needs.generate.outputs.context }}
+      INVOCATION_ID: ${{ needs.generate.outputs.invocation }}
+      AUTOMATION_REPOSITORY: releaseway/homebrew-actions
+      AUTOMATION_SHA: 7e351bd4f3ea1aa0070e4d6556bb5130df2401e6
+      PLATFORM: ${{ matrix.target.platform }}
+      REQUESTED_RUNNER: ${{ matrix.target.runner }}
+      FORMULA_PATH: tap/${{ needs.generate.outputs.formula-path }}
+      NATIVE_RUNTIME: native-runtime.json
+      NATIVE_RECEIPT: receipt.json
+    steps:
+      - name: Setup Homebrew
+        if: runner.os == 'Linux'
+        uses: Homebrew/actions/setup-homebrew@4790763c0a3ba4036f72634dc079c4a7dfcd4878 # main
+        with:
+          stable: true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: releaseway/homebrew-actions
+          ref: 7e351bd4f3ea1aa0070e4d6556bb5130df2401e6 # v0.5.3
+          path: automation
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.generate.outputs.artifact }}
+          path: tap/Formula
+      - name: Verify native runtime and Formula digest
+        run: ruby automation/internal/scripts/record-formula-validation.rb --preflight
+      - name: Audit, install and test Formula
+        env:
+          TAP_PATH: tap
+          FORMULA: ${{ needs.generate.outputs.formula }}
+          VALIDATION_MODE: release
+        run: bash automation/internal/scripts/validate-formula.sh
+      - name: Record successful native checks
+        env:
+          VALIDATION_SUCCEEDED: 'true'
+        run: ruby automation/internal/scripts/record-formula-validation.rb --record
+      - name: Preserve native validation receipt
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-homebrew-${{ matrix.target.platform }}
+          path: receipt.json
+          if-no-files-found: error
+          retention-days: 30

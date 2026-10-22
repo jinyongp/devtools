@@ -2,6 +2,11 @@ name: devtools
 desc: Agent-first developer environment and task management
 homepage: https://github.com/jinyongp/devtools
 license: MIT
+platforms:
+  - macos-arm64
+  - macos-x86_64
+  - linux-arm64
+  - linux-x86_64
 command_aliases:
   dvt: devtools
 dependencies:

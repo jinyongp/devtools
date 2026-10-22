@@ -372,7 +372,17 @@ Pull Request와 관련 파일의 main push에서는 `.github/workflows/homebrew.
 `releaseway/homebrew-actions` publish 워크플로에 태그 커밋, 버전, 목적지 tap과
 배포 키를 전달한다. 워크플로는 태그 커밋의 소스로 Formula를 생성하고 native Homebrew
 검증을 통과한 뒤 `jinyongp/homebrew-tap`의 `Formula/devtools.rb`를 직접 갱신한다.
+[Formula spec](../.github/homebrew/formula.yml)의 `platforms`는 macOS와 Linux의 ARM64·x64 네 대상을 명시한다.
+게시 전 각 대상의 native runner에서 audit·설치·Formula test를 모두 통과해야 한다.
+일반 PR의 `check.yml`은 spec 렌더링·audit을 검사하며 이 native 설치 검증을 대신하지 않는다.
+게시 워크플로는 source·spec commit과 Formula digest를 각 native 검증 기록에 연결하고,
+원본 검증 기록을 포함한 집계 artifact를 30일간 보관한다.
 사전 릴리스는 GitHub Releases에만 게시하고 Homebrew는 건너뛴다.
+
+게시 없이 현재 커밋의 native 설치를 확인하려면
+`.github/workflows/homebrew-native.yml`을 수동 실행한다. spec의 네 플랫폼에서
+동일한 Formula artifact의 digest와 실제 OS·아키텍처를 확인하고 audit·소스 설치·test를
+수행한다. 성공한 플랫폼의 검증 기록은 30일간 보관한다.
 
 배포에는 devtools 저장소의 `HOMEBREW_TAP_DEPLOY_KEY` Actions secret을 사용한다.
 Homebrew 단계가 실패해도 이미 게시된 GitHub Release는 유지되며 해당 job을 다시 실행할 수 있다.

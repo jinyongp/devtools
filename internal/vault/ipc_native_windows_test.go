@@ -19,6 +19,44 @@ import (
 
 func init() { nativePeerFixture = runWindowsPeerFixture }
 
+func TestNativeWindowsSessionEndpointSurvivesBetweenAccepts(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	directory := privateTempDir(t)
+	id, err := NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := listenSession(directory, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	endpoint := sessionEndpoint(directory, id)
+	for range 3 {
+		// Deliberately connect before the next Accept. No worker scheduling or
+		// sleep may be needed to keep an already published endpoint available.
+		client, err := dialSession(ctx, endpoint)
+		if err != nil {
+			t.Fatal("published endpoint disappeared between connections", err)
+		}
+		server, err := listener.Accept(ctx)
+		if err != nil {
+			client.Close()
+			t.Fatal(err)
+		}
+		server.Close()
+		client.Close()
+	}
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if client, err := dialSession(ctx, endpoint); err == nil {
+		client.Close()
+		t.Fatal("closed listener retained its endpoint")
+	}
+}
+
 // A deliberately public fixture pipe lets the peer check run independently of
 // the production pipe ACL. No key, session endpoint file or request uses it.
 func nativePeerTestPipe(name string) (windows.Handle, error) {

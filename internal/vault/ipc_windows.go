@@ -73,14 +73,14 @@ func (l *windowsSessionListener) Close() error {
 func (l *windowsSessionListener) Accept(ctx context.Context) (sessionConnection, error) {
 	stop := context.AfterFunc(ctx, l.cancel)
 	defer stop()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	for {
 		if err := l.ctx.Err(); err != nil {
 			return nil, err
 		}
-		l.mu.Lock()
 		h := l.initial
 		l.initial = 0
-		l.mu.Unlock()
 		if h == 0 {
 			var err error
 			h, err = newSessionPipe(l.name, false)
@@ -89,6 +89,23 @@ func (l *windowsSessionListener) Accept(ctx context.Context) (sessionConnection,
 			}
 		}
 		if err := connectSessionPipe(l.ctx, h); err != nil {
+			windows.CloseHandle(h)
+			return nil, err
+		}
+		// Keep a server instance alive before handing this connection to its
+		// worker. Closing the last instance removes the named endpoint, so a
+		// fast following client could otherwise see ERROR_FILE_NOT_FOUND
+		// before the accept loop creates its next pipe.
+		next, err := newSessionPipe(l.name, false)
+		if err == nil {
+			err = l.ctx.Err()
+		}
+		if err == nil {
+			l.initial = next
+		} else if next != 0 {
+			windows.CloseHandle(next)
+		}
+		if err != nil {
 			windows.CloseHandle(h)
 			return nil, err
 		}

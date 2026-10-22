@@ -57,8 +57,55 @@ Tailscale은 host와 준비된 두 번째 tailnet 장치 모두 1.104.2여야 �
 `--provider tailscale --live --peer-network container:tailscale-peer`를 사용한다.
 두 장치 IP가 같거나 로그인·HTTPS·전용 Serve 포트 8443/8444가 준비되지 않았으면 실패한다.
 Serve 설정의 전후 일치와 소유 handler 정리를 검사한다. 모의 LocalAPI 검사를 실제 tailnet
-결과로 기록하지 않는다. Actions의 명시 tailscale job은 재사용 가능한 ephemeral `TS_AUTHKEY`와
-tailnet의 HTTPS/Serve 권한이 필요하다. 비밀이 없는 job은 전제 부재로 실패하며 pass/skip으로 바꾸지 않는다.
+결과로 기록하지 않는다. Actions의 명시 tailscale job은 GitHub OIDC로 runner와 peer를 각각
+ephemeral·pre-approved 장치로 등록한다. 개인 계정·개인망과 분리한 전용 테스트 tailnet을 사용한다.
+OIDC 설정이나 HTTPS/Serve 권한이 없으면 전제 부재로 실패하며 pass/skip으로 바꾸지 않는다.
+
+### Tailscale CI의 최초 OIDC 설정
+
+장기 auth key나 OAuth client secret을 저장하지 않는다. 테스트 tailnet에 federated identity를
+한 번 등록하면 이후 실행에서는 GitHub의 짧은 수명 토큰으로 장치를 등록한다.
+[Tailscale의 공식 GitHub 연동](https://tailscale.com/docs/integrations/github/github-action)과
+[workload identity 설정](https://tailscale.com/docs/features/workload-identity-federation)을 따른다.
+
+1. 테스트 tailnet의 Access controls → Tags → Create tag에서 Tag name은 `ci`, Tag owner는
+   목록의 `autogroup:admin`을 선택해 저장한다. CI 기기 간 TCP 8443/8444를 허용한다.
+   전용 테스트망의 최소 정책 예시는 다음과 같다.
+
+   ```json
+   {
+     "tagOwners": {"tag:ci": ["autogroup:admin"]},
+     "grants": [
+       {"src": ["tag:ci"], "dst": ["tag:ci"], "ip": ["tcp:8443", "tcp:8444"]}
+     ]
+   }
+   ```
+
+2. [Trust credentials](https://console.tailscale.com/admin/settings/trust-credentials)에서
+   Credential → OpenID Connect를 선택하고 아래 값으로 등록한다.
+
+   | 항목 | 값 |
+   |---|---|
+   | Description | `devtools-ci` |
+   | Issuer | GitHub: `https://token.actions.githubusercontent.com` |
+   | Subject | `repo:jinyongp/devtools:ref:refs/heads/*` |
+   | Custom claim | `event_name` = `workflow_dispatch` |
+   | Scope | Auth Keys의 Write (`auth_keys`) |
+   | Tags | 목록에서 `tag:ci`를 선택한다. 검색 칸에 입력만 한 상태로는 등록할 수 없다. |
+
+3. 생성된 Client ID를 GitHub 저장소 Settings → Secrets and variables → Actions → Variables의
+   `TS_OAUTH_CLIENT_ID`로 저장한다. Client ID는 비밀이 아니다. Audience는 Tailscale의 생성 규칙인
+   `api.tailscale.com/<Client ID>`를 workflow에서 구성한다.
+4. 테스트 tailnet의 MagicDNS와 HTTPS certificates를 활성화하고 Serve를 허용한다.
+5. Unix 또는 compatibility workflow를 해당 branch에서 `live_provider=tailscale`로 dispatch한다.
+   Subject와 custom claim은 이 저장소의 branch에서 명시 실행한 job만 허용한다.
+
+OIDC 권한은 Tailscale job과 이를 호출하는 reusable workflow job에만 전달한다. 개발 서버에는
+GitHub token과 OIDC token 발급 환경 변수를 전달하지 않는다. peer의 등록 권한은 `docker exec`의
+일시적 환경으로만 전달하며 container 설정에 저장하지 않는다. 종료 시 peer는 로그아웃·제거하고
+runner는 Tailscale Action의 종료 처리에서 로그아웃한다.
+
+### 플랫폼별 브라우저와 evidence
 
 Windows는 disposable Actions에서 `--client-mode local --disposable-trust`로 실행한다.
 해당 runner의 hosts에 테스트 hostname의 loopback 항목만 추가하고, 실패 시에도 소유 항목을

@@ -9,9 +9,6 @@ on:
       live_provider:
         type: string
         default: none
-    secrets:
-      TS_AUTHKEY:
-        required: false
   workflow_dispatch:
     inputs:
       live_provider:
@@ -189,12 +186,13 @@ jobs:
 
   proxy-compat:
     name: Proxy compatibility
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/proxy-compat.yml
     with:
       commit: ${{ inputs.commit || github.sha }}
       live_provider: ${{ inputs.live_provider || 'none' }}
-    secrets:
-      TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
 
   validation:
     name: Unix validation

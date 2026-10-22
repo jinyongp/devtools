@@ -9,9 +9,6 @@ on:
       live_provider:
         type: string
         default: none
-    secrets:
-      TS_AUTHKEY:
-        required: false
   workflow_dispatch:
     inputs:
       live_provider:
@@ -192,21 +189,28 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.live_provider == 'tailscale'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
     env:
-      TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+      TS_OAUTH_CLIENT_ID: ${{ vars.TS_OAUTH_CLIENT_ID }}
+      TS_AUDIENCE: api.tailscale.com/${{ vars.TS_OAUTH_CLIENT_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.commit || github.sha }}
       - name: Require prepared tailnet authorization
         run: |
-          if [ -z "$TS_AUTHKEY" ]; then
-            echo 'Required precondition missing: reusable ephemeral TS_AUTHKEY and tailnet HTTPS/Serve permissions.' >&2
+          if [ -z "$TS_OAUTH_CLIENT_ID" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo 'Required precondition missing: test-tailnet TS_OAUTH_CLIENT_ID repository variable, GitHub OIDC permission and tailnet HTTPS/Serve permissions.' >&2
             exit 2
           fi
       - uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4
         with:
-          authkey: ${{ secrets.TS_AUTHKEY }}
+          oauth-client-id: ${{ env.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ env.TS_AUDIENCE }}
+          tags: tag:ci
+          hostname: dvt-origin-${{ github.run_id }}-${{ github.run_attempt }}
           version: 1.104.2
           retry: '1'
           args: --accept-routes=false
@@ -216,7 +220,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22.22.2'
-      - name: Prepare a distinct disposable peer and candidate
+      - name: Prepare the candidate and peer image
         env:
           VERSION: 0.0.0-proxy-compat
           COMMIT: ${{ inputs.commit || github.sha }}
@@ -225,10 +229,18 @@ jobs:
           corepack pnpm install --frozen-lockfile --ignore-scripts
           corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts
           docker build -t devtools-proxy-browser:1.63.0 verify/proxy-browser
-          docker run -d --name tailscale-peer --cap-add NET_ADMIN --device /dev/net/tun -e TS_AUTHKEY -e TS_USERSPACE=false -e TS_HOSTNAME="dvt-peer-$GITHUB_RUN_ID" tailscale/tailscale:v1.104.2
+          docker pull tailscale/tailscale:v1.104.2
           python3 -B scripts/package.py
           mkdir -p bin/candidate
           tar -xzf dist/devtools_0.0.0-proxy-compat_linux_amd64.tar.gz -C bin/candidate
+      - name: Enroll a distinct ephemeral peer with GitHub OIDC
+        run: |
+          docker run -d --name tailscale-peer --cap-add NET_ADMIN --device /dev/net/tun --entrypoint tailscaled tailscale/tailscale:v1.104.2 --state=mem:
+          timeout 30s docker exec tailscale-peer sh -c 'until [ -S /var/run/tailscale/tailscaled.sock ]; do sleep 0.1; done'
+          docker exec -e ACTIONS_ID_TOKEN_REQUEST_URL -e ACTIONS_ID_TOKEN_REQUEST_TOKEN tailscale-peer tailscale up \
+            --client-id="$TS_OAUTH_CLIENT_ID?preauthorized=true&ephemeral=true" \
+            --audience="$TS_AUDIENCE" --advertise-tags=tag:ci --accept-routes=false \
+            --hostname="dvt-peer-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --timeout=60s
       - name: Real tailnet RPC, HMR, messages and owned Serve cleanup
         run: |
           python3 - <<'PY'

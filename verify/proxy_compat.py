@@ -245,16 +245,22 @@ def loopback_mapping(hosts, hostname):
         hosts.write_bytes(current.replace(owned, b"", 1))
 
 
-def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
-    artifacts.mkdir(parents=True)
-    result = {"target": target, "case": case, "scheme": scheme, "policy": policy, "browser": browser, "provider": options.provider, "auth_mode": options.auth_mode}
+def consumer_environment():
+    """Development servers must not inherit CI enrollment credentials."""
     environment = dict(os.environ)
     environment.pop("DEVTOOLS_TASK_CONTEXT", None)
     environment.pop("DEVTOOLS_ISOLATED_ROOT", None)
     environment.pop("PROXY_COMPAT_AUTH", None)
-    for key in ("TS_AUTHKEY", "GH_TOKEN", "GITHUB_TOKEN"):
+    for key in ("TS_AUTHKEY", "GH_TOKEN", "GITHUB_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_TOKEN"):
         environment.pop(key, None)
     environment.update(NUXT_TELEMETRY_DISABLED="1", NEXT_TELEMETRY_DISABLED="1")
+    return environment
+
+
+def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
+    artifacts.mkdir(parents=True)
+    result = {"target": target, "case": case, "scheme": scheme, "policy": policy, "browser": browser, "provider": options.provider, "auth_mode": options.auth_mode}
+    environment = consumer_environment()
     server = None
     sibling_server = None
     configured = False

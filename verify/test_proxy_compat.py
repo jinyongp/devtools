@@ -1,13 +1,26 @@
 """Proxy evidence must not retain credentials from common diagnostic formats."""
 import unittest
+import os
 from pathlib import Path
 import shutil
 import tempfile
 from unittest.mock import patch
-from proxy_compat import loopback_mapping, owned_scratch, redact
+from proxy_compat import consumer_environment, loopback_mapping, owned_scratch, redact
 
 
 class EvidenceRedaction(unittest.TestCase):
+    def test_consumers_cannot_request_github_identity_tokens(self):
+        with patch.dict(os.environ, {
+            "ACTIONS_ID_TOKEN_REQUEST_URL": "https://actions.example.test/token",
+            "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "ci-enrollment-credential",
+            "GITHUB_TOKEN": "ci-repository-credential",
+            "PUBLIC_FIXTURE_VALUE": "fixture-value",
+        }):
+            environment = consumer_environment()
+        for key in ("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "GITHUB_TOKEN"):
+            self.assertNotIn(key, environment)
+        self.assertEqual(environment["PUBLIC_FIXTURE_VALUE"], "fixture-value")
+
     def test_header_and_url_credentials_are_absent(self):
         transcript = "Authorization: Basic dXNlcjpwYXNz\nAuthorization=Bearer application-secret\nCookie=session-cookie\nwss://app.test/socket?token=vite-secret&sid=engine-session&transport=websocket"
         cleaned = redact(transcript)

@@ -221,11 +221,21 @@ func publish(ctx context.Context, s *Snapshot, data []byte, ops publication) (*S
 	now, e := Read(s.Path)
 	if e != nil || !bytes.Equal(now.Bytes, data) || now.security != s.security || !os.SameFile(now.Info, candidate.Info) {
 		cleanup = false
+		field := "identity"
+		switch {
+		case e != nil:
+			field = "read"
+		case !bytes.Equal(now.Bytes, data):
+			field = "content"
+		case now.security != s.security:
+			field = "permissions"
+		}
 		failure := Error("config_commit_uncertain", "post_publication_observation", nil)
 		failure.Details["effects"] = "committed"
 		failure.Details["retry"] = "inspect_first"
+		failure.Details["facts"] = map[string]any{"field": field}
 		if backup != "" {
-			failure.Details["facts"] = map[string]any{"backup_name": filepath.Base(backup)}
+			failure.Details["facts"].(map[string]any)["backup_name"] = filepath.Base(backup)
 		}
 		return nil, failure
 	}

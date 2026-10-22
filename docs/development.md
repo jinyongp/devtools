@@ -246,6 +246,10 @@ Windows 검사는 x64·ARM64 전체 lane의 성공을, Homebrew 검사는 Formul
 Windows focused 실행과 릴리스의 소스 검사 재사용 실행은 `Windows focused validation`으로
 구분하므로 전체 PR 검사를 대신하지 않는다. Homebrew는 비게시 수동 검사도 지원한다.
 
+Windows 설정 파일의 권한 보존·원자적 교체만 재현하려면 `windows-platform.yml`을
+`focus=config`로 수동 실행한다. x64·ARM64에서 `projectfile`과 `configedit` 검사 및 vet를
+수행하고 결과를 artifact에 보관한다. 전체 suite도 같은 검사를 먼저 실행한다.
+
 관리자 예외는 기존 설정을 유지한다. 관리자의 직접 push는 필수 검사를 우회할 수 있으므로
 일반 변경은 PR의 두 검사 결과를 확인한 뒤 병합한다. 문서 변경에도 Windows 전체 검사를
 실행하며, push의 경로 필터는 PR 검사 적용 범위에 영향을 주지 않는다.

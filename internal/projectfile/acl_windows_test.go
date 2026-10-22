@@ -3,6 +3,8 @@ package projectfile
 import (
 	"context"
 	"golang.org/x/sys/windows"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -33,6 +35,44 @@ func TestWindowsPublicationPreservesProtectedACL(t *testing.T) {
 	}
 	if s.security != next.security {
 		t.Fatal("protected ACL was changed")
+	}
+}
+
+func TestWindowsReplacementPreservesSnapshotMetadata(t *testing.T) {
+	path, source := fileFixture(t)
+	f, err := os.CreateTemp(filepath.Dir(path), ".replacement-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	defer os.Remove(f.Name())
+	if err = copyMetadata(source, f); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.Write([]byte("profile='next'\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err = f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	candidate, failure := Read(f.Name())
+	if failure != nil {
+		t.Fatal(failure, failure.Details)
+	}
+	committed, uncertain, backup, err := replace(context.Background(), source, candidate)
+	defer os.Remove(backup)
+	if err != nil || !committed || uncertain {
+		t.Fatalf("replacement: committed=%v uncertain=%v error=%v", committed, uncertain, err)
+	}
+	observed, failure := Read(path)
+	if failure != nil {
+		t.Fatal(failure, failure.Details)
+	}
+	if observed.security != source.security {
+		t.Fatalf("permission identity changed: source=%q candidate=%q observed=%q", source.security, candidate.security, observed.security)
+	}
+	if observed.identity != candidate.identity || !os.SameFile(observed.Info, candidate.Info) {
+		t.Fatalf("file identity changed: candidate=%q observed=%q same_file=%v", candidate.identity, observed.identity, os.SameFile(observed.Info, candidate.Info))
 	}
 }
 

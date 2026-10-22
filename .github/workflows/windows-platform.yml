@@ -22,7 +22,7 @@ on:
         description: Focused feedback; full remains the final completion gate
         type: choice
         default: full
-        options: [full, network, installer, providers, completion, lifecycle, suite, product, race]
+        options: [full, network, installer, providers, completion, lifecycle, suite, product, race, config]
   push:
     paths:
       - .github/workflows/windows-platform.yml
@@ -52,7 +52,7 @@ jobs:
       fail-fast: false
       matrix:
         runner: [windows-2025, windows-11-arm]
-        lane: ${{ fromJSON(inputs.reuse-source && '["product","installer-ps5","installer-ps7","installer-x64"]' || (inputs.focus == 'suite' && '["suite"]') || (inputs.focus == 'race' && '["race"]') || (inputs.focus == 'installer' && '["installer-ps5","installer-ps7","installer-x64"]') || ((inputs.focus == 'completion' || inputs.focus == 'product') && '["product"]') || ((inputs.focus == 'network' || inputs.focus == 'providers' || inputs.focus == 'lifecycle') && '["boundaries"]') || '["suite","boundaries","product","race","installer-ps5","installer-ps7","installer-x64"]') }}
+        lane: ${{ fromJSON(inputs.reuse-source && '["product","installer-ps5","installer-ps7","installer-x64"]' || ((inputs.focus == 'suite' || inputs.focus == 'config') && '["suite"]') || (inputs.focus == 'race' && '["race"]') || (inputs.focus == 'installer' && '["installer-ps5","installer-ps7","installer-x64"]') || ((inputs.focus == 'completion' || inputs.focus == 'product') && '["product"]') || ((inputs.focus == 'network' || inputs.focus == 'providers' || inputs.focus == 'lifecycle') && '["boundaries"]') || '["suite","boundaries","product","race","installer-ps5","installer-ps7","installer-x64"]') }}
         include:
           - runner: windows-2025
             arch: amd64
@@ -160,6 +160,14 @@ jobs:
         run: |
           & go test -json -count=1 -timeout 8m ./internal/valuehandoff ./internal/runnerengine | Tee-Object -FilePath windows-value-handoff-results.jsonl
           if ($LASTEXITCODE -ne 0) { throw 'Native external value handoff component contract failed' }
+
+      - name: Native configuration publication
+        if: ${{ matrix.lane == 'suite' && !inputs.reuse-source }}
+        run: |
+          & go test -json -count=1 -timeout 2m ./internal/projectfile ./internal/configedit | Tee-Object -FilePath windows-config-publication-results.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native configuration publication failed' }
+          & go vet ./internal/projectfile ./internal/configedit
+          if ($LASTEXITCODE -ne 0) { throw 'Native configuration publication vet failed' }
 
       - name: Complete native Go product suite
         if: ${{ matrix.lane == 'suite' && (github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'suite') }}
@@ -398,6 +406,7 @@ jobs:
             windows-record-publication-results.jsonl
             windows-publication-read-results.jsonl
             windows-product-suite-results.jsonl
+            windows-config-publication-results.jsonl
             windows-value-handoff-results.jsonl
             windows-native-peer-results.jsonl
             project-lifecycle-repeat-results.jsonl

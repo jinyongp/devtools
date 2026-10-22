@@ -23,6 +23,10 @@ on:
         type: choice
         default: full
         options: [full, network, installer, providers, completion, lifecycle, suite, product, race, config, api]
+      installer_repetitions:
+        description: Repeat the x64-on-ARM64 installer journey to diagnose native crashes (1-20)
+        type: number
+        default: 1
   push:
     paths:
       - .github/workflows/windows-platform.yml
@@ -312,8 +316,16 @@ jobs:
       - name: Test selected native PowerShell installer and running-image updates
         if: ${{ startsWith(matrix.lane, 'installer-') }}
         run: |
+          $dumpFolder = Join-Path $PWD 'windows-install-crashes'
+          New-Item -ItemType Directory -Force $dumpFolder | Out-Null
+          $dumpKey = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\pwsh.exe'
+          New-Item -Path $dumpKey -Force | Out-Null
+          New-ItemProperty -Path $dumpKey -Name DumpFolder -Value $dumpFolder -PropertyType ExpandString -Force | Out-Null
+          New-ItemProperty -Path $dumpKey -Name DumpType -Value 1 -PropertyType DWord -Force | Out-Null
+          New-ItemProperty -Path $dumpKey -Name DumpCount -Value 2 -PropertyType DWord -Force | Out-Null
           $engine = '${{ matrix.lane }}'.Substring(10)
-          & pwsh -NoProfile -NonInteractive -File scripts/test-windows-install.ps1 -Arch '${{ matrix.arch }}' -Commit $env:DEVTOOLS_SOURCE_COMMIT -Engine $engine
+          $repeat = if ($engine -eq 'x64') { [int]'${{ inputs.installer_repetitions || 1 }}' } else { 1 }
+          & pwsh -NoProfile -NonInteractive -File scripts/test-windows-install.ps1 -Arch '${{ matrix.arch }}' -Commit $env:DEVTOOLS_SOURCE_COMMIT -Engine $engine -Repeat $repeat
           if ($LASTEXITCODE -ne 0) { throw 'Native PowerShell installer/update tests failed' }
 
       - name: Native amd64 race detector
@@ -431,6 +443,11 @@ jobs:
             windows-install-results.json
             windows-install-diagnostic.txt
             windows-install-context.json
+            windows-install-stdout.txt
+            windows-install-events.json
+            windows-install-event-error.txt
+            windows-install-emulated-runtime.json
+            windows-install-crashes/
             project-release-results.tap
             dist/*.zip
             dist/*.zip.sha256

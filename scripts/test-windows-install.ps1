@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$Arch,
     [Parameter(Mandatory=$true)][string]$Commit,
-    [ValidateSet('all', 'ps5', 'ps7', 'x64')][string]$Engine = 'all'
+    [ValidateSet('all', 'ps5', 'ps7', 'x64')][string]$Engine = 'all',
+    [ValidateRange(1, 20)][int]$Repeat = 1
 )
 $ErrorActionPreference = 'Stop'
 $temporaryBase = $env:RUNNER_TEMP
@@ -17,23 +18,35 @@ $oldInstallerFixture = $env:DEVTOOLS_INSTALLER_FIXTURE
 $bootstrapBin = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\devtools\bin'
 $bootstrapOwned = $false
 function Require([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
-function Save-InvocationFailure([string]$Executable, [string[]]$Arguments, [int]$ExitCode) {
+function Save-InvocationFailure([string]$Executable, [string[]]$Arguments, [int]$ExitCode, [datetime]$Started, [string]$Output) {
     $caller = Get-PSCallStack | Select-Object -Skip 2 -First 1
     $diagnostic = Join-Path $root 'diagnostic.txt'
     $bytes = if (Test-Path -LiteralPath $diagnostic) { (Get-Item -LiteralPath $diagnostic).Length } else { 0 }
     $context = [ordered]@{
         engine = [IO.Path]::GetFileName($Executable)
         exit_code = $ExitCode
+        exit_hex = ('0x{0:X8}' -f $ExitCode)
+        started = $Started.ToUniversalTime().ToString('o')
         script_line = $caller.ScriptLineNumber
+        iteration = $iteration
         argument_flags = @($Arguments | Where-Object { $_ -match '^--?[A-Za-z][A-Za-z0-9-]*$' } | Select-Object -First 16)
         stderr_bytes = $bytes
     }
     [IO.File]::WriteAllText((Join-Path $PWD 'windows-install-context.json'), ($context | ConvertTo-Json -Depth 3), [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $PWD 'windows-install-stdout.txt'), $Output, [Text.UTF8Encoding]::new($false))
+    try {
+        $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Id = @(1000, 1001, 1026); StartTime = $Started } -ErrorAction Stop |
+            Select-Object -First 20 TimeCreated, Id, ProviderName, Message)
+        ConvertTo-Json -InputObject $events -Depth 4 | Set-Content -Encoding utf8 windows-install-events.json
+    } catch {
+        $_.Exception.Message | Set-Content -Encoding utf8 windows-install-event-error.txt
+    }
 }
 function Invoke-Json([string]$Executable, [string[]]$Arguments) {
+    $started = Get-Date
     $text = & $Executable @Arguments 2> (Join-Path $root 'diagnostic.txt')
     $exitCode = $LASTEXITCODE
-    if ($exitCode -ne 0) { Save-InvocationFailure $Executable $Arguments $exitCode }
+    if ($exitCode -ne 0) { Save-InvocationFailure $Executable $Arguments $exitCode $started ($text -join "`n") }
     Require ($exitCode -eq 0) ('Command failed; see disposable diagnostic file: ' + $Executable)
     if ($Arguments -contains '-Json') {
         Require (-not (Get-Content -LiteralPath (Join-Path $root 'diagnostic.txt') -Raw)) 'Successful JSON installer wrote human text to stderr.'
@@ -41,9 +54,10 @@ function Invoke-Json([string]$Executable, [string[]]$Arguments) {
     return ($text -join "`n" | ConvertFrom-Json)
 }
 function Invoke-Text([string]$Executable, [string[]]$Arguments) {
+    $started = Get-Date
     $text = & $Executable @Arguments 2> (Join-Path $root 'diagnostic.txt')
     $exitCode = $LASTEXITCODE
-    if ($exitCode -ne 0) { Save-InvocationFailure $Executable $Arguments $exitCode }
+    if ($exitCode -ne 0) { Save-InvocationFailure $Executable $Arguments $exitCode $started ($text -join "`n") }
     Require ($exitCode -eq 0) ('Human installer failed; see disposable diagnostic file: ' + $Executable)
     Require (-not (Get-Content -LiteralPath (Join-Path $root 'diagnostic.txt') -Raw)) 'Successful human installer wrote its guidance to stderr.'
     return ($text -join "`n")
@@ -73,8 +87,9 @@ try {
         $portable = Join-Path $root 'powershell-x64'
         Expand-Archive -LiteralPath $archive -DestinationPath $portable
         $emulatedShell = Join-Path $portable 'pwsh.exe'
-        $actual = Invoke-Json $emulatedShell @('-NoProfile', '-NonInteractive', '-Command', '[pscustomobject]@{process=[Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString();os=[Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()} | ConvertTo-Json')
+        $actual = Invoke-Json $emulatedShell @('-NoProfile', '-NonInteractive', '-Command', '[pscustomobject]@{process=[Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString();os=[Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString();framework=[Runtime.InteropServices.RuntimeInformation]::FrameworkDescription;version=$PSVersionTable.PSVersion.ToString()} | ConvertTo-Json')
         Require ($actual.process -eq 'X64' -and $actual.os -eq 'Arm64') 'ARM64 fixture did not run actual x64 emulation.'
+        $actual | ConvertTo-Json | Set-Content -Encoding utf8 windows-install-emulated-runtime.json
         $shells += $emulatedShell
     }
     $results = @()
@@ -90,8 +105,9 @@ function Invoke-RestMethod([string]$Uri) {
 }
 irm https://jinyongp.dev/devtools/install.ps1 | iex
 '@
-    foreach ($shell in $shells) {
-        Write-Output ('Testing installer engine: ' + $shell)
+    foreach ($iteration in 1..$Repeat) {
+      foreach ($shell in $shells) {
+        Write-Output ('Testing installer engine: ' + $shell + ' (iteration ' + $iteration + '/' + $Repeat + ')')
         $shellVersion = Invoke-Json $shell @('-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.ToString() | ConvertTo-Json')
         $bin = Join-Path $root ('설치 경로 ' + [Guid]::NewGuid().ToString('N') + '/bin')
         $beforePath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -173,6 +189,7 @@ irm https://jinyongp.dev/devtools/install.ps1 | iex
         $bootstrapOwned = $false
         [Environment]::SetEnvironmentVariable('Path', $beforePath, 'User')
         $results += @{ shell = $shell; shell_version = $shellVersion; arch = $Arch; emulated_x64 = ($shell -eq $emulatedShell); install = 'pass'; alias_update = 'pass'; main_update = 'pass'; default_user_path = 'pass'; path_idempotency = 'pass'; no_path_opt_out = 'pass'; inline_bootstrap = 'pass'; inline_release = $inlineVersion.data.version; human_output = $inline; no_path_output = $optOut; human_error = 'pass'; json_error = 'pass'; json_success = 'pass'; human_failure_output = $humanFailure; inline_installer_source = 'candidate download fixture'; inline_artifacts = 'public latest stable'; runtime_path_empty = 'pass'; bootstrap_update = 'pass'; same_version_reinstall = 'pass'; legacy_install_update = 'pass'; bootstrap_update_output = $bootstrapUpdate; legacy_update_output = $legacyUpdate }
+      }
     }
     $pathBefore = [Environment]::GetEnvironmentVariable('Path', 'User')
     $pathBin = Join-Path $root 'explicit PATH install/bin'

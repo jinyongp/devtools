@@ -30,7 +30,7 @@ func TestDashboardProcessStartPreflightRejectsBeforeExecutionRecord(t *testing.T
 		t.Fatal(err)
 	}
 	args, _ := json.Marshal([]string{exe, "-test.run=^$"})
-	config := "profile='app'\n[requirements]\nvars=['REQUIRED']\n[commands.web]\nexec=" + string(args) + "\ninject=true\n"
+	config := "profile='app'\n[ports.web]\n[proxies.web]\nhost='${DASHBOARD_MISSING_NETWORK_DOMAIN}'\nport='web'\n[requirements]\nvars=['REQUIRED']\n[commands.web]\nserve=['web']\nexec=" + string(args) + "\ninject=true\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}

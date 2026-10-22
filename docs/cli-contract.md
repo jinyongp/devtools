@@ -80,6 +80,11 @@ devtools version
 
 `schema`와 `project inspect`는 조회 명령이다. 전자는 호출 방법을 확인하고, 후자는 현재 프로젝트 연결을 확인하는 데 사용한다.
 
+protocol 12부터 이름 명령의 `run`·`process start`·`project up`은 `serve`에 연결된 proxy
+선언을 자동 준비한다. `--proxy`는 비활성 route까지 준비하고 matching route를 요구한다.
+`--no-proxy`와 `--proxy=false`는 준비만 생략한다. `run` 옵션은 이름 앞에 둔다.
+설정·권한·기존 실행 전환 규칙은 [로컬 네트워크](local-network.md)를 따른다.
+
 인자 없이 실행한 `devtools`도 텍스트 도움말을 제공합니다. `devtools task --help`로
 하위 명령을 찾고, `devtools task claim --help`로 사용법을 확인하세요.
 에이전트는 `devtools schema task`로 그룹을 탐색한 뒤 `devtools schema task claim`처럼

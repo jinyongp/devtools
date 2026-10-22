@@ -157,6 +157,12 @@ guarantee; never treat output filtering as a sandbox.
 Use `command list` to discover configured commands, `command inspect NAME` to
 inspect one, and `command run NAME` for foreground work. Use `process start NAME`
 for a persistent server.
+Protocol 12 automatically prepares declared routes matching the selected command's
+served ports. See [network.md](network.md) for disabled routes, batch peers and
+permissions. Put `--no-proxy` before a run command name to skip preparation, or use
+`--proxy` to require and reactivate routes. Restart inherits the stored effective
+mode; an existing off execution requires stop/start to switch. Do not add TOML
+`proxy = true`. Inspect the installed protocol first; older CLIs require `--proxy`.
 In devtools 0.22.2 and newer, command names are literal keys of 1–128 characters.
 Punctuation, spaces, and Unicode are supported; leading `-` and control characters
 are invalid. For example, `[commands."dev:docs"]` with `exec = ["pnpm", "run", "docs:dev"]`

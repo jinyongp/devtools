@@ -9,9 +9,9 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
-func TestProtocolV11DiscoveryContracts(t *testing.T) {
+func TestProtocolV12DiscoveryContracts(t *testing.T) {
 	app := testApp(t)
-	if protocol.ProtocolVersion != 11 || protocol.EnvelopeVersion != 1 {
+	if protocol.ProtocolVersion != 12 || protocol.EnvelopeVersion != 1 {
 		t.Fatal("unexpected machine/envelope version")
 	}
 	for _, args := range [][]string{
@@ -25,8 +25,8 @@ func TestProtocolV11DiscoveryContracts(t *testing.T) {
 		{"schema", "project", "down"}, {"schema", "run"},
 	} {
 		data := outputData(t, app, args)
-		if data["protocol_version"] != float64(11) {
-			t.Fatalf("%v: missing protocol v11", args)
+		if data["protocol_version"] != float64(12) {
+			t.Fatalf("%v: missing protocol v12", args)
 		}
 	}
 	doctor := outputData(t, app, []string{"schema", "doctor"})
@@ -40,6 +40,22 @@ func TestProtocolV11DiscoveryContracts(t *testing.T) {
 	next := edit["output_schema"].(map[string]any)["properties"].(map[string]any)["next_actions"]
 	if props["remedies"].(map[string]any)["items"].(map[string]any)["$ref"] != "#/$defs/Remedy" || next.(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["effect"] == nil {
 		t.Fatal("doctor/task remedy schemas differ")
+	}
+}
+
+func TestPreparationOptionsAppearInSchemaAndHelp(t *testing.T) {
+	app := testApp(t)
+	for _, name := range []string{"run", "command run", "cmd run", "process start", "project up"} {
+		words := strings.Fields(name)
+		data := outputData(t, app, append([]string{"schema"}, words...))
+		body := mustJSON(t, data["input_schema"])
+		if !strings.Contains(body, `"no-proxy"`) || !strings.Contains(body, `"proxy"`) {
+			t.Fatal(name, body)
+		}
+		code, out, diagnostic := invoke(t, app, "", append(words, "--help")...)
+		if code != 0 || diagnostic != "" || !strings.Contains(out, "--no-proxy") || !strings.Contains(out, "--proxy") {
+			t.Fatal(name, code, out, diagnostic)
+		}
 	}
 }
 

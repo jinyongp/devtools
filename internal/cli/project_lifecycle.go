@@ -120,11 +120,11 @@ func (a *App) registerProjectLifecycle() {
 		Command{
 			Name:        "project up",
 			UniqueArgs:  true,
-			Description: "Start one or more configured commands as a retry-safe project operation.",
+			Description: "Start one or more configured commands as a retry-safe project operation, automatically preparing declared served proxies.",
 			Arguments:   []Argument{commandArgument},
 			Options: []Option{
 				directory,
-				{Name: "proxy", Boolean: true, Description: "Prepare the selected serve union, DNS, and listeners before launching the batch."},
+				{Name: "proxy", Boolean: true, Description: "Require a matching route across the batch and prepare routes, including disabled routes; false skips preparation."},
 				{Name: "no-proxy", Boolean: true, Description: "Skip proxy preparation without stopping existing routes."},
 				{Name: "bundle", Pattern: project.ProfilePattern, Description: "Select all, none, or one shared value bundle for the batch."},
 				{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment for every selected command."},

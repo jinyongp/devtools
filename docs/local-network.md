@@ -52,24 +52,46 @@ PORT = { port = "api" }
 
 ```sh
 devtools instance name main
-devtools project up web api --proxy --request-id UUID
+devtools project up web api --request-id UUID
 devtools command env web
 devtools proxy env api
 devtools project status
 ```
 
-`--proxy`는 선택한 서버의 포트를 함께 할당하고 binding·DNS·listener를 준비한 뒤
+protocol 12부터 `run`, `process start`, `project up`은 선택 명령의 `serve`와
+`proxies.NAME.port`가 같은 route를 자동 준비한다. `serve`만 있고 route 선언이 없으면
+일반 포트 실행이다. 별도 `proxy = true` 설정은 필요하지 않으며 지원하지 않는다.
+선택한 서버의 포트를 함께 할당하고 binding·DNS·listener를 준비한 뒤
 모든 서버를 시작하고 readiness를 기다린다. web이 아직 시작하지 않은 api를 참조해도
 같은 batch의 포트를 사용한다. 선택하지 않은 서버는 자동으로 실행하지 않는다.
 재시작은 실행 기록의 proxy 모드를 유지한다. 준비 실패 시 기존 서버를 보존하며,
 일부 시작 실패 시 성공한 다른 서버는 유지한다.
-foreground는 `devtools run --proxy web`, 단일 managed 서버는
-`devtools process start web --proxy --request-id UUID`를 사용한다.
+foreground는 `devtools run web`, 단일 managed 서버는
+`devtools process start web --request-id UUID`를 사용한다.
 `run`의 devtools 옵션은 command 이름 앞에 둔다. 이름 뒤 옵션은 child 인자다.
 다른 worktree는 `instance name feature`처럼 별도 alias를 지정한다.
 프로젝트 lifecycle은 현재 실제 프로젝트 디렉터리의 서버만 선택한다.
 설정·값을 바꿨으면 `devtools project restart web api --request-id UUID`로 교체한다.
 `devtools project down --request-id UUID`는 backend를 종료한다. route 비활성화는 `proxy down NAME --request-id UUID`다.
+
+`proxy down`으로 비활성화한 route는 자동 시작에서 그대로 둔다. `--proxy`는 matching
+route가 하나 이상 있어야 하며 비활성 route도 다시 준비한다. batch에는 route 없는 DB나
+worker를 함께 선택할 수 있다. 여러 route가 같은 served port를 참조하면 모두 대상이다.
+누락된 network env·alias·DNS 권한이나 listener 준비 오류는 실행을 중단한다.
+
+`devtools run --no-proxy web`, `process start web --no-proxy --request-id UUID`,
+`project up web api --no-proxy --request-id UUID`는 준비를 생략한다. `--proxy=false`도 같다.
+직접 포트로만 실행하거나 DNS를 별도로 관리할 때 사용한다. 기존 route·listener·hosts·공유를
+끄지는 않는다. port·binding·값·실행 파일 검사는 계속하며 proxy URL을 직접 URL로 바꾸지 않는다.
+`--no-proxy=false`는 기본 자동 모드이며, 두 flag를 함께 지정하면 값과 무관하게 오류다.
+직접 `run -- PROGRAM`은 자동 준비하지 않고 `--proxy`도 허용하지 않는다.
+
+기존 managed 실행은 옵션을 생략해도 기록된 모드를 유지한다. off 실행을 자동 모드로
+전환하려면 stop 뒤 새 start/up 요청을 사용한다. restart와 값 변경 자동 restart도 기존
+모드를 상속하며 network-on 실행은 disabled 상태를 존중한다. 구 UUID는 과거 계약으로
+재현한다. 새 요청은 준비 모드와 대상을 고정하므로 모드 변경에는 새 UUID가 필요하다.
+조회·doctor와 Dashboard 시작은 네트워크를 자동 준비하지 않는다. Dashboard의 proxy 실행
+재시작은 CLI에서 수행한다.
 
 ## listener와 HTTPS
 
@@ -118,7 +140,7 @@ setup 의도와 실제 bind 권한은 별도로 검사한다. standalone 업데�
 
 `dns` 생략은 `auto`다. `.localhost`는 기존처럼 hosts 파일을 수정하지 않는다.
 예를 들어 `host = "api.${instance.alias}.${DEV_DOMAIN:-shop.test}"`처럼 custom host를
-선언할 수 있다. custom host는 `proxy up` 또는 `--proxy` 시작 안에서 devtools 소유 hosts mapping을
+선언할 수 있다. custom host는 `proxy up` 또는 자동/명시 준비 시작 안에서 devtools 소유 hosts mapping을
 준비한다. 별도 hosts 명령은 일상 실행에 필요하지 않다.
 wildcard listener의 로컬 hosts mapping은 IPv4의 `127.0.0.1`, IPv6의 `::1`을 사용하며
 `0.0.0.0`이나 `::`를 hosts에 기록하지 않는다.

@@ -139,7 +139,7 @@ func (a *App) registerCommands() {
 		Command{
 			Name:        "command run",
 			Aliases:     []string{"cmd run", "run"},
-			Description: "Execute a configured command; put devtools options before its name and child arguments after it. Use -- PROGRAM to execute a program directly.",
+			Description: "Execute a configured command, automatically preparing declared served proxies. Put devtools options before its name and child arguments after it. Use -- PROGRAM to execute a program directly.",
 			Options:     profileOptions(true),
 			Arguments:   []Argument{{Name: "command", Pattern: project.CommandPattern}},
 			ChildArgs:   true,
@@ -152,7 +152,7 @@ func (a *App) registerCommands() {
 		if a.commands[index].Name == "command run" {
 			a.commands[index].Options = append(a.commands[index].Options, outputOptions()...)
 			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "bundle", Pattern: project.ProfilePattern, Description: "Select all, none, or one shared value bundle; overrides command and project selection."})
-			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "proxy", Boolean: true, Description: "Prepare declared proxy routes and DNS before running the configured server."})
+			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "proxy", Boolean: true, Description: "Require matching declared routes and prepare them, including disabled routes; false skips preparation."})
 			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "no-proxy", Boolean: true, Description: "Skip proxy preparation; existing routes and listeners remain unchanged."})
 		}
 	}

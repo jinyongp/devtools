@@ -52,7 +52,8 @@ func (a *App) registerProcesses() {
 		if action == "start" {
 			c.Arguments = []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern}}
 			c.Options = append(c.Options, Option{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory."})
-			c.Options = append(c.Options, Option{Name: "proxy", Boolean: true, Description: "Prepare the declared route and DNS before starting."})
+			c.Description += " Declared served proxies prepare automatically."
+			c.Options = append(c.Options, Option{Name: "proxy", Boolean: true, Description: "Require matching declared routes and prepare them, including disabled routes; false skips preparation."})
 			c.Options = append(c.Options, Option{Name: "no-proxy", Boolean: true, Description: "Skip proxy preparation without stopping existing routes."})
 		}
 		if action == "start" || action == "restart" {

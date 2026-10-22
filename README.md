@@ -124,6 +124,11 @@ and `--help`. On older versions such as v0.22.3, use the explicit `--` separator
 See the [command execution guide](docs/cli-contract.md#이름-명령에-추가-인자-전달)
 for the version requirements and both forms.
 
+Protocol 12 builds automatically prepare proxies declared for a saved command's
+`serve` ports when you run it or start it with `process start` / `project up`.
+`--no-proxy` skips preparation; `--proxy` also reactivates disabled routes.
+See [local networking](docs/local-network.md) for setup and existing process modes.
+
 ## Guides
 
 The [documentation index](docs/README.md) separates user guides, API contracts,

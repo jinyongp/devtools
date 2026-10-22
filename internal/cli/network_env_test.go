@@ -50,6 +50,18 @@ PRIVATE={template='${var.CANARY}'}
 	if code != 0 || !strings.Contains(out, "http://127.0.0.1:") || !strings.Contains(out, "http://api.localhost:20200") || strings.Contains(out, "private-canary") || string(before) != string(after) {
 		t.Fatal(code, out, err)
 	}
+	for _, args := range [][]string{{"proxy", "env", "api"}, {"command", "inspect", "web"}, {"config", "inspect"}, {"doctor", "web"}, {"diagnostics"}} {
+		if code, _, diagnostic := invoke(t, a, "", args...); code != 0 {
+			t.Fatal(args, code, diagnostic)
+		}
+		after, e := os.ReadFile(registry)
+		if e != nil || string(before) != string(after) {
+			t.Fatal("public query changed network state", args, e)
+		}
+		if _, e := os.Stat(filepath.Join(filepath.Dir(directory), "ca", "material.json")); !os.IsNotExist(e) {
+			t.Fatal("public query initialized CA", args, e)
+		}
+	}
 	if code, _, err := invoke(t, a, "secret-canary", "sec", "set", "PORT", "--stdin"); code != 0 {
 		t.Fatal(err)
 	}

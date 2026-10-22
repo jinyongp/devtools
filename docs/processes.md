@@ -47,7 +47,9 @@ status·check·wait·logs·stop·restart는 실행 ID로 대상을 선택하므�
 
 ## 프로젝트 서버를 함께 관리하기
 
-도메인과 HTTPS도 준비하려면 `project up web api --proxy --request-id UUID`를 사용한다.
+protocol 12부터 `project up web api --request-id UUID`는 `serve`와 matching proxy 선언이
+있는 서버의 도메인·설정된 HTTPS를 자동 준비한다. `--proxy`는 비활성 route까지 다시
+준비하며 `--no-proxy` 또는 `--proxy=false`는 준비를 생략한다. 기존 listener를 끄지 않는다.
 선택 서버의 포트와 binding을 함께 확정하고 DNS·listener를 준비한 뒤 모든 child를 launch하고
 readiness를 기다린다. proxy 모드 restart는 전체 후보를 준비한 다음 기존 실행을 교체한다.
 최초 준비와 설정은 [로컬 네트워크 가이드](local-network.md)를 참고한다.
@@ -79,7 +81,8 @@ devtools project down --request-id UUID
 `up`은 신규로 시작할 명령의 필수 조건과 port/binding을 batch 변경 전에 모두 검사한 뒤 입력 순서대로 시작한다.
 같은 프로젝트에서 이미 실행 중인 singleton은 cold-start 검사를 요구하지 않고 기존 process 계층이 재사용 여부와
 env·로그 설정 충돌을 판정한다. 실제 새 process를 만드는 경우에는 process 생성 직전 현재 project 설정과 값·port 상태로
-같은 preflight를 다시 수행한다. snapshot에서 재사용 대상으로 보였던 singleton이 그 사이 종료된 경우에도 이 검사를 거친다.
+같은 preflight를 다시 수행한다. 네트워크 batch에서 재사용 대상으로 고정한 singleton이
+준비 전에 종료되면 새 UUID로 다시 요청해야 한다.
 `ready` probe가 선언된 명령은 준비 완료까지 기다리고, probe가 없으면 프로세스
 시작으로 완료한다. `--timeout`은 명령별 readiness 대기 시간이며 기본 30초, 최대 10분이다. `--env`와
 `--capture-logs`는 선택한 모든 명령에 적용된다. 같은 설정으로 이미 실행 중이면 기존 실행을 재사용하고, env나 로그

@@ -118,9 +118,13 @@ with a supplied CA. Kernel ports and provider accounts remain shared resources.
 
 ## Execution and public environment queries
 
-`run`, `process start`, and `project up` prepare networking only with `--proxy`.
-Selected serve keys determine the declared route union; absent serve/route declarations
-give `proxy_not_configured`. Candidate snapshots, union allocations, and all bindings
+Protocol 12 makes `run`, `process start`, and `project up` prepare networking automatically
+when selected serve keys match declared route port keys. No match or all routes explicitly
+disabled keeps ordinary port execution. Auto excludes disabled routes before environment
+expansion. `--proxy` requires a match across the batch and reactivates disabled routes;
+`--no-proxy` and `--proxy=false` skip preparation without stopping existing networking.
+Both flags together are invalid. Direct execution does not prepare proxies.
+Candidate snapshots, union allocations, and all bindings
 are checked in one temporary registry transition; binding failure saves nothing.
 Later DNS/listener failure preserves assigned numbers for retry and rolls back only
 new owned unused hosts/sockets. All children launch before readiness waits.
@@ -132,6 +136,13 @@ retry does not stop successful replacements. Preparation recognizes original own
 claims. Partial sibling failure preserves successful siblings. Mixed batches use the
 recorded per-child modes; all-legacy mode preserves existing order/fingerprints. No
 missing command or unselected peer starts implicitly. Project down remains process-only.
+
+Existing executions retain their effective snapshot mode. Switching an off execution
+requires stop/start; restart and value auto-restart inherit it. New intent and selection
+are frozen in extensible journal private data before child preparation. Legacy receipt
+hashes and process/lease/receipt shapes remain unchanged. Old UUIDs keep old semantics.
+Read-only queries, doctor and Dashboard app-only starts do not prepare networking;
+network-on Dashboard restarts continue to require the initiating CLI.
 
 `command env COMMAND` / `proxy env NAME [--global]` read public network values without
 allocating, starting, initializing CA, or changing activation. Unresolved values are

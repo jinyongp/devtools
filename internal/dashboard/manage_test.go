@@ -176,6 +176,22 @@ func TestDashboardProcessRestartPreStopValidationPreservesRunningExecution(t *te
 	if stored.ID != id || stored.EndedAt != nil || stored.State != "running" {
 		t.Fatalf("dashboard pre-stop validation stopped the old process: %#v", stored)
 	}
+	stored.ProxyMode = true
+	if err := tasks.WritePrivate(recordPath, stored); err != nil {
+		t.Fatal(err)
+	}
+	request = httptest.NewRequest("POST", server.registry.Address+"/api/actions", strings.NewReader(string(requestBody)))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", server.registry.Address)
+	request.Header.Set("Authorization", "Bearer session")
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != 400 || !strings.Contains(response.Body.String(), "network_preparation_required") || !strings.Contains(response.Body.String(), "devtools process restart") {
+		t.Fatal("proxy restart must direct the user to the CLI", response.Code, response.Body)
+	}
+	if e := tasks.ReadPrivate(recordPath, &stored); e != nil || stored.EndedAt != nil {
+		t.Fatal("proxy restart stopped the original", e)
+	}
 }
 
 func TestDashboardValuesRequestCancelsWhileMaintenanceLocked(t *testing.T) {

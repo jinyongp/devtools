@@ -19,18 +19,29 @@ groups with `proxy configure`; omitted `listener` selects the group named `defau
 Use `proxy status --all` to distinguish the daemon from each listener. Start/stop selects
 one group. Configure while stopped; active exposure pins protect route/listener/port identity.
 
-Use `run --proxy COMMAND`, `process start COMMAND --proxy`, or
-`project up web api --proxy --request-id UUID` for integrated preparation. Each selected command must declare a served port
-with a matching proxy route. Batch preparation
+On protocol 12, `run COMMAND`, `process start COMMAND --request-id UUID`, and
+`project up web api --request-id UUID` automatically prepare routes matching served
+port keys. Auto preserves explicitly disabled routes before environment expansion.
+No matching route or all disabled means ordinary port execution. `--proxy` requires
+a match across the selection and reactivates disabled routes. A batch may include
+port-only servers and workers. `--no-proxy` / `--proxy=false` skip preparation only;
+existing routes/listeners/hosts/sharing and normal binding/value/tool checks remain.
+Do not substitute direct URLs for proxy bindings. Both flags together are invalid;
+`--no-proxy=false` selects auto. Direct `run -- PROGRAM` never auto-prepares.
+Batch preparation
 allocates the selected union and resolves binding/DNS/listeners before launching all
 children, then waits for readiness. Restart inherits proxy mode and prepares the whole
 replacement batch before stopping originals. Partial failure preserves successful siblings.
 `project down` stops backend processes; `proxy down ROUTE` deactivates a route until up.
+Existing active executions retain their stored mode on omitted start/up and restart.
+Use stop/start to convert an off execution. New request UUIDs freeze mode/selection;
+old UUIDs replay old semantics. Failed required preparation does not fall back to off.
+Queries/doctor and Dashboard starts remain app-only; proxy restarts use the CLI.
 
 ## DNS, bindings and external backends
 
 Project routes declare host, port, optional listener and dns. Omitted dns is auto:
-`.localhost` needs no hosts change; custom hosts are prepared inside up/`--proxy` by the
+`.localhost` needs no hosts change; custom hosts are prepared inside automatic/explicit preparation by the
 initiating CLI, which previews owned changes and handles OS authentication. Noninteractive
 execution uses `sudo -n` with preauthorized permissions; insufficient permissions return
 `permission_required` without a password prompt. `dns=external` uses user-prepared DNS. Queries and daemon

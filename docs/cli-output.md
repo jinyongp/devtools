@@ -55,7 +55,7 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 11`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
+`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 12`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
 
 실행 준비 중 사용자 취소는 `canceled`와 종료 코드 130, 준비 기한 초과는
 `deadline_exceeded`와 종료 코드 3으로 구분합니다. 저장이 완료된 뒤 도착한 취소는
@@ -134,6 +134,17 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v12 마이그레이션
+
+`run`, `process start`, `project up`은 matching served proxy를 기본 자동 준비합니다.
+기존 포트 실행을 유지하려면 `--no-proxy` 또는 `--proxy=false`를 사용하세요.
+`--proxy`는 matching route를 요구하며 disabled route도 재활성화합니다.
+옵션은 run의 이름 앞에 둡니다. 두 flag를 동시에 주면 값과 관계없이 오류입니다.
+기존 실행과 restart는 기록된 모드를 유지하며 구 UUID는 기존 계약으로 재현합니다.
+새 UUID의 준비 의도는 고정되므로 auto/on/off 변경 시 `request_conflict`입니다.
+envelope 1, 버전 없는 TOML, daemon control 2, task·registry 저장 형식은 유지합니다.
+설정과 예외는 [로컬 네트워크 가이드](local-network.md)를 따릅니다.
 
 ## protocol v10 마이그레이션
 

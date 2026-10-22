@@ -46,7 +46,7 @@ def guard(token=None, request=None):
     return ["--revision", token or revision(), "--request-id", request or str(uuid.uuid4())]
 
 
-assert api("version")["protocol_version"] == 11
+assert api("version")["protocol_version"] == 12
 api("init", "--profile", "mutation-fixture")
 assert api("var", "set", "URL", "--value", "before") == {"profile": "mutation-fixture", "changed": True}
 token, request = revision(), str(uuid.uuid4())

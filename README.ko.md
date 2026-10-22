@@ -121,6 +121,10 @@ devtools 자체의 도움말은 `devtools run --help`로 확인하세요.
 v0.22.3 등 이전 버전에서는 구분자 `--`를 붙이세요.
 버전별 사용법과 두 형식은 [명령 실행 가이드](docs/cli-contract.md#이름-명령에-추가-인자-전달)를 참고하세요.
 
+protocol 12부터 이름 명령의 `serve`와 연결된 proxy를 `run`·`process start`·`project up`에서
+자동 준비합니다. `--no-proxy`는 준비를 생략하고 `--proxy`는 비활성 route까지 준비합니다.
+설정과 기존 실행의 모드 전환은 [로컬 네트워크 가이드](docs/local-network.md)를 참고하세요.
+
 ## 사용 가이드
 
 [전체 문서](docs/README.md)에서 사용자 가이드, API 계약, 개발 안내와 구조 설명을 찾을 수 있습니다.

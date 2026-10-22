@@ -12,6 +12,9 @@
   파일/stdin 입력과 신규 dotenv 기본 secret 분류를 유지한다.
 - var는 명시 조회 가능한 값이며 인터넷 공개 안전값이라는 뜻이 아니다.
   sec 조회/`--value`/자동 kind 강등은 제공하지 않는다.
+- var set은 `--value`·`--file`·`--stdin` 중 하나, sec set은 `--file`·`--stdin` 중 하나를
+  받는다. 파일/stdin은 공통 입력 리더를 사용해 공백과 끝 개행을 보존한다.
+  입력 경로가 저장 종류나 vault 요구 조건을 바꾸지 않는다.
 - public-only profile은 vault 없이 기존 var 기능을 제공한다. 한번 sealed가 된
   profile은 secret을 unset해도 강등하지 않는다. 잠긴 var/메타데이터 조회는
   `integrity_verified:false`, 수정·검증된 주입은 unlock을 요구한다.

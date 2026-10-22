@@ -66,6 +66,10 @@ devtools var get LOG_LEVEL --env local
 The final JSON response contains `data.value: "debug"`, confirming the `local`
 override. To pass that value to a child command, choose the example for your shell.
 
+`var set` also accepts `--file PATH` or piped `--stdin` instead of `--value`.
+Each reads one complete value, preserving whitespace and trailing newlines.
+See [variable input options](docs/cli-contract.md#일반-변수-variable--var).
+
 In a POSIX shell on macOS, Linux, or WSL:
 
 ```sh

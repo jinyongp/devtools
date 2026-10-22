@@ -44,9 +44,15 @@ while writes/unsets affect only that env. Removing an override reveals the commo
 value. A key's variable/secret kind is profile-wide and persists after values are
 unset. Remove directly stored env values before removing the env.
 
-Use `variable`/`var` for public values and `secret`/`sec` for metadata-only secret
-management. Secret set accepts exactly one of --file or --stdin and preserves
-input bytes, including a trailing newline. Do not read secret files into command
+Use `variable`/`var` for readable values and `secret`/`sec` for metadata-only secret
+management. Discover `schema var set` on the installed build: supporting builds
+accept exactly one of --value, --file or --stdin; older builds require --value.
+Secret set accepts exactly one of --file or --stdin and never accepts --value.
+File/stdin inputs read one whole raw UTF-8 value, preserving whitespace and trailing
+newlines; they do not parse dotenv. Empty inputs store an empty value. Stdin requires
+a pipe or file redirect. The input method does not change the variable/secret kind
+or vault requirements. For guarded retries, identical values across input methods
+replay the same request; changed bytes conflict. Do not read secret files into command
 arguments. Preview dotenv import with --dry-run; existing key kinds are retained,
 new keys named by --var are public, and other new keys become secrets. Different
 stored values require explicit --overwrite; failed import preserves all values.

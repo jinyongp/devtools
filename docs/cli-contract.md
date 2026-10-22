@@ -204,6 +204,12 @@ devtools var set LOG_LEVEL --value info
 # local에서 덮어쓰기
 devtools var set LOG_LEVEL --env local --value debug
 
+# 파일 전체를 값 하나로 등록 (실제 값이 담긴 일반 파일 준비)
+devtools var set API_URL --file /path/to/api-url
+
+# POSIX 셸에서 파이프 입력: 끝 개행 없이 전달
+printf '%s' 'https://example.com' | devtools var set API_URL --stdin
+
 # 공통 값 조회: info
 devtools var get LOG_LEVEL
 
@@ -223,9 +229,20 @@ devtools var unset LOG_LEVEL
 
 기본 목록은 값 대신 키와 출처를 보여준다. 값을 읽으려면 `get`을 사용한다. 위 명령들은 모두 `--profile NAME`으로 프로젝트 연결을 대신할 수 있다.
 
+`set`은 `--value`, `--file`, `--stdin` 중 정확히 하나를 받는다. `--file`은 일반 파일
+전체를 값 하나로 읽으며 dotenv 구문을 해석하지 않는다. `--stdin`은 파이프나 파일
+리다이렉션을 받으며 터미널 입력을 받지 않는다. 파일과 stdin은 공백·CRLF·마지막 개행을
+그대로 보존한다. `--value ""`, 빈 파일, 빈 stdin은 모두 빈 값을 등록한다.
+입력 경로와 무관하게 var로 저장되며 sec로 분류되지 않는다. 설치본의 지원 여부는
+`devtools schema var set`에서 확인한다.
+
 키는 영문자 또는 밑줄로 시작하고, 이후에는 영문자·숫자·밑줄을 사용한다. 값은 UTF-8 문자열이며 빈 문자열도 명시적인 값으로 취급한다. 환경변수로 전달할 수 있도록 NUL 바이트는 오류로 처리한다. 값의 `$NAME` 같은 문자열은 입력한 그대로 저장한다.
 
 같은 값을 다시 등록하거나 이미 비어 있는 영역의 값을 제거하면 `changed: false`로 성공한다. 키 종류는 값을 모두 제거한 뒤에도 유지된다.
+
+`--revision`과 `--request-id`를 쓰는 재시도는 입력 경로 대신 읽은 값으로 동일성을
+판단한다. 같은 요청의 `--value`를 파일이나 stdin으로 바꿔도 값이 같으면 replay되며,
+끝 개행을 포함해 값이 달라지면 `request_conflict`를 반환한다.
 
 ## 민감한 변수: secret / sec
 

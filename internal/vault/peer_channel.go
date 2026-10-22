@@ -76,11 +76,6 @@ func DialPeer(ctx context.Context, root, runner, instance string) (PeerConnectio
 	if err != nil {
 		return nil, err
 	}
-	guard, err := platformfs.OpenRoot(dir, false)
-	if err != nil {
-		return nil, ErrRecovery
-	}
-	defer guard.Close()
 	address, _ := PeerAddress(root, runner, instance)
-	return dialSession(ctx, address)
+	return dialPeerEndpoint(ctx, dir, address)
 }

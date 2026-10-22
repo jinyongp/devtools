@@ -185,4 +185,93 @@ func TestNativeUnixPeersRejectOtherUID(t *testing.T) {
 			t.Fatal("new runner channel admitted foreign client", err)
 		}
 	})
+	t.Run("runner transport rejects foreign filesystem ownership", func(t *testing.T) {
+		for _, foreign := range []string{"parent", "socket"} {
+			t.Run(foreign, func(t *testing.T) {
+				const runner, instance = "01234567-89ab-4cde-8fab-0123456789ab", "01234567-89ab-4cde-8fab-0123456789ac"
+				transportRoot := filepath.Join(root, "foreign-owner-"+foreign)
+				directory, _ := peerDirectory(transportRoot, runner, instance)
+				if err := os.MkdirAll(directory, 0700); err != nil {
+					t.Fatal(err)
+				}
+				address, err := PeerAddress(transportRoot, runner, instance)
+				if err != nil {
+					t.Fatal(err)
+				}
+				parent := filepath.Dir(address)
+				if err := os.Mkdir(parent, 0700); err != nil {
+					t.Fatal(err)
+				}
+				listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: address, Net: "unix"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { listener.Close(); os.Remove(parent) }()
+				if err := os.Chmod(address, 0600); err != nil {
+					t.Fatal(err)
+				}
+				target := address
+				if foreign == "parent" {
+					target = parent
+				}
+				if err := os.Chown(target, 65534, 65534); err != nil {
+					t.Fatal(err)
+				}
+				connection, err := DialPeer(ctx, transportRoot, runner, instance)
+				if connection != nil {
+					connection.Close()
+				}
+				if !errors.Is(err, ErrRecovery) {
+					t.Fatal("runner accepted foreign filesystem ownership", err)
+				}
+			})
+		}
+	})
+	t.Run("runner transport client rejects other-user server", func(t *testing.T) {
+		const runner, instance = "01234567-89ab-4cde-8fab-0123456789ab", "01234567-89ab-4cde-8fab-0123456789ac"
+		transportRoot := filepath.Join(root, "foreign-runner-server")
+		directory, _ := peerDirectory(transportRoot, runner, instance)
+		if err := os.MkdirAll(directory, 0700); err != nil {
+			t.Fatal(err)
+		}
+		address, err := PeerAddress(transportRoot, runner, instance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parent := filepath.Dir(address)
+		if err := os.Mkdir(parent, 0700); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { os.Remove(address); os.Remove(parent) }()
+		// Let the synthetic foreign server bind, then make filesystem metadata
+		// look correct. The kernel peer identity must still reject its UID.
+		if err := os.Chmod(parent, 0777); err != nil {
+			t.Fatal(err)
+		}
+		cmd := child("server", address)
+		ready, err := cmd.StdoutPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { cmd.Process.Kill(); cmd.Wait() }()
+		line, err := bufio.NewReader(ready).ReadString('\n')
+		if err != nil || line != "ready-uid-65534\n" {
+			t.Fatal("different-UID runner server did not become ready")
+		}
+		for _, err := range []error{os.Chown(address, 0, 0), os.Chmod(address, 0600), os.Chmod(parent, 0700)} {
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		connection, err := DialPeer(ctx, transportRoot, runner, instance)
+		if connection != nil {
+			connection.Close()
+		}
+		if !errors.Is(err, ErrDenied) {
+			t.Fatal("runner accepted foreign kernel peer identity", err)
+		}
+	})
 }

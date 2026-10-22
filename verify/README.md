@@ -4,6 +4,14 @@
 
 ## Framework·Library·Provider 호환성
 
+protocol 12의 기본 준비는 `devtools run test:installed proxy_auto`로 검사한다.
+실제 archive CLI와 서버로 auto/off/disabled/force, HTTP·CA 지정 HTTPS, 혼합 batch의
+peer readiness, 두 worktree, 모드 재사용과 구 receipt replay를 확인한다. OS hosts·trust는
+변경하지 않는다. Unix native handoff job이 Linux/macOS에서 실행하고 Windows product는
+기본 `project up`의 실제 HTTPS를 확인한다. WSL browser job은 같은 자동 준비 시나리오를
+WSL2에서 실행한 뒤 기존 Windows browser DNS·trust 경계를 검증한다.
+현재 commit의 native 실행 결과가 있어야 해당 플랫폼의 통과로 인정한다.
+
 Host 정책은 `check:proxy-compat`로 실제 개발 서버·브라우저를 연결해 검사한다.
 Node 22.22.2, pnpm 11.24.0, root의 Playwright 1.63.0과 fixture lockfile이 필요하다.
 직접 의존성 버전은 [fixture manifest](fixtures/proxy-compat/package.json)에 고정되어 있다.

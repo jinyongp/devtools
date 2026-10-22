@@ -125,11 +125,11 @@ timeout='10s'
             sudo.write_text("#!/bin/sh\nprintf '%s' \"$1\" > \"$0.first-arg\"\nexit 1\n");sudo.chmod(0o700)
             previous_path=env["PATH"];env["PATH"]=str(denied)+os.pathsep+previous_path
             try:
-                mutate("project","up","web","--proxy",error="permission_required")
+                mutate("project","up","web",error="permission_required")
                 assert sudo.with_name("sudo.first-arg").read_text()=="-n"
                 assert not api("process","list","--profile","platform-network")["items"]
             finally:env["PATH"]=previous_path
-            mutate("project","up","web","--proxy")
+            mutate("project","up","web")
             assert "127.0.0.1" in socket.gethostbyname_ex(hostname)[2]
             c=http.client.HTTPConnection(hostname,80,timeout=5)
             c.request("GET","/path?q=1");r=c.getresponse();r.read()

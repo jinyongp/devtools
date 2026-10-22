@@ -15,6 +15,7 @@ Windows UAC·CurrentUser trust의 실제 사용자 확인 창을 아래 Unix 결
 
 | 검증 영역 | 검사 위치와 판정 기준 |
 | --- | --- |
+| protocol 12 자동 준비 | `proxy_auto`: 실제 archive의 auto/off/force/disabled, 혼합 peer readiness, HTTP·검증 TLS, worktree·restart·legacy 완료 receipt. Go mode/selector/manifest/activation tests가 실패·동시성·구 hash를 보완한다. Unix handoff와 Windows product/WSL browser의 실제 실행 결과를 별도로 요구한다. |
 | 단일 CLI·기존 HTTP·UUID·root 격리 | `install`, `proxies`, `network`: 실제 archive 설치, 공개 schema, daemon/child root 전달, normal root 불변. `internal/paths` 및 OS helper 검사가 공유 자원 변경 차단을 확인한다. |
 | registry 호환·기존 route·tombstone | `internal/ports/ports_test.go`, `local_network_test.go`: v1/v2 읽기 bytes 보존, 첫 mutation upgrade, identity/assignment/reservation 보존. `internal/proxy/resolver_test.go`: legacy implicit route 및 down/up 계약. `proxies`: 설치 CLI·worktree·재시작 회귀. |
 | listener 독립성·port 소유권 | `network`, `network_failures`: 두 listener, 두 번째 socket bind 실패의 첫 socket rollback, 같은 UUID 재시도, 다른 listener의 기존 WebSocket·새 TLS 연결 보존, 선택 stop/start. `internal/ports`: assignment/reservation 충돌, exact backend 및 preferred/strict 계약. |

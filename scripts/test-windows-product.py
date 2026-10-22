@@ -226,11 +226,12 @@ timeout = "3s"
         http_port, tls_port = available_port(), available_port()
         mutate("proxy", "configure", "--http-address", f"127.0.0.1:{http_port}", "--https-address", f"127.0.0.1:{tls_port}")
         request = str(uuid.uuid4())
-        up = mutate("project", "up", "web", "--proxy", "--timeout", "15s", request=request, settle=True)
+        up = mutate("project", "up", "web", "--timeout", "15s", request=request, settle=True)
         running = True
         assert up["items"][0]["status"] == "ready"
+        assert up["items"][0]["item"]["proxy_mode"]
         execution = up["items"][0]["item"]["id"]
-        replay = mutate("project", "up", "web", "--proxy", "--timeout", "15s", request=request, settle=True)
+        replay = mutate("project", "up", "web", "--timeout", "15s", request=request, settle=True)
         assert replay["replayed"] and replay["items"][0]["item"]["id"] == execution
         port = api("port", "show", "web")["item"]["port"]
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)

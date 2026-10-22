@@ -75,7 +75,7 @@ def main():
         # Only this child exports the public CA path to Windows. Product WSLENV
         # and the developer's distro/network configuration are never changed.
         command = ["/usr/bin/env", "HOME=/home/dvtfixture", "PATH=/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "DEVTOOLS_DISPOSABLE_HOST=1", "/bin/bash", "-c",
-                   "cd /home/dvtfixture/repository && corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts && python3 -B verify/proxy_compat.py \"$@\"", "proxy-compat",
+                   "cd /home/dvtfixture/repository && DEVTOOLS_TEST_BINARY=/usr/local/bin/devtools python3 -B verify/scenarios/proxy_auto.py && corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts && python3 -B verify/proxy_compat.py \"$@\"", "proxy-compat",
                    "--binary", "/usr/local/bin/devtools", "--case", "nuxt", "--case", "ws", "--scheme", "https", "--policy", "preserve", "--hostname", "wsl-compat.localhost", "--client-mode", "windows-peer", "--windows-node", translate(windows_node), "--windows-runner", translate(repository / "verify/proxy_compat_browser.mjs"), "--peer-packages", translate(repository / "verify/fixtures/proxy-compat/node_modules"), "--disposable-trust", "--artifacts", translate(artifacts)]
         hosts = Path(os.environ["SystemRoot"]) / "System32/drivers/etc/hosts"
         with loopback_mapping(hosts, "wsl-compat.localhost"):

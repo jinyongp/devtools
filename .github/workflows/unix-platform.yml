@@ -152,8 +152,8 @@ jobs:
           go test -c -o bin/vault-native.test ./internal/vault
           sudo env DEVTOOLS_TEST_NATIVE_PEERS=1 DEVTOOLS_DISPOSABLE_HOST=1 ./bin/vault-native.test -test.run '^TestNativeUnixPeersRejectOtherUID$' -test.v | tee native-unix-peer.log
           python3 -c 'from pathlib import Path; text=Path("native-unix-peer.log").read_text(); assert "--- SKIP" not in text; assert "--- PASS: TestNativeUnixPeersRejectOtherUID " in text; assert "--- PASS: TestNativeUnixPeersRejectOtherUID/runner_transport_rejects_other-user_client " in text'
-      - name: Installed guarded mutations and cooperative runner
-        run: python3 -B verify/run.py secret_mutations value_handoff
+      - name: Installed guarded mutations, cooperative runner and automatic proxies
+        run: python3 -B verify/run.py secret_mutations value_handoff proxy_auto
 
   automation-performance:
     name: Protected automation measurements

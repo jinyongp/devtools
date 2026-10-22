@@ -214,6 +214,8 @@ jobs:
           version: 1.104.2
           retry: '1'
           args: --accept-routes=false
+      - name: Allow this disposable runner to manage its Serve handlers
+        run: sudo tailscale set --operator="$USER"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod

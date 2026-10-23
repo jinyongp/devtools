@@ -190,11 +190,12 @@ func vaultInitializationError(ctx context.Context, directory, backend string, er
 	}})
 }
 
-func (a *App) changeVaultLock(ctx context.Context, streams IO, r Request, action string) (any, *protocol.Error) {
+func (a *App) changeVaultLock(ctx context.Context, streams IO, r Request, action string) (result any, condition *protocol.Error) {
 	directory, e := a.vaultDirectory()
 	if e != nil {
 		return nil, e
 	}
+	defer func() { values.Recover(condition, filepath.Dir(directory), "", "", "", r.Invocation) }()
 	slot, err := (vault.KeyFileStore{Directory: directory}).Read()
 	if err != nil {
 		return nil, values.VaultError(ctx, err)

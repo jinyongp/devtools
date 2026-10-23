@@ -157,6 +157,7 @@ func (a *App) diagnose(parent context.Context, _ IO, r Request) (any, *protocol.
 func (a *App) passiveChecks(ctx context.Context, command execution.Command, directory, mode string, executable bool) []doctor.Check {
 	checks := []doctor.Check{}
 	registered := map[string]values.Kind{}
+	prerequisites := map[string]values.Prerequisite{}
 	public := map[string]string{}
 	known := true
 	environmentUnknown := ""
@@ -164,7 +165,7 @@ func (a *App) passiveChecks(ctx context.Context, command execution.Command, dire
 	if needs {
 		spec := command.ValueInputSpec()
 		spec.Inject = true
-		version, observed, e := values.InspectSearchInput(ctx, filepath.Dir(directory), command.Project.Profile, command.Env, spec)
+		version, observed, observedPrerequisites, e := values.InspectSearchPrerequisites(ctx, filepath.Dir(directory), command.Project.Profile, command.Env, spec)
 		if e != nil {
 			known = false
 			status := "unknown"
@@ -190,6 +191,7 @@ func (a *App) passiveChecks(ctx context.Context, command execution.Command, dire
 			}
 		} else {
 			public = observed
+			prerequisites = observedPrerequisites
 			if version != nil {
 				for _, slot := range version.Slots {
 					kind := values.Variable
@@ -203,6 +205,7 @@ func (a *App) passiveChecks(ctx context.Context, command execution.Command, dire
 		}
 	}
 	input := doctor.Input{Command: command.Name, Args: command.Arguments(), Profile: command.Project.Profile, Directory: command.Directory, Env: command.Env, Requirements: command.Requirements, Inject: command.Inject, CheckInjection: executable, Environment: os.Environ(), Public: public, Registration: registered, RegistrationKnown: known, EnvironmentUnknown: environmentUnknown, Mode: mode}
+	input.Prerequisites = prerequisites
 	if command.Project.Document != nil {
 		input.Source = func(path []string) configcontract.Source {
 			return command.Project.Document.CommandSource(command.Name, path)

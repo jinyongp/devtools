@@ -55,7 +55,7 @@ func Public(e *Error, operation string) *Error {
 		}
 	}
 	facts := map[string]any{}
-	allowed := []string{"expected_version", "observed_version", "state", "expected_revision", "observed_revision", "candidate_digest", "backup_name", "os_code", "input_role", "resource", "field", "rule", "allowed", "minimum", "maximum", "actual_length", "suggestions", "reason", "executable", "search_origin", "domain", "stage", "context_reason", "expected_target_kind", "actual_target_kind", "affected_count", "outcomes"}
+	allowed := []string{"expected_kind", "actual_kind", "expected_type", "observed_type", "limit_kind", "observed", "limit", "import_items", "expected_version", "observed_version", "state", "expected_revision", "observed_revision", "candidate_digest", "backup_name", "os_code", "input_role", "resource", "field", "rule", "allowed", "minimum", "maximum", "actual_length", "suggestions", "reason", "executable", "search_origin", "domain", "stage", "context_reason", "expected_target_kind", "actual_target_kind", "affected_count", "outcomes"}
 	if value, ok := old["facts"].(map[string]any); ok {
 		for _, key := range allowed {
 			if v, ok := value[key]; ok {

@@ -46,7 +46,17 @@ func (s Store) attempted(ctx context.Context, r record) *protocol.Error {
 	}
 	return failure("delivery_already_started")
 }
-func (s Store) Deliver(ctx context.Context, id, requestID string, input RevisionInput) (Result, *protocol.Error) {
+func (s Store) Deliver(ctx context.Context, id, requestID string, input RevisionInput) (result Result, condition *protocol.Error) {
+	defer func() {
+		if condition != nil && (condition.Code == "delivery_outcome_unknown" || condition.Code == "delivery_pending") {
+			if condition.Details == nil {
+				condition.Details = map[string]any{}
+			}
+			condition.Details["retry"] = "inspect_first"
+			condition.Details["effects"] = "unknown"
+			condition.Details["remedies"] = []protocol.Remedy{protocol.LocalAction([]string{"devtools", "values", "execution", "status", id, "--profile", s.Profile}, nil, "Inspect the original execution and receiver state. An uncertain delivery must not be sent again or replaced with a new prepare request.", "read").Remedy(protocol.InvocationContext{})}
+		}
+	}()
 	if !idRE.MatchString(id) || !uuidRE.MatchString(requestID) || input.Revision == 0 {
 		return Result{}, invalid()
 	}

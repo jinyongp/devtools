@@ -31,6 +31,7 @@ type entry struct {
 
 // State is a private-storage snapshot. CLI responses use Metadata instead.
 type State struct {
+	prerequisites      map[string]Prerequisite
 	preparationChanged bool
 	sealedUnverified   bool
 	expiries           map[string]map[string]int64

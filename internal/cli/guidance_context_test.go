@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,5 +97,30 @@ func TestPreparationEffectsMatchNewProfilePublication(t *testing.T) {
 	code, _, diagnostic = invoke(t, a, "", "run", "--profile", "valid-new", "--", "__missing_effect_test__")
 	if code != 127 || !strings.Contains(diagnostic, `"effects":"partial"`) {
 		t.Fatal(code, diagnostic)
+	}
+}
+
+func TestWrongKindAndLockedRunKeepActionableConditions(t *testing.T) {
+	a := testApp(t)
+	t.Chdir(privateTempDir(t))
+	initializeTestVault(t, a)
+	exe, _ := os.Executable()
+	config := fmt.Sprintf("profile='audit'\n[commands.need]\nexec=[%q]\ninject=true\n[commands.need.requirements]\nsecs=['MISMATCH']\n", exe)
+	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, e := invoke(t, a, "", "var", "set", "MISMATCH", "--value", "public"); code != 0 {
+		t.Fatal(e)
+	}
+	code, _, e := invoke(t, a, "", "run", "need")
+	if code != 3 || !strings.Contains(e, "kind_mismatch") || strings.Contains(e, `"sec","set","MISMATCH"`) {
+		t.Fatal(code, e)
+	}
+	if code, _, e := invoke(t, a, "", "vault", "lock"); code != 0 {
+		t.Fatal(e)
+	}
+	code, _, e = invoke(t, a, "", "run", "need")
+	if code != 3 || !strings.Contains(e, `"--passphrase-stdin"`) || !strings.Contains(e, `"required_inputs":["stdin"]`) || !strings.Contains(e, `"retry":"after_dependency_change"`) {
+		t.Fatal(code, e)
 	}
 }

@@ -17,15 +17,22 @@ import (
 // native helper or migration, decrypting secrets, or extending the key's idle
 // deadline. Cold protection is deliberately an unavailable verification.
 func InspectInput(ctx context.Context, root, profile, env string, spec InputSpec) (*InputVersion, *protocol.Error) {
-	return inspectInput(ctx, root, profile, env, spec, nil)
+	return inspectInput(ctx, root, profile, env, spec, nil, nil)
 }
 
 // InspectSearchInput reads authenticated public values without unlocking,
 // opening secret slots or extending the reusable key session's idle deadline.
 func InspectSearchInput(ctx context.Context, root, profile, env string, spec InputSpec) (*InputVersion, map[string]string, *protocol.Error) {
 	public := map[string]string{}
-	v, e := inspectInput(ctx, root, profile, env, spec, &public)
+	v, e := inspectInput(ctx, root, profile, env, spec, &public, nil)
 	return v, public, e
+}
+
+func InspectSearchPrerequisites(ctx context.Context, root, profile, env string, spec InputSpec) (*InputVersion, map[string]string, map[string]Prerequisite, *protocol.Error) {
+	public := map[string]string{}
+	prerequisites := map[string]Prerequisite{}
+	v, e := inspectInput(ctx, root, profile, env, spec, &public, &prerequisites)
+	return v, public, prerequisites, e
 }
 
 // DiagnosticPublicState supplies only already authenticated public values to the
@@ -41,7 +48,7 @@ func DiagnosticPublicState(profile, env string, public map[string]string) *State
 	return s
 }
 
-func inspectInput(ctx context.Context, root, profile, env string, spec InputSpec, public *map[string]string) (*InputVersion, *protocol.Error) {
+func inspectInput(ctx context.Context, root, profile, env string, spec InputSpec, public *map[string]string, prerequisites *map[string]Prerequisite) (*InputVersion, *protocol.Error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if !project.ValidProfile(profile) || (env != "" && !project.ValidProfile(env)) || !vault.ValidSelection(spec.Selection) {
@@ -113,6 +120,9 @@ func inspectInput(ctx context.Context, root, profile, env string, spec InputSpec
 	effective, err := p.ResolveSelectedMetadata(env, key, spec.Selection)
 	if err != nil {
 		return nil, VaultError(ctx, err)
+	}
+	if prerequisites != nil {
+		*prerequisites = profilePrerequisites(p, env, spec.Selection, time.Now())
 	}
 	metadata := SnapshotMetadata{Identity: vault.InputIdentity{ProfileID: p.ID, StorageGeneration: p.Generation}, KeyEpoch: p.KeyEpoch, IntegrityVerified: p.Sealed, Slots: []vault.SlotReference{}}
 	if absent {

@@ -339,7 +339,8 @@ func (s ModernStore) replayHeld(ctx context.Context, c Change, p *vault.Profile,
 	return result, true, nil
 }
 
-func (s ModernStore) Apply(ctx context.Context, c Change) (ChangeResult, *protocol.Error) {
+func (s ModernStore) Apply(ctx context.Context, c Change) (outResult ChangeResult, condition *protocol.Error) {
+	defer func() { Recover(condition, s.root(), s.Profile, c.Env, c.RequestID, s.Invocation) }()
 	out := ChangeResult{Profile: s.Profile}
 	if !project.ValidProfile(s.Profile) || !modernRequestID.MatchString(c.RequestID) || c.Revision == "" {
 		return out, protocol.NewError("invalid_argument", "Provide profile, revision and request UUID.", 2, nil)

@@ -19,9 +19,10 @@ import (
 // no key setup. Once the shared vault exists, authenticated writes acquire its
 // reusable session key before disk locks; reads remain metadata/public only.
 type ModernStore struct {
-	Directory string
-	Profile   string
-	Master    func(context.Context) (*vault.Material, error)
+	Invocation protocol.InvocationContext
+	Directory  string
+	Profile    string
+	Master     func(context.Context) (*vault.Material, error)
 	// WriteMaster also binds commit authority to the original session epoch.
 	WriteMaster func(context.Context) (*vault.Material, func(context.Context) error, error)
 	// Test seam after candidate computation, before commit lease acquisition.
@@ -270,7 +271,8 @@ func (s ModernStore) publishHeld(ctx context.Context, p *vault.Profile, key, mas
 
 var errUnchanged = errors.New("mutation unchanged")
 
-func (s ModernStore) Update(ctx context.Context, change func(*Editor) (bool, *protocol.Error)) (bool, *protocol.Error) {
+func (s ModernStore) Update(ctx context.Context, change func(*Editor) (bool, *protocol.Error)) (resultChanged bool, condition *protocol.Error) {
+	defer func() { Recover(condition, s.root(), s.Profile, s.Invocation.Env, "", s.Invocation) }()
 	if !project.ValidProfile(s.Profile) {
 		return false, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}

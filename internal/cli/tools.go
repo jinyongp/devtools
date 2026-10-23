@@ -34,7 +34,12 @@ func (a *App) store(options map[string]string) (values.ModernStore, *protocol.Er
 	if err != nil {
 		return values.ModernStore{}, err
 	}
-	return values.CurrentStore(dir, p.Profile), nil
+	store := values.CurrentStore(dir, p.Profile)
+	store.Invocation = protocol.InvocationContext{Profile: p.Profile, ProfileKnown: true, Env: options["env"], EnvKnown: true}
+	if dirs, e := a.currentPaths(); e == nil {
+		store.Invocation.IsolatedRoot = dirs.IsolatedRoot
+	}
+	return store, nil
 }
 
 func profileOptions(withEnv bool) []Option {

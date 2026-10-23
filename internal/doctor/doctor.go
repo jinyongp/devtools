@@ -61,6 +61,7 @@ func State(checks []Check) string {
 }
 
 type Input struct {
+	Prerequisites                          map[string]values.Prerequisite
 	Command                                string
 	Args                                   []string
 	Profile, Directory, Env                string
@@ -98,6 +99,9 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 	known := in.RegistrationKnown
 	secrets := map[string]string{}
 	if in.State != nil {
+		if in.Prerequisites == nil {
+			in.Prerequisites = in.State.Prerequisites()
+		}
 		registered = map[string]values.Kind{}
 		known = true
 		public = map[string]string{}
@@ -336,14 +340,35 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 		sort.Strings(keys)
 		for _, key := range keys {
 			status, reason, message := "pass", "registered", "Required "+label+" "+key+" is registered."
+			actual := registered[key]
+			prerequisite, detailed := in.Prerequisites[key]
+			if detailed {
+				actual = prerequisite.Kind
+			}
 			if !known {
 				status, reason, message = "unknown", "registration_unverified", "Registration could not be authenticated."
-			} else if registered[key] != kind {
-				status, reason, message = "fail", "not_registered", "Required "+label+" "+key+" is missing or has another kind."
+			} else if actual == "" {
+				status, reason, message = "fail", "not_registered", "Required "+label+" "+key+" is not registered."
+			} else if actual != kind {
+				status, reason, message = "fail", "kind_mismatch", "The registered key has a different kind than the prerequisite. Review the declaration; do not delete or downgrade it."
+			} else if detailed && !prerequisite.Selected {
+				status, reason, message = "fail", "outside_bundle", "The required key is outside the selected bundle. Review the declaration or bundle selection."
+			} else if detailed && !prerequisite.HasSlot {
+				status, reason, message = "fail", "slot_missing", "The registered key has no common or selected environment value."
+			} else if detailed && prerequisite.Expired {
+				status, reason, message = "fail", "value_expired", "The selected value has expired. Review and replace its value before retrying."
 			}
 			i := add(label+":"+key, status, reason, message)
+			checks[i].Facts = map[string]any{"expected_kind": string(kind)}
+			if known && actual != "" {
+				checks[i].Facts["actual_kind"] = string(actual)
+			}
 			checks[i].Target = map[string]any{"kind": label, "name": key, "profile": in.Profile, "env": in.Env}
 			if status == "fail" {
+				if reason == "kind_mismatch" || reason == "outside_bundle" {
+					checks[i].Remedies = []protocol.Remedy{{Argv: []string{}, RequiredInputs: []string{}, Message: message, Effect: "config_write"}}
+					continue
+				}
 				argv := []string{"devtools", label, "set", key, "--profile", in.Profile}
 				required := []string{"value"}
 				if in.Env != "" {

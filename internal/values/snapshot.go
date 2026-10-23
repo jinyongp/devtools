@@ -48,6 +48,7 @@ func (s *State) Clone() *State {
 	}
 	out := newState(s.Profile)
 	out.preparationChanged = s.preparationChanged
+	out.prerequisites = s.Prerequisites()
 	out.Version = s.Version
 	out.sealedUnverified = s.sealedUnverified
 	if s.expiries != nil {
@@ -160,7 +161,8 @@ func CaptureLegacy(state *State, env string, inject bool) (*Snapshot, *protocol.
 
 // CaptureVault obtains a root key once per snapshot, before the disk gate. All
 // selected slots resolve from the one authenticated catalog/profile read.
-func CaptureVault(ctx context.Context, root, profile, env string, inject bool, now time.Time, master func(context.Context) (*vault.Material, error), selection ...string) (*Snapshot, *protocol.Error) {
+func CaptureVault(ctx context.Context, root, profile, env string, inject bool, now time.Time, master func(context.Context) (*vault.Material, error), selection ...string) (result *Snapshot, failure *protocol.Error) {
+	defer func() { Recover(failure, root, profile, env, "", protocol.InvocationContext{}) }()
 	if master == nil {
 		return nil, VaultError(ctx, vault.ErrLocked)
 	}
@@ -236,6 +238,7 @@ func captureProfile(p *vault.Profile, profileKey *vault.Material, env string, in
 		return nil, VaultError(ctx, err)
 	}
 	s := &Snapshot{state: newState(profile), canInject: inject, metadata: SnapshotMetadata{Selection: chosen, Identity: vault.InputIdentity{ProfileID: p.ID, StorageGeneration: p.Generation}, KeyEpoch: p.KeyEpoch, IntegrityVerified: p.Sealed, Slots: []vault.SlotReference{}}}
+	s.state.prerequisites = profilePrerequisites(p, env, chosen, now)
 	if env != "" {
 		s.state.Envs[env] = true
 	}

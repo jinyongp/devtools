@@ -143,6 +143,8 @@ func TestLostACKIsUnknownAndNeverResends(t *testing.T) {
 	ctx := context.Background()
 	if _, e := s.Deliver(ctx, approved.Item.ID, requestID(620), RevisionInput{2}); e == nil || e.Code != "delivery_outcome_unknown" {
 		t.Fatal("missing ACK was not unknown", e)
+	} else if e.Details["retry"] != "inspect_first" || e.Details["effects"] != "unknown" {
+		t.Fatal("unknown delivery lost recovery semantics", e)
 	}
 	waitCount(t, &count, 1)
 	for _, id := range []string{requestID(620), requestID(621)} {

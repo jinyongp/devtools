@@ -15,7 +15,7 @@ func CanonicalDir(t testing.TB, path string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	physical, err := filepath.EvalSymlinks(absolute)
+	physical, err := canonicalDir(absolute)
 	if err != nil {
 		t.Fatal(err)
 	}

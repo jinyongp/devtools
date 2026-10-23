@@ -45,6 +45,44 @@ permissions:
   contents: read
 
 jobs:
+  sandbox-query:
+    name: ${{ matrix.os }} / read-only query locks
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Install Linux sandbox launcher
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Validate native read-only locks and policy negative controls
+        shell: bash
+        run: |
+          mkdir -p bin/sandbox-query-evidence
+          git rev-parse HEAD > bin/sandbox-query-evidence/source-commit.txt
+          go version > bin/sandbox-query-evidence/go-version.txt
+          uname -a > bin/sandbox-query-evidence/kernel.txt
+          df -h . "$RUNNER_TEMP" > bin/sandbox-query-evidence/filesystem.txt
+          python3 -B -m unittest discover -s verify -p test_sandbox_query_fixture.py
+          go build -o bin/sandbox-query-lock ./verify/probes/sandbox_query_lock.go
+          python3 -B verify/sandbox_query_fixture.py --probe bin/sandbox-query-lock --artifacts bin/sandbox-query-evidence
+      - name: Preserve native sandbox evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sandbox-query-${{ matrix.os }}-${{ github.run_attempt }}
+          path: bin/sandbox-query-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
   source:
     name: ${{ matrix.os }} / ${{ matrix.lane }}
     strategy:

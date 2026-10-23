@@ -41,6 +41,7 @@ func Check(path string) (map[string]any, *protocol.Error) {
 	if format, ok := e.Details["format"].(string); ok {
 		report["format"] = format
 	}
+	e.Message = "Project configuration is invalid. Correct the reported fields and expected input rules."
 	diagnostics := []any{}
 	if causes, ok := e.Details["causes"].([]any); ok {
 		for _, cause := range causes {

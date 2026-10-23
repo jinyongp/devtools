@@ -11,7 +11,7 @@ import (
 var keyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func dotenvError(line int, message string) *protocol.Error {
-	return protocol.NewError("invalid_dotenv", message, 2, map[string]any{"line": line})
+	return protocol.NewError("invalid_dotenv", message, 2, map[string]any{"line": line, "sources": []any{map[string]any{"kind": "dotenv", "path": []string{}, "line": line}}, "facts": map[string]any{"input_role": "dotenv"}})
 }
 
 // ParseDotenv parses assignments as data, preserving dollar expressions literally.

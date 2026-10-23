@@ -55,7 +55,11 @@ function storageFailureDetails(input) {
     safe.target = {};
     for (const key of ["kind","name","profile","env","command","bundle","id","request_id"]) if (typeof input.target[key] === "string") safe.target[key] = input.target[key];
     safe.facts = {};
-    for (const key of ["domain","resource","stage","field","state","expected_version","observed_version","reason"]) if (typeof input.facts[key] === "string") safe.facts[key] = input.facts[key];
+    for (const key of ["domain","resource","stage","field","state","expected_version","observed_version","reason","expected_type","observed_type","expected_kind","actual_kind","limit_kind"]) if (typeof input.facts[key] === "string") safe.facts[key] = input.facts[key];
+    for (const key of ["observed","limit","minimum","maximum"]) if (Number.isFinite(input.facts[key])) safe.facts[key] = input.facts[key];
+    safe.facts.import_items = (Array.isArray(input.facts.import_items) ? input.facts.import_items : []).filter(v => typeof v.key === "string" && ["variable","secret"].includes(v.kind) && ["conflict","kind_conflict"].includes(v.action)).map(v => ({key:v.key,kind:v.kind,action:v.action}));
+    safe.sources = (Array.isArray(input.sources) ? input.sources : []).filter(v => typeof v.kind === "string" && Array.isArray(v.path) && v.path.every(p => typeof p === "string")).map(v => ({kind:v.kind,path:v.path,...(Number.isInteger(v.line) && v.line > 0 ? {line:v.line} : {}),...(Number.isInteger(v.column) && v.column > 0 ? {column:v.column} : {})}));
+    safe.causes = (Array.isArray(input.causes) ? input.causes : []).map(v => storageFailureDetails({reason:v.reason,target:v.target,facts:v.facts,sources:v.sources})).filter(v => v?.facts);
     if (Number.isSafeInteger(input.facts.os_code) && input.facts.os_code > 0) safe.facts.os_code = input.facts.os_code;
     safe.facts.outcomes = (Array.isArray(input.facts.outcomes) ? input.facts.outcomes : []).map(v => ({kind:v.kind,name:v.name,id:v.id,state:v.state,changed:v.changed,code:v.code}));
     safe.checks = (Array.isArray(input.checks) ? input.checks : []).map(c => ({id:c.id,status:c.status,reason:c.reason}));
@@ -79,7 +83,11 @@ function storageFailureMessage(details) {
     const checks = details.checks.filter(c => c.status === "fail" || c.status === "unknown").map(c => `${c.id}: ${c.reason}`).join(", ");
     const remedies = details.remedies.map(r => r.message).join(" ");
     const outcomes = details.facts.outcomes.map(v => `${v.name}: ${v.state}${v.id ? ` (${v.id})` : ""}`).join(", ");
-    return ` ${stage}${target}: ${details.reason}${os}.${checks ? ` ${checks}.` : ""}${outcomes ? ` ${outcomes}.` : ""}${remedies ? ` ${remedies}` : ""}`;
+    const rules = [details,...(details.causes || [])].map(v => {
+      const f=v.facts, location=(v.sources || []).map(s => `${s.path.join(".")}${s.line ? ` line ${s.line}` : ""}`).join(", ");
+      return [location,f.expected_type ? `expected ${f.expected_type}, observed ${f.observed_type}` : "",f.expected_kind ? `expected ${f.expected_kind}, observed ${f.actual_kind || "unverified"}` : "",f.limit_kind ? `${f.limit_kind}: observed ${f.observed}, limit ${f.limit}` : "",...(f.import_items || []).map(i => `${i.key} (${i.kind}): ${i.action}`)].filter(Boolean).join("; ");
+    }).filter(Boolean).join(". ");
+    return ` ${stage}${target}: ${details.reason}${os}.${checks ? ` ${checks}.` : ""}${outcomes ? ` ${outcomes}.` : ""}${rules ? ` ${rules}.` : ""}${remedies ? ` ${remedies}` : ""}`;
   }
   const reason = {
     access_denied:"access denied", not_found:"storage item missing", already_exists:"storage item already exists",

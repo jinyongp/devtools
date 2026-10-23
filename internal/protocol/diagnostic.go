@@ -80,6 +80,23 @@ func Public(e *Error, operation string) *Error {
 		}
 		facts["outcomes"] = out
 	}
+	importItems := facts["import_items"]
+	if e.Code == "import_conflict" {
+		importItems = old["items"]
+	}
+	if importItems != nil {
+		out := []any{}
+		for _, item := range diagnosticArray(importItems) {
+			v := diagnosticObject(item)
+			key, kok := v["key"].(string)
+			kind, _ := v["kind"].(string)
+			action, _ := v["action"].(string)
+			if kok && (kind == "variable" || kind == "secret") && (action == "conflict" || action == "kind_conflict") {
+				out = append(out, map[string]any{"key": key, "kind": kind, "action": action})
+			}
+		}
+		facts["import_items"] = out
+	}
 	for _, key := range []string{"domain", "resource", "field", "stage", "state", "input_role", "expected_revision", "observed_revision"} {
 		if v, ok := old[key].(string); ok {
 			facts[key] = v

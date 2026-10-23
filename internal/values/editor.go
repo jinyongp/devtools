@@ -183,7 +183,7 @@ func (e *Editor) batchImport(input map[string]string, variables []string, env st
 		return nil, false, err
 	}
 	if apply && !applicable {
-		return items, false, protocol.NewError("import_conflict", "Keep the existing kinds for conflicting keys.", 3, nil)
+		return items, false, protocol.NewError("import_conflict", "Keep the existing kinds for conflicting keys.", 3, map[string]any{"items": items})
 	}
 	if apply {
 		for _, item := range items {

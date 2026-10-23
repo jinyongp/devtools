@@ -124,3 +124,37 @@ func TestWrongKindAndLockedRunKeepActionableConditions(t *testing.T) {
 		t.Fatal(code, e)
 	}
 }
+
+func TestImportAndConfigDiagnosticsKeepSafeFacts(t *testing.T) {
+	a := testApp(t)
+	dir := privateTempDir(t)
+	t.Chdir(dir)
+	if err := os.WriteFile("devtools.toml", []byte("profile='audit'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, e := invoke(t, a, "", "var", "set", "TOKEN", "--value", "old"); code != 0 {
+		t.Fatal(e)
+	}
+	file := filepath.Join(dir, "input.env")
+	if err := os.WriteFile(file, []byte("TOKEN=CANARY_DIAGNOSTIC_VALUE\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	code, _, e := invoke(t, a, "", "import", "--file", file)
+	if code != 3 || !strings.Contains(e, `"import_items":[{"action":"conflict","key":"TOKEN","kind":"variable"}]`) || strings.Contains(e, "CANARY_DIAGNOSTIC_VALUE") {
+		t.Fatal(code, e)
+	}
+	if err := os.WriteFile(file, []byte("OK=public\nTOKEN=\"CANARY_UNCLOSED\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	code, _, e = invoke(t, a, "", "import", "--file", file)
+	if code != 2 || !strings.Contains(e, `"kind":"dotenv","line":2`) || strings.Contains(e, "CANARY_UNCLOSED") {
+		t.Fatal(code, e)
+	}
+	if err := os.WriteFile("devtools.toml", []byte("profile='audit'\n[commands.dev]\nexec=['missing']\ninject='CANARY_WRONG_TYPE'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	code, _, e = invoke(t, a, "", "config", "check")
+	if code != 3 || !strings.Contains(e, `"expected_type":"boolean"`) || !strings.Contains(e, `"observed_type":"string"`) || strings.Contains(e, "CANARY_WRONG_TYPE") || strings.Contains(e, "Run devtools config check") {
+		t.Fatal(code, e)
+	}
+}

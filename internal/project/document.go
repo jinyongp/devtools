@@ -154,7 +154,11 @@ func ParseDocument(data []byte, path, root string) (*Document, *protocol.Error) 
 			for index, issue := range issues {
 				cause := causes[index].(map[string]any)
 				cause["reason"] = issue.Reason
-				cause["facts"] = map[string]any{"rule": issue.Rule}
+				facts := map[string]any{"rule": issue.Rule}
+				for k, v := range issue.Facts {
+					facts[k] = v
+				}
+				cause["facts"] = facts
 			}
 			return nil, e
 		}

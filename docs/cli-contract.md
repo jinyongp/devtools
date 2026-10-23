@@ -313,7 +313,7 @@ devtools import --file .env --profile myapp
 {"schema_version":1,"ok":true,"data":{"profile":"myapp","env":"local","dry_run":true,"changed":false,"applicable":true,"items":[{"key":"PORT","kind":"variable","action":"add"},{"key":"TOKEN","kind":"secret","action":"add"}]}}
 ```
 
-`changed`는 실제 저장 변경 여부이고, 미리보기에서는 항상 false다. `applicable`은 현재 옵션으로 전체를 적용할 수 있는지 나타낸다. 미리보기는 충돌이 있어도 종료 코드 0과 `applicable: false`를 반환한다. 실제 적용에서 충돌하면 `import_conflict`와 종료 코드 3을 반환하고 `error.details.items`에 메타데이터를 제공한다. 미리보기와 실제 적용 사이의 변경은 실제 적용 시 다시 검사한다.
+`changed`는 실제 저장 변경 여부이고, 미리보기에서는 항상 false다. `applicable`은 현재 옵션으로 전체를 적용할 수 있는지 나타낸다. 미리보기는 충돌이 있어도 종료 코드 0과 `applicable: false`를 반환한다. 실제 적용에서 충돌하면 `import_conflict`와 종료 코드 3을 반환하고 `error.details.facts.import_items`에 충돌한 key/kind/action을 제공한다. 미리보기와 실제 적용 사이의 변경은 실제 적용 시 다시 검사한다.
 
 입력은 UTF-8 일반 파일이다. 지원 문법은 다음과 같다.
 
@@ -324,7 +324,7 @@ devtools import --file .env --profile myapp
 - 따옴표로 감싼 여러 줄 값은 개행을 포함해 저장한다. 닫는 따옴표 뒤에는 공백과 주석을 허용한다.
 - `$NAME`, `${NAME}`, `$(...)`는 문자열로 저장한다. 파일은 셸 명령으로 실행하지 않는다.
 
-중복 키·잘못된 키·닫히지 않은 따옴표·NUL·잘못된 UTF-8은 `invalid_dotenv`와 종료 코드 2로 처리한다. 문법 오류에는 `error.details.line`과 고정된 원인 설명을 제공한다. 파일 내용과 값은 진단에 포함하지 않는다.
+중복 키·잘못된 키·닫히지 않은 따옴표·NUL·잘못된 UTF-8은 `invalid_dotenv`와 종료 코드 2로 처리한다. 문법 오류에는 `error.details.sources`의 dotenv source에 확인된 행과 고정된 원인 설명을 제공한다. column은 아는 경우만 제공한다. 파일 내용과 값은 진단에 포함하지 않는다.
 
 ## 재사용할 값 묶음: bundle
 

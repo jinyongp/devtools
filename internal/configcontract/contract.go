@@ -99,6 +99,7 @@ func Definition(name string) map[string]any {
 }
 
 type Issue struct {
+	Facts  map[string]any
 	Path   []string
 	Reason string
 	Offset int64
@@ -334,6 +335,32 @@ func Validate(name string, v any) []Issue {
 			return
 		}
 		rule := strings.Join(e.ErrorKind.KeywordPath(), "/")
+		facts := map[string]any{}
+		switch k := e.ErrorKind.(type) {
+		case *kind.Type:
+			facts["expected_type"] = strings.Join(k.Want, " or ")
+			facts["observed_type"] = k.Got
+		case *kind.Enum:
+			allowed := []string{}
+			for _, v := range k.Want {
+				if s, ok := v.(string); ok {
+					allowed = append(allowed, s)
+				}
+			}
+			facts["allowed"] = allowed
+		case *kind.Minimum:
+			n, _ := k.Want.Float64()
+			facts["minimum"] = n
+		case *kind.Maximum:
+			n, _ := k.Want.Float64()
+			facts["maximum"] = n
+		case *kind.MinLength:
+			facts["minimum"] = k.Want
+		case *kind.MaxLength:
+			facts["maximum"] = k.Want
+		case *kind.Pattern:
+			facts["rule"] = k.Want
+		}
 		switch k := e.ErrorKind.(type) {
 		case *kind.AdditionalProperties:
 			for _, key := range k.Properties {
@@ -353,7 +380,7 @@ func Validate(name string, v any) []Issue {
 		if strings.HasPrefix(rule, "additionalProperties") {
 			reason = "unknown_field"
 		}
-		issues = append(issues, Issue{Path: append([]string{}, e.InstanceLocation...), Reason: reason, Rule: rule})
+		issues = append(issues, Issue{Path: append([]string{}, e.InstanceLocation...), Reason: reason, Rule: rule, Facts: facts})
 	}
 	walk(validation)
 	return issues

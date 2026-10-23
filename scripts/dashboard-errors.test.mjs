@@ -6,6 +6,16 @@ import vm from 'node:vm';
 const app = readFileSync(new URL('../internal/dashboard/assets/app.js', import.meta.url), 'utf8');
 const source = app.slice(app.indexOf('function storageFailureDetails('), app.indexOf('function query('));
 
+test('public config, import and limit facts survive without raw values', () => {
+  const context = vm.createContext({});
+  vm.runInContext(source, context);
+  context.details = {reason:'invalid_type',target:{kind:'config',name:'devtools.toml'},facts:{},causes:[{reason:'invalid_type',target:{kind:'config',name:'devtools.toml'},sources:[{kind:'config',path:['commands','dev','inject'],line:4,column:1}],facts:{expected_type:'boolean',observed_type:'string',raw:'PRIVATE-CANARY'}}]};
+  const message = vm.runInContext('storageFailureMessage(storageFailureDetails(details))', context);
+  assert.match(message,/commands.dev.inject line 4/);
+  assert.match(message,/expected boolean, observed string/);
+  assert.doesNotMatch(message,/PRIVATE-CANARY/);
+});
+
 test('API errors retain safe storage facts and display original OS failure', async () => {
   const context = vm.createContext({
     generation: 0, detailGeneration: 0, sessionToken: 'private-session',

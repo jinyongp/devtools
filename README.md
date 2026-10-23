@@ -92,7 +92,8 @@ Commit the generated `devtools.toml` to Git. Projects and worktrees that use the
 same profile share stored values. Builds with vault support protect stored secrets
 with local encryption and a reusable OS-protected or passphrase key session;
 public variables remain readable. Complete vault setup before storing secrets. See
-[local secret protection](docs/secret-protection.md) for setup and build availability.
+[local secret protection](docs/secret-protection.md) for setup, passphrase/backend
+changes on supporting builds, and build availability.
 The [values guide](docs/cli-contract.md) covers secret registration and saved commands.
 
 Use `devtools --help` or a command's help, such as `devtools task --help`, to

@@ -60,7 +60,7 @@ func rewrapRemedy(scope protocol.InvocationContext, requestID, from, target stri
 
 func pendingRewrapError(info *vault.RewrapInfo, scope protocol.InvocationContext) *protocol.Error {
 	return protocol.NewError(vault.ErrRecovery.Error(), "A vault protection change is pending. Resume the original rewrap; storage recovery cannot choose replacement protection.", 3,
-		map[string]any{"rewrap": info, "remedies": []protocol.Remedy{rewrapRemedy(scope, info.RequestID, info.FromBackend, info.Backend, !info.SlotPublished)}})
+		map[string]any{"request_id": info.RequestID, "retry": "same_request", "remedies": []protocol.Remedy{rewrapRemedy(scope, info.RequestID, info.FromBackend, info.Backend, !info.SlotPublished)}})
 }
 
 func (a *App) rewrapPassphrase(ctx context.Context, streams IO, options map[string]string, prefix string, required, confirm bool) (*vault.Material, *protocol.Error) {
@@ -113,6 +113,7 @@ func (a *App) rewrapVault(ctx context.Context, streams IO, r Request) (result an
 		if condition.Details == nil {
 			condition.Details = map[string]any{}
 		}
+		condition.Details["request_id"] = strings.ToLower(r.Options["request-id"])
 		if attempted {
 			protocol.WithEffects(condition, "unknown")
 		}
@@ -121,7 +122,10 @@ func (a *App) rewrapVault(ctx context.Context, streams IO, r Request) (result an
 			return
 		}
 		if pending, _ := keys.RewrapInfo(""); pending != nil {
-			condition.Details["rewrap"] = pending
+			condition.Details["retry"] = "after_dependency_change"
+			if strings.ReplaceAll(pending.RequestID, "-", "") == id {
+				condition.Details["retry"] = "same_request"
+			}
 			condition.Details["remedies"] = []protocol.Remedy{rewrapRemedy(r.Invocation, pending.RequestID, pending.FromBackend, pending.Backend, !pending.SlotPublished)}
 		} else {
 			condition.Details["remedies"] = []protocol.Remedy{rewrapRemedy(r.Invocation, r.Options["request-id"], from, target, true)}

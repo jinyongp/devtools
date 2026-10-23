@@ -30,6 +30,31 @@ func assertContract(t *testing.T, name string, v any) {
 	}
 }
 
+func TestConfigSchemaResponseMatchesPublishedOutput(t *testing.T) {
+	app := testApp(t)
+	metadata := outputData(t, app, []string{"schema", "config", "schema"})
+	data, err := json.Marshal(metadata["output_schema"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema any
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatal(err)
+	}
+	compiler := jsonschema.NewCompiler()
+	const url = "urn:devtools:test:config-schema-response"
+	if err := compiler.AddResource(url, schema); err != nil {
+		t.Fatal(err)
+	}
+	compiled, err := compiler.Compile(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := compiled.Validate(outputData(t, app, []string{"config", "schema"})); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestEveryPublishedBodyExampleMatchesItsSchema(t *testing.T) {
 	app := testApp(t)
 	for i, command := range app.commands {

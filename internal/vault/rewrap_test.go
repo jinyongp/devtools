@@ -171,6 +171,20 @@ func TestRewrapFailurePreservesRecoverableSlotAndManualLatch(t *testing.T) {
 type rewrapFixtureInput struct {
 	VaultID, ID, Stage string
 	Old, Next          []byte
+	Native             bool
+}
+
+type rewrapNativeCheckpoint struct {
+	Protector
+	stage string
+}
+
+func (p rewrapNativeCheckpoint) Wrap(ctx context.Context, key []byte) ([]byte, error) {
+	wrapped, err := p.Protector.Wrap(ctx, key)
+	if err == nil && p.stage == "native-created" {
+		os.Exit(99)
+	}
+	return wrapped, err
 }
 
 func runRewrapFixture() {
@@ -184,7 +198,18 @@ func runRewrapFixture() {
 	clear(input.Next)
 	defer old.Destroy()
 	defer next.Destroy()
-	_, err := (KeyFileStore{Directory: os.Args[2]}).rewrap(context.Background(), input.ID, PassphraseProtector{VaultID: input.VaultID, Passphrase: old}, PassphraseProtector{VaultID: input.VaultID, Passphrase: next}, func(stage string) {
+	var target Protector = PassphraseProtector{VaultID: input.VaultID, Passphrase: next}
+	if input.Native {
+		if os.Getenv("DEVTOOLS_DISPOSABLE_HOST") != "1" {
+			os.Exit(92)
+		}
+		p, err := NativeProtection(input.VaultID, false)
+		if err != nil {
+			os.Exit(93)
+		}
+		target = rewrapNativeCheckpoint{Protector: p, stage: input.Stage}
+	}
+	_, err := (KeyFileStore{Directory: os.Args[2]}).rewrap(context.Background(), input.ID, PassphraseProtector{VaultID: input.VaultID, Passphrase: old}, target, func(stage string) {
 		if stage == input.Stage {
 			os.Exit(99)
 		}
@@ -192,6 +217,103 @@ func runRewrapFixture() {
 	if err != nil {
 		os.Exit(91)
 	}
+}
+
+// Called only by the real native platform gates. Crash after the actual OS
+// item creation/publication, then recover with the same protector and root.
+func testNativeRewrapRecovery(t *testing.T) {
+	t.Helper()
+	t.Run("native_rewrap_recovery", func(t *testing.T) {
+		if os.Getenv("DEVTOOLS_DISPOSABLE_HOST") != "1" {
+			t.Skip("requires an explicitly disposable native host")
+		}
+		for _, stage := range []string{"native-created", "slot-published"} {
+			t.Run(stage, func(t *testing.T) {
+				dir, old, master := sessionFixture(t)
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				native, err := NativeProtection(old.VaultID, false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() {
+					if remover, ok := native.(interface{ Remove(context.Context) error }); ok {
+						if err := remover.Remove(context.Background()); err != nil && !errors.Is(err, ErrKeyMissing) {
+							t.Error("owned native item cleanup", err)
+						}
+					}
+				})
+				id, _ := NewID()
+				input := rewrapFixtureInput{VaultID: old.VaultID, ID: id, Stage: stage, Old: old.Passphrase.CopyBytes(), Native: true}
+				body, err := json.Marshal(input)
+				clear(input.Old)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer clear(body)
+				executable, err := os.Executable()
+				if err != nil {
+					t.Fatal(err)
+				}
+				child := exec.CommandContext(ctx, executable, "__vault-rewrap-fixture", dir)
+				child.Stdin = bytes.NewReader(body)
+				var exit *exec.ExitError
+				if err := child.Run(); !errors.As(err, &exit) || exit.ExitCode() != 99 {
+					t.Fatal("native child did not reach actual crash boundary", err)
+				}
+				store := KeyFileStore{Directory: dir}
+				info, err := store.RewrapInfo(id)
+				if err != nil || (stage == "native-created" && info != nil) || (stage == "slot-published" && (info == nil || !info.SlotPublished)) {
+					t.Fatal("wrong native crash state", info, err)
+				}
+				result, err := store.Rewrap(ctx, id, old, native)
+				if err != nil || !result.Changed {
+					t.Fatal("native crash recovery", result, err)
+				}
+				installed, err := store.Read()
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := unwrapRoot(ctx, native, installed)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer got.Destroy()
+				if !sameMaterial(master, got) {
+					t.Fatal("native crash recovery changed root")
+				}
+				if native.Identity().Backend == "dpapi" {
+					return // DPAPI has no external item or retirement operation.
+				}
+				// Inject a refusal at the removal boundary while retaining the real
+				// OS item. This is not a claim that an OS ACL refusal was induced.
+				pass := NewMaterial([]byte("synthetic-native-retirement-retry"))
+				defer pass.Destroy()
+				next := PassphraseProtector{VaultID: old.VaultID, Passphrase: pass}
+				retirement, _ := NewID()
+				denied := &rewrapProtector{Protector: native, removeError: ErrDenied}
+				if _, err := store.Rewrap(ctx, retirement, denied, next); !errors.Is(err, ErrDenied) || denied.removals != 1 {
+					t.Fatal("native retirement refusal was not preserved", err)
+				}
+				retained, err := unwrapRoot(ctx, native, installed)
+				if err != nil {
+					t.Fatal("old native item retired before successful removal", err)
+				}
+				retained.Destroy()
+				info, err = store.RewrapInfo(retirement)
+				if err != nil || info == nil || !info.SlotPublished {
+					t.Fatal("missing native retirement recovery", info, err)
+				}
+				result, err = store.Rewrap(ctx, retirement, native, next)
+				if err != nil || !result.Changed || !result.Replayed {
+					t.Fatal("native retirement retry", result, err)
+				}
+				if _, err := unwrapRoot(ctx, native, installed); !errors.Is(err, ErrKeyMissing) {
+					t.Fatal("retired native item still accessible", err)
+				}
+			})
+		}
+	})
 }
 func TestRewrapRecoveryAtDurableBoundaries(t *testing.T) {
 	for _, stage := range []string{"prepared", "slot-published", "installed-verified", "old-retired", "receipt-written", "cleaned"} {

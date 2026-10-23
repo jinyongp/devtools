@@ -200,6 +200,7 @@ jobs:
       - name: Complete native Go product suite
         if: ${{ startsWith(matrix.lane, 'suite-') && (github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'suite') }}
         env:
+          DEVTOOLS_DISPOSABLE_HOST: '1'
           DEVTOOLS_TEST_SYSTEM_NETWORK: '1'
           DEVTOOLS_TEST_PACKAGE_SHIMS: '1'
         run: |

@@ -77,6 +77,13 @@ func commandExamples(c Command) []string {
 
 func commandWorkflow(c Command) []string {
 	switch c.Name {
+	case "vault rewrap":
+		return []string{
+			"Discover schema vault rewrap and inspect vault status. Select the actual original and target backend explicitly; this changes protection of the same root key, not stored values or provider credentials.",
+			"Replace the syntax example's UUID once for a new change. Provide original and target passphrases through hidden terminal input or private files; only one side may read piped stdin. Native authentication UI requires --interactive.",
+			"After interruption retain the original UUID, backend selections and target credentials. Inspect vault status; after slot publication the retired original credentials are no longer required. Follow pending-operation remedies rather than reinitializing.",
+			"Rewrap preserves manual lock. Explicitly unlock the target protection before using a locked passphrase session. Existing app environments, provider credentials and old copies are not revoked.",
+		}
 	case "secret generate":
 		return []string{
 			"Read devtools values revision --profile sample for the current edit revision; inspect existing key metadata before selecting --replace.",

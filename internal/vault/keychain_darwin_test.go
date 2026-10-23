@@ -69,6 +69,7 @@ func TestNativeKeychainSyntheticVault(t *testing.T) {
 	if _, err := p.Unwrap(context.Background(), wrapped); !errors.Is(err, ErrKeyMissing) {
 		t.Fatal("missing key", err)
 	}
+	testNativeRewrapRecovery(t)
 }
 
 // This test may lock only the dedicated keychain selected by the disposable

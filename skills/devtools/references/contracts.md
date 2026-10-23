@@ -21,6 +21,7 @@
 - Lists: `data.items`. Single resources: `data.item`. Scalars/reports keep named fields.
 - Mutations expose `data.changed`; retry-safe ones also expose `data.replayed`, including false.
 - Replays preserve the original changed result; do not count another mutation or infer current health.
+- On supporting builds `vault rewrap` returns `item`, `request_id`, `changed`, `replayed`. Optional vault status `item.rewrap` is unverified routing metadata; pending recovery uses `details.target.request_id`, `retry:same_request` and scoped remedies.
 - Devtools errors, including help errors, use JSON stderr. Child streams follow output-protection policy; completion returns a raw script.
 - Dashboard startup returns JSON, with the credential-bearing URL in `data.item.url`; no output-format option is needed.
 

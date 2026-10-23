@@ -41,6 +41,7 @@ func TestNativeDPAPIUserRoundtrip(t *testing.T) {
 	if _, err := p.Unwrap(ctx, wrapped); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
+	testNativeRewrapRecovery(t)
 }
 
 // ACL denial alone cannot establish DPAPI's identity binding: the other user

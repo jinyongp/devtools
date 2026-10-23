@@ -301,6 +301,7 @@ func TestNativeSecretServiceSyntheticVault(t *testing.T) {
 		t.Fatal("native roundtrip", err)
 	}
 	clear(got)
+	testNativeRewrapRecovery(t)
 }
 
 func TestSessionNativeHelperRealPipeAndCancellation(t *testing.T) {

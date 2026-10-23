@@ -34,7 +34,8 @@ WSL은 별도의 Linux 저장소와 서비스를 사용한다. Windows의 키나
 `key_backend_unavailable`은 OS 키 저장소를 사용할 수 없다는 뜻이다. 특히 Secret
 Service가 없는 WSL에서는 `--interactive`만 추가해도 해결되지 않는다.
 `vault status`가 `uninitialized`일 때 암호 방식을 명시적으로 선택할 수 있다.
-이미 초기화된 vault라면 기존 키를 복구해야 하며 다른 backend로 다시 초기화하지 않는다.
+이미 초기화된 vault라면 기존 키를 복구한다. 보호 방식을 바꾸려면 아래 `vault rewrap`을
+사용하며 다른 backend로 다시 초기화하지 않는다.
 
 ```sh
 devtools vault init --backend passphrase
@@ -139,6 +140,55 @@ Linux/macOS의 준비된 저장소에서 `env list`, `variable list/get`과 `sec
 환경과 자식 프로세스까지 회수되지는 않는다. 실행은 실제 전달 값을 미리 고정하며,
 재시작도 old stop 전에 같은 입력을 준비한다. 잠금·저장 세대 변경으로 준비가 거절되면
 기존 실행을 유지한다. 저장 성공이 기존 앱에 새 값이 반영되었다는 뜻은 아니다.
+
+## 암호와 보호 방식 바꾸기
+
+이 기능은 현재 소스의 protocol 14에 추가되었다. 설치한 CLI에서
+`devtools schema vault rewrap`을 먼저 확인한다. 기존 vault 지원만으로 보호 변경까지
+제공된다고 가정하지 않는다. Dashboard의 초기 설정·보호 변경은 CLI에서 수행한다.
+
+`vault rewrap`은 같은 root key의 보호만 바꾼다. profile의 암호문·논리 값·root ID를
+바꾸지 않는다. `vault status`에서 현재 backend를 확인하고 원래 방식과 대상 방식을
+모두 명시한다. `--from-backend native`와 `--backend native`는 해당 OS의 기존
+Keychain·Secret Service·DPAPI를 선택한다. 실패 시 다른 방식으로 전환하지 않는다.
+isolated root에서는 양쪽 모두 passphrase여야 한다.
+
+새 변경에는 UUID를 한 번 생성한다. 아래 `UUID`를 그 값으로 바꾼다. 실제 터미널에서는
+기존 암호 한 번과 새 암호 두 번을 숨김 입력한다. 따뜻한 키 세션도 기존 보호의 인증을
+대신하지 않는다.
+
+```sh
+devtools vault status
+devtools vault rewrap --from-backend passphrase --backend passphrase --request-id UUID
+```
+
+비대화형 입력은 소유자만 읽을 수 있는 기존 일반 파일이나 명시적인 stdin을 사용한다.
+아래 두 파일을 먼저 준비하고 실제 경로로 바꾼다. 암호를 argv나 환경 변수에 넣지 않는다.
+양쪽 모두 stdin을 선택할 수 없다. native인 쪽에는 passphrase 옵션을 쓰지 않으며,
+OS 인증 창이 필요할 때만 `--interactive`를 명시한다.
+
+```sh
+devtools vault rewrap --from-backend passphrase --backend passphrase --request-id UUID \
+  --current-passphrase-file /private/current-vault-passphrase \
+  --new-passphrase-file /private/new-vault-passphrase
+```
+
+성공은 `data.item`의 현재 상태, `request_id`, `changed`, `replayed`를 반환한다.
+같은 native 보호로의 변경은 인증 후 `changed:false`가 될 수 있다. 같은 UUID의 재전송은
+최초 `changed`를 유지하고 `replayed:true`를 반환한다. 서로 다른 변경에 UUID를 재사용하지 않는다.
+
+중단·응답 유실 때는 **원래 UUID·backend 선택·대상 자격**을 유지하고 `vault status`를
+확인한다. `item.rewrap`이 있으면 원래 작업을 재개한다. `slot_published:false`면 기존
+자격도 필요하고, true면 대상 자격으로 재개하므로 삭제된 이전 OS 항목이나 이전 암호
+파일은 필요하지 않다. `integrity_verified:false`인 상태 메타데이터는 인증 완료를
+뜻하지 않는다. `vault recover`도 pending 보호 변경을 발견하면 같은 UUID의 rewrap으로
+안내한다. 보호 파일 삭제나 init으로 해결하지 않는다.
+
+보호 변경은 캐시된 키와 이전 실행 준비를 무효화하지만 수동 잠금은 해제하지 않는다.
+passphrase 대상은 새 암호로 명시 `vault unlock`한 뒤 사용한다. native 대상은 기존 OS의
+silent 해제 정책을 따르며 수동 잠금 뒤에는 명시 unlock이 필요하다. 이 변경은 이미
+전달한 앱 환경, 외부 서비스의 token, 과거 백업·키 사본을 회수하지 않는다. 앱 재시작이나
+provider 자격 회전이 필요하면 별도로 수행한다. 백업 전송 암호도 독립적이다.
 
 ## Dashboard와 진단
 

@@ -11,9 +11,19 @@
 - Manual lock survives daemon restart; passphrase sessions need explicit unlock after idle expiry. Metadata/diagnostics do not unlock or extend idle.
 - Lock cannot revoke values already delivered to apps.
 
+## Change existing protection
+
+- Discover `schema vault rewrap` before use; vault support alone does not establish rewrap support. Read `vault status` and explicitly select both `--from-backend native|passphrase` and `--backend native|passphrase`.
+- Rewrap protects the same root key; profile bytes and values stay the same. Use a new UUID once for a new change. A warm session does not replace original-protector authentication.
+- Passphrases use hidden terminal input or `--current-passphrase-file/stdin` and `--new-passphrase-file/stdin`. Only one side can read stdin. Never use argv/env. Native sides accept no passphrase; OS UI requires `--interactive`. Isolated roots allow passphrase on both sides only.
+- After interruption preserve the original UUID, backend selections and target credentials. Inspect `item.rewrap`: before slot publication original credentials are also needed; afterward target authentication suffices even if the old file/OS item is gone. Routing metadata with `integrity_verified:false` is not authenticated intent.
+- Same-native protection may authenticate and return `changed:false`. Replay preserves original `changed` and returns `replayed:true`.
+- Rewrap invalidates cached keys and previous launch preparation but preserves manual lock. Explicitly unlock a locked passphrase target. It does not rotate provider credentials, restart apps, revoke delivered environments or invalidate old copies/independent backup passphrases.
+
 ## Recover without replacing authority
 
 - `vault recover` completes interrupted storage transitions after explicit unlock; it verifies existing protection.
+- Pending protection changes instead route to `vault rewrap` with the original UUID and target credentials. Follow the same-request remedy; do not substitute `init` or delete the slot.
 - Do not delete key/catalog/recovery files or invent a replacement key.
 - Unknown admission/launch stays unresolved until trustworthy recovery evidence exists; PID existence is insufficient.
 - Profile transfer passphrases and local vault protection are independent. See [storage.md](storage.md).

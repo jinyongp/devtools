@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v10 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v14 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
@@ -55,7 +55,7 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 13`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
+`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 14`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
 
 실행 준비 중 사용자 취소는 `canceled`와 종료 코드 130, 준비 기한 초과는
 `deadline_exceeded`와 종료 코드 3으로 구분합니다. 저장이 완료된 뒤 도착한 취소는
@@ -108,6 +108,7 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `process` 목록·상태·변경 | `items`, `item`, 또는 `item`·`changed`·`replayed` |
 | `process check/wait/logs` | readiness 또는 로그 보고서 |
 | `vault status`, init/recover/lock/unlock | 각각 `item`, `item`·`changed`; 상태 조회는 키를 해제하지 않음 |
+| `vault rewrap` | `item`, `request_id`, `changed`, `replayed`; 같은 root key의 보호 변경 |
 | `bundle set/rename/remove` | `profile`, `bundle`, `revision`, `changed`, `replayed` |
 | `secret generate` | `profile`, `changed`, `revision`, `replayed`; 해당하면 값 없는 `warnings` |
 | `values revision` | `profile`, `env`, 불투명 문자열 `revision`, `integrity_verified` |
@@ -134,6 +135,27 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v14 마이그레이션
+
+현재 소스는 `vault rewrap`을 추가합니다. 명시한 기존·대상 backend와 UUID로 같은
+root key의 암호 또는 native 보호를 바꿉니다. 입력·재시도 절차는
+[로컬 secret 보호](secret-protection.md#암호와-보호-방식-바꾸기)를 따릅니다.
+
+vault 상태의 `item.rewrap`은 pending 작업이 있을 때만 제공되는 선택 필드입니다.
+`request_id`, 선택적 `from_backend`·`backend`, `slot_published`, `completed`,
+`integrity_verified:false`를 포함하며 인증 증명이 아닙니다. pending 복구 오류는 기존
+`details.target.request_id`, `retry:same_request`, 범위가 유지된 `remedies`로 재개를
+안내합니다. 실패의 `effects:unknown`을 무변경으로 해석하지 않습니다.
+
+`config schema`의 응답과 공개 output schema도 protocol 14로 일치시킵니다.
+이전 output schema의 잘못 남은 `protocol_version.const:10`에 의존한 consumer는
+실제 CLI의 schema를 다시 읽어야 합니다. 설정 파일에는 버전 필드를 추가하지 않습니다.
+
+내부 키 세션 protocol은 4이며 CLI가 이전 세션을 퇴역시키고 새로 연결합니다.
+보호 변경 후 이전 세션 키·실행 ticket은 다시 사용할 수 없습니다. 수동 잠금은 유지하고
+저장 형식과 envelope `schema_version`은 1을 유지합니다. 실행 중인 앱 환경과 이전
+키 사본의 회수는 제공하지 않습니다.
 
 ## protocol v13 마이그레이션
 

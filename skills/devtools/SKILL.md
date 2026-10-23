@@ -25,7 +25,7 @@ Use this skill alongside the source-work workflow. Do not create task records me
 | Run once; keep a server alive; restart; wait for readiness | `command run`, `process`, `project` | [execution.md](references/execution.md) |
 | Pick a free port; avoid worktree collisions; pass ports or URLs to apps | `[ports.NAME]`, `port`, `serve`, `bind`, `${bind.NAME}` | [ports.md](references/ports.md) |
 | Inject env values or secrets; reuse a subset; inspect changed input | `var`, `secret`, `env`, `bundle`, `values` | [values.md](references/values.md) |
-| Initialize/unlock local protection; fix protected execution | `vault` | [protection.md](references/protection.md) |
+| Initialize/unlock/change local protection; fix protected execution | `vault` | [protection.md](references/protection.md) |
 | Stable local domains; HTTPS; LAN/public sharing | `proxy`, `expose` | [network.md](references/network.md) |
 | Claim/resume requested tasks; edit plans; record validation | `task`, workstreams | [tasks.md](references/tasks.md) |
 | Transfer profiles; back up, restore, or clean history | `profile`, `backup`, `cleanup` | [storage.md](references/storage.md) |
@@ -43,7 +43,7 @@ Use this skill alongside the source-work workflow. Do not create task records me
 - Missing support: inspect the error and installed version. Do not assume the current source or a published release matches the installed CLI.
 - Missing CLI: verify the project's execution environment before diagnosing absence. Resolve authorized setup or report the gap; do not replace devtools with a wrapper merely because it was unavailable in one shell.
 - Reuse contracts for the same build. Avoid `schema --all` unless reviewing the full catalog.
-- On protocol 13, syntax examples may contain placeholders. Follow `workflow` for
+- On protocol 13 and later, syntax examples may contain placeholders. Follow `workflow` for
   real revisions/IDs and new UUID versus identical-input retry. `values execution
   status` accepts one execution ID or `--request-id`, never both.
 - Ordinary operation needs the installed CLI and these bundled references, not a separate devtools source checkout.

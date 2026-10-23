@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/paths"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/vault"
 )
@@ -134,7 +135,13 @@ func TestVaultRewrapPublicPassphraseLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(filepath.Join(dir, "rewrap-pending.json"), receipt, 0600); err != nil {
+	private, err := platformfs.OpenRoot(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = private.WriteFile(ctx, "rewrap-pending.json", receipt, false)
+	private.Close()
+	if err != nil {
 		t.Fatal(err)
 	}
 	code, out, diagnostic = invoke(t, app, "", "vault", "status")
@@ -145,6 +152,24 @@ func TestVaultRewrapPublicPassphraseLifecycle(t *testing.T) {
 	code, _, diagnostic = invoke(t, app, "", "vault", "recover")
 	if code != 3 || !strings.Contains(diagnostic, strings.ToLower(request)) || !strings.Contains(diagnostic, `"rewrap"`) || strings.Contains(diagnostic, `"unlock"`) {
 		t.Fatal("recovery did not preserve pending operation", code, diagnostic)
+	}
+	var failure struct {
+		Error struct {
+			Details struct {
+				Target struct {
+					RequestID string `json:"request_id"`
+				} `json:"target"`
+				Retry string `json:"retry"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(diagnostic), &failure); err != nil || failure.Error.Details.Target.RequestID != strings.ToLower(request) || failure.Error.Details.Retry != "same_request" {
+		t.Fatal("pending request routing did not survive public error projection", err, diagnostic)
+	}
+	otherRequest := "00000000-0000-4000-8000-000000000013"
+	code, _, diagnostic = invoke(t, app, "", "vault", "rewrap", "--from-backend", "passphrase", "--backend", "passphrase", "--request-id", otherRequest)
+	if err := json.Unmarshal([]byte(diagnostic), &failure); err != nil || code != 3 || failure.Error.Details.Target.RequestID != otherRequest || failure.Error.Details.Retry != "after_dependency_change" || !strings.Contains(diagnostic, strings.ToLower(request)) {
+		t.Fatal("conflicting request did not preserve attempted target and original pending remedy", err, diagnostic)
 	}
 	code, out, diagnostic = invoke(t, app, "", replay...)
 	if code != 0 || vaultStatusResult(t, out).State != vault.LockedManual || vaultStatusResult(t, out).Rewrap != nil {

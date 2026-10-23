@@ -1,84 +1,56 @@
 ---
 name: devtools
-description: Operate the devtools CLI for project setup, managed servers, local networking and sharing, task/workstream coordination, and profile backup/recovery. Use when a repository has devtools.toml or when the user asks to inspect, configure, run, coordinate, or recover devtools-managed work.
+description: Configure and run devtools-managed projects using existing commands, dynamic ports, environment values, servers, and local URLs. Use alongside implementation or debugging when devtools.toml exists and work involves setup, execution, port conflicts, or service connections, even when the request does not name devtools. Also use for requested devtools networking, task coordination, and profile recovery. Unrelated source edits do not require devtools operations.
 license: MIT
 compatibility: Requires the devtools CLI in PATH and filesystem access to the target project and the user's devtools data directory.
 ---
 
 # devtools
 
-Use the installed CLI's help and schemas as the command contract. This skill
-adds operating decisions; it is not a command catalog or permission to change
-unrelated profiles, system settings, or external services.
+## Start with existing capabilities
 
-## Choose the requested operation
+1. Inspect project instructions and existing `devtools.toml` before changing setup or launch code.
+2. Match the requested behavior to the table below. Read only the relevant reference.
+3. Check `devtools version`, then the selected group's `--help` and specific command schema.
+4. Reuse an existing command or change its declarations. Add wrapper code only for a confirmed capability gap or an explicit project requirement.
+5. For changes, validate configuration and affected behavior. For inspection requests, keep operations read-only. Report what actually passed.
 
-Read only the relevant reference, then discover the specific command contract:
+Use this skill alongside the source-work workflow. Do not create task records merely because a project uses devtools.
 
-- Configure a project, values/bundles or commands; inspect value usage; run a command; manage ports or servers:
-  [references/execution.md](references/execution.md).
-- Prepare proxy routes, DNS, HTTPS, LAN/public sharing or network teardown:
-  [references/network.md](references/network.md). For managed backends also read
-  the server lifecycle section in execution.md.
-- Create or operate task/workstream records, resume claims, or record validation:
-  [references/tasks.md](references/tasks.md). Use only when coordination through
-  devtools is requested or required by project instructions; ordinary source work
-  does not itself require creating or claiming devtools tasks.
-- Compare or transfer profiles, back up/restore data, or clean stored history:
-  [references/storage.md](references/storage.md).
+## Choose by requested behavior
 
-For Windows native or WSL execution, installation, storage, shell arguments,
-or host network changes, also read [references/platforms.md](references/platforms.md).
+| Request | Existing capability | Read |
+| --- | --- | --- |
+| Set up tools; add/change a launch or check command | `config`, `command`, `doctor` | [execution.md](references/execution.md) |
+| Run once; keep a server alive; restart; wait for readiness | `command run`, `process`, `project` | [execution.md](references/execution.md) |
+| Pick a free port; avoid worktree collisions; pass ports or URLs to apps | `[ports.NAME]`, `port`, `serve`, `bind`, `${bind.NAME}` | [ports.md](references/ports.md) |
+| Inject env values or secrets; reuse a subset; inspect changed input | `var`, `secret`, `env`, `bundle`, `values` | [values.md](references/values.md) |
+| Initialize/unlock local protection; fix protected execution | `vault` | [protection.md](references/protection.md) |
+| Stable local domains; HTTPS; LAN/public sharing | `proxy`, `expose` | [network.md](references/network.md) |
+| Claim/resume requested tasks; edit plans; record validation | `task`, workstreams | [tasks.md](references/tasks.md) |
+| Transfer profiles; back up, restore, or clean history | `profile`, `backup`, `cleanup` | [storage.md](references/storage.md) |
+| Guard value mutations; deliver frozen values to an existing local runner | `values revision`, `values execution`, `values runner` | [automation.md](references/automation.md) |
 
-These are alternatives, not a workflow sequence. Do not load unrelated references.
-If the user only needs visual management, discover `dashboard` and return its
-login link privately; its session can modify all of the user's profiles.
+- Windows/WSL execution, installation, shell or host changes: also read [platforms.md](references/platforms.md).
+- JSON bodies, output parsing, replay or protocol compatibility: read [contracts.md](references/contracts.md).
+- Visual management only: discover `dashboard`; return its login link privately. The session can modify all profiles.
 
-## Discover only what you need
+## Discover the installed contract
 
-Check `devtools version` for the installed build before using release-specific behavior.
-Start with `devtools <group> --help`. For structured input, request one contract,
-such as `devtools schema task claim`. Bare `schema` lists groups; `schema --all`
-is for explicit full-catalog work. Reuse discovered contracts for the same installed
-build; rediscover affected contracts after upgrading the CLI. A published release
-does not update the installed CLI or this Skill automatically.
-Command examples here name operations; obtain required flags from their help.
+- Commands: `devtools <group> --help`, then `devtools schema <group> <command>`.
+- TOML fields and binding forms: `devtools config schema`. Command schemas and configuration schemas serve different purposes.
+- Existing setup: `project inspect`, `command list`, `command inspect NAME`; discover support before using newer `config inspect` or `command explain`.
+- Missing support: inspect the error and installed version. Do not assume the current source or a published release matches the installed CLI.
+- Missing CLI: verify the project's execution environment before diagnosing absence. Resolve authorized setup or report the gap; do not replace devtools with a wrapper merely because it was unavailable in one shell.
+- Reuse contracts for the same build. Avoid `schema --all` unless reviewing the full catalog.
+- Ordinary operation needs the installed CLI and these bundled references, not a separate devtools source checkout.
 
-Resolve the profile from tracked `devtools.toml` or explicit `--profile`.
-Worktrees with the same profile share values and task history.
-Data commands always return JSON: check the exit code, then `data` or `error.code`.
-Lists use `data.items`; single resources use `data.item`. Scalar values and reports
-keep their named fields. Mutations expose `data.changed`; retry-safe mutations also
-expose `data.replayed`, including false values. A replay preserves the original
-changed result and must not be counted as another mutation.
-Schema metadata declares `output_mode`: json, text, artifact, or passthrough.
-Only json commands have `output_schema`, describing the envelope's data.
-Use `version` for build metadata and `protocol_version`.
-Every JSON response exposes envelope `schema_version: 1` at the top level;
-all `schema` responses also report the CLI protocol version. Keep `devtools.toml`
-versionless: do not add `version` or `schema_version` fields to project configuration.
-Help returns text; completion returns a raw script; `command run` forwards the
-child's output and exit code. The shorter `run` form remains a supported alias.
-Devtools errors, including help errors, use JSON stderr. Child output is not wrapped
-in JSON and follows the execution's output-protection policy.
-Dashboard startup returns JSON with its login link in `data.item.url`, without
-an output-format option. Treat this link as a credential.
+## Keep scope and state explicit
 
-## Scope and recovery
-
-For project-scoped changes, use `project inspect` to confirm the selected
-project/profile. Explicit `--profile` overrides tracked configuration. Shared profile data does not
-make process/port selections interchangeable across worktrees.
-
-For mutations requiring `--request-id`, generate a UUID for a new operation. Reuse
-it with identical input after an uncertain response. Read `error.details` before
-retrying; refresh stale revisions or previews and reassess changed input. Stop
-blind retries when missing permissions, conflicting state, or unavailable tools
-need resolution. Remedy argv suggests an action; it does not authorize it.
-
-Keep secrets in stdin/private files. Discover `vault` support before using local key
-protection; setup/unlock is reused rather than repeated for every command. Task contexts,
-dashboard links, historical logs and output outside filtering may expose credentials;
-omit them from shared evidence. Inspect saved
-operation results and query live state separately: a replay is not a fresh health
-check. Report completed changes, observed validation, and unresolved conditions.
+- Confirm the selected project/profile before project changes. Explicit `--profile` overrides tracked configuration.
+- Same-profile worktrees share values and task history; processes and port assignments belong to execution locations.
+- Keep `devtools.toml` versionless. Never add top-level `version` or `schema_version`.
+- Use a new UUID where `--request-id` is required. After response loss, retry identical input with the original UUID; inspect current state separately.
+- Refresh stale revisions/previews before a new decision. Stop blind retries on missing permissions, conflicting ownership or unknown execution outcomes.
+- Keep secrets in stdin/private files. Omit task contexts, dashboard links, credentials and unfiltered historical logs from shared evidence.
+- Remedies suggest actions; they do not authorize unrelated installation, host changes, external exposure or data replacement.

@@ -1,58 +1,42 @@
-# Windows native and WSL boundaries
+# Windows native and WSL
 
-Check the selected release for matching Windows ZIPs, checksums and installer.
-Target Windows 11 25H2/26H2 x64/ARM64.
-Actions validates native x64 on Server 2025 (test host, not product support) and
-ARM64 on Windows 11; the full CPU/OS matrix and actual-PC UAC/browser/terminal
-behavior are unverified. Windows 10 and self-hosted operations are excluded.
-Standalone exe needs no Go/Python/Git Bash/WSL runtime. Project tools are separate.
+## Select the execution environment
 
-Use a matching install.ps1, ZIP and checksum. Installer inputs are -Version,
--Source, -BinDir, -AddToPath, -NoPath and -Json. It adds the install directory to
-user PATH by default; -NoPath disables that change. Default output is human text;
-use -Json for machine-readable success/error output. Re-running the installer
-updates an owned installation and succeeds when the same version is present.
-Native OS architecture selects the package even under x64 PowerShell on ARM64.
-Do not change execution policy or shell profiles automatically. dvt.exe is an
-owned binary copy. Native update journals old/main/alias replacement and keeps
-mapped old images for later cleanup. It never automatically stops active daemons.
+- WSL workspace: use Linux binaries/storage and initialized WSL shell. Native Windows and WSL stores, daemons, CA and process ownership are separate.
+- WSL uses `appendWindowsPath=false`; only explicit `.exe` lookup selects Windows tools. Managed Win32 servers in WSL are unsupported.
+- Do not change WSLENV, WSL configuration, firewall or portproxy automatically. Transfer profiles through encrypted archives, not live storage copies.
+- Unknown interop does not imply availability/failure. Diagnostics do not execute Windows children.
+- Linux trust does not establish Windows browser trust. Export only the public CA, verify fingerprint and deliberately import into CurrentUser Root; preserve existing certificates.
+- Actual WSL2-to-Windows browser connectivity remains unverified; inspect both sides separately.
 
-Windows private config/data/cache/runtime use Known Folder LocalAppData/devtools,
-local NTFS, protected ACLs for the current user and SYSTEM. In an AppContainer,
-creation and validation also grant its specific container SID; broad package
-permissions and other containers' SIDs are rejected. Do not repair foreign ACLs or use
-UNC/SMB/reparse/cloud-sync active private storage. Native and WSL stores, daemons,
-CAs and ownership are separate. Use encrypted profile transfer; no active process
-ownership migrates. WSL uses Linux tools/storage, including appendWindowsPath=false.
-Only explicit .exe lookup selects Windows tools. Never modify WSLENV, WSL config,
-firewall or portproxy automatically; managed Win32 servers in WSL are unsupported.
+## Install or update only when requested
 
-Protocol 8 adds diagnostics.paths.source, diagnostics.platform.isolation and safe
-storage details on failed issues. Read error.details for operation, resource,
-reason and an optional numeric os_error; raw paths and OS messages are excluded.
-Known Folders can select a separate sandbox store. Compare actual paths before
-interpreting an empty list as missing data. Access denied alone does not identify
-the exact ACL or sandbox rule. AppContainer storage uses the same identity policy
-for directories, files and locks; this does not override host sandbox restrictions.
-Queries and diagnostics can create private lock directories/files.
+- Match release, Windows ZIP, architecture, checksum and installer. Native OS architecture selects the package, including x64 PowerShell on ARM64.
+- Target Windows 11 25H2/26H2 x64/ARM64; Windows 10 and self-hosted operations are excluded.
+- CI covers x64 on Server 2025 (test host) and ARM64 on Windows 11. Full CPU/OS combinations and actual-PC UAC/browser/terminal behavior remain unverified.
+- Standalone exe needs no Go/Python/Git Bash/WSL; project tools are separate prerequisites.
+- Installer inputs: `-Version`, `-Source`, `-BinDir`, `-AddToPath`, `-NoPath`, `-Json`. Default adds user PATH and returns human text; `-NoPath` avoids PATH changes.
+- Re-running updates owned installation; same version succeeds. Never silently change execution policy or shell profiles.
+- `dvt.exe` is an owned copy. Updates journal old/main/alias replacement, retain mapped old images for cleanup and do not stop active daemons automatically.
 
-Read diagnostics.platform and its schema. Unknown interop does not imply failure
-or availability; diagnosis never executes Windows children. Linux trust does not
-establish Windows browser trust. Export only the public CA, verify its fingerprint,
-then deliberately import into the client's CurrentUser Root; preserve existing
-certificates. Actual WSL2-to-Windows browser networking remains unverified.
+## Storage and sandbox identity
 
-Native custom hosts changes use a constrained same-SID UAC helper; noninteractive
-hosts changes need an already elevated token. CurrentUser trust/untrust requires
-an interactive terminal and OS root-certificate consent; noninteractive calls
-return permission_required. Never automate approval or move CA private keys.
-Tailscale requires user-installed/logged-in >=1.104.1 and its fixed protected pipe;
-never run debug local-creds on Windows. ARM64 cloudflared uses the user-installed
-amd64 provider via Windows emulation. Live accounts/public connectivity are unverified.
+- Native private storage: Known Folder LocalAppData/devtools, local NTFS, current-user/SYSTEM protected ACLs.
+- AppContainer storage additionally grants its specific SID; broad package grants and other container SIDs are rejected. Do not repair foreign ACLs or use UNC/SMB/reparse/cloud-sync private storage.
+- Protocol 8 adds `diagnostics.paths.source`, platform isolation and safe storage issue metadata. Compare actual paths before treating an empty list as missing data.
+- `error.details` can contain operation, resource, reason and numeric `os_error`; raw paths/OS messages are excluded. Access denied alone does not identify the exact ACL/sandbox restriction.
+- Identity checks apply to directories/files/locks and do not override host sandbox rules. Queries/diagnostics may create private lock directories/files.
 
-Batch arguments reject NUL/newline/double-quote/percent. Run .ps1 with an explicit
-PowerShell interpreter. PS5.1 may lose native empty/quote argv before devtools sees
-it. completion powershell registers devtools/dvt using literal AST and UTF-8 NUL
-stdin; never evaluate dynamic expressions. cmd supports execution only.
-Protocol 7 adds diagnostics.platform and the powershell shell; envelope remains
-1, TOML remains versionless, and the v6 run/child argument boundary remains intact.
+## Host permissions and providers
+
+- Native hosts changes use a same-SID UAC helper; noninteractive changes need an already elevated token.
+- CurrentUser trust/untrust needs interactive terminal and OS root-certificate consent; noninteractive returns `permission_required`. Never automate consent or move CA private keys.
+- Tailscale needs user-installed/logged-in >=1.104.1 and its fixed protected pipe. Never run `debug local-creds` on Windows.
+- ARM64 cloudflared uses the user-installed amd64 provider through emulation. Live accounts/public connectivity remain unverified.
+
+## Shell boundaries
+
+- Batch args reject NUL/newline/double-quote/percent. Run `.ps1` with an explicit PowerShell interpreter.
+- PS5.1 may lose native empty/quote argv before devtools sees it. Prefer explicit files when exact bytes matter.
+- PowerShell completion uses literal AST plus UTF-8 NUL stdin; never evaluate dynamic expressions. cmd supports execution only.
+- Protocol 7 adds the PowerShell shell/platform diagnostics; envelope stays 1 and TOML stays versionless. Run options still precede the configured command name.

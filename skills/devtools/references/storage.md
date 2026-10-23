@@ -1,87 +1,52 @@
-# Profiles, backups and cleanup
+# Profiles, transfer, backup and cleanup
 
-## Inspect stored profiles
+## Choose the operation
 
-Use `profile list`, `profile inspect NAME`, and `profile diff LEFT RIGHT` for metadata-only
-profile management. Diff reports key/scope and task/instance differences, not stored
-values or secret equality; no metadata difference does not prove equal values.
+| Need | Use |
+| --- | --- |
+| Inspect profile metadata | `profile list/inspect/diff` |
+| Copy a profile across devices | `profile export/import` |
+| Back up or recover stored profiles | `backup` |
+| Archive eligible history | `cleanup preview/apply` |
+| Stop servers or remove port/routes | `process/project`, `port`, `proxy`; not cleanup |
 
-## Transfer a profile
+- Profile diff reports key/scope/task/instance differences, not values or secret equality. Equal metadata does not prove equal values.
+- Local protection: [protection.md](protection.md). Archive passphrases and local vault passphrases are independent.
 
-Use `profile export` and `profile import` for the default cross-device transfer.
-The default is source-first: run export on the source without preparing the destination,
-copy the resulting `.age` file, then import it on the destination. For vault-supporting builds, unlock the protected source
-before export; initialize/unlock the destination before applying protected values.
-This local setup is separate from the archive passphrase. Interactive export
-prompts twice for a passphrase with terminal echo disabled; interactive import prompts once.
-Devtools does not persist the passphrase. For non-interactive use, select exactly one of
-`--passphrase-file` or `--passphrase-stdin`; never place a passphrase in argv or env.
+## Transfer source first
 
-Export defaults to the current project's profile and to `./<profile>.age`. If `--output`
-points to an existing directory, export writes `<profile>.age` inside it. Existing final
-outputs fail before snapshot construction and are never overwritten. Copy only the resulting
-encrypted archive from source to destination.
+1. Export on the source; no destination preparation is needed for passphrase export.
+2. Copy only the encrypted `.age` archive.
+3. Initialize/unlock destination protection when needed; preview import.
+4. Review metadata diff; apply the same file/source/target with digest and request UUID.
 
-Recipient-based transfer remains an advanced compatibility path. Run
-`profile transfer prepare` on the destination, then use `--recipient` or
-`--recipient-file` on export. Recipient archives can use the prepared local identity or an
-explicit `--identity-file` on import. Recipient and passphrase inputs are mutually exclusive.
+- Protected source export needs its existing unlocked session. Interactive export prompts twice; import once; terminal echo stays disabled.
+- Noninteractive: exactly one of `--passphrase-file` / `--passphrase-stdin`. No passphrase in argv/env or persisted by devtools.
+- Export defaults to current profile and `./<profile>.age`. An output directory gets that filename. Existing final output fails before snapshot creation; no overwrite.
+- Recipient mode is an advanced alternative: destination `profile transfer prepare`, source export with `--recipient` / `--recipient-file`, import with prepared identity or `--identity-file`. Recipient/passphrase inputs are mutually exclusive.
+- Preview returns `digest`, `target_exists` and metadata-only `diff`. Single source is inferred; name stays unless `--as` is supplied.
+- Apply needs `--apply DIGEST --request-id UUID`; existing target needs `--replace`.
+- Replacement creates a private safety archive using the import's passphrase or recipient. No backup configuration is needed for profile import.
+- Stale target: new preview/new UUID. Response loss: identical input/original UUID. Active claims, execution credentials, port assignments and live processes do not transfer as active state.
 
-Import without `--apply` previews and returns `digest`, `target_exists`, and metadata-only
-`diff`. It infers a single source profile and keeps its name unless `--as` is supplied.
-Review that preview, then apply the same file/source/target with
-`--apply DIGEST --request-id UUID`. Existing targets require `--replace` at apply.
-Before replacement, devtools creates a private safety archive using the same encryption mode
-as the active import: the same passphrase for passphrase archives, or the same recipient for
-recipient archives. No backup configuration is required. Stale targets require a fresh
-preview and a new request ID. Identical apply retries replay the stored result; changed inputs
-conflict. Task claims, execution credentials, port assignments, and live processes are not
-transferred as active state.
+## Backup and restore
 
-## Encrypted backup and restore
+- `backup status`: inspect configuration. `backup keygen`: create identity/public recipient without overwrite; keep private identity outside projects.
+- `backup configure`: output directory and public recipient. `backup create` without `--profile` includes all stored profiles; use explicit profile for scoped backup. Existing outputs are never overwritten.
+- `backup inspect` decrypts using an identity file and returns metadata, not values.
+- Restore selects source with `--profile`; `--as` chooses target, otherwise `<source>-restored`.
+- Preview, then apply identical file/source/target with `--apply DIGEST --request-id UUID`.
+- Existing-target restore needs `--replace` and configured safety backup recipient/directory. Safety backup failure prevents replacement. Unlike profile import, this configuration is required.
+- Refresh stale previews; retry uncertain apply with identical input/UUID.
+- Restored tasks retain IDs but release claims; obtain a new claim and refresh cursors. Reconnect project config and prepare instance/ports/processes separately; dashboard sessions are not restored.
+- Logical archives exclude device keys, vault sessions and launch handles. Protected import needs initialized/unlocked destination protection.
+- Restore creates new profile IDs, storage generations and keysets, preserving logical ValueIDs, slot versions and bundle IDs/membership. Identical restored values can still stale a preview.
 
-Use `backup status` to inspect configuration. `backup keygen` creates a private
-identity and public recipient file without overwriting existing files. Keep the
-identity outside project files; `backup configure` stores the default output
-directory and public recipient. `backup create` without --profile includes all
-stored profiles; use an explicit profile for a scoped backup. Existing outputs
-are never overwritten. `backup inspect` decrypts with an identity file and returns
-metadata, not plaintext values.
+## Archive and recover history
 
-`backup restore` differs from profile import: select the source with --profile;
---as chooses the target, otherwise it defaults to <source>-restored. Preview first,
-then use the same file/source/target with --apply DIGEST --request-id UUID.
-Replacing an existing target requires --replace and a configured safety backup
-recipient/directory; failure to create that backup prevents replacement. This
-configuration requirement does not apply to profile import's same-mode safety
-archive. Refresh a stale preview; reuse identical apply input/UUID after an
-uncertain response.
-
-Restored task history keeps IDs but releases active claims; obtain a new claim.
-Config files, instance/port assignments, live processes and dashboard sessions
-are not restored. Reconnect the target project and prepare its local execution
-state separately. Refresh task cursors after restore.
-
-For builds with vault support, protected exports require the existing reusable local
-key session. Logical value archives exclude device keys, vault sessions and launch
-handles. A sealed import needs an initialized/unlocked destination vault; restoration
-creates fresh local profile IDs, storage generations and keysets while preserving
-logical ValueIDs, slot versions and bundle IDs/membership. Transfer passphrases and vault passphrases are independent.
-A preview can become stale even when a replacement restores identical values.
-
-## Cleanup and archives
-
-`cleanup preview` returns data.id as PLAN_ID and data.items candidate IDs. Apply
-only selected candidates with `cleanup apply PLAN_ID --item ID --request-id UUID`.
-A preview lasts ten minutes; refresh it if stale before the first apply. Once
-apply starts, identical retries resume its fixed selection, including after TTL
-expiry; successful siblings may already be archived. Inspect error details and
-archives after partial failure rather than assuming rollback.
-
-Cleanup archives eligible data; it does not purge the archive. Use `cleanup
-archives` then `cleanup restore ARCHIVE_ID` for recovery. Restore conflicts if the
-original location has changed. `cleanup purge ARCHIVE_ID` permanently removes an
-eligible payload after the retention period and needs explicit deletion scope.
-Restore/purge use archive IDs and do not take request UUIDs. They are repeatable.
-Port release/prune and proxy teardown are separate operations; do not substitute
-cleanup for stopping running servers or deactivating routes.
+- `cleanup preview`: `data.id` is plan ID; `data.items` holds candidate IDs. Apply only selected items with `cleanup apply PLAN_ID --item ID --request-id UUID`.
+- Preview expires after ten minutes before first apply. Once apply starts, identical retries resume its frozen selection even after TTL; successful siblings may already be archived.
+- Partial failure: inspect error details and archives; do not assume rollback.
+- Cleanup archives, not purges. Inspect `cleanup archives`; recover with `cleanup restore ARCHIVE_ID`. Changed original location causes conflict.
+- `cleanup purge ARCHIVE_ID` permanently removes eligible payload after retention; requires explicit deletion scope.
+- Restore/purge use archive IDs, no request UUID, and are repeatable. Port release/prune and proxy teardown remain separate operations.

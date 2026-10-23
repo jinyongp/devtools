@@ -49,14 +49,16 @@ func (a *App) registerValueRunners() {
 		if e != nil {
 			return nil, e
 		}
-		return s.Register(ctx, input, r.Options["request-id"])
+		result, e := s.Register(ctx, input, r.Options["request-id"])
+		return result, executionRecovery(s, r, e)
 	}})
 	a.commands = append(a.commands, Command{Name: "values runner unregister", Description: "Disable only the observed instance; delivered inputs and external jobs cannot be revoked here.", Arguments: []Argument{id}, Options: []Option{{Name: "instance", Required: true, Pattern: valuehandoff.UUIDPattern, Description: "The observed instance to disable."}, {Name: "request-id", Required: true, Pattern: valuehandoff.UUIDPattern, Description: "Canonical lowercase retry UUID."}}, Output: output, Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 		s, e := a.runnerStore()
 		if e != nil {
 			return nil, e
 		}
-		return s.Unregister(ctx, r.Args[0], r.Options["instance"], r.Options["request-id"])
+		result, e := s.Unregister(ctx, r.Args[0], r.Options["instance"], r.Options["request-id"])
+		return result, executionRecovery(s, r, e)
 	}})
 	a.commands = append(a.commands, Command{Name: "values runner show", Description: "Passively authenticate the root-wide registration; does not probe or unlock.", Arguments: []Argument{id}, Output: object(map[string]any{"profile": stringSchema(), "item": runnerSchema()}, "profile", "item"), Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 		s, e := a.runnerStore()
@@ -64,6 +66,6 @@ func (a *App) registerValueRunners() {
 			return nil, e
 		}
 		item, e := s.Runner(ctx, r.Args[0])
-		return map[string]any{"profile": "", "item": item}, e
+		return map[string]any{"profile": "", "item": item}, executionRecovery(s, r, e)
 	}})
 }

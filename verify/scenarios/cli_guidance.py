@@ -138,6 +138,9 @@ failure = api("run", "need", expected=3)
 assert failure["details"]["retry"] == "after_dependency_change"
 unlock = failure["details"]["remedies"][0]
 assert "--passphrase-stdin" in unlock["argv"] and unlock["required_inputs"] == ["stdin"]
+inspection = api("values", "execution", "status", "0" * 32, expected=3)
+assert inspection["details"]["retry"] == "after_dependency_change"
+assert inspection["details"]["remedies"][0]["required_inputs"] == ["stdin"]
 api(*unlock["argv"][1:], body=passphrase + "\n")
 api("vault", "lock")
 api("vault", "lock", "--isolated-root", str(root_a))

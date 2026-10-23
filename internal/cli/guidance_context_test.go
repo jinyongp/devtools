@@ -17,8 +17,9 @@ func TestExecutionGuidanceKeepsRootAndDirectTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := filepath.Join(privateTempDir(t), "selected")
+	rootJSON, _ := json.Marshal(root)
 	code, _, diagnostic := invoke(t, a, "", "run", "--isolated-root", root, "missing")
-	if code != 127 || !strings.Contains(diagnostic, root) {
+	if code != 127 || !strings.Contains(diagnostic, string(rootJSON)) {
 		t.Fatal(code, diagnostic)
 	}
 	initializeTestVault(t, a)
@@ -97,8 +98,9 @@ func TestVaultAndExplainGuidanceKeepExplicitRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := filepath.Join(privateTempDir(t), "B")
+	rootJSON, _ := json.Marshal(root)
 	code, _, diagnostic := invoke(t, a, "synthetic", "sec", "set", "TOKEN", "--stdin", "--isolated-root", root)
-	if code != 3 || !strings.Contains(diagnostic, root) {
+	if code != 3 || !strings.Contains(diagnostic, string(rootJSON)) {
 		t.Fatal(code, diagnostic)
 	}
 	var failure struct {
@@ -116,7 +118,7 @@ func TestVaultAndExplainGuidanceKeepExplicitRoot(t *testing.T) {
 		}
 	}
 	code, out, err := invoke(t, a, "", "command", "explain", "show", "--isolated-root", root)
-	if code != 0 || !strings.Contains(out, root) {
+	if code != 0 || !strings.Contains(out, string(rootJSON)) {
 		t.Fatal(out, err)
 	}
 }
@@ -157,6 +159,10 @@ func TestWrongKindAndLockedRunKeepActionableConditions(t *testing.T) {
 	code, _, e = invoke(t, a, "", "run", "need")
 	if code != 3 || !strings.Contains(e, `"--passphrase-stdin"`) || !strings.Contains(e, `"required_inputs":["stdin"]`) || !strings.Contains(e, `"retry":"after_dependency_change"`) {
 		t.Fatal(code, e)
+	}
+	code, _, e = invoke(t, a, "", "values", "execution", "status", strings.Repeat("0", 32))
+	if code != 3 || !strings.Contains(e, `"--passphrase-stdin"`) || !strings.Contains(e, `"required_inputs":["stdin"]`) || !strings.Contains(e, `"retry":"after_dependency_change"`) {
+		t.Fatal("external execution inspection lost the vault prerequisite", code, e)
 	}
 }
 

@@ -64,16 +64,28 @@ func TestDiagnosticsSchemaExcludesSensitivePayloads(t *testing.T) {
 	app := testApp(t)
 	data := outputData(t, app, []string{"schema", "diagnostics"})
 	schema := data["output_schema"].(map[string]any)
-	encoded, err := json.Marshal(schema)
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(encoded)
-	for _, forbidden := range []string{"content", "token", "context", "recipient", "secret"} {
-		if strings.Contains(text, `"`+forbidden+`"`) {
-			t.Fatalf("diagnostics schema exposes forbidden concept %q: %s", forbidden, text)
+	var inspect func(any)
+	inspect = func(value any) {
+		switch v := value.(type) {
+		case map[string]any:
+			// A kind enum may say "secret"; a payload property must not expose it.
+			if properties, ok := v["properties"].(map[string]any); ok {
+				for _, forbidden := range []string{"content", "token", "context", "recipient", "secret"} {
+					if _, present := properties[forbidden]; present {
+						t.Fatalf("diagnostics schema exposes forbidden payload field %q", forbidden)
+					}
+				}
+			}
+			for _, child := range v {
+				inspect(child)
+			}
+		case []any:
+			for _, child := range v {
+				inspect(child)
+			}
 		}
 	}
+	inspect(schema)
 }
 
 func TestDiagnosticsPlatformMatchesPublishedSchema(t *testing.T) {

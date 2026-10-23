@@ -34,6 +34,18 @@ func (a *App) executionStore(r Request) (valuehandoff.Store, *protocol.Error) {
 	}
 	return valuehandoff.Store{Root: root, Profile: s.Profile}, nil
 }
+
+// Handoff revisions and request receipts belong to a different domain from
+// value edits. Share only vault recovery, using the store actually observed.
+func executionRecovery(s valuehandoff.Store, r Request, e *protocol.Error) *protocol.Error {
+	if e != nil {
+		switch e.Code {
+		case "vault_locked", "key_interaction_required", "key_backend_locked", "integrity_failed":
+			values.Recover(e, s.Root, s.Profile, "", "", r.Invocation)
+		}
+	}
+	return e
+}
 func executionOptions() []Option {
 	return append(profileOptions(false), Option{Name: "request-id", Required: true, Pattern: valuehandoff.UUIDPattern, Description: "Canonical lowercase operation UUID; retry identical input."}, Option{Name: "file", Description: "Strict JSON control body file; contains no secret values."}, Option{Name: "stdin", Boolean: true, Description: "Read strict JSON control body from a pipe."})
 }
@@ -69,7 +81,8 @@ func (a *App) registerValueExecutions() {
 		if e != nil {
 			return nil, e
 		}
-		return s.Prepare(ctx, input, r.Options["request-id"])
+		result, e := s.Prepare(ctx, input, r.Options["request-id"])
+		return result, executionRecovery(s, r, e)
 	}})
 	a.commands = append(a.commands, Command{Name: "values execution status", Description: "Passively authenticate current execution metadata; provide exactly one execution ID or original prepare request UUID. Never delivers or starts work.", InputOneOf: []map[string]any{
 		{"required": []string{"args"}, "properties": map[string]any{"args": map[string]any{"minItems": 1}}, "not": map[string]any{"required": []string{"request-id"}}},
@@ -83,7 +96,8 @@ func (a *App) registerValueExecutions() {
 		if len(r.Args) > 0 {
 			id = r.Args[0]
 		}
-		return s.Status(ctx, id, r.Options["request-id"])
+		result, e := s.Status(ctx, id, r.Options["request-id"])
+		return result, executionRecovery(s, r, e)
 	}})
 	a.commands = append(a.commands, Command{Name: "values execution list", Description: "Passively list verified external delivery metadata with revision-bound pagination.", Options: append(profileOptions(false), Option{Name: "limit", Pattern: `^[0-9]+$`, Description: "Page size, default 50, maximum 200."}, Option{Name: "cursor", Description: "Opaque cursor from the previous page."}), Output: object(map[string]any{"profile": stringSchema(), "items": arraySchema(executionSchema()), "next_cursor": map[string]any{"type": []string{"string", "null"}}}, "profile", "items", "next_cursor"), Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 		s, e := a.executionStore(r)
@@ -98,7 +112,8 @@ func (a *App) registerValueExecutions() {
 				return nil, argumentError("Use a page size from 1 through 200.", "limit")
 			}
 		}
-		return s.List(ctx, limit, r.Options["cursor"])
+		result, e := s.List(ctx, limit, r.Options["cursor"])
+		return result, executionRecovery(s, r, e)
 	}})
 }
 
@@ -127,7 +142,8 @@ func (a *App) registerExecutionReport() {
 		if e != nil {
 			return nil, e
 		}
-		return s.Report(ctx, r.Args[0], r.Options["request-id"], input)
+		result, e := s.Report(ctx, r.Args[0], r.Options["request-id"], input)
+		return result, executionRecovery(s, r, e)
 	}})
 }
 
@@ -141,7 +157,8 @@ func (a *App) registerExecutionDelivery() {
 		if e != nil {
 			return nil, e
 		}
-		return s.Deliver(ctx, r.Args[0], r.Options["request-id"], input)
+		result, e := s.Deliver(ctx, r.Args[0], r.Options["request-id"], input)
+		return result, executionRecovery(s, r, e)
 	}})
 }
 
@@ -166,13 +183,15 @@ func (a *App) registerExecutionControls() {
 				if e := executionInput(ctx, streams, r, &input); e != nil {
 					return nil, e
 				}
-				return s.Approve(ctx, r.Args[0], r.Options["request-id"], input)
+				result, e := s.Approve(ctx, r.Args[0], r.Options["request-id"], input)
+				return result, executionRecovery(s, r, e)
 			}
 			var input valuehandoff.RevisionInput
 			if e := executionInput(ctx, streams, r, &input); e != nil {
 				return nil, e
 			}
-			return s.Cancel(ctx, r.Args[0], r.Options["request-id"], input)
+			result, e := s.Cancel(ctx, r.Args[0], r.Options["request-id"], input)
+			return result, executionRecovery(s, r, e)
 		}})
 	}
 }

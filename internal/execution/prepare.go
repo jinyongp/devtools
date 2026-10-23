@@ -257,21 +257,22 @@ func (p Prepared) Checks(ctx context.Context, parentEnvironment []string, forceE
 		executable = p.Args[0]
 	}
 	return doctor.CheckRequirements(ctx, doctor.Input{
-		Command:         p.Command.Name,
-		Args:            p.Args,
-		Mode:            p.mode,
-		ReadyExec:       readyArguments(p.Command),
-		Profile:         p.Command.Project.Profile,
-		Directory:       p.Command.Directory,
-		Env:             p.Command.Env,
-		Requirements:    p.Command.Requirements,
-		State:           p.State,
-		Inject:          p.Command.Inject,
-		Executable:      executable,
-		Environment:     parentEnvironment,
-		PathOverride:    p.PathOverride,
-		SearchOverrides: p.SearchOverrides,
-		Source:          commandSource(p.Command),
+		Command:          p.Command.Name,
+		Args:             p.Args,
+		Mode:             p.mode,
+		ReadyExec:        readyArguments(p.Command),
+		Profile:          p.Command.Project.Profile,
+		Directory:        p.Command.Directory,
+		Env:              p.Command.Env,
+		Requirements:     p.Command.Requirements,
+		State:            p.State,
+		Inject:           p.Command.Inject,
+		Executable:       executable,
+		ExecutableOffset: p.Command.Invocation.ExecutableOffset,
+		Environment:      parentEnvironment,
+		PathOverride:     p.PathOverride,
+		SearchOverrides:  p.SearchOverrides,
+		Source:           commandSource(p.Command),
 	})
 }
 
@@ -414,22 +415,23 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 	}
 
 	checks := doctor.CheckRequirements(ctx, doctor.Input{
-		Command:         command.Name,
-		Args:            args,
-		Profile:         command.Project.Profile,
-		Directory:       command.Directory,
-		Env:             command.Env,
-		Requirements:    requirements,
-		State:           state,
-		Inject:          command.Inject,
-		CheckInjection:  true,
-		Executable:      executable,
-		Environment:     parentEnvironment,
-		PathOverride:    pathOverride,
-		SearchOverrides: searchOverrides,
-		Mode:            "managed",
-		ReadyExec:       readyArguments(command),
-		Source:          commandSource(command),
+		Command:          command.Name,
+		Args:             args,
+		Profile:          command.Project.Profile,
+		Directory:        command.Directory,
+		Env:              command.Env,
+		Requirements:     requirements,
+		State:            state,
+		Inject:           command.Inject,
+		CheckInjection:   true,
+		Executable:       executable,
+		ExecutableOffset: command.Invocation.ExecutableOffset,
+		Environment:      parentEnvironment,
+		PathOverride:     pathOverride,
+		SearchOverrides:  searchOverrides,
+		Mode:             "managed",
+		ReadyExec:        readyArguments(command),
+		Source:           commandSource(command),
 	})
 	if !ChecksPassed(checks) {
 		return doctor.FailureFor(checks, command.Diagnostic("managed"))
@@ -504,8 +506,14 @@ func (p Prepared) Environment(parent []string) []string {
 // Execute runs a prepared command using either the regular foreground process
 // path or a caller-provided managed-process runner.
 func (p Prepared) Execute(ctx context.Context, parentEnvironment []string, runner process.Runner, in io.Reader, out, diagnostic io.Writer) (code int, failure *protocol.Error) {
+	spawned := false
+	beforeStart := ctx
+	ctx = process.WithStarted(ctx, func() *protocol.Error {
+		spawned = true
+		return process.NotifyStarted(beforeStart)
+	})
 	defer func() {
-		if p.State.PreparationChanged() {
+		if spawned || p.State.PreparationChanged() {
 			protocol.WithEffects(failure, "partial")
 		}
 	}()

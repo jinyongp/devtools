@@ -43,6 +43,9 @@ Use this skill alongside the source-work workflow. Do not create task records me
 - Missing support: inspect the error and installed version. Do not assume the current source or a published release matches the installed CLI.
 - Missing CLI: verify the project's execution environment before diagnosing absence. Resolve authorized setup or report the gap; do not replace devtools with a wrapper merely because it was unavailable in one shell.
 - Reuse contracts for the same build. Avoid `schema --all` unless reviewing the full catalog.
+- On protocol 13, syntax examples may contain placeholders. Follow `workflow` for
+  real revisions/IDs and new UUID versus identical-input retry. `values execution
+  status` accepts one execution ID or `--request-id`, never both.
 - Ordinary operation needs the installed CLI and these bundled references, not a separate devtools source checkout.
 
 ## Keep scope and state explicit

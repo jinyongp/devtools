@@ -364,6 +364,15 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		defer func() { a.isolatedRoot = oldRoot; a.dataDirectory = oldDirectory }()
 	}
 	request.Invocation.Operation = selected.Name
+	if selected.Name == "command run" && len(request.Args) == 0 && len(request.Child) > 0 {
+		for i, word := range rest {
+			if word == "--" {
+				offset := i + 1 + len(args) - len(rest) + rootArgumentOffset
+				request.Invocation.ExecutableOffset = &offset
+				break
+			}
+		}
+	}
 	request.Invocation.Directory, _ = os.Getwd()
 	if dirs, e := a.currentPaths(); e == nil {
 		request.Invocation.IsolatedRoot = dirs.IsolatedRoot

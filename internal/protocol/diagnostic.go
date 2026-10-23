@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Public projects domain details onto the protocol-11 allowlist. Private paths,
+// Public projects domain details onto the protocol-13 allowlist. Private paths,
 // request bodies and execution/session credentials never cross this boundary.
 func Public(e *Error, operation string) *Error {
 	copy := *e

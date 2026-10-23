@@ -86,7 +86,7 @@ exec = ['cmd.exe', '/d', '/c', 'echo CANARY_NEVER_RUN']
     }
     $schema = & $main schema completion | ConvertFrom-Json
     Require ($schema.data.protocol_version -eq 13 -and $schema.data.input_schema.properties.args.prefixItems[0].pattern.Contains('powershell')) 'Completion schema mismatch'
-    [pscustomobject]@{shell=$PSVersionTable.PSVersion.ToString();edition=$PSEdition;protocol=11;native_registration='pass';utf8_nul_dynamic_names='pass';single_quote='pass';child_boundary='pass';dynamic_expression_canary='pass';platform_schema='pass'} | ConvertTo-Json
+    [pscustomobject]@{shell=$PSVersionTable.PSVersion.ToString();edition=$PSEdition;protocol=13;native_registration='pass';utf8_nul_dynamic_names='pass';single_quote='pass';child_boundary='pass';dynamic_expression_canary='pass';platform_schema='pass'} | ConvertTo-Json
 } finally {
     Set-Location -LiteralPath $location.Path
     $env:DEVTOOLS_ISOLATED_ROOT = $beforeRoot; $env:PATH = $beforePath

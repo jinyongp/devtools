@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"sort"
 	"strings"
@@ -115,8 +116,22 @@ func ParseDocument(data []byte, path, root string) (*Document, *protocol.Error) 
 		if !legacy {
 			issues = configcontract.Validate("Project", d.Raw)
 		} else {
-			// Legacy structure remains readable, but its tool fields follow the
-			// same contract (including explicit empty ranges) as registry tools.
+			// Validate shared fields using the same contract while leaving legacy
+			// requirements to their existing parser and tool checks below.
+			base := maps.Clone(d.Raw)
+			delete(base, "requirements")
+			if commands, ok := d.Raw["commands"].(map[string]any); ok {
+				copied := maps.Clone(commands)
+				for name, value := range commands {
+					if command, ok := value.(map[string]any); ok {
+						fields := maps.Clone(command)
+						delete(fields, "requirements")
+						copied[name] = fields
+					}
+				}
+				base["commands"] = copied
+			}
+			issues = configcontract.Validate("Project", base)
 			validateTools := func(raw any, path []string) {
 				req, _ := raw.(map[string]any)
 				tools, _ := req["tools"].(map[string]any)

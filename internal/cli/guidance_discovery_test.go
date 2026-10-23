@@ -5,15 +5,54 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/redact"
 	"github.com/jinyongp/devtools/internal/tasks"
+	"github.com/jinyongp/devtools/internal/values"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"io"
 	"os"
 	"strings"
 	"testing"
 )
+
+func TestReadGuidanceMatchesPublishedRegistry(t *testing.T) {
+	a := testApp(t)
+	scope := protocol.InvocationContext{IsolatedRoot: privateTempDir(t), Directory: privateTempDir(t), Profile: "actual", ProfileKnown: true, EnvKnown: true, Bundle: "all", BundleKnown: true, Name: "check", Kind: "command", Mode: "managed", Inject: true}
+	remedies := []protocol.Remedy{scope.DoctorAction()}
+	limit := execution.OutputProtectionFailure(&redact.LimitError{Kind: "pattern_bytes", Observed: redact.MaxPatternBytes + 1, Limit: redact.MaxPatternBytes}, scope)
+	remedies = append(remedies, limit.Details["remedies"].([]protocol.Remedy)...)
+	for _, code := range []string{"revision_conflict", "request_conflict", "integrity_failed", "vault_locked"} {
+		e := protocol.NewError(code, "Synthetic condition.", 3, nil)
+		values.Recover(e, privateTempDir(t), scope.Profile, "", tasks.ID(), scope)
+		remedies = append(remedies, e.Details["remedies"].([]protocol.Remedy)...)
+	}
+	for _, remedy := range remedies {
+		if remedy.Effect != "read" || len(remedy.Argv) == 0 {
+			continue
+		}
+		if len(remedy.RequiredInputs) != 0 {
+			t.Fatal("read action unexpectedly needs unresolved input", remedy)
+		}
+		matched := false
+		for _, command := range a.commands {
+			for _, name := range append([]string{command.Name}, command.Aliases...) {
+				words := strings.Fields(name)
+				if len(remedy.Argv) < len(words)+1 || strings.Join(remedy.Argv[1:1+len(words)], " ") != name {
+					continue
+				}
+				if _, e := parseRequest(command, remedy.Argv[1+len(words):]); e == nil {
+					matched = true
+				}
+			}
+		}
+		if !matched {
+			t.Fatal("read action does not satisfy the published registry", remedy)
+		}
+	}
+}
 
 func TestStatusSelectorsAgreeWithSchemaAndParser(t *testing.T) {
 	a := testApp(t)

@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설정 모델](cli-config-redesign.md) · [진단 계약](diagnostic-contract.md)
 
-이 문서는 protocol 11 소스의 설정 편집 계약이다. 사용 순서는 [설정 편집 가이드](configuration.md)를 따른다.
+이 문서는 protocol 13 소스의 설정 편집 계약이다. 사용 순서는 [설정 편집 가이드](configuration.md)를 따른다.
 본문의 입력·응답 이름은 [schema의 $defs](../internal/configcontract/schema.json)를 가리킨다.
 JSON envelope는 기존처럼 성공을 stdout, 실패를 stderr에 한 개씩 반환한다.
 범위 지원 소스의 `Version`은 `x-npmRange: true`를 가진다. 런타임은 이 확장 keyword로
@@ -62,7 +62,7 @@ explain은 이를 정적으로 해석하며 값 저장소를 읽지 않는다.
 
 ## 조회
 
-config schema는 프로젝트 탐색 없이 `{"protocol_version":11,"schema":{...}}`를 반환한다.
+config schema는 프로젝트 탐색 없이 `{"protocol_version":13,"schema":{...}}`를 반환한다.
 schema는 이 저장소의 계약 schema와 동일한 $defs를 포함한다.
 `schema config preset add` 등 개별 command schema도 같은 정의를 묶어 독립적으로 검증 가능하게 반환한다.
 명령 schema의 input/output과 이 계약이 다른 경우 출시하지 않는다.

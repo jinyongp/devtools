@@ -38,7 +38,9 @@ func (p Prepared) executeInput(ctx context.Context, runner process.Runner, in io
 	ctx = protected.Context
 	defer func() {
 		if protected.Close(ctx.Err() != nil || failure != nil) != nil {
-			failure = protocol.NewError("output_protection_failed", "Protected output could not be delivered safely.", 1, nil)
+			outputFailure := protocol.NewError("output_protection_failed", "Protected output could not be delivered safely.", 1, nil)
+			protocol.PreserveRecovery(outputFailure, failure)
+			failure = outputFailure
 		}
 	}()
 	var admission *vault.LaunchAdmission
@@ -62,9 +64,15 @@ func (p Prepared) executeInput(ctx context.Context, runner process.Runner, in io
 				admission.Finish(context.Background(), "canceled")
 			}
 		}()
+		beforeAdmission := ctx
 		ctx = process.WithStarted(ctx, func() *protocol.Error {
 			completed = true
-			if err := admission.Finish(context.Background(), "spawned"); err != nil {
+			observed := process.NotifyStarted(beforeAdmission)
+			err := admission.Finish(context.Background(), "spawned")
+			if observed != nil {
+				return observed
+			}
+			if err != nil {
 				return values.VaultError(ctx, err)
 			}
 			return nil

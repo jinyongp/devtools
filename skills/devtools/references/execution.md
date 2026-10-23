@@ -73,7 +73,13 @@ their existing access requirements; metadata queries do not unlock or renew a va
 - Restart applies current config/values. It does not start a missing command implicitly.
 - `project status/logs/restart/down` select this project, not other worktrees sharing its profile. Names are required for up/restart; do not assume every configured command is a server.
 - `project logs NAME` reads active captured output; execution-ID `process logs` reads ended history. Logs are discarded unless capture was requested.
-- On protocol 12, run/start/up can prepare matching proxy routes automatically. See [network.md](network.md); older builds need `--proxy`. There is no TOML `proxy = true` field.
+- Since protocol 12, run/start/up can prepare matching proxy routes automatically. See [network.md](network.md); older builds need `--proxy`. There is no TOML `proxy = true` field.
+- For a named command, omitting `--env` inherits its configured env. An explicit
+  `--env ''` selects common values; a direct executable uses common values by
+  default. Place run options before the command name or child `--` boundary.
+- Recovery argv for the same store retains the selected isolation root. Inspect
+  `retry`, `effects`, and `required_inputs` before acting; passphrase unlock needs
+  private stdin/file, while native unlock may need explicit OS authentication.
 
 ## Restart and retry
 

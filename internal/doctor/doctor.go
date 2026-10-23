@@ -69,6 +69,7 @@ type Input struct {
 	State                                  *values.State
 	Inject, CheckInjection                 bool
 	Executable                             string
+	ExecutableOffset                       *int
 	Environment                            []string
 	PathOverride                           *string
 	SearchOverrides                        map[string]string
@@ -260,7 +261,9 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 			checks[i].Remedies = []protocol.Remedy{Remedy("Make the declared executable available at a version satisfying the requirement; verify version_args.", nil)}
 			checks[i].Remedies[0].Effect = "system_write"
 		}
-		if in.Source != nil && (in.Command != "" || id != "command_executable" && id != "readiness_executable") {
+		if id == "command_executable" && in.Command == "" && in.ExecutableOffset != nil {
+			checks[i].Sources = append(checks[i].Sources, configcontract.Source{Kind: "argv", Path: []string{"child_args", "0"}, Offset: in.ExecutableOffset})
+		} else if in.Source != nil && (in.Command != "" || id != "command_executable" && id != "readiness_executable") {
 			path := []string{"tools", name}
 			if id == "command_executable" {
 				path = []string{"commands", in.Command, "exec", "0"}

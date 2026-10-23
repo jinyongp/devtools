@@ -4,6 +4,12 @@
 
 CI·로컬 검사 선택과 수동 진단의 구분은 [검증 구성](../docs/verification.md)을 따른다.
 
+`python3 -B verify/run.py cli_guidance`는 protocol 13 archive를 설치해 A/B isolation
+root의 후속 행동, direct argv 위치, 신규 profile effects, kind 충돌, revision/request
+복구, help/status 계약, import·설정 safe facts와 실제 managed launcher의 redaction
+한도를 검사한다. 기존 Release의 Linux/macOS `test:installed` 전체 선택에 포함된다.
+Go의 한도별 경계·손상 frame 검사와 native Windows suite를 대체하지 않는다.
+
 `python3 -B verify/run.py sandbox_queries`는 설치 archive로 공개·legacy·보호 저장소의
 메타데이터 조회를 실제 읽기 전용 sandbox에서 검사한다. Linux는 bubblewrap,
 macOS는 sandbox-exec가 필요하다. 도구·정책 준비 실패는 skip하지 않는다.

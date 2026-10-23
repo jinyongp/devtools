@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설정 모델](cli-config-redesign.md) · [설정 편집](config-edit-contract.md)
 
-이 문서는 protocol 11 소스의 진단 계약이다. 사용 순서는 [개발환경 진단](doctor.md)을 따른다.
+이 문서는 protocol 13 소스의 진단 계약이다. 사용 순서는 [개발환경 진단](doctor.md)을 따른다.
 공통 diagnostic과 Check·DoctorReport·ErrorDetails의 구조는
 [계약 schema](../internal/configcontract/schema.json)의 같은 이름의 정의를 따른다.
 명령의 문장은 설명에 사용하고 자동화는 code·reason·status·retry·effects를 읽는다.
@@ -40,6 +40,23 @@ remedy.effect는 read, config_write, value_write, system_write 중 하나다.
 수정 argv를 제공해도 실행·승인 권한이 부여된 것은 아니다.
 secret 등록 remedy는 --stdin과 stdin required input을 사용하고 값은 포함하지 않는다.
 
+같은 저장소에 대한 행동은 실제 선택된 isolation root를 고정한다. help/schema,
+외부·수동 행동과 다른 장치 transfer 준비는 별도 범위를 유지한다. 내부 InvocationContext와
+action 관계는 wire 데이터에 추가하지 않는다. 실행 계획과 managed record가 선택의 정본이다.
+
+effects는 알려진 논리 저장 상태·외부 실행 변경에 대한 관찰이다. 신규 profile을 게시한 뒤
+실패하거나 child가 시작된 뒤 stream 전달이 실패하면 partial이다. 잘못된 env/bundle로
+게시·시작 전에 거절된 경우 none이다. 게시·전달 결과가 불명인 경우 unknown을 유지한다.
+child 종료 코드 passthrough는 그대로다. 잠금 파일 생성만으로 논리 profile 생성을 주장하지 않는다.
+
+prerequisite는 인증한 같은 manifest에서 kind, bundle 포함 여부, common/선택 env 슬롯을
+구분한다. kind_mismatch는 expected_kind/actual_kind와 declaration 검토를 안내한다.
+outside_bundle과 slot_missing을 미등록으로 합치지 않는다. 미인증 kind는 추측하지 않는다.
+revision_conflict는 revision 조회와 after_refresh, request_conflict는 원 UUID의 저장 결과
+조회와 inspect_first다. unknown 전달도 원 ID의 status부터 확인한다. passphrase 잠금은
+private stdin/file, native 잠금은 명시 OS 인증을 요구한다. integrity_failed는 잘못된
+암호·손상 두 가능성을 유지하며 원본 삭제·재초기화를 권하지 않는다.
+
 Linux/macOS 메타데이터 조회의 writable fallback이 실패하면 기존 `storage_error`와
 OS 기반 `reason`, `facts.os_code`, 실패 stage를 보존하고 `facts.state`에
 `initialization_required` 또는 `recovery_required`를 추가한다.
@@ -52,6 +69,13 @@ source.path는 문자열 배열이다. JSON 배열 index는 문자열, literal �
 argv source는 path에 positional 이름 또는 option 이름을 넣고 offset에 원래 argv index를 기록한다.
 config/JSON의 offset은 0부터, line·column은 1부터 세는 UTF-8 byte 위치다.
 source를 모르는 하위 오류에 임의의 파일·행을 붙이지 않는다.
+dotenv source는 path=[]와 확인된 line을 제공하며 column이 없을 수 있다.
+direct executable source는 전체 argv를 복사하지 않고 argv[0]의 원래 token index만 제공한다.
+
+safe facts의 기대/관측 타입은 type 이름만, import_items는 충돌한 key/kind/action만 공개한다.
+redaction 한도는 limit_kind와 실패 지점의 observed/limit를 제공한다. 한도는 고정이며
+패턴 수·개별 byte·합계 byte·states·state별 outputs를 구분한다. launcher 전달도 닫힌 enum과
+두 정수로 제한한다. 값 축소·bundle 검토를 안내하고 raw 우회를 권하지 않는다.
 
 ### 공개 정보의 범위
 

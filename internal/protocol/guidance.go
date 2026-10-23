@@ -11,6 +11,7 @@ type InvocationContext struct {
 	Operation, Directory, IsolatedRoot, RootSource string
 	Kind, Name, Profile, Env, Bundle, Mode         string
 	ProfileKnown, EnvKnown, BundleKnown, Inject    bool
+	ExecutableOffset                               *int
 }
 
 type ActionRelation uint8

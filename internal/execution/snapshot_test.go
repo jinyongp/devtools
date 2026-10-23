@@ -20,6 +20,24 @@ import (
 
 const snapshotCredential = "synthetic-frozen-credential-only"
 
+type failedSnapshotOutput struct{}
+
+func (failedSnapshotOutput) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestStartedChildOutputFailureHasPartialEffects(t *testing.T) {
+	command, dependencies, _ := executionSnapshotFixture(t)
+	parent := []string{"BASE=before", "DEVTOOLS_EXEC_SNAPSHOT_CHILD=1"}
+	prepared, e := PrepareInput(context.Background(), command, dependencies, parent, PlanOptions{})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer prepared.Release()
+	_, failure := prepared.Execute(context.Background(), parent, nil, nil, failedSnapshotOutput{}, io.Discard)
+	if failure == nil || protocol.Public(failure, "command run").Details["effects"] != "partial" {
+		t.Fatal("a spawned child was reported as no change", failure)
+	}
+}
+
 func TestPreparedExecutableReplacementRequiresRefresh(t *testing.T) {
 	command, dependencies, _ := executionSnapshotFixture(t)
 	fixture := filepath.Join(command.Directory, "fixture-executable.exe")

@@ -44,6 +44,41 @@ func TestExecutionGuidanceKeepsRootAndDirectTarget(t *testing.T) {
 	if strings.Contains(diagnostic, `"commands","","exec"`) {
 		t.Fatal(diagnostic)
 	}
+	for _, args := range [][]string{
+		{"run", "--", "__missing_guidance_test__"},
+		{"command", "run", "--", "__missing_guidance_test__"},
+		{"--isolated-root", root, "run", "--profile", "audit", "--", "__missing_guidance_test__"},
+	} {
+		code, _, diagnostic = invoke(t, a, "", args...)
+		if code != 127 {
+			t.Fatal(code, diagnostic)
+		}
+		var response struct {
+			Error struct {
+				Details struct {
+					Checks []struct {
+						ID      string
+						Sources []struct {
+							Kind   string
+							Offset *int
+						}
+					}
+				}
+			}
+		}
+		if e := json.Unmarshal([]byte(diagnostic), &response); e != nil {
+			t.Fatal(e)
+		}
+		found := false
+		for _, check := range response.Error.Details.Checks {
+			if check.ID == "command_executable" {
+				found = len(check.Sources) == 1 && check.Sources[0].Kind == "argv" && check.Sources[0].Offset != nil && *check.Sources[0].Offset == len(args)-1
+			}
+		}
+		if !found {
+			t.Fatal("direct executable lost its original argv position", diagnostic)
+		}
+	}
 }
 
 func anyStrings(v any) []string {
@@ -156,5 +191,20 @@ func TestImportAndConfigDiagnosticsKeepSafeFacts(t *testing.T) {
 	code, _, e = invoke(t, a, "", "config", "check")
 	if code != 3 || !strings.Contains(e, `"expected_type":"boolean"`) || !strings.Contains(e, `"observed_type":"string"`) || strings.Contains(e, "CANARY_WRONG_TYPE") || strings.Contains(e, "Run devtools config check") {
 		t.Fatal(code, e)
+	}
+}
+
+func TestLegacyConfigTypeFactsMatchRegistry(t *testing.T) {
+	a := testApp(t)
+	t.Chdir(privateTempDir(t))
+	for _, suffix := range []string{"", "[commands.dev.requirements]\nsecs=['TOKEN']\n"} {
+		config := "profile='audit'\n[commands.dev]\nexec=['missing']\ninject='CANARY_WRONG_TYPE'\n" + suffix
+		if e := os.WriteFile("devtools.toml", []byte(config), 0600); e != nil {
+			t.Fatal(e)
+		}
+		code, _, diagnostic := invoke(t, a, "", "config", "check")
+		if code != 3 || !strings.Contains(diagnostic, `"expected_type":"boolean"`) || !strings.Contains(diagnostic, `"observed_type":"string"`) || strings.Contains(diagnostic, "CANARY_WRONG_TYPE") {
+			t.Fatal(code, diagnostic)
+		}
 	}
 }

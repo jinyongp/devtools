@@ -225,6 +225,13 @@ func TestRewrapRecoveryAtDurableBoundaries(t *testing.T) {
 			if !errors.As(err, &exit) || exit.ExitCode() != 99 {
 				t.Fatal("owned rewrap process did not reach checkpoint", err)
 			}
+			info, infoErr := (KeyFileStore{Directory: dir}).RewrapInfo(id)
+			if infoErr != nil || info == nil || info.RequestID == "" || info.FromBackend != "passphrase" || info.Backend != "passphrase" || info.IntegrityVerified {
+				t.Fatal("missing passive recovery metadata", infoErr)
+			}
+			if info.SlotPublished != (stage != "prepared") || info.Completed != (stage == "cleaned") {
+				t.Fatal("wrong recovery authentication route", stage, info)
+			}
 			// Crash delivery, explicit recovery and independent key verification
 			// are separate operations; each retains the same bounded deadline.
 			retryCtx, cancelRetry := context.WithTimeout(context.Background(), 20*time.Second)
@@ -273,6 +280,96 @@ func TestRewrapRecoveryAtDurableBoundaries(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestRewrapDrainsAdmissionAndInvalidatesFrozenTicket(t *testing.T) {
+	dir, old, _ := sessionFixture(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := (SessionManager{Directory: dir}).Client(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Retire(context.Background())
+	if err = client.Unlock(ctx, old.Passphrase, false); err != nil {
+		t.Fatal(err)
+	}
+	key, ticket, err := client.UseWithTicket(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key.Destroy()
+	launchID, _ := NewID()
+	admission, err := client.BeginLaunch(ctx, launchID, *ticket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admission.Finish(context.Background(), "canceled")
+	nextPass := NewMaterial([]byte("synthetic-rewrap-ticket-target"))
+	defer nextPass.Destroy()
+	next := PassphraseProtector{VaultID: old.VaultID, Passphrase: nextPass}
+	operation, _ := NewID()
+	prepared := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		_, e := (KeyFileStore{Directory: dir}).rewrap(ctx, operation, old, next, func(stage string) {
+			if stage == "prepared" {
+				close(prepared)
+			}
+		})
+		done <- e
+	}()
+	select {
+	case <-prepared:
+	case <-ctx.Done():
+		t.Fatal("preparation blocked on admitted spawn")
+	}
+	before, err := (KeyFileStore{Directory: dir}).Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldRoot, err := unwrapRoot(ctx, old, before)
+	if err != nil {
+		t.Fatal("published across active admission", err)
+	}
+	oldRoot.Destroy()
+	select {
+	case e := <-done:
+		t.Fatal("rewrap crossed admitted launch", e)
+	default:
+	}
+	if err = admission.Finish(ctx, "spawned"); err != nil {
+		t.Fatal(err)
+	}
+	if err = <-done; err != nil {
+		t.Fatal(err)
+	}
+	if err = client.Unlock(ctx, nextPass, false); err != nil {
+		t.Fatal("target explicit unlock after publication", err)
+	}
+	newID, _ := NewID()
+	if a, e := client.BeginLaunch(ctx, newID, *ticket); !errors.Is(e, ErrLocked) {
+		if a != nil {
+			a.Finish(ctx, "canceled")
+		}
+		t.Fatal("pre-rewrap ticket survived explicit unlock", e)
+	}
+	key, fresh, err := client.UseWithTicket(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key.Destroy()
+	if fresh.Epoch == ticket.Epoch {
+		t.Fatal("slot publication did not change epoch")
+	}
+	newID, _ = NewID()
+	a, err := client.BeginLaunch(ctx, newID, *fresh)
+	if err != nil {
+		t.Fatal("fresh ticket rejected", err)
+	}
+	if err = a.Finish(ctx, "canceled"); err != nil {
+		t.Fatal(err)
 	}
 }
 

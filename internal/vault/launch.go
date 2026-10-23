@@ -107,6 +107,9 @@ func (s *KeySession) launchKey(ctx context.Context, ticket LaunchTicket, session
 	if err != nil {
 		return nil, err
 	}
+	if ticket.Epoch != s.epoch {
+		return nil, ErrLocked
+	}
 	if k.VaultID != ticket.VaultID {
 		return nil, ErrIntegrity
 	}

@@ -17,12 +17,14 @@ import (
 const rewrapPending = "rewrap-pending.json"
 
 type rewrapEnvelope struct {
-	Format    int    `json:"rewrap_format"`
-	ID        string `json:"operation_id"`
-	VaultID   string `json:"vault_id"`
-	Before    string `json:"before"`
-	After     string `json:"after"`
-	Protected []byte `json:"protected"`
+	Format      int    `json:"rewrap_format"`
+	ID          string `json:"operation_id"`
+	VaultID     string `json:"vault_id"`
+	Before      string `json:"before"`
+	After       string `json:"after"`
+	FromBackend string `json:"from_backend,omitempty"`
+	Backend     string `json:"backend,omitempty"`
+	Protected   []byte `json:"protected"`
 }
 type rewrapState struct {
 	ID     string  `json:"operation_id"`
@@ -33,6 +35,68 @@ type RewrapResult struct {
 	Changed  bool   `json:"changed"`
 	Replayed bool   `json:"replayed"`
 	Backend  string `json:"backend"`
+}
+
+// RewrapInfo is routing metadata, not proof of authenticated intent. The actual
+// operation authenticates its encrypted state and both slot identities again.
+type RewrapInfo struct {
+	RequestID         string `json:"request_id"`
+	FromBackend       string `json:"from_backend,omitempty"`
+	Backend           string `json:"backend,omitempty"`
+	SlotPublished     bool   `json:"slot_published"`
+	Completed         bool   `json:"completed"`
+	IntegrityVerified bool   `json:"integrity_verified"`
+}
+
+func rewrapInfo(e *rewrapEnvelope, current *KeyFile, completed bool) (*RewrapInfo, error) {
+	if e.VaultID != current.VaultID {
+		return nil, ErrIntegrity
+	}
+	digest := keyFileDigest(current)
+	if !completed && digest != e.Before && digest != e.After {
+		return nil, ErrRecovery
+	}
+	id := e.ID
+	requestID := id[:8] + "-" + id[8:12] + "-" + id[12:16] + "-" + id[16:20] + "-" + id[20:]
+	return &RewrapInfo{RequestID: requestID, FromBackend: e.FromBackend, Backend: e.Backend, SlotPublished: digest == e.After, Completed: completed}, nil
+}
+
+// An empty ID inspects only pending work. A supplied ID also finds its receipt,
+// letting callers omit retired old credentials after the slot was published.
+func (s KeyFileStore) RewrapInfo(id string) (*RewrapInfo, error) {
+	if id != "" && !validID(id) {
+		return nil, ErrInvalid
+	}
+	current, err := s.Read()
+	if err != nil {
+		return nil, err
+	}
+	r, err := platformfs.OpenRoot(s.Directory, false)
+	if err != nil {
+		return nil, ErrRecovery
+	}
+	defer r.Close()
+	pending, err := readRewrap(r, rewrapPending)
+	if err == nil {
+		if id != "" && pending.ID != id {
+			return nil, ErrRecovery
+		}
+		return rewrapInfo(pending, current, false)
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, ErrRecovery
+	}
+	if id == "" {
+		return nil, nil
+	}
+	receipt, err := readRewrap(r, rewrapReceipt(id))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return rewrapInfo(receipt, current, true)
 }
 
 func keyFileBytes(k *KeyFile) []byte { b, _ := json.Marshal(k); return b }
@@ -67,6 +131,11 @@ func readRewrap(r *platformfs.Root, name string) (*rewrapEnvelope, error) {
 	if StrictDecode(b, &e) != nil || e.Format != 1 || !validID(e.ID) || !validID(e.VaultID) || len(e.Before) != 64 || len(e.After) != 64 || len(e.Protected) == 0 {
 		return nil, ErrRecovery
 	}
+	for _, backend := range []string{e.FromBackend, e.Backend} {
+		if backend != "" && backend != "passphrase" && backend != "keychain" && backend != "secret-service" && backend != "dpapi" {
+			return nil, ErrRecovery
+		}
+	}
 	return &e, nil
 }
 func openRewrap(ctx context.Context, e *rewrapEnvelope, master *Material) (*rewrapState, error) {
@@ -77,6 +146,9 @@ func openRewrap(ctx context.Context, e *rewrapEnvelope, master *Material) (*rewr
 	defer p.Destroy()
 	var s rewrapState
 	if StrictDecode(p.data, &s) != nil || s.ID != e.ID || s.Before.validate() != nil || s.After.validate() != nil || s.Before.VaultID != e.VaultID || s.After.VaultID != e.VaultID || keyFileDigest(&s.Before) != e.Before || keyFileDigest(&s.After) != e.After {
+		return nil, ErrIntegrity
+	}
+	if (e.FromBackend != "" && e.FromBackend != s.Before.Backend) || (e.Backend != "" && e.Backend != s.After.Backend) {
 		return nil, ErrIntegrity
 	}
 	return &s, nil
@@ -235,7 +307,7 @@ func (s KeyFileStore) rewrap(ctx context.Context, id string, old, next Protector
 		// Native item references are already bound to this vault/current account.
 		// Re-selecting that same backend does not overwrite its only working item.
 		after := *current
-		if old.Identity() != next.Identity() || (current.Backend != "keychain" && current.Backend != "secret-service") {
+		if old.Identity() != next.Identity() || current.Backend == "passphrase" {
 			after = KeyFile{Format: StorageVersion, VaultID: current.VaultID, Backend: next.Identity().Backend}
 			after.Wrapped, err = prepareRootProtection(ctx, next, master)
 			if err != nil {
@@ -263,7 +335,7 @@ func (s KeyFileStore) rewrap(ctx context.Context, id string, old, next Protector
 		if err != nil {
 			return result, err
 		}
-		pending = &rewrapEnvelope{Format: 1, ID: id, VaultID: current.VaultID, Before: keyFileDigest(current), After: keyFileDigest(&after), Protected: protected}
+		pending = &rewrapEnvelope{Format: 1, ID: id, VaultID: current.VaultID, Before: keyFileDigest(current), After: keyFileDigest(&after), FromBackend: current.Backend, Backend: after.Backend, Protected: protected}
 		release, err := maintenance.LockExclusive(ctx, filepath.Join(s.Directory, "key-slot-write.lock"))
 		if err != nil {
 			return result, err
@@ -302,13 +374,21 @@ func (s KeyFileStore) rewrap(ctx context.Context, id string, old, next Protector
 	if !preparedSame {
 		return result, ErrIntegrity
 	}
+	// Preparation/native calls above do not hold any launch or storage lease.
+	// Drain actual spawn admissions only for the slot publication boundary.
+	finishLaunch, err := AcquireLaunchMutation(ctx, s.Directory)
+	if err != nil {
+		return result, err
+	}
 	release, err := maintenance.LockExclusive(ctx, filepath.Join(s.Directory, "key-slot-write.lock"))
 	if err != nil {
+		finishLaunch()
 		return result, err
 	}
 	observed, readErr := s.Read()
 	if readErr != nil {
 		release()
+		finishLaunch()
 		return result, readErr
 	}
 	switch keyFileDigest(observed) {
@@ -319,6 +399,7 @@ func (s KeyFileStore) rewrap(ctx context.Context, id string, old, next Protector
 		err = ErrInputChanged
 	}
 	release()
+	finishLaunch()
 	if err != nil {
 		return result, err
 	}

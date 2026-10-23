@@ -17,6 +17,7 @@ type SessionStatus struct {
 	VaultID       string       `json:"vault_id,omitempty"`
 	Backend       string       `json:"backend,omitempty"`
 	IdleExpiresAt *time.Time   `json:"idle_expires_at,omitempty"`
+	Rewrap        *RewrapInfo  `json:"rewrap,omitempty"`
 }
 type manualLock struct {
 	Format  int    `json:"format"`
@@ -76,7 +77,11 @@ func (s *KeySession) read() (*KeyFile, error) {
 	s.status.VaultID = k.VaultID
 	b, _ := json.Marshal(k)
 	digest := sha256.Sum256(b)
-	if s.key != nil && digest != s.fingerprint {
+	if s.fingerprint != ([sha256.Size]byte{}) && digest != s.fingerprint {
+		s.epoch++
+		if s.unwrapCancel != nil {
+			s.unwrapCancel()
+		}
 		s.destroy(Locked)
 	}
 	s.fingerprint = digest
@@ -86,6 +91,17 @@ func (s *KeySession) read() (*KeyFile, error) {
 		return nil, ErrRecovery
 	}
 	defer r.Close()
+	s.status.Rewrap = nil
+	if pending, pendingErr := readRewrap(r, rewrapPending); pendingErr == nil {
+		s.status.Rewrap, pendingErr = rewrapInfo(pending, k, false)
+		if pendingErr != nil {
+			s.destroy(RecoveryRequired)
+			return nil, pendingErr
+		}
+	} else if !errors.Is(pendingErr, os.ErrNotExist) {
+		s.destroy(RecoveryRequired)
+		return nil, ErrRecovery
+	}
 	manual, err := r.ReadFile("manual-lock.json", MaxKeySlotBytes)
 	if err == nil {
 		var latch manualLock
@@ -139,7 +155,7 @@ func (s *KeySession) unlockAtEpoch(ctx context.Context, passphrase *Material, in
 	_, err := s.obtain(ctx, passphrase, interactive, true, &epoch)
 	return err
 }
-func (s *KeySession) lockEpoch() uint64 { s.mu.Lock(); defer s.mu.Unlock(); return s.epoch }
+func (s *KeySession) lockEpoch() uint64 { s.mu.Lock(); defer s.mu.Unlock(); s.read(); return s.epoch }
 func (s *KeySession) useAtEpoch(ctx context.Context, epoch uint64) (*Material, error) {
 	return s.obtain(ctx, nil, false, false, &epoch)
 }
@@ -189,6 +205,9 @@ func (s *KeySession) inspectCachedAtEpoch(ctx context.Context, expected *uint64)
 	if _, err := s.read(); err != nil {
 		return nil, err
 	}
+	if expected != nil && *expected != s.epoch {
+		return nil, ErrLockPending
+	}
 	if s.status.State == RecoveryRequired {
 		return nil, ErrRecovery
 	}
@@ -232,6 +251,10 @@ func (s *KeySession) obtain(ctx context.Context, passphrase *Material, interacti
 	if err != nil {
 		s.mu.Unlock()
 		return nil, err
+	}
+	if expectedEpoch != nil && *expectedEpoch != s.epoch {
+		s.mu.Unlock()
+		return nil, ErrLockPending
 	}
 	if !explicit {
 		if s.status.State == LockedManual {

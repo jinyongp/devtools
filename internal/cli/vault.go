@@ -26,7 +26,7 @@ func (a *App) vaultDirectory() (string, *protocol.Error) {
 	return filepath.Join(filepath.Dir(directory), "vault"), nil
 }
 func vaultStatusSchema() map[string]any {
-	return object(map[string]any{"state": map[string]any{"enum": []string{"uninitialized", "locked", "unlocked", "locking", "locked_manual", "recovery_required"}}, "vault_id": stringSchema(), "backend": stringSchema(), "idle_expires_at": stringSchema()}, "state")
+	return object(map[string]any{"state": map[string]any{"enum": []string{"uninitialized", "locked", "unlocked", "locking", "locked_manual", "recovery_required"}}, "vault_id": stringSchema(), "backend": stringSchema(), "idle_expires_at": stringSchema(), "rewrap": rewrapInfoSchema()}, "state")
 }
 func vaultPassphraseOptions() []Option {
 	return []Option{filePathOption("passphrase-file", false), {Name: "passphrase-stdin", Boolean: true, Description: "Read the vault passphrase from piped stdin; never pass it in argv or environment."}}
@@ -83,6 +83,7 @@ func (a *App) registerVault() {
 	initOptions := append(vaultPassphraseOptions(), Option{Name: "backend", Default: "native", Pattern: "^(native|passphrase)$", Description: "Use existing OS protection or explicitly choose a passphrase session."}, Option{Name: "interactive", Boolean: true, Description: "Allow native OS authentication UI for this explicit setup operation."})
 	a.commands = append(a.commands, Command{Name: "vault init", Description: "Initialize local key protection and safely migrate all legacy value profiles; original user files remain intact.", Options: initOptions, Output: changedItemOutput(vaultStatusSchema()), Run: a.initializeVault})
 	a.commands = append(a.commands, Command{Name: "vault recover", Description: "Finish an encrypted storage transition or a setup interrupted before migration; requires an unlocked session.", Options: []Option{}, Output: changedItemOutput(vaultStatusSchema()), Run: a.recoverVault})
+	a.registerVaultRewrap()
 	for _, action := range []string{"unlock", "lock"} {
 		options := []Option{}
 		if action == "unlock" {
@@ -235,10 +236,15 @@ func (a *App) changeVaultLock(ctx context.Context, streams IO, r Request, action
 	return map[string]any{"item": after, "changed": before.State != after.State}, nil
 }
 
-func (a *App) recoverVault(ctx context.Context, _ IO, _ Request) (any, *protocol.Error) {
+func (a *App) recoverVault(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 	directory, e := a.vaultDirectory()
 	if e != nil {
 		return nil, e
+	}
+	if pending, err := (vault.KeyFileStore{Directory: directory}).RewrapInfo(""); err == nil && pending != nil {
+		return nil, pendingRewrapError(pending, r.Invocation)
+	} else if err != nil && !errors.Is(err, vault.ErrKeyMissing) {
+		return nil, values.VaultError(ctx, err)
 	}
 	client, err := a.keySessionClient(ctx, directory)
 	if err != nil {

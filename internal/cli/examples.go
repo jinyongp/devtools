@@ -8,6 +8,9 @@ import (
 )
 
 func exampleValue(name, pattern string) string {
+	if pattern == "^(native|passphrase)$" {
+		return "passphrase"
+	}
 	if pattern == positiveIntegerPattern {
 		return "1"
 	}

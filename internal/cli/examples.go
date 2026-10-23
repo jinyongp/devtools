@@ -2,7 +2,6 @@ package cli
 
 import (
 	"encoding/json"
-	"github.com/jinyongp/devtools/internal/configcontract"
 	"sort"
 	"strings"
 )
@@ -106,9 +105,8 @@ func bodyExample(c Command) any {
 	var s map[string]any
 	_ = json.Unmarshal(b, &s)
 	defs, _ := s["$defs"].(map[string]any)
-	if defs == nil {
-		defs = configcontract.Schema()["$defs"].(map[string]any)
-	}
+	// Published body schemas are self-contained. Configuration commands include
+	// their referenced definitions; task/value bodies need no external schema.
 	var sample func(map[string]any, int) any
 	sample = func(schema map[string]any, depth int) any {
 		if depth > 12 {

@@ -191,6 +191,12 @@ jobs:
           & go vet ./internal/projectfile ./internal/configedit
           if ($LASTEXITCODE -ne 0) { throw 'Native configuration publication vet failed' }
 
+      - name: Verify shared fixture path aliases
+        if: matrix.lane == 'suite-rest' && !inputs.reuse-source
+        run: |
+          & python -B -m unittest discover -s scripts -p test_fixture_paths.py 2>&1 | Tee-Object -FilePath fixture-path-results.log
+          if ($LASTEXITCODE -ne 0) { throw 'Shared fixture path alias regression failed' }
+
       - name: Complete native Go product suite
         if: ${{ startsWith(matrix.lane, 'suite-') && (github.event_name != 'workflow_dispatch' || inputs.focus == 'full' || inputs.focus == 'suite') }}
         env:
@@ -456,6 +462,7 @@ jobs:
             windows-product-suite-results.jsonl
             windows-go-packages.json
             windows-config-publication-results.jsonl
+            fixture-path-results.log
             windows-native-peer-results.jsonl
             project-lifecycle-repeat-results.jsonl
             project-lifecycle-diagnostic-results.jsonl

@@ -120,7 +120,7 @@ func (a *App) registerTools() {
 				return nil, err
 			}
 			if action == "list" {
-				state, err := store.Read(ctx)
+				state, err := store.ReadForQuery(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -153,8 +153,15 @@ func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kin
 	}
 	env := request.Options["env"]
 	if action == "list" || action == "get" {
-		state, err := store.Read(ctx)
+		state, err := store.ReadForQuery(ctx)
 		if err != nil {
+			if env != "" && err.Details["state"] != nil {
+				if remedies, ok := err.Details["remedies"].([]protocol.Remedy); ok {
+					for i := range remedies {
+						remedies[i].Argv = append(remedies[i].Argv, "--env", env)
+					}
+				}
+			}
 			return nil, err
 		}
 		if action == "list" {

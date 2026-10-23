@@ -246,18 +246,20 @@ jobs:
   validation:
     name: Unix validation
     if: always()
-    needs: [source, handoff, automation-performance, proxy-compat]
+    needs: [sandbox-query, source, handoff, automation-performance, proxy-compat]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Require every native lane
         env:
+          SANDBOX_QUERY_RESULT: ${{ needs.sandbox-query.result }}
           RESULT: ${{ needs.source.result }}
           HANDOFF_RESULT: ${{ needs.handoff.result }}
           PERFORMANCE_RESULT: ${{ needs.automation-performance.result }}
           PERFORMANCE_REQUIRED: ${{ inputs.measure_automation && 'true' || 'false' }}
           PROXY_RESULT: ${{ needs.proxy-compat.result }}
         run: |
+          test "$SANDBOX_QUERY_RESULT" = success
           test "$RESULT" = success
           test "$HANDOFF_RESULT" = success
           test "$PROXY_RESULT" = success

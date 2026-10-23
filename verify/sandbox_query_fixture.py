@@ -22,7 +22,7 @@ def sandbox_command(data, scratch, command, system=None, privileged=False):
         return ["/usr/bin/sandbox-exec", "-p", policy, *map(str, command)]
     if system == "linux":
         prefix = ["sudo", "-n"] if privileged else []
-        identity = ["--uid", str(os.getuid()), "--gid", str(os.getgid())] if privileged else []
+        identity = ["--unshare-user", "--uid", str(os.getuid()), "--gid", str(os.getgid())] if privileged else []
         return [*prefix, "bwrap", "--ro-bind", "/", "/", "--bind", str(scratch), str(scratch),
                 "--dev", "/dev", "--proc", "/proc", "--die-with-parent", *identity, "--chdir", str(scratch),
                 "--", *map(str, command)]

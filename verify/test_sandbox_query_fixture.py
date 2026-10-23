@@ -24,13 +24,20 @@ class SandboxBoundary(unittest.TestCase):
     def test_linux_root_is_read_only_with_one_disjoint_scratch(self):
         command = sandbox_command("/tmp/data", "/tmp/scratch", ["tool"], system="linux")
         self.assertEqual(command[:4], ["bwrap", "--ro-bind", "/", "/"])
-        self.assertEqual(command[4:7], ["--bind", "/tmp/scratch", "/tmp/scratch"])
+        scratch = str(Path("/tmp/scratch").resolve())
+        self.assertEqual(command[4:7], ["--bind", scratch, scratch])
+
+    def test_privileged_linux_launcher_keeps_invoking_identity_in_user_namespace(self):
+        command = sandbox_command("/tmp/data", "/tmp/scratch", ["tool"], system="linux", privileged=True)
+        self.assertEqual(command[:3], ["sudo", "-n", "bwrap"])
+        start = command.index("--unshare-user")
+        self.assertEqual(command[start:start + 5], ["--unshare-user", "--uid", str(os.getuid()), "--gid", str(os.getgid())])
 
     def test_fixture_environment_excludes_credentials_and_real_user_home(self):
         with patch.dict(os.environ, {"HOME": "/real/home", "GITHUB_TOKEN": "private",
                                     "DEVTOOLS_TASK_CONTEXT": "private", "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "private"}):
             env = fixture_environment("/tmp/query-home")
-        self.assertEqual(env["HOME"], "/tmp/query-home")
+        self.assertEqual(env["HOME"], str(Path("/tmp/query-home").resolve()))
         self.assertFalse(any(key in env for key in ("GITHUB_TOKEN", "DEVTOOLS_TASK_CONTEXT", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")))
 
     def test_holder_is_stopped_if_assertion_fails_while_it_owns_lock(self):

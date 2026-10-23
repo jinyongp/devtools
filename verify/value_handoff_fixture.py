@@ -10,10 +10,11 @@ import uuid
 REPOSITORY = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY / "scripts"))
 from vault_test_support import retire_vaults
+from fixture_paths import fixture_path
 
 
 def run(binary, receiver, directory, base_env=None):
-    directory = Path(directory).resolve()
+    directory = fixture_path(directory)
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     project = directory / "project"
     project.mkdir()

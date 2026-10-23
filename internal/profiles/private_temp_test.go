@@ -3,16 +3,14 @@ package profiles
 import (
 	"context"
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/testfs"
 	"path/filepath"
 	"testing"
 )
 
 func privateTempDir(t *testing.T) string {
 	t.Helper()
-	base, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	base := testfs.TempDir(t)
 	path := filepath.Join(base, "private")
 	root, err := platformfs.OpenRoot(path, true)
 	if err != nil {

@@ -5,6 +5,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+from fixture_paths import session_path
+
 _control = None
 _scratch = None
 
@@ -14,7 +16,7 @@ def retire_vaults(*directories):
     # Preserve the caller's spelling: session endpoints bind to the exact data
     # root, and Windows resolve() expands 8.3 paths used by tempfile/Go.
     # Unix product roots are canonical, including macOS /var -> /private/var.
-    existing = [Path(os.path.abspath(path)) if os.name == 'nt' else Path(path).resolve()
+    existing = [session_path(path)
                 for path in directories if (Path(path) / 'session.json').exists()]
     if not existing:
         return

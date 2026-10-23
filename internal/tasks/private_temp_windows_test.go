@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/testfs"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -9,7 +10,7 @@ import (
 
 func privateTempDir(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "private")
+	path := filepath.Join(testfs.TempDir(t), "private")
 	r, e := platformfs.OpenRoot(path, true)
 	if e != nil {
 		t.Fatal(e)

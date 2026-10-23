@@ -28,6 +28,8 @@ import uuid
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from fixture_paths import create_fixture_directory
 FIXTURES = ROOT / "verify/fixtures/proxy-compat"
 CASES = {
     "nuxt": ("nuxt/bin/nuxt.mjs", ["dev", "--host", "127.0.0.1"], "app/pages/index.vue"),
@@ -65,7 +67,7 @@ def free_port():
 def owned_scratch(result):
     # Windows TEMP can contain an 8.3 alias (RUNNER~1); Vite intentionally rejects
     # short-name paths even when their parent appears in its filesystem allowlist.
-    scratch = Path(tempfile.mkdtemp(prefix="devtools-proxy-compat-")).resolve()
+    scratch = create_fixture_directory(prefix="devtools-proxy-compat-")
     try:
         yield scratch
     finally:

@@ -165,6 +165,24 @@ CLI schema와 성공 응답은 바뀌지 않는다. 데이터 migration과 버�
 rollback은 이전 CLI 사용으로 충분하며 데이터 변환·잠금 삭제는 수행하지 않는다.
 읽기만 가능한 파일에 대한 writer의 기존 O_RDWR 요구는 유지한다.
 
+### D08. 공통 fixture 경로 계약 (사용자 추가 요구, 2026-10-23)
+
+반복되는 macOS `/tmp`·`/var` 별칭 오류는 fixture 경계에서 해결한다.
+제품의 `internal/paths.canonicalIsolation`과 no-follow 검사, 기존 세션의 path identity는
+변경하지 않는다. 테스트 호출부마다 독립적인 `.resolve()`/EvalSymlinks를 추가하지 않는다.
+
+- Go는 표준 라이브러리만 쓰는 `internal/testfs`의 TempDir/CanonicalDir로 새 fixture의
+  실제 경로를 선택한다. 기존 package별 privateTempDir는 이 helper를 사용하고 각자의
+  private mode/Windows ACL 설정은 그대로 유지한다. platformfs도 순환 import 없이 사용한다.
+- Python은 `scripts/fixture_paths.py`에 새 fixture 경로·임시 root 생성·기존 session 경로
+  선택을 모은다. verify runner/sandbox/proxy/handoff/network와 vault cleanup이 재사용한다.
+- Windows의 기존 session endpoint는 caller의 선택 경로 표기가 identity에 들어가므로
+  새 fixture용 canonicalize와 분리한다. 기존 vault cleanup의 Windows abspath 계약을 보존한다.
+- OS별 `/tmp` 리터럴을 기대값으로 쓰지 않는다. 모든 native OS에서 임의 alias를
+  만들어 physical root와 미생성 suffix가 같게 선택되는지, session 경로 예외가 유지되는지 검증한다.
+- 공통 helper 검증을 프로젝트 check와 Unix sandbox gate에 연결한다. 새 helper 적용으로
+  바뀐 test harness만 재검증하고 제품의 symlink 거절 정책을 완화하지 않는다.
+
 ## 4. 영향 범위와 유지할 경계
 
 | 영역/호출부 | 직접 변경 | 검증 또는 유지할 이유 |
@@ -187,6 +205,7 @@ rollback은 이전 CLI 사용으로 충분하며 데이터 변환·잠금 삭제
 | Windows rwlock/platformfs | 변경 없음 | 기존 native 저장·ACL·handle 정책 유지 |
 | protocol/storageerr/configcontract | 원칙적으로 변경 없음 | 기존 state/effects allowlist 사용. 계약 테스트로 확인 |
 | scripts/verify/Unix CI | sandbox scenario 추가 | chmod 대신 OS 차단과 packaged 명령 동작 증거 확보 |
+| internal/testfs·package별 privateTempDir·scripts/fixture_paths | fixture 경로 경계 공통화 | physical 경로 선택·Windows session identity 예외·native alias 회귀 |
 
 AcquireShared/LockShared의 production 호출은 위 모든 영역을 검색해 분류했다.
 읽기라는 이름만으로 mutation·migration·session 권한을 줄이는 변경은 하지 않는다.
@@ -220,6 +239,9 @@ AcquireShared/LockShared의 production 호출은 위 모든 영역을 검색해 
 
 - 경로: `internal/maintenance/rwlock_unix.go`, 새 `query.go`, `query_unix.go`, `query_other.go`,
   `query_unix_test.go`, 기존 maintenance tests.
+- 사용자 추가 요구 D08에 따라 `internal/testfs`, 기존 privateTempDir wrappers,
+  `scripts/fixture_paths.py`, 관련 Python fixture consumers/tests를 함께 정리한다.
+  기존 정규화 조각을 공통 경계로 옮기고 OS와 무관한 alias 회귀를 프로젝트 check에 연결한다.
 - D02~D05 알고리즘과 QueryPreparationError 구현. production failpoint/env는 추가하지 않는다.
 - fixture 상태: 정상 public/보호 root, 누락 root/디렉터리/각 lock, invalid permissions,
   symlink/FIFO/directory, 복구 pointer 손상, orphan, v1/v2/v4 prepared/applying/committed 및 v3 ready.
@@ -287,7 +309,7 @@ AcquireShared/LockShared의 production 호출은 위 모든 영역을 검색해 
 | ID | 검증 | 기대 결과 | 소유 task |
 | --- | --- | --- | --- |
 | V01 | native O_RDONLY flock와 실제 write deny 음성 대조 | old/new 양방향 차단, 종료 후 해제 | T01 |
-| V02 | maintenance 정상/누락/손상/복구/취소 및 writer intent | 원래 exclusion·복구 경계 유지, handle 누수 없음 | T02 |
+| V02 | maintenance 상태 행렬 및 공통 fixture 경로/alias 회귀 | exclusion·복구 유지, handle 누수 없음, OS별 경로 계약 일치 | T02 |
 | V03 | values/CLI 출력·오류·alias·기존 mutation callers | protocol12/envelope1 유지, secret 비노출, fallback 정보 보존 | T03 |
 | V04 | installed sandbox_queries on macOS/Linux | 정상 조회 성공·쓰기 차단·복구 왕복·동시성 통과 | T04 |
 | V05 | 문서·전체 호출부 리뷰·전체/Windows 회귀 | 모든 scope 및 accepted exclusion 일치 | T05 |

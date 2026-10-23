@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/jinyongp/devtools/internal/maintenance"
 )
 
 func emit(value any) { _ = json.NewEncoder(os.Stdout).Encode(value) }
@@ -23,6 +25,29 @@ func main() {
 		os.Exit(2)
 	}
 	operation, path := os.Args[1], os.Args[2]
+	if operation == "init-query" || operation == "hold-query" || operation == "query" {
+		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+		defer cancel()
+		acquire := maintenance.AcquireQuery
+		if operation == "init-query" {
+			acquire = maintenance.AcquireShared
+		}
+		release, err := acquire(ctx, path)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				emit(map[string]any{"event": "deadline_exceeded"})
+				return
+			}
+			emit(map[string]any{"event": "query_failed"})
+			os.Exit(1)
+		}
+		defer release()
+		emit(map[string]any{"event": "acquired"})
+		if operation == "hold-query" {
+			_, _ = bufio.NewReader(os.Stdin).ReadByte()
+		}
+		return
+	}
 	if operation == "deny-writes" {
 		checks := map[string]func() error{
 			"read_write_open": func() error {

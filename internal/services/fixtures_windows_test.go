@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/testfs"
 )
 
 func fixtureWriteFile(path string, b []byte, mode os.FileMode) error {
@@ -34,7 +35,7 @@ func fixtureMkdir(path string, mode os.FileMode) error {
 }
 func privateTestRoot(t testing.TB) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "private")
+	path := filepath.Join(testfs.TempDir(t), "private")
 	if err := fixtureMkdirAll(path, 0700); err != nil {
 		t.Fatal(err)
 	}

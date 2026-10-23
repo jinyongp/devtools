@@ -6,16 +6,15 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/jinyongp/devtools/internal/testfs"
 )
 
 func testRoot(t *testing.T) *Root {
 	t.Helper()
 	// Darwin temp paths start at the system /var alias; keep the SDK no-follow
 	// contract and pass the existing physical fixture directory.
-	base, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	base := testfs.TempDir(t)
 	root, err := OpenRoot(filepath.Join(base, "private"), true)
 	if err != nil {
 		t.Fatal(err)

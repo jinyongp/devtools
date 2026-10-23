@@ -123,6 +123,7 @@ def main(args):
     elif action == "project-check":
         node_tests("project.test.mjs", extra)
         run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "scripts", "-p", "test_project.py"])
+        run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "scripts", "-p", "test_fixture_paths.py"])
         run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "verify", "-p", "test_proxy_compat.py"])
     elif action == "check-static":
         if extra:

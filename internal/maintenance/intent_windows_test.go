@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/testfs"
 	"golang.org/x/sys/windows"
 )
 
 func privateTempDir(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "private")
+	path := filepath.Join(testfs.TempDir(t), "private")
 	root, err := platformfs.OpenRoot(path, true)
 	if err != nil {
 		t.Fatal(err)

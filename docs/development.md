@@ -144,6 +144,25 @@ Go 단위 테스트는 OS가 고른 포트를 먼저 닫은 뒤 재사용하지 
 `devtools run perf:go`(Go benchmark)를 사용한다. 격리 fixture·크기·이력·baseline 비교는
 [성능 안내](../perf/README.md)를 따른다. end-to-end runner는 Linux·WSL용이다.
 
+### Fixture 경로 선택
+
+새 private fixture는 생성 시 실제 경로를 한 번 선택한 뒤 HOME·isolated root·subprocess
+인수·기대값을 같은 root에서 만든다. `/tmp`와 `/private/tmp`, `/var`와 `/private/var`,
+Windows 짧은 경로처럼 같은 위치의 표기가 다를 수 있으므로 OS 경로 문자열을 하드코딩하지 않는다.
+
+- Go: `internal/testfs.TempDir(t)` 또는 기존 fixture의 `CanonicalDir(t, path)` 사용.
+  package별 privateTempDir는 공통 helper 뒤에 기존 private mode·Windows ACL 준비를 유지한다.
+- Python: `scripts/fixture_paths.py`의 `temporary_fixture`/`create_fixture_directory`로
+  새 root를 만들고, 외부에서 받은 소유 fixture는 `fixture_path`로 선택한다.
+  cleanup 실패 시 증거를 보존하는 기존 harness는 create 함수와 기존 cleanup 규칙을 함께 쓴다.
+- 이미 선택된 Windows vault session 경로는 문자열도 endpoint identity에 들어가므로
+  `session_path`로 표기를 보존한다. 새 root 정규화와 기존 session 선택을 혼용하지 않는다.
+
+공통 경계의 회귀는 임의 symlink/junction alias를 만들어 모든 OS에서 검사한다.
+미생성 suffix·선택된 session 경로 예외도 포함하며 macOS의 특정 `/tmp` 문자열에 의존하지 않는다.
+Python 검사는 `check:project`, Go 검사는 기본 suite, 실제 sandbox 검사는 Unix native gate에 포함한다.
+이 helper는 테스트 소유 경로용이다. 제품의 no-follow·containment·ACL 검사를 우회하는 데 쓰지 않는다.
+
 ## var/sec 통합 수용 검증
 
 저장·세션·실행 보호는 Release workflow의 native OS job으로 검증한다.

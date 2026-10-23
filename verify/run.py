@@ -6,11 +6,13 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
 import time
 import uuid
 
 from vault_fixture import retire_home_sessions
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from fixture_paths import temporary_fixture
 
 
 TEST_VERSIONS = ("0.0.0-test.1", "0.0.0-test.2")
@@ -166,8 +168,8 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
 
     for name in selected:
         started = time.monotonic()
-        with tempfile.TemporaryDirectory(prefix=f"devtools-{name}-") as temporary:
-            home = Path(temporary).resolve() / "home"
+        with temporary_fixture(prefix=f"devtools-{name}-") as temporary:
+            home = temporary / "home"
             home.mkdir(mode=0o700)
             env = dict(
                 os.environ,
@@ -242,8 +244,8 @@ def main():
             parser.error("--releases must name an existing directory")
         return run_scenarios(selected, scenarios, repository, releases)
 
-    with tempfile.TemporaryDirectory(prefix="devtools-verify-releases-") as temporary:
-        releases = Path(temporary).resolve() / "releases"
+    with temporary_fixture(prefix="devtools-verify-releases-") as temporary:
+        releases = temporary / "releases"
         started = time.monotonic()
         package_test_releases(repository, releases)
         print(f"Test release preparation: {time.monotonic() - started:.3f}s", flush=True)

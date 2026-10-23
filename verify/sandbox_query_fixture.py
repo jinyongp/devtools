@@ -9,12 +9,14 @@ import platform
 import selectors
 import subprocess
 import sys
-import tempfile
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from fixture_paths import fixture_path, temporary_fixture
 
 
 def sandbox_command(data, scratch, command, system=None, privileged=False):
     system = system or sys.platform
-    data, scratch = Path(data).resolve(), Path(scratch).resolve()
+    data, scratch = fixture_path(data), fixture_path(scratch)
     if data == scratch or data in scratch.parents or scratch in data.parents:
         raise ValueError("data and writable scratch must be disjoint")
     if system == "darwin":
@@ -34,7 +36,7 @@ def sandbox_command(data, scratch, command, system=None, privileged=False):
 
 
 def fixture_environment(scratch):
-    scratch = str(Path(scratch).resolve())
+    scratch = str(fixture_path(scratch))
     # Do not pass CI identity, shell credentials, or a real user's vault session.
     env = {key: os.environ[key] for key in ("PATH", "LANG", "LC_ALL", "SYSTEMROOT") if key in os.environ}
     env.update(HOME=scratch, TMPDIR=scratch, XDG_CONFIG_HOME=scratch + "/config",
@@ -44,7 +46,7 @@ def fixture_environment(scratch):
 
 class Sandbox:
     def __init__(self, data, scratch):
-        self.data, self.scratch = Path(data).resolve(), Path(scratch).resolve()
+        self.data, self.scratch = fixture_path(data), fixture_path(scratch)
         self.environment = fixture_environment(scratch)
         self.privileged = False
         preflight = self.run(["/usr/bin/true"], check=False)
@@ -101,7 +103,7 @@ def held(command, env=None, cwd=None):
 
 
 def native_probe(binary, data, scratch):
-    data, scratch = Path(data).resolve(), Path(scratch).resolve()
+    data, scratch = fixture_path(data), fixture_path(scratch)
     data.mkdir(mode=0o700, exist_ok=True)
     scratch.mkdir(mode=0o700, exist_ok=True)
     for name in ("lock", "write", "rename", "unlink"):
@@ -123,11 +125,22 @@ def native_probe(binary, data, scratch):
     writer = subprocess.run([binary, "try-write", lock], text=True, capture_output=True, check=True, timeout=10)
     assert json.loads(writer.stdout) == {"event": "acquired"}
     assert inventory(data) == before, "read-only probe changed fixture"
+    store = data / "store"
+    subprocess.run([binary, "init-query", store], check=True, capture_output=True, timeout=10)
+    before_query = inventory(data)
+    gate = store / ".maintenance" / "lock"
+    with held([str(binary), "hold-write", str(gate)]):
+        assert json.loads(sandbox.run([binary, "query", store]).stdout) == {"event": "deadline_exceeded"}
+    with held(sandbox.command([binary, "hold-query", store]), sandbox.environment, scratch):
+        writer = subprocess.run([binary, "try-write", gate], text=True, capture_output=True, check=True, timeout=10)
+        assert json.loads(writer.stdout) == {"event": "busy"}
+        assert json.loads(sandbox.run([binary, "query", store]).stdout) == {"event": "acquired"}
+    assert inventory(data) == before_query, "AcquireQuery changed fixture"
     return {"os": sys.platform, "kernel": platform.release(), "arch": platform.machine(),
             "binary_sha256": hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
             "checks": denied, "old_writer_blocks_reader": True, "reader_blocks_old_writer": True,
             "concurrent_readers": True, "cancellation": True, "close_releases_lock": True,
-            "inventory_unchanged": True}
+            "inventory_unchanged": True, "product_query_gate": True}
 
 
 def main():
@@ -135,8 +148,7 @@ def main():
     parser.add_argument("--probe", required=True, type=Path)
     parser.add_argument("--artifacts", type=Path)
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix="devtools-sandbox-query-") as temporary:
-        root = Path(temporary).resolve()
+    with temporary_fixture(prefix="devtools-sandbox-query-") as root:
         result = native_probe(args.probe.resolve(), root / "data", root / "scratch")
     if args.artifacts:
         args.artifacts.mkdir(parents=True, exist_ok=True)

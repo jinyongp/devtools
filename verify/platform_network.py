@@ -11,8 +11,10 @@ import socket
 import ssl
 import subprocess
 import sys
-import tempfile
 import uuid
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from fixture_paths import create_fixture_directory
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -23,12 +25,12 @@ def main():
         parser.error("Requires DEVTOOLS_DISPOSABLE_HOST=1 and a non-root user on a disposable host with passwordless sudo available.")
     source=args.binary.resolve()
     report={"platform":sys.platform,"binary_sha256":hashlib.sha256(source.read_bytes()).hexdigest(),"result":"fail","commands":[]}
-    temporary=tempfile.mkdtemp(prefix="devtools-system-network-")
+    temporary=create_fixture_directory(prefix="devtools-system-network-")
     # Retain keys and recovery state if any OS cleanup cannot be confirmed.
     if temporary:
         # macOS's /var temporary path is an OS symlink. Select the real path
         # before passing HOME to the no-follow private storage boundary.
-        root=Path(temporary).resolve();root.chmod(0o700)
+        root=temporary;root.chmod(0o700)
         report["recovery_root"]=str(root)
         binary=root/"bin"/"devtools";binary.parent.mkdir();shutil.copy2(source,binary)
         project=root/"project";project.mkdir()

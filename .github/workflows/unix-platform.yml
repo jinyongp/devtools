@@ -71,6 +71,7 @@ jobs:
           go version > bin/sandbox-query-evidence/go-version.txt
           uname -a > bin/sandbox-query-evidence/kernel.txt
           df -h . "$RUNNER_TEMP" > bin/sandbox-query-evidence/filesystem.txt
+          python3 -B -m unittest discover -s scripts -p test_fixture_paths.py
           python3 -B -m unittest discover -s verify -p test_sandbox_query_fixture.py
           go build -o bin/sandbox-query-lock ./verify/probes/sandbox_query_lock.go
           python3 -B verify/sandbox_query_fixture.py --probe bin/sandbox-query-lock --artifacts bin/sandbox-query-evidence

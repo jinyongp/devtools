@@ -51,13 +51,22 @@ func acquireFileLock(ctx context.Context, path string, mode lockMode) (*lockedFi
 	if err != nil {
 		return nil, err
 	}
+	return waitForFileLock(ctx, file, mode)
+}
+
+// waitForFileLock takes ownership of file, including all failure paths.
+func waitForFileLock(ctx context.Context, file *os.File, mode lockMode) (*lockedFile, error) {
 	for {
 		if ctx.Err() != nil {
 			_ = file.Close()
 			return nil, ctx.Err()
 		}
-		err = syscall.Flock(int(file.Fd()), flockMode(mode))
+		err := syscall.Flock(int(file.Fd()), flockMode(mode))
 		if err == nil {
+			if err := ctx.Err(); err != nil {
+				_ = file.Close()
+				return nil, err
+			}
 			return &lockedFile{File: file}, nil
 		}
 		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EINTR) {

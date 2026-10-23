@@ -1082,6 +1082,10 @@ func (s Store) start(ctx context.Context, q Request, previous string) (result Re
 			handoffErr = channel.admit()
 		}
 		if handoffErr != nil {
+			if handoffErr.Details != nil {
+				handoffErr.Details["profile"] = r.Profile
+				handoffErr.Details = protocol.BindGuidance(handoffErr.Details, protocol.InvocationContext{IsolatedRoot: r.IsolatedRoot, Profile: r.Profile, ProfileKnown: true}).(map[string]any)
+			}
 			return Result{Item: r}, handoffErr
 		}
 		r.LaunchPhase = "admitted"

@@ -14,6 +14,11 @@ test('public config, import and limit facts survive without raw values', () => {
   assert.match(message,/commands.dev.inject line 4/);
   assert.match(message,/expected boolean, observed string/);
   assert.doesNotMatch(message,/PRIVATE-CANARY/);
+  context.details = {reason:'redaction_unavailable',target:{kind:'command',name:'show'},facts:{limit_kind:'patterns',observed:4097,limit:4096,import_items:[{key:'TOKEN',kind:'secret',action:'conflict',value:'PRIVATE-CANARY'}]}};
+  const limitMessage = vm.runInContext('storageFailureMessage(storageFailureDetails(details))', context);
+  assert.match(limitMessage,/patterns: observed 4097, limit 4096/);
+  assert.match(limitMessage,/TOKEN \(secret\): conflict/);
+  assert.doesNotMatch(limitMessage,/PRIVATE-CANARY/);
 });
 
 test('API errors retain safe storage facts and display original OS failure', async () => {

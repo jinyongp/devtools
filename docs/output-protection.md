@@ -80,6 +80,11 @@ JSON escaping으로 늘어난 표현도 한도에 포함한다. OS 환경 한도
 한도에 걸릴 수 있다. 초기화가 실패하면 `redaction_unavailable`로 실행을 거절하며,
 managed restart도 기존 실행을 멈추기 전에 거절한다. 패턴을 조용히 버리거나 raw로 바꾸지 않는다.
 
+protocol 13의 `facts.limit_kind/observed/limit`는 실패 지점의 정규화된 패턴·byte·상태·suffix
+관측량과 고정 상한을 제공한다. 전체 secret 수와 같지 않으며 모든 입력을 센 결과도 아니다.
+필요한 값만 포함한 bundle로 선택 범위를 줄인다. 한도 조정 CLI 옵션은 없고 raw는 일반 복구
+행동으로 권하지 않는다. managed launcher도 닫힌 종류와 두 정수만 부모에 전달하며 원문 오류·값은 전달하지 않는다.
+
 각 stream은 최장 패턴보다 한 byte 작은 lookahead, 같은 크기의 match 길이 ring,
 32 KiB 출력 block을 사용한다. 실제 비밀 prefix일 수 있는 부분만 보류하며, 관련 없는
 시작 메시지는 즉시 전달한다. 비밀 prefix로 끝난 짧은 출력은 다음 입력이나 EOF까지 지연될 수 있다.

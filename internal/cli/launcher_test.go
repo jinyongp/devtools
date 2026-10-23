@@ -311,6 +311,10 @@ func TestFrozenLauncherRealProcessRestartAndLock(t *testing.T) {
 	if limitErr == nil || limitErr.Code != "redaction_unavailable" {
 		t.Fatal("masker initialization did not reject before old stop", limitErr)
 	}
+	limitFacts, ok := limitErr.Details["facts"].(map[string]any)
+	if !ok || limitFacts["limit_kind"] != "pattern_bytes" || limitFacts["observed"] != 66000 || limitFacts["limit"] != 65536 || limitErr.Details["effects"] != "partial" {
+		t.Fatal("launcher lost safe limit facts or published-record effect", limitErr)
+	}
 	if previous, e := service.Status(ctx, first.Item.ID); e != nil || previous.State != "running" {
 		t.Fatal("masker limit stopped previous app", e)
 	}

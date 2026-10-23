@@ -21,9 +21,10 @@ import (
 // launcher. Neither actual input nor transport keys appear in argv, environment,
 // records or disk. EOF before commit aborts; retry never chooses newer input.
 const (
-	launchBound    byte = 1
-	launchAdmitted byte = 2
-	launchCommit   byte = 3
+	launchBound        byte = 1
+	launchAdmitted     byte = 2
+	launchCommit       byte = 3
+	launchLimitFailure byte = 4
 )
 
 type launcherInputChannel struct {
@@ -72,13 +73,36 @@ func launcherFailureCode(code string) string {
 	}
 }
 
-// ReportLauncherFailure sends only a closed, value-free error code on the
-// single-operation control pipe. stderr remains unavailable to the caller.
+// ReportLauncherFailure sends a closed error code or a fixed-size matcher limit
+// record. Raw messages/details and stderr never cross the control pipe.
 func ReportLauncherFailure(out io.Writer, e *protocol.Error) {
+	if e.Code == "redaction_unavailable" {
+		if facts, ok := e.Details["facts"].(map[string]any); ok {
+			kind, _ := facts["limit_kind"].(string)
+			observed, ook := facts["observed"].(int)
+			limit, lok := facts["limit"].(int)
+			condition := &redact.LimitError{Kind: kind, Observed: observed, Limit: limit}
+			if ook && lok && condition.Valid() {
+				for i, k := range launcherLimitKinds {
+					if kind == k {
+						var frame [18]byte
+						frame[0], frame[1] = launchLimitFailure, byte(i)
+						binary.BigEndian.PutUint64(frame[2:10], uint64(observed))
+						binary.BigEndian.PutUint64(frame[10:18], uint64(limit))
+						out.Write(frame[:])
+						return
+					}
+				}
+			}
+		}
+	}
 	code := launcherFailureCode(e.Code)
 	frame := append([]byte{0, byte(len(code))}, []byte(code)...)
 	out.Write(frame)
 }
+
+var launcherLimitKinds = [...]string{"patterns", "pattern_bytes", "total_pattern_bytes", "states", "outputs_per_state"}
+
 func (c *launcherInputChannel) expect(value byte) *protocol.Error {
 	var b [1]byte
 	if _, err := io.ReadFull(c.read, b[:]); err != nil {
@@ -86,6 +110,22 @@ func (c *launcherInputChannel) expect(value byte) *protocol.Error {
 	}
 	if b[0] == value {
 		return nil
+	}
+	if b[0] == launchLimitFailure {
+		var body [17]byte
+		if _, err := io.ReadFull(c.read, body[:]); err != nil || int(body[0]) >= len(launcherLimitKinds) {
+			return failure("launcher_unavailable")
+		}
+		observed, limit := binary.BigEndian.Uint64(body[1:9]), binary.BigEndian.Uint64(body[9:17])
+		maxInt := uint64(^uint(0) >> 1)
+		if observed > maxInt || limit > maxInt {
+			return failure("launcher_unavailable")
+		}
+		condition := &redact.LimitError{Kind: launcherLimitKinds[body[0]], Observed: int(observed), Limit: int(limit)}
+		if !condition.Valid() {
+			return failure("launcher_unavailable")
+		}
+		return execution.OutputProtectionFailure(condition, protocol.InvocationContext{})
 	}
 	if b[0] != 0 {
 		return failure("launcher_unavailable")
@@ -193,7 +233,7 @@ func ReceiveLauncherInput(ctx context.Context, in io.ReadCloser, out io.WriteClo
 		bound.Streams, outputErr = redact.Protect(runContext, input.Patterns, metadata.Output, stdout, stderr)
 		if outputErr != nil {
 			input.Destroy()
-			return nil, protocol.NewError("redaction_unavailable", "Cannot initialize the requested output protection.", 3, nil)
+			return nil, execution.OutputProtectionFailure(outputErr, protocol.InvocationContext{Profile: record.Profile, ProfileKnown: true, IsolatedRoot: record.IsolatedRoot})
 		}
 	}
 	input.Destroy()

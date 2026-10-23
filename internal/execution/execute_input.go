@@ -33,7 +33,7 @@ func (p Prepared) executeInput(ctx context.Context, runner process.Runner, in io
 	}
 	protected, outputErr := redact.Protect(ctx, input.Patterns, p.Input.metadata.Output, out, diagnostic)
 	if outputErr != nil {
-		return 0, protocol.NewError("redaction_unavailable", "Cannot initialize the requested output protection; adjust output policy or limits.", 3, nil)
+		return 0, OutputProtectionFailure(outputErr, p.Command.Diagnostic(p.mode))
 	}
 	ctx = protected.Context
 	defer func() {

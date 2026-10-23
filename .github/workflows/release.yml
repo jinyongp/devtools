@@ -159,7 +159,9 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.1'
-          cache: true
+          # Cache egress throttling can leave setup waiting until the job limit.
+          # Native protection checks must also run with a cold build cache.
+          cache: false
       - name: Verify actual native architecture
         run: test "$(go env GOHOSTARCH)" = '${{ matrix.arch }}'
       - name: Verify disposable native Keychain and locked collection

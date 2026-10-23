@@ -1,4 +1,4 @@
-"""Reuse only a complete, successful main push for the release's exact workflow SHA.
+"""Reuse source and installer compatibility checks from an exact-SHA full main push.
 
 Missing, inaccessible or unsuitable evidence means running all native checks again.
 No binaries or artifacts from another run are promoted by this decision.
@@ -99,7 +99,9 @@ def main():
             # Construct a URL from repository/run identity, rather than an untrusted display field.
             url = f'{os.environ["GITHUB_SERVER_URL"]}/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{int(run["id"])}'
             summary.write(f'Windows source checks: [{os.environ["SOURCE_COMMIT"]}]({url}), '
-                          f'attempt {int(run["run_attempt"])}. Final-version installation and product checks run again.\n')
+                          f'attempt {int(run["run_attempt"])}. Source and synthetic-version installer compatibility '
+                          'checks reused; final-version installation, completion and product checks run again '
+                          'on amd64 and arm64.\n')
         else:
             summary.write('No reusable Windows source validation; all native checks run.\n')
     print(f'Reuse Windows source validation: {reused}')

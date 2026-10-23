@@ -72,6 +72,30 @@ class TrustTests(unittest.TestCase):
                     self.assertIn(name, {job['name'] for job in jobs})
                     self.assertIsNone(self.find(jobs=[job for job in jobs if job['name'] != name]))
 
+    def test_all_five_installer_compatibility_jobs_must_have_actually_passed(self):
+        step = 'Test selected native PowerShell installer and running-image updates'
+        for arch, lane in (('amd64', 'installer-ps5'), ('amd64', 'installer-ps7'),
+                           ('arm64', 'installer-ps5'), ('arm64', 'installer-ps7'),
+                           ('arm64', 'installer-x64')):
+            name = f'Windows {arch} / {lane}'
+            with self.subTest(job=name):
+                _, jobs = fixture()
+                self.assertIsNone(self.find(jobs=[job for job in jobs if job['name'] != name]))
+                for state in ('failure', 'skipped', 'cancelled'):
+                    changed = copy.deepcopy(jobs)
+                    job = next(job for job in changed if job['name'] == name)
+                    target = next(item for item in job['steps'] if item['name'] == step)
+                    target['conclusion'] = state
+                    self.assertIsNone(self.find(jobs=changed))
+
+    def test_native_installer_recovery_is_required_before_reuse(self):
+        for arch in ('amd64', 'arm64'):
+            with self.subTest(arch=arch):
+                _, jobs = fixture()
+                job = next(job for job in jobs if job['name'] == f'Windows {arch} / installer-ps7')
+                job['steps'] = [step for step in job['steps'] if step['name'] != 'Test native installer recovery']
+                self.assertIsNone(self.find(jobs=jobs))
+
     def test_rerun_in_progress_invalidates_old_success(self):
         run, _ = fixture()
         run.update(status='in_progress', conclusion=None, run_attempt=2)

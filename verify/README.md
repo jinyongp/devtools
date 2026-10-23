@@ -256,7 +256,8 @@ zsh와 fish를 명시적으로 설치해 세 shell을 모두 확인한다.
 
 `.github/workflows/windows-platform.yml`의 full gate는 x64와 ARM64에서 실행한다.
 release workflow도 이를 필수 dependency로 호출한다. 동일 main push SHA의 전체 성공 근거가 있으면
-소스 검사를 재사용하고 installer·최종 버전의 product lane은 다시 실행한다. 누락·오류 시 전체 재실행한다.
+소스·합성 버전 installer 호환성 검사를 재사용하고 최종 버전의 product lane 2개만 다시 실행한다.
+설치 엔진 5개 중 하나라도 누락·실패·skip됐거나 근거 조회에 오류가 있으면 전체 재실행한다.
 자세한 조건은 [개발 가이드](../docs/development.md#릴리스)를 따른다. Windows native 실행은
 Actions에서 검증하며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 절차를 대신 사용하지 않는다.
 
@@ -279,6 +280,22 @@ Actions에서 검증하며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 
   결과는 `windows-platform-{arch}-{lane}` artifact에 보관한다. installer lane은
   `installer-ps5`·`installer-ps7`·ARM64의 `installer-x64`로 구분한다.
   새로운 push/PR은 이전 CI를 취소하지만 release 실행은 취소하지 않는다.
+
+PowerShell 크래시의 반복 재현은 수동 `focus=powershell`/`installer` 진단에서만 요청한다.
+일반 full 실행은 기존 installer 시나리오를 엔진당 1회 실행하며 startup·stdio 반복 probe는 0회다.
+`installer_repetitions`(1–20), `powershell_startup_probes`(0–1000),
+`powershell_stdio_probes`(0–2000)를 지정해 반복하고 `installer_package_commit`으로
+원래 패키지 SHA를 고정할 수 있다. 이 실행은 full gate나 재사용 근거를 대체하지 않는다.
+실패는 자동 재시도하지 않는다. 호출 위치·종료 코드·stdout/stderr·Application 이벤트와
+WER minidump를 artifact에 수집한다. dump 설정은 일회용 Actions VM에만 적용한다.
+
+2026-10-23 조사 기준, [최초 Release 실행](https://github.com/jinyongp/devtools/actions/runs/39821194100)의
+ARM64 위 x64 PowerShell 7.6.6 `0xC0000005` 원인은 미확정이다. 당시 stderr는
+`Fatal error. 0xC0000005`뿐이며 dump/stack이 없었다.
+[원래 소스의 installer 8회 검사](https://github.com/jinyongp/devtools/actions/runs/39831751407)와
+[세 환경의 실제 subprocess 함수 총 3,000회 검사](https://github.com/jinyongp/devtools/actions/runs/39836188801)는
+통과했으나 최초 오류의 해결 근거로 간주하지 않는다. 제품 설치기 수정 없이 진단 수집을 보강했고,
+재발 시 확보한 dump와 이벤트로 실패 모듈·호출 경로를 확인한다.
 
 Release의 `profile-exchange`는 이미 빌드한 Linux·macOS·Windows x64/ARM64 CLI와 합성 데이터로
 암호화 archive를 교환한다. 네 native consumer가 다른 세 producer의 archive를 import해 총 12개

@@ -321,8 +321,12 @@ full 제품 검사를 필수 dependency로 실행한다. Windows 소스 검증�
 같은 저장소 main push의 전체 lane·필수 단계가 성공한 최신 attempt만 재사용한다. PR·fork·focused 실행,
 다른 SHA, 누락·실패·취소된 단계는 인정하지 않는다. API 오류나 근거 부재 시 전체 검사를 실행한다.
 Actions 요약에 재사용한 run/attempt를 남긴다. `reuse_validation=false`로 전체 재실행을 강제할 수 있다.
-재사용하더라도 Windows 설치/update·최종 버전 패키지의 completion·실제품·Chromium 검사는 다시 실행한다.
-PowerShell 엔진별 설치 검사는 PATH·기본 설치 경로를 격리하기 위해 각각 별도 runner에서 병렬 실행한다.
+재사용 시 PS5.1·native PS7·ARM64 위 x64 PS7의 합성 버전 설치/update 검사 5개도 해당 main 실행의
+성공 근거로 대체한다. 이 검사는 릴리스 버전 대신 `0.0.0-test.1/2`를 사용하므로 중복 실행하지 않는다.
+최종 버전 ZIP을 새로 빌드·설치하는 product lane은 x64·ARM64에서 다시 실행하며,
+completion·실제품·Chromium·profile export 검사와 검증한 ZIP의 checksum 보존을 유지한다.
+재사용하지 않는 전체 실행에서는 PowerShell 엔진별 설치 검사를 PATH·기본 설치 경로 격리를 위해
+각각 별도 runner에서 병렬 실행한다. Unix 검사는 현재 재사용 대상에 포함하지 않는다.
 이전 candidate ZIP을 이름만 바꿔 게시하지 않는다. 실제 게시인 `publish=true`는
 main ref와 main ancestry를 모두 확인한다. `publish=false`는 후보 branch에서도 실행할 수 있다.
 Linux는 Agent Skill local/public discovery와 Chromium dashboard smoke를 포함한다.

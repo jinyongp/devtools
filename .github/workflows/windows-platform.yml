@@ -10,7 +10,7 @@ on:
         required: true
         type: string
       reuse-source:
-        description: Release caller has verified a successful full main push at this exact SHA
+        description: Release caller has verified full source and installer compatibility checks at this exact main-push SHA
         type: boolean
         default: false
       focus:
@@ -68,7 +68,9 @@ jobs:
       fail-fast: false
       matrix:
         runner: [windows-2025, windows-11-arm]
-        lane: ${{ fromJSON(inputs.reuse-source && '["product","installer-ps5","installer-ps7","installer-x64"]' || (inputs.focus == 'config' && '["suite-rest"]') || (inputs.focus == 'suite' && '["suite-cli","suite-values","suite-tasks","suite-handoff","suite-runtime","suite-rest"]') || (inputs.focus == 'race' && '["race"]') || (inputs.focus == 'powershell' && '["installer-ps7","installer-x64"]') || (inputs.focus == 'installer' && '["installer-ps5","installer-ps7","installer-x64"]') || ((inputs.focus == 'completion' || inputs.focus == 'product') && '["product"]') || ((inputs.focus == 'network' || inputs.focus == 'providers' || inputs.focus == 'lifecycle' || inputs.focus == 'api') && '["boundaries"]') || '["suite-cli","suite-values","suite-tasks","suite-handoff","suite-runtime","suite-rest","boundaries","product","race","installer-ps5","installer-ps7","installer-x64"]') }}
+        # Installer compatibility uses the same synthetic versions as the full
+        # main push. Reuse that evidence; product builds and installs VERSION again.
+        lane: ${{ fromJSON(inputs.reuse-source && '["product"]' || (inputs.focus == 'config' && '["suite-rest"]') || (inputs.focus == 'suite' && '["suite-cli","suite-values","suite-tasks","suite-handoff","suite-runtime","suite-rest"]') || (inputs.focus == 'race' && '["race"]') || (inputs.focus == 'powershell' && '["installer-ps7","installer-x64"]') || (inputs.focus == 'installer' && '["installer-ps5","installer-ps7","installer-x64"]') || ((inputs.focus == 'completion' || inputs.focus == 'product') && '["product"]') || ((inputs.focus == 'network' || inputs.focus == 'providers' || inputs.focus == 'lifecycle' || inputs.focus == 'api') && '["boundaries"]') || '["suite-cli","suite-values","suite-tasks","suite-handoff","suite-runtime","suite-rest","boundaries","product","race","installer-ps5","installer-ps7","installer-x64"]') }}
         include:
           - runner: windows-2025
             arch: amd64

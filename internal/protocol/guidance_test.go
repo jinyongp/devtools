@@ -39,3 +39,18 @@ func TestBindGuidancePreservesNestedActionsAndDestination(t *testing.T) {
 		t.Fatal("binding mutated shared domain guidance")
 	}
 }
+
+func TestRecoveryCompositionPreservesObservedEffects(t *testing.T) {
+	for _, effect := range []string{"none", "committed", "partial", "unknown"} {
+		cause := WithEffects(NewError("synthetic", "Safe condition.", 3, nil), effect)
+		wrapped := NewError("requirements_failed", "Preparation failed.", 3, nil)
+		PreserveRecovery(wrapped, cause)
+		if Public(wrapped, "command run").Details["effects"] != effect {
+			t.Fatal(effect, wrapped)
+		}
+	}
+	e := WithEffects(NewError("storage_error", "Publication uncertain.", 1, nil), "unknown")
+	if WithEffects(e, "partial").Details["effects"] != "unknown" {
+		t.Fatal(e)
+	}
+}

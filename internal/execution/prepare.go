@@ -82,8 +82,13 @@ func Prepare(ctx context.Context, command Command, dependencies Dependencies, pr
 	return prepare(ctx, command, dependencies, preview, nil)
 }
 
-func prepare(ctx context.Context, command Command, dependencies Dependencies, preview bool, managedParentEnvironment *[]string) (Prepared, *protocol.Error) {
+func prepare(ctx context.Context, command Command, dependencies Dependencies, preview bool, managedParentEnvironment *[]string) (result Prepared, failure *protocol.Error) {
 	var state *values.State
+	defer func() {
+		if state.PreparationChanged() {
+			protocol.WithEffects(failure, "partial")
+		}
+	}()
 	if command.NeedsValues() {
 		var err *protocol.Error
 		state, err = readExecutionState(ctx, command, dependencies)
@@ -300,12 +305,17 @@ func validateInjectedKeyspace(command Command, injected map[string]string) *prot
 // execution is still running. It does not claim ports or require served ports
 // to be free. Bindings backed by a new port served by this same command may be
 // deferred until the post-stop cold-start preflight.
-func Validate(ctx context.Context, command Command, dependencies Dependencies, parentEnvironment []string) *protocol.Error {
+func Validate(ctx context.Context, command Command, dependencies Dependencies, parentEnvironment []string) (failure *protocol.Error) {
 	command.Invocation.IsolatedRoot = dependencies.IsolatedRoot
 	if err := validateInjectedKeyspace(command, nil); err != nil {
 		return err
 	}
 	var state *values.State
+	defer func() {
+		if state.PreparationChanged() {
+			protocol.WithEffects(failure, "partial")
+		}
+	}()
 	if command.NeedsValues() {
 		var err *protocol.Error
 		state, err = readExecutionState(ctx, command, dependencies)
@@ -428,13 +438,18 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 }
 
 // Preflight performs the non-mutating checks used before a managed cold start.
-func Preflight(ctx context.Context, command Command, dependencies Dependencies, parentEnvironment []string) *protocol.Error {
+func Preflight(ctx context.Context, command Command, dependencies Dependencies, parentEnvironment []string) (failure *protocol.Error) {
 	command.Invocation.IsolatedRoot = dependencies.IsolatedRoot
 	prepared, err := prepare(ctx, command, dependencies, true, &parentEnvironment)
 	if err != nil {
 		return PreparationFailure(ctx, command, parentEnvironment, "managed", err)
 	}
 	prepared.mode = "managed"
+	defer func() {
+		if prepared.State.PreparationChanged() {
+			protocol.WithEffects(failure, "partial")
+		}
+	}()
 	defer prepared.Release()
 	environment, environmentErr := managedEnvironment(command, prepared.State, parentEnvironment, prepared.PathOverride)
 	if environmentErr != nil {
@@ -488,7 +503,12 @@ func (p Prepared) Environment(parent []string) []string {
 
 // Execute runs a prepared command using either the regular foreground process
 // path or a caller-provided managed-process runner.
-func (p Prepared) Execute(ctx context.Context, parentEnvironment []string, runner process.Runner, in io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
+func (p Prepared) Execute(ctx context.Context, parentEnvironment []string, runner process.Runner, in io.Reader, out, diagnostic io.Writer) (code int, failure *protocol.Error) {
+	defer func() {
+		if p.State.PreparationChanged() {
+			protocol.WithEffects(failure, "partial")
+		}
+	}()
 	if p.Input != nil {
 		return p.executeInput(ctx, runner, in, out, diagnostic)
 	}

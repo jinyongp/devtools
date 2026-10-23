@@ -31,12 +31,13 @@ type entry struct {
 
 // State is a private-storage snapshot. CLI responses use Metadata instead.
 type State struct {
-	sealedUnverified bool
-	expiries         map[string]map[string]int64
-	Version          int               `json:"version"`
-	Profile          string            `json:"profile"`
-	Envs             map[string]bool   `json:"envs"`
-	Keys             map[string]*entry `json:"keys"`
+	preparationChanged bool
+	sealedUnverified   bool
+	expiries           map[string]map[string]int64
+	Version            int               `json:"version"`
+	Profile            string            `json:"profile"`
+	Envs               map[string]bool   `json:"envs"`
+	Keys               map[string]*entry `json:"keys"`
 }
 
 type Metadata struct {

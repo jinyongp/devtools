@@ -865,7 +865,7 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	out.Replayed = receiptExists
 	return out, nil
 }
-func (s Store) start(ctx context.Context, q Request, previous string) (Result, *protocol.Error) {
+func (s Store) start(ctx context.Context, q Request, previous string) (result Result, condition *protocol.Error) {
 	var out Result
 	// Request identity also names the execution, so retry after a lost receipt
 	// observes the same run instead of launching another command.
@@ -1022,8 +1022,10 @@ func (s Store) start(ctx context.Context, q Request, previous string) (Result, *
 	}
 	lease, launchErr := s.prepareLaunch(r, q.Network)
 	if launchErr != nil {
-		return out, launchErr
+		return out, protocol.WithEffects(launchErr, "unknown")
 	}
+	// The execution record is durable before the launcher can bind its input.
+	defer func() { protocol.WithEffects(condition, "partial") }()
 	entry := "__process-serve"
 	if s.PrepareInput != nil {
 		entry = "__process-launch"

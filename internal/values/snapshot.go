@@ -16,14 +16,15 @@ import (
 )
 
 type SnapshotMetadata struct {
-	Selection         string                    `json:"selection"`
-	Public            *vault.PublicLaunchTicket `json:"public,omitempty"`
-	Launch            *vault.LaunchTicket       `json:"launch,omitempty"`
-	KeyEpoch          uint64                    `json:"key_epoch,omitempty"`
-	Identity          vault.InputIdentity       `json:"identity"`
-	Slots             []vault.SlotReference     `json:"slots"`
-	IntegrityVerified bool                      `json:"integrity_verified"`
-	EarliestExpiry    *time.Time                `json:"earliest_expiry,omitempty"`
+	PreparationChanged bool                      `json:"-"`
+	Selection          string                    `json:"selection"`
+	Public             *vault.PublicLaunchTicket `json:"public,omitempty"`
+	Launch             *vault.LaunchTicket       `json:"launch,omitempty"`
+	KeyEpoch           uint64                    `json:"key_epoch,omitempty"`
+	Identity           vault.InputIdentity       `json:"identity"`
+	Slots              []vault.SlotReference     `json:"slots"`
+	IntegrityVerified  bool                      `json:"integrity_verified"`
+	EarliestExpiry     *time.Time                `json:"earliest_expiry,omitempty"`
 }
 
 // Snapshot is an owned, in-memory view of exactly one observed profile/env.
@@ -46,6 +47,7 @@ func (s *State) Clone() *State {
 		return nil
 	}
 	out := newState(s.Profile)
+	out.preparationChanged = s.preparationChanged
 	out.Version = s.Version
 	out.sealedUnverified = s.sealedUnverified
 	if s.expiries != nil {
@@ -82,9 +84,14 @@ func (s *Snapshot) StateCopy() *State {
 	if s == nil {
 		return nil
 	}
-	return s.state.Clone()
+	copy := s.state.Clone()
+	if copy != nil {
+		copy.preparationChanged = s.metadata.PreparationChanged
+	}
+	return copy
 }
-func (s *Snapshot) CanInject() bool { return s != nil && s.state != nil && s.canInject }
+func (s *State) PreparationChanged() bool { return s != nil && s.preparationChanged }
+func (s *Snapshot) CanInject() bool       { return s != nil && s.state != nil && s.canInject }
 func (s *Snapshot) Metadata() SnapshotMetadata {
 	if s == nil {
 		return SnapshotMetadata{Slots: []vault.SlotReference{}}
@@ -171,6 +178,7 @@ func CaptureVault(ctx context.Context, root, profile, env string, inject bool, n
 		return nil, VaultError(ctx, err)
 	}
 	store := vault.FileStore{Root: root, VaultID: k.VaultID, CatalogKey: key}
+	created := false
 	p, profileKey, err := store.ReadAnyWithMasterHeld(ctx, profile, key)
 	release()
 	if err != nil && err.Error() == "profile_not_found" {
@@ -183,7 +191,18 @@ func CaptureVault(ctx context.Context, root, profile, env string, inject bool, n
 		if err != nil && err.Error() == "profile_not_found" {
 			p, err = vault.NewProfile(profile)
 			if err == nil {
+				candidate, failure := captureProfile(p, nil, env, inject, now, selection...)
+				if failure != nil {
+					release()
+					return nil, failure
+				}
+				candidate.Destroy()
 				err = store.PublishManagedHeld(ctx, p, nil)
+				if err != nil {
+					release()
+					return nil, protocol.WithEffects(VaultError(ctx, err), "unknown")
+				}
+				created = true
 			}
 		}
 		release()
@@ -192,7 +211,14 @@ func CaptureVault(ctx context.Context, root, profile, env string, inject bool, n
 		return nil, VaultError(ctx, err)
 	}
 	defer profileKey.Destroy()
-	return captureProfile(p, profileKey, env, inject, now, selection...)
+	snapshot, failure := captureProfile(p, profileKey, env, inject, now, selection...)
+	if failure != nil && created {
+		return nil, protocol.WithEffects(failure, "partial")
+	}
+	if snapshot != nil {
+		snapshot.metadata.PreparationChanged = created
+	}
+	return snapshot, failure
 }
 
 func captureProfile(p *vault.Profile, profileKey *vault.Material, env string, inject bool, now time.Time, selection ...string) (*Snapshot, *protocol.Error) {

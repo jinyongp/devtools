@@ -84,3 +84,17 @@ func TestVaultAndExplainGuidanceKeepExplicitRoot(t *testing.T) {
 		t.Fatal(out, err)
 	}
 }
+
+func TestPreparationEffectsMatchNewProfilePublication(t *testing.T) {
+	a := testApp(t)
+	t.Chdir(privateTempDir(t))
+	initializeTestVault(t, a)
+	code, _, diagnostic := invoke(t, a, "", "run", "--profile", "invalid-new", "--env", "missing", "--", "__missing_effect_test__")
+	if code == 0 || !strings.Contains(diagnostic, `"effects":"none"`) {
+		t.Fatal(code, diagnostic)
+	}
+	code, _, diagnostic = invoke(t, a, "", "run", "--profile", "valid-new", "--", "__missing_effect_test__")
+	if code != 127 || !strings.Contains(diagnostic, `"effects":"partial"`) {
+		t.Fatal(code, diagnostic)
+	}
+}

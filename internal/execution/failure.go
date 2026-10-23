@@ -34,6 +34,7 @@ func PreparationFailure(ctx context.Context, c Command, parent []string, mode st
 	checks := doctor.CheckRequirements(ctx, doctor.Input{Profile: c.Project.Profile, Command: c.Name, Directory: c.Directory, Env: c.Env, Requirements: c.Requirements, Inject: c.Inject, CheckInjection: true, Executable: exe, Args: c.Arguments(), Environment: parent, EnvironmentUnknown: unknown, Mode: mode, ReadyExec: readyArguments(c), Source: commandSource(c)})
 	checks = append(checks, doctor.NewCheck("preparation", "fail", cause.Code, cause.Message))
 	failure := doctor.FailureFor(checks, c.Diagnostic(mode))
+	protocol.PreserveRecovery(failure, cause)
 	if cause.Code == "canceled" || cause.Code == "deadline_exceeded" {
 		failure.Code = cause.Code
 		failure.ExitCode = cause.ExitCode

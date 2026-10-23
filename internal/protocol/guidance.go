@@ -190,3 +190,16 @@ func PreserveRecovery(to, from *Error) {
 		}
 	}
 }
+
+func WithEffects(e *Error, effects string) *Error {
+	if e == nil {
+		return nil
+	}
+	if e.Details == nil {
+		e.Details = map[string]any{}
+	}
+	if e.Details["effects"] != "unknown" {
+		e.Details["effects"] = effects
+	}
+	return e
+}

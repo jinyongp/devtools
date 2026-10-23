@@ -169,7 +169,7 @@ func preparationDeadline(created time.Time, budget time.Duration) time.Time {
 	return created.Add(min(budget, DefaultPreparationTimeout))
 }
 
-func AuthenticateSnapshot(ctx context.Context, plan *Plan, dependencies Dependencies) (*AuthenticatedSnapshot, *protocol.Error) {
+func AuthenticateSnapshot(ctx context.Context, plan *Plan, dependencies Dependencies) (authenticated *AuthenticatedSnapshot, failure *protocol.Error) {
 	if plan == nil || plan.destroyed {
 		return nil, snapshotError("invalid_input_snapshot")
 	}
@@ -187,6 +187,14 @@ func AuthenticateSnapshot(ctx context.Context, plan *Plan, dependencies Dependen
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	snapshot, e := loadSnapshot(ctx, plan.command, dependencies, plan.command.Inject)
+	if snapshot != nil {
+		changed := snapshot.Metadata().PreparationChanged
+		defer func() {
+			if changed {
+				protocol.WithEffects(failure, "partial")
+			}
+		}()
+	}
 	if e != nil {
 		return nil, e
 	}
@@ -332,7 +340,7 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 	prepared.probeEnvironment = probeEnvironment(plan.parent, prepared.State, plan.command.Env)
 	return prepared, nil
 }
-func PrepareInput(ctx context.Context, command Command, dependencies Dependencies, parent []string, options PlanOptions) (Prepared, *protocol.Error) {
+func PrepareInput(ctx context.Context, command Command, dependencies Dependencies, parent []string, options PlanOptions) (prepared Prepared, failure *protocol.Error) {
 	command.Invocation.IsolatedRoot = dependencies.IsolatedRoot
 	plan, e := ResolvePlan(command, parent, options)
 	if e != nil {
@@ -344,6 +352,12 @@ func PrepareInput(ctx context.Context, command Command, dependencies Dependencie
 		return Prepared{}, PreparationFailure(ctx, plan.command, plan.parent, plan.mode, e)
 	}
 	defer snapshot.Destroy()
+	changed := snapshot.values.Metadata().PreparationChanged
+	defer func() {
+		if changed {
+			protocol.WithEffects(failure, "partial")
+		}
+	}()
 	return Materialize(ctx, snapshot, dependencies)
 }
 

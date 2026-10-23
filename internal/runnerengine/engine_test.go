@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/jinyongp/devtools/internal/storageerr"
 )
 
 func TestEngineHelper(t *testing.T) {
@@ -129,7 +131,8 @@ func TestLookupDuringExecutionReturnsUnresolvedReservation(t *testing.T) {
 		t.Fatal("lookup blocked on engine or inferred state", err)
 	}
 	if err := <-done; err != nil {
-		t.Fatal(err)
+		t.Fatalf("execution completion: %v; deadline_exceeded=%t; storage=%v", err,
+			errors.Is(err, context.DeadlineExceeded), storageerr.Details(err, "runnerengine", "publish_file", "ledger"))
 	}
 }
 

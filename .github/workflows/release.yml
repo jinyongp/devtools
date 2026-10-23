@@ -271,8 +271,8 @@ jobs:
           go build -o bin/devtools ./cmd/devtools
           echo "$PWD/bin" >> "$GITHUB_PATH"
       - run: devtools run build:cli
-      - name: Install verification shells
-        run: sudo apt-get update && sudo apt-get install -y fish zsh
+      - name: Install verification shells and sandbox launcher
+        run: sudo apt-get update && sudo apt-get install -y fish zsh bubblewrap
       - name: Verify installed CLI and simulated network failures
         run: devtools run test:installed
 

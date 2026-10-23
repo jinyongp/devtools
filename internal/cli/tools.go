@@ -122,6 +122,7 @@ func (a *App) registerTools() {
 			if action == "list" {
 				state, err := store.ReadForQuery(ctx)
 				if err != nil {
+					a.scopeQueryRemedy(err, "")
 					return nil, err
 				}
 				return map[string]any{"profile": store.Profile, "items": state.EnvNames()}, nil
@@ -155,13 +156,7 @@ func (a *App) valueCommand(ctx context.Context, streams IO, request Request, kin
 	if action == "list" || action == "get" {
 		state, err := store.ReadForQuery(ctx)
 		if err != nil {
-			if env != "" && err.Details["state"] != nil {
-				if remedies, ok := err.Details["remedies"].([]protocol.Remedy); ok {
-					for i := range remedies {
-						remedies[i].Argv = append(remedies[i].Argv, "--env", env)
-					}
-				}
-			}
+			a.scopeQueryRemedy(err, env)
 			return nil, err
 		}
 		if action == "list" {

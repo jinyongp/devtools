@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 import package as release_package
 from vault_test_support import retire_vaults
+from native_rewrap import check_native_rewrap
 
 
 class CLIError(RuntimeError):
@@ -96,7 +97,7 @@ def main():
         ], cwd=repository, env=base_env, text=True, encoding="utf-8", capture_output=True, timeout=180)
         assert install.returncode == 0, "Candidate installer did not complete (raw output withheld)"
         identity = api("version")
-        assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 13
+        assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 14
         alias = binary.with_name("dvt.exe")
         assert hashlib.sha256(alias.read_bytes()).digest() == hashlib.sha256(binary.read_bytes()).digest()
         steps.append("candidate_install_and_alias")
@@ -222,6 +223,9 @@ timeout = "3s"
         updated_native = api("vault", "status", env=native_env)["item"]
         assert updated_native["backend"] == "dpapi" and updated_native["vault_id"] == native["vault_id"]
         steps.append("default_dpapi_data_and_cold_native_unlock_after_self_update")
+        native_rewrap = check_native_rewrap(binary, native_env, project, 'native-product', native_directory)
+        assert native_rewrap['same_root_and_profile_bytes'] and native_rewrap['native_noop_and_replay']
+        steps.append("public_dpapi_passphrase_transition_replay_noop_and_manual_lock")
 
         http_port, tls_port = available_port(), available_port()
         mutate("proxy", "configure", "--http-address", f"127.0.0.1:{http_port}", "--https-address", f"127.0.0.1:{tls_port}")

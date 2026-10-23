@@ -134,6 +134,7 @@ jobs:
           path: |
             vault-secret-service-*.jsonl
             vault-secret-service-*.jsonl.stderr
+            vault-secret-service-rewrap-*.json
             vault-secret-service-logout.*
             vault-peers-*
           if-no-files-found: error

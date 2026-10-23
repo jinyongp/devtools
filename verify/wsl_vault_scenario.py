@@ -48,6 +48,18 @@ def main():
         api('init', '--profile', 'wsl-restart')
         api('vault', 'init', '--backend', 'passphrase', '--passphrase-file', str(password))
         api('sec', 'set', 'TOKEN', '--file', str(secretfile))
+        replacement = home / 'replacement-passphrase'
+        replacement.write_text('synthetic-wsl-rewrapped-passphrase\n')
+        replacement.chmod(0o600)
+        changed = api('vault', 'rewrap', '--from-backend', 'passphrase', '--backend', 'passphrase',
+                      '--request-id', '00000000-0000-4000-8000-000000000456',
+                      '--current-passphrase-file', str(password), '--new-passphrase-file', str(replacement))
+        if not changed['changed'] or changed['replayed']:
+            raise RuntimeError('WSL protection change did not commit')
+        if api('vault', 'unlock', '--passphrase-file', str(password), expected=3)['code'] != 'integrity_failed':
+            raise RuntimeError('WSL rewrap still accepts the old passphrase')
+        password.write_text(replacement.read_text())
+        api('vault', 'unlock', '--passphrase-file', str(password))
         redacted()
         api('vault', 'lock')
         if api('vault', 'status')['item']['state'] != 'locked_manual':
@@ -56,6 +68,10 @@ def main():
         desired = 'locked_manual' if phase == 'after-manual-restart' else 'locked'
         if api('vault', 'status')['item']['state'] != desired:
             raise RuntimeError('Unexpected passive state after distro restart')
+        replay = api('vault', 'rewrap', '--from-backend', 'passphrase', '--backend', 'passphrase',
+                     '--request-id', '00000000-0000-4000-8000-000000000456', '--new-passphrase-file', str(password))
+        if not replay['replayed'] or replay['item']['state'] != desired:
+            raise RuntimeError('WSL rewrap replay lost its receipt or changed manual state')
         if api('sec', 'set', 'TOKEN', '--file', str(home / 'secret'), expected=3)['code'] != 'vault_locked':
             raise RuntimeError('Restart reopened passphrase protection without explicit input')
         api('vault', 'unlock', '--passphrase-file', str(password))
@@ -65,6 +81,7 @@ def main():
         raise RuntimeError('Unknown restart phase')
     print(json.dumps({'phase': phase, 'result': 'pass', 'kernel': kernel,
                       'filesystem': filesystem, 'uid': os.getuid(),
+                      'rewrap_and_receipt_persisted': True,
                       'binary_identity': api('version')}))
 
 

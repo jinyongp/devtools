@@ -10,6 +10,7 @@ import tempfile
 
 import package as release_package
 from vault_test_support import retire_vaults
+from native_rewrap import check_native_rewrap
 
 SECRET = 'synthetic-installed-keychain-secret'
 
@@ -147,6 +148,9 @@ def main():
             final = api('vault', 'status')['item']
             if final['vault_id'] != original['vault_id'] or final['backend'] != 'keychain':
                 raise RuntimeError('Update replaced native protection')
+            rewrap = check_native_rewrap(binary, env, home, 'native-keychain-fixture', directory,
+                lock_backend=lambda: checked('/usr/bin/security', 'lock-keychain', str(keychain)),
+                unlock_backend=lambda: checked('/usr/bin/security', 'unlock-keychain', '-p', '', str(keychain)))
         finally:
             checked('/usr/bin/security', 'unlock-keychain', '-p', '', str(keychain))
             if directory is not None:
@@ -156,7 +160,8 @@ def main():
                     silent_native_reopen_after_session_retirement=True,
                     old_key_session_retired_before_update=True, synthetic_home_removed=True,
                     changed_signature_authorization_required=update_denial,
-                    explicit_previous_version_recovery='pass', existing_creator_app_policy_preserved=True)
+                    explicit_previous_version_recovery='pass', existing_creator_app_policy_preserved=True,
+                    public_native_rewrap=rewrap)
     if not evidence['signatures_differ']:
         raise RuntimeError('Two versions did not have different signed identities')
     Path('vault-keychain-installed.json').write_text(json.dumps(evidence, indent=2) + '\n')

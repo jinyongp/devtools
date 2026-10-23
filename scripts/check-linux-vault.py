@@ -48,8 +48,12 @@ def main():
             raise RuntimeError('Required native Secret Service tests did not actually pass')
 
     absent = ['TestNativeSecretServiceUnavailableDoesNotActivate']
+    rewrap_binary = Path.home() / 'devtools-native-rewrap'
+    subprocess.run(['go', 'build', '-trimpath', '-o', str(rewrap_binary), './cmd/devtools'], check=True, timeout=120)
     tests('^TestNativeSecretServiceUnavailableDoesNotActivate$', 'vault-secret-service-absent.jsonl', absent,
           DEVTOOLS_TEST_NATIVE_SECRET_SERVICE_ABSENT='1')
+    subprocess.run([sys.executable, '-B', 'scripts/check-linux-rewrap.py', '--binary', str(rewrap_binary), '--unavailable'],
+                   env=env, check=True, timeout=120)
     daemon = subprocess.Popen(['gnome-keyring-daemon', '--foreground', '--unlock', '--components=secrets',
                                '--control-directory', str(control)],
                               env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -71,6 +75,8 @@ def main():
         tests('^TestNativeSecretService(SyntheticVault|LockedCollection|SessionReuseCounts)$', 'vault-secret-service-native.jsonl',
               ['TestNativeSecretServiceSyntheticVault', 'TestNativeSecretServiceLockedCollection', 'TestNativeSecretServiceSessionReuseCounts'],
               DEVTOOLS_TEST_NATIVE_SECRET_SERVICE='1')
+        subprocess.run([sys.executable, '-B', 'scripts/check-linux-rewrap.py', '--binary', str(rewrap_binary)],
+                       env=env, check=True, timeout=120)
     finally:
         if daemon.poll() is None:
             daemon.terminate()

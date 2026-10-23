@@ -17,6 +17,7 @@ subprocess.run(['sh', os.environ['DEVTOOLS_TEST_INSTALLER'], 'install', '--versi
 binary = str(home / '.local/bin/devtools')
 secret = 'synthetic-installed-vault-secret'
 passphrase = 'synthetic-installed-vault-passphrase'
+replacement_passphrase = 'synthetic-installed-vault-replacement'
 
 
 def invoke(*args, input=None, error=None):
@@ -24,6 +25,7 @@ def invoke(*args, input=None, error=None):
                             text=True, capture_output=True, timeout=20)
     assert secret not in result.stdout + result.stderr
     assert passphrase not in result.stdout + result.stderr
+    assert replacement_passphrase not in result.stdout + result.stderr
     assert not (result.stdout and result.stderr), 'mixed response streams'
     envelope = json.loads(result.stderr if error else result.stdout)
     assert envelope['schema_version'] == 1 and envelope['ok'] == (error is None)
@@ -207,4 +209,20 @@ invoke('vault', 'recover')
 result = subprocess.run([binary, 'run', '--', 'sh', '-c', 'printf %s "$TOKEN"'],
                         cwd=project, env=env, capture_output=True, timeout=20)
 assert result.returncode == 0 and result.stdout == b'[REDACTED]' and not result.stderr
-print('Installed vault setup, reused key session, locked metadata, JSON/schema/completion and protected output verified')
+replacement_file = home / 'replacement-vault-passphrase'
+replacement_file.write_text(replacement_passphrase + '\n')
+replacement_file.chmod(0o600)
+rewrap_id = str(uuid.uuid4())
+changed = invoke('vault', 'rewrap', '--from-backend', 'passphrase', '--backend', 'passphrase',
+                 '--request-id', rewrap_id, '--current-passphrase-stdin',
+                 '--new-passphrase-file', str(replacement_file), input=passphrase + '\n')
+assert changed['changed'] and not changed['replayed'] and changed['item']['state'] == 'locked'
+invoke('vault', 'unlock', '--passphrase-stdin', input=passphrase + '\n', error='integrity_failed')
+invoke('vault', 'unlock', '--passphrase-file', str(replacement_file))
+replayed = invoke('vault', 'rewrap', '--from-backend', 'passphrase', '--backend', 'passphrase',
+                  '--request-id', rewrap_id, '--new-passphrase-file', str(replacement_file))
+assert replayed['changed'] and replayed['replayed'] and replayed['item']['vault_id'] == initial['vault_id']
+result = subprocess.run([binary, 'run', '--', 'sh', '-c', 'printf %s "$TOKEN"'],
+                        cwd=project, env=env, capture_output=True, timeout=20)
+assert result.returncode == 0 and result.stdout == b'[REDACTED]' and not result.stderr
+print('Installed vault setup, sessions, locked metadata, protected output and rewrap/replay verified')

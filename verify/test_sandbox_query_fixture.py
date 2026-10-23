@@ -27,11 +27,12 @@ class SandboxBoundary(unittest.TestCase):
         scratch = str(Path("/tmp/scratch").resolve())
         self.assertEqual(command[4:7], ["--bind", scratch, scratch])
 
-    def test_privileged_linux_launcher_keeps_invoking_identity_in_user_namespace(self):
+    def test_privileged_linux_launcher_drops_to_invoking_host_identity(self):
         command = sandbox_command("/tmp/data", "/tmp/scratch", ["tool"], system="linux", privileged=True)
         self.assertEqual(command[:3], ["sudo", "-n", "bwrap"])
-        start = command.index("--unshare-user")
-        self.assertEqual(command[start:start + 5], ["--unshare-user", "--uid", str(os.getuid()), "--gid", str(os.getgid())])
+        self.assertNotIn("--unshare-user", command)
+        start = command.index("/usr/bin/setpriv")
+        self.assertEqual(command[start:start + 7], ["/usr/bin/setpriv", "--reuid", str(os.getuid()), "--regid", str(os.getgid()), "--clear-groups", "--"])
 
     def test_fixture_environment_excludes_credentials_and_real_user_home(self):
         with patch.dict(os.environ, {"HOME": "/real/home", "GITHUB_TOKEN": "private",

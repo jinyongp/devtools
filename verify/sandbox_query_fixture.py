@@ -22,10 +22,14 @@ def sandbox_command(data, scratch, command, system=None, privileged=False):
         return ["/usr/bin/sandbox-exec", "-p", policy, *map(str, command)]
     if system == "linux":
         prefix = ["sudo", "-n"] if privileged else []
-        identity = ["--unshare-user", "--uid", str(os.getuid()), "--gid", str(os.getgid())] if privileged else []
+        # Root only prepares mounts. Drop to the invoking host identity before
+        # the probe; a root-created user namespace maps the wrong file owner.
+        capabilities = ["--cap-add", "CAP_SETUID", "--cap-add", "CAP_SETGID"] if privileged else []
+        identity = ["/usr/bin/setpriv", "--reuid", str(os.getuid()), "--regid", str(os.getgid()),
+                    "--clear-groups", "--"] if privileged else []
         return [*prefix, "bwrap", "--ro-bind", "/", "/", "--bind", str(scratch), str(scratch),
-                "--dev", "/dev", "--proc", "/proc", "--die-with-parent", *identity, "--chdir", str(scratch),
-                "--", *map(str, command)]
+                "--dev", "/dev", "--proc", "/proc", "--die-with-parent", *capabilities, "--chdir", str(scratch),
+                "--", *identity, *map(str, command)]
     raise RuntimeError("native sandbox queries require Linux or macOS")
 
 

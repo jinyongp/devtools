@@ -278,7 +278,7 @@ timeout = "3s"
         assert api("backup", "status", env=target_env)["item"]["configured"] is False
         assert api("diagnostics")["ready"]
         steps.append("encrypted_profile_transfer_preview_apply_retry")
-        result = {"commit": args.commit, "version": args.version, "final_version": update_version, "protocol": 7,
+        result = {"commit": args.commit, "version": args.version, "final_version": update_version, "protocol": identity["protocol_version"],
                   "exe_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
                   "steps": {step: "pass" for step in steps}, "isolated": False,
                   "isolated_transfer_and_managed_roots": True, "native_provider_disposable_user_root": True,

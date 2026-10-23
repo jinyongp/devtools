@@ -47,9 +47,13 @@ type failureResponse struct {
 }
 
 func Success(w io.Writer, data any) error {
-	return json.NewEncoder(w).Encode(successResponse{SchemaVersion: EnvelopeVersion, OK: true, Data: data})
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	return encoder.Encode(successResponse{SchemaVersion: EnvelopeVersion, OK: true, Data: data})
 }
 
 func Failure(w io.Writer, err *Error) error {
-	return json.NewEncoder(w).Encode(failureResponse{SchemaVersion: EnvelopeVersion, OK: false, Error: err})
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	return encoder.Encode(failureResponse{SchemaVersion: EnvelopeVersion, OK: false, Error: err})
 }

@@ -85,7 +85,7 @@ func TestBoundedProbeOutput(t *testing.T) {
 func TestFailureRemedyPreservesInjectionSelection(t *testing.T) {
 	checks := []Check{NewCheck("command_executable", "fail", "not_found", "The executable is missing.")}
 	for _, inject := range []bool{false, true} {
-		e := Failure(checks, "web", "/project", "sample", "", "none", "foreground", inject)
+		e := FailureFor(checks, protocol.InvocationContext{Kind: "command", Name: "web", Directory: "/project", Profile: "sample", Env: "", Bundle: "none", Mode: "foreground", Inject: inject, ProfileKnown: true, EnvKnown: true, BundleKnown: true})
 		remedy := e.Details["remedies"].([]protocol.Remedy)[0]
 		hasEnv := false
 		for _, arg := range remedy.Argv {

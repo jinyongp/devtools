@@ -32,7 +32,7 @@ func vaultPassphraseOptions() []Option {
 	return []Option{filePathOption("passphrase-file", false), {Name: "passphrase-stdin", Boolean: true, Description: "Read the vault passphrase from piped stdin; never pass it in argv or environment."}}
 }
 func vaultPassphraseRequired(action string) *protocol.Error {
-	return protocol.NewError("passphrase_required", "A vault passphrase is required.", 3, map[string]any{"remedies": []protocol.Remedy{{Effect: "value_write", Argv: []string{"devtools", "vault", action, "--passphrase-file", "PATH"}, RequiredInputs: []string{"passphrase-file"}, Message: "Provide the vault passphrase through a private regular file."}}})
+	return protocol.NewError("passphrase_required", "A vault passphrase is required.", 3, map[string]any{"remedies": []protocol.Remedy{{Relation: protocol.SameStoreAction, Effect: "value_write", Argv: []string{"devtools", "vault", action, "--passphrase-file", "PATH"}, RequiredInputs: []string{"passphrase-file"}, Message: "Provide the vault passphrase through a private regular file."}}})
 }
 func (a *App) vaultPassphrase(ctx context.Context, streams IO, options map[string]string, action string, confirm bool) (*vault.Material, *protocol.Error) {
 	hasFile := options["passphrase-file"] != ""
@@ -185,8 +185,8 @@ func vaultInitializationError(ctx context.Context, directory, backend string, er
 	}
 	message += " No automatic switch to passphrase protection was attempted."
 	return protocol.NewError(e.Code, message, 3, map[string]any{"remedies": []protocol.Remedy{
-		{Argv: []string{"devtools", "vault", "status"}, RequiredInputs: []string{}, Message: "Confirm the vault is still uninitialized before choosing a protection backend."},
-		{Effect: "value_write", Argv: []string{"devtools", "vault", "init", "--backend", "passphrase"}, RequiredInputs: []string{}, Message: "For an uninitialized vault, explicitly choose passphrase protection. A terminal prompts twice with hidden input; non-interactive use requires --passphrase-file or --passphrase-stdin. Never put the passphrase in argv or environment."},
+		{Relation: protocol.SameStoreAction, Argv: []string{"devtools", "vault", "status"}, RequiredInputs: []string{}, Message: "Confirm the vault is still uninitialized before choosing a protection backend."},
+		{Relation: protocol.SameStoreAction, Effect: "value_write", Argv: []string{"devtools", "vault", "init", "--backend", "passphrase"}, RequiredInputs: []string{}, Message: "For an uninitialized vault, explicitly choose passphrase protection. A terminal prompts twice with hidden input; non-interactive use requires --passphrase-file or --passphrase-stdin. Never put the passphrase in argv or environment."},
 	}})
 }
 

@@ -12,7 +12,12 @@ import (
 	"github.com/jinyongp/devtools/internal/values"
 )
 
-func (a *App) executionDependencies(command execution.Command) (execution.Dependencies, *protocol.Error) {
+func (a *App) executionDependencies(command execution.Command) (dependencies execution.Dependencies, failure *protocol.Error) {
+	defer func() {
+		if dirs, e := a.currentPaths(); e == nil {
+			dependencies.IsolatedRoot = dirs.IsolatedRoot
+		}
+	}()
 	needsPorts := len(command.Bind)+len(command.Serve) > 0
 	if !command.NeedsValues() && !needsPorts {
 		return execution.Dependencies{}, nil

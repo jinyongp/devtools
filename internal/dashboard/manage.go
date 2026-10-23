@@ -89,6 +89,13 @@ func apiError(w http.ResponseWriter, e *protocol.Error) {
 	if value, ok := e.Details["operation"].(string); ok {
 		operation = value
 	}
+	invocation := protocol.InvocationContext{Operation: operation}
+	if dirs, err := paths.Current(); err == nil {
+		invocation.IsolatedRoot = dirs.IsolatedRoot
+	}
+	if e.Details != nil {
+		e.Details = protocol.BindGuidance(e.Details, invocation).(map[string]any)
+	}
 	_ = protocol.Failure(w, protocol.Public(e, operation))
 }
 func invalidAction(w http.ResponseWriter) {
@@ -319,7 +326,11 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	s.results = nil
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
-	_ = protocol.Success(w, result)
+	invocation := protocol.InvocationContext{Profile: req.Profile, ProfileKnown: req.Profile != ""}
+	if dirs, err := paths.Current(); err == nil {
+		invocation.IsolatedRoot = dirs.IsolatedRoot
+	}
+	_ = protocol.Success(w, protocol.BindGuidance(result, invocation))
 }
 
 // Create uses a request-specific output and durable intent so uncertain HTTP

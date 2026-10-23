@@ -378,6 +378,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		if id := request.Options["request-id"]; id != "" {
 			err.Details["request_id"] = id
 		}
+		err.Details = protocol.BindGuidance(err.Details, request.Invocation).(map[string]any)
 		return fail(err)
 	}
 	if selected.OutputMode == OutputPassthrough {
@@ -398,7 +399,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	if selected.OutputMode != OutputJSON || processOutput {
 		return fail(protocol.NewError("internal_error", "Command output does not match its declared mode.", 1, nil))
 	}
-	if protocol.Success(streams.Out, data) != nil {
+	if protocol.Success(streams.Out, protocol.BindGuidance(data, request.Invocation)) != nil {
 		return fail(protocol.NewError("io_error", "Cannot write output.", 1, nil))
 	}
 	return 0

@@ -12,8 +12,7 @@ func (a *App) scopeQueryRemedy(failure *protocol.Error, env string) {
 		if env != "" {
 			remedies[i].Argv = append(remedies[i].Argv, "--env", env)
 		}
-		if a.isolatedRoot != "" {
-			remedies[i].Argv = append(remedies[i].Argv, "--isolated-root", a.isolatedRoot)
-		}
+		r := remedies[i]
+		remedies[i] = protocol.LocalAction(r.Argv, r.RequiredInputs, r.Message, r.Effect).Remedy(protocol.InvocationContext{IsolatedRoot: a.isolatedRoot})
 	}
 }

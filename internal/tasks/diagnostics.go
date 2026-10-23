@@ -86,13 +86,13 @@ func (s *State) explain(r Request, e *protocol.Error, profile string) *protocol.
 			argv = append(argv, "context")
 		}
 		argv = append(argv, i.ID, "--profile", profile)
-		remedies = append(remedies, protocol.Remedy{Argv: argv, RequiredInputs: []string{}, Message: "Read the current item and its blocking conditions."})
+		remedies = append(remedies, protocol.LocalAction(argv, nil, "Read the current item and its blocking conditions.", "read").Remedy(protocol.InvocationContext{}))
 		if i.Kind == "task" && a.ExecutionStatus == "stale" {
-			remedies = append(remedies, protocol.Remedy{Effect: "value_write", Argv: []string{"devtools", "task", "sync", i.ID, "--profile", profile}, RequiredInputs: []string{"context", "if-revision", "request-id", "reason"}, Message: "Review the changed definition, then sync with the current execution context."})
+			remedies = append(remedies, protocol.Remedy{Relation: protocol.SameStoreAction, Effect: "value_write", Argv: []string{"devtools", "task", "sync", i.ID, "--profile", profile}, RequiredInputs: []string{"context", "if-revision", "request-id", "reason"}, Message: "Review the changed definition, then sync with the current execution context."})
 		}
 	}
 	if len(remedies) == 0 {
-		remedies = append(remedies, protocol.Remedy{Argv: []string{"devtools", "task", "current", "--profile", profile}, RequiredInputs: []string{}, Message: "Inspect current execution state."})
+		remedies = append(remedies, protocol.LocalAction([]string{"devtools", "task", "current", "--profile", profile}, nil, "Inspect current execution state.", "read").Remedy(protocol.InvocationContext{}))
 	}
 	e.Details["related"] = related
 	e.Details["remedies"] = remedies

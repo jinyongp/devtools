@@ -1,6 +1,9 @@
 package protocol
 
-import "strings"
+import (
+	"reflect"
+	"strings"
+)
 
 // InvocationContext contains only public selection metadata. It never owns
 // execution inputs, credentials, stores, or a mutable execution plan.
@@ -29,7 +32,16 @@ type Action struct {
 }
 
 func (a Action) Remedy(c InvocationContext) Remedy {
-	r := Remedy{Argv: append([]string{}, a.Argv...), RequiredInputs: append([]string{}, a.RequiredInputs...), Message: a.Message, Effect: a.Effect}
+	r := Remedy{Argv: append([]string{}, a.Argv...), RequiredInputs: append([]string{}, a.RequiredInputs...), Message: a.Message, Effect: a.Effect, Relation: a.Relation}
+	if a.Relation == SameStoreAction && c.ProfileKnown {
+		for i, input := range r.RequiredInputs {
+			if input == "profile" {
+				r.Argv = append(r.Argv, "--profile", c.Profile)
+				r.RequiredInputs = append(r.RequiredInputs[:i], r.RequiredInputs[i+1:]...)
+				break
+			}
+		}
+	}
 	if a.Relation == SameStoreAction && len(r.Argv) > 1 && c.IsolatedRoot != "" {
 		found := false
 		for _, word := range r.Argv {
@@ -42,6 +54,77 @@ func (a Action) Remedy(c InvocationContext) Remedy {
 		}
 	}
 	return r
+}
+
+// BindGuidance renders declared actions before serialization, including actions
+// nested in typed doctor reports and successful workflow results. Unmarked,
+// discovery, destination, and external actions never inherit the caller store.
+func BindGuidance(value any, c InvocationContext) any {
+	if value == nil {
+		return nil
+	}
+	remedyType := reflect.TypeOf(Remedy{})
+	var bind func(reflect.Value, InvocationContext) reflect.Value
+	bind = func(v reflect.Value, scope InvocationContext) reflect.Value {
+		if !v.IsValid() {
+			return v
+		}
+		if v.Type() == remedyType {
+			r := v.Interface().(Remedy)
+			return reflect.ValueOf((Action{Argv: r.Argv, RequiredInputs: r.RequiredInputs, Message: r.Message, Effect: r.Effect, Relation: r.Relation}).Remedy(scope))
+		}
+		switch v.Kind() {
+		case reflect.Interface:
+			if v.IsNil() {
+				return v
+			}
+			out := reflect.New(v.Type()).Elem()
+			out.Set(bind(v.Elem(), scope))
+			return out
+		case reflect.Map:
+			if v.IsNil() || v.Type().Key().Kind() != reflect.String {
+				return v
+			}
+			if p := v.MapIndex(reflect.ValueOf("profile").Convert(v.Type().Key())); p.IsValid() {
+				if p.Kind() == reflect.Interface {
+					p = p.Elem()
+				}
+				if p.IsValid() && p.Kind() == reflect.String {
+					scope.Profile, scope.ProfileKnown = p.String(), true
+				}
+			}
+			out := reflect.MakeMapWithSize(v.Type(), v.Len())
+			it := v.MapRange()
+			for it.Next() {
+				out.SetMapIndex(it.Key(), bind(it.Value(), scope))
+			}
+			return out
+		case reflect.Slice:
+			if v.IsNil() {
+				return v
+			}
+			out := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+			for i := 0; i < v.Len(); i++ {
+				out.Index(i).Set(bind(v.Index(i), scope))
+			}
+			return out
+		case reflect.Struct:
+			out := reflect.New(v.Type()).Elem()
+			out.Set(v)
+			// Only diagnostic containers have action fields. Do not traverse
+			// arbitrary resource state, credentials, clocks, or custom marshalers.
+			for _, name := range []string{"Remedies", "Checks", "Commands", "Report", "Details"} {
+				f := out.FieldByName(name)
+				if f.IsValid() && f.CanSet() {
+					f.Set(bind(f, scope))
+				}
+			}
+			return out
+		default:
+			return v
+		}
+	}
+	return bind(reflect.ValueOf(value), c).Interface()
 }
 
 func LocalAction(argv []string, inputs []string, message, effect string) Action {

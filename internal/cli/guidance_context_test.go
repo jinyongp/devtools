@@ -52,3 +52,35 @@ func anyStrings(v any) []string {
 	}
 	return out
 }
+
+func TestVaultAndExplainGuidanceKeepExplicitRoot(t *testing.T) {
+	a := testApp(t)
+	dir := privateTempDir(t)
+	t.Chdir(dir)
+	if err := os.WriteFile("devtools.toml", []byte("profile='audit'\n[commands.show]\nexec=['node']\ninject=true\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(privateTempDir(t), "B")
+	code, _, diagnostic := invoke(t, a, "synthetic", "sec", "set", "TOKEN", "--stdin", "--isolated-root", root)
+	if code != 3 || !strings.Contains(diagnostic, root) {
+		t.Fatal(code, diagnostic)
+	}
+	var failure struct {
+		Error struct {
+			Details struct{ Remedies []struct{ Argv []string } }
+		}
+	}
+	if err := json.Unmarshal([]byte(diagnostic), &failure); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range failure.Error.Details.Remedies {
+		code, out, err := invoke(t, a, "", r.Argv[1:]...)
+		if code != 0 || !strings.Contains(out, `"uninitialized"`) {
+			t.Fatal(out, err)
+		}
+	}
+	code, out, err := invoke(t, a, "", "command", "explain", "show", "--isolated-root", root)
+	if code != 0 || !strings.Contains(out, root) {
+		t.Fatal(out, err)
+	}
+}

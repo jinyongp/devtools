@@ -39,14 +39,7 @@ func Remedy(message string, argv []string, inputs ...string) protocol.Remedy {
 	if inputs == nil {
 		inputs = []string{}
 	}
-	effect := "read"
-	for _, s := range argv {
-		switch s {
-		case "set", "create", "unlock", "init":
-			effect = "value_write"
-		}
-	}
-	return protocol.Remedy{Argv: argv, RequiredInputs: inputs, Message: message, Effect: effect}
+	return protocol.LocalAction(argv, inputs, message, "read").Remedy(protocol.InvocationContext{})
 }
 func NewCheck(id, status, reason, message string) Check {
 	return Check{ID: id, Status: status, Required: status != "not_applicable", Reason: reason, Message: message, Target: map[string]any{"kind": "prerequisite", "name": id}, Sources: []configcontract.Source{}, Facts: map[string]any{}, Remedies: []protocol.Remedy{}}
@@ -361,6 +354,7 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 					required = []string{"stdin"}
 				}
 				checks[i].Remedies = []protocol.Remedy{Remedy("Register the required key in the selected profile and env.", argv, required...)}
+				checks[i].Remedies[0].Effect = "value_write"
 			}
 		}
 	}
@@ -372,10 +366,6 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 		}
 	}
 	return checks
-}
-
-func Failure(checks []Check, command, dir, profile, env, selection, mode string, inject bool) *protocol.Error {
-	return FailureFor(checks, protocol.InvocationContext{Kind: "command", Name: command, Directory: dir, Profile: profile, Env: env, Bundle: selection, Mode: mode, Inject: inject, ProfileKnown: true, EnvKnown: true, BundleKnown: true})
 }
 
 func FailureFor(checks []Check, invocation protocol.InvocationContext) *protocol.Error {

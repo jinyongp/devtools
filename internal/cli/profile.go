@@ -266,6 +266,7 @@ func transferIdentityError(err error) *protocol.Error {
 	case errors.Is(err, profiletransfer.ErrIdentityMissing):
 		return protocol.NewError("transfer_identity_missing", "No local profile transfer identity is prepared.", 3, map[string]any{
 			"remedies": []protocol.Remedy{{
+				Relation:       protocol.SameStoreAction,
 				Argv:           []string{"devtools", "profile", "transfer", "prepare"},
 				Effect:         "value_write",
 				RequiredInputs: []string{},
@@ -275,6 +276,7 @@ func transferIdentityError(err error) *protocol.Error {
 	case errors.Is(err, profiletransfer.ErrInvalidIdentity):
 		return protocol.NewError("transfer_identity_invalid", "The local profile transfer identity is invalid or unsafe.", 3, map[string]any{
 			"remedies": []protocol.Remedy{{
+				Relation:       protocol.SameStoreAction,
 				Argv:           []string{"devtools", "profile", "import"},
 				Effect:         "value_write",
 				RequiredInputs: []string{"file", "identity-file"},
@@ -292,15 +294,18 @@ func transferArchiveError(err *protocol.Error) *protocol.Error {
 	message := ""
 	switch err.Code {
 	case "invalid_recipient":
+		remedy.Relation = protocol.DestinationAction
 		message = "Supply a valid public age X25519 recipient for the destination device."
 		remedy.Argv = []string{"devtools", "profile", "transfer", "prepare"}
 		remedy.Message = "Run this on the destination device, then copy its public recipient into --recipient or --recipient-file on the source device."
 	case "invalid_backup":
+		remedy.Relation = protocol.SameStoreAction
 		message = "Cannot read or authenticate the profile archive with the selected passphrase or identity."
 		remedy.Argv = []string{"devtools", "profile", "import"}
 		remedy.RequiredInputs = []string{"file"}
 		remedy.Message = "Check that the archive is complete. For the default transfer use the matching passphrase; for an advanced recipient archive use the matching --identity-file or prepared local identity."
 	case "profile_exists":
+		remedy.Relation = protocol.SameStoreAction
 		message = "The target profile already exists; replacement requires explicit authorization."
 		remedy.Argv = []string{"devtools", "profile", "import"}
 		remedy.RequiredInputs = []string{"file", "as"}

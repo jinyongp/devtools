@@ -17,12 +17,14 @@ func passphraseRequiredError(command string) *protocol.Error {
 	return protocol.NewError("passphrase_required", "A profile transfer passphrase is required.", 3, map[string]any{
 		"remedies": []protocol.Remedy{
 			{
+				Relation:       protocol.SameStoreAction,
 				Effect:         "value_write",
 				Argv:           []string{"devtools", "profile", command, "--passphrase-file", "PATH"},
 				RequiredInputs: []string{"passphrase-file"},
 				Message:        "Provide the passphrase through a regular file for non-interactive use.",
 			},
 			{
+				Relation:       protocol.SameStoreAction,
 				Effect:         "value_write",
 				Argv:           []string{"devtools", "profile", command, "--passphrase-stdin"},
 				RequiredInputs: []string{"stdin"},

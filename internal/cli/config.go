@@ -8,7 +8,6 @@ import (
 
 	"github.com/jinyongp/devtools/internal/configcontract"
 	"github.com/jinyongp/devtools/internal/configedit"
-	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/projectfile"
@@ -274,15 +273,12 @@ func (a *App) explainCommand(_ context.Context, _ IO, r Request) (any, *protocol
 		}
 	}
 	unresolved := []any{}
-	diagnosis := []string{"devtools", "doctor", "--dir", p.Root, "--profile", p.Profile, "--bundle", resolved.Selection, "--mode", "foreground"}
-	if resolved.Inject {
-		diagnosis = append(diagnosis, "--env", resolved.Env)
-	}
-	diagnosis = append(diagnosis, resolved.Name)
+	resolved.Invocation = r.Invocation
+	diagnosis := resolved.Diagnostic("foreground").DoctorAction()
 	for _, field := range []string{"bind", "serve", "values"} {
 		needed := field == "bind" && len(resolved.Bind) > 0 || field == "serve" && len(resolved.Serve) > 0 || field == "values" && resolved.NeedsValues()
 		if needed {
-			unresolved = append(unresolved, map[string]any{"code": "dynamic_input_unresolved", "reason": "requires_preflight", "message": "Runtime value/network inputs are resolved by doctor and execution preflight.", "target": map[string]any{"kind": "command", "name": resolved.Name, "profile": p.Profile}, "sources": []configcontract.Source{}, "facts": map[string]any{"field": field}, "remedies": []protocol.Remedy{doctor.Remedy("Inspect this command without starting the application.", diagnosis)}})
+			unresolved = append(unresolved, map[string]any{"code": "dynamic_input_unresolved", "reason": "requires_preflight", "message": "Runtime value/network inputs are resolved by doctor and execution preflight.", "target": map[string]any{"kind": "command", "name": resolved.Name, "profile": p.Profile}, "sources": []configcontract.Source{}, "facts": map[string]any{"field": field}, "remedies": []protocol.Remedy{diagnosis}})
 		}
 	}
 	item := map[string]any{"name": details.Name, "exec": details.Exec, "inject": details.Inject, "env": details.Env, "selection": details.Selection, "output": map[string]any{"mode": details.Output.Mode, "stdout": details.Output.Stdout, "stderr": details.Output.Stderr}, "values_update": details.ValuesUpdate, "serve": details.Serve, "bind": details.Bind, "ready": details.Ready, "requirements": details.Requirements}

@@ -15,10 +15,11 @@ const (
 
 // Error contains a stable code suitable for programmatic branching.
 type Remedy struct {
-	Effect         string   `json:"effect"`
-	Argv           []string `json:"argv"`
-	RequiredInputs []string `json:"required_inputs"`
-	Message        string   `json:"message"`
+	Relation       ActionRelation `json:"-"`
+	Effect         string         `json:"effect"`
+	Argv           []string       `json:"argv"`
+	RequiredInputs []string       `json:"required_inputs"`
+	Message        string         `json:"message"`
 }
 
 type Error struct {

@@ -41,8 +41,9 @@ func (s ModernStore) queryError(ctx context.Context, cause error) *protocol.Erro
 	failure.Details["effects"] = "unknown"
 	failure.Details["retry"] = "after_dependency_change"
 	failure.Details["remedies"] = []protocol.Remedy{{
-		Argv:   []string{"devtools", "variable", "list", "--profile", s.Profile},
-		Effect: "value_write", RequiredInputs: []string{},
+		Relation: protocol.SameStoreAction,
+		Argv:     []string{"devtools", "variable", "list", "--profile", s.Profile},
+		Effect:   "value_write", RequiredInputs: []string{},
 		Message: "Run this query in an execution context with write access to the existing store, then retry. Initialization or recovery may write storage.",
 	}}
 	return failure

@@ -202,5 +202,8 @@ func parseRequest(command Command, tokens []string) (Request, *protocol.Error) {
 			return request, invalid("invalid_value", "Argument "+argument.Name+" does not match its schema.", argument.Name, argumentOffsets[i], map[string]any{"rule": argument.Pattern})
 		}
 	}
+	if command.Name == "values execution status" && (len(request.Args) == 0) == (request.Options["request-id"] == "") {
+		return request, invalid("conflicting_inputs", "Provide exactly one execution ID or --request-id from the original prepare operation.", "execution-id", len(tokens), nil)
+	}
 	return request, nil
 }

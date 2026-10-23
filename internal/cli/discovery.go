@@ -97,6 +97,13 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 			if o.Default != "" {
 				fmt.Fprintf(&b, " (default: %s)", o.Default)
 			}
+			_, facts := inputRule(o.Pattern, o.MinLength, o.MaxLength, 0)
+			if choices, ok := facts["allowed"].([]string); ok {
+				fmt.Fprintf(&b, " (choices: %s)", strings.Join(choices, ", "))
+			}
+			if o.Pattern == positiveIntegerPattern {
+				b.WriteString(" (positive integer)")
+			}
 			b.WriteByte('\n')
 		}
 		if len(names) > 0 {
@@ -105,9 +112,16 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 		}
 		fmt.Fprintf(&b, "\nJSON schema: devtools schema %s\n", exact.Name)
 		if len(exact.Examples) > 0 {
+			b.WriteString("\nSyntax examples use placeholder IDs/revisions/UUIDs. Replace them with inspected identifiers and one new UUID per new operation.\n")
 			b.WriteString("\nExamples:\n")
 			for _, example := range exact.Examples {
 				fmt.Fprintf(&b, "  %s\n", example)
+			}
+		}
+		if len(exact.Workflow) > 0 {
+			b.WriteString("\nWorkflow:\n")
+			for i, step := range exact.Workflow {
+				fmt.Fprintf(&b, "  %d. %s\n", i+1, step)
 			}
 		}
 		if exact.BodyExample != nil {

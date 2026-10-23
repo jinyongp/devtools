@@ -71,7 +71,10 @@ func (a *App) registerValueExecutions() {
 		}
 		return s.Prepare(ctx, input, r.Options["request-id"])
 	}})
-	a.commands = append(a.commands, Command{Name: "values execution status", Description: "Passively authenticate current execution metadata; never deliver or start work.", Options: append(profileOptions(false), Option{Name: "request-id", Pattern: valuehandoff.UUIDPattern, Description: "Recover the execution selected by its prepare request UUID."}), Arguments: []Argument{{Name: "execution-id", Pattern: valuehandoff.IDPattern}}, Output: object(map[string]any{"profile": stringSchema(), "item": executionSchema()}, "profile", "item"), Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
+	a.commands = append(a.commands, Command{Name: "values execution status", Description: "Passively authenticate current execution metadata; provide exactly one execution ID or original prepare request UUID. Never delivers or starts work.", InputOneOf: []map[string]any{
+		{"required": []string{"args"}, "properties": map[string]any{"args": map[string]any{"minItems": 1}}, "not": map[string]any{"required": []string{"request-id"}}},
+		{"required": []string{"request-id"}, "properties": map[string]any{"args": map[string]any{"maxItems": 0}}},
+	}, Options: append(profileOptions(false), Option{Name: "request-id", Pattern: valuehandoff.UUIDPattern, Description: "Recover the execution selected by its prepare request UUID."}), Arguments: []Argument{{Name: "execution-id", Pattern: valuehandoff.IDPattern}}, Output: object(map[string]any{"profile": stringSchema(), "item": executionSchema()}, "profile", "item"), Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 		s, e := a.executionStore(r)
 		if e != nil {
 			return nil, e

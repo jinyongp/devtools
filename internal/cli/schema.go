@@ -25,6 +25,10 @@ func (a *App) catalog() map[string]any {
 			if option.Pattern != "" {
 				s["pattern"] = option.Pattern
 			}
+			_, facts := inputRule(option.Pattern, option.MinLength, option.MaxLength, 0)
+			if choices, ok := facts["allowed"].([]string); ok {
+				s["enum"] = choices
+			}
 			if option.MinLength != 0 {
 				s["minLength"] = option.MinLength
 			}
@@ -90,6 +94,9 @@ func (a *App) catalog() map[string]any {
 		}
 		entry := map[string]any{"name": command.Name, "aliases": command.Aliases, "description": command.Description, "options": command.Options, "arguments": command.Arguments, "accepts_child_args": command.ChildArgs, "output_mode": command.OutputMode, "input_schema": input, "output_schema": command.Output}
 		entry["examples"] = command.Examples
+		if len(command.Workflow) > 0 {
+			entry["workflow"] = command.Workflow
+		}
 		if command.BodyExample != nil {
 			entry["body_example"] = command.BodyExample
 		}

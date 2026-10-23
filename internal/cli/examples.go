@@ -67,7 +67,34 @@ func commandExamples(c Command) []string {
 	if c.Name == "command add" {
 		line = "devtools command add dev:web -- node scripts/dev.mjs"
 	}
+	if c.Name == "values execution status" {
+		line += " " + strings.Repeat("0", 32)
+	}
 	return []string{line}
+}
+
+func commandWorkflow(c Command) []string {
+	switch c.Name {
+	case "secret generate":
+		return []string{
+			"Read devtools values revision --profile sample for the current edit revision; inspect existing key metadata before selecting --replace.",
+			"Replace the syntax example's sample profile/key and zero revision with those actual selections. Generate one fresh UUID for this new operation.",
+			"Run the edited command. If its response is lost, keep the original UUID and identical input; inspect devtools values request show REQUEST_UUID --profile sample before retrying.",
+			"Inspect devtools secret list --profile sample for metadata; secret plaintext is never returned.",
+		}
+	case "values execution status":
+		return []string{
+			"Obtain the execution ID from the prepare response or devtools values execution list --profile sample.",
+			"Replace the zero ID in the syntax example, or omit it and use --request-id with the original prepare UUID. Supply exactly one selector.",
+			"An unknown delivery requires receiver/execution inspection; do not prepare or deliver new work merely to recover a response.",
+		}
+	}
+	for _, o := range c.Options {
+		if o.Name == "request-id" && o.Required {
+			return []string{"The example is syntax only. Obtain required resource IDs, revisions and preview digests from the operation's inspection workflow.", "Generate a new UUID once for a new operation. After an uncertain response, retain that UUID and identical input and inspect saved state before retrying."}
+		}
+	}
+	return nil
 }
 func bodyExample(c Command) any {
 	// Schemas are assembled from both typed Go slices and decoded JSON. Normalize

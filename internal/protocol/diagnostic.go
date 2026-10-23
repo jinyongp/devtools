@@ -188,7 +188,11 @@ func Public(e *Error, operation string) *Error {
 		remedies = childRemedies
 	}
 	if remedies == nil {
-		remedies = []Remedy{{Argv: append([]string{"devtools", "help"}, strings.Fields(operation)...), RequiredInputs: []string{}, Message: "Inspect the accepted inputs and next actions for this operation.", Effect: "read"}}
+		argv := []string{"devtools", "help"}
+		if operation != "devtools" {
+			argv = append(argv, strings.Fields(operation)...)
+		}
+		remedies = []Remedy{{Argv: argv, RequiredInputs: []string{}, Message: "Inspect the accepted inputs and next actions for this operation.", Effect: "read"}}
 	}
 	retry := "after_input_change"
 	if copy.ExitCode == 1 {

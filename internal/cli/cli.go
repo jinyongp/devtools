@@ -41,6 +41,7 @@ type Option struct {
 }
 
 type Command struct {
+	Workflow    []string                                                  `json:"workflow,omitempty"`
 	Examples    []string                                                  `json:"examples"`
 	BodyExample any                                                       `json:"body_example,omitempty"`
 	BodySchema  map[string]any                                            `json:"body_schema,omitempty"`
@@ -159,6 +160,16 @@ func New(version, commit string) *App {
 	a.registerUpdate()
 	a.registerCompletion()
 	for i := range a.commands {
+		if a.commands[i].Name == "command run" {
+			for j := range a.commands[i].Options {
+				if a.commands[i].Options[j].Name == "env" {
+					o := &a.commands[i].Options[j]
+					o.Description = "Override the configured command env and enable injection; an empty value selects common. Omission inherits the saved command env. Direct execution defaults to common. Use command explain to inspect the effective selection."
+					o.Pattern = "^$|" + project.ProfilePattern
+					o.MinLength = 0
+				}
+			}
+		}
 		a.commands[i].Options = append(a.commands[i].Options, Option{Name: "isolated-root", MinLength: 1, Description: "Use independent config/data/cache/runtime; shared OS mutations are prohibited."})
 		if a.commands[i].Name == "schema" || a.commands[i].Name == "help" {
 			a.commands[i].Arguments = []Argument{{Name: "command"}, {Name: "subcommand"}, {Name: "action"}, {Name: "operation"}}
@@ -183,6 +194,7 @@ func New(version, commit string) *App {
 			a.commands[i].Arguments = []Argument{}
 		}
 		a.commands[i].Examples = commandExamples(a.commands[i])
+		a.commands[i].Workflow = commandWorkflow(a.commands[i])
 		if a.commands[i].BodySchema != nil {
 			a.commands[i].BodyExample = bodyExample(a.commands[i])
 		}
@@ -284,7 +296,15 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		}
 		data, text, found := a.discovery(strings.Join(targetArgs, " "), schema)
 		if !found {
-			return fail(protocol.NewError("invalid_argument", "Unknown help or schema target. Run devtools --help.", 2, nil))
+			group := targetArgs
+			for len(group) > 0 {
+				group = group[:len(group)-1]
+				if _, _, valid := a.discovery(strings.Join(group, " "), false); valid {
+					break
+				}
+			}
+			argv := append([]string{"devtools", "help"}, group...)
+			return fail(protocol.NewError("invalid_argument", "Unknown help or schema target. Inspect the nearest valid command group.", 2, map[string]any{"remedies": []protocol.Remedy{{Argv: argv, RequiredInputs: []string{}, Message: "List commands in the nearest valid group.", Effect: "read"}}}))
 		}
 		var err error
 		if schema {

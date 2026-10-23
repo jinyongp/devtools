@@ -24,6 +24,14 @@ Windows AppContainer의 생성·검증은 같은 사용자·SYSTEM·해당 컨�
 shared 상태에서 복구가 필요하면 잠금을 놓고 exclusive로 다시 검사한다.
 동일 잠금의 승격을 기다리며 교착시키지 않는다. 잠금 대기는 호출 context의 취소를 따른다.
 
+Linux/macOS의 `env list`, `variable list/get`(`var`), `secret list`(`sec`)는
+`AcquireQuery`로 기존 `lock.turnstile`과 `lock`을 읽기 전용으로 열고 같은 shared flock을 잡는다.
+기존 저장소가 정상이고 복구할 transaction이 없으면 쓰기 접근 없이 조회한다.
+잠금 누락은 기존 `AcquireShared`의 초기화 경로로, pending/orphan은 잠금을 놓은 뒤
+기존 exclusive 재검사·복구 경로로 들어간다. 쓰기가 막히면 조회도 실패한다.
+읽기·권한·소유권·no-follow 검사 실패를 빈 저장소나 초기화 조건으로 해석하지 않는다.
+Windows와 다른 조회·변경·실행·dashboard/task 경로는 기존 shared gate 계약을 유지한다.
+
 여러 파일을 바꾸는 작업은 복구 가능한 transaction으로 게시한다.
 저장 성공 응답 이전에 필요한 flush와 commit 경계를 확인하며,
 응답이 실패했다고 디스크 변경이 없었다고 가정하지 않는다.

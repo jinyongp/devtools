@@ -16,6 +16,15 @@
 - Ports and URLs: [ports.md](ports.md). Values/injection: [values.md](values.md).
 - Proxy routes: [network.md](network.md). Protection errors: [protection.md](protection.md).
 
+On Linux/macOS, `env list`, `variable list/get` (`var`) and `secret list` (`sec`)
+can query a clean, initialized store under read-only sandbox access. They still
+take the ordinary maintenance locks. Missing locks or pending recovery can require
+writes: inspect `facts.state` (`initialization_required` / `recovery_required`) and
+the `value_write` remedy, run the scoped query in an authorized writable context,
+then retry. Do not change permissions, remove locks, or elevate automatically.
+Read denial is a separate storage failure. Windows and other query commands retain
+their existing access requirements; metadata queries do not unlock or renew a vault.
+
 ## Project configuration
 
 - Profile resolution: explicit `--profile`, then nearest `devtools.toml`; lookup stops at the Git root. Remote URLs do not imply a profile.

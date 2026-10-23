@@ -40,6 +40,14 @@ remedy.effect는 read, config_write, value_write, system_write 중 하나다.
 수정 argv를 제공해도 실행·승인 권한이 부여된 것은 아니다.
 secret 등록 remedy는 --stdin과 stdin required input을 사용하고 값은 포함하지 않는다.
 
+Linux/macOS 메타데이터 조회의 writable fallback이 실패하면 기존 `storage_error`와
+OS 기반 `reason`, `facts.os_code`, 실패 stage를 보존하고 `facts.state`에
+`initialization_required` 또는 `recovery_required`를 추가한다.
+fallback이 일부 작업을 했을 수 있어 `effects:unknown`, `retry:after_dependency_change`다.
+`value_write` remedy는 선택 profile/env/isolated root로 같은 조회를 쓰기 가능한 실행
+환경에서 수행하라는 안내다. 자동 권한 승격이나 자동 실행을 뜻하지 않는다.
+정상 저장소 자체의 읽기 거부·잘못된 pending 포인터는 이 상태로 바꾸지 않는다.
+
 source.path는 문자열 배열이다. JSON 배열 index는 문자열, literal 이름은 한 원소다.
 argv source는 path에 positional 이름 또는 option 이름을 넣고 offset에 원래 argv index를 기록한다.
 config/JSON의 offset은 0부터, line·column은 1부터 세는 UTF-8 byte 위치다.

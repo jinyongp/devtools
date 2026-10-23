@@ -4,6 +4,14 @@
 
 CI·로컬 검사 선택과 수동 진단의 구분은 [검증 구성](../docs/verification.md)을 따른다.
 
+`python3 -B verify/run.py sandbox_queries`는 설치 archive로 공개·legacy·보호 저장소의
+메타데이터 조회를 실제 읽기 전용 sandbox에서 검사한다. Linux는 bubblewrap,
+macOS는 sandbox-exec가 필요하다. 도구·정책 준비 실패는 skip하지 않는다.
+쓰기 open·생성·변경·rename·unlink 차단 대조, 기존 writer 배제, 저장소 inventory 불변,
+누락 잠금·pending/orphan의 실패와 외부 복구 후 재조회까지 검사한다.
+기존 Unix validation의 macos-15/ubuntu-24.04 job이 source·환경·binary hash·결과를 보존한다.
+이 Seatbelt 증거는 실제 Codex macOS 세션의 성공 여부와 구분한다.
+
 ## Framework·Library·Provider 호환성
 
 protocol 12의 기본 준비는 `devtools run test:installed proxy_auto`로 검사한다.

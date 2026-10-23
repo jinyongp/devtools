@@ -171,9 +171,11 @@ rollback은 이전 CLI 사용으로 충분하며 데이터 변환·잠금 삭제
 제품의 `internal/paths.canonicalIsolation`과 no-follow 검사, 기존 세션의 path identity는
 변경하지 않는다. 테스트 호출부마다 독립적인 `.resolve()`/EvalSymlinks를 추가하지 않는다.
 
-- Go는 표준 라이브러리만 쓰는 `internal/testfs`의 TempDir/CanonicalDir로 새 fixture의
+- Go는 제품 보안 계층과 독립된 `internal/testfs`의 TempDir/CanonicalDir로 새 fixture의
   실제 경로를 선택한다. 기존 package별 privateTempDir는 이 helper를 사용하고 각자의
   private mode/Windows ACL 설정은 그대로 유지한다. platformfs도 순환 import 없이 사용한다.
+  Unix는 EvalSymlinks, Windows는 기존 x/sys/windows의 directory handle 최종 경로 API를 쓴다.
+  Windows junction과 긴 Unicode 경로를 native 회귀로 검증한다.
 - Python은 `scripts/fixture_paths.py`에 새 fixture 경로·임시 root 생성·기존 session 경로
   선택을 모은다. verify runner/sandbox/proxy/handoff/network와 vault cleanup이 재사용한다.
 - Windows의 기존 session endpoint는 caller의 선택 경로 표기가 identity에 들어가므로
@@ -301,7 +303,8 @@ AcquireShared/LockShared의 production 호출은 위 모든 영역을 검색해 
 - 전체 `check:all`, Windows amd64/arm64 native 기존 maintenance/values/cli tests,
   installed 호환 시나리오 및 T04 native gate 결과를 같은 candidate source 기준으로 확인한다.
 - 완료: 모든 acceptance에 current validation 존재, 기능 미완성/OS skip을 통과로 계산하지 않음.
-  구현 완료 기록과 실제 Codex 세션 미확인 상태를 구분한다. commit/PR/release는 별도 사용자 범위다.
+  구현 완료 기록과 실제 Codex 세션 미확인 상태를 구분한다. 사용자가 main commit/push와
+  기존 Actions 실행을 승인했다. PR/merge/release는 포함하지 않는다.
 - 의존: T02, T03, T04.
 
 ## 6. 필수 검증 행렬
@@ -331,11 +334,12 @@ Windows는 native 환경에서 기존 프로젝트 lane/CI를 사용한다. cros
 ## 7. 확정하지 않은 사실과 실행 차단 조건
 
 제품/API/지원 범위/오류/복구/fallback/배포 방식의 미결정 항목은 없다.
-아직 없는 것은 native macOS·실제 Codex·구현 후 테스트 증거다. 이는 미리 통과를 약속할
-결정사항이 아니라 필수 검증 대상이다. T01 native 실패는 T02를 차단하고, T04 실패는 최종
+native macOS·실제 Codex·구현 후 테스트 증거는 각각 실행 결과로 판단한다. 이는 미리 통과를 약속할
+결정사항이 아니라 검증 대상이다. T01 native 실패는 T02를 차단하고, T04 실패는 최종
 완료를 차단한다. native 기능이 예상과 다르면 이 계획의 해당 근거를 갱신한 뒤 범위를
 재검토하며, 구현자가 임의로 보장을 낮추거나 별도 서비스를 도입하지 않는다.
 
-이번 조사에서는 제품 파일을 수정하지 않고 이 계획 문서와 devtools 정의만 기록한다.
-기존 데이터·권한·vault 설정은 변경하지 않는다. devtools 기록 자체는 기존 task journal에
-정상적인 계획 추가를 수행하며 조회의 잠금 제한 때문에 승인된 외부 실행을 사용한다.
+사용자의 후속 구현 지시에 따라 이 계획의 제품·fixture·문서 변경을 수행한다.
+실행 진행·검증 증거는 devtools task/workstream과 Actions에 기록한다.
+사용자의 기존 데이터·권한·vault 설정은 변경하지 않으며 검증은 일회용 fixture를 사용한다.
+devtools 기록 자체는 기존 task journal에 정상적인 작업 기록을 수행한다.

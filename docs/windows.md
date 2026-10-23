@@ -148,6 +148,12 @@ could not be inspected. These notes do not change `ready` or relax security
 checks. An absent alias note describes only the bounded sample, not every file
 in the store; it does not establish historical data continuity.
 
+The read-only maintenance query gate is supported on Linux/macOS. Windows
+metadata queries retain the existing private-storage access, ACL, sharing and
+recovery requirements. A successful Unix sandbox test does not establish Windows
+AppContainer support. Test fixtures resolve newly created junction roots through
+their directory handles; existing session endpoint path identities are preserved.
+
 `verify_file_identity / file_identity_mismatch` means the handle and the entry
 resolved through the pinned root have different volume/file IDs.
 `verify_file_identity / path_mismatch` means the requested entry is not a valid

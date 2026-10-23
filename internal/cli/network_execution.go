@@ -328,7 +328,10 @@ func (a *App) prepareNetwork(ctx context.Context, p project.Context, names []str
 				}
 				checks := prepared.Checks(ctx, os.Environ(), true)
 				if !execution.ChecksPassed(checks) {
-					return nil, doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "managed", command.Inject)
+					if directories, e := a.currentPaths(); e == nil {
+						command.Invocation.IsolatedRoot = directories.IsolatedRoot
+					}
+					return nil, doctor.FailureFor(checks, command.Diagnostic("managed"))
 				}
 			}
 			if e := j.Set("snapshots", snapshots); e != nil {

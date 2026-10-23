@@ -9,9 +9,9 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
-func TestProtocolV12DiscoveryContracts(t *testing.T) {
+func TestProtocolV13DiscoveryContracts(t *testing.T) {
 	app := testApp(t)
-	if protocol.ProtocolVersion != 12 || protocol.EnvelopeVersion != 1 {
+	if protocol.ProtocolVersion != 13 || protocol.EnvelopeVersion != 1 {
 		t.Fatal("unexpected machine/envelope version")
 	}
 	for _, args := range [][]string{
@@ -25,8 +25,8 @@ func TestProtocolV12DiscoveryContracts(t *testing.T) {
 		{"schema", "project", "down"}, {"schema", "run"},
 	} {
 		data := outputData(t, app, args)
-		if data["protocol_version"] != float64(12) {
-			t.Fatalf("%v: missing protocol v12", args)
+		if data["protocol_version"] != float64(13) {
+			t.Fatalf("%v: missing protocol v13", args)
 		}
 	}
 	doctor := outputData(t, app, []string{"schema", "doctor"})

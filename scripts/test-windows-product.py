@@ -96,7 +96,7 @@ def main():
         ], cwd=repository, env=base_env, text=True, encoding="utf-8", capture_output=True, timeout=180)
         assert install.returncode == 0, "Candidate installer did not complete (raw output withheld)"
         identity = api("version")
-        assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 12
+        assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 13
         alias = binary.with_name("dvt.exe")
         assert hashlib.sha256(alias.read_bytes()).digest() == hashlib.sha256(binary.read_bytes()).digest()
         steps.append("candidate_install_and_alias")

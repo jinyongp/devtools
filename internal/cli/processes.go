@@ -257,6 +257,7 @@ func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 		}
 		dependencies.CaptureOutput = r.Capture
 		dependencies.IsolatedRoot = r.IsolatedRoot
+		command.Invocation.IsolatedRoot = r.IsolatedRoot
 		prepared, err := execution.PrepareInput(ctx, command, dependencies, os.Environ(), execution.PlanOptions{Mode: "managed"})
 		if err != nil {
 			return err
@@ -264,7 +265,7 @@ func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 		defer prepared.Release()
 		checks := prepared.Checks(ctx, os.Environ(), false)
 		if !execution.ChecksPassed(checks) {
-			return doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "managed", command.Inject)
+			return doctor.FailureFor(checks, command.Diagnostic("managed"))
 		}
 		ctx = services.WithEnvironmentSelection(ctx, command.Env, command.Inject)
 		_, err = prepared.Execute(ctx, os.Environ(), runner, nil, output, output)

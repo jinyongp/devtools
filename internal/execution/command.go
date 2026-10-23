@@ -11,6 +11,7 @@ import (
 // Command is the immutable command-level input shared by foreground and managed
 // execution paths before storage, ports, or process lifetime are involved.
 type Command struct {
+	Invocation   protocol.InvocationContext
 	Selection    string
 	Output       redact.Policy
 	Network      *network.ExecutionSnapshot
@@ -25,6 +26,23 @@ type Command struct {
 	Ready        *project.ReadyProbe
 	Serve        []string
 	Bind         map[string]project.Binding
+}
+
+func (c Command) Diagnostic(mode string) protocol.InvocationContext {
+	d := c.Invocation
+	d.Kind, d.Name = "command", c.Name
+	if c.Name == "" {
+		d.Kind = "direct"
+		if len(c.Exec) > 0 {
+			d.Name = c.Exec[0]
+		}
+	}
+	d.Directory, d.Profile, d.Env, d.Bundle, d.Mode, d.Inject = c.Directory, c.Project.Profile, c.Env, c.Selection, mode, c.Inject
+	d.ProfileKnown, d.EnvKnown, d.BundleKnown = true, true, true
+	if d.Bundle == "" {
+		d.Bundle = "all"
+	}
+	return d
 }
 
 // ResolveConfigured derives the effective settings for one named project

@@ -248,7 +248,7 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 	pathBefore, _ := process.LookPath(prepared.Args[0], prepared.Command.Directory, environment)
 	stampBefore, stampErr := process.ExecutableStamp(pathBefore)
 	checks := prepared.Checks(ctx, prepared.probeEnvironment, true)
-	if failure := doctor.Failure(checks, plan.command.Name, plan.command.Directory, plan.command.Project.Profile, plan.command.Env, plan.command.Selection, plan.mode, plan.command.Inject); failure != nil {
+	if failure := doctor.FailureFor(checks, plan.command.Diagnostic(plan.mode)); failure != nil {
 		prepared.Release()
 		return Prepared{}, failure
 	}
@@ -333,6 +333,7 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 	return prepared, nil
 }
 func PrepareInput(ctx context.Context, command Command, dependencies Dependencies, parent []string, options PlanOptions) (Prepared, *protocol.Error) {
+	command.Invocation.IsolatedRoot = dependencies.IsolatedRoot
 	plan, e := ResolvePlan(command, parent, options)
 	if e != nil {
 		return Prepared{}, e

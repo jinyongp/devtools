@@ -4,6 +4,7 @@ package cli
 import (
 	"context"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/jinyongp/devtools/internal/doctor"
@@ -76,6 +77,7 @@ type Argument struct {
 	Pattern    string `json:"pattern,omitempty"`
 }
 type Request struct {
+	Invocation    protocol.InvocationContext
 	OptionOffsets map[string]int
 	Options       map[string]string
 	ListOptions   map[string][]string
@@ -340,6 +342,17 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		a.isolatedRoot = dirs.IsolatedRoot
 		a.dataDirectory = func() (string, *protocol.Error) { return dirs.Data + "/profiles", nil }
 		defer func() { a.isolatedRoot = oldRoot; a.dataDirectory = oldDirectory }()
+	}
+	request.Invocation.Operation = selected.Name
+	request.Invocation.Directory, _ = os.Getwd()
+	if dirs, e := a.currentPaths(); e == nil {
+		request.Invocation.IsolatedRoot = dirs.IsolatedRoot
+	}
+	request.Invocation.RootSource = "default"
+	if root != "" {
+		request.Invocation.RootSource = "flag"
+	} else if request.Invocation.IsolatedRoot != "" {
+		request.Invocation.RootSource = "env"
 	}
 	data, err := selected.Run(ctx, streams, request)
 	if err != nil {

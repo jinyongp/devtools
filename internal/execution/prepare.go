@@ -301,6 +301,7 @@ func validateInjectedKeyspace(command Command, injected map[string]string) *prot
 // to be free. Bindings backed by a new port served by this same command may be
 // deferred until the post-stop cold-start preflight.
 func Validate(ctx context.Context, command Command, dependencies Dependencies, parentEnvironment []string) *protocol.Error {
+	command.Invocation.IsolatedRoot = dependencies.IsolatedRoot
 	if err := validateInjectedKeyspace(command, nil); err != nil {
 		return err
 	}
@@ -421,13 +422,14 @@ func Validate(ctx context.Context, command Command, dependencies Dependencies, p
 		Source:          commandSource(command),
 	})
 	if !ChecksPassed(checks) {
-		return doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "managed", command.Inject)
+		return doctor.FailureFor(checks, command.Diagnostic("managed"))
 	}
 	return nil
 }
 
 // Preflight performs the non-mutating checks used before a managed cold start.
 func Preflight(ctx context.Context, command Command, dependencies Dependencies, parentEnvironment []string) *protocol.Error {
+	command.Invocation.IsolatedRoot = dependencies.IsolatedRoot
 	prepared, err := prepare(ctx, command, dependencies, true, &parentEnvironment)
 	if err != nil {
 		return PreparationFailure(ctx, command, parentEnvironment, "managed", err)
@@ -440,7 +442,7 @@ func Preflight(ctx context.Context, command Command, dependencies Dependencies, 
 	}
 	if err := checkManagedArguments(command, prepared.Args, environment); err != nil {
 		checks := prepared.Checks(ctx, parentEnvironment, true)
-		if failure := doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "managed", command.Inject); failure != nil {
+		if failure := doctor.FailureFor(checks, command.Diagnostic("managed")); failure != nil {
 			return failure
 		}
 		return err
@@ -448,7 +450,7 @@ func Preflight(ctx context.Context, command Command, dependencies Dependencies, 
 
 	checks := prepared.Checks(ctx, parentEnvironment, true)
 	if !ChecksPassed(checks) {
-		return doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "managed", command.Inject)
+		return doctor.FailureFor(checks, command.Diagnostic("managed"))
 	}
 	return nil
 }

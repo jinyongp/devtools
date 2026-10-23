@@ -42,7 +42,7 @@ test("dashboard login, value mutation and navigation survive reload", async ({ p
 
   try {
     const identity = JSON.parse(runCLI(["version"], project, env));
-    expect(identity.data.protocol_version).toBe(12);
+    expect(identity.data.protocol_version).toBe(13);
     if (process.env.DEVTOOLS_TEST_CLI_COMMIT) expect(identity.data.commit).toBe(process.env.DEVTOOLS_TEST_CLI_COMMIT);
     runCLI(["var", "set", "MESSAGE", "--value", "before"], project, env);
     const started = JSON.parse(runCLI(["dashboard"], project, env));

@@ -36,6 +36,7 @@ func PrepareFrozenInput(ctx context.Context, r Record, n *network.ExecutionSnaps
 	dependencies.CaptureOutput = r.Capture
 	dependencies.DeferServing = true
 	dependencies.IsolatedRoot = r.IsolatedRoot
+	command.Invocation.IsolatedRoot = r.IsolatedRoot
 	prepared, e := execution.PrepareInput(ctx, command, dependencies, os.Environ(), execution.PlanOptions{Mode: "managed"})
 	if e != nil {
 		return execution.Prepared{}, e
@@ -43,7 +44,7 @@ func PrepareFrozenInput(ctx context.Context, r Record, n *network.ExecutionSnaps
 	checks := prepared.Checks(ctx, os.Environ(), false)
 	if !execution.ChecksPassed(checks) {
 		prepared.Release()
-		return execution.Prepared{}, doctor.Failure(checks, command.Name, command.Directory, command.Project.Profile, command.Env, command.Selection, "managed", command.Inject)
+		return execution.Prepared{}, doctor.FailureFor(checks, command.Diagnostic("managed"))
 	}
 	return prepared, nil
 }

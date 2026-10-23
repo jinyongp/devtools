@@ -263,7 +263,7 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 			checks[i].Remedies = []protocol.Remedy{Remedy("Make the declared executable available at a version satisfying the requirement; verify version_args.", nil)}
 			checks[i].Remedies[0].Effect = "system_write"
 		}
-		if in.Source != nil {
+		if in.Source != nil && (in.Command != "" || id != "command_executable" && id != "readiness_executable") {
 			path := []string{"tools", name}
 			if id == "command_executable" {
 				path = []string{"commands", in.Command, "exec", "0"}
@@ -375,6 +375,11 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 }
 
 func Failure(checks []Check, command, dir, profile, env, selection, mode string, inject bool) *protocol.Error {
+	return FailureFor(checks, protocol.InvocationContext{Kind: "command", Name: command, Directory: dir, Profile: profile, Env: env, Bundle: selection, Mode: mode, Inject: inject, ProfileKnown: true, EnvKnown: true, BundleKnown: true})
+}
+
+func FailureFor(checks []Check, invocation protocol.InvocationContext) *protocol.Error {
+	command := invocation.Name
 	if State(checks) == "ready" {
 		return nil
 	}
@@ -390,18 +395,11 @@ func Failure(checks []Check, command, dir, profile, env, selection, mode string,
 			break
 		}
 	}
-	if selection == "" {
-		selection = "all"
+	if invocation.Bundle == "" {
+		invocation.Bundle = "all"
 	}
-	if mode == "" {
-		mode = "foreground"
-	}
-	argv := []string{"devtools", "doctor", "--dir", dir, "--profile", profile, "--bundle", selection, "--mode", mode}
-	if inject {
-		argv = append(argv, "--env", env)
-	}
-	if command != "" {
-		argv = append(argv, command)
+	if invocation.Mode == "" {
+		invocation.Mode = "foreground"
 	}
 	problems := []string{}
 	for _, check := range checks {
@@ -423,5 +421,10 @@ func Failure(checks []Check, command, dir, profile, env, selection, mode string,
 	if code == "canceled" {
 		message = "Command prerequisite checks were explicitly canceled."
 	}
-	return protocol.NewError(code, message, exit, map[string]any{"phase": "preflight", "reason": code, "target": map[string]any{"kind": "command", "name": command, "profile": profile, "env": env, "command": command, "directory": dir, "bundle": selection}, "checks": checks, "remedies": []protocol.Remedy{Remedy("Diagnose the same command selection and execution mode.", argv)}})
+	remedies := []protocol.Remedy{invocation.DoctorAction()}
+	if invocation.Kind == "direct" {
+		message = fmt.Sprintf("Executable %q prerequisites failed: %s.", command, strings.Join(problems, ", "))
+		remedies = []protocol.Remedy{{Argv: []string{}, RequiredInputs: []string{}, Effect: "system_write", Message: "Review the executable and failed checks for this direct invocation, then retry the original command. Doctor diagnoses configured commands only."}}
+	}
+	return protocol.NewError(code, message, exit, map[string]any{"phase": "preflight", "reason": code, "target": invocation.Target(), "checks": checks, "remedies": remedies})
 }

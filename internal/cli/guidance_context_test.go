@@ -1,13 +1,92 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jinyongp/devtools/internal/vault"
 )
+
+func TestExpiredDoctorInputRetainsAuthenticatedPrerequisite(t *testing.T) {
+	a := testApp(t)
+	t.Chdir(privateTempDir(t))
+	initializeTestVault(t, a)
+	if e := os.WriteFile("devtools.toml", []byte("profile='audit'\n[commands.check]\nexec=['__missing_guidance__']\ninject=true\nsecs=['TOKEN']\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	if code, _, diagnostic := invoke(t, a, "CANARY_EXPIRED_VALUE", "secret", "set", "TOKEN", "--stdin"); code != 0 {
+		t.Fatal(code, diagnostic)
+	}
+	store, failure := a.store(map[string]string{})
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	ctx := context.Background()
+	master, e := store.Master(ctx)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer master.Destroy()
+	root := filepath.Dir(store.Directory)
+	slot, e := (vault.KeyFileStore{Directory: filepath.Join(root, "vault")}).Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	files := vault.FileStore{Root: root, VaultID: slot.VaultID, CatalogKey: master}
+	_, key, e := files.ReadWithMaster(ctx, "audit", master)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer key.Destroy()
+	expired := time.Now().Add(-time.Hour).Unix()
+	if _, e := files.Update(ctx, "audit", key, func(p *vault.Profile) (bool, error) {
+		p.Values[0].Slots[0].ExpiresAt = &expired
+		p.Revision++
+		return true, nil
+	}); e != nil {
+		t.Fatal(e)
+	}
+	before := outputData(t, a, []string{"vault", "status"})["item"].(map[string]any)["idle_expires_at"]
+	if before == nil {
+		t.Fatal("fixture has no reusable session idle deadline")
+	}
+	code, out, diagnostic := invoke(t, a, "", "doctor", "check")
+	if code != 0 || strings.Contains(out, "CANARY_EXPIRED_VALUE") {
+		t.Fatal(code, diagnostic)
+	}
+	var report struct {
+		Data struct {
+			Commands []struct {
+				Checks []struct {
+					ID, Reason string
+					Facts      map[string]any
+				}
+			}
+		}
+	}
+	if e := json.Unmarshal([]byte(out), &report); e != nil {
+		t.Fatal(e)
+	}
+	found := false
+	for _, check := range report.Data.Commands[0].Checks {
+		if check.ID == "sec:TOKEN" {
+			found = check.Reason == "value_expired" && check.Facts["actual_kind"] == "secret"
+		}
+	}
+	if !found {
+		t.Fatal("authenticated expiry was mistaken for unverified registration", out)
+	}
+	after := outputData(t, a, []string{"vault", "status"})["item"].(map[string]any)["idle_expires_at"]
+	if before != after {
+		t.Fatal("doctor extended the secret session idle deadline")
+	}
+}
 
 func TestExecutionGuidanceKeepsRootAndDirectTarget(t *testing.T) {
 	a := testApp(t)

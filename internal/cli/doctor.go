@@ -168,6 +168,10 @@ func (a *App) passiveChecks(ctx context.Context, command execution.Command, dire
 		version, observed, observedPrerequisites, e := values.InspectSearchPrerequisites(ctx, filepath.Dir(directory), command.Project.Profile, command.Env, spec)
 		if e != nil {
 			known = false
+			if observedPrerequisites != nil {
+				known = true
+				prerequisites = observedPrerequisites
+			}
 			status := "unknown"
 			switch e.Code {
 			case "env_not_found", "bundle_not_found", "value_expired", "key_not_found", "kind_conflict", "vault_locked_manual", "vault_recovery_required":

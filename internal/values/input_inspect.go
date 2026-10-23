@@ -30,7 +30,9 @@ func InspectSearchInput(ctx context.Context, root, profile, env string, spec Inp
 
 func InspectSearchPrerequisites(ctx context.Context, root, profile, env string, spec InputSpec) (*InputVersion, map[string]string, map[string]Prerequisite, *protocol.Error) {
 	public := map[string]string{}
-	prerequisites := map[string]Prerequisite{}
+	// nil means authentication did not finish. An authenticated empty manifest
+	// is an allocated empty map, even when later input checks fail.
+	var prerequisites map[string]Prerequisite
 	v, e := inspectInput(ctx, root, profile, env, spec, &public, &prerequisites)
 	return v, public, prerequisites, e
 }

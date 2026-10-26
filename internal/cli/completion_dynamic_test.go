@@ -69,15 +69,19 @@ func TestDynamicCompletion(t *testing.T) {
 	// interpreting the caller's project as its owner.
 	processID := tasks.ID()
 	processDir := filepath.Join(filepath.Dir(managerData), "processes", processID)
-	if err := os.MkdirAll(processDir, 0700); err != nil {
+	if err := tasks.PrivateDir(processDir); err != nil {
 		t.Fatal(err)
 	}
-	record, err := json.Marshal(services.Record{ID: processID, Profile: "other", Command: "worker", Directory: projectDir, State: "running", CreatedAt: time.Now().UTC()})
-	if err != nil {
+	record := services.Record{ID: processID, Profile: "other", Command: "worker", Directory: projectDir, State: "running", CreatedAt: time.Now().UTC()}
+	if err := tasks.WritePrivate(filepath.Join(processDir, "record.json"), record); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(processDir, "record.json"), record, 0600); err != nil {
-		t.Fatal(err)
+	store, issue := a.serviceStore()
+	if issue != nil {
+		t.Fatal(issue)
+	}
+	if records, issue := store.StoredRecords(); issue != nil || len(records) != 1 || records[0].ID != processID {
+		t.Fatal("process fixture must satisfy the private storage contract", records, issue)
 	}
 	// A new command/option needs only entity metadata; the resolver must not
 	// contain its name or infer a source from its argument spelling.

@@ -32,8 +32,8 @@ schema는 JSON, help/completion/child/private stdout은 기존 소유권을 유�
 | 오류·경고·후속 행동 | reviewed | 원 message/code/exit, checks/causes/effects/retry/scope, 필수 입력, 한 줄 shell argv 보존; mutation 재실행 없음 |
 | CLI UI·스타일 | reviewed | immutable Document, control escape, 폭 40/79/80/120, CJK/complex fallback, NO_COLOR/TERM, 단일 연속 출력; 실제 다중 플랫폼 시각 수용은 pending |
 | 출력 실패·native 소유권 | reviewed | JSON/native UI bypass, 최대 두 render, 원 오류 exit·긴급 전체 진단, short write/stderr 재시도 금지, post-handler effectsunknown; Windows 기존 VT는 읽기만 수행 |
-| discovery·소비자 | reviewed | strict catalog/global_options, 네 shell 생성, old/new bootstrap, 설치·검증·perf 호출, README/출력 문서/bundled skill; Windows 실행은 pending |
-| 검증·작업 기록 | reviewed | 작업 단위 커밋, 전체 Linux 검사와 38 installed scenario, native/visual 미실행을 별도 기록; workstream close하지 않음 |
+| discovery·소비자 | reviewed | strict catalog/global_options, 네 shell 생성, old/new bootstrap, 설치·검증·perf 호출, README/출력 문서/bundled skill; Windows native 실행도 Actions에서 통과 |
+| 검증·작업 기록 | reviewed | 작업 단위 커밋, 전체 Linux 검사와 38 installed scenario 및 세 OS native Actions 성공. 실제 화면 미검증은 별도 기록; workstream close하지 않음 |
 
 확인한 결함을 수정한 뒤 영향 caller와 기존 검사를 다시 확인했다.
 리뷰한 소스에서 남은 확정 결함은 발견하지 못했다. 아래 미실행 수용 조건 때문에

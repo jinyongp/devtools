@@ -171,6 +171,20 @@ bold, 이름과 label은 기본 전경색, exec와 개수만 dim으로 바꿨다
 표현한 미리보기이며 실제 OS terminal 테마/console 검증과 구분한다. 목록의 긴 exec는 자르거나
 argv 개수로 대체하지 않는다. 관련 의미·폭·unknown 필드·복사 가능한 action 검사는 재사용한다.
 
+제품 소스 `640e0b4d31a08d549cf84356c5d41463a09fca16`에서 `devtools run check:all`과
+전체 `devtools run test:installed`가 통과했다. installed `cli_presentation` 시나리오는 실제
+PTY/pipe, agent 감지, 오류 stream, 형식 우선순위, 폭과 복사 가능한 Next 검사를 포함한다.
+임시 로그는 `/tmp/devtools-style-check-all.log`, `/tmp/devtools-style-installed.log`다.
+
+- [Windows full run 40296950151](https://github.com/jinyongp/devtools/actions/runs/40296950151):
+  success. 전체 페이지 조회에서 23 success, failure/skip 0. amd64/arm64 native 검사를 포함한다.
+- [Unix run 40296950133](https://github.com/jinyongp/devtools/actions/runs/40296950133):
+  전체 job은 24 success, 3 intentional skip, failure 0이다. Linux/macOS source·installed 검사와
+  실제 PTY를 포함한다. skip은 선택하지 않은 실제 Cloudflared/Tailscale과 자동화 성능 측정이다.
+- 두 run의 source SHA는 위 D15 제품 소스와 같다. 계획의 스타일 표와 등록된 workstream
+  plan/spec에도 D15를 반영했다(profile revision 1142). 실제 native 시각 gate를 pass로 바꾸거나
+  stale prerequisite completion을 강제로 갱신하지 않는다.
+
 ## 남은 수용 조건
 
 - A11의 OS native 실행은 위 Actions로 검증했다. Windows console/ConPTY의 실제 화면 상태는

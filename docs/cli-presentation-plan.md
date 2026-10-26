@@ -532,11 +532,13 @@ VIRTUAL_TERMINAL_PROCESSING이 모두 켜져 있을 때만 SGR을 쓴다. 실패
 | --- | --- | --- |
 | 결과 제목·섹션 제목·table header | 기본 전경색 + bold | title은 한 줄, 반복 브랜드 배너 없음 |
 | 식별 대상·중요 값 | 기본 전경색, 필요한 대상만 bold | 모든 값을 강조해 계층을 평탄화하지 않음 |
-| scope label·보조 설명·출처 | dim, 기본 전경색 | 필수 ID·상태·원인·복구 행동은 dim 처리하지 않음 |
+| scope label·이름·주요 값 | 기본 전경색 | 일반 label에 상태색이나 dim을 적용하지 않음 |
+| exec·목록 개수 | dim, 기본 전경색 | 비기본 실행 설정·필수 ID·상태·원인·복구 행동은 dim 처리하지 않음 |
 | 성공 | `OK` / `READY` / `CHANGED` + green | label만 색칠; 성공하지 않은 대상까지 green으로 감싸지 않음 |
 | 주의·부분 실패·불확실 | `WARN` / `PARTIAL` / `UNKNOWN` + yellow | unknown은 완료로 보이지 않게 원문 상태·효과를 병기 |
 | 오류·미준비 | `ERROR` / `FAIL` / `NOT READY` + red | error code·메시지·대상은 기본 전경색으로 읽기 쉽게 유지 |
-| 미리보기·정보·다음 행동 | `PREVIEW` / `INFO` / `Next` + cyan | 실제 적용/자동 실행을 뜻하지 않음 |
+| 미리보기·정보 상태 | `PREVIEW` / `INFO` + cyan | 실제 적용/자동 실행을 뜻하지 않음 |
+| 다음 행동 구획 | `Next`, 기본 전경색 + bold | 복구 명령은 기본 전경색의 독립된 한 줄로 표시 |
 | 변경 없음·재전송 | `NO CHANGE` / `REPLAYED`, 기본 전경색 | dim으로 숨기지 않고 의미를 명시 |
 
 색은 항상 같은 문자 label을 보강한다. 아이콘·emoji·red/green 차이만으로 상태를 구분하지

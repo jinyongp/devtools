@@ -61,6 +61,9 @@ func TestPresentationSelectionUsesSuppliedIO(t *testing.T) {
 		exit int
 		json bool
 	}{
+		{presentation.Environment{Stdout: presentation.Terminal{IsTerminal: true}}, []string{"version"}, 0, false},
+		{presentation.Environment{Stdout: presentation.Terminal{IsTerminal: true}, Signals: []string{"AI_AGENT"}}, []string{"version"}, 0, true},
+		{presentation.Environment{}, []string{"version"}, 0, true},
 		{presentation.Environment{Stdout: presentation.Terminal{IsTerminal: true}}, []string{"--format", "auto", "version"}, 0, false},
 		{presentation.Environment{Stdout: presentation.Terminal{IsTerminal: true}, Signals: []string{"AI_AGENT"}}, []string{"--format", "auto", "version"}, 0, true},
 		{presentation.Environment{Stderr: presentation.Terminal{IsTerminal: true}}, []string{"--format", "auto", "nonexistent"}, 2, true},

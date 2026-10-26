@@ -99,6 +99,19 @@ def main():
         assert install.returncode == 0, "Candidate installer did not complete (raw output withheld)"
         identity = api("version")
         assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 15
+        # Real native Windows pipe/explicit modes. Console VT and ConPTY visual
+        # acceptance are separate gates; a captured pipe cannot establish them.
+        clean = {key: value for key, value in base_env.items() if key not in (
+            "DEVTOOLS_FORMAT", "AI_AGENT", "CODEX_THREAD_ID", "CODEX_CI", "CLAUDECODE",
+            "CLAUDE_CODE", "CURSOR_AGENT", "GEMINI_CLI", "OPENCODE", "OPENCODE_CLIENT")}
+        captured = subprocess.run([str(binary), "version"], cwd=project, env=clean,
+                                  capture_output=True, text=True, encoding="utf-8", timeout=15)
+        assert captured.returncode == 0 and json.loads(captured.stdout)["data"] == identity
+        captured = subprocess.run([str(binary), "--format", "text", "version"], cwd=project,
+                                  env=dict(clean, DEVTOOLS_FORMAT="invalid"), capture_output=True,
+                                  text=True, encoding="utf-8", timeout=15)
+        assert captured.returncode == 0 and args.version in captured.stdout and "\x1b[" not in captured.stdout
+        steps.append("native_pipe_and_explicit_presentation")
         alias = binary.with_name("dvt.exe")
         assert hashlib.sha256(alias.read_bytes()).digest() == hashlib.sha256(binary.read_bytes()).digest()
         steps.append("candidate_install_and_alias")

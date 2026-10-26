@@ -15,8 +15,7 @@ const (
 	FormatAuto Format = "auto"
 	FormatText Format = "text"
 	FormatJSON Format = "json"
-	// Kept JSON until the consumer migration and installed verification gate.
-	DefaultFormat = FormatJSON
+	DefaultFormat = FormatAuto
 )
 
 type Capability uint8

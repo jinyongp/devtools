@@ -12,12 +12,17 @@ import (
 	"testing"
 	"time"
 
+	proxyapi "github.com/jinyongp/devtools/internal/proxy"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
 func TestDynamicCompletion(t *testing.T) {
 	a := testApp(t)
 	initializeTestVault(t, a)
+	managerData, _ := a.dataDirectory()
+	// Completion reads metadata; configuring its fixture must not probe unrelated
+	// host services occupying the example listener ports.
+	a.proxyManager = func(string) proxyapi.Manager { return cliTestManager(filepath.Dir(managerData)) }
 	projectDir := privateTempDir(t)
 	t.Chdir(projectDir)
 	if err := os.WriteFile("devtools.toml", []byte("profile = 'app'\n[ports.web]\nport = 38082\n[proxies.web]\nhost = 'web.localhost'\nport = 'web'\n[commands.web]\nexec = ['echo', 'CANARY-VALUE']\n"), 0600); err != nil {

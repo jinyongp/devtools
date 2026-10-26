@@ -34,7 +34,7 @@ func (a *App) portDefaults() ([]int, *protocol.Error) {
 	return ports.DefaultRange(filepath.Join(d.Config, "config.toml"))
 }
 func portOptions() []Option {
-	return append(profileOptions(false), Option{Name: "instance", Pattern: instanceSelectorPattern, Description: "Instance alias or id:ID."}, Option{Name: "dir", MinLength: 1, Description: "Select a project directory."})
+	return append(profileOptions(false), Option{Name: "instance", Pattern: instanceSelectorPattern, Completion: completeInstance, Description: "Instance alias or id:ID."}, Option{Name: "dir", MinLength: 1, Description: "Select a project directory."})
 }
 func instanceFields() map[string]any {
 	return map[string]any{"profile": stringSchema(), "instance_id": stringSchema(), "alias": map[string]any{"type": []string{"string", "null"}}, "directory": stringSchema(), "location_status": map[string]any{"enum": []string{"available", "missing", "unknown"}}}
@@ -65,7 +65,7 @@ func (a *App) registerPorts() {
 	for _, action := range []string{"list", "show", "allocate", "check", "release", "prune"} {
 		cmd := Command{Name: "port " + action, Description: portDescriptions[action], Options: portOptions()}
 		if action != "list" && action != "prune" {
-			cmd.Arguments = []Argument{{Name: "port-name", Required: true, Pattern: project.ProfilePattern}}
+			cmd.Arguments = []Argument{{Name: "port-name", Required: true, Pattern: project.ProfilePattern, Completion: completePort}}
 		}
 		f := assignmentFields()
 		switch action {
@@ -104,7 +104,7 @@ func (a *App) registerPorts() {
 			cmd.Arguments = []Argument{{Name: "alias", Required: true, Pattern: project.ProfilePattern}}
 		}
 		if action == "move" || action == "remove" {
-			cmd.Arguments = []Argument{{Name: "instance-selector", Required: true, Pattern: instanceSelectorPattern}}
+			cmd.Arguments = []Argument{{Name: "instance-selector", Required: true, Pattern: instanceSelectorPattern, Completion: completeInstance}}
 		}
 		if action == "name" || action == "move" || action == "remove" {
 			options := []Option{}

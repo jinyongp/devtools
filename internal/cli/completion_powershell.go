@@ -36,10 +36,7 @@ func powershellCompletion(nodes map[string]*completionNode, paths []string) stri
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			values := []string{}
-			if path == "" && name == "--format" {
-				values = []string{"auto", "text", "json"}
-			}
+			values := append([]string{}, patternChoices(source.options[name].Pattern)...)
 			row.Options = append(row.Options, option{Name: name, Boolean: source.options[name].Boolean, Values: values})
 		}
 		metadata = append(metadata, row)

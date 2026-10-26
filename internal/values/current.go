@@ -112,6 +112,57 @@ func (s ModernStore) PlanImport(ctx context.Context, input map[string]string, va
 // CompletionNames reads only names from stable atomic profile images. It never
 // creates locks, unlocks a key session or performs recovery during shell completion.
 func (s ModernStore) CompletionNames(kind Kind, env string) ([]string, *protocol.Error) {
+	raw, e := s.completionSnapshot()
+	if e != nil {
+		return nil, e
+	}
+	defer clear(raw)
+	state, e := metadataFromRaw(raw, s.Profile)
+	if e != nil {
+		return nil, e
+	}
+	if kind == "" {
+		return state.EnvNames(), nil
+	}
+	items, e := state.List(kind, env)
+	if e != nil {
+		return nil, e
+	}
+	names := make([]string, 0, len(items))
+	for _, item := range items {
+		names = append(names, item.Key)
+	}
+	return names, nil
+}
+
+// CompletionBundleNames returns public bundle names through the same passive
+// snapshot boundary. It never consults a master/session or exposes value IDs.
+func (s ModernStore) CompletionBundleNames() ([]string, *protocol.Error) {
+	raw, e := s.completionSnapshot()
+	if e != nil {
+		return nil, e
+	}
+	defer clear(raw)
+	if raw == nil {
+		return nil, nil
+	}
+	p, err := vault.DecodeProfile(raw)
+	if err != nil {
+		// Valid legacy metadata has no bundles. Do not migrate it on Tab.
+		_, e := metadataFromRaw(raw, s.Profile)
+		return nil, e
+	}
+	if p.Name != s.Profile {
+		return nil, storageError()
+	}
+	names := make([]string, 0, len(p.Bundles))
+	for _, bundle := range p.Bundles {
+		names = append(names, bundle.Name)
+	}
+	return names, nil
+}
+
+func (s ModernStore) completionSnapshot() ([]byte, *protocol.Error) {
 	if !project.ValidProfile(s.Profile) {
 		return nil, storageError()
 	}
@@ -120,26 +171,13 @@ func (s ModernStore) CompletionNames(kind Kind, env string) ([]string, *protocol
 		if err != nil {
 			continue
 		}
-		state, e := metadataFromRaw(first, s.Profile)
 		second, err := profilekey.Snapshot(s.Directory, s.Profile, "values", vault.MaxDocumentBytes)
 		same := err == nil && bytes.Equal(first, second)
-		clear(first)
 		clear(second)
-		if !same || e != nil {
-			continue
+		if same {
+			return first, nil
 		}
-		if kind == "" {
-			return state.EnvNames(), nil
-		}
-		items, e := state.List(kind, env)
-		if e != nil {
-			return nil, e
-		}
-		names := make([]string, 0, len(items))
-		for _, item := range items {
-			names = append(names, item.Key)
-		}
-		return names, nil
+		clear(first)
 	}
 	return nil, storageError()
 }

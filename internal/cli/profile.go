@@ -186,7 +186,7 @@ func (a *App) registerProfiles() {
 		Command{
 			Name:        "profile inspect",
 			Description: "Inspect one profile's metadata, instances, and managed processes without returning values.",
-			Arguments:   []Argument{{Name: "profile", Required: true, Pattern: project.ProfilePattern}},
+			Arguments:   []Argument{{Name: "profile", Required: true, Pattern: project.ProfilePattern, Completion: completeProfile}},
 			Output:      itemOutput(profileDetailSchema()),
 			Run:         a.inspectProfile,
 		},
@@ -194,8 +194,8 @@ func (a *App) registerProfiles() {
 			Name:        "profile diff",
 			Description: "Compare two profiles without returning stored values or runtime process state.",
 			Arguments: []Argument{
-				{Name: "left", Required: true, Pattern: project.ProfilePattern},
-				{Name: "right", Required: true, Pattern: project.ProfilePattern},
+				{Name: "left", Required: true, Pattern: project.ProfilePattern, Completion: completeProfile},
+				{Name: "right", Required: true, Pattern: project.ProfilePattern, Completion: completeProfile},
 			},
 			Output: profileDiffSchema(),
 			Run:    a.diffProfiles,

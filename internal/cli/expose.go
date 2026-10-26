@@ -29,6 +29,7 @@ func exposureSchema() map[string]any {
 }
 func (a *App) registerExpose() {
 	c := Command{Name: "expose start", Description: "Share a selected route through an explicit provider; authentication is read from stdin or a private file.", Arguments: []Argument{{Name: "name", Required: true, Pattern: project.ProfilePattern}}, Options: []Option{{Name: "provider", Default: "local", Pattern: "^(local|lan|cloudflared|tailscale)$", Description: "Sharing provider; local only reads the configured URL."}, {Name: "global", Boolean: true, Description: "Select a projectless global route."}, {Name: "dir", Default: ".", Description: "Project directory."}, {Name: "alias", Description: "LAN .local alias; clients configure DNS themselves."}, {Name: "auth-stdin", Boolean: true, Description: "Read Basic auth user:password from stdin."}, {Name: "auth-file", Description: "Read Basic auth from a private regular file."}, {Name: "no-auth", Boolean: true, Description: "Explicitly allow unauthenticated sharing."}, {Name: "serve-port", Pattern: positiveIntegerPattern, Description: "Tailscale HTTPS port; omission selects 443."}, {Name: "request-id", Pattern: uuidPattern, Description: "Required retry-safe UUID for external sharing."}}, Output: map[string]any{"oneOf": []any{object(map[string]any{"item": exposureSchema(), "changed": map[string]any{"type": "boolean"}, "replayed": map[string]any{"type": "boolean"}}, "item", "changed", "replayed"), object(map[string]any{"item": map[string]any{"type": "object"}, "changed": map[string]any{"type": "boolean"}}, "item", "changed")}}}
+	c.Arguments[0].Completion = completeRoute
 	c.Output = map[string]any{"oneOf": []any{mutationSchema(map[string]any{"item": exposureSchema()}, "item"), object(map[string]any{"item": routeEndpointSchema(), "changed": boolSchema()}, "item", "changed")}}
 	c.Run = func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 		m, e := a.proxyStore()
@@ -99,7 +100,7 @@ func (a *App) registerExpose() {
 		if action == "list" {
 			c.Output = object(map[string]any{"items": map[string]any{"type": "array", "items": exposureSchema()}}, "items")
 		} else {
-			c.Arguments = []Argument{{Name: "id", Required: true, Pattern: uuidPattern}}
+			c.Arguments = []Argument{{Name: "id", Required: true, Pattern: uuidPattern, Completion: completeExposure}}
 		}
 		if action == "stop" {
 			c.Options = []Option{{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "Retry-safe request UUID."}}

@@ -39,7 +39,7 @@ func valueUseSchema() map[string]any {
 	return object(map[string]any{"kind": map[string]any{"enum": []string{"declared", "delivered", "prepared"}}, "command": stringSchema(), "directory": stringSchema(), "env": stringSchema(), "selection": stringSchema(), "execution_id": stringSchema(), "execution_state": stringSchema(), "output_policy": outputPolicySchema(), "output": map[string]any{"type": "object"}, "values": inputObservationSchema()}, "kind", "command", "directory", "env", "selection", "values")
 }
 func (a *App) registerValueUsage() {
-	options := append(profileOptions(true), Option{Name: "bundle", Pattern: project.ProfilePattern, Default: "all", Description: "Select all, none, or a shared bundle; no per-key arguments are required."})
+	options := append(profileOptions(true), Option{Name: "bundle", Pattern: project.ProfilePattern, Completion: completeSelection, Default: "all", Description: "Select all, none, or a shared bundle; no per-key arguments are required."})
 	a.commands = append(a.commands, Command{Name: "values inspect", Description: "Inspect selected input identities without values, unlocking, or extending the key session.", Options: options, Output: object(map[string]any{"profile": stringSchema(), "env": stringSchema(), "selection": stringSchema(), "values": inputObservationSchema()}, "profile", "env", "selection", "values"), Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 		store, e := a.store(r.Options)
 		if e != nil {

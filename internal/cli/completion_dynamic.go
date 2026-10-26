@@ -173,75 +173,31 @@ func (a *App) dynamicCandidates(words []string) []string {
 		}
 		pending, prefix, replacement = opt.Name, value, name+"="
 	}
-	source := ""
-	switch pending {
-	case "listener", "provider", "dns":
-		source = pending
-	case "profile", "env":
-		source = pending
-		// Restart inherits the recorded process profile, not the caller's cwd.
-		if cmd.Name == "process restart" {
+	source := completionSource("")
+	var choices []string
+	if pending != "" {
+		opt := opts["--"+pending]
+		source, choices = opt.Completion, patternChoices(opt.Pattern)
+		// Restart's selected environment belongs to its recorded execution,
+		// never the caller's current project. Without that scope stay silent.
+		if cmd.Name == "process restart" && (source == completeEnv || source == completeSelection) {
 			return nil
 		}
-	case "workstream":
-		if strings.HasPrefix(cmd.Name, "task ") {
-			source = "workstream"
-		}
-	case "task", "task-ids":
-		if strings.HasPrefix(cmd.Name, "task ") {
-			source = "task"
-		}
-	case "validation-ids":
-		if strings.HasPrefix(cmd.Name, "task ") {
-			source = "validation"
-		}
-	case "depends-on":
-		if cmd.Name == "task depends set" {
-			source = "task"
-		}
-		if cmd.Name == "task workstream depends set" {
-			source = "workstream"
-		}
-	case "":
+	} else {
 		if len(cmd.Arguments) == 0 || strings.HasPrefix(prefix, "-") {
 			return nil
 		}
-		if positionals != 0 {
-			last := len(cmd.Arguments) - 1
-			if !cmd.Arguments[last].Repeatable || positionals < last {
+		index := positionals
+		if index >= len(cmd.Arguments) {
+			index = len(cmd.Arguments) - 1
+			if !cmd.Arguments[index].Repeatable {
 				return nil
 			}
 		}
-		switch {
-		case cmd.Name == "command run" || cmd.Name == "command inspect" || cmd.Name == "command env" || cmd.Name == "process start" || cmd.Name == "doctor" || strings.HasPrefix(cmd.Name, "project "):
-			source = "command"
-		case cmd.Name == "expose status" || cmd.Name == "expose stop":
-			source = "exposure"
-		case cmd.Name == "expose start" || cmd.Name == "proxy env" || cmd.Name == "proxy up" || cmd.Name == "proxy down" || cmd.Name == "proxy rm" || cmd.Name == "proxy run" || strings.HasPrefix(cmd.Name, "proxy hosts "):
-			source = "route"
-		case cmd.Name == "env remove":
-			source = "env"
-		case strings.HasPrefix(cmd.Name, "variable "):
-			source = "variable"
-		case strings.HasPrefix(cmd.Name, "secret "):
-			source = "secret"
-		case strings.HasPrefix(cmd.Name, "task workstream "):
-			source = "workstream"
-		case strings.HasPrefix(cmd.Name, "task validation "):
-			source = "validation"
-		case strings.HasPrefix(cmd.Name, "task "):
-			source = "task"
-		}
-		for _, def := range tasks.Definitions {
-			if cmd.Name == "task "+def.Command {
-				source = def.Kind
-			}
-		}
-		if cmd.Name == "task checkpoint list" {
-			source = "run"
-		}
+		arg := cmd.Arguments[index]
+		source = arg.Completion
 	}
-	if source == "" {
+	if source == "" && len(choices) == 0 {
 		return nil
 	}
 	// Task --dir selects execution/query locations; profile resolution uses cwd.
@@ -259,7 +215,10 @@ func (a *App) dynamicCandidates(words []string) []string {
 		scoped.dataDirectory = func() (string, *protocol.Error) { return directories.Data + "/profiles", nil }
 		a = &scoped
 	}
-	names := a.completionNames(source, selected)
+	names := choices
+	if source != "" {
+		names = a.completionNames(string(source), selected)
+	}
 	sort.Strings(names)
 	out := []string{}
 	for _, name := range names {
@@ -269,6 +228,9 @@ func (a *App) dynamicCandidates(words []string) []string {
 		valid := completionIdentifier.MatchString(name)
 		if source == "command" {
 			valid = project.ValidCommand(name)
+		}
+		if source == completeInstance {
+			valid, _ = regexp.MatchString(instanceSelectorPattern, name)
 		}
 		if !valid || !strings.HasPrefix(name, prefix) {
 			continue
@@ -285,11 +247,20 @@ func (a *App) dynamicCandidates(words []string) []string {
 }
 
 func (a *App) completionNames(source string, selected map[string]string) []string {
-	if source == "provider" {
-		return []string{"local", "lan", "cloudflared", "tailscale"}
-	}
-	if source == "dns" {
-		return []string{"auto", "hosts", "external"}
+	if source == "process" {
+		store, e := a.serviceStore()
+		if e != nil {
+			return nil
+		}
+		items, e := store.StoredRecords()
+		if e != nil {
+			return nil
+		}
+		names := []string{}
+		for _, item := range items {
+			names = append(names, item.ID)
+		}
+		return names
 	}
 	if source == "listener" || source == "route" && selected["global"] == "true" {
 		store, e := a.portStore()
@@ -336,7 +307,35 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 	if dir == "" {
 		dir = "."
 	}
-	if source == "command" || source == "route" {
+	if source == "instance" {
+		// A move's --dir is its destination, not the profile owning its source.
+		p, e := project.Resolve(".", selected["profile"])
+		if e != nil {
+			return nil
+		}
+		store, e := a.portStore()
+		if e != nil {
+			return nil
+		}
+		state, e := store.Read()
+		if e != nil {
+			return nil
+		}
+		names := []string{}
+		for _, item := range state.Instances {
+			if item.Profile == p.Profile {
+				names = append(names, "id:"+item.ID)
+				if item.Alias != nil {
+					names = append(names, *item.Alias)
+				}
+			}
+		}
+		return names
+	}
+	if source == "port" {
+		return a.portCompletionNames(selected)
+	}
+	if source == "command" || source == "route" || source == "tool" || source == "preset" {
 		p, e := project.Resolve(dir, "")
 		if e != nil {
 			return nil
@@ -345,6 +344,15 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 		if source == "route" {
 			for name := range p.Proxies {
 				names = append(names, name)
+			}
+			return names
+		}
+		if source == "tool" || source == "preset" {
+			if p.Document != nil {
+				entries, _ := p.Document.Raw[source+"s"].(map[string]any)
+				for name := range entries {
+					names = append(names, name)
+				}
 			}
 			return names
 		}
@@ -383,7 +391,21 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 	if e != nil {
 		return nil
 	}
-	if source == "env" || source == "variable" || source == "secret" {
+	if source == "bundle" || source == "selection" {
+		names, _ := (values.ModernStore{Directory: data, Profile: p.Profile}).CompletionBundleNames()
+		if source == "selection" {
+			names = append(names, "all", "none")
+		}
+		return names
+	}
+	if source == "env" || source == "variable" || source == "secret" || source == "value-key" {
+		store := values.ModernStore{Directory: data, Profile: p.Profile}
+		if source == "value-key" {
+			// Bundles contain shared IDs, independent of environment overrides.
+			vars, _ := store.CompletionNames(values.Variable, "")
+			secs, _ := store.CompletionNames(values.Secret, "")
+			return append(vars, secs...)
+		}
 		kind := values.Kind(source)
 		if source == "env" {
 			kind = ""
@@ -392,5 +414,40 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 		return names
 	}
 	names, _ := (tasks.Store{Directory: filepath.Join(filepath.Dir(data), "tasks"), Profile: p.Profile}).CompletionIDs(source, selected["workstream"])
+	return names
+}
+
+func (a *App) portCompletionNames(selected map[string]string) []string {
+	profile, selector, dir, e := portTarget(Request{Options: selected})
+	if e != nil {
+		return nil
+	}
+	store, e := a.portStore()
+	if e != nil {
+		return nil
+	}
+	state, e := store.Read()
+	if e != nil {
+		return nil
+	}
+	instance := state.Find(profile, selector, dir)
+	if instance == nil && selector != "" {
+		return nil
+	}
+	names := []string{}
+	if instance != nil {
+		dir = instance.Directory
+		for _, item := range state.Assignments {
+			if item.Profile == profile && item.ID == instance.ID {
+				names = append(names, item.Name)
+			}
+		}
+	}
+	// Existing assignments remain selectable even if their config disappeared.
+	if p, e := project.Resolve(dir, ""); e == nil && p.Profile == profile {
+		for name := range p.Ports {
+			names = append(names, name)
+		}
+	}
 	return names
 }

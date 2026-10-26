@@ -11,7 +11,7 @@ import (
 
 func (a *App) registerImport() {
 	options := append(profileOptions(true),
-		Option{Name: "bundle", Pattern: project.ProfilePattern, Description: "Add all imported shared ValueIDs to this reusable var/sec bundle atomically."},
+		Option{Name: "bundle", Pattern: project.ProfilePattern, Completion: completeBundle, Description: "Add all imported shared ValueIDs to this reusable var/sec bundle atomically."},
 		Option{Name: "file", Required: true, MinLength: 1, Description: "Read dotenv assignments from a regular UTF-8 file."},
 		Option{Name: "var", Repeatable: true, Pattern: values.KeyPattern, Description: "Classify a new key as variable; repeat for each public key. Existing kinds are preserved."},
 		Option{Name: "overwrite", Boolean: true, Description: "Replace different values in the selected scope."},

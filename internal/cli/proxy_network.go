@@ -11,6 +11,7 @@ func (a *App) registerNetworkProxy() {
 	a.registerNetsetup()
 	a.registerNetworkTeardown()
 	c := Command{Name: "proxy configure", Description: "Configure a stopped named HTTP/HTTPS listener. HTTPS is opt-in.", Options: []Option{{Name: "listener", Pattern: project.ProfilePattern, Description: "Listener name; omission selects default."}, {Name: "http-address", MinLength: 1, Description: "HTTP IP:port."}, {Name: "https-address", MinLength: 1, Description: "Enable HTTPS at this IP:port."}, {Name: "disable-https", Boolean: true, Description: "Disable HTTPS on a stopped listener."}, {Name: "request-id", Required: true, Pattern: uuidPattern, Description: "Retry-safe request UUID."}}, Output: map[string]any{"type": "object"}}
+	c.Options[0].Completion = completeListener
 	c.Run = func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 		m, e := a.proxyStore()
 		if e != nil {
@@ -32,6 +33,7 @@ func (a *App) registerNetworkProxy() {
 			}
 			c.Output = object(map[string]any{"items": arraySchema(object(f, "time", "listener", "generation", "state", "reason"))}, "items")
 		}
+		c.Options[0].Completion = completeListener
 		c.Run = func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 			m, e := a.proxyStore()
 			if e != nil {

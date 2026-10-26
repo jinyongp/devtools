@@ -31,15 +31,16 @@ type IO struct {
 }
 
 type Option struct {
-	Repeatable  bool   `json:"repeatable,omitempty"`
-	Boolean     bool   `json:"boolean,omitempty"`
-	Required    bool   `json:"required"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Default     string `json:"default"`
-	Pattern     string `json:"pattern,omitempty"`
-	MinLength   int    `json:"minLength,omitempty"`
-	MaxLength   int    `json:"maxLength,omitempty"`
+	Completion  completionSource `json:"-"`
+	Repeatable  bool             `json:"repeatable,omitempty"`
+	Boolean     bool             `json:"boolean,omitempty"`
+	Required    bool             `json:"required"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Default     string           `json:"default"`
+	Pattern     string           `json:"pattern,omitempty"`
+	MinLength   int              `json:"minLength,omitempty"`
+	MaxLength   int              `json:"maxLength,omitempty"`
 }
 
 type Command struct {
@@ -77,10 +78,11 @@ type App struct {
 }
 
 type Argument struct {
-	Name       string `json:"name"`
-	Required   bool   `json:"required"`
-	Repeatable bool   `json:"repeatable,omitempty"`
-	Pattern    string `json:"pattern,omitempty"`
+	Completion completionSource `json:"-"`
+	Name       string           `json:"name"`
+	Required   bool             `json:"required"`
+	Repeatable bool             `json:"repeatable,omitempty"`
+	Pattern    string           `json:"pattern,omitempty"`
 }
 type Request struct {
 	Invocation    protocol.InvocationContext
@@ -119,7 +121,7 @@ func New(version, commit string) *App {
 			return nil, nil
 		}},
 		{Name: "init", Description: "Create project configuration in the current directory without overwriting existing files.", Options: []Option{
-			{Name: "profile", Description: "Project profile identifier.", Required: true, Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128},
+			{Name: "profile", Description: "Project profile identifier.", Required: true, Pattern: project.ProfilePattern, Completion: completeProfile, MinLength: 1, MaxLength: 128},
 		}, Output: changedItemOutput(object(map[string]any{"config_path": stringSchema(), "profile": stringSchema()}, "config_path", "profile")), Run: func(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
 			result, err := project.Init(".", request.Options["profile"])
 			return map[string]any{"item": map[string]string{"config_path": result.ConfigPath, "profile": result.Profile}, "changed": result.Created}, err
@@ -135,7 +137,7 @@ func New(version, commit string) *App {
 		{Name: "schema", Description: "Describe the machine interface using JSON Schema.", Options: []Option{}, Output: map[string]any{"$ref": "#/$defs/catalog"}, Run: func(context.Context, IO, Request) (any, *protocol.Error) { return a.catalog(), nil }},
 		{Name: "project inspect", Description: "Resolve a project profile and user data paths without reading secrets.", Options: []Option{
 			{Name: "dir", Description: "Directory to search from.", Default: ".", MinLength: 1},
-			{Name: "profile", Description: "Explicit profile; bypasses configuration lookup.", Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128},
+			{Name: "profile", Description: "Explicit profile; bypasses configuration lookup.", Pattern: project.ProfilePattern, Completion: completeProfile, MinLength: 1, MaxLength: 128},
 		}, Output: object(map[string]any{
 			"item":  object(map[string]any{"profile": stringSchema(), "source": map[string]any{"enum": []string{"flag", "file"}}, "config_path": stringSchema(), "root": stringSchema()}, "profile", "source"),
 			"paths": object(map[string]any{"config": stringSchema(), "data": stringSchema(), "cache": stringSchema(), "runtime": stringSchema()}, "config", "data", "cache"),

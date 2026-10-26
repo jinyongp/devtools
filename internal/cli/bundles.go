@@ -25,9 +25,9 @@ func (a *App) registerBundles() {
 	for _, action := range []string{"set", "rename", "remove"} {
 		action := action
 		options := append(profileOptions(false), Option{Name: "revision", Required: true, Pattern: "^[0-9a-f]{64}$", Description: "Edit revision from bundle list; stale edits fail atomically."}, Option{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "Retry-safe UUID; repeat identical input to replay."}, Option{Name: "dry-run", Boolean: true, Description: "Validate the entire edit without publishing it."})
-		args := []Argument{{Name: "name", Required: true, Pattern: project.ProfilePattern}}
+		args := []Argument{{Name: "name", Required: true, Pattern: project.ProfilePattern, Completion: completeBundle}}
 		if action == "set" {
-			options = append(options, Option{Name: "key", Repeatable: true, Pattern: values.KeyPattern, Description: "Shared value name to include; omission selects an empty bundle."})
+			options = append(options, Option{Name: "key", Repeatable: true, Pattern: values.KeyPattern, Completion: completeValueKey, Description: "Shared value name to include; omission selects an empty bundle."})
 		}
 		if action == "rename" {
 			args = append(args, Argument{Name: "new-name", Required: true, Pattern: project.ProfilePattern})

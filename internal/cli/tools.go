@@ -43,9 +43,9 @@ func (a *App) store(options map[string]string) (values.ModernStore, *protocol.Er
 }
 
 func profileOptions(withEnv bool) []Option {
-	options := []Option{{Name: "profile", Description: "Project profile; defaults to devtools.toml.", Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128}}
+	options := []Option{{Name: "profile", Description: "Project profile; defaults to devtools.toml.", Pattern: project.ProfilePattern, Completion: completeProfile, MinLength: 1, MaxLength: 128}}
 	if withEnv {
-		options = append(options, Option{Name: "env", Description: "Existing env; omission selects common values.", Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128})
+		options = append(options, Option{Name: "env", Description: "Existing env; omission selects common values.", Pattern: project.ProfilePattern, Completion: completeEnv, MinLength: 1, MaxLength: 128})
 	}
 	return options
 }
@@ -75,7 +75,7 @@ func (a *App) registerTools() {
 		for _, action := range actions {
 			command := Command{Name: string(kind) + " " + action, Aliases: []string{alias + " " + action}, Description: action + " " + string(kind) + " values in the selected profile scope.", Options: profileOptions(true), Output: changedSchema()}
 			if action != "list" {
-				command.Arguments = []Argument{{Name: "key", Required: true, Pattern: values.KeyPattern}}
+				command.Arguments = []Argument{{Name: "key", Required: true, Pattern: values.KeyPattern, Completion: completionSource(kind)}}
 			}
 			if action == "set" {
 				if kind == values.Variable {
@@ -111,6 +111,9 @@ func (a *App) registerTools() {
 		command := Command{Name: "env " + action, Description: action + " environments in the selected profile.", Options: profileOptions(false), Output: changedSchema()}
 		if action != "list" {
 			command.Arguments = []Argument{{Name: "env", Required: true, Pattern: project.ProfilePattern}}
+			if action == "remove" {
+				command.Arguments[0].Completion = completeEnv
+			}
 			guardMutation(&command, false)
 		} else {
 			command.Output = object(map[string]any{"profile": stringSchema(), "items": map[string]any{"type": "array", "items": stringSchema()}}, "profile", "items")

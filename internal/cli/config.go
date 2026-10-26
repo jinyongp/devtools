@@ -78,6 +78,9 @@ func (a *App) registerConfig() {
 				"rename": "Rename a literal command key at its inspected revision while preserving its definition.",
 			}[action]
 			c := Command{Name: name, Description: description, Options: opts, Arguments: []Argument{{Name: "name", Required: true, Pattern: pattern}}, Output: configcontract.Definition("EditResult"), Run: a.configResource(kind, action)}
+			if action != "add" {
+				c.Arguments[0].Completion = completionSource(kind)
+			}
 			if action == "rename" {
 				c.Arguments = append(c.Arguments, Argument{Name: "new_name", Required: true, Pattern: pattern})
 			}
@@ -95,7 +98,7 @@ func (a *App) registerConfig() {
 			a.commands = append(a.commands, c)
 		}
 	}
-	a.commands = append(a.commands, Command{Name: "command explain", Description: "Resolve one command and show declaration/default provenance without reading stored values or running probes.", Arguments: []Argument{{Name: "name", Required: true, Pattern: project.CommandPattern}}, Options: append(configOptions(), Option{Name: "profile", Pattern: project.ProfilePattern, Description: "Override the selected profile without bypassing configuration lookup."}, Option{Name: "env", Pattern: `^$|` + project.ProfilePattern, Description: "Override env, including the empty common layer; enables injection."}, Option{Name: "bundle", Pattern: project.ProfilePattern, Description: "Override value selection (all, none or a named bundle)."}), Output: configcontract.Definition("ExplainResult"), Run: a.explainCommand})
+	a.commands = append(a.commands, Command{Name: "command explain", Description: "Resolve one command and show declaration/default provenance without reading stored values or running probes.", Arguments: []Argument{{Name: "name", Required: true, Pattern: project.CommandPattern, Completion: completeCommand}}, Options: append(configOptions(), Option{Name: "profile", Pattern: project.ProfilePattern, Completion: completeProfile, Description: "Override the selected profile without bypassing configuration lookup."}, Option{Name: "env", Pattern: `^$|` + project.ProfilePattern, Completion: completeEnv, Description: "Override env, including the empty common layer; enables injection."}, Option{Name: "bundle", Pattern: project.ProfilePattern, Completion: completeSelection, Description: "Override value selection (all, none or a named bundle)."}), Output: configcontract.Definition("ExplainResult"), Run: a.explainCommand})
 }
 
 func readConfigBody(ctx context.Context, streams IO, r Request, definition string) (map[string]any, *protocol.Error) {

@@ -12,7 +12,9 @@ function __DevtoolsComplete {
         $elements = @($commandAst.CommandElements)
         if ($elements.Count -eq 0) { return }
         $first = __DevtoolsLiteral $elements[0]
-        if (-not $first[0] -or $first[1] -notin @('devtools','dvt','devtools.exe','dvt.exe')) { return }
+        if (-not $first[0]) { return }
+        $commandName = [IO.Path]::GetFileName([string]$first[1])
+        if ($commandName -notin @('devtools','dvt','devtools.exe','dvt.exe')) { return }
         $words = [Collections.Generic.List[string]]::new()
         $current = ''
         for ($index = 1; $index -lt $elements.Count; $index++) {

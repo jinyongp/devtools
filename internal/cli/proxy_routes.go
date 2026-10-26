@@ -37,12 +37,15 @@ func (a *App) registerProxyRoutes() {
 		c := Command{Name: "proxy " + action, Description: "Manage global declarations or activate/deactivate selected routes without starting backend processes.", Options: []Option{{Name: "global", Boolean: true, Description: "Select projectless global routes."}, {Name: "all", Boolean: true, Description: "Explicitly select all routes in the selected scope."}, {Name: "request-id", Required: true, Pattern: uuidPattern, Description: "Retry-safe request UUID."}}, Output: map[string]any{"type": "object"}}
 		if action != "clear" {
 			c.Arguments = []Argument{{Name: "name", Required: action == "add" || action == "rm", Pattern: project.ProfilePattern}}
+			if action != "add" {
+				c.Arguments[0].Completion = completeRoute
+			}
 		}
 		c.Output = routeMutationSchema(action)
 		if action == "add" {
 			c.Arguments = append(c.Arguments, Argument{Name: "port", Required: true, Pattern: positiveIntegerPattern})
 			c.Options = append(c.Options, Option{Name: "host-policy", Pattern: "^(rewrite|preserve)$", Description: "Backend Host policy; omission preserves the existing rewrite behavior."})
-			c.Options = append(c.Options, Option{Name: "host", Required: true, Description: "DNS hostname."}, Option{Name: "listener", Pattern: project.ProfilePattern, Description: "Listener name; omission selects default."}, Option{Name: "dns", Pattern: "^(auto|hosts|external)$", Description: "DNS preparation policy; omission selects auto."})
+			c.Options = append(c.Options, Option{Name: "host", Required: true, Description: "DNS hostname."}, Option{Name: "listener", Pattern: project.ProfilePattern, Completion: completeListener, Description: "Listener name; omission selects default."}, Option{Name: "dns", Pattern: "^(auto|hosts|external)$", Description: "DNS preparation policy; omission selects auto."})
 		} else if action == "up" || action == "down" {
 			c.Options = append(c.Options, Option{Name: "dir", MinLength: 1, Description: "Project directory; omission selects current directory."})
 		}

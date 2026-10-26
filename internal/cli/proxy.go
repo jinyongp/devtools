@@ -73,7 +73,7 @@ func (a *App) registerProxy() {
 			command.Description = "Show reverse proxy daemon and listener reservation status."
 		case "list":
 			command.Description = "List routes and instance diagnostics from current project state."
-			command.Options = []Option{{Name: "profile", Description: "Filter by profile; omission lists all profiles.", Pattern: project.ProfilePattern, MinLength: 1, MaxLength: 128}}
+			command.Options = []Option{{Name: "profile", Description: "Filter by profile; omission lists all profiles.", Pattern: project.ProfilePattern, Completion: completeProfile, MinLength: 1, MaxLength: 128}}
 			command.Options = append(command.Options, Option{Name: "global", Boolean: true, Description: "List only global routes; excludes --profile."})
 			command.Output = object(map[string]any{"items": map[string]any{"type": "array", "items": proxyItemSchema()}}, "items")
 		case "stop":
@@ -153,7 +153,7 @@ func (a *App) registerProxy() {
 			return map[string]any{"item": proxyStatusResult(result), "changed": result.Changed, "replayed": result.Replayed}, err
 		}
 		if action != "list" {
-			command.Options = append(command.Options, Option{Name: "listener", Pattern: project.ProfilePattern, Description: "Named listener; omission selects default."}, Option{Name: "all", Boolean: true, Description: "Select all configured listeners."})
+			command.Options = append(command.Options, Option{Name: "listener", Pattern: project.ProfilePattern, Completion: completeListener, Description: "Named listener; omission selects default."}, Option{Name: "all", Boolean: true, Description: "Select all configured listeners."})
 			command.Output = listenerOutput(action != "status")
 		}
 		a.commands = append(a.commands, command)

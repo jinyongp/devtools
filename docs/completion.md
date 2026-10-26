@@ -84,7 +84,16 @@ PowerShell single quote 규칙으로 escape합니다. cmd에는 자동완성 eng
 | `--profile` | 값·task 저장소와 현재 프로젝트의 profile 이름 |
 | 값 명령·`command run`·`run`·`process start`의 `--env`, `env remove` | 선택한 profile의 env 이름 |
 | `var get/set/unset`, `sec set/unset` | 선택한 profile·env에서 사용할 수 있는 키 이름 |
-| `command inspect`, `command run`, `run`, `process start`, `doctor`, `project up/status/restart/logs/down` | `devtools.toml`에 정의한 명령 이름 |
+| `command inspect/explain/update/remove/rename`, `command run`, `run`, `process start`, `doctor`, `project up/status/restart/logs/down` | `devtools.toml`에 정의한 명령 이름. rename은 첫 번째 인자만 해당 |
+| `config tool update/remove`, `config preset update/remove` | 해당 프로젝트에 선언한 tool·preset 이름 |
+| `profile inspect`, `profile diff`의 양쪽 인자 | 저장된 profile과 현재 프로젝트의 profile 이름 |
+| `port show/allocate/check/release` | 선택한 실행 위치의 포트 선언과 남아 있는 할당 이름 |
+| `instance move/remove`, port·instance의 `--instance` | 선택한 profile의 instance alias와 `id:ID` |
+| `process status/stop/restart/logs/check/wait` | supervisor를 호출하지 않고 읽은 저장된 execution ID |
+| `bundle set/rename/remove`, `import --bundle` | 선택한 profile의 bundle 이름. rename은 첫 번째 인자만 해당 |
+| 실행·진단·값 조회의 `--bundle` | `all`, `none`, 선택한 profile의 bundle 이름 |
+| `bundle set --key` | 공통 계층의 변수·secret 이름. 값과 내부 ID는 제외 |
+| `--output`, `--mode`, task `--state` 등 고정 선택 옵션 | 해당 옵션의 검증 정의에 있는 허용값 |
 | task·workstream·validation의 ID 인수 | 해당 종류의 ID |
 | `--workstream`, `--task`, `--task-ids`, `--validation-ids`, `--depends-on` | 해당 관계에 맞는 ID |
 | `task checkpoint`, `task release`, `task checkpoint list` | 실행 run ID |
@@ -105,6 +114,26 @@ bash 자동완성은 공백과 셸 문법 문자를 escape해 이름을 하나�
 자동완성으로 노출하지 않습니다. 값을 받는 일반 옵션 다음에는 직접 값을 입력하며,
 `--`부터는 실행할 자식 명령의 인수로 취급합니다.
 
+새 이름을 만드는 `command add`, `config tool/preset add`, `env create`, rename의 새 이름과
+새 작업의 `--request-id`에는 기존 항목을 제안하지 않습니다. `process restart --env/--bundle`은
+저장된 실행의 profile을 상속하므로 현재 디렉터리 기준 후보를 제안하지 않습니다.
+값 전달 request/execution/runner와 cleanup plan/archive ID는 후보 공급자에 포함하지 않습니다.
+인증이나 복구 범위를 추측하지 않고 필요한 ID는 해당 조회 결과에서 사용하세요.
+
 조회는 저장된 스냅샷을 읽고, 데이터·캐시를 변경하지 않습니다. 입력한 접두사에 맞는
 후보를 정렬해 최대 100개 반환합니다. 조회가 200ms를 넘거나 저장소를 읽을 수 없으면
 동적 후보를 생략합니다. 수정·삭제한 이름은 다음 조회에 반영됩니다.
+
+## 구현 경계
+
+선택 대상은 명령 등록 시 `Argument.Completion`과 `Option.Completion`에 선언합니다.
+검증용 정규식이나 `name`, `id` 같은 인자 이름으로 entity 종류를 추론하지 않습니다.
+이 메타데이터는 내부용이며 공개 JSON schema에는 추가되지 않습니다.
+
+공통 `__complete` 엔진이 커서의 인자 위치·옵션·별칭과 선택된 dir/profile/env를 해석하고,
+해당 후보 공급자가 선언 또는 수동적인 저장소 snapshot에서 식별자만 조회합니다.
+정렬·접두사 필터·중복 제거·100개 제한·200ms 예산은 엔진이 소유합니다.
+고정 선택 옵션은 parser와 공유하는 literal alternatives 판독기로 검증 정의를 재사용합니다.
+셸 adapter는 같은 프로토콜을 호출하고 quoting과 셸 등록을 담당합니다.
+`./bin/devtools`처럼 경로로 입력했다면 PATH의 다른 설치본 대신 입력한 실행 파일에 조회합니다.
+실행 handler, readiness/네트워크 probe, vault unlock·세션 갱신·migration은 Tab 조회에서 호출하지 않습니다.

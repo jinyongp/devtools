@@ -17,6 +17,7 @@ func (a *App) registerHosts() {
 		if action != "preview" {
 			c.Options = append(c.Options, Option{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "Retry-safe request UUID."})
 		}
+		c.Arguments[0].Completion = completeRoute
 		if action == "apply" {
 			c.Options = append(c.Options, Option{Name: "apply", Required: true, Pattern: "^[0-9a-f]{64}$", Description: "Unchanged hosts digest from preview."})
 		}

@@ -16,6 +16,7 @@ func publicEnvSchema() map[string]any {
 }
 func (a *App) registerNetworkEnv() {
 	c := Command{Name: "command env", Aliases: []string{"cmd env"}, Description: "Read only public network bindings; returns pending diagnostics and excludes profile variables, secrets, and parent environment.", Arguments: []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern}}, Options: []Option{{Name: "dir", Default: ".", Description: "Project directory."}}, Output: publicEnvSchema()}
+	c.Arguments[0].Completion = completeCommand
 	c.Run = func(_ context.Context, _ IO, r Request) (any, *protocol.Error) {
 		p, e := project.Resolve(r.Options["dir"], "")
 		if e != nil {
@@ -53,6 +54,7 @@ func (a *App) registerNetworkEnv() {
 	a.commands = append(a.commands, c)
 	c = Command{Name: "proxy env", Description: "Read configured backend and route URLs with separate activation, listener, and upstream diagnostics.", Arguments: []Argument{{Name: "name", Required: true, Pattern: project.ProfilePattern}}, Options: []Option{{Name: "dir", Default: ".", Description: "Project directory."}, {Name: "global", Boolean: true, Description: "Select a global route and its public peer environment."}}, Output: map[string]any{"type": "object"}}
 	c.Output = proxyEnvironmentSchema()
+	c.Arguments[0].Completion = completeRoute
 	c.Run = func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 		m, e := a.proxyStore()
 		if e != nil {

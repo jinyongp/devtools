@@ -13,6 +13,7 @@ import (
 	"time"
 
 	proxyapi "github.com/jinyongp/devtools/internal/proxy"
+	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
@@ -23,9 +24,10 @@ func TestDynamicCompletion(t *testing.T) {
 	// Completion reads metadata; configuring its fixture must not probe unrelated
 	// host services occupying the example listener ports.
 	a.proxyManager = func(string) proxyapi.Manager { return cliTestManager(filepath.Dir(managerData)) }
+	a.portProbe = managerPortStore(cliTestManager(filepath.Dir(managerData))).Probe
 	projectDir := privateTempDir(t)
 	t.Chdir(projectDir)
-	if err := os.WriteFile("devtools.toml", []byte("profile = 'app'\n[ports.web]\nport = 38082\n[proxies.web]\nhost = 'web.localhost'\nport = 'web'\n[commands.web]\nexec = ['echo', 'CANARY-VALUE']\n"), 0600); err != nil {
+	if err := os.WriteFile("devtools.toml", []byte("profile = 'app'\n[tools.echo]\nexecutable = 'echo'\n[presets.base]\ntools = ['echo']\n[ports.web]\nport = 38082\n[proxies.web]\nhost = 'web.localhost'\nport = 'web'\n[commands.web]\nexec = ['echo', 'CANARY-VALUE']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for i := range a.commands {
@@ -52,6 +54,8 @@ func TestDynamicCompletion(t *testing.T) {
 	call("", "var", "set", "_LEVEL", "--value", "CANARY-VALUE")
 	call("", "var", "set", "LOCAL_ONLY", "--env", "local", "--value", "CANARY-VALUE")
 	call("CANARY-SECRET", "sec", "set", "TOKEN", "--stdin")
+	bundleRevision := call("", "bundle", "list")["revision"].(string)
+	call("", "bundle", "set", "dev-bundle", "--key", "_LEVEL", "--revision", bundleRevision, "--request-id", tasks.ID())
 	workstream := call("", "task", "workstream", "create", "--title", "CANARY-TITLE", "--request-id", tasks.ID())["item"].(map[string]any)["id"].(string)
 	taskID := call("", "task", "add", "--title", "CANARY-TITLE", "--workstream", workstream, "--request-id", tasks.ID())["item"].(map[string]any)["id"].(string)
 	otherTask := call("", "task", "add", "--title", "CANARY-TITLE", "--request-id", tasks.ID())["item"].(map[string]any)["id"].(string)
@@ -59,6 +63,28 @@ func TestDynamicCompletion(t *testing.T) {
 	call("", "proxy", "configure", "--http-address", "127.0.0.1:38080", "--request-id", tasks.ID())
 	call("", "proxy", "configure", "--listener", "preview", "--http-address", "127.0.0.1:38081", "--request-id", tasks.ID())
 	call("", "proxy", "add", "shared", "38083", "--global", "--host", "shared.localhost", "--request-id", tasks.ID())
+	instanceID := call("", "port", "allocate", "web")["item"].(map[string]any)["instance_id"].(string)
+	call("", "instance", "name", "current")
+	// A record with no supervisor endpoint must still complete without RPC or
+	// interpreting the caller's project as its owner.
+	processID := tasks.ID()
+	processDir := filepath.Join(filepath.Dir(managerData), "processes", processID)
+	if err := os.MkdirAll(processDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	record, err := json.Marshal(services.Record{ID: processID, Profile: "other", Command: "worker", Directory: projectDir, State: "running", CreatedAt: time.Now().UTC()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(processDir, "record.json"), record, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// A new command/option needs only entity metadata; the resolver must not
+	// contain its name or infer a source from its argument spelling.
+	a.commands = append(a.commands, Command{Name: "fixture choose", Arguments: []Argument{
+		{Name: "source", Completion: completeCommand}, {Name: "destination"},
+	}, Options: []Option{{Name: "owner", Completion: completeProfile}}})
+	call("", "vault", "lock")
 	data, _ := a.dataDirectory()
 	snapshot := func() map[string]string {
 		out := map[string]string{}
@@ -113,6 +139,46 @@ func TestDynamicCompletion(t *testing.T) {
 		{[]string{"variable", "get", "--env", "local", ""}, []string{"LOCAL_ONLY", "_LEVEL"}},
 		{[]string{"sec", "unset", ""}, []string{"TOKEN"}},
 		{[]string{"command", "inspect", "--dir", projectDir, ""}, []string{"web"}},
+		{[]string{"command", "explain", ""}, []string{"web"}},
+		{[]string{"command", "explain", "--profile", "other", ""}, []string{"web"}},
+		{[]string{"fixture", "choose", ""}, []string{"web"}},
+		{[]string{"fixture", "choose", "web", ""}, nil},
+		{[]string{"fixture", "choose", "--owner", ""}, []string{"app", "other"}},
+		{[]string{"command", "explain", "--dir", projectDir, "w"}, []string{"web"}},
+		{[]string{"command", "update", ""}, []string{"web"}},
+		{[]string{"command", "remove", ""}, []string{"web"}},
+		{[]string{"command", "rename", ""}, []string{"web"}},
+		{[]string{"command", "rename", "web", ""}, nil},
+		{[]string{"command", "add", ""}, nil},
+		{[]string{"config", "tool", "update", ""}, []string{"echo"}},
+		{[]string{"config", "tool", "remove", ""}, []string{"echo"}},
+		{[]string{"config", "tool", "add", ""}, nil},
+		{[]string{"config", "preset", "update", ""}, []string{"base"}},
+		{[]string{"config", "preset", "remove", ""}, []string{"base"}},
+		{[]string{"config", "preset", "add", ""}, nil},
+		{[]string{"profile", "inspect", ""}, []string{"app", "other"}},
+		{[]string{"profile", "diff", ""}, []string{"app", "other"}},
+		{[]string{"profile", "diff", "app", ""}, []string{"app", "other"}},
+		{[]string{"bundle", "remove", ""}, []string{"dev-bundle"}},
+		{[]string{"bundle", "rename", "dev-bundle", ""}, nil},
+		{[]string{"bundle", "set", "new", "--key", ""}, []string{"TOKEN", "_LEVEL"}},
+		{[]string{"values", "inspect", "--bundle", ""}, []string{"all", "dev-bundle", "none"}},
+		{[]string{"command", "explain", "web", "--bundle=d"}, []string{"--bundle=dev-bundle"}},
+		{[]string{"run", "--bundle", ""}, []string{"all", "dev-bundle", "none"}},
+		{[]string{"run", "--profile", "other", "--bundle", ""}, []string{"all", "none"}},
+		{[]string{"import", "--bundle", ""}, []string{"dev-bundle"}},
+		{[]string{"run", "--output", ""}, []string{"auto", "raw", "redacted"}},
+		{[]string{"run", "--output=r"}, []string{"--output=raw", "--output=redacted"}},
+		{[]string{"doctor", "--mode", ""}, []string{"foreground", "managed"}},
+		{[]string{"task", "list", "--state", ""}, []string{"all", "canceled", "done", "open"}},
+		{[]string{"port", "allocate", ""}, []string{"web"}},
+		{[]string{"port", "release", "--profile", "app", "--instance", "current", ""}, []string{"web"}},
+		{[]string{"instance", "remove", ""}, []string{"current", "id:" + instanceID}},
+		{[]string{"instance", "move", "--dir", privateTempDir(t), ""}, []string{"current", "id:" + instanceID}},
+		{[]string{"port", "show", "--profile", "other", "--instance", ""}, nil},
+		{[]string{"process", "status", ""}, []string{processID}},
+		{[]string{"process", "restart", processID, "--env", ""}, nil},
+		{[]string{"process", "restart", processID, "--bundle", ""}, nil},
 		{[]string{"command", "env", ""}, []string{"web"}},
 		{[]string{"proxy", "env", ""}, []string{"web"}},
 		{[]string{"proxy", "env", "--global", ""}, []string{"shared"}},

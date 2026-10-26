@@ -47,17 +47,17 @@ func (a *App) registerProcesses() {
 		if action == "list" {
 			c.Options = profileOptions(false)
 		} else {
-			c.Arguments = []Argument{{Name: "execution-id", Required: true, Pattern: uuidPattern}}
+			c.Arguments = []Argument{{Name: "execution-id", Required: true, Pattern: uuidPattern, Completion: completeProcess}}
 		}
 		if action == "start" {
-			c.Arguments = []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern}}
+			c.Arguments = []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern, Completion: completeCommand}}
 			c.Options = append(c.Options, Option{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory."})
 			c.Description += " Declared served proxies prepare automatically."
 			c.Options = append(c.Options, Option{Name: "proxy", Boolean: true, Description: "Require matching declared routes and prepare them, including disabled routes; false skips preparation."})
 			c.Options = append(c.Options, Option{Name: "no-proxy", Boolean: true, Description: "Skip proxy preparation without stopping existing routes."})
 		}
 		if action == "start" || action == "restart" {
-			c.Options = append(c.Options, Option{Name: "bundle", Pattern: project.ProfilePattern, Description: "Select all, none, or a shared value bundle; restart inherits the previous explicit override."}, Option{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment."}, Option{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for seven days after exit."})
+			c.Options = append(c.Options, Option{Name: "bundle", Pattern: project.ProfilePattern, Completion: completeSelection, Description: "Select all, none, or a shared value bundle; restart inherits the previous explicit override."}, Option{Name: "env", Pattern: project.ProfilePattern, Completion: completeEnv, MinLength: 1, Description: "Inject this environment."}, Option{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for seven days after exit."})
 		}
 		if action == "wait" {
 			c.Options = append(c.Options, Option{Name: "timeout", Default: "30s", Description: "Overall readiness wait, greater than zero and at most 10m."})

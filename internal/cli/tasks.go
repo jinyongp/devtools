@@ -29,7 +29,7 @@ func (a *App) taskStore(r Request) (tasks.Store, *protocol.Error) {
 	return tasks.Store{Directory: filepath.Join(filepath.Dir(dir), "tasks"), Profile: p.Profile, Cache: filepath.Join(dirs.Cache, "task-queries")}, nil
 }
 func taskOptions() []Option {
-	return []Option{{Name: "profile", Description: "Explicit project profile.", Pattern: project.ProfilePattern, MaxLength: 128}}
+	return []Option{{Name: "profile", Description: "Explicit project profile.", Pattern: project.ProfilePattern, Completion: completeProfile, MaxLength: 128}}
 }
 func taskField(k string) string {
 	switch k {
@@ -224,14 +224,14 @@ func (a *App) registerTasks() {
 			opts = append(opts, Option{Name: "context", Description: "Current execution context; defaults to DEVTOOLS_TASK_CONTEXT."})
 		}
 		if def.Action == "run.revoked" {
-			opts = append(opts, Option{Name: "expected-run", Required: true, Pattern: uuidPattern, Description: "Observed current run UUID to revoke."})
+			opts = append(opts, Option{Name: "expected-run", Required: true, Pattern: uuidPattern, Completion: completeRun, Description: "Observed current run UUID to revoke."})
 		}
 		if def.Action == "run.claimed" || def.Action == "run.taken_over" {
 			opts = append(opts, Option{Name: "dir", Default: ".", Description: "Execution working directory."})
 			if def.Action == "run.claimed" {
-				opts = append(opts, Option{Name: "workstream", Pattern: uuidPattern, Description: "Select ready tasks in this workstream."})
+				opts = append(opts, Option{Name: "workstream", Pattern: uuidPattern, Completion: completeWorkstream, Description: "Select ready tasks in this workstream."})
 			} else {
-				opts = append(opts, Option{Name: "expected-run", Required: true, Pattern: uuidPattern, Description: "Observed current run UUID."})
+				opts = append(opts, Option{Name: "expected-run", Required: true, Pattern: uuidPattern, Completion: completeRun, Description: "Observed current run UUID."})
 			}
 		}
 		for _, f := range def.Fields {
@@ -244,11 +244,11 @@ func (a *App) registerTasks() {
 			} else if f == "result" {
 				pattern = `^(pass|fail|blocked|skipped)$`
 			}
-			opts = append(opts, Option{Name: taskField(f), Repeatable: taskArray(f), Boolean: f == "required", Pattern: pattern, Description: taskFieldDescription(f)})
+			opts = append(opts, Option{Name: taskField(f), Repeatable: taskArray(f), Boolean: f == "required", Pattern: pattern, Completion: taskFieldCompletion(f, def.Kind), Description: taskFieldDescription(f)})
 		}
 		args := []Argument{}
 		if def.Target || def.OptionalTarget {
-			args = append(args, Argument{Name: taskTargetArgument(def.Kind), Required: def.Target, Pattern: uuidPattern})
+			args = append(args, Argument{Name: taskTargetArgument(def.Kind), Required: def.Target, Pattern: uuidPattern, Completion: completionSource(def.Kind)})
 		}
 		a.commands = append(a.commands, Command{Name: "task " + def.Command, Description: taskMutationDescription(def.Action), Options: opts, Arguments: args, BodySchema: taskBody(def), Output: taskOutput(true), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			store, e := a.taskStore(r)
@@ -323,7 +323,11 @@ func (a *App) registerTasks() {
 					description = "Narrow task ID completion to this workstream; does not filter the command result."
 				}
 			}
-			opts = append(opts, Option{Name: n, Pattern: pattern, Description: description})
+			completion := completionSource("")
+			if n == "workstream" {
+				completion = completeWorkstream
+			}
+			opts = append(opts, Option{Name: n, Pattern: pattern, Completion: completion, Description: description})
 		}
 		if name == "list" || name == "validation list" {
 			opts = append(opts, Option{Name: "scope", Pattern: `^(included|removed|all)$`, Description: "Scope: included (default), removed, or all."})
@@ -349,7 +353,7 @@ func (a *App) registerTasks() {
 			case strings.HasPrefix(name, "validation "):
 				kind = "validation"
 			}
-			args = append(args, Argument{Name: taskTargetArgument(kind), Required: required, Pattern: uuidPattern})
+			args = append(args, Argument{Name: taskTargetArgument(kind), Required: required, Pattern: uuidPattern, Completion: completionSource(kind)})
 		}
 		a.commands = append(a.commands, Command{Name: "task " + name, Description: taskQueryDescription(name), Options: opts, Arguments: args, Output: taskQueryOutput(name), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			store, e := a.taskStore(r)

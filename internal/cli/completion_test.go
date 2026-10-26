@@ -109,3 +109,49 @@ func TestCompletionScripts(t *testing.T) {
 		t.Fatal(code)
 	}
 }
+
+func TestCompletionUsesInvokedExecutable(t *testing.T) {
+	a := New("test", "test")
+	shadow := privateTempDir(t)
+	selected := filepath.Join(privateTempDir(t), "selected build")
+	if err := os.Mkdir(selected, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for directory, candidate := range map[string]string{shadow: "PATH-candidate", selected: "selected-candidate"} {
+		if err := os.WriteFile(filepath.Join(directory, "devtools"), []byte("#!/bin/sh\nprintf '%s\\n' "+shellQuote(candidate)+"\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", shadow+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("ZDOTDIR", shadow)
+	target := filepath.Join(selected, "devtools")
+	for _, shell := range []string{"bash", "zsh", "fish"} {
+		t.Run(shell, func(t *testing.T) {
+			binary, err := exec.LookPath(shell)
+			if err != nil {
+				t.Skip("shell unavailable")
+			}
+			code, script, stderr := invoke(t, a, "", "completion", shell)
+			if code != 0 || stderr != "" {
+				t.Fatal(code, stderr)
+			}
+			path := filepath.Join(privateTempDir(t), "completion")
+			if err := os.WriteFile(path, []byte(script), 0600); err != nil {
+				t.Fatal(err)
+			}
+			var harness string
+			switch shell {
+			case "bash":
+				harness = "source " + shellQuote(path) + "\nCOMP_WORDS=(" + shellQuote(target) + " command explain '')\nCOMP_CWORD=3\n_devtools\nprintf '%s\\n' \"${COMPREPLY[@]}\""
+			case "zsh":
+				harness = "compdef() { :; }\ncompadd() { print -rl -- $dynamic; }\n_describe() { :; }\nsource " + shellQuote(path) + "\nwords=(" + shellQuote(target) + " command explain '')\nCURRENT=4\n_devtools"
+			case "fish":
+				harness = "source " + shellQuote(path) + "\ncomplete -C " + shellQuote(shellQuote(target)+" command explain ")
+			}
+			out, err := exec.Command(binary, "-c", harness).CombinedOutput()
+			if err != nil || !strings.Contains(string(out), "selected-candidate") || strings.Contains(string(out), "PATH-candidate") {
+				t.Fatalf("completion queried a different executable: %s %v", out, err)
+			}
+		})
+	}
+}

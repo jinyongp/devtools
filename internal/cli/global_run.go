@@ -13,6 +13,7 @@ import (
 
 func (a *App) registerGlobalRun() {
 	c := Command{Name: "proxy run", Description: "Run a foreground program on an exact global backend port, with public peer URL bindings.", Arguments: []Argument{{Name: "name", Required: true, Pattern: project.ProfilePattern}}, Options: []Option{{Name: "global", Boolean: true, Description: "Select a projectless global route."}}, ChildArgs: true, OutputMode: OutputPassthrough}
+	c.Arguments[0].Completion = completeRoute
 	c.Run = func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 		if r.Options["global"] != "true" || len(r.Child) == 0 {
 			return nil, argumentError("Use proxy run --global NAME -- PROGRAM ARG...", "")

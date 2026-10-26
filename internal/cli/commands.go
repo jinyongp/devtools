@@ -128,7 +128,7 @@ func (a *App) registerCommands() {
 			Aliases:     []string{"cmd inspect"},
 			Description: "Show the effective definition of one configured project command.",
 			Options:     projectOptions,
-			Arguments:   []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern}},
+			Arguments:   []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern, Completion: completeCommand}},
 			Output: object(map[string]any{
 				"profile": stringSchema(),
 				"item":    projectCommandDetailsSchema(),
@@ -141,7 +141,7 @@ func (a *App) registerCommands() {
 			Aliases:     []string{"cmd run", "run"},
 			Description: "Execute a configured command, automatically preparing declared served proxies. Put devtools options before its name and child arguments after it. Use -- PROGRAM to execute a program directly.",
 			Options:     profileOptions(true),
-			Arguments:   []Argument{{Name: "command", Pattern: project.CommandPattern}},
+			Arguments:   []Argument{{Name: "command", Pattern: project.CommandPattern, Completion: completeCommand}},
 			ChildArgs:   true,
 			OutputMode:  OutputPassthrough,
 			Output:      map[string]any{},
@@ -151,7 +151,7 @@ func (a *App) registerCommands() {
 	for index := range a.commands {
 		if a.commands[index].Name == "command run" {
 			a.commands[index].Options = append(a.commands[index].Options, outputOptions()...)
-			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "bundle", Pattern: project.ProfilePattern, Description: "Select all, none, or one shared value bundle; overrides command and project selection."})
+			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "bundle", Pattern: project.ProfilePattern, Completion: completeSelection, Description: "Select all, none, or one shared value bundle; overrides command and project selection."})
 			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "proxy", Boolean: true, Description: "Require matching declared routes and prepare them, including disabled routes; false skips preparation."})
 			a.commands[index].Options = append(a.commands[index].Options, Option{Name: "no-proxy", Boolean: true, Description: "Skip proxy preparation; existing routes and listeners remain unchanged."})
 		}

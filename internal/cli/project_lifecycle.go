@@ -112,8 +112,8 @@ func (a *App) projectLifecycleManager() (lifecycle.Manager, *protocol.Error) {
 }
 
 func (a *App) registerProjectLifecycle() {
-	commandArgument := Argument{Name: "command", Required: true, Repeatable: true, Pattern: project.CommandPattern}
-	optionalCommands := Argument{Name: "command", Repeatable: true, Pattern: project.CommandPattern}
+	commandArgument := Argument{Name: "command", Required: true, Repeatable: true, Pattern: project.CommandPattern, Completion: completeCommand}
+	optionalCommands := Argument{Name: "command", Repeatable: true, Pattern: project.CommandPattern, Completion: completeCommand}
 	directory := Option{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory."}
 
 	a.commands = append(a.commands,
@@ -126,8 +126,8 @@ func (a *App) registerProjectLifecycle() {
 				directory,
 				{Name: "proxy", Boolean: true, Description: "Require a matching route across the batch and prepare routes, including disabled routes; false skips preparation."},
 				{Name: "no-proxy", Boolean: true, Description: "Skip proxy preparation without stopping existing routes."},
-				{Name: "bundle", Pattern: project.ProfilePattern, Description: "Select all, none, or one shared value bundle for the batch."},
-				{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment for every selected command."},
+				{Name: "bundle", Pattern: project.ProfilePattern, Completion: completeSelection, Description: "Select all, none, or one shared value bundle for the batch."},
+				{Name: "env", Pattern: project.ProfilePattern, Completion: completeEnv, MinLength: 1, Description: "Inject this environment for every selected command."},
 				{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for every selected command."},
 				{Name: "timeout", Default: "30s", Description: "Readiness wait per selected command, greater than zero and at most 10m."},
 				{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe project start."},
@@ -151,8 +151,8 @@ func (a *App) registerProjectLifecycle() {
 			Arguments:   []Argument{commandArgument},
 			Options: []Option{
 				directory,
-				{Name: "bundle", Pattern: project.ProfilePattern, Description: "Select all, none, or one shared value bundle for the batch."},
-				{Name: "env", Pattern: project.ProfilePattern, MinLength: 1, Description: "Inject this environment for every restarted command."},
+				{Name: "bundle", Pattern: project.ProfilePattern, Completion: completeSelection, Description: "Select all, none, or one shared value bundle for the batch."},
+				{Name: "env", Pattern: project.ProfilePattern, Completion: completeEnv, MinLength: 1, Description: "Inject this environment for every restarted command."},
 				{Name: "capture-logs", Boolean: true, Description: "Retain bounded redacted output for every restarted command."},
 				{Name: "timeout", Default: "30s", Description: "Readiness wait per restarted command, greater than zero and at most 10m."},
 				{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe project restart."},
@@ -163,7 +163,7 @@ func (a *App) registerProjectLifecycle() {
 		Command{
 			Name:        "project logs",
 			Description: "Read retained output for one active command in the current project instance.",
-			Arguments:   []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern}},
+			Arguments:   []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern, Completion: completeCommand}},
 			Options:     []Option{directory},
 			Output: object(map[string]any{
 				"id":      stringSchema(),

@@ -39,20 +39,28 @@ func inputRule(pattern string, minimum, maximum, actual int) (string, map[string
 	case `^[0-9a-f]{64}$`:
 		return "Use the 64-character lowercase hexadecimal revision or digest returned by the corresponding inspection.", facts
 	}
-	if strings.HasPrefix(pattern, "^(") && strings.HasSuffix(pattern, ")$") {
-		choices := strings.Split(strings.TrimSuffix(strings.TrimPrefix(pattern, "^("), ")$"), "|")
-		plain := true
-		for _, choice := range choices {
-			if !regexp.MustCompile(`^[A-Za-z0-9_-]+$`).MatchString(choice) {
-				plain = false
-			}
-		}
-		if plain {
-			facts["allowed"] = choices
-			return "Choose one of: " + strings.Join(choices, ", ") + ".", facts
-		}
+	if choices := patternChoices(pattern); len(choices) > 0 {
+		facts["allowed"] = choices
+		return "Choose one of: " + strings.Join(choices, ", ") + ".", facts
 	}
 	return "Inspect this field's pattern and length constraints in the command schema.", facts
+}
+
+var plainPatternChoice = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// Only explicit finite literal alternatives are choices. Identifier/UUID/range
+// patterns validate input but cannot tell completion which entities exist.
+func patternChoices(pattern string) []string {
+	if !strings.HasPrefix(pattern, "^(") || !strings.HasSuffix(pattern, ")$") {
+		return nil
+	}
+	choices := strings.Split(strings.TrimSuffix(strings.TrimPrefix(pattern, "^("), ")$"), "|")
+	for _, choice := range choices {
+		if !plainPatternChoice.MatchString(choice) {
+			return nil
+		}
+	}
+	return choices
 }
 
 func parseRequest(command Command, tokens []string) (Request, *protocol.Error) {

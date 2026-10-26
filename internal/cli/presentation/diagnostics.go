@@ -9,13 +9,43 @@ import (
 
 // Text diagnostics answer what happened and what to do. The JSON contract owns
 // parser offsets, machine retry codes and the complete diagnostic record.
-func conciseError(e map[string]any) cliui.Document {
+func conciseError(e map[string]any, inputs []InputHint) cliui.Document {
 	details, _ := e["details"].(map[string]any)
 	target, _ := details["target"].(map[string]any)
 	facts, _ := details["facts"].(map[string]any)
 	reason, _ := details["reason"].(string)
 	message, _ := e["message"].(string)
 	name, _ := target["name"].(string)
+	kind, _ := target["kind"].(string)
+	phase, _ := details["phase"].(string)
+	field, _ := facts["field"].(string)
+	var guidance string
+	if phase == "parse" {
+		for _, input := range inputs {
+			if input.Name != field {
+				continue
+			}
+			// Argument and option names can coincide. The parser's sentence
+			// identifies which declaration failed, without inspecting raw argv.
+			if input.Option != strings.Contains(message, "--"+field) {
+				continue
+			}
+			if reason == "missing_argument" && name != "" {
+				if input.Option {
+					message = fmt.Sprintf("'%s' requires --%s.", name, field)
+				} else {
+					message = fmt.Sprintf("'%s' requires a %s argument.", name, field)
+				}
+			}
+			if reason == "invalid_value" && !input.Option {
+				message = fmt.Sprintf("Invalid value for argument '%s'. %s", field, input.Rule)
+			}
+			if (reason == "missing_argument" || reason == "missing_option_value") && len(input.Choices) > 0 {
+				guidance = "Choose " + joinChoices(input.Choices) + "."
+			}
+			break
+		}
+	}
 	switch reason {
 	case "unknown_command":
 		if name != "" {
@@ -23,12 +53,28 @@ func conciseError(e map[string]any) cliui.Document {
 		}
 	case "unknown_option":
 		if field, ok := facts["field"].(string); ok && field != "" {
-			message = fmt.Sprintf("Unknown option --%s.", field)
+			if !strings.HasPrefix(field, "-") {
+				field = "--" + field
+			}
+			message = fmt.Sprintf("Unknown option %s.", field)
+			if name != "" && name != "devtools" {
+				message = fmt.Sprintf("Unknown option %s for '%s'.", field, name)
+			}
 		}
+	}
+	if name != "" && kind != "" && reason != "unknown_command" && reason != "unknown_option" && !mentionsTarget(message, name) {
+		label, known := map[string]string{"command": "", "profile": "Profile ", "variable": "Variable ", "secret": "Secret ", "environment": "Environment ", "process": "Process ", "execution": "Execution "}[kind]
+		if !known {
+			label = "Resource "
+		}
+		message = fmt.Sprintf("%s'%s': %s", label, name, message)
 	}
 	blocks := []cliui.Block{cliui.Paragraph(cliui.Text{Spans: []cliui.Span{
 		{Text: "Error: ", Role: cliui.Failure}, {Text: message},
 	}, Flow: cliui.Prose})}
+	if guidance != "" {
+		blocks = append(blocks, cliui.Paragraph(cliui.Words(guidance)))
+	}
 	suggested, _ := stringArray(facts["suggestions"])
 	correction := (reason == "unknown_command" || reason == "unknown_option") && len(suggested) > 0
 	if correction {
@@ -40,14 +86,6 @@ func conciseError(e map[string]any) cliui.Document {
 			choices[i] = fmt.Sprintf("%q", candidate)
 		}
 		blocks = append(blocks, cliui.Paragraph(cliui.Words("Did you mean "+strings.Join(choices, " or ")+"?")))
-	}
-	if !correction && name != "" && !strings.Contains(message, name) && reason != "unknown_command" && reason != "unknown_option" {
-		kind, _ := target["kind"].(string)
-		label := map[string]string{"command": "Command", "profile": "Profile", "variable": "Variable", "secret": "Secret", "environment": "Environment", "process": "Process", "execution": "Execution"}[kind]
-		if label == "" {
-			label = "Resource"
-		}
-		blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal(label), Value: cliui.Literal(name)}))
 	}
 	// Scope is useful for a failed operation, but adds nothing to a parse typo.
 	if reason != "unknown_command" && reason != "unknown_option" {
@@ -108,6 +146,18 @@ func conciseError(e map[string]any) cliui.Document {
 		}
 	}
 	return cliui.NewDocument(blocks...)
+}
+
+func mentionsTarget(message, name string) bool {
+	// A substring such as "env" in "environment" does not identify the target.
+	return strings.Contains(" "+message+" ", " "+name+" ") || strings.Contains(message, "'"+name+"'") || strings.Contains(message, fmt.Sprintf("%q", name))
+}
+
+func joinChoices(choices []string) string {
+	if len(choices) == 1 {
+		return choices[0]
+	}
+	return strings.Join(choices[:len(choices)-1], ", ") + " or " + choices[len(choices)-1]
 }
 
 func recoveryNotes(details map[string]any) []cliui.Block {

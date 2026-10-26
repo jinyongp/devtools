@@ -65,12 +65,25 @@ func decode(public []byte) (envelope, error) {
 // Build consumes one already projected envelope. A missing or incompatible
 // dedicated view falls back as a whole, without discarding unfamiliar fields.
 func Build(command string, public []byte) (cliui.Document, error) {
+	return BuildWithInputs(command, public, nil)
+}
+
+// InputHint is static command metadata, never request values or stored data.
+// It supplies readable constraints without changing the public JSON diagnostic.
+type InputHint struct {
+	Name    string
+	Option  bool
+	Choices []string
+	Rule    string
+}
+
+func BuildWithInputs(command string, public []byte, inputs []InputHint) (cliui.Document, error) {
 	e, err := decode(public)
 	if err != nil {
 		return cliui.Document{}, err
 	}
 	if !e.ok {
-		return errorDocument(e.value.(map[string]any)), nil
+		return conciseError(e.value.(map[string]any), inputs), nil
 	}
 	definition := DefinitionFor(command)
 	if document, valid := buildView(definition, e.value); valid {
@@ -97,7 +110,7 @@ func generic(e envelope) cliui.Document {
 }
 
 func errorDocument(e map[string]any) cliui.Document {
-	return conciseError(e)
+	return conciseError(e, nil)
 }
 
 func keys(object map[string]any) []string {
@@ -212,7 +225,11 @@ func actionBlocks(value any) ([]cliui.Block, bool) {
 		if !ok || !argvOK || !inputsOK {
 			return nil, false
 		}
-		result = append(result, cliui.Paragraph(cliui.Words(message)))
+		// A complete help invocation already says what to inspect. Keep
+		// substantive recovery instructions and unfinished templates verbatim.
+		if len(inputs) > 0 || !routineHelp(message, argv) {
+			result = append(result, cliui.Paragraph(cliui.Words(message)))
+		}
 		if len(inputs) > 0 {
 			result = append(result, cliui.Paragraph(cliui.Words("Requires: "+strings.Join(inputs, ", ")+".")))
 		}
@@ -228,6 +245,19 @@ func actionBlocks(value any) ([]cliui.Block, bool) {
 		}
 	}
 	return result, true
+}
+
+func routineHelp(message string, argv []string) bool {
+	if len(argv) < 2 || argv[0] != "devtools" || argv[1] != "help" {
+		return false
+	}
+	switch message {
+	case "Inspect this command's accepted inputs and examples.",
+		"Inspect the accepted inputs and next actions for this operation.",
+		"List commands in this group.", "List commands in the nearest valid group.":
+		return true
+	}
+	return false
 }
 
 func title(command string) string {

@@ -322,8 +322,8 @@ func (r *renderer) commands(argv []string) {
 		r.out.WriteByte('\n')
 	}
 	for _, c := range lines {
-		if len(lines) > 1 || len(r.options.CommandShells) == 1 && r.options.CommandShells[0] == PowerShell {
-			r.out.WriteString("Command (" + c.label + ")\n")
+		if len(lines) > 1 {
+			r.out.WriteString(c.label + "\n")
 		}
 		r.out.WriteString(c.line + "\n")
 	}

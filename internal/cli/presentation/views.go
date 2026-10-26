@@ -154,6 +154,9 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 	if definition.Family == "commands" {
 		return commandListView(data), true
 	}
+	if definition.Family == "update" {
+		return updateView(definition, data)
+	}
 	if definition.Family == "command" {
 		return commandInspectView(definition, data)
 	}
@@ -277,7 +280,7 @@ func remaining(data map[string]any, consumed map[string]bool, prefix string, def
 	if len(rest) == 0 {
 		return nil
 	}
-	return []cliui.Block{cliui.Section(cliui.Literal("Details"), tree(rest)...)}
+	return tree(rest)
 }
 
 func detail(data map[string]any, prefix string, definition Definition) []cliui.Block {

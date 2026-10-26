@@ -699,9 +699,9 @@ bold 등의 장식까지 끄는 표준은 아니다. Windows VT 지원 관측은
   전달한다. 읽기 쉬운 안전 token은 그대로 쓰고 필요한 token만 literal quote한다. 단순
   `strings.Join(argv," ")`·JSON 인용·한 shell용 quote의 재사용은 금지한다.
 - host가 제공하는 대상은 Unix의 POSIX(sh/bash/zsh)와 Fish, Windows의 PowerShell이다.
-  Unix의 두 formatter 결과가 같으면 한 줄만 표시한다. 다르면 각 `Command (sh/bash/zsh)`/
-  `Command (fish)` label을 **윗줄**에 두고 각각 한 줄을 제공한다. Windows는 필요할 때
-  `Command (PowerShell)` label을 윗줄에 둔다. OS를 실제 활성 shell의 증거로 부르지 않는다.
+  Unix의 두 formatter 결과가 같으면 한 줄만 표시한다. 다르면 각 `sh/bash/zsh`/
+  `fish` label을 **윗줄**에 두고 각각 한 줄을 제공한다. 단일 PowerShell 명령에는 라벨을
+  붙이지 않는다. OS를 실제 활성 shell의 증거로 부르지 않는다.
   `$SHELL`/ComSpec·부모 process tree·subprocess로 shell을 추정하지 않고 새 설정도 추가하지
   않는다. cmd.exe 명령 생성은 이번 범위에 포함하지 않는다.
   CommandShells는 Render 입력을 복사해 읽으며 중복을 제거한다. nil/빈 목록·미지원 enum은

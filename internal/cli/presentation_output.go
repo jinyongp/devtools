@@ -66,7 +66,9 @@ func (o *outputController) publish(public []byte, exit int, failure bool) int {
 	if o.decision.Format == presentation.FormatText {
 		build, render := o.app.buildDocument, o.app.renderDocument
 		if build == nil {
-			build = presentation.Build
+			build = func(command string, public []byte) (cliui.Document, error) {
+				return presentation.BuildWithInputs(command, public, o.app.presentationInputs(command))
+			}
 		}
 		if render == nil {
 			render = cliui.Render
@@ -109,4 +111,23 @@ func (o *outputController) publish(public []byte, exit int, failure bool) int {
 		return o.failure(o.outputError("io_error", "Cannot write output."))
 	}
 	return exit
+}
+
+func (a *App) presentationInputs(name string) []presentation.InputHint {
+	for _, command := range a.commands {
+		if command.Name != name {
+			continue
+		}
+		var inputs []presentation.InputHint
+		for _, argument := range command.Arguments {
+			rule, _ := inputRule(argument.Pattern, 0, 0, 0)
+			inputs = append(inputs, presentation.InputHint{Name: argument.Name, Choices: patternChoices(argument.Pattern), Rule: rule})
+		}
+		for _, option := range command.Options {
+			rule, _ := inputRule(option.Pattern, option.MinLength, option.MaxLength, 0)
+			inputs = append(inputs, presentation.InputHint{Name: option.Name, Option: true, Choices: patternChoices(option.Pattern), Rule: rule})
+		}
+		return inputs
+	}
+	return nil
 }

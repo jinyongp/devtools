@@ -78,6 +78,21 @@ func TestCommandLineArgvHelper(t *testing.T) {
 	os.Exit(2)
 }
 
+func TestCommandLabelsOnlyDisambiguateDifferentShellSyntax(t *testing.T) {
+	for _, shells := range [][]Shell{{PowerShell}, {POSIX, Fish}, {PowerShell, PowerShell}} {
+		block, _ := CommandLine([]string{"devtools", "help", "completion"})
+		out, err := Render(NewDocument(block), Options{CommandShells: shells})
+		if err != nil || string(out) != "devtools help completion\n" {
+			t.Fatalf("single copyable line gained a label: %q %v", out, err)
+		}
+	}
+	block, _ := CommandLine([]string{"devtools", "command", "inspect", "don't"})
+	out, err := Render(NewDocument(block), Options{CommandShells: []Shell{POSIX, Fish}})
+	if err != nil || !strings.Contains(string(out), "sh/bash/zsh\n") || !strings.Contains(string(out), "fish\n") || strings.Contains(string(out), "Command (") {
+		t.Fatal("different shell syntax lost its labels", string(out), err)
+	}
+}
+
 func TestFieldsRetainEarlierOutputAndMultilineValues(t *testing.T) {
 	doc := NewDocument(Heading(Literal("Original heading"), 1), Fields(
 		Field{Literal("Name"), Literal("first\nsecond")},

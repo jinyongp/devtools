@@ -41,6 +41,8 @@ func operationDefinition(command string) Definition {
 	}
 	base := Definition{Title: title(command), Required: []Requirement{{"", "object"}}}
 	switch command {
+	case "update":
+		return Definition{Family: "update", Title: "Update", Required: []Requirement{{"version", "string"}, {"action", "string"}, {"changed", "boolean"}, {"alias", "object"}, {"alias.name", "string"}, {"alias.status", "string"}}}
 	case "doctor":
 		return Definition{Family: "diagnostic", Title: "Doctor", Required: []Requirement{{"state", "string"}, {"ready", "boolean"}, {"checks", "array"}, {"commands", "array"}}, Optional: []string{"summary", "scope", "selection", "mode", "profile", "directory", "config_path"}}
 	case "diagnostics":
@@ -75,6 +77,38 @@ func operationDefinition(command string) Definition {
 		}
 	}
 	return Definition{}
+}
+
+func updateView(definition Definition, data map[string]any) (cliui.Document, bool) {
+	version := data["version"].(string)
+	action := data["action"].(string)
+	if action != "install" && action != "update" {
+		return cliui.Document{}, false
+	}
+	message := "Updated devtools to " + version + "."
+	if action == "install" {
+		message = "Installed devtools " + version + "."
+	}
+	if !boolField(data, "changed") {
+		message = "Devtools " + version + " is already installed."
+	}
+	blocks := []cliui.Block{cliui.Paragraph(cliui.Literal(message))}
+	alias := data["alias"].(map[string]any)
+	name := alias["name"].(string)
+	switch status := alias["status"].(string); status {
+	case "unchanged":
+	case "created":
+		blocks = append(blocks, cliui.Paragraph(cliui.Literal("Shortcut '"+name+"' is available.")))
+	case "skipped_conflict":
+		blocks = append(blocks, cliui.Paragraph(cliui.Styled("Shortcut '"+name+"' was left unchanged because another command already uses that name. Use devtools instead.", cliui.Warning)))
+	case "failed":
+		blocks = append(blocks, cliui.Paragraph(cliui.Styled("Shortcut '"+name+"' could not be updated. Use devtools instead.", cliui.Warning)))
+	default:
+		blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Shortcut '" + name + "'"), Value: cliui.Literal(status)}))
+	}
+	blocks = append(blocks, remaining(alias, map[string]bool{"name": true, "status": true}, "alias", definition)...)
+	blocks = append(blocks, remaining(data, map[string]bool{"version": true, "action": true, "changed": true, "alias": true}, "", definition)...)
+	return cliui.NewDocument(blocks...), true
 }
 
 func boolField(data map[string]any, key string) bool { value, _ := data[key].(bool); return value }

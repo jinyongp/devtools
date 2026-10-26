@@ -22,6 +22,77 @@ func presentationApp(environment presentation.Environment) *App {
 	return a
 }
 
+func TestInputErrorsExplainTheCorrectionWithoutRepeatedLabels(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"completion"}, []string{"Error: 'completion' requires a shell argument.", "Choose zsh, bash, fish or powershell.", "devtools help completion"}},
+		{[]string{"completion", "cmd"}, []string{"'completion'", "Invalid value for argument 'shell'.", "zsh, bash, fish, powershell", "devtools help completion"}},
+		{[]string{"command", "explain"}, []string{"'command explain' requires a name argument.", "devtools help command explain"}},
+		{[]string{"profile", "diff"}, []string{"'profile diff'", "argument.", "devtools help profile diff"}},
+		{[]string{"command", "list", "--dir"}, []string{"'command list'", "--dir requires a value", "devtools help command list"}},
+		{[]string{"command", "list", "--dir", "a", "--dir", "b"}, []string{"'command list'", "Specify --dir once.", "devtools help command list"}},
+		{[]string{"completion", "bash", "extra"}, []string{"'completion'", "Unexpected positional arguments", "devtools help completion"}},
+		{[]string{"command", "list", "-q"}, []string{"Unknown option -q for 'command list'.", "devtools help command list"}},
+	} {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			a := presentationApp(presentation.Environment{})
+			// Exercise the Windows presentation contract on every test host.
+			a.renderDocument = func(doc cliui.Document, _ cliui.Options) ([]byte, error) {
+				return cliui.Render(doc, cliui.Options{Width: 120, CommandShells: []cliui.Shell{cliui.PowerShell}})
+			}
+			exit, out, diagnostic := invoke(t, a, "", append([]string{"--format", "text"}, tc.args...)...)
+			if exit != 2 || out != "" {
+				t.Fatalf("exit=%d stdout=%s stderr=%s", exit, out, diagnostic)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(diagnostic, want) {
+					t.Fatalf("missing %q: %s", want, diagnostic)
+				}
+			}
+			for _, noise := range []string{"Command  ", "Command (", "Inspect this command's accepted", "does not match its schema"} {
+				if strings.Contains(diagnostic, noise) {
+					t.Fatalf("redundant diagnostic %q: %s", noise, diagnostic)
+				}
+			}
+		})
+	}
+}
+
+func TestRequiredOptionHintsComeFromTheCommandDefinition(t *testing.T) {
+	a := presentationApp(presentation.Environment{})
+	a.commands = append(a.commands, Command{Name: "fixture", Options: []Option{{Name: "mode", Required: true, Pattern: "^(read|write)$"}}, Run: func(context.Context, IO, Request) (any, *protocol.Error) {
+		t.Fatal("invalid input reached the handler")
+		return nil, nil
+	}})
+	for _, args := range [][]string{{"fixture"}, {"fixture", "--mode"}} {
+		exit, _, diagnostic := invoke(t, a, "", append([]string{"--format", "text"}, args...)...)
+		if exit != 2 || !strings.Contains(diagnostic, "Choose read or write.") || !strings.Contains(diagnostic, "devtools help fixture") {
+			t.Fatal(diagnostic)
+		}
+	}
+}
+
+func TestInputPresentationDoesNotChangeJSONDiagnostics(t *testing.T) {
+	a := presentationApp(presentation.Environment{})
+	exit, _, diagnostic := invoke(t, a, "", "--format", "json", "completion")
+	var response struct {
+		Error struct {
+			Message string `json:"message"`
+			Details struct {
+				Facts    map[string]any `json:"facts"`
+				Remedies []struct {
+					Message string `json:"message"`
+				} `json:"remedies"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	if json.Unmarshal([]byte(diagnostic), &response) != nil || exit != 2 || response.Error.Message != "Required argument shell is missing." || response.Error.Details.Facts["allowed"] != nil || len(response.Error.Details.Remedies) != 1 || response.Error.Details.Remedies[0].Message != "Inspect this command's accepted inputs and examples." {
+		t.Fatal("text hints crossed the JSON boundary", diagnostic)
+	}
+}
+
 func TestPresentationDispatchAndDiscovery(t *testing.T) {
 	for _, tc := range []struct {
 		args []string

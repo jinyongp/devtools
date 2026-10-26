@@ -171,7 +171,7 @@ func named(key string, value any) []cliui.Block {
 			if len(actions) == 0 {
 				return []cliui.Block{cliui.Section(cliui.Literal(key), cliui.Paragraph(cliui.Literal("[]")))}
 			}
-			return []cliui.Block{cliui.Section(cliui.Styled("Next", cliui.Info), actions...)}
+			return []cliui.Block{cliui.Section(cliui.Literal("Next"), actions...)}
 		}
 	}
 	if blocks, valid := diagnosticSection(key, value); valid {

@@ -34,7 +34,7 @@ var readViews = map[string]Definition{
 		KnownOmitted: []Omission{{"items.*.serve", "empty-array"}, {"items.*.values_update", "notify"}, {"items.*.output", "default-output"}},
 	},
 	"command inspect": {
-		Family: "detail", Title: "Command",
+		Family: "command", Title: "Command",
 		Required:     []Requirement{{"profile", "string"}, {"item", "object"}, {"item.name", "string"}, {"item.exec", "strings"}, {"item.env", "string"}, {"item.inject", "boolean"}},
 		Optional:     []string{"values", "item.selection", "item.serve", "item.bind", "item.requirements", "item.ready", "item.output", "item.values_update"},
 		KnownOmitted: []Omission{{"item.serve", "empty-array"}, {"item.bind", "empty-object"}, {"item.ready", "null"}, {"item.requirements", "empty-requirements"}, {"item.values_update", "notify"}, {"item.output", "default-output"}},
@@ -154,6 +154,9 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 	if definition.Family == "commands" {
 		return commandListView(data), true
 	}
+	if definition.Family == "command" {
+		return commandInspectView(definition, data)
+	}
 	if definition.Family == "mutation" || definition.Family == "preview" || definition.Family == "diagnostic" || definition.Family == "task" {
 		return operationView(definition, data)
 	}
@@ -201,9 +204,15 @@ func identity(data map[string]any, consumed map[string]bool) []cliui.Block {
 func scope(data map[string]any, consumed map[string]bool) []cliui.Block {
 	var fields []cliui.Field
 	for _, key := range []string{"profile", "env", "directory"} {
+		if consumed[key] {
+			continue
+		}
 		if value, exists := data[key]; exists {
-			if _, ok := value.(string); ok {
-				fields = append(fields, cliui.Field{Label: cliui.Styled(title(key), cliui.Muted), Value: display(value)})
+			if text, ok := value.(string); ok {
+				if key == "env" && text == "" {
+					text = "common"
+				}
+				fields = append(fields, cliui.Field{Label: cliui.Literal(title(key)), Value: display(text)})
 				consumed[key] = true
 			}
 		}
@@ -280,12 +289,15 @@ func detail(data map[string]any, prefix string, definition Definition) []cliui.B
 			continue
 		}
 		text := display(value)
+		if key == "env" && value == "" {
+			text = cliui.Literal("common")
+		}
 		if key == "exec" {
 			argv, valid := stringArray(value)
 			if !valid {
 				continue
 			}
-			text = cliui.Literal(argvDisplay(argv))
+			text = cliui.Styled(argvDisplay(argv), cliui.Muted)
 		}
 		fields = append(fields, cliui.Field{Label: cliui.Literal(title(key)), Value: text})
 		consumed[key] = true
@@ -315,11 +327,7 @@ func argvDisplay(argv []string) string {
 // command inspect; repeating its defaults beneath every row defeats that task.
 func commandListView(data map[string]any) cliui.Document {
 	items := data["items"].([]any)
-	profile, _ := data["profile"].(string)
-	blocks := []cliui.Block{
-		cliui.Heading(cliui.Literal(fmt.Sprintf("Commands (%d)", len(items))), 1),
-		cliui.Fields(cliui.Field{Label: cliui.Styled("Profile", cliui.Muted), Value: cliui.Literal(profile)}),
-	}
+	blocks := []cliui.Block{cliui.Heading(cliui.Literal(listTitle("Commands", data)), 1)}
 	var fields []cliui.Field
 	for _, value := range items {
 		row := value.(map[string]any)
@@ -352,15 +360,21 @@ func commandListView(data map[string]any) cliui.Document {
 		if row["values_update"] == "restart" {
 			settings = append(settings, "restart on value changes")
 		}
+		value := cliui.Styled(text, cliui.Muted)
 		if len(settings) > 0 {
-			text += "  [" + strings.Join(settings, "; ") + "]"
+			value.Spans = append(value.Spans, cliui.Span{Text: "  [" + strings.Join(settings, "; ") + "]"})
 		}
-		fields = append(fields, cliui.Field{Label: cliui.Styled(row["name"].(string), cliui.Info), Value: cliui.Literal(text)})
+		fields = append(fields, cliui.Field{Label: cliui.Literal(row["name"].(string)), Value: value})
 	}
 	if len(fields) == 0 {
 		blocks = append(blocks, cliui.Paragraph(cliui.Words("No commands configured.")))
 	} else {
 		blocks = append(blocks, cliui.Fields(fields...))
+		count := fmt.Sprintf("%d commands", len(items))
+		if len(items) == 1 {
+			count = "1 command"
+		}
+		blocks = append(blocks, cliui.Paragraph(cliui.Styled(count, cliui.Muted)))
 	}
 	if warnings, exists := data["warnings"]; exists {
 		blocks = append(blocks, named("warnings", warnings)...)
@@ -371,10 +385,91 @@ func commandListView(data map[string]any) cliui.Document {
 	return cliui.NewDocument(blocks...)
 }
 
+func commandInspectView(definition Definition, data map[string]any) (cliui.Document, bool) {
+	item := data["item"].(map[string]any)
+	if selection, exists := item["selection"]; exists {
+		if _, ok := selection.(string); !ok {
+			return cliui.Document{}, false
+		}
+	}
+	name := item["name"].(string)
+	blocks := []cliui.Block{cliui.Heading(cliui.Literal("Command "+name), 1)}
+	consumed := map[string]bool{"item": true}
+	blocks = append(blocks, scope(data, consumed)...)
+	argv, _ := stringArray(item["exec"])
+	fields := []cliui.Field{{Label: cliui.Literal("Exec"), Value: cliui.Styled(argvDisplay(argv), cliui.Muted)}}
+	valueInputs := "Disabled"
+	environment := item["env"].(string)
+	if environment == "" {
+		environment = "common"
+	}
+	selection, _ := item["selection"].(string)
+	if item["inject"] == true {
+		switch selection {
+		case "", "all":
+			valueInputs = "All values from " + environment
+		case "none":
+			valueInputs = "No values selected"
+		default:
+			valueInputs = "Bundle " + selection + " from " + environment
+		}
+	} else if item["env"] != "" {
+		fields = append(fields, cliui.Field{Label: cliui.Literal("Environment"), Value: cliui.Literal(environment)})
+	}
+	fields = append(fields, cliui.Field{Label: cliui.Literal("Value injection"), Value: cliui.Literal(valueInputs)})
+	if item["inject"] != true && selection != "" && selection != "all" {
+		label := "Bundle " + selection
+		if selection == "none" {
+			label = "No values selected"
+		}
+		fields = append(fields, cliui.Field{Label: cliui.Literal("Value selection"), Value: cliui.Literal(label)})
+	}
+	blocks = append(blocks, cliui.Fields(fields...))
+	used := map[string]bool{"name": true, "exec": true, "inject": true, "env": true, "selection": true}
+	blocks = append(blocks, remaining(item, used, "item", definition)...)
+	if observation, ok := data["values"].(map[string]any); ok {
+		if observation["reason"] == "declared_only" && observation["state"] == "unknown" && observation["delivered"] == nil {
+			// Static configuration does not prove delivery to an execution.
+			// Internal revisions/empty identities add no configuration detail.
+			consumed["values"] = true
+		} else if observation["state"] == "verification_pending" || observation["state"] == "failed" {
+			reason, _ := observation["reason"].(string)
+			message := map[string]string{
+				"vault_locked": "The vault is locked.", "lock_pending": "The vault lock is still pending.",
+				"key_missing": "The local protection key is missing.", "key_backend_unavailable": "The key backend is unavailable.",
+				"key_access_denied": "Access to the protection key was denied.", "key_interaction_required": "The key backend needs user interaction.",
+				"key_backend_locked": "The key backend is locked.", "key_session_protocol_mismatch": "The key session needs a compatible version.",
+				"vault_recovery_required": "The vault needs recovery.",
+			}[reason]
+			if message == "" {
+				message = strings.ReplaceAll(reason, "_", " ")
+			}
+			prefix, role := "Value inspection failed. ", cliui.Failure
+			if observation["state"] == "verification_pending" {
+				prefix, role = "Value verification pending. ", cliui.Warning
+			}
+			blocks = append(blocks, cliui.Paragraph(cliui.Text{Spans: []cliui.Span{{Text: prefix, Role: role}, {Text: message}}, Flow: cliui.Prose}))
+			consumed["values"] = true
+		}
+	}
+	blocks = append(blocks, remaining(data, consumed, "", definition)...)
+	return cliui.NewDocument(blocks...), true
+}
+
+func listTitle(title string, data map[string]any) string {
+	if profile, ok := data["profile"].(string); ok && profile != "" {
+		return title + " for " + profile
+	}
+	return title
+}
+
 func listView(definition Definition, data map[string]any) cliui.Document {
 	items := data["items"].([]any)
-	blocks := []cliui.Block{cliui.Heading(cliui.Literal(fmt.Sprintf("%s (%d)", definition.Title, len(items))), 1)}
+	blocks := []cliui.Block{cliui.Heading(cliui.Literal(listTitle(definition.Title, data)), 1)}
 	consumed := map[string]bool{"items": true}
+	if profile, ok := data["profile"].(string); ok && profile != "" {
+		consumed["profile"] = true // The heading already identifies this scope.
+	}
 	blocks = append(blocks, scope(data, consumed)...)
 	if len(items) == 0 {
 		blocks = append(blocks, cliui.Paragraph(cliui.Words("No items.")))
@@ -395,6 +490,9 @@ func listView(definition Definition, data map[string]any) cliui.Document {
 					used[column.Path] = true
 				}
 				text := display(value)
+				if column.Path == "env" && value == "" {
+					text = cliui.Literal("common")
+				}
 				switch column.Display {
 				case "onoff":
 					label := "Off"
@@ -404,7 +502,7 @@ func listView(definition Definition, data map[string]any) cliui.Document {
 					text = cliui.Literal(label)
 				case "argv":
 					argv, _ := stringArray(value)
-					text = cliui.Literal(argvDisplay(argv))
+					text = cliui.Styled(argvDisplay(argv), cliui.Muted)
 				}
 				rows[i].Cells = append(rows[i].Cells, text)
 			}
@@ -421,6 +519,11 @@ func listView(definition Definition, data map[string]any) cliui.Document {
 		}
 		table, _ := cliui.Table(columns, rows)
 		blocks = append(blocks, table)
+		count := fmt.Sprintf("%d results", len(items))
+		if len(items) == 1 {
+			count = "1 result"
+		}
+		blocks = append(blocks, cliui.Paragraph(cliui.Styled(count, cliui.Muted)))
 	}
 	blocks = append(blocks, remaining(data, consumed, "", definition)...)
 	return cliui.NewDocument(blocks...)

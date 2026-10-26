@@ -16,6 +16,10 @@ Workstream ID: `bd696a33-81fa-4dab-9f61-ca5e76300d49`.
 Exec JSON-quote/argv-count summary 규칙은 [D14](cli-presentation-contract-review.md#d14-실제-사용-피드백-읽기-화면과-json-계약-분리)로 대체한다.
 JSON 원문·schema·exit·효과 의미·원 action argv·단일 handler/encode·복구 안전성은 유지한다.
 
+**실제 ANSI 화면 피드백에 따른 D15 우선 적용:** 목록 제목과 profile의 중복, 제목의 count,
+명령 이름 전체의 cyan, scope label의 dim은 [D15](cli-presentation-contract-review.md#d15-실제-ansi-화면의-위계와-강조)로 대체한다.
+목록의 관계를 나타내는 제목과 아래 count, 중립적인 이름/label, dim exec와 semantic 상태색을 사용한다.
+
 사용자가 같은 CLI 명령을 실행해도 개인 터미널에서는 읽기 쉬운 텍스트를,
 감지된 agent와 파이프에서는 기존 JSON을 받는다. agent 감지는 편의상 추론이며
 권한·샌드박스·사용자 신원 판정이 아니다. 명시한 형식은 감지보다 우선한다.

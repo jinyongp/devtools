@@ -94,7 +94,9 @@ parser offset·target 구조·`effects:none`·`retry:after_input_change` 같은 
 `command list`는 이름과 전체 실행 내용을 한 번씩 나열합니다. 반복되는 기본 설정·빈 환경·
 `Item N / Details`·argv 개수 요약은 표시하지 않습니다. 값 주입·bundle·serve·출력 보호처럼
 실행에 영향을 주는 비기본 설정은 해당 명령 옆에 짧게 표시합니다. 상세 설정은 `command inspect`로 봅니다.
-제목과 Profile은 별도 줄에 두며 가운데점 같은 장식 구분자에 정보 위계를 맡기지 않습니다.
+목록 제목은 `Commands for devtools`처럼 종류와 profile을 함께 식별합니다. 같은 profile을
+별도 행에 반복하지 않고 개수는 목록 아래의 보조 정보로 둡니다. 가운데점 같은 장식 구분자에
+정보 위계를 맡기지 않습니다.
 그 밖의 목록은 비교 표 또는 폭에 맞는 세로 배치를 사용합니다. 표시하는 ID·cursor·URL은 자르지 않습니다.
 미리보기·재전송·변경 없음과 task의 lifecycle/completion/execution은 구분합니다.
 
@@ -104,7 +106,10 @@ shell label을 윗줄에 나눠 표시하고 Windows는 PowerShell 대상입니�
 분류 메타데이터는 생략하며 남은 필수 입력은 `Requires`와 command template으로 안내합니다. 남은 필수 입력이나
 원 token을 보존할 수 없는 control/native 전달 조합은 실행 가능한 것처럼 표시하지 않습니다.
 
-실제 출력 stream이 TTY이고 ANSI를 지원할 때 제목·상태에만 최소 강조를 사용합니다.
+실제 출력 stream이 TTY이고 ANSI를 지원할 때 제목은 중립적인 bold, 명령 이름과 필드 label은
+기본 전경색을 사용합니다. 색상은 오류·경고·실행 상태에 한정하고 `Next` 같은 구획 제목이나
+모든 명령 이름을 색칠하지 않습니다. exec와 개수 같은 보조 정보만 dim으로 낮춥니다.
+비기본 실행 설정과 복구 명령은 dim으로 낮추지 않습니다. 빈 environment는 `common`으로 안내합니다.
 non-TTY·TERM=dumb·지원 관측 실패는 plain입니다. 비어 있지 않은 NO_COLOR는 전경색을
 끄고 bold/dim은 유지합니다. 중요 경고·ID·복구 행동은 dim으로 숨기지 않습니다.
 색·공백·열 정렬은 machine 파싱 계약이 아니므로 자동화는 `--format json`을 사용하세요.

@@ -54,10 +54,28 @@ func TestReadPresentationUsesRealCommandAndAlias(t *testing.T) {
 		if exit != 0 || diagnostic != "" {
 			t.Fatal(exit, out, diagnostic)
 		}
-		for _, expected := range []string{"Commands (1)", "presentation-fixture", "dev", "go test"} {
+		for _, expected := range []string{"Commands for presentation-fixture", "1 command", "dev", "go test"} {
 			if !strings.Contains(out, expected) {
 				t.Errorf("missing %q: %s", expected, out)
 			}
+		}
+		exit, out, diagnostic = invoke(t, a, "", "--format", "text", command, "inspect", "dev", "--dir", root)
+		if exit != 0 || diagnostic != "" || !strings.Contains(out, "go test") || !strings.Contains(out, "Disabled") {
+			t.Fatal("configured command summary unavailable", exit, out, diagnostic)
+		}
+		for _, noise := range []string{"declared_only", "effective_input_revision", "storage_generation", "Details"} {
+			if strings.Contains(out, noise) {
+				t.Fatalf("static command inspection dumped runtime metadata %q: %s", noise, out)
+			}
+		}
+		exit, out, diagnostic = invoke(t, a, "", "--format", "json", command, "inspect", "dev", "--dir", root)
+		var envelope struct{ Data map[string]any }
+		if exit != 0 || diagnostic != "" || json.Unmarshal([]byte(out), &envelope) != nil {
+			t.Fatal(exit, out, diagnostic)
+		}
+		observation, ok := envelope.Data["values"].(map[string]any)
+		if !ok || observation["reason"] != "declared_only" || observation["current"] == nil {
+			t.Fatal("JSON lost the full value observation", out)
 		}
 	}
 }

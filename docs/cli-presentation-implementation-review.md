@@ -150,6 +150,27 @@ line/column을 보존했다. 실제 잘못된 TOML로 재현했고 argv offset�
 - 등록된 validation 8개의 method에도 D14 우선 적용과 장식 구분자 금지를 반영했다.
   실제 시각 확인 gate와 stale prerequisite completion은 자동 검사 통과로 덮어쓰지 않는다.
 
+## D15: 실제 ANSI 화면 피드백 이후의 스타일 수정
+
+사용자 screenshot에서 명령 이름 전체가 cyan이고 exec가 기본 밝기여서 주정보와 보조 정보의
+위계가 뒤집힌 것을 확인했다. 목록의 개수와 중복 Profile 행도 제목의 범위를 불분명하게 했다.
+내용/ANSI strip 검사 통과를 실제 시각 품질의 통과 근거로 사용했던 한계를 반영한다.
+
+공유 presentation의 제목과 label, 목록, exec, Next 구획을 함께 검토했다. 제목은 중립적인
+bold, 이름과 label은 기본 전경색, exec와 개수만 dim으로 바꿨다. 비기본 실행 설정과 복구
+명령은 dim으로 낮추지 않는다. 오류·경고·PREVIEW 같은 상태의 semantic color는 유지한다.
+목록 제목에 profile을 포함하고 중복 scope 행은 제거했다. 빈 environment는 common으로 안내한다.
+
+실제 `command inspect`는 기본 설정에서도 내부 revision과 빈 identity를 긴 트리로 표시했다.
+정적 설정은 명령 이름·exec·값 주입 설정을 먼저 보여주고 내부 관측 정보는 JSON에 남긴다.
+검증 실패·보류는 설명으로 보존하고 알 수 없는 관측 형태는 기존 fallback으로 유지한다.
+실제 CLI 회귀 검사에서 text 요약과 JSON 전체 관측 보존을 함께 확인한다.
+
+실제 CLI의 command list/inspect, doctor, 오타 오류를 PTY로 실행해 ANSI 출력을 캡처했다.
+동일 출력을 밝은/어두운 배경으로 렌더링한 미리보기를 검토했다. 이는 browser에서 ANSI를
+표현한 미리보기이며 실제 OS terminal 테마/console 검증과 구분한다. 목록의 긴 exec는 자르거나
+argv 개수로 대체하지 않는다. 관련 의미·폭·unknown 필드·복사 가능한 action 검사는 재사용한다.
+
 ## 남은 수용 조건
 
 - A11의 OS native 실행은 위 Actions로 검증했다. Windows console/ConPTY의 실제 화면 상태는

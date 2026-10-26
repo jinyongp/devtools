@@ -8,6 +8,28 @@
 
 ## 확인한 빈틈과 확정 결정
 
+### D15. 실제 ANSI 화면의 위계와 강조
+
+- 근거: 사용자가 제공한 terminal screenshot에서 모든 명령 이름은 cyan인 반면 exec는 기본
+  밝기였다. Profile label만 dim인 별도 행과 `Commands (27)` 제목도 관계를 드러내지 못했다.
+  실제 화면 피드백이므로 ANSI strip/내용 검사 통과를 시각 품질의 근거로 재사용하지 않는다.
+- 결정: 목록 제목은 종류와 profile의 관계를 문장으로 표현한다(`Commands for devtools`).
+  같은 profile을 별도 행에 반복하지 않고 개수는 목록 아래로 내린다. 다른 전용 read 목록도
+  같은 제목/범위/개수 규칙을 따른다. D14의 count 제목과 별도 Profile 행 결정은 대체한다.
+- 역할: 제목/구획 제목은 중립적인 bold, 명령 이름/필드 label/주요 값은 기본 전경색이다.
+  오류/경고/실행 상태만 semantic color를 사용한다. exec와 개수는 dim으로 낮추되 비기본
+  실행 설정, ID와 복구 행동은 낮추지 않는다. 일반 label을 dim으로 만드는 규칙은 제거한다.
+- 상세: `command inspect`는 명령 이름, exec, 값 주입 설정과 비기본 설정을 먼저 보여준다.
+  실행에 전달된 snapshot이 없는 `unknown/declared_only` 관측의 내부 hash/빈 identity는 기본
+  화면에서 생략한다. 값 검증 실패/보류는 설명으로 남기고, 알 수 없는 관측 형태는 fallback으로
+  보존한다. 주입 설정을 실제 실행에 전달됐다는 의미로 표현하지 않는다. 전체 관측은 JSON에 남긴다.
+- 경계: presentation이 의미 역할과 묶음을 선택하고 cliui가 기존 SGR/색 지원 관측에 맞게
+  렌더링한다. JSON, action argv, 안전한 CommandLine, NO_COLOR와 TERM=dumb 계약은 유지한다.
+  빈 environment는 내부 빈 문자열 대신 `common`으로 안내한다. 장식 구분자는 추가하지 않는다.
+- 검증: 실제 CLI의 ANSI 출력을 확인하고 목록/상세/진단/오류를 함께 검토한다. 어두운/밝은
+  배경의 ANSI 미리보기와 실제 native terminal 확인은 구분한다. 기존 의미/strip/복사 줄 검사와
+  관련 installed 검증을 재사용하며 미관 선택을 그대로 복제하는 문자열 검사는 추가하지 않는다.
+
 ### D14. 실제 사용 피드백: 읽기 화면과 JSON 계약 분리
 
 - 근거: 사용자가 실제 `commands list` 오류와 27개 `command list` 출력을 제공했다.

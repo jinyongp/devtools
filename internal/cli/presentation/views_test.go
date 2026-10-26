@@ -33,7 +33,7 @@ func TestCommandListIsAnInventoryWithUsefulSettings(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, value := range []string{"Commands (2)", "demo", "dev", "build", "values: local", longArg, "cursor-do-not-truncate", "Warning must remain."} {
+		for _, value := range []string{"Commands for demo", "2 commands", "dev", "build", "values: local", longArg, "cursor-do-not-truncate", "Warning must remain."} {
 			if !strings.Contains(string(out), value) {
 				t.Errorf("width %d lost %q: %s", width, value, out)
 			}
@@ -65,8 +65,8 @@ func TestReadViewsEmptyValuesAndDefinitionOwnership(t *testing.T) {
 		data     any
 		contains []string
 	}{
-		{"env list", map[string]any{"profile": "demo", "items": []string{}}, []string{"Environments (0)", "No items.", "demo"}},
-		{"env list", map[string]any{"profile": "demo", "items": []string{"z", "a"}}, []string{"Environments (2)", "Environment", "z", "a"}},
+		{"env list", map[string]any{"profile": "demo", "items": []string{}}, []string{"Environments for demo", "No items."}},
+		{"env list", map[string]any{"profile": "demo", "items": []string{"z", "a"}}, []string{"Environments for demo", "2 results", "Environment", "z", "a"}},
 		{"variable get", map[string]any{"profile": "demo", "value": "", "metadata": map[string]any{"key": "EMPTY", "source": "common", "overrides": false}, "integrity_verified": false}, []string{"Variable", "EMPTY", `""`, "false"}},
 		{"process logs", map[string]any{"id": "log-id", "content": "first\nsecond\x1b[31m"}, []string{"Process logs", "log-id", "first\n", "second", `\u001b[31m`}},
 		{"new list", map[string]any{"items": []any{}, "state": "UNKNOWN_NEW_STATE"}, []string{"Result", "UNKNOWN_NEW_STATE", "[]"}},
@@ -94,5 +94,15 @@ func TestKnownOmissionsNeverHideNewNestedData(t *testing.T) {
 	out, err := cliui.Render(publicDocument(t, "command inspect", base), cliui.Options{})
 	if err != nil || !strings.Contains(string(out), "future_output") || !strings.Contains(string(out), "future_requirement") || !strings.Contains(string(out), "false") || !strings.Contains(string(out), "0") {
 		t.Fatal(string(out), err)
+	}
+}
+
+func TestCommandInspectionRetainsValueVerificationFailure(t *testing.T) {
+	data := map[string]any{"profile": "demo", "item": map[string]any{
+		"name": "web", "exec": []string{"node", "server.js"}, "env": "local", "inject": true,
+	}, "values": map[string]any{"state": "verification_pending", "reason": "vault_locked", "delivered": nil, "current": nil}}
+	output, err := cliui.Render(publicDocument(t, "command inspect", data), cliui.Options{})
+	if err != nil || !strings.Contains(string(output), "All values from local") || !strings.Contains(string(output), "Value verification pending.") || !strings.Contains(string(output), "The vault is locked.") {
+		t.Fatal("configuration summary hid unresolved value verification", string(output), err)
 	}
 }

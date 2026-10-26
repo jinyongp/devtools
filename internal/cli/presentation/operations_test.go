@@ -38,7 +38,7 @@ func TestOperationStatesDoNotClaimNewEffects(t *testing.T) {
 	}
 }
 
-func TestDiagnosticMessagesActionsAndUnknownFieldsStayTogether(t *testing.T) {
+func TestDiagnosticMessagesAndActionsDoNotDumpMetadata(t *testing.T) {
 	data := map[string]any{"state": "not_ready", "ready": false, "checks": []any{
 		map[string]any{"id": "tool", "status": "fail", "required": true, "message": "Original check message.", "target": map[string]any{"name": "node"}, "future_check": "keep-check", "remedies": []any{map[string]any{"message": "Original remedy message.", "argv": []string{"devtools", "help", "doctor"}, "required_inputs": []string{}, "effect": "read"}}},
 		map[string]any{"id": "future", "status": "unrecognized", "message": "Do not infer READY from this message."},
@@ -47,9 +47,14 @@ func TestDiagnosticMessagesActionsAndUnknownFieldsStayTogether(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"NOT READY", "FAIL", "WARN", "Original check message.", "Original remedy message.", "Original warning message.", "keep-check", "keep-warning", "node", "unrecognized", "inspect_first", "unknown", "devtools help doctor"} {
+	for _, expected := range []string{"NOT READY", "FAIL", "Warnings", "Original check message.", "Original remedy message.", "Original warning message.", "node", "unrecognized", "Changes may have been applied.", "devtools help doctor"} {
 		if !strings.Contains(string(out), expected) {
 			t.Errorf("lost %q: %s", expected, out)
+		}
+	}
+	for _, noise := range []string{"keep-check", "keep-warning", "inspect_first", "Details", "effect"} {
+		if strings.Contains(string(out), noise) {
+			t.Errorf("metadata leaked into a diagnostic: %q: %s", noise, out)
 		}
 	}
 }
@@ -76,7 +81,7 @@ func TestTaskLifecycleCompletionExecutionAndDocuments(t *testing.T) {
 	}
 }
 
-func TestErrorPresentationPreservesOriginalPublicEnvelope(t *testing.T) {
+func TestErrorPresentationKeepsConsequencesAndRecovery(t *testing.T) {
 	const public = `{"schema_version":1,"ok":false,"error":{"code":"partial_failure","message":"Original failure message.","new_error_field":"keep-top","details":{"target":{"name":"demo"},"checks":[{"id":"one","status":"fail","message":"Check original."}],"causes":[{"code":"nested","reason":"unknown","new_cause":"keep-cause"}],"effects":"partial","retry":"inspect_first","request_id":"uuid-original","new_diagnostic":"keep-details","remedies":[{"message":"Original next action.","argv":["devtools","help","project"],"required_inputs":[],"effect":"read"}]}}}`
 	doc, err := Build("project up", []byte(public))
 	if err != nil {
@@ -86,12 +91,17 @@ func TestErrorPresentationPreservesOriginalPublicEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"partial_failure", "Original failure message.", "Check original.", "nested", "keep-cause", "partial", "inspect_first", "uuid-original", "keep-details", "keep-top", "Original next action.", "devtools help project"} {
+	for _, expected := range []string{"Error: Original failure message.", "Check original.", "nested", "Some changes were applied.", "Check the current state", "uuid-original", "Original next action.", "devtools help project"} {
 		if !strings.Contains(string(out), expected) {
 			t.Errorf("lost %q: %s", expected, out)
 		}
 	}
-	if strings.Index(string(out), "Effects") > strings.Index(string(out), "Next") {
+	if strings.Index(string(out), "Some changes were applied.") > strings.Index(string(out), "Original next action.") {
 		t.Fatal("recovery action appeared before effect/retry context", string(out))
+	}
+	for _, noise := range []string{"partial_failure", "inspect_first", "keep-details", "keep-top", "keep-cause", "Details", "target"} {
+		if strings.Contains(string(out), noise) {
+			t.Errorf("debug field %q obscures recovery: %s", noise, out)
+		}
 	}
 }

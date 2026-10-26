@@ -203,10 +203,11 @@ func (r *renderer) fields(fields []Field, indent int) {
 	for _, f := range fields {
 		labelWidth = max(labelWidth, cellWidth(plain(f.Label)))
 	}
-	labelWidth = min(labelWidth, 24)
+	labelLimit := min(40, r.options.Width/2)
+	labelWidth = min(labelWidth, labelLimit)
 	for _, f := range fields {
 		label := plain(f.Label)
-		if cellWidth(label) > 24 || r.options.Width-indent-labelWidth-2 < 24 || strings.Contains(label, "\n") {
+		if cellWidth(label) > labelLimit || r.options.Width-indent-labelWidth-2 < 24 || strings.Contains(label, "\n") {
 			r.line(f.Label, indent, false)
 			r.line(f.Value, indent+2, false)
 			continue
@@ -317,7 +318,9 @@ func (r *renderer) commands(argv []string) {
 		r.out.WriteString("Arguments (not copyable)\n" + Escape(argumentDisplay(argv)) + "\n")
 		return
 	}
-	r.out.WriteByte('\n')
+	if r.out.Len() > 0 && !strings.HasSuffix(r.out.String(), "\n\n") {
+		r.out.WriteByte('\n')
+	}
 	for _, c := range lines {
 		if len(lines) > 1 || len(r.options.CommandShells) == 1 && r.options.CommandShells[0] == PowerShell {
 			r.out.WriteString("Command (" + c.label + ")\n")

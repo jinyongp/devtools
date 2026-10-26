@@ -1,7 +1,9 @@
 package presentation
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/jinyongp/devtools/internal/cliui"
 )
@@ -146,6 +148,9 @@ func operationView(definition Definition, data map[string]any) (cliui.Document, 
 	for _, key := range []string{"changed", "dry_run", "replayed", "ready", "valid", "execution_ready", "closable", "state", "effects", "retry"} {
 		if value, exists := data[key]; exists {
 			consumed[key] = true
+			if key == "effects" || key == "retry" || key == "changed" || key == "dry_run" || key == "replayed" || definition.Family == "diagnostic" && (key == "ready" || key == "state") {
+				continue // Already represented by the outcome heading or recovery note.
+			}
 			if scalar(value) {
 				blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal(title(key)), Value: display(value)}))
 			} else {
@@ -153,13 +158,40 @@ func operationView(definition Definition, data map[string]any) (cliui.Document, 
 			}
 		}
 	}
+	blocks = append(blocks, recoveryNotes(data)...)
+	if data["effects"] == "partial" || data["effects"] == "unknown" || data["retry"] == "same_request" {
+		consumed["request_id"] = true
+	}
 	for _, key := range []string{"items", "checks", "commands", "issues", "warnings", "unresolved", "tasks", "nodes", "edges", "blockers", "validations", "documents", "readiness"} {
 		value, exists := data[key]
 		if !exists || omit(key, value, definition) {
 			continue
 		}
 		consumed[key] = true
-		if definition.Family == "task" && key == "documents" {
+		if definition.Family == "diagnostic" && key == "commands" {
+			if rows, ok := value.([]any); ok {
+				for _, entry := range rows {
+					if command, ok := entry.(map[string]any); ok {
+						name, _ := command["name"].(string)
+						checks, _ := command["checks"].([]any)
+						blocks = append(blocks, cliui.Section(cliui.Literal(name), conciseDiagnostics(checks, true)...))
+					}
+				}
+			}
+		} else if definition.Family == "diagnostic" && key == "readiness" {
+			if readiness, ok := value.(map[string]any); ok {
+				reason, _ := readiness["reason"].(string)
+				message := map[string]string{"probe_timeout": "The readiness check timed out.", "probe_execution_failed": "The readiness check could not start.", "probe_failed": "The readiness check failed.", "not_configured": "No readiness check is configured."}[reason]
+				if message != "" {
+					blocks = append(blocks, cliui.Paragraph(cliui.Words(message)))
+				} else if readiness["ready"] != true && reason != "" {
+					blocks = append(blocks, cliui.Paragraph(cliui.Words(strings.ReplaceAll(reason, "_", " "))))
+				}
+				if code, ok := readiness["exit_code"].(json.Number); ok && code != "0" {
+					blocks = append(blocks, cliui.Paragraph(cliui.Words("Readiness check exit code: "+string(code))))
+				}
+			}
+		} else if definition.Family == "task" && key == "documents" {
 			blocks = append(blocks, documentBodies(value)...)
 		} else if definition.Family == "task" && (key == "items" || key == "tasks" || key == "validations" || key == "nodes") {
 			if rows, ok := value.([]any); ok {
@@ -183,6 +215,11 @@ func operationView(definition Definition, data map[string]any) (cliui.Document, 
 		}
 	}
 	blocks = append(blocks, identity(data, consumed)...)
+	if definition.Family == "diagnostic" {
+		// Mode, scope, selection, counters and schema facts are report metadata,
+		// not another diagnostic. Checks and their actions above carry the result.
+		return cliui.NewDocument(blocks...), true
+	}
 	// identity's fields may already have been shown as operation state.
 	blocks = append(blocks, remaining(data, consumed, "", definition)...)
 	return cliui.NewDocument(blocks...), true
@@ -218,43 +255,9 @@ func diagnosticSection(key string, value any) ([]cliui.Block, bool) {
 	if !ok {
 		return nil, false
 	}
-	var children []cliui.Block
-	for i, value := range array {
-		row, valid := value.(map[string]any)
-		if !valid {
-			children = append(children, cliui.Section(cliui.Literal(fmt.Sprintf("[%d]", i)), tree(value)...))
-			continue
-		}
-		label, role := "", cliui.Primary
-		if key == "warnings" {
-			label, role = "WARN", cliui.Warning
-		} else if state, valid := row["status"].(string); valid && key == "checks" {
-			label, role = stateLabel(state)
-		}
-		spans := []cliui.Span{}
-		if label != "" {
-			spans = append(spans, cliui.Span{Text: label + "  ", Role: role})
-		}
-		for _, field := range []string{"id", "code"} {
-			if text, valid := row[field].(string); valid {
-				spans = append(spans, cliui.Span{Text: text + "  "})
-			}
-		}
-		if len(spans) == 0 {
-			spans = append(spans, cliui.Span{Text: fmt.Sprintf("[%d]", i)})
-		}
-		consumed := map[string]bool{}
-		var content []cliui.Block
-		if message, valid := row["message"].(string); valid {
-			consumed["message"] = true
-			content = append(content, cliui.Paragraph(cliui.Words(message)))
-		}
-		// Original status/id/code remain in the record as well as its visual label.
-		content = append(content, remaining(row, consumed, "", Definition{})...)
-		children = append(children, cliui.Section(cliui.Text{Spans: spans}, content...))
-	}
+	children := conciseDiagnostics(array, true)
 	if len(children) == 0 {
-		children = tree(value)
+		return nil, true
 	}
 	return []cliui.Block{cliui.Section(cliui.Literal(title(key)), children...)}, true
 }

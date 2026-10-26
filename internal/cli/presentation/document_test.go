@@ -55,7 +55,7 @@ func TestPublicActionsRetainRawArgvAndRequiredInputs(t *testing.T) {
 		t.Fatalf("action changed or template advertised as runnable: %#v", commands)
 	}
 	out, err := cliui.Render(doc, cliui.Options{CommandShells: []cliui.Shell{cliui.POSIX, cliui.Fish}})
-	if err != nil || !strings.Contains(string(out), "Original action.") || !strings.Contains(string(out), "keep") || !strings.Contains(string(out), "task-id") || !strings.Contains(string(out), "Arguments (inputs required)") {
+	if err != nil || !strings.Contains(string(out), "Original action.") || !strings.Contains(string(out), "Requires: task-id.") || !strings.Contains(string(out), "Command template") || strings.Contains(string(out), "new_metadata") || strings.Contains(string(out), "effect") {
 		t.Fatal(string(out), err)
 	}
 }

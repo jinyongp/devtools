@@ -103,7 +103,7 @@ assert code == 2 and not output and json.loads(error)['error']['code'] == 'inval
 code, output, error = call('no-such-command', tty_err=True)
 assert code == 2 and not output and json.loads(error)['error']['details']['reason'] == 'unknown_command'
 code, output, error = call('no-such-command', tty_out=True)
-assert code == 2 and not output and 'unknown_command' in error and '\x1b[' not in error
+assert code == 2 and not output and 'Unknown command' in error and '\x1b[' not in error
 for args in [('schema', 'version'), ('config', 'schema')]:
     code, output, error = call(*args, extra={'DEVTOOLS_FORMAT': 'text'}, tty_out=True)
     assert code == 0 and error == '' and json.loads(output)['ok']

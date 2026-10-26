@@ -200,7 +200,7 @@ func TestPresentationContextAndPublication(t *testing.T) {
 		cancel()
 		var out, diagnostic bytes.Buffer
 		exit := presentationApp(presentation.Environment{}).Run(ctx, []string{"--format", "text", "version"}, IO{In: strings.NewReader(""), Out: &out, Err: &diagnostic})
-		if exit != want || out.Len() != 0 || !strings.Contains(diagnostic.String(), "ERROR") {
+		if exit != want || out.Len() != 0 || !strings.Contains(diagnostic.String(), "Error:") {
 			t.Fatal(exit, out.String(), diagnostic.String())
 		}
 	}

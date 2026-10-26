@@ -21,7 +21,7 @@ func publicDocument(t *testing.T, command string, data any) cliui.Document {
 	return doc
 }
 
-func TestCommandListViewPreservesRowDetailsAndUnknowns(t *testing.T) {
+func TestCommandListIsAnInventoryWithUsefulSettings(t *testing.T) {
 	longArg := strings.Repeat("long", 20)
 	data := map[string]any{"profile": "demo", "next_cursor": "cursor-do-not-truncate", "new_root": "new-root-value", "warnings": []any{map[string]any{"code": "fixture", "message": "Warning must remain."}}, "items": []any{
 		map[string]any{"name": "dev", "env": "local", "inject": true, "exec": []string{"pnpm", "dev"}, "serve": []string{}, "output": map[string]any{"mode": "auto"}, "values_update": "notify"},
@@ -33,13 +33,15 @@ func TestCommandListViewPreservesRowDetailsAndUnknowns(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, value := range []string{"Commands (2)", "demo", "dev", "build", "On", "Off", longArg, "new_row", "false", "new-root-value", "cursor-do-not-truncate", "Warning must remain."} {
+		for _, value := range []string{"Commands (2)", "demo", "dev", "build", "values: local", longArg, "cursor-do-not-truncate", "Warning must remain."} {
 			if !strings.Contains(string(out), value) {
 				t.Errorf("width %d lost %q: %s", width, value, out)
 			}
 		}
-		if strings.Contains(string(out), "values_update") || strings.Contains(string(out), "serve") || strings.Contains(string(out), "output") {
-			t.Fatal("explicit default omissions not applied", string(out))
+		for _, noise := range []string{"values_update", "selection", "Details", "Item 1", "argv tokens", "Environment", "Off", "new_row", "new_root"} {
+			if strings.Contains(string(out), noise) {
+				t.Fatalf("inventory contains configuration/debug noise %q: %s", noise, out)
+			}
 		}
 	}
 	// Changing a required type invalidates the entire dedicated view. Unknown

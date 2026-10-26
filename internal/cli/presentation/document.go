@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -96,39 +97,7 @@ func generic(e envelope) cliui.Document {
 }
 
 func errorDocument(e map[string]any) cliui.Document {
-	heading := cliui.Text{Spans: []cliui.Span{{Text: "ERROR", Role: cliui.Failure}, {Text: "  " + e["code"].(string)}}}
-	blocks := []cliui.Block{cliui.Heading(heading, 1), cliui.Paragraph(cliui.Words(e["message"].(string)))}
-	if details, ok := e["details"].(map[string]any); ok {
-		consumed := map[string]bool{}
-		for _, key := range []string{"target", "checks", "causes", "report", "items", "warnings", "effects", "retry", "request_id", "remedies"} {
-			value, exists := details[key]
-			if !exists {
-				continue
-			}
-			consumed[key] = true
-			if array, ok := value.([]any); ok && len(array) == 0 && (key == "checks" || key == "causes" || key == "warnings") {
-				continue // Only declared empty diagnostic collections are omitted.
-			}
-			if scalar(value) {
-				blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal(title(key)), Value: display(value)}))
-			} else {
-				blocks = append(blocks, named(key, value)...)
-			}
-		}
-		blocks = append(blocks, remaining(details, consumed, "", Definition{})...)
-		for _, key := range keys(e) {
-			if key != "message" && key != "code" && key != "details" {
-				blocks = append(blocks, named(key, e[key])...)
-			}
-		}
-		return cliui.NewDocument(blocks...)
-	}
-	for _, key := range keys(e) {
-		if key != "message" && key != "code" {
-			blocks = append(blocks, named(key, e[key])...)
-		}
-	}
-	return cliui.NewDocument(blocks...)
+	return conciseError(e)
 }
 
 func keys(object map[string]any) []string {
@@ -244,24 +213,18 @@ func actionBlocks(value any) ([]cliui.Block, bool) {
 			return nil, false
 		}
 		result = append(result, cliui.Paragraph(cliui.Words(message)))
-		for _, key := range keys(action) {
-			if key == "message" || key == "argv" {
-				continue
-			}
-			if key == "required_inputs" && len(inputs) == 0 {
-				continue
-			}
-			result = append(result, named(key, action[key])...)
+		if len(inputs) > 0 {
+			result = append(result, cliui.Paragraph(cliui.Words("Requires: "+strings.Join(inputs, ", ")+".")))
 		}
 		if len(inputs) == 0 && len(argv) > 0 && argv[0] != "" {
 			command, _ := cliui.CommandLine(argv)
 			result = append(result, command)
 		} else {
-			label := "Arguments"
+			label := "Command"
 			if len(inputs) > 0 {
-				label = "Arguments (inputs required)"
+				label = "Command template"
 			}
-			result = append(result, cliui.Fields(cliui.Field{Label: cliui.Literal(label), Value: cliui.Literal(literal(action["argv"]))}))
+			result = append(result, cliui.Fields(cliui.Field{Label: cliui.Literal(label), Value: cliui.Literal(argvDisplay(argv))}))
 		}
 	}
 	return result, true

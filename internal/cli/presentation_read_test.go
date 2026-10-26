@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,38 @@ import (
 
 	"github.com/jinyongp/devtools/internal/cli/presentation"
 )
+
+func TestTextTypoShowsCorrectionAndJSONKeepsFullDiagnostic(t *testing.T) {
+	for _, words := range [][]string{{"commands", "list"}, {"command", "list", "--dri", "."}} {
+		app := presentationApp(presentation.Environment{})
+		args := append([]string{"--format", "text"}, words...)
+		exit, out, diagnostic := invoke(t, app, "", args...)
+		if exit != 2 || out != "" || !strings.Contains(diagnostic, "Did you mean") {
+			t.Fatal(words, exit, out, diagnostic)
+		}
+		for _, noise := range []string{"invalid_argument", "Details", "target", "after_input_change", "offset", "effect", "sources"} {
+			if strings.Contains(diagnostic, noise) {
+				t.Fatalf("typo correction obscured by %q: %s", noise, diagnostic)
+			}
+		}
+		args[1] = "json"
+		exit, _, diagnostic = invoke(t, app, "", args...)
+		var envelope struct {
+			Error struct {
+				Code    string
+				Details map[string]any
+			}
+		}
+		if json.Unmarshal([]byte(diagnostic), &envelope) != nil || exit != 2 || envelope.Error.Code != "invalid_argument" {
+			t.Fatal(exit, diagnostic)
+		}
+		for _, field := range []string{"target", "facts", "sources", "effects", "retry"} {
+			if _, ok := envelope.Error.Details[field]; !ok {
+				t.Fatalf("JSON lost %s while changing text: %s", field, diagnostic)
+			}
+		}
+	}
+}
 
 func TestReadPresentationUsesRealCommandAndAlias(t *testing.T) {
 	root := t.TempDir()
@@ -21,7 +54,7 @@ func TestReadPresentationUsesRealCommandAndAlias(t *testing.T) {
 		if exit != 0 || diagnostic != "" {
 			t.Fatal(exit, out, diagnostic)
 		}
-		for _, expected := range []string{"Commands (1)", "presentation-fixture", "dev", "Off", `"go" "test"`} {
+		for _, expected := range []string{"Commands (1)", "presentation-fixture", "dev", "go test"} {
 			if !strings.Contains(out, expected) {
 				t.Errorf("missing %q: %s", expected, out)
 			}

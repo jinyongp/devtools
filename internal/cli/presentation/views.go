@@ -3,8 +3,9 @@ package presentation
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
-	"unicode/utf8"
+	"unicode"
 
 	"github.com/jinyongp/devtools/internal/cliui"
 )
@@ -26,7 +27,7 @@ type ViewColumn struct{ Path, Label, Display string }
 var readViews = map[string]Definition{
 	"version": {Family: "detail", Title: "Version", Required: []Requirement{{"version", "string"}, {"commit", "string"}, {"protocol_version", "number"}}},
 	"command list": {
-		Family: "list", Title: "Commands",
+		Family: "commands", Title: "Commands",
 		Required:     []Requirement{{"profile", "string"}, {"items", "array"}, {"items.*.name", "string"}, {"items.*.exec", "strings"}, {"items.*.inject", "boolean"}, {"items.*.env", "string"}, {"items.*.serve", "strings"}},
 		Columns:      []ViewColumn{{"name", "Command", ""}, {"env", "Environment", ""}, {"inject", "Values", "onoff"}, {"exec", "Exec", "argv"}},
 		Optional:     []string{"items.*.selection", "items.*.values_update", "items.*.output"},
@@ -149,6 +150,9 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 	}
 	if definition.Family == "list" {
 		return listView(definition, data), true
+	}
+	if definition.Family == "commands" {
+		return commandListView(data), true
 	}
 	if definition.Family == "mutation" || definition.Family == "preview" || definition.Family == "diagnostic" || definition.Family == "task" {
 		return operationView(definition, data)
@@ -296,12 +300,72 @@ func detail(data map[string]any, prefix string, definition Definition) []cliui.B
 func argvDisplay(argv []string) string {
 	parts := make([]string, len(argv))
 	for i, arg := range argv {
-		parts[i] = literal(arg)
+		parts[i] = arg
+		if arg == "" || strings.ContainsAny(arg, "\"'\\$`;|&<>()*?[]{}") || strings.ContainsFunc(arg, unicode.IsSpace) {
+			parts[i] = strconv.Quote(arg)
+		}
 	}
 	if len(parts) == 0 {
 		return "[]"
 	}
 	return strings.Join(parts, " ")
+}
+
+// A command inventory answers "what can I run?". Configuration belongs in
+// command inspect; repeating its defaults beneath every row defeats that task.
+func commandListView(data map[string]any) cliui.Document {
+	items := data["items"].([]any)
+	profile, _ := data["profile"].(string)
+	blocks := []cliui.Block{cliui.Heading(cliui.Literal(fmt.Sprintf("Commands (%d) · %s", len(items), profile)), 1)}
+	var fields []cliui.Field
+	for _, value := range items {
+		row := value.(map[string]any)
+		argv, _ := stringArray(row["exec"])
+		text := argvDisplay(argv)
+		var settings []string
+		if row["inject"] == true {
+			environment, _ := row["env"].(string)
+			if environment == "" {
+				environment = "common"
+			}
+			settings = append(settings, "values: "+environment)
+		} else if environment, ok := row["env"].(string); ok && environment != "" {
+			settings = append(settings, "env: "+environment)
+		}
+		if selection, ok := row["selection"].(string); ok && selection != "" && selection != "all" {
+			settings = append(settings, "bundle: "+selection)
+		}
+		if served, ok := stringArray(row["serve"]); ok && len(served) > 0 {
+			settings = append(settings, "serves: "+strings.Join(served, ", "))
+		}
+		if output, ok := row["output"].(map[string]any); ok {
+			switch output["mode"] {
+			case "raw":
+				settings = append(settings, "unmasked output")
+			case "redacted":
+				settings = append(settings, "masked output")
+			}
+		}
+		if row["values_update"] == "restart" {
+			settings = append(settings, "restart on value changes")
+		}
+		if len(settings) > 0 {
+			text += "  [" + strings.Join(settings, "; ") + "]"
+		}
+		fields = append(fields, cliui.Field{Label: cliui.Styled(row["name"].(string), cliui.Info), Value: cliui.Literal(text)})
+	}
+	if len(fields) == 0 {
+		blocks = append(blocks, cliui.Paragraph(cliui.Words("No commands configured.")))
+	} else {
+		blocks = append(blocks, cliui.Fields(fields...))
+	}
+	if warnings, exists := data["warnings"]; exists {
+		blocks = append(blocks, named("warnings", warnings)...)
+	}
+	if cursor, ok := data["next_cursor"].(string); ok && cursor != "" {
+		blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Next page"), Value: cliui.Literal(cursor)}))
+	}
+	return cliui.NewDocument(blocks...)
 }
 
 func listView(definition Definition, data map[string]any) cliui.Document {
@@ -337,12 +401,7 @@ func listView(definition Definition, data map[string]any) cliui.Document {
 					text = cliui.Literal(label)
 				case "argv":
 					argv, _ := stringArray(value)
-					full := argvDisplay(argv)
-					text = cliui.Literal(full)
-					if utf8.RuneCountInString(full) > 40 {
-						text = cliui.Literal(fmt.Sprintf("%d argv tokens", len(argv)))
-						extra = append(extra, cliui.Fields(cliui.Field{Label: cliui.Literal(column.Label), Value: cliui.Literal(full)}))
-					}
+					text = cliui.Literal(argvDisplay(argv))
 				}
 				rows[i].Cells = append(rows[i].Cells, text)
 			}

@@ -316,7 +316,10 @@ func argvDisplay(argv []string) string {
 func commandListView(data map[string]any) cliui.Document {
 	items := data["items"].([]any)
 	profile, _ := data["profile"].(string)
-	blocks := []cliui.Block{cliui.Heading(cliui.Literal(fmt.Sprintf("Commands (%d) · %s", len(items), profile)), 1)}
+	blocks := []cliui.Block{
+		cliui.Heading(cliui.Literal(fmt.Sprintf("Commands (%d)", len(items))), 1),
+		cliui.Fields(cliui.Field{Label: cliui.Styled("Profile", cliui.Muted), Value: cliui.Literal(profile)}),
+	}
 	var fields []cliui.Field
 	for _, value := range items {
 		row := value.(map[string]any)
@@ -411,7 +414,7 @@ func listView(definition Definition, data map[string]any) cliui.Document {
 			if len(extra) > 0 {
 				label := fmt.Sprintf("Item %d", i+1)
 				if len(rows[i].Cells) > 0 {
-					label += " — " + rows[i].Cells[0].Spans[0].Text
+					label += ": " + rows[i].Cells[0].Spans[0].Text
 				}
 				rows[i].Details = []cliui.Block{cliui.Section(cliui.Literal(label), extra...)}
 			}

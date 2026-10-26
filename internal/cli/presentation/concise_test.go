@@ -1,6 +1,7 @@
 package presentation
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -20,7 +21,7 @@ func TestCommandInventoryDoesNotGrowASecondList(t *testing.T) {
 			t.Fatal(err)
 		}
 		text := string(output)
-		if lines := strings.Count(text, "\n"); lines > 30 {
+		if lines := strings.Count(text, "\n"); lines > 32 {
 			t.Fatalf("27 commands expanded to %d lines at width %d: %s", lines, width, text)
 		}
 		for i := 0; i < 27; i++ {
@@ -28,7 +29,7 @@ func TestCommandInventoryDoesNotGrowASecondList(t *testing.T) {
 				t.Fatal("command duplicated or missing", text)
 			}
 		}
-		if strings.Count(text, "test_run.py") != 27 || strings.Contains(text, "argv tokens") || strings.Contains(text, "Details") {
+		if strings.Count(text, "test_run.py") != 27 || strings.Contains(text, "argv tokens") || strings.Contains(text, "Details") || strings.ContainsAny(text, "·—•→") {
 			t.Fatal("executable content replaced by counts or metadata", text)
 		}
 	}
@@ -100,5 +101,31 @@ func TestAggregateDiagnosticKeepsSubsystemRecovery(t *testing.T) {
 		if strings.Contains(string(output), noise) {
 			t.Fatalf("raw diagnostic metadata %q: %s", noise, output)
 		}
+	}
+}
+
+func TestConfigDiagnosticKeepsActionableSourceLocation(t *testing.T) {
+	// Public causes intentionally omit their original message. The reason and
+	// source must still identify the input to correct without a JSON dump.
+	const public = `{"schema_version":1,"ok":false,"error":{"code":"invalid_config","message":"Project configuration is invalid.","details":{"reason":"unknown_field","target":{"config_path":"/demo/devtools.toml"},"effects":"none","retry":"after_input_change","causes":[{"code":"invalid_config","reason":"unknown_field","sources":[{"kind":"config","path":["commands","test","typo"],"line":5,"column":3}]}]}}}`
+	doc, err := Build("config check", []byte(public))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := cliui.Render(doc, cliui.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"Unknown configuration field.", "/demo/devtools.toml", "At commands.test.typo, line 5, column 3."} {
+		if !strings.Contains(string(output), expected) {
+			t.Fatalf("lost actionable config diagnostic %q: %s", expected, output)
+		}
+	}
+	if strings.Contains(string(output), "sources") || strings.Contains(string(output), "invalid_config") {
+		t.Fatal("raw source tree in config error", string(output))
+	}
+	location := diagnosticLocations(map[string]any{"sources": []any{map[string]any{"kind": "argv", "offset": json.Number("2")}}})
+	if len(location) != 0 {
+		t.Fatal("routine parser offsets should stay in JSON")
 	}
 }

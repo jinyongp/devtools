@@ -60,6 +60,7 @@ func conciseError(e map[string]any) cliui.Document {
 		if len(scope) > 0 {
 			blocks = append(blocks, cliui.Fields(scope...))
 		}
+		blocks = append(blocks, diagnosticLocations(details)...)
 	}
 	blocks = append(blocks, recoveryNotes(details)...)
 	if conflicts, ok := facts["import_items"].([]any); ok && len(conflicts) > 0 {
@@ -161,6 +162,10 @@ func conciseDiagnostics(rows []any, showPassed bool) []cliui.Block {
 		}
 		message, _ := row["message"].(string)
 		if message == "" {
+			reason, _ := row["reason"].(string)
+			message = map[string]string{"unknown_field": "Unknown configuration field.", "invalid_type": "Invalid value type.", "syntax_error": "Invalid TOML syntax."}[reason]
+		}
+		if message == "" {
 			// Public causes may expose only a code/reason; show a readable label.
 			for _, key := range []string{"code", "reason", "name", "id"} {
 				if text, ok := row[key].(string); ok && text != "" {
@@ -194,6 +199,7 @@ func conciseDiagnostics(rows []any, showPassed bool) []cliui.Block {
 			text.Spans = append(text.Spans, cliui.Span{Text: message})
 			result = append(result, cliui.Paragraph(text))
 		}
+		result = append(result, diagnosticLocations(row)...)
 		for _, key := range []string{"checks", "causes", "issues", "warnings"} {
 			if nested, ok := row[key].([]any); ok {
 				result = append(result, conciseDiagnostics(nested, showPassed)...)
@@ -214,6 +220,32 @@ func conciseDiagnostics(rows []any, showPassed bool) []cliui.Block {
 		}
 		if actions, valid := actionBlocks(row["remedies"]); valid {
 			result = append(result, actions...)
+		}
+	}
+	return result
+}
+
+func diagnosticLocations(record map[string]any) []cliui.Block {
+	sources, _ := record["sources"].([]any)
+	var result []cliui.Block
+	for _, value := range sources {
+		source, ok := value.(map[string]any)
+		if !ok || source["kind"] != "config" {
+			continue
+		}
+		path, _ := stringArray(source["path"])
+		var parts []string
+		if len(path) > 0 {
+			parts = append(parts, strings.Join(path, "."))
+		}
+		if line, ok := source["line"]; ok && fmt.Sprint(line) != "0" {
+			parts = append(parts, "line "+fmt.Sprint(line))
+			if column, ok := source["column"]; ok && fmt.Sprint(column) != "0" {
+				parts = append(parts, "column "+fmt.Sprint(column))
+			}
+		}
+		if len(parts) > 0 {
+			result = append(result, cliui.Paragraph(cliui.Literal("At "+strings.Join(parts, ", ")+".")))
 		}
 	}
 	return result

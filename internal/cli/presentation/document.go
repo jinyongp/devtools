@@ -60,9 +60,22 @@ func decode(public []byte) (envelope, error) {
 	return envelope{ok, value}, nil
 }
 
-// Build consumes only the already projected, serialized response. Dedicated
-// command views are added separately; every command has this complete fallback.
-func Build(_ string, public []byte) (cliui.Document, error) { return BuildGeneric(public) }
+// Build consumes one already projected envelope. A missing or incompatible
+// dedicated view falls back as a whole, without discarding unfamiliar fields.
+func Build(command string, public []byte) (cliui.Document, error) {
+	e, err := decode(public)
+	if err != nil {
+		return cliui.Document{}, err
+	}
+	if !e.ok {
+		return errorDocument(e.value.(map[string]any)), nil
+	}
+	definition := DefinitionFor(command)
+	if document, valid := buildView(definition, e.value); valid {
+		return document, nil
+	}
+	return generic(e), nil
+}
 
 func BuildGeneric(public []byte) (cliui.Document, error) {
 	e, err := decode(public)

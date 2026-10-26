@@ -10,6 +10,12 @@ Workstream ID: `bd696a33-81fa-4dab-9f61-ca5e76300d49`.
 
 ## 1. 목적과 범위
 
+**후속 사용자 피드백에 따른 D14 우선 적용:** 실제 `commands list` 오류와 `command list` 화면을
+확인한 사용자가 진단 key/enum·반복 Details를 제거하고 교정·행동 중심의 간결한 출력을 요구했다.
+따라서 아래의 모든 public field를 text Details로 보존한다는 초기 규칙과 진단 enum/원문 표시,
+Exec JSON-quote/argv-count summary 규칙은 [D14](cli-presentation-contract-review.md#d14-실제-사용-피드백-읽기-화면과-json-계약-분리)로 대체한다.
+JSON 원문·schema·exit·효과 의미·원 action argv·단일 handler/encode·복구 안전성은 유지한다.
+
 사용자가 같은 CLI 명령을 실행해도 개인 터미널에서는 읽기 쉬운 텍스트를,
 감지된 agent와 파이프에서는 기존 JSON을 받는다. agent 감지는 편의상 추론이며
 권한·샌드박스·사용자 신원 판정이 아니다. 명시한 형식은 감지보다 우선한다.

@@ -85,14 +85,22 @@ stdout 선택이 JSON이면 stderr만 TTY여도 JSON 오류입니다. 기존 pro
 
 ## text 표시
 
-text도 같은 한 번의 public 결과를 표시합니다. 오류·경고·안내 원문, 효과·재시도 규칙과 action
-토큰을 재작성하지 않습니다. 목록은 비교 표, 좁거나 긴 값·복잡한 Unicode가 있으면 세로 배치로
-전환합니다. ID·revision·cursor·URL은 자르지 않고, 새 공개 필드는 Details에 남깁니다.
+text는 같은 한 번의 public 결과에서 사용자의 판단과 다음 행동에 필요한 정보를 고릅니다.
+JSON 필드를 재귀적으로 펼치는 것이 기본 화면은 아닙니다. 전체 진단과 확장 필드는 JSON에 유지합니다.
+오타는 입력과 교정 후보를 바로 안내하고, 일반 오류는 설명과 필요한 복구 행동만 표시합니다.
+parser offset·target 구조·`effects:none`·`retry:after_input_change` 같은 machine 정보는 생략합니다.
+부분 변경·결과 불명확·동일 request ID 재시도는 문장으로 안내하고 필요한 UUID를 보존합니다.
+
+`command list`는 이름과 전체 실행 내용을 한 번씩 나열합니다. 반복되는 기본 설정·빈 환경·
+`Item N / Details`·argv 개수 요약은 표시하지 않습니다. 값 주입·bundle·serve·출력 보호처럼
+실행에 영향을 주는 비기본 설정은 해당 명령 옆에 짧게 표시합니다. 상세 설정은 `command inspect`로 봅니다.
+그 밖의 목록은 비교 표 또는 폭에 맞는 세로 배치를 사용합니다. 표시하는 ID·cursor·URL은 자르지 않습니다.
 미리보기·재전송·변경 없음과 task의 lifecycle/completion/execution은 구분합니다.
 
 완성된 Next 행동은 설명 아래의 독립된 한 줄을 전체 복사할 수 있습니다. prompt·번호·SGR·
 삽입 개행·말줄임 없이 필요한 shell 인용을 적용합니다. Unix POSIX/Fish 표현이 다르면
-shell label을 윗줄에 나눠 표시하고 Windows는 PowerShell 대상입니다. 남은 필수 입력이나
+shell label을 윗줄에 나눠 표시하고 Windows는 PowerShell 대상입니다. action의 `effect:read` 같은
+분류 메타데이터는 생략하며 남은 필수 입력은 `Requires`와 command template으로 안내합니다. 남은 필수 입력이나
 원 token을 보존할 수 없는 control/native 전달 조합은 실행 가능한 것처럼 표시하지 않습니다.
 
 실제 출력 stream이 TTY이고 ANSI를 지원할 때 제목·상태에만 최소 강조를 사용합니다.

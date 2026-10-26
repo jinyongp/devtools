@@ -26,7 +26,7 @@
 - On supporting builds `vault rewrap` returns `item`, `request_id`, `changed`, `replayed`. Optional vault status `item.rewrap` is unverified routing metadata; pending recovery uses `details.target.request_id`, `retry:same_request` and scoped remedies.
 - Devtools errors use the selected format; schema and malformed format inputs use JSON. Existing prompts/child streams can precede the diagnostic. Completion/help/artifact/child/private stdout retains its own wire even with --format json.
 - Dashboard startup is structured output; explicitly request JSON to read the credential-bearing URL at `data.item.url`. Return it only to its user.
-- Text is for reading: layout/style is not a stable parser interface. Complete Next actions appear as whole copyable shell lines; their source remains the same public argv. Missing required inputs remain templates. Do not re-run a mutation to obtain its other presentation.
+- Text is a task-focused summary, not a complete diagnostic dump or stable parser interface. Typos show correction candidates; routine parser/effect/retry metadata stays in JSON. Partial/uncertain effects and same-request recovery remain explicit in readable language. Complete Next actions retain public argv as whole copyable shell lines; required inputs remain templates. Do not re-run a mutation to obtain another presentation.
 
 ## Recover the same operation
 

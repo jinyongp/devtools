@@ -106,6 +106,28 @@ system-network smoke와 `publish=false`에 따른 release/homebrew/installer-pag
 | `TestPowerShellNativeCommandLineRoundTrip` | PASS 실제 `powershell.exe`와 `pwsh` 하위 검사. amd64 suite-rest JSON 이벤트의 `Action:pass` 확인 |
 | 외부 provider·system-network smoke | 입력에 따른 의도적 미실행. 이번 표시 변경에 추가하지 않는 기존 범위 유지 |
 
+## D14: 실제 사용 피드백 이후의 가독성 수정
+
+사용자가 제공한 실제 출력은 기존의 전체 필드 보존 규칙이 읽기 화면의 목적을 달성하지 못함을
+보여줬다. `command list`의 반복 Item/selection/Details와 argv 개수 요약을 제거하고,
+이름과 전체 실행 내용을 한 번씩 표시한다. 오타 오류는 잘못된 입력과 교정 후보를 먼저 안내한다.
+공통 오류·doctor·경고·readiness·action도 설명과 복구 행동을 중심으로 줄였다.
+부분 변경·결과 불명확·동일 UUID 재시도와 원 action argv는 계속 보존한다.
+전체 공개 정보와 확장 필드는 JSON에 유지한다. 상세 결정은 계약 리뷰의 D14가 우선한다.
+
+리뷰 범위는 목록, parser 오류, 일반 오류와 복구 안전성, 진단·경고·readiness, action/template,
+좁은 화면, JSON 호환성과 fallback이다. 수정 후 해당 경로와 호출자를 다시 검토했다.
+27개 명령은 폭 40/80/120에서도 두 번째 상세 목록 없이 각 이름과 실행 내용을 한 번씩 출력한다.
+실제 CLI 오타 검사는 text의 교정 제안과 JSON facts/sources/effects/retry 보존을 함께 검증한다.
+복구 검사는 공개 target 안의 request ID를 사용하는 실제 형태를 포함한다.
+
+제품 소스 `8535c3d`에서 `devtools run check:all`과 전체 `devtools run test:installed`가 통과했다.
+임시 로그는 `/tmp/devtools-readable-text-final-check-all.log`,
+`/tmp/devtools-readable-text-final-installed.log`다. 로컬 `bin/devtools`도 다시 빌드해
+사용자가 제공한 두 명령과 doctor의 실제 출력을 확인했다.
+위의 Release run은 D14 이전 소스의 증거이며 이번 수정의 native 통과 근거로 재사용하지 않는다.
+이번 소스의 Actions 결과는 별도로 기록한다. 실제 terminal 시각 확인 gate는 여전히 열려 있다.
+
 ## 남은 수용 조건
 
 - A11의 OS native 실행은 위 Actions로 검증했다. Windows console/ConPTY의 실제 화면 상태는

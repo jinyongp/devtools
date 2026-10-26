@@ -8,6 +8,29 @@
 
 ## 확인한 빈틈과 확정 결정
 
+### D14. 실제 사용 피드백: 읽기 화면과 JSON 계약 분리
+
+- 근거: 사용자가 실제 `commands list` 오류와 27개 `command list` 출력을 제공했다.
+  `target`/`Details`/raw retry는 읽을 수 없고, 반복되는 Item/selection과 argv 개수는 목록의 목적을
+  방해한다고 지적했다. 교정 후보와 상황별 오류·동작 제안을 짧게 안내하라는 후속 지시다.
+- 결정: text는 업무 목적에 맞는 요약이며 JSON을 펼친 전체 record가 아니다.
+  D10의 unknown Details 강제 보존, D13의 Exec JSON 인용·개수 요약, A15의 text 문구 동일성은
+  해당 범위에서 이 결정으로 대체한다. 공개 JSON 계약은 바꾸지 않는다.
+- 오류: `Error: 설명` → 필요하면 교정 후보 → 부분 변경/불확실성/동일 UUID 복구 → 실제 행동.
+  parser offset·reason enum·routine effects/retry·target kind·action effect 등은 기본 text에서 생략한다.
+  경고/검사는 설명과 필요한 대상·행동만 표시하고 같은 metadata를 다시 나열하지 않는다.
+- 목록: `command list`는 profile/count 한 줄과 이름/전체 실행 내용의 단일 inventory다.
+  all/default/false/빈 환경을 반복하지 않는다. 주입·bundle·serve·명시 출력 보호·restart 정책은
+  짧은 문구로 남긴다. long argv도 count로 대체하거나 별도 상세 목록에 반복하지 않는다.
+  상세 조회와 JSON은 전체 설정·새 field를 제공한다.
+- 계층: parser/producer/public JSON은 그대로 두고 public facts를 읽는 presentation에서만 copy와
+  선택을 바꾼다. 완성 action의 shell quoting·원 argv·필수 입력/template 구분은 유지한다.
+- UI: Fields label 한계는 폭의 절반(최대 40 cells)으로 조정해 실제 command 이름을 같은 열에 둔다.
+  색·공백이 없어도 이름/실행 내용과 원인/다음 행동을 읽을 수 있어야 한다.
+- 검증: 실제 제공 명령의 실행 결과를 보여준다. 27개 목록의 크기가 두 번째 상세 목록으로
+  늘지 않는지, correction과 오류 exit, unchanged JSON facts/sources/effects/retry, 부분 변경·
+  불확실한 결과·동일 UUID 복구, 실제 Next 복사 줄과 필요한 입력을 확인한다.
+
 ### D01. 화면 모델의 실제 타입·소유권
 
 - 빈틈: Document가 주석만 있는 struct였고 primitive가 mutation 가능한 domain 값이나

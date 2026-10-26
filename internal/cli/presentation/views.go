@@ -80,6 +80,9 @@ var readViews = map[string]Definition{
 
 func DefinitionFor(command string) Definition {
 	d := readViews[command]
+	if d.Family == "" {
+		d = operationDefinition(command)
+	}
 	d.Required = append([]Requirement(nil), d.Required...)
 	d.Optional = append([]string(nil), d.Optional...)
 	d.KnownOmitted = append([]Omission(nil), d.KnownOmitted...)
@@ -147,6 +150,9 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 	if definition.Family == "list" {
 		return listView(definition, data), true
 	}
+	if definition.Family == "mutation" || definition.Family == "preview" || definition.Family == "diagnostic" || definition.Family == "task" {
+		return operationView(definition, data)
+	}
 	blocks := []cliui.Block{cliui.Heading(cliui.Literal(definition.Title), 1)}
 	consumed := map[string]bool{}
 	blocks = append(blocks, identity(data, consumed)...)
@@ -177,7 +183,7 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 func identity(data map[string]any, consumed map[string]bool) []cliui.Block {
 	var fields []cliui.Field
 	for _, key := range []string{"name", "id", "command", "version", "protocol_version", "commit", "state", "status", "revision", "request_id"} {
-		if value, exists := data[key]; exists && scalar(value) {
+		if value, exists := data[key]; exists && !consumed[key] && scalar(value) {
 			fields = append(fields, cliui.Field{Label: cliui.Literal(title(key)), Value: display(value)})
 			consumed[key] = true
 		}

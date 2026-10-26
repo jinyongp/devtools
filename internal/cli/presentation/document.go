@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/jinyongp/devtools/internal/cliui"
 )
@@ -97,6 +98,31 @@ func generic(e envelope) cliui.Document {
 func errorDocument(e map[string]any) cliui.Document {
 	heading := cliui.Text{Spans: []cliui.Span{{Text: "ERROR", Role: cliui.Failure}, {Text: "  " + e["code"].(string)}}}
 	blocks := []cliui.Block{cliui.Heading(heading, 1), cliui.Paragraph(cliui.Words(e["message"].(string)))}
+	if details, ok := e["details"].(map[string]any); ok {
+		consumed := map[string]bool{}
+		for _, key := range []string{"target", "checks", "causes", "report", "items", "warnings", "effects", "retry", "request_id", "remedies"} {
+			value, exists := details[key]
+			if !exists {
+				continue
+			}
+			consumed[key] = true
+			if array, ok := value.([]any); ok && len(array) == 0 && (key == "checks" || key == "causes" || key == "warnings") {
+				continue // Only declared empty diagnostic collections are omitted.
+			}
+			if scalar(value) {
+				blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal(title(key)), Value: display(value)}))
+			} else {
+				blocks = append(blocks, named(key, value)...)
+			}
+		}
+		blocks = append(blocks, remaining(details, consumed, "", Definition{})...)
+		for _, key := range keys(e) {
+			if key != "message" && key != "code" && key != "details" {
+				blocks = append(blocks, named(key, e[key])...)
+			}
+		}
+		return cliui.NewDocument(blocks...)
+	}
 	for _, key := range keys(e) {
 		if key != "message" && key != "code" {
 			blocks = append(blocks, named(key, e[key])...)
@@ -179,6 +205,9 @@ func named(key string, value any) []cliui.Block {
 			return []cliui.Block{cliui.Section(cliui.Styled("Next", cliui.Info), actions...)}
 		}
 	}
+	if blocks, valid := diagnosticSection(key, value); valid {
+		return blocks
+	}
 	return []cliui.Block{cliui.Section(cliui.Literal(key), tree(value)...)}
 }
 
@@ -239,5 +268,9 @@ func actionBlocks(value any) ([]cliui.Block, bool) {
 }
 
 func title(command string) string {
-	return strings.ToUpper(command[:1]) + command[1:]
+	if command == "" {
+		return `""`
+	}
+	first, size := utf8.DecodeRuneInString(command)
+	return string(unicode.ToUpper(first)) + command[size:]
 }

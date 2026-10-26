@@ -25,7 +25,7 @@ func (o *outputController) outputError(code, message string) *protocol.Error {
 	if o.handlerReturned {
 		effects, retry = "unknown", "inspect_first"
 	}
-	details := map[string]any{"phase": "output", "effects": effects, "retry": retry}
+	details := map[string]any{"phase": "render", "effects": effects, "retry": retry}
 	if o.requestID != "" {
 		details["request_id"] = o.requestID
 	}

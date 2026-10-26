@@ -12,6 +12,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/cli/presentation"
 	"github.com/jinyongp/devtools/internal/cliui"
+	"github.com/jinyongp/devtools/internal/configcontract"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -169,6 +170,18 @@ func TestOutputFailureStageAndNoTransportRetry(t *testing.T) {
 	exit = a.Run(context.Background(), []string{"--format", "json", "nonexistent"}, IO{In: strings.NewReader(""), Out: &out, Err: w})
 	if exit != 1 || w.calls != 1 {
 		t.Fatal("stderr transport was retried", exit, w.calls)
+	}
+	var diagnosticJSON bytes.Buffer
+	failingOut := &presentationFailWriter{}
+	exit = a.Run(context.Background(), []string{"--format", "json", "fixture", "--request-id", id}, IO{In: strings.NewReader(""), Out: failingOut, Err: &diagnosticJSON})
+	var failure struct {
+		Error struct{ Details map[string]any }
+	}
+	if json.Unmarshal(diagnosticJSON.Bytes(), &failure) != nil || exit != 1 {
+		t.Fatal(exit, diagnosticJSON.String())
+	}
+	if issues := configcontract.Validate("ErrorDetails", failure.Error.Details); len(issues) != 0 {
+		t.Fatal("new output error drifted from the shared diagnostic schema", issues, diagnosticJSON.String())
 	}
 }
 

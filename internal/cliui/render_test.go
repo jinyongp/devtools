@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -77,7 +78,26 @@ func TestCommandLineArgvHelper(t *testing.T) {
 	os.Exit(2)
 }
 
+func TestFieldsRetainEarlierOutputAndMultilineValues(t *testing.T) {
+	doc := NewDocument(Heading(Literal("Original heading"), 1), Fields(
+		Field{Literal("Name"), Literal("first\nsecond")},
+		Field{Literal("Note"), Words("one two three four five six seven eight nine ten")},
+	))
+	output, err := Render(doc, Options{Width: 40})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, wanted := range []string{"Original heading\n", "Name  first\n      second\n", "Note  one two three four five six seven", "\n      eight nine ten\n"} {
+		if !strings.Contains(string(output), wanted) {
+			t.Fatalf("lost heading, field or continuation %q: %s", wanted, output)
+		}
+	}
+}
+
 func TestCommandLineRoundTrip(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix shell argument delivery is checked on Unix hosts")
+	}
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -108,6 +128,45 @@ func TestCommandLineRoundTrip(t *testing.T) {
 				t.Fatalf("argv changed: want=%q got=%q output=%s", want, got, out)
 			}
 		})
+	}
+}
+
+func TestPowerShellNativeCommandLineRoundTrip(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("requires actual Windows native argument delivery")
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"two words", "한글", "don't", `a\b`, "$(Write-Output injected)", "*.go", "a;b", "a&b", "!history", "#comment"}
+	argv := append([]string{executable, "-test.run=^TestCommandLineArgvHelper$", "--"}, want...)
+	line, valid := commandLine(argv, PowerShell)
+	if !valid {
+		t.Fatal("supported native arguments were rejected")
+	}
+	for _, shell := range []string{"powershell.exe", "pwsh"} {
+		t.Run(shell, func(t *testing.T) {
+			binary, err := exec.LookPath(shell)
+			if err != nil {
+				t.Skip("PowerShell edition is not installed")
+			}
+			// The helper writes UTF-8 JSON; avoid a legacy console code page
+			// corrupting its output after native argv delivery already succeeded.
+			command := "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); " + line
+			cmd := exec.Command(binary, "-NoProfile", "-NonInteractive", "-Command", command)
+			cmd.Env = append(os.Environ(), "DEVTOOLS_UI_ARGV_HELPER=1")
+			output, err := cmd.CombinedOutput()
+			var got []string
+			if err != nil || json.Unmarshal(output, &got) != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("native argv changed: error=%v want=%q got=%q output=%s", err, want, got, output)
+			}
+		})
+	}
+	for _, argument := range []string{"", `a"b`, "trailing space\\"} {
+		if _, valid := commandLine([]string{executable, argument}, PowerShell); valid {
+			t.Fatalf("legacy native limitation advertised as copyable: %q", argument)
+		}
 	}
 }
 

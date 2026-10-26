@@ -126,11 +126,18 @@ func (r *renderer) text(t Text, bold bool) string {
 // Prose wraps at whitespace; literal values keep their original logical lines.
 // The slice boundaries retain semantic styles when a paragraph is wrapped.
 func (r *renderer) line(t Text, indent int, bold bool) {
+	r.continuedLine(t, indent, bold, false)
+}
+
+func (r *renderer) continuedLine(t Text, indent int, bold, firstAlreadyStarted bool) {
 	padding := strings.Repeat(" ", indent)
 	if t.Flow == Verbatim {
 		lines := strings.Split(r.text(t, bold), "\n")
-		for _, line := range lines {
-			r.out.WriteString(padding + line + "\n")
+		for i, line := range lines {
+			if i != 0 || !firstAlreadyStarted {
+				r.out.WriteString(padding)
+			}
+			r.out.WriteString(line + "\n")
 		}
 		return
 	}
@@ -145,7 +152,9 @@ func (r *renderer) line(t Text, indent int, bold bool) {
 		}
 	}
 	used := 0
-	r.out.WriteString(padding)
+	if !firstAlreadyStarted {
+		r.out.WriteString(padding)
+	}
 	for i := 0; i < len(chars); {
 		if chars[i].r == '\n' {
 			r.out.WriteString("\n" + padding)
@@ -204,13 +213,7 @@ func (r *renderer) fields(fields []Field, indent int) {
 		}
 		r.out.WriteString(strings.Repeat(" ", indent) + r.text(f.Label, false) + strings.Repeat(" ", labelWidth-cellWidth(label)+2))
 		// First line shares the label; later logical lines retain the value column.
-		start := r.out.Len()
-		r.line(f.Value, indent+labelWidth+2, false)
-		content := r.out.String()
-		prefix := strings.Repeat(" ", indent+labelWidth+2)
-		result := content[:start] + strings.TrimPrefix(content[start:], prefix)
-		r.out.Reset()
-		r.out.WriteString(result)
+		r.continuedLine(f.Value, indent+labelWidth+2, false, true)
 	}
 }
 

@@ -17,7 +17,9 @@ from socketserver import ThreadingTCPServer
 
 assert os.getuid() != 0, "Use an ordinary installation user"
 home = Path.home()
-env = dict(os.environ, PATH=str(home / ".local/bin") + ":" + os.environ["PATH"])
+# The no-alias case owns its PATH as well as its home. A developer's installed
+# dvt must not turn this case into the separate conflict case below.
+env = dict(os.environ, PATH=str(home / ".local/bin") + os.pathsep + os.defpath)
 env.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
 installer = ["sh", os.environ["DEVTOOLS_TEST_INSTALLER"]]
 release_directory = os.environ["DEVTOOLS_TEST_RELEASES"]
@@ -62,6 +64,7 @@ assert not result.stderr
 assert shutil.which("devtools", path=env["PATH"]) == str(home / ".local/bin/devtools")
 assert shutil.which("dvt", path=env["PATH"]) == str(home / ".local/bin/dvt")
 assert (home / ".local/bin/dvt").readlink() == Path("devtools")
+env["PATH"] = str(home / ".local/bin") + os.pathsep + os.environ["PATH"]
 assert api("version")["data"]["version"] == "0.0.0-test.1"
 assert execute(["dvt", "version"]).stdout == execute(["devtools", "version"]).stdout
 install("install", "0.0.0-test.1", expected=1)

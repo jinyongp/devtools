@@ -15,8 +15,11 @@ def execute(*args, expected=0):
     assert result.returncode == expected, (result.stdout, result.stderr)
     return json.loads(result.stdout if expected == 0 else result.stderr)
 
-execute('sh', os.environ['DEVTOOLS_TEST_INSTALLER'], 'install', '--version',
-        '0.0.0-test.1', '--source', os.environ['DEVTOOLS_TEST_RELEASES'])
+installed = subprocess.run(['sh', os.environ['DEVTOOLS_TEST_INSTALLER'], 'install', '--version',
+                           '0.0.0-test.1', '--source', os.environ['DEVTOOLS_TEST_RELEASES']],
+                          env=dict(os.environ, PATH=os.defpath), text=True,
+                          capture_output=True, timeout=30)
+assert installed.returncode == 0 and json.loads(installed.stdout)['data']['alias']['status'] == 'created'
 execute(str(binary), 'var', 'set', 'KEEP', '--value', 'preserved', '--profile', 'update')
 updated = execute(str(alias), 'update', '--version', '0.0.0-test.2', '--source',
                   os.environ['DEVTOOLS_TEST_RELEASES'])

@@ -12,10 +12,10 @@ import (
 type Format string
 
 const (
-	FormatAuto Format = "auto"
-	FormatText Format = "text"
-	FormatJSON Format = "json"
-	DefaultFormat = FormatAuto
+	FormatAuto    Format = "auto"
+	FormatText    Format = "text"
+	FormatJSON    Format = "json"
+	DefaultFormat        = FormatAuto
 )
 
 type Capability uint8

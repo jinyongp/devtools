@@ -35,6 +35,8 @@ func TestInputErrorsExplainTheCorrectionWithoutRepeatedLabels(t *testing.T) {
 		{[]string{"command", "list", "--dir", "a", "--dir", "b"}, []string{"'command list'", "Specify --dir once.", "devtools help command list"}},
 		{[]string{"completion", "bash", "extra"}, []string{"'completion'", "Unexpected positional arguments", "devtools help completion"}},
 		{[]string{"command", "list", "-q"}, []string{"Unknown option -q for 'command list'.", "devtools help command list"}},
+		{[]string{"run"}, []string{"'command run'", "Supply a configured command name or an executable after --.", "devtools help command run"}},
+		{[]string{"cmd", "run"}, []string{"'command run'", "Supply a configured command name or an executable after --.", "devtools help command run"}},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			a := presentationApp(presentation.Environment{})

@@ -37,7 +37,11 @@ func conciseError(e map[string]any, inputs []InputHint) cliui.Document {
 					message = fmt.Sprintf("'%s' requires a %s argument.", name, field)
 				}
 			}
-			if reason == "invalid_value" && !input.Option {
+			// Handler-level input-combination errors also use parse/invalid_value.
+			// Only the parser's pattern failures carry a validation rule; keep
+			// semantic guidance such as the configured-command/direct-exec choice.
+			_, patternFailure := facts["rule"].(string)
+			if reason == "invalid_value" && !input.Option && patternFailure {
 				message = fmt.Sprintf("Invalid value for argument '%s'. %s", field, input.Rule)
 			}
 			if (reason == "missing_argument" || reason == "missing_option_value") && len(input.Choices) > 0 {

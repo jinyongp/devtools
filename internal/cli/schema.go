@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"github.com/jinyongp/devtools/internal/cli/presentation"
 	"github.com/jinyongp/devtools/internal/configcontract"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -40,6 +41,11 @@ func (a *App) catalog() map[string]any {
 			}
 			properties[option.Name] = s
 		}
+		formats := []string{"auto", "text", "json"}
+		if machineCommand(command.Name) {
+			formats = []string{"auto", "json"}
+		}
+		properties["format"] = map[string]any{"type": "string", "enum": formats, "default": string(presentation.DefaultFormat), "description": "Root-prefix output format; precedes the command. Native stdout is preserved."}
 		argumentSchemas := []any{}
 		minimum := 0
 		var repeated map[string]any
@@ -93,6 +99,7 @@ func (a *App) catalog() map[string]any {
 			}
 		}
 		entry := map[string]any{"name": command.Name, "aliases": command.Aliases, "description": command.Description, "options": command.Options, "arguments": command.Arguments, "accepts_child_args": command.ChildArgs, "output_mode": command.OutputMode, "input_schema": input, "output_schema": command.Output}
+		entry["presentation"] = commandPresentation(command)
 		entry["examples"] = command.Examples
 		if len(command.Workflow) > 0 {
 			entry["workflow"] = command.Workflow
@@ -110,6 +117,7 @@ func (a *App) catalog() map[string]any {
 	}
 	return map[string]any{
 		"protocol_version": protocol.ProtocolVersion,
+		"global_options":   globalOptions(),
 		"commands":         commands,
 		"transport": map[string]any{
 			"input":             "CLI flags and positional args. For command run, devtools options precede the command name and all following tokens are child_args; an optional -- immediately after the name is a separator. Without a name, -- introduces the program and its arguments. Schemas describe parsed inputs, not a JSON stdin endpoint. Variable/secret set --stdin reads a raw UTF-8 value.",
@@ -133,6 +141,25 @@ func (a *App) catalog() map[string]any {
 				map[string]any{"properties": map[string]any{"ok": map[string]any{"const": false}}, "required": []string{"error"}, "not": map[string]any{"required": []string{"data"}}},
 			},
 		},
-		"$defs": map[string]any{"catalog": map[string]any{"type": "object", "required": []string{"protocol_version", "commands", "transport", "exit_codes", "response_schema", "$defs"}, "properties": map[string]any{"protocol_version": map[string]any{"const": protocol.ProtocolVersion}, "commands": map[string]any{"type": "array", "items": map[string]any{"type": "object"}}, "transport": map[string]any{"type": "object"}, "exit_codes": map[string]any{"type": "object"}, "response_schema": map[string]any{"type": "object"}, "$defs": map[string]any{"type": "object"}}, "additionalProperties": false}},
+		"$defs": map[string]any{"catalog": map[string]any{"type": "object", "required": []string{"protocol_version", "global_options", "commands", "transport", "exit_codes", "response_schema", "$defs"}, "properties": map[string]any{"protocol_version": map[string]any{"const": protocol.ProtocolVersion}, "global_options": map[string]any{"type": "array", "items": map[string]any{"type": "object"}}, "commands": map[string]any{"type": "array", "items": map[string]any{"type": "object"}}, "transport": map[string]any{"type": "object"}, "exit_codes": map[string]any{"type": "object"}, "response_schema": map[string]any{"type": "object"}, "$defs": map[string]any{"type": "object"}}, "additionalProperties": false}},
+	}
+}
+
+func machineCommand(name string) bool { return name == "schema" || name == "config schema" }
+
+func commandPresentation(command Command) map[string]any {
+	if machineCommand(command.Name) {
+		return map[string]any{"formats": []string{"json"}, "default": "json"}
+	}
+	if command.OutputMode != OutputJSON {
+		return map[string]any{"formats": []string{}, "default": "native"}
+	}
+	return map[string]any{"formats": []string{"json", "text"}, "default": string(presentation.DefaultFormat)}
+}
+
+func globalOptions() []map[string]any {
+	return []map[string]any{
+		{"name": "format", "values": []string{"auto", "text", "json"}, "default": string(presentation.DefaultFormat), "environment": "DEVTOOLS_FORMAT", "placement": "root-prefix"},
+		{"name": "isolated-root", "value_name": "PATH", "placement": "root-prefix"},
 	}
 }

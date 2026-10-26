@@ -1,6 +1,7 @@
 # CLI 표시 형식: auto · text · json 구현 계획
 
-상태: 계획 리뷰 수정본. 제품 구현·구현 후 검증·릴리스는 미착수.
+상태: 확정 구현 계약. 사용자 승인에 따라 구현·작업 단위 커밋·후속 리뷰루프를 진행한다.
+실제 작업 상태·검증 결과는 devtools task/validation 기록을 정본으로 삼는다. 릴리스는 별도다.
 기록일: 2026-10-26 KST. 기준 소스: `ff8edcca1ba5bae4fdd7981779bc4f0c5e557438`.
 설치 CLI: 0.34.0 / protocol 14. 등록 대상: devtools profile `devtools`의 별도 workstream.
 Workstream ID: `bd696a33-81fa-4dab-9f61-ca5e76300d49`.

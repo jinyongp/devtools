@@ -1,7 +1,7 @@
 # CLI 표시 계획 추가 계약 리뷰
 
 기준: `ff8edcca1ba5bae4fdd7981779bc4f0c5e557438`, 설치 CLI 0.34.0 / protocol 14.
-범위: [표시 계획](cli-presentation-plan.md)의 현재 계약 전체. 제품 구현은 미착수.
+범위: [표시 계획](cli-presentation-plan.md)의 계약 전체. 이 계약 리뷰 당시 제품 구현은 미착수였다.
 방식: 순차 source 대조 → 모순·미결정 확인 → 계획 수정 → 영향 계약 재검토.
 별도 agent나 외부 reviewer를 사용하지 않았다. 명시 보류한 임의 agent 설정·TUI·새 TOML·
 색상 강제 옵션·릴리스/설치는 추가하지 않는다.

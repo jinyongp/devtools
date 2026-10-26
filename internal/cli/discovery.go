@@ -41,6 +41,7 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 					continue
 				}
 				entry["protocol_version"] = catalog["protocol_version"]
+				entry["global_options"] = catalog["global_options"]
 				delete(entry, "options")
 				delete(entry, "arguments")
 				if len(exact.Aliases) == 0 {
@@ -134,7 +135,7 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 		return nil, "", false
 	}
 	if schema {
-		return map[string]any{"protocol_version": protocol.ProtocolVersion, "items": names, "scope": target, "usage": "devtools schema <command>; --all for full catalog"}, "", true
+		return map[string]any{"protocol_version": protocol.ProtocolVersion, "global_options": globalOptions(), "items": names, "scope": target, "usage": "devtools schema <command>; --all for full catalog"}, "", true
 	}
 	heading := "devtools"
 	if target != "" {

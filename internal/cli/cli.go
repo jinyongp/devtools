@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/jinyongp/devtools/internal/cli/presentation"
+	"github.com/jinyongp/devtools/internal/cliui"
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/lifecycle"
 	"github.com/jinyongp/devtools/internal/notices"
@@ -60,6 +62,9 @@ type Command struct {
 }
 
 type App struct {
+	observeOutput    func(IO) presentation.Environment
+	buildDocument    func(string, []byte) (cliui.Document, error)
+	renderDocument   func(cliui.Document, cliui.Options) ([]byte, error)
 	vaultClient      func(context.Context, string) (*vault.SessionClient, error)
 	userPaths        func() (paths.Directories, error)
 	commands         []Command
@@ -224,44 +229,24 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		return a.completeDynamic(ctx, streams)
 	}
 	operation := "devtools"
-	rootArgumentOffset := 0
-	fail := func(err *protocol.Error) int {
-		if sources, ok := err.Details["sources"].([]any); ok && rootArgumentOffset > 0 {
-			for _, value := range sources {
-				if source, ok := value.(map[string]any); ok && source["kind"] == "argv" {
-					if offset, ok := source["offset"].(int); ok {
-						source["offset"] = offset + rootArgumentOffset
-					}
-				}
-			}
-		}
-		err = protocol.Public(err, operation)
-		if protocol.Failure(streams.Err, err) != nil {
-			return 1
-		}
-		return err.ExitCode
+	observe := a.observeOutput
+	if observe == nil {
+		observe = observeOutputEnvironment
 	}
-	if e := protocol.ContextError(ctx.Err()); e != nil {
-		return fail(e)
+	environment := observe(streams)
+	output := outputController{app: a, streams: streams, environment: environment, operation: operation, decision: presentation.Decision{Format: presentation.FormatJSON}}
+	fail := output.failure
+	rootOptions, rootErr := parseRootOptions(args)
+	if rootErr != nil {
+		return fail(rootErr)
 	}
-	rootPrefix := ""
-	if len(args) > 0 && (args[0] == "--isolated-root" || strings.HasPrefix(args[0], "--isolated-root=")) {
-		if args[0] == "--isolated-root" {
-			if len(args) < 3 || args[1] == "" {
-				return fail(argumentError("Supply an isolation root and command.", "isolated-root"))
-			}
-			rootPrefix = args[1]
-			rootArgumentOffset = 2
-			args = args[2:]
-		} else {
-			rootPrefix = strings.TrimPrefix(args[0], "--isolated-root=")
-			rootArgumentOffset = 1
-			args = args[1:]
-			if rootPrefix == "" || len(args) == 0 {
-				return fail(argumentError("Supply an isolation root and command.", "isolated-root"))
-			}
-		}
+	selection, selectionErr := presentation.Select(presentation.FormatInput{Present: rootOptions.FormatSet, Raw: rootOptions.Format}, environment.FormatEnv)
+	if selectionErr != nil {
+		return fail(formatError("DEVTOOLS_FORMAT requires auto, text, or json.", 0, true))
 	}
+	output.decision, _ = presentation.Resolve(selection, presentation.Detection{Signals: environment.Signals}, environment.Stdout.IsTerminal, presentation.Adaptable)
+	rootPrefix := rootOptions.IsolatedRoot
+	args = rootOptions.CommandArgs
 	if len(args) == 0 || (len(args) == 1 && (args[0] == "--help" || args[0] == "-h")) {
 		args = []string{"help"}
 	}
@@ -288,11 +273,20 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		if args[0] != "help" && !schema {
 			targetArgs = args[:len(args)-1]
 		}
+		capability := presentation.Native
+		if schema {
+			capability = presentation.MachineOnly
+		}
+		var formatErr error
+		output.decision, formatErr = presentation.Resolve(selection, presentation.Detection{Signals: environment.Signals}, environment.Stdout.IsTerminal, capability)
+		if e := protocol.ContextError(ctx.Err()); e != nil {
+			return fail(e)
+		}
 		if schema && len(targetArgs) == 1 && targetArgs[0] == "--all" {
-			if protocol.Success(streams.Out, a.catalog()) != nil {
-				return fail(protocol.NewError("io_error", "Cannot write output.", 1, nil))
+			if formatErr != nil {
+				return fail(formatError("Machine discovery requires JSON; use --format auto or json.", formatOffset(rootOptions), false))
 			}
-			return 0
+			return output.success(a.catalog())
 		}
 		data, text, found := a.discovery(strings.Join(targetArgs, " "), schema)
 		if !found {
@@ -308,7 +302,10 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		}
 		var err error
 		if schema {
-			err = protocol.Success(streams.Out, data)
+			if formatErr != nil {
+				return fail(formatError("Machine discovery requires JSON; use --format auto or json.", formatOffset(rootOptions), false))
+			}
+			return output.success(data)
 		} else {
 			err = writeHelp(streams.Out, text)
 		}
@@ -318,23 +315,37 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		return 0
 	}
 	if selected == nil {
-		return fail(a.unknownCommand(args))
+		if e := protocol.ContextError(ctx.Err()); e != nil {
+			return fail(e)
+		}
+		err := a.unknownCommand(args)
+		mapArgumentSources(err, rootOptions.OriginalOffsets)
+		return fail(err)
+	}
+	request, parseErr := parseRequest(*selected, rest)
+	capability := presentation.Adaptable
+	if selected.Name == "config schema" && !(parseErr == nil && request.Help) {
+		capability = presentation.MachineOnly
+	} else if selected.OutputMode != OutputJSON || parseErr == nil && request.Help {
+		capability = presentation.Native
+	}
+	var formatErr error
+	output.decision, formatErr = presentation.Resolve(selection, presentation.Detection{Signals: environment.Signals}, environment.Stdout.IsTerminal, capability)
+	if e := protocol.ContextError(ctx.Err()); e != nil {
+		return fail(e)
 	}
 	operation = selected.Name
-	request, parseErr := parseRequest(*selected, rest)
+	output.operation = operation
+	consumed := len(args) - len(rest)
 	if parseErr != nil {
-		if sources, ok := parseErr.Details["sources"].([]any); ok {
-			for _, s := range sources {
-				source := s.(map[string]any)
-				if offset, ok := source["offset"].(int); ok {
-					source["offset"] = offset + len(args) - len(rest)
-				}
-			}
-		}
+		mapArgumentSources(parseErr, rootOptions.OriginalOffsets[consumed:])
 		return fail(parseErr)
 	}
+	if formatErr != nil {
+		return fail(formatError("Machine discovery requires JSON; use --format auto or json.", formatOffset(rootOptions), false))
+	}
 	for name, offset := range request.OptionOffsets {
-		request.OptionOffsets[name] = offset + len(args) - len(rest) + rootArgumentOffset
+		request.OptionOffsets[name] = rootOptions.OriginalOffsets[consumed+offset]
 	}
 	if request.Help {
 		_, text, _ := a.discovery(selected.Name, false)
@@ -367,7 +378,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	if selected.Name == "command run" && len(request.Args) == 0 && len(request.Child) > 0 {
 		for i, word := range rest {
 			if word == "--" {
-				offset := i + 1 + len(args) - len(rest) + rootArgumentOffset
+				offset := rootOptions.OriginalOffsets[consumed+i+1]
 				request.Invocation.ExecutableOffset = &offset
 				break
 			}
@@ -383,6 +394,8 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	} else if request.Invocation.IsolatedRoot != "" {
 		request.Invocation.RootSource = "env"
 	}
+	output.invocation = request.Invocation
+	output.requestID = request.Options["request-id"]
 	data, err := selected.Run(ctx, streams, request)
 	if err != nil {
 		if err.Details == nil {
@@ -407,9 +420,9 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		if id := request.Options["request-id"]; id != "" {
 			err.Details["request_id"] = id
 		}
-		err.Details = protocol.BindGuidance(err.Details, request.Invocation).(map[string]any)
 		return fail(err)
 	}
+	output.handlerReturned = true
 	if selected.OutputMode == OutputPassthrough {
 		if result, ok := data.(processResult); ok {
 			return result.ExitCode
@@ -428,8 +441,5 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	if selected.OutputMode != OutputJSON || processOutput {
 		return fail(protocol.NewError("internal_error", "Command output does not match its declared mode.", 1, nil))
 	}
-	if protocol.Success(streams.Out, protocol.BindGuidance(data, request.Invocation)) != nil {
-		return fail(protocol.NewError("io_error", "Cannot write output.", 1, nil))
-	}
-	return 0
+	return output.success(data)
 }

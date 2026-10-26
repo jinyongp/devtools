@@ -3,12 +3,25 @@ import unittest
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 from unittest.mock import patch
-from proxy_compat import consumer_environment, loopback_mapping, owned_scratch, redact
+from proxy_compat import browser_worker, consumer_environment, loopback_mapping, owned_scratch, redact
 
 
 class EvidenceRedaction(unittest.TestCase):
+    def test_large_browser_report_exits_without_waiting_for_pipe_drain(self):
+        size = 256 * 1024
+        args = [sys.executable, "-c", f"import sys; sys.stdout.write('x' * {size}); sys.stderr.write('y' * {size})"]
+        with browser_worker(args, dict(os.environ)) as (worker, output, diagnostic):
+            self.assertEqual(worker.wait(timeout=5), 0)
+            output.seek(0)
+            diagnostic.seek(0)
+            self.assertEqual(output.read(), "x" * size)
+            self.assertEqual(diagnostic.read(), "y" * size)
+        self.assertTrue(output.closed)
+        self.assertTrue(diagnostic.closed)
+
     def test_consumers_cannot_request_github_identity_tokens(self):
         with patch.dict(os.environ, {
             "ACTIONS_ID_TOKEN_REQUEST_URL": "https://actions.example.test/token",

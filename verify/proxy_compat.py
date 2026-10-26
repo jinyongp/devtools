@@ -57,6 +57,20 @@ def command(args, **kwargs):
     return result.stdout
 
 
+@contextmanager
+def browser_worker(args, environment):
+    # The host polls while coordinating stop probes. Pipes can fill before the
+    # child exits (Windows buffers are particularly small), so capture to private
+    # temporary files. Raw output never becomes an uploaded evidence artifact.
+    with tempfile.TemporaryFile(mode="w+t", encoding="utf8") as output, tempfile.TemporaryFile(mode="w+t", encoding="utf8") as diagnostic:
+        with subprocess.Popen([str(x) for x in args], env=environment, stdout=output, stderr=diagnostic, text=True) as worker:
+            try:
+                yield worker, output, diagnostic
+            finally:
+                if worker.poll() is None:
+                    worker.kill()
+
+
 def free_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -409,7 +423,7 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
             else:
                 argv = ["node", str(ROOT / "verify/proxy_compat_browser.mjs"), str(artifacts / "browser.json")]
             # The browser result is retained even when a browser assertion fails.
-            with subprocess.Popen([str(x) for x in argv], env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as worker:
+            with browser_worker(argv, environment) as (worker, browser_output, browser_diagnostic):
                 deadline = time.monotonic() + 300
                 while worker.poll() is None and time.monotonic() < deadline:
                     if shared and (artifacts / "ready-to-stop").exists() and shared["id"] in exposures:
@@ -430,7 +444,9 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
                 if worker.poll() is None:
                     worker.kill()
                     raise TimeoutError("browser worker exceeded 300 seconds")
-                stdout, stderr = worker.communicate(timeout=10)
+                browser_output.seek(0)
+                browser_diagnostic.seek(0)
+                stdout, stderr = browser_output.read(), browser_diagnostic.read()
                 browser_code = worker.returncode
             browser_result = artifacts / "browser-result.json"
             if not browser_result.exists():

@@ -73,6 +73,20 @@ Fish 3.7과 필요한 패키지는 `/tmp/devtools-presentation-fish`에 풀어 �
 
 ## 남은 수용 조건
 
+### Actions 실행으로 이행
+
+사용자가 기존 Actions 검증과 main-only 진행을 승인했다. `3449f60`을 origin/main에 push하고
+[Windows full](https://github.com/jinyongp/devtools/actions/runs/40270980861)과
+[Unix native](https://github.com/jinyongp/devtools/actions/runs/40271033252)를 시작했다.
+Windows 검증은 진행 중이며 Unix에서는 macOS Intel의 기존 `proxy_auto` 부분 readiness 검사가 실패했다.
+아래 pending 사유 중 최초 원격 push 승인 대기와 PowerShell 접근 제한은 이미 해소됐다.
+
+실패한 fixture는 Python/TLS 준비 확인에 300ms만 주었다. 이 검사의 목적은 startup 지연 SLA가
+아니라 ready/pending의 부분 결과와 동일 UUID 재시도다. 예산을 3초로 변경하고 기대 상태는
+유지했으며 실패 시 실제 outcomes도 남긴다. 지연 command는 ready.flag를 쓰기 전에는
+ready가 될 수 없다. Linux installed `proxy_auto` 재검증은 통과했다. macOS 재검증과
+수정 SHA의 기존 Release `publish=false` 전체 검증 결과는 후속 기록으로 남긴다.
+
 - A11: 실제 macOS terminal, native Windows console/ConPTY와 PowerShell 5.1/7 실행.
   기존 Unix CI에는 새 installed scenario, Windows CI에는 pipe/explicit mode와 argv 검사를 연결했다.
   CI 실행을 위해 push·release하거나 사용자 설치본을 교체하지 않았다.

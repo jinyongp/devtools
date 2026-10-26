@@ -175,9 +175,12 @@ try:
     assert request("alt.main.auto.localhost")[0] in (301, 302, 307, 308)
     assert json.loads(request("alt.main.auto.localhost", True)[1])["pid"] == web["pid"]
 
-    partial_args = ["project", "up", "web", "delayed", "--timeout", "300ms", "--request-id", str(uuid.uuid4())]
+    # This checks partial readiness and replay, not a subsecond startup SLA.
+    # A fresh Python/TLS probe needs scheduling time on native Intel macOS.
+    # delayed cannot become ready until ready.flag is created below.
+    partial_args = ["project", "up", "web", "delayed", "--timeout", "3s", "--request-id", str(uuid.uuid4())]
     partial = api(*partial_args, error="project_operation_failed")["details"]["facts"]["outcomes"]
-    assert [item["state"] for item in partial] == ["ready", "pending"]
+    assert [item["state"] for item in partial] == ["ready", "pending"], partial
     (root / "ready.flag").touch()
     resumed = api(*partial_args)
     assert resumed["replayed"] and [item["item"]["id"] for item in resumed["items"]] == [item["id"] for item in partial]

@@ -332,8 +332,8 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 		}
 		return names
 	}
-	if source == "port" {
-		return a.portCompletionNames(selected)
+	if source == "port" || source == "port-declaration" {
+		return a.portCompletionNames(selected, source == "port-declaration")
 	}
 	if source == "command" || source == "route" || source == "tool" || source == "preset" {
 		p, e := project.Resolve(dir, "")
@@ -402,9 +402,8 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 		store := values.ModernStore{Directory: data, Profile: p.Profile}
 		if source == "value-key" {
 			// Bundles contain shared IDs, independent of environment overrides.
-			vars, _ := store.CompletionNames(values.Variable, "")
-			secs, _ := store.CompletionNames(values.Secret, "")
-			return append(vars, secs...)
+			names, _ := store.CompletionValueNames()
+			return names
 		}
 		kind := values.Kind(source)
 		if source == "env" {
@@ -417,7 +416,7 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 	return names
 }
 
-func (a *App) portCompletionNames(selected map[string]string) []string {
+func (a *App) portCompletionNames(selected map[string]string, declared bool) []string {
 	profile, selector, dir, e := portTarget(Request{Options: selected})
 	if e != nil {
 		return nil
@@ -437,16 +436,21 @@ func (a *App) portCompletionNames(selected map[string]string) []string {
 	names := []string{}
 	if instance != nil {
 		dir = instance.Directory
-		for _, item := range state.Assignments {
-			if item.Profile == profile && item.ID == instance.ID {
-				names = append(names, item.Name)
+		if !declared {
+			for _, item := range state.Assignments {
+				if item.Profile == profile && item.ID == instance.ID {
+					names = append(names, item.Name)
+				}
 			}
 		}
 	}
-	// Existing assignments remain selectable even if their config disappeared.
-	if p, e := project.Resolve(dir, ""); e == nil && p.Profile == profile {
-		for name := range p.Ports {
-			names = append(names, name)
+	// Allocation needs declarations from this exact execution directory. Reading
+	// or releasing an existing assignment does not require its config to survive.
+	if declared {
+		if p, e := project.Resolve(dir, ""); e == nil && p.Profile == profile && p.Root == dir {
+			for name := range p.Ports {
+				names = append(names, name)
+			}
 		}
 	}
 	return names

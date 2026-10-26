@@ -135,6 +135,25 @@ func (s ModernStore) CompletionNames(kind Kind, env string) ([]string, *protocol
 	return names, nil
 }
 
+// CompletionValueNames includes keys with only an environment slot: bundles
+// select shared identities, not the effective keys of the common layer.
+func (s ModernStore) CompletionValueNames() ([]string, *protocol.Error) {
+	raw, e := s.completionSnapshot()
+	if e != nil {
+		return nil, e
+	}
+	defer clear(raw)
+	state, e := metadataFromRaw(raw, s.Profile)
+	if e != nil {
+		return nil, e
+	}
+	names := make([]string, 0, len(state.Keys))
+	for name := range state.Keys {
+		names = append(names, name)
+	}
+	return names, nil
+}
+
 // CompletionBundleNames returns public bundle names through the same passive
 // snapshot boundary. It never consults a master/session or exposes value IDs.
 func (s ModernStore) CompletionBundleNames() ([]string, *protocol.Error) {

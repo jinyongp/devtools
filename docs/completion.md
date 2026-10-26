@@ -87,12 +87,13 @@ PowerShell single quote 규칙으로 escape합니다. cmd에는 자동완성 eng
 | `command inspect/explain/update/remove/rename`, `command run`, `run`, `process start`, `doctor`, `project up/status/restart/logs/down` | `devtools.toml`에 정의한 명령 이름. rename은 첫 번째 인자만 해당 |
 | `config tool update/remove`, `config preset update/remove` | 해당 프로젝트에 선언한 tool·preset 이름 |
 | `profile inspect`, `profile diff`의 양쪽 인자 | 저장된 profile과 현재 프로젝트의 profile 이름 |
-| `port show/allocate/check/release` | 선택한 실행 위치의 포트 선언과 남아 있는 할당 이름 |
+| `port allocate` | 선택한 실행 위치에 선언한 포트 이름 |
+| `port show/check/release` | 선택한 실행 위치에 남아 있는 할당 이름 |
 | `instance move/remove`, port·instance의 `--instance` | 선택한 profile의 instance alias와 `id:ID` |
 | `process status/stop/restart/logs/check/wait` | supervisor를 호출하지 않고 읽은 저장된 execution ID |
 | `bundle set/rename/remove`, `import --bundle` | 선택한 profile의 bundle 이름. rename은 첫 번째 인자만 해당 |
 | 실행·진단·값 조회의 `--bundle` | `all`, `none`, 선택한 profile의 bundle 이름 |
-| `bundle set --key` | 공통 계층의 변수·secret 이름. 값과 내부 ID는 제외 |
+| `bundle set --key` | 선택한 profile의 변수·secret 이름. env에만 존재하는 키도 포함하며 값과 내부 ID는 제외 |
 | `--output`, `--mode`, task `--state` 등 고정 선택 옵션 | 해당 옵션의 검증 정의에 있는 허용값 |
 | task·workstream·validation의 ID 인수 | 해당 종류의 ID |
 | `--workstream`, `--task`, `--task-ids`, `--validation-ids`, `--depends-on` | 해당 관계에 맞는 ID |

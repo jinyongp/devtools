@@ -224,14 +224,14 @@ func (a *App) registerTasks() {
 			opts = append(opts, Option{Name: "context", Description: "Current execution context; defaults to DEVTOOLS_TASK_CONTEXT."})
 		}
 		if def.Action == "run.revoked" {
-			opts = append(opts, Option{Name: "expected-run", Required: true, Pattern: uuidPattern, Completion: completeRun, Description: "Observed current run UUID to revoke."})
+			opts = append(opts, Option{Name: "expected-run", Required: true, Pattern: uuidPattern, Description: "Observed current run UUID to revoke."})
 		}
 		if def.Action == "run.claimed" || def.Action == "run.taken_over" {
 			opts = append(opts, Option{Name: "dir", Default: ".", Description: "Execution working directory."})
 			if def.Action == "run.claimed" {
 				opts = append(opts, Option{Name: "workstream", Pattern: uuidPattern, Completion: completeWorkstream, Description: "Select ready tasks in this workstream."})
 			} else {
-				opts = append(opts, Option{Name: "expected-run", Required: true, Pattern: uuidPattern, Completion: completeRun, Description: "Observed current run UUID."})
+				opts = append(opts, Option{Name: "expected-run", Required: true, Pattern: uuidPattern, Description: "Observed current run UUID."})
 			}
 		}
 		for _, f := range def.Fields {

@@ -27,7 +27,7 @@ func TestDynamicCompletion(t *testing.T) {
 	a.portProbe = managerPortStore(cliTestManager(filepath.Dir(managerData))).Probe
 	projectDir := privateTempDir(t)
 	t.Chdir(projectDir)
-	if err := os.WriteFile("devtools.toml", []byte("profile = 'app'\n[tools.echo]\nexecutable = 'echo'\n[presets.base]\ntools = ['echo']\n[ports.web]\nport = 38082\n[proxies.web]\nhost = 'web.localhost'\nport = 'web'\n[commands.web]\nexec = ['echo', 'CANARY-VALUE']\n"), 0600); err != nil {
+	if err := os.WriteFile("devtools.toml", []byte("profile = 'app'\n[tools.echo]\nexecutable = 'echo'\n[presets.base]\ntools = ['echo']\n[ports.web]\nport = 38082\n[ports.unallocated]\nport = 38084\n[proxies.web]\nhost = 'web.localhost'\nport = 'web'\n[commands.web]\nexec = ['echo', 'CANARY-VALUE']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for i := range a.commands {
@@ -55,7 +55,7 @@ func TestDynamicCompletion(t *testing.T) {
 	call("", "var", "set", "LOCAL_ONLY", "--env", "local", "--value", "CANARY-VALUE")
 	call("CANARY-SECRET", "sec", "set", "TOKEN", "--stdin")
 	bundleRevision := call("", "bundle", "list")["revision"].(string)
-	call("", "bundle", "set", "dev-bundle", "--key", "_LEVEL", "--revision", bundleRevision, "--request-id", tasks.ID())
+	call("", "bundle", "set", "dev-bundle", "--key", "_LEVEL", "--key", "LOCAL_ONLY", "--revision", bundleRevision, "--request-id", tasks.ID())
 	workstream := call("", "task", "workstream", "create", "--title", "CANARY-TITLE", "--request-id", tasks.ID())["item"].(map[string]any)["id"].(string)
 	taskID := call("", "task", "add", "--title", "CANARY-TITLE", "--workstream", workstream, "--request-id", tasks.ID())["item"].(map[string]any)["id"].(string)
 	otherTask := call("", "task", "add", "--title", "CANARY-TITLE", "--request-id", tasks.ID())["item"].(map[string]any)["id"].(string)
@@ -161,7 +161,7 @@ func TestDynamicCompletion(t *testing.T) {
 		{[]string{"profile", "diff", "app", ""}, []string{"app", "other"}},
 		{[]string{"bundle", "remove", ""}, []string{"dev-bundle"}},
 		{[]string{"bundle", "rename", "dev-bundle", ""}, nil},
-		{[]string{"bundle", "set", "new", "--key", ""}, []string{"TOKEN", "_LEVEL"}},
+		{[]string{"bundle", "set", "new", "--key", ""}, []string{"LOCAL_ONLY", "TOKEN", "_LEVEL"}},
 		{[]string{"values", "inspect", "--bundle", ""}, []string{"all", "dev-bundle", "none"}},
 		{[]string{"command", "explain", "web", "--bundle=d"}, []string{"--bundle=dev-bundle"}},
 		{[]string{"run", "--bundle", ""}, []string{"all", "dev-bundle", "none"}},
@@ -171,7 +171,9 @@ func TestDynamicCompletion(t *testing.T) {
 		{[]string{"run", "--output=r"}, []string{"--output=raw", "--output=redacted"}},
 		{[]string{"doctor", "--mode", ""}, []string{"foreground", "managed"}},
 		{[]string{"task", "list", "--state", ""}, []string{"all", "canceled", "done", "open"}},
-		{[]string{"port", "allocate", ""}, []string{"web"}},
+		{[]string{"port", "allocate", ""}, []string{"unallocated", "web"}},
+		{[]string{"port", "show", ""}, []string{"web"}},
+		{[]string{"port", "check", ""}, []string{"web"}},
 		{[]string{"port", "release", "--profile", "app", "--instance", "current", ""}, []string{"web"}},
 		{[]string{"instance", "remove", ""}, []string{"current", "id:" + instanceID}},
 		{[]string{"instance", "move", "--dir", privateTempDir(t), ""}, []string{"current", "id:" + instanceID}},
@@ -213,6 +215,7 @@ func TestDynamicCompletion(t *testing.T) {
 		{[]string{"var", "get", "--profile", "missing", ""}, nil},
 		{[]string{"var", "get", "--env", "missing", ""}, nil},
 		{[]string{"task", "add", "--request-id", ""}, nil},
+		{[]string{"task", "takeover", taskID, "--expected-run", ""}, nil},
 		{[]string{"task", "show", otherTask, ""}, nil},
 	}
 	for _, tc := range cases {

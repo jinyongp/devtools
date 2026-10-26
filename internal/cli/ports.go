@@ -66,6 +66,9 @@ func (a *App) registerPorts() {
 		cmd := Command{Name: "port " + action, Description: portDescriptions[action], Options: portOptions()}
 		if action != "list" && action != "prune" {
 			cmd.Arguments = []Argument{{Name: "port-name", Required: true, Pattern: project.ProfilePattern, Completion: completePort}}
+			if action == "allocate" {
+				cmd.Arguments[0].Completion = completePortDeclaration
+			}
 		}
 		f := assignmentFields()
 		switch action {

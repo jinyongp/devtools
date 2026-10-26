@@ -77,3 +77,28 @@ func TestReadinessExplainsFailureWithoutReportMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestAggregateDiagnosticKeepsSubsystemRecovery(t *testing.T) {
+	data := map[string]any{"ready": false, "issues": []any{map[string]any{
+		"section": "vault", "code": "vault_locked", "message": "Subsystem inspection could not complete.",
+		"details": map[string]any{
+			"effects": "unknown", "retry": "same_request", "target": map[string]any{"request_id": "recovery-uuid"},
+			"causes":   []any{map[string]any{"message": "Unlock the vault before inspecting secrets."}},
+			"remedies": []any{map[string]any{"message": "Inspect the vault.", "argv": []string{"devtools", "vault", "status"}, "required_inputs": []string{}, "effect": "read"}},
+		},
+	}}}
+	output, err := cliui.Render(publicDocument(t, "diagnostics", data), cliui.Options{CommandShells: []cliui.Shell{cliui.POSIX}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"vault: Subsystem inspection", "Changes may have been applied.", "same request ID: recovery-uuid", "Unlock the vault", "Inspect the vault.", "\ndevtools vault status\n"} {
+		if !strings.Contains(string(output), expected) {
+			t.Fatalf("lost subsystem recovery %q: %s", expected, output)
+		}
+	}
+	for _, noise := range []string{"Details", "vault_locked", "same_request", "effects"} {
+		if strings.Contains(string(output), noise) {
+			t.Fatalf("raw diagnostic metadata %q: %s", noise, output)
+		}
+	}
+}

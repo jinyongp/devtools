@@ -175,6 +175,8 @@ func conciseDiagnostics(rows []any, showPassed bool) []cliui.Block {
 		if message != "" {
 			if key, ok := row["key"].(string); ok && key != "" {
 				message = key + ": " + message
+			} else if section, ok := row["section"].(string); ok && section != "" {
+				message = section + ": " + message
 			}
 			if target, ok := row["target"].(map[string]any); ok {
 				if name, ok := target["name"].(string); ok && name != "" && name != row["id"] && !strings.Contains(message, name) {
@@ -195,6 +197,19 @@ func conciseDiagnostics(rows []any, showPassed bool) []cliui.Block {
 		for _, key := range []string{"checks", "causes", "issues", "warnings"} {
 			if nested, ok := row[key].([]any); ok {
 				result = append(result, conciseDiagnostics(nested, showPassed)...)
+			}
+		}
+		// Aggregate diagnostics wrap public error details in each subsystem issue.
+		// Keep their recovery guidance without exposing the wrapper's metadata.
+		if details, ok := row["details"].(map[string]any); ok {
+			result = append(result, recoveryNotes(details)...)
+			for _, key := range []string{"checks", "causes", "issues", "warnings"} {
+				if nested, ok := details[key].([]any); ok {
+					result = append(result, conciseDiagnostics(nested, showPassed)...)
+				}
+			}
+			if actions, valid := actionBlocks(details["remedies"]); valid {
+				result = append(result, actions...)
 			}
 		}
 		if actions, valid := actionBlocks(row["remedies"]); valid {

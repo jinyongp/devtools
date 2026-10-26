@@ -51,7 +51,7 @@ Windows standalone 설치기와 이 기능이 포함된 `devtools update`는 자
 PowerShell 5.1과 7의 Documents 아래 `WindowsPowerShell/profile.ps1`, `PowerShell/profile.ps1`
 (CurrentUserAllHosts)에 로더를 한 번 추가하고, 업데이트 때 로더가 없으면 복구합니다.
 기존 프로필 내용과 인코딩은 보존합니다. 생성한 스크립트는
-`%LOCALAPPDATA%\devtools\completion\powershell.ps1`에 두고 업데이트할 때 갱신합니다.
+`%LOCALAPPDATA%\Programs\devtools\completion\powershell.ps1`에 두고 업데이트할 때 갱신합니다.
 등록 과정에서 실행 정책이나 Tab 키 설정은 바꾸지 않습니다. `-NoProfile`로 시작한 셸은 로더를 읽지 않습니다.
 
 이 기능이 없는 구버전의 updater는 새 등록 후처리를 실행하지 못합니다. 처음 전환할 때는

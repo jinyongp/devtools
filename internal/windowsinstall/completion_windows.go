@@ -39,7 +39,7 @@ func registerPowerShellCompletion(ctx context.Context, executable string, alias 
 	if !alias {
 		output.body = bytes.ReplaceAll(output.body, []byte("-CommandName devtools,dvt,devtools.exe,dvt.exe"), []byte("-CommandName devtools,devtools.exe"))
 	}
-	return publishPowerShellCompletion(ctx, filepath.Join(local, "devtools", "completion"), documents, output.body)
+	return publishPowerShellCompletion(ctx, filepath.Join(local, "Programs", "devtools", "completion"), documents, output.body)
 }
 
 // A separate shared lock serializes installation directories writing the same

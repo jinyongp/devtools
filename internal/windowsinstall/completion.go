@@ -14,7 +14,7 @@ const completionEnd = "# devtools completion: end"
 // The loader is ASCII so appending it does not reinterpret unmarked ANSI or
 // UTF-8 profiles in Windows PowerShell 5.1. The generated script has a UTF-8 BOM.
 const completionLoader = completionBegin + `
-$__devtoolsCompletion = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'devtools\completion\powershell.ps1'
+$__devtoolsCompletion = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\devtools\completion\powershell.ps1'
 if (Test-Path -LiteralPath $__devtoolsCompletion) { . $__devtoolsCompletion }
 Remove-Variable __devtoolsCompletion -ErrorAction SilentlyContinue
 ` + completionEnd + "\n"

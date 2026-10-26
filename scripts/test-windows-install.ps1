@@ -20,7 +20,7 @@ $originalMachinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
 $oldInstallerFixture = $env:DEVTOOLS_INSTALLER_FIXTURE
 $bootstrapBin = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\devtools\bin'
 $bootstrapOwned = $false
-$completionFile = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'devtools\completion\powershell.ps1'
+$completionFile = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\devtools\completion\powershell.ps1'
 $completionProfiles = @('WindowsPowerShell', 'PowerShell') | ForEach-Object { Join-Path ([Environment]::GetFolderPath('MyDocuments')) ($_ + '\profile.ps1') }
 $completionBackup = @(@($completionFile) + $completionProfiles | ForEach-Object {
     @{ path = $_; existed = [IO.File]::Exists($_); bytes = $(if ([IO.File]::Exists($_)) { [IO.File]::ReadAllBytes($_) } else { $null }) }

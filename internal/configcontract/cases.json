@@ -1,5 +1,5 @@
 {
-  "description": "Synthetic protocol-14 conformance cases; provider execution is a separate required check.",
+  "description": "Synthetic protocol-15 conformance cases; provider execution is a separate required check.",
   "cases": [
     {
       "schema": "Name",

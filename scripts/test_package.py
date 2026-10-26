@@ -138,7 +138,7 @@ class ArchiveContracts(unittest.TestCase):
             binary = Path(scratch) / ("standalone.exe" if system == "windows" else "standalone")
             binary.write_bytes(package.read_archive(artifact, system))
             binary.chmod(0o755)
-            result = subprocess.check_output([str(binary), "version"], env=dict(os.environ, PATH=""), text=True, encoding="utf-8")
+            result = subprocess.check_output([str(binary), "version"], env=dict(os.environ, PATH="", DEVTOOLS_FORMAT="json"), text=True, encoding="utf-8")
             self.assertEqual(json.loads(result)["data"]["version"], "0.0.0-package-test")
             self.assertEqual(json.loads(result)["data"]["commit"], "package-native-test")
             with self.assertRaisesRegex(ValueError, "metadata"):

@@ -15,7 +15,7 @@ def check(binary, baseline=None):
     evidence = {"checks": []}
     with tempfile.TemporaryDirectory(prefix="devtools-host-contract-") as temporary, serving(Backend) as backend:
         root = Path(temporary)
-        environment = dict(os.environ)
+        environment = dict(os.environ, DEVTOOLS_FORMAT="json")
         environment.pop("DEVTOOLS_TASK_CONTEXT", None)
         environment.pop("DEVTOOLS_ISOLATED_ROOT", None)
 

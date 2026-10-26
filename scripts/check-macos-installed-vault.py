@@ -37,7 +37,7 @@ def main():
         root = Path(temporary).resolve()
         home = root / 'home'
         home.mkdir(mode=0o700)
-        env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / 'config'),
+        env = dict(os.environ, DEVTOOLS_FORMAT='json', HOME=str(home), XDG_CONFIG_HOME=str(home / 'config'),
                    XDG_DATA_HOME=str(home / 'data'), XDG_CACHE_HOME=str(home / 'cache'),
                    XDG_RUNTIME_DIR=str(home / 'runtime'))
         env.pop('DEVTOOLS_ISOLATED_ROOT', None)

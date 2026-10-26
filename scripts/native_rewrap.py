@@ -7,8 +7,11 @@ import subprocess
 import sys
 import uuid
 
+from cli_json import json_argv, json_environment
+
 
 def check_native_rewrap(binary, env, cwd, profile, directory, *, lock_backend=None, unlock_backend=None):
+    env = json_environment(env)
     if env.get('DEVTOOLS_DISPOSABLE_HOST') != '1' or env.get('DEVTOOLS_ISOLATED_ROOT'):
         raise RuntimeError('Native rewrap requires the owned disposable host store')
     directory, cwd = Path(directory), Path(cwd)
@@ -21,7 +24,7 @@ def check_native_rewrap(binary, env, cwd, profile, directory, *, lock_backend=No
         path.chmod(0o600)
 
     def api(*args, input=None, error=None):
-        p = subprocess.run([str(binary), *map(str, args)], cwd=cwd, env=env, input=input,
+        p = subprocess.run(json_argv(binary,args,environment=env,cwd=cwd), cwd=cwd, env=env, input=input,
                            capture_output=True, text=True, timeout=45)
         for secret in (canary, 'synthetic-native-rewrap-password', 'synthetic-wrong-native-rewrap-password'):
             if secret in p.stdout + p.stderr:

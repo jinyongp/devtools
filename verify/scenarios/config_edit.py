@@ -31,7 +31,7 @@ def api(*argv, body=None, expected=0):
     return response.get("data") if expected == 0 else response["error"]
 
 
-assert api("version")["protocol_version"] == 14
+assert api("version")["protocol_version"] == 15
 api("init", "--profile", "sample")
 path = project / "devtools.toml"
 initial = api("config", "inspect")

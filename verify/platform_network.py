@@ -34,7 +34,7 @@ def main():
         report["recovery_root"]=str(root)
         binary=root/"bin"/"devtools";binary.parent.mkdir();shutil.copy2(source,binary)
         project=root/"project";project.mkdir()
-        env=dict(os.environ,HOME=str(root),XDG_CONFIG_HOME=str(root/"config"),XDG_DATA_HOME=str(root/"data"),XDG_CACHE_HOME=str(root/"cache"))
+        env=dict(os.environ,DEVTOOLS_FORMAT="json",HOME=str(root),XDG_CONFIG_HOME=str(root/"config"),XDG_DATA_HOME=str(root/"data"),XDG_CACHE_HOME=str(root/"cache"))
         env.pop("DEVTOOLS_ISOLATED_ROOT",None);env.pop("DEVTOOLS_TASK_CONTEXT",None)
         original_hosts=Path("/etc/hosts").read_bytes()
         hostname="network-"+uuid.uuid4().hex[:12]+".test"

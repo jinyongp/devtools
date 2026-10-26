@@ -11,7 +11,7 @@ compatibility: Requires the devtools CLI in PATH and filesystem access to the ta
 
 1. Inspect project instructions and existing `devtools.toml` before changing setup or launch code.
 2. Match the requested behavior to the table below. Read only the relevant reference.
-3. Check `devtools version`, then the selected group's `--help` and specific command schema.
+3. Discover `schema version` with child environment `DEVTOOLS_FORMAT=json`. If its `global_options` advertises root-prefix format/json, use `devtools --format json version` and the same prefix for structured calls. Older builds keep their original argv. Then read the selected group's `--help` and command schema.
 4. Reuse an existing command or change its declarations. Add wrapper code only for a confirmed capability gap or an explicit project requirement.
 5. For changes, validate configuration and affected behavior. For inspection requests, keep operations read-only. Report what actually passed.
 
@@ -37,6 +37,7 @@ Use this skill alongside the source-work workflow. Do not create task records me
 
 ## Discover the installed contract
 
+- Protocol 15 adds `--format auto|text|json` before the command and `DEVTOOLS_FORMAT`. Auto uses text on ordinary terminals and JSON for known agents/pipes; detection is only a convenience. For stable parsing, select JSON explicitly after discovering support. Do not probe support by failing and retrying a mutation.
 - Commands: `devtools <group> --help`, then `devtools schema <group> <command>`.
 - TOML fields and binding forms: `devtools config schema`. Command schemas and configuration schemas serve different purposes.
 - Existing setup: `project inspect`, `command list`, `command inspect NAME`; discover support before using newer `config inspect` or `command explain`.

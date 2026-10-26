@@ -18,10 +18,11 @@ import time
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
 from vault_test_support import retire_vaults
+from cli_json import json_argv, json_environment
 
 
 def binary_identity(path):
-    version = subprocess.run([str(path), "version"], capture_output=True, check=True, timeout=10)
+    version = subprocess.run(json_argv(path, ["version"]), env=json_environment(), capture_output=True, check=True, timeout=10)
     return {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             "version": json.loads(version.stdout)["data"]}
 
@@ -32,11 +33,11 @@ class Fixture:
         self.root = Path(tempfile.mkdtemp(prefix="devtools-mutations-")).resolve()
         self.root.chmod(0o700)
         self.env = {k: v for k, v in os.environ.items() if not k.startswith("DEVTOOLS_")}
-        self.env.update(DEVTOOLS_ISOLATED_ROOT=str(self.root), LC_ALL="C")
+        self.env.update(DEVTOOLS_ISOLATED_ROOT=str(self.root), LC_ALL="C", DEVTOOLS_FORMAT="json")
         self.serial = 0
 
     def call(self, *args, timed=False):
-        argv = [str(self.binary), *map(str, args)]
+        argv = json_argv(self.binary, args, environment=self.env, cwd=self.root)
         self.serial += 1
         rss = self.root / ("rss-%d.txt" % self.serial)
         if timed:

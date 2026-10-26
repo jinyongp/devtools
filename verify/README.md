@@ -4,7 +4,7 @@
 
 CI·로컬 검사 선택과 수동 진단의 구분은 [검증 구성](../docs/verification.md)을 따른다.
 
-`python3 -B verify/run.py cli_guidance`는 protocol 14 archive를 설치해 A/B isolation
+`python3 -B verify/run.py cli_guidance`는 protocol 15 archive를 설치해 A/B isolation
 root의 후속 행동, direct argv 위치, 신규 profile effects, kind 충돌, revision/request
 복구, help/status 계약, import·설정 safe facts와 실제 managed launcher의 redaction
 한도를 검사한다. 기존 Release의 Linux/macOS `test:installed` 전체 선택에 포함된다.

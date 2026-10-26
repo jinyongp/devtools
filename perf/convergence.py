@@ -16,6 +16,7 @@ import uuid
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / 'scripts'))
 from vault_test_support import retire_vaults
+from cli_json import json_argv, json_environment
 
 PASSWORD = 'synthetic-convergence-unlock'
 SECRET = 'synthetic-convergence-secret'
@@ -27,13 +28,14 @@ def measure(binary, size, policy, deadline, storm, row):
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(('DEVTOOLS_', 'BENCH_VALUE_')) and k not in ('TOKEN', 'REV')}
     env['DEVTOOLS_ISOLATED_ROOT'] = str(root / 'state')
+    env['DEVTOOLS_FORMAT'] = 'json'
     cleaning = False
 
     def api(*args, input=None):
         remaining = 30 if cleaning else min(30, deadline - time.monotonic())
         if remaining <= 0:
             raise RuntimeError('Convergence run budget exhausted')
-        p = subprocess.run([str(binary), *map(str, args)], cwd=root, env=env,
+        p = subprocess.run(json_argv(binary,args,environment=env,cwd=root), cwd=root, env=env,
                            input=input, capture_output=True, text=True, timeout=remaining)
         if SECRET in p.stdout + p.stderr or PASSWORD in p.stdout + p.stderr:
             raise RuntimeError('Fixture credential disclosed')
@@ -220,7 +222,7 @@ def main():
     try:
         result['binary_sha256'] = hashlib.sha256(binary.read_bytes()).hexdigest()
         result['harness_sha256'] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
-        result['identity'] = json.loads(subprocess.check_output([str(binary), 'version'], timeout=10))['data']
+        result['identity'] = json.loads(subprocess.check_output(json_argv(binary, ['version']), env=json_environment(), timeout=10))['data']
         result['source_commit'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip()
         result['source_dirty'] = bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=REPO, text=True).strip())
         result['cpu_model'] = next((line.split(':', 1)[1].strip() for line in Path('/proc/cpuinfo').read_text().splitlines() if line.startswith('model name')), platform.processor())

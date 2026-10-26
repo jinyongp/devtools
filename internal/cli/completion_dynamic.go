@@ -11,7 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/project"
+	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
 )
@@ -65,6 +67,44 @@ func (a *App) dynamicCandidates(words []string) []string {
 	}
 	prefix := words[len(words)-1]
 	past := words[:len(words)-1]
+	rootEnd := 0
+	rootSelection := map[string]string{}
+	formatCandidates := func(prefix, replacement string) []string {
+		out := []string{}
+		for _, value := range []string{"auto", "text", "json"} {
+			if strings.HasPrefix(value, prefix) {
+				out = append(out, replacement+value)
+			}
+		}
+		return out
+	}
+	for rootEnd < len(past) {
+		name, value, inline := strings.Cut(past[rootEnd], "=")
+		if name != "--format" && name != "--isolated-root" {
+			break
+		}
+		rootEnd++
+		if !inline {
+			if rootEnd == len(past) {
+				if name == "--format" {
+					return formatCandidates(prefix, "")
+				}
+				return nil
+			}
+			value = past[rootEnd]
+			rootEnd++
+		}
+		if value == "" || name == "--format" && value != "auto" && value != "text" && value != "json" {
+			return nil
+		}
+		if name == "--isolated-root" {
+			rootSelection["isolated-root"] = value
+		}
+	}
+	if rootEnd == len(past) && strings.HasPrefix(prefix, "--format=") {
+		return formatCandidates(strings.TrimPrefix(prefix, "--format="), "--format=")
+	}
+	past = past[rootEnd:]
 	var cmd *Command
 	consumed := 0
 	for i := range a.commands {
@@ -82,7 +122,7 @@ func (a *App) dynamicCandidates(words []string) []string {
 	for _, opt := range cmd.Options {
 		opts["--"+opt.Name] = opt
 	}
-	selected := map[string]string{}
+	selected := rootSelection
 	pending := ""
 	positionals := 0
 	positionalValues := map[string]bool{}
@@ -207,6 +247,17 @@ func (a *App) dynamicCandidates(words []string) []string {
 	// Task --dir selects execution/query locations; profile resolution uses cwd.
 	if strings.HasPrefix(cmd.Name, "task ") {
 		delete(selected, "dir")
+	}
+	if root := selected["isolated-root"]; root != "" {
+		directories, err := paths.Isolated(root)
+		if err != nil {
+			return nil
+		}
+		// Query the selected root without mutating App or creating user paths.
+		scoped := *a
+		scoped.isolatedRoot = directories.IsolatedRoot
+		scoped.dataDirectory = func() (string, *protocol.Error) { return directories.Data + "/profiles", nil }
+		a = &scoped
 	}
 	names := a.completionNames(source, selected)
 	sort.Strings(names)

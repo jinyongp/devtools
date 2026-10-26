@@ -14,6 +14,7 @@ func powershellCompletion(nodes map[string]*completionNode, paths []string) stri
 	type option struct {
 		Name    string
 		Boolean bool
+		Values  []string
 	}
 	type node struct {
 		Path      string
@@ -35,7 +36,11 @@ func powershellCompletion(nodes map[string]*completionNode, paths []string) stri
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			row.Options = append(row.Options, option{Name: name, Boolean: source.options[name].Boolean})
+			values := []string{}
+			if path == "" && name == "--format" {
+				values = []string{"auto", "text", "json"}
+			}
+			row.Options = append(row.Options, option{Name: name, Boolean: source.options[name].Boolean, Values: values})
 		}
 		metadata = append(metadata, row)
 	}

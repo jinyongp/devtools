@@ -13,6 +13,7 @@ from vault_fixture import retire_home_sessions
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from fixture_paths import temporary_fixture
+from cli_json import json_argv, json_environment
 
 
 TEST_VERSIONS = ("0.0.0-test.1", "0.0.0-test.2")
@@ -68,9 +69,9 @@ def cleanup_managed_processes(home: Path, env) -> bool:
     def run(*args):
         try:
             return subprocess.run(
-                [str(binary), *args],
+                json_argv(binary, args, environment=env, cwd=home),
                 cwd=home,
-                env=env,
+                env=json_environment(env),
                 text=True,
                 capture_output=True,
                 timeout=10,
@@ -184,6 +185,7 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
                 DEVTOOLS_TEST_README=str(readme),
                 DEVTOOLS_TEST_INSTALL_DOC=str(install_doc),
                 DEVTOOLS_TEST_CANONICAL_SKILL=str(canonical_skill),
+                DEVTOOLS_FORMAT="json",
             )
             for key in GIT_LOCAL_ENVIRONMENT:
                 env.pop(key, None)

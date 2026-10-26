@@ -22,7 +22,7 @@ def main():
         runtime = root / 'runtime'
         runtime.mkdir(mode=0o700)
         env = {k: v for k, v in os.environ.items() if not k.startswith('DEVTOOLS_')}
-        env.update(DEVTOOLS_DISPOSABLE_HOST='1', XDG_CONFIG_HOME=str(root/'config'), XDG_DATA_HOME=str(root/'data'),
+        env.update(DEVTOOLS_FORMAT='json', DEVTOOLS_DISPOSABLE_HOST='1', XDG_CONFIG_HOME=str(root/'config'), XDG_DATA_HOME=str(root/'data'),
                    XDG_CACHE_HOME=str(root/'cache'), XDG_RUNTIME_DIR=str(runtime))
         directory = root / 'data/devtools/vault'
         def api(*words):

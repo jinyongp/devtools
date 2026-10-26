@@ -63,8 +63,10 @@ devtools var set LOG_LEVEL --env local --value debug
 devtools var get LOG_LEVEL --env local
 ```
 
-The final JSON response contains `data.value: "debug"`, confirming the `local`
-override. To pass that value to a child command, choose the example for your shell.
+The final response shows `debug`, confirming the `local` override. Data commands
+use readable text on ordinary terminals and JSON for known agents or pipes.
+For automation, use `devtools --format json var get LOG_LEVEL --env local` and read
+`data.value`. To pass the value to a child command, choose your shell's example.
 
 `var set` also accepts `--file PATH` or piped `--stdin` instead of `--value`.
 Each reads one complete value, preserving whitespace and trailing newlines.
@@ -84,7 +86,8 @@ devtools run --env local -- cmd.exe /d /c set LOG_LEVEL
 
 These print `debug` and `LOG_LEVEL=debug`, respectively. In your project, put
 an installed project tool's command after `--`, such as `pnpm dev` or `go run .`.
-Devtools data commands return JSON; child output is not wrapped in JSON.
+`--format auto|text|json` precedes the command and overrides `DEVTOOLS_FORMAT`.
+Schema queries stay JSON, and child output is not wrapped or reformatted.
 On builds with [output protection](docs/output-protection.md), non-TTY stdout and
 stderr mask delivered secrets by default. TTY output uses the configured policy.
 

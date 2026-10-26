@@ -26,6 +26,8 @@ from dataclasses import asdict, dataclass
 
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "scripts"))
+from cli_json import json_argv, json_environment
 GROUPS = ("cli", "project", "values", "tasks", "backup", "process", "proxy", "dashboard", "discovery")
 GIT_ENV = (
     "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
@@ -41,7 +43,7 @@ def write_json(path, value):
 
 def execute(argv, *, env=None, cwd=None, timeout=180):
     """Bound the command and its ordinary children, including hyperfine hooks."""
-    process = subprocess.Popen(argv, env=env, cwd=cwd, stdout=subprocess.PIPE,
+    process = subprocess.Popen(argv, env=json_environment(env), cwd=cwd, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, text=True, start_new_session=True)
     try:
         stdout, stderr = process.communicate(timeout=timeout)
@@ -78,7 +80,7 @@ def isolated_env(root, inherited=None):
     for key, directory in {"XDG_CONFIG_HOME": "config", "XDG_DATA_HOME": "data",
                            "XDG_CACHE_HOME": "cache", "XDG_RUNTIME_DIR": "runtime"}.items():
         env[key] = str(root / directory)
-    env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", PYTHONDONTWRITEBYTECODE="1")
+    env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", PYTHONDONTWRITEBYTECODE="1", DEVTOOLS_FORMAT="json")
     return env
 
 
@@ -110,7 +112,7 @@ class Fixture:
         self.info = info or {}
 
     def cli(self, *args):
-        result = json.loads(execute([str(self.binary), *map(str, args)], env=self.env,
+        result = json.loads(execute(json_argv(self.binary, args, environment=self.env, cwd=self.project), env=self.env,
                                     cwd=self.project, timeout=45))
         if not result.get("ok"):
             raise RuntimeError("Fixture command returned an unsuccessful response.")
@@ -553,7 +555,7 @@ def main():
         seed_binary = scratch / "fixture"
         execute(["go", "build", "-trimpath", "-o", str(seed_binary), "./perf/fixture"], cwd=REPO)
         summary["metadata"].update(binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
-                                   binary_version=json.loads(execute([str(binary), "version"])),
+                                   binary_version=json.loads(execute(json_argv(binary, ["version"]))),
                                    source_commit=execute(["git", "rev-parse", "HEAD"], cwd=REPO).strip(),
                                    source_dirty=bool(execute(["git", "status", "--porcelain"], cwd=REPO).strip()))
         catalog = json.loads(execute([str(binary), "schema", "--all"]))["data"]

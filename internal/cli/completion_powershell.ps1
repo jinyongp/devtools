@@ -73,20 +73,28 @@ function __DevtoolsComplete {
                 }
             } finally { $child.Dispose() }
         }
-        $context = ''; $skip = $false; $static = $true
+        $context = ''; $skip = $false; $static = $true; $pendingOption = $null
         for ($index = 0; $index -lt $words.Count - 1; $index++) {
             $word = $words[$index]
-            if ($skip) { $skip = $false; continue }
+            if ($skip) { $skip = $false; $pendingOption = $null; continue }
             if ($word -eq '--') { $static = $false; break }
             $node = $script:DevtoolsCompletionNodes | Where-Object { $_.Path -ceq $context } | Select-Object -First 1
             $option = $node.Options | Where-Object { $_.Name -ceq $word } | Select-Object -First 1
-            if ($option) { $skip = -not $option.Boolean; continue }
+            if ($option) { $skip = -not $option.Boolean; $pendingOption = $option; continue }
             if ($word.StartsWith('--') -and $word.Contains('=')) { continue }
             if ($word.StartsWith('-')) { $static = $false; break }
             if ($node.ChildArgs) { $static = $false; break }
             if ($node.Children -ccontains $word) { $context = ($context + ' ' + $word).TrimStart() }
         }
-        if ($static -and -not $skip) {
+        if ($static -and $skip -and $pendingOption.Values) {
+            foreach ($value in $pendingOption.Values) {
+                if ($value.StartsWith($current, [StringComparison]::Ordinal)) { $candidates.Add($value) }
+            }
+        } elseif ($static -and -not $context -and $current.StartsWith('--format=', [StringComparison]::Ordinal)) {
+            foreach ($value in @('--format=auto','--format=text','--format=json')) {
+                if ($value.StartsWith($current, [StringComparison]::Ordinal)) { $candidates.Add($value) }
+            }
+        } elseif ($static -and -not $skip) {
             $node = $script:DevtoolsCompletionNodes | Where-Object { $_.Path -ceq $context } | Select-Object -First 1
             foreach ($value in @($node.Children) + @($node.Options | ForEach-Object { $_.Name })) {
                 if ($null -ne $value -and $value.StartsWith($current, [StringComparison]::Ordinal)) { $candidates.Add($value) }

@@ -11,6 +11,7 @@ import tempfile
 import uuid
 
 from vault_test_support import retire_vaults
+from cli_json import json_argv, json_environment
 
 PASSPHRASE = 'synthetic-cross-platform-fixture-passphrase\n'
 SECRET = 'synthetic-cross-platform-secret\n'
@@ -19,10 +20,10 @@ ORIGINS = {'linux', 'macos', 'windows-amd64', 'windows-arm64'}
 
 
 def cli(binary, root, *args, input=None, error=None):
-    env = dict(os.environ, DEVTOOLS_ISOLATED_ROOT=str(root))
+    env = json_environment(dict(os.environ, DEVTOOLS_ISOLATED_ROOT=str(root)))
     env.pop('DEVTOOLS_TASK_CONTEXT', None)
     # Binary stdin keeps fixture secret bytes identical on Windows and Unix.
-    result = subprocess.run([str(binary), *args], cwd=root, env=env,
+    result = subprocess.run(json_argv(binary,args,environment=env,cwd=root), cwd=root, env=env,
                             input=input.encode('utf-8') if input is not None else None,
                             capture_output=True, timeout=60)
     stdout, stderr = result.stdout.decode('utf-8'), result.stderr.decode('utf-8')

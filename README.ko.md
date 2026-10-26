@@ -61,7 +61,9 @@ devtools var set LOG_LEVEL --env local --value debug
 devtools var get LOG_LEVEL --env local
 ```
 
-마지막 JSON 응답의 `data.value`가 `debug`이면 `local` 환경의 덮어쓰기를 확인한 것입니다.
+마지막 응답에 `debug`가 표시되면 `local` 환경의 덮어쓰기를 확인한 것입니다.
+일반 터미널에서는 읽기 쉬운 text, 알려진 agent와 파이프에서는 JSON을 선택합니다.
+자동화에서는 `devtools --format json var get LOG_LEVEL --env local`의 `data.value`를 읽으세요.
 자식 명령에 이 값을 전달하려면 사용하는 셸에 맞게 실행하세요.
 
 macOS·Linux·WSL의 POSIX 셸:
@@ -77,8 +79,9 @@ devtools run --env local -- cmd.exe /d /c set LOG_LEVEL
 ```
 
 각각 `debug`, `LOG_LEVEL=debug`가 출력됩니다. 실제 프로젝트에서는 `--` 뒤에
-`pnpm dev`, `go run .` 등 설치된 프로젝트 도구의 명령을 넣으세요. devtools 명령은
-JSON을 반환하고, 자식 프로그램의 출력은 JSON으로 감싸지 않습니다.
+`pnpm dev`, `go run .` 등 설치된 프로젝트 도구의 명령을 넣으세요.
+`--format auto|text|json`은 명령 앞에 두며 `DEVTOOLS_FORMAT`보다 우선합니다.
+schema 조회는 JSON을 유지하고 자식 출력은 기존 stream으로 전달합니다.
 [출력 보호](docs/output-protection.md)를 지원하는 빌드에서는 non-TTY stdout·stderr의
 전달된 secret을 기본 마스킹합니다. TTY 출력에는 설정한 정책을 적용합니다.
 

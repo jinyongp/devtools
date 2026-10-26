@@ -249,7 +249,7 @@ def loopback_mapping(hosts, hostname):
 
 def consumer_environment():
     """Development servers must not inherit CI enrollment credentials."""
-    environment = dict(os.environ)
+    environment = dict(os.environ, DEVTOOLS_FORMAT="json")
     environment.pop("DEVTOOLS_TASK_CONTEXT", None)
     environment.pop("DEVTOOLS_ISOLATED_ROOT", None)
     environment.pop("PROXY_COMPAT_AUTH", None)

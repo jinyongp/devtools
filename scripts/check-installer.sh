@@ -27,6 +27,10 @@ mkdir -p "$release" "$home"
 
 cat > "$scratch/devtools" <<'EOF'
 #!/bin/sh
+if [ "${1:-}" = schema ] && [ "${2:-}" = version ]; then
+  printf '%s\n' '{"schema_version":1,"ok":true,"data":{"global_options":[]}}'
+  exit 0
+fi
 if [ "${1:-}" = version ]; then
   printf '%s\n' '{"schema_version":1,"ok":true,"data":{"version":"0.0.0-installer-test"}}'
   exit 0

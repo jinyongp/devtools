@@ -107,6 +107,7 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 			}
 			b.WriteByte('\n')
 		}
+		b.WriteString("\nRoot options (before the command):\n  --format auto|text|json   Output format; overrides DEVTOOLS_FORMAT. Schema stays JSON; native stdout is preserved.\n  --isolated-root PATH      Independent user paths; command-local support follows this command's options.\n")
 		if len(names) > 0 {
 			b.WriteByte('\n')
 			b.WriteString(a.commandHelp(target, names))
@@ -144,6 +145,9 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s — developer tools\n\n", heading)
 	b.WriteString(a.commandHelp(target, names))
+	if target == "" {
+		b.WriteString("\nRoot options (before the command): --format auto|text|json, --isolated-root PATH\nOutput preference: --format > DEVTOOLS_FORMAT > default. Auto uses text on ordinary terminals and JSON for agents/pipes.\n")
+	}
 	fmt.Fprintf(&b, "\nUsage: %s <command> --help\nSchema: devtools schema %s<command>\n", heading, strings.TrimPrefix(heading+" ", "devtools "))
 	return nil, b.String(), true
 }

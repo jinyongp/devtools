@@ -13,6 +13,7 @@ import urllib.parse
 import urllib.request
 
 from vault_test_support import retire_vaults
+from cli_json import json_argv, json_environment
 
 BASELINE = '89100eb98888895a450b2ebd403e4e1c9b5f52d2'
 SECRET = 'synthetic-actual-legacy-migration-token'
@@ -93,8 +94,9 @@ def main():
         legacy_digest = hashlib.sha256(legacy.read_bytes()).hexdigest()
         env = {k: v for k, v in os.environ.items() if not k.startswith('DEVTOOLS_')}
         env['DEVTOOLS_ISOLATED_ROOT'] = str(root)
+        env['DEVTOOLS_FORMAT'] = 'json'
         def api(binary, *argv, input=None, denied=False):
-            result = subprocess.run([str(binary), *argv], cwd=root, env=env,
+            result = subprocess.run(json_argv(binary,argv,environment=env,cwd=root), cwd=root, env=env,
                                     input=input.encode() if input is not None else None,
                                     capture_output=True, timeout=30)
             if SECRET.encode() in result.stdout + result.stderr or PASSWORD.encode() in result.stdout + result.stderr:

@@ -11,6 +11,7 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY / "scripts"))
 from vault_test_support import retire_vaults
 from fixture_paths import fixture_path
+from cli_json import json_argv, json_environment
 
 
 def run(binary, receiver, directory, base_env=None):
@@ -19,7 +20,7 @@ def run(binary, receiver, directory, base_env=None):
     project = directory / "project"
     project.mkdir()
     isolated = directory / "store"
-    env = dict(base_env or os.environ, DEVTOOLS_ISOLATED_ROOT=str(isolated))
+    env = json_environment(dict(base_env or os.environ, DEVTOOLS_ISOLATED_ROOT=str(isolated)))
     env.pop("DEVTOOLS_TASK_CONTEXT", None)
     canary = "synthetic-installed-handoff-secret"
     other = "synthetic-outside-scope-secret"
@@ -32,7 +33,7 @@ def run(binary, receiver, directory, base_env=None):
     def api(*args, body=None, text=None, error=None):
         if body is not None:
             text = json.dumps(body)
-        result = subprocess.run([str(binary), *args], cwd=project, env=env,
+        result = subprocess.run(json_argv(binary,args,environment=env,cwd=project), cwd=project, env=env,
                                 input=text, text=True, capture_output=True, timeout=30)
         for secret in (canary, other, passphrase):
             assert secret not in result.stdout + result.stderr, "private input reached CLI response"
@@ -91,7 +92,7 @@ def run(binary, receiver, directory, base_env=None):
         return json.loads(result.stdout)
 
     try:
-        assert api("version")["protocol_version"] == 14
+        assert api("version")["protocol_version"] == 15
         api("init", "--profile", "handoff")
         api("vault", "init", "--backend", "passphrase", "--passphrase-stdin", text=passphrase + "\n")
         api("secret", "set", "TOKEN", "--stdin", text=canary)

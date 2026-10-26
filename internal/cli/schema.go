@@ -121,10 +121,10 @@ func (a *App) catalog() map[string]any {
 		"commands":         commands,
 		"transport": map[string]any{
 			"input":             "CLI flags and positional args. For command run, devtools options precede the command name and all following tokens are child_args; an optional -- immediately after the name is a separator. Without a name, -- introduces the program and its arguments. Schemas describe parsed inputs, not a JSON stdin endpoint. Variable/secret set --stdin reads a raw UTF-8 value.",
-			"success":           "Follow output_mode: json encodes one response envelope on stdout; text is help; artifact is generated file content; passthrough delegates stdout, stderr, and exit status to the child.",
-			"failure":           "Devtools errors use one JSON response on stderr, including help and artifact errors. After child execution starts, passthrough preserves child output and exit status.",
+			"success":           "Read output_mode and presentation together. Structured json commands support --format auto|text|json before the command; DEVTOOLS_FORMAT is the fallback preference. Auto selects JSON for known agent signals or non-terminal stdout, otherwise text. Schema/config schema always use JSON. Help, artifact and passthrough preserve native stdout.",
+			"failure":           "Devtools errors use the selected format on stderr; machine discovery and malformed format inputs use JSON. The format follows stdout selection even when stderr is a terminal. Existing interactive prompts or child streams may precede a diagnostic; stderr as a whole is not necessarily one envelope. Child exit/signal and output protection are preserved.",
 			"output_modes":      []OutputMode{OutputJSON, OutputText, OutputArtifact, OutputPassthrough},
-			"output_schema":     "Describes data inside the success envelope, and is present only for json commands.",
+			"output_schema":     "Describes data inside the JSON success envelope, and is present only for structured json commands. Text layout/style is not a machine parsing contract; request --format json for stable data.",
 			"interactive":       true,
 			"interactive_input": "Profile export/import can prompt for a passphrase on a terminal. Use --passphrase-file or --passphrase-stdin for non-interactive transfers.",
 			"help_flags":        []string{"--help", "-h"},

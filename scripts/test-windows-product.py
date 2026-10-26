@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 import package as release_package
 from vault_test_support import retire_vaults
 from native_rewrap import check_native_rewrap
+from cli_json import json_argv, json_environment
 
 
 class CLIError(RuntimeError):
@@ -48,7 +49,7 @@ def main():
     project = root / "프로젝트 공백"
     project.mkdir()
     binary = root / "installed" / "bin" / "devtools.exe"
-    base_env = dict(os.environ)
+    base_env = json_environment()
     base_env.pop("DEVTOOLS_ISOLATED_ROOT", None)
     source_env = dict(base_env, DEVTOOLS_ISOLATED_ROOT=str(root / "source"))
     target_env = dict(base_env, DEVTOOLS_ISOLATED_ROOT=str(root / "target"))
@@ -57,7 +58,7 @@ def main():
     steps = []
 
     def raw(arguments, env=source_env, input="", timeout=40):
-        result = subprocess.run([str(binary), *arguments], cwd=project, env=env, input=input.encode("utf-8"),
+        result = subprocess.run(json_argv(binary,arguments,environment=env,cwd=project), cwd=project, env=env, input=input.encode("utf-8"),
                                 capture_output=True, timeout=timeout)
         if result.returncode:
             try:
@@ -97,7 +98,7 @@ def main():
         ], cwd=repository, env=base_env, text=True, encoding="utf-8", capture_output=True, timeout=180)
         assert install.returncode == 0, "Candidate installer did not complete (raw output withheld)"
         identity = api("version")
-        assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 14
+        assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 15
         alias = binary.with_name("dvt.exe")
         assert hashlib.sha256(alias.read_bytes()).digest() == hashlib.sha256(binary.read_bytes()).digest()
         steps.append("candidate_install_and_alias")

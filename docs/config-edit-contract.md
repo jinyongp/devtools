@@ -2,9 +2,10 @@
 
 [문서 목록](README.md) · [설정 모델](cli-config-redesign.md) · [진단 계약](diagnostic-contract.md)
 
-이 문서는 protocol 14 소스의 설정 편집 계약이다. 사용 순서는 [설정 편집 가이드](configuration.md)를 따른다.
+이 문서는 protocol 15 소스의 설정 편집 계약이다. 사용 순서는 [설정 편집 가이드](configuration.md)를 따른다.
 본문의 입력·응답 이름은 [schema의 $defs](../internal/configcontract/schema.json)를 가리킨다.
-JSON envelope는 기존처럼 성공을 stdout, 실패를 stderr에 한 개씩 반환한다.
+JSON 표현을 선택하면 envelope는 기존처럼 성공을 stdout, 실패를 stderr에 한 개씩 반환한다.
+안정적인 소비자는 명령 앞의 `--format json`을 사용한다. `config schema`는 항상 JSON이다.
 범위 지원 소스의 `Version`은 `x-npmRange: true`를 가진다. 런타임은 이 확장 keyword로
 128 byte 이내의 비어 있지 않은 npm SemVer 범위를 검증한다. 일반 JSON Schema 검사기는
 이 keyword를 무시할 수 있으므로 문자/길이 검사만으로 범위 문법이 검증됐다고 간주하지 않는다.
@@ -14,7 +15,7 @@ Tool·ToolPatch·TOML 로드는 같은 범위 검사기를 사용한다. 잘못�
 
 ## 명령과 옵션
 
-root의 기존 `--isolated-root` 선택은 유지한다.
+root의 기존 `--isolated-root` 선택과 표시용 `--format auto|text|json`은 명령 앞에 둔다.
 아래 표에 없는 옵션, JSON의 모르는 필드, 중복 옵션은 invalid_argument다.
 `--dir`의 기본값은 현재 디렉터리다. 해당 옵션은 현재 디렉터리 기준으로 해석하며 process cwd를 바꾸지 않는다.
 `--file`도 process cwd 기준이고 프로젝트 root 기준이 아니다.

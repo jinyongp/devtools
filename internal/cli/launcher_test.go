@@ -117,6 +117,8 @@ func TestMain(m *testing.M) {
 			os.Exit(0)
 		}
 	}
+	// Baseline tests consume JSON; individual preference tests set their own value.
+	_ = os.Unsetenv("DEVTOOLS_FORMAT")
 	os.Exit(m.Run())
 }
 

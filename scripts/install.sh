@@ -114,7 +114,14 @@ tar -xzf "$scratch/package.tar.gz" -C "$scratch" devtools 2>/dev/null || fail 'C
 [ -f "$scratch/devtools" ] && [ ! -L "$scratch/devtools" ] || fail 'Invalid release executable.'
 chmod 0755 "$scratch/devtools" 2>/dev/null || fail 'Cannot set executable permissions.'
 installer_stage=candidate_version
-"$scratch/devtools" version > "$scratch/version.json" 2> "$scratch/candidate.error" || fail 'Release executable cannot run on this system.'
+DEVTOOLS_FORMAT=json "$scratch/devtools" schema version > "$scratch/capability.json" 2> "$scratch/candidate.error" || fail 'Cannot discover the release JSON contract.'
+# Candidate envelopes use the CLI's compact Go JSON encoding. This fixed metadata
+# marker selects the new root option; older verified releases keep their argv.
+if grep -F '"name":"format"' "$scratch/capability.json" >/dev/null && grep -F '"environment":"DEVTOOLS_FORMAT"' "$scratch/capability.json" >/dev/null && grep -F '"placement":"root-prefix"' "$scratch/capability.json" >/dev/null && grep -F '"values":["auto","text","json"]' "$scratch/capability.json" >/dev/null; then
+  DEVTOOLS_FORMAT=json "$scratch/devtools" --format json version > "$scratch/version.json" 2> "$scratch/candidate.error" || fail 'Release executable cannot run on this system.'
+else
+  DEVTOOLS_FORMAT=json "$scratch/devtools" version > "$scratch/version.json" 2> "$scratch/candidate.error" || fail 'Release executable cannot run on this system.'
+fi
 grep -F '"version":"'"$version"'"' "$scratch/version.json" >/dev/null || fail 'Release version does not match the request.'
 setup_intent=
 if [ "$platform" = linux ]; then

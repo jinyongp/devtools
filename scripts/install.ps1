@@ -74,6 +74,7 @@ function Invoke-Candidate([string]$Executable, [string]$Arguments, [string]$Inpu
     $start.FileName = $Executable
     $start.Arguments = $Arguments
     $start.UseShellExecute = $false
+    $start.EnvironmentVariables['DEVTOOLS_FORMAT'] = 'json'
     $start.CreateNoWindow = $true
     $start.RedirectStandardInput = $true
     $start.RedirectStandardOutput = $true
@@ -210,7 +211,11 @@ public static class DevtoolsInstallerNativeArchitecture {
     $candidate = Join-Path $stage 'devtools.exe'
     [IO.File]::WriteAllBytes($candidate, $body)
     $phase = 'candidate_version'
-    $versionOutput = Invoke-Candidate $candidate 'version' ''
+    $capability = (Invoke-Candidate $candidate 'schema version' '') | ConvertFrom-Json
+    if (-not $capability.ok -or $capability.schema_version -ne 1) { throw 'Cannot discover the release JSON contract.' }
+    $formatSupported = @($capability.data.global_options | Where-Object { $_.name -eq 'format' -and $_.placement -eq 'root-prefix' -and $_.values -contains 'json' }).Count -gt 0
+    $versionArguments = if ($formatSupported) { '--format json version' } else { 'version' }
+    $versionOutput = Invoke-Candidate $candidate $versionArguments ''
     $reported = $versionOutput | ConvertFrom-Json
     if (-not $reported.ok -or $reported.data.version -cne $Version -or $reported.data.commit -cne $commit) { throw 'Release runtime version/commit mismatch.' }
     $externalAlias = [bool](Get-Command dvt -ErrorAction SilentlyContinue)

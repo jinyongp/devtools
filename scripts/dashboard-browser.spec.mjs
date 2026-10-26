@@ -12,9 +12,9 @@ if (process.env.DEVTOOLS_BROWSER_EXECUTABLE) {
 }
 
 function runCLI(args, cwd, env, input = "") {
-  return execFileSync(binary, args, {
+  return execFileSync(binary, ["--format", "json", ...args], {
     cwd,
-    env,
+    env: { ...env, DEVTOOLS_FORMAT: "json" },
     input,
     encoding: "utf8",
     stdio: ["pipe", "pipe", "pipe"],
@@ -42,7 +42,7 @@ test("dashboard login, value mutation and navigation survive reload", async ({ p
 
   try {
     const identity = JSON.parse(runCLI(["version"], project, env));
-    expect(identity.data.protocol_version).toBe(14);
+    expect(identity.data.protocol_version).toBe(15);
     if (process.env.DEVTOOLS_TEST_CLI_COMMIT) expect(identity.data.commit).toBe(process.env.DEVTOOLS_TEST_CLI_COMMIT);
     runCLI(["var", "set", "MESSAGE", "--value", "before"], project, env);
     const started = JSON.parse(runCLI(["dashboard"], project, env));

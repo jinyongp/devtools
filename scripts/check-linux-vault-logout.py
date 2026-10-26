@@ -42,7 +42,7 @@ def phase(root, name):
     runtime = Path(os.environ['XDG_RUNTIME_DIR'])
     if runtime != Path('/run/user') / str(os.getuid()):
         raise RuntimeError('PAM runtime directory mismatch')
-    env = dict(os.environ, DBUS_SESSION_BUS_ADDRESS='unix:path=' + str(runtime / 'bus'))
+    env = dict(os.environ, DEVTOOLS_FORMAT='json', DBUS_SESSION_BUS_ADDRESS='unix:path=' + str(runtime / 'bus'))
     control = runtime / 'keyring'
     control.mkdir(mode=0o700, exist_ok=True)
     env['GNOME_KEYRING_CONTROL'] = str(control)

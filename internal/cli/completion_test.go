@@ -43,6 +43,11 @@ func TestCompletionScripts(t *testing.T) {
 				empty bool
 			}{
 				{[]string{"devtools", ""}, "var", false},
+				{[]string{"devtools", "--f"}, "--format", false},
+				{[]string{"devtools", "--format", ""}, "json", false},
+				{[]string{"devtools", "--format=t"}, "--format=text", false},
+				{[]string{"devtools", "--format", "json", "command", ""}, "list", false},
+				{[]string{"devtools", "--isolated-root", "/tmp/fixture", "--format", "text", "command", ""}, "list", false},
 				{[]string{"devtools", "var", ""}, "get", false},
 				{[]string{"devtools", "variable", "set", "KEY", ""}, "--value", false},
 				{[]string{"devtools", "variable", "set", "KEY", ""}, "--stdin", false},
@@ -58,6 +63,7 @@ func TestCompletionScripts(t *testing.T) {
 				{[]string{"devtools", "run", "--env", "local", ""}, "--profile", false},
 				{[]string{"devtools", "run", "web", ""}, "", true},
 				{[]string{"devtools", "run", "web", "--env", ""}, "", true},
+				{[]string{"devtools", "--format", "json", "run", "web", "--format", ""}, "", true},
 				{[]string{"devtools", "command", "run", "web", ""}, "", true},
 				{[]string{"devtools", "cmd", "run", "web", "--profile=", ""}, "", true},
 				{[]string{"devtools", "completion", ""}, "fish", false},

@@ -18,21 +18,22 @@ import time
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
 from vault_test_support import retire_vaults
+from cli_json import json_argv, json_environment
 
 PASSWORD='synthetic-disposable-memory-unlock'
 
 def identity(binary):
-    r=subprocess.run([str(binary),'version'],capture_output=True,check=True,timeout=10)
+    r=subprocess.run(json_argv(binary, ['version']),env=json_environment(),capture_output=True,check=True,timeout=10)
     return {'sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'version':json.loads(r.stdout)['data']}
 
 def measure(binary, protected, size, repeat):
     scratch=tempfile.mkdtemp(prefix='devtools-memory-')
     root=Path(scratch).resolve();root.chmod(0o700)
     env={k:v for k,v in os.environ.items() if not k.startswith('DEVTOOLS_')}
-    env.update(DEVTOOLS_ISOLATED_ROOT=str(root),LC_ALL='C')
+    env.update(DEVTOOLS_ISOLATED_ROOT=str(root),LC_ALL='C',DEVTOOLS_FORMAT='json')
     data=root/'data';vault=data/'vault';worker=None
     def cli(*args,input=None):
-        r=subprocess.run([str(binary),*map(str,args)],cwd=root,env=env,input=input,capture_output=True,timeout=30)
+        r=subprocess.run(json_argv(binary,args,environment=env,cwd=root),cwd=root,env=env,input=input,capture_output=True,timeout=30)
         if r.returncode or r.stderr:raise RuntimeError('Memory fixture command failed: '+args[0])
         return json.loads(r.stdout)['data']
     def proc_memory():

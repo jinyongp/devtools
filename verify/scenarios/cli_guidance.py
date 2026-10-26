@@ -1,4 +1,4 @@
-"""Installed protocol-14 guidance follows the observed target and failure phase."""
+"""Installed protocol-15 guidance follows the observed target and failure phase."""
 import json
 import os
 from pathlib import Path
@@ -38,7 +38,7 @@ def checks(failure):
     return {c["id"]: c for c in failure["details"]["checks"]}
 
 
-assert api("version")["protocol_version"] == 14
+assert api("version")["protocol_version"] == 15
 config = project / "devtools.toml"
 config.write_text("profile='guidance'\n[commands.missing]\nexec=['__missing_guidance__']\n")
 root_a, root_b = home / "A", home / "B"

@@ -2,18 +2,35 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v14 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v15 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
 
 ## 출력 종류 확인
 
-명령의 결과를 어떻게 읽을지는 `devtools schema COMMAND`의 `data.output_mode`로 확인합니다. 터미널인지 파이프인지에 따라 형식을 자동으로 바꾸지 않습니다. 명령별 `--json` 옵션도 사용하지 않습니다.
+`devtools schema COMMAND`의 `data.output_mode`와 `data.presentation`을 함께 확인합니다.
+`output_mode`는 stdout의 소유권, `presentation.formats`는 구조화 결과의 표시 형식입니다.
+
+`devtools --format auto|text|json COMMAND`의 루트 옵션이 `DEVTOOLS_FORMAT`보다 우선합니다.
+둘 다 없으면 auto이며, 알려진 agent 신호나 non-TTY stdout에서는 JSON, 일반 터미널에서는
+text입니다. 명시한 auto도 환경변수보다 우선합니다. 빈 환경값은 미설정이고 나머지 값은
+소문자 세 값만 허용합니다. 잘못된 format·중복 root 옵션은 JSON stderr invalid_argument/2입니다.
+선택된 유효 flag가 있으면 잘못된 환경값은 무시합니다. 임의 agent 변수 설정·새 TOML 필드는 없습니다.
+
+```sh
+devtools --format json command list
+devtools --format text command list > commands.txt
+```
+
+자동 감지는 권한·신원·샌드박스 판정이 아닙니다. agent 변수가 사람의 자식 셸에 상속되거나
+알려지지 않은 agent가 PTY를 쓰면 추론이 틀릴 수 있으므로 안정적인 소비자는 JSON을 명시합니다.
+`CI`, `TERM`, 샌드박스 변수는 agent 신호로 사용하지 않습니다.
 
 | `output_mode` | 해당 명령 | stdout |
 | --- | --- | --- |
-| `json` | 조회·변경·진단·schema 명령 | JSON 응답 한 개 |
+| `json` | 조회·변경·진단 | 선택된 JSON envelope 또는 text |
+| `json` + machine-only presentation | `schema`, `config schema` | 항상 JSON |
 | `text` | `help`, 인자 없는 호출, `--help`·`-h` | 사람이 읽는 도움말 |
 | `artifact` | `completion bash`, `completion zsh`, `completion fish`, `completion powershell` | 생성한 셸 스크립트 원문 |
 | `passthrough` | `command run`, 별칭 `run` | 자식 출력 stream; 실행별 출력 보호 적용 |
@@ -39,23 +56,52 @@ devtools command run test
 
 ## 성공과 실패
 
-JSON 명령은 성공 시 stdout에 응답 한 개를 출력합니다. 성공 응답에는 항상 `data`가 있고 `error`는 없습니다. 결과가 없는 경우에도 `data` 필드 자체를 생략하지 않습니다.
+구조화 결과는 성공 시 stdout, devtools 실패는 stderr에 선택한 형식으로 출력합니다.
+아래 envelope 계약은 JSON 표현에 적용합니다. 성공에는 항상 `data`가 있고 `error`는 없습니다.
+결과가 없는 경우에도 `data` 필드 자체를 생략하지 않습니다.
 
 ```json
 {"schema_version":1,"ok":true,"data":{"items":[]}}
 ```
 
-Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며, `data` 대신 `error`를 제공합니다. `error.code`는 분기에 사용하고 `message`는 설명으로 사용합니다. protocol 10의 오류는 공통 `details`를 항상 제공합니다.
+JSON 실패는 `data` 대신 `error`를 제공합니다. `error.code`는 분기에 사용하고 `message`는 설명으로 사용합니다. protocol 10부터 공통 `details`를 항상 제공합니다.
 
 ```json
 {"schema_version":1,"ok":false,"error":{"code":"command_not_found","message":"The selected project command is not defined.","details":{"operation":"command run","phase":"validate","target":{"kind":"command","name":"dev:web"},"sources":[],"reason":"command_not_found","facts":{},"checks":[],"causes":[],"remedies":[],"retry":"after_input_change","effects":"none"}}}
 ```
 
-이 오류 규칙은 도움말 대상 오류와 completion 생성 오류에도 적용됩니다. `command run`은 실행 준비 오류와 Devtools 자체의 스트림 처리 오류에 JSON stderr를 사용합니다. 자식 프로그램의 출력 보호 정책과 종료 상태를 유지하므로, stderr 전체가 Devtools JSON이라고 가정하면 안 됩니다. 출력 전달 자체가 실패하면 자식의 일부 출력 뒤에 Devtools I/O 오류가 기록될 수 있습니다.
+도움말·artifact·run의 devtools 오류도 선택된 형식을 사용하고 native stdout은 변환하지 않습니다.
+schema 오류는 JSON이며 명시 `--format text`로 정상 schema를 요청하면 실행 전 JSON 입력 오류로
+거절합니다. 기존 parser가 help로 해석한 `schema --help`와 `config schema --help`는 text 도움말입니다.
+모든 argv에서 help를 검색하지 않으므로 기존 unknown option/child 경계를 유지합니다.
+stdout 선택이 JSON이면 stderr만 TTY여도 JSON 오류입니다. 기존 prompt나 자식 stderr 뒤에 진단이
+올 수 있어 stderr 전체가 하나의 JSON이라는 보장은 없습니다. 자식 보호 정책·exit/signal은 유지합니다.
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 공통 성공/실패 envelope의 형식 버전이며 1입니다. 명령별 `data` 구조와 입력·출력 규칙을 포함한 CLI machine contract는 현재 `protocol_version: 14`입니다. `devtools version`과 모든 `devtools schema` 응답의 `data.protocol_version`에서 확인할 수 있습니다. 이 값은 `devtools.toml` 설정 버전이 아닙니다. 명령별 계약은 설치한 실행 파일의 `schema`에서 확인하세요.
+`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 15`입니다.
+`version`과 `schema`의 `data.protocol_version`에서 확인합니다. TOML·저장소·dashboard/private wire
+버전은 별개입니다. format 지원 여부는 숫자 추측 대신 discovery의 `global_options`로 확인하세요.
+
+## text 표시
+
+text도 같은 한 번의 public 결과를 표시합니다. 오류·경고·안내 원문, 효과·재시도 규칙과 action
+토큰을 재작성하지 않습니다. 목록은 비교 표, 좁거나 긴 값·복잡한 Unicode가 있으면 세로 배치로
+전환합니다. ID·revision·cursor·URL은 자르지 않고, 새 공개 필드는 Details에 남깁니다.
+미리보기·재전송·변경 없음과 task의 lifecycle/completion/execution은 구분합니다.
+
+완성된 Next 행동은 설명 아래의 독립된 한 줄을 전체 복사할 수 있습니다. prompt·번호·SGR·
+삽입 개행·말줄임 없이 필요한 shell 인용을 적용합니다. Unix POSIX/Fish 표현이 다르면
+shell label을 윗줄에 나눠 표시하고 Windows는 PowerShell 대상입니다. 남은 필수 입력이나
+원 token을 보존할 수 없는 control/native 전달 조합은 실행 가능한 것처럼 표시하지 않습니다.
+
+실제 출력 stream이 TTY이고 ANSI를 지원할 때 제목·상태에만 최소 강조를 사용합니다.
+non-TTY·TERM=dumb·지원 관측 실패는 plain입니다. 비어 있지 않은 NO_COLOR는 전경색을
+끄고 bold/dim은 유지합니다. 중요 경고·ID·복구 행동은 dim으로 숨기지 않습니다.
+색·공백·열 정렬은 machine 파싱 계약이 아니므로 자동화는 `--format json`을 사용하세요.
+text 렌더 실패 시 기존 오류는 전체 escaped public 진단과 원 종료 코드를 보존합니다.
+성공 결과를 표시할 수 없으면 internal_error/1, 인코딩·쓰기 실패는 io_error/1이며
+성공 handler 반환 뒤 새 출력 오류는 effects:unknown/retry:inspect_first입니다. 자동 재실행하지 않습니다.
 
 실행 준비 중 사용자 취소는 `canceled`와 종료 코드 130, 준비 기한 초과는
 `deadline_exceeded`와 종료 코드 3으로 구분합니다. 저장이 완료된 뒤 도착한 취소는
@@ -135,6 +181,17 @@ Devtools가 처리하는 실패는 stderr의 JSON 응답 한 개로 반환하며
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v15 마이그레이션
+
+- 항상 JSON이던 일반 구조화 명령의 기본값을 auto로 전환합니다. JSON의 data/envelope는 유지합니다.
+- root-prefix `--format`과 `DEVTOOLS_FORMAT`, 응답당 `global_options`와 명령별 `presentation`을 추가합니다.
+  기존 `--output auto|redacted|raw`는 자식 stream 보호 옵션으로 그대로입니다.
+- old/new CLI를 함께 다루는 consumer는 자식 환경에 DEVTOOLS_FORMAT=json을 지정해
+  `schema version`을 먼저 조회합니다. global_options에 root-prefix format/json 지원이 있을 때만
+  후속 호출에 `--format json`을 붙입니다. 지원 여부를 알아내려고 mutation을 실패/재시도하지 않습니다.
+- 사용자 설정·저장된 요청/replay·fingerprint에 format을 넣지 않습니다. 표시 전환은 같은 업무
+  UUID를 다른 요청으로 만들지 않고, 자식 실행·도움말·completion/private wire도 재포장하지 않습니다.
 
 ## protocol v14 마이그레이션
 

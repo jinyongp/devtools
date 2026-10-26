@@ -94,6 +94,7 @@ parser offset·target 구조·`effects:none`·`retry:after_input_change` 같은 
 `command list`는 이름과 전체 실행 내용을 한 번씩 나열합니다. 반복되는 기본 설정·빈 환경·
 `Item N / Details`·argv 개수 요약은 표시하지 않습니다. 값 주입·bundle·serve·출력 보호처럼
 실행에 영향을 주는 비기본 설정은 해당 명령 옆에 짧게 표시합니다. 상세 설정은 `command inspect`로 봅니다.
+제목과 Profile은 별도 줄에 두며 가운데점 같은 장식 구분자에 정보 위계를 맡기지 않습니다.
 그 밖의 목록은 비교 표 또는 폭에 맞는 세로 배치를 사용합니다. 표시하는 ID·cursor·URL은 자르지 않습니다.
 미리보기·재전송·변경 없음과 task의 lifecycle/completion/execution은 구분합니다.
 

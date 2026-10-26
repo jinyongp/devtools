@@ -19,7 +19,7 @@
 - 오류: `Error: 설명` → 필요하면 교정 후보 → 부분 변경/불확실성/동일 UUID 복구 → 실제 행동.
   parser offset·reason enum·routine effects/retry·target kind·action effect 등은 기본 text에서 생략한다.
   경고/검사는 설명과 필요한 대상·행동만 표시하고 같은 metadata를 다시 나열하지 않는다.
-- 목록: `command list`는 profile/count 한 줄과 이름/전체 실행 내용의 단일 inventory다.
+- 목록: `command list`는 count가 있는 제목, 별도 Profile 줄, 이름/전체 실행 내용의 단일 inventory다.
   all/default/false/빈 환경을 반복하지 않는다. 주입·bundle·serve·명시 출력 보호·restart 정책은
   짧은 문구로 남긴다. long argv도 count로 대체하거나 별도 상세 목록에 반복하지 않는다.
   상세 조회와 JSON은 전체 설정·새 field를 제공한다.
@@ -27,6 +27,9 @@
   선택을 바꾼다. 완성 action의 shell quoting·원 argv·필수 입력/template 구분은 유지한다.
 - UI: Fields label 한계는 폭의 절반(최대 40 cells)으로 조정해 실제 command 이름을 같은 열에 둔다.
   색·공백이 없어도 이름/실행 내용과 원인/다음 행동을 읽을 수 있어야 한다.
+  사용자 지시에 따라 가운데점과 유사한 장식 구분자로 서로 다른 위계를 한 줄에 합치지 않는다.
+  제목, label, 줄바꿈과 정렬로 위계를 표현한다. 설정 오류의 field 경로와 line/column은
+  고칠 위치를 찾는 데 필요하므로 문장으로 남기고 argv offset 같은 parser 내부 정보와 구분한다.
 - 검증: 실제 제공 명령의 실행 결과를 보여준다. 27개 목록의 크기가 두 번째 상세 목록으로
   늘지 않는지, correction과 오류 exit, unchanged JSON facts/sources/effects/retry, 부분 변경·
   불확실한 결과·동일 UUID 복구, 실제 Next 복사 줄과 필요한 입력을 확인한다.

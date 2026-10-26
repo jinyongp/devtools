@@ -128,6 +128,28 @@ system-network smoke와 `publish=false`에 따른 release/homebrew/installer-pag
 위의 Release run은 D14 이전 소스의 증거이며 이번 수정의 native 통과 근거로 재사용하지 않는다.
 이번 소스의 Actions 결과는 별도로 기록한다. 실제 terminal 시각 확인 gate는 여전히 열려 있다.
 
+후속 리뷰에서 종합 `diagnostics`의 하위 issue 안에 있는 공개 복구 안내가 빠지는 경로를 확인해
+`c1911a1`에서 수정했다. 하위 subsystem 이름, cause 설명, 효과/동일 UUID 복구와 원 action을
+보존하는 회귀 검사를 추가했다. 사용자 후속 지시로 가운데점과 장식 구분자를 제거하고
+제목과 Profile을 별도 줄로 나눴다. 다른 목록의 장식 대시도 일반 label 구분으로 바꿨다.
+
+설정 오류의 public cause에는 message가 없는 형태도 있어 reason의 문장화와 실제 field 경로,
+line/column을 보존했다. 실제 잘못된 TOML로 재현했고 argv offset은 계속 생략한다.
+이 두 수정은 `86358b0a92f28d7a8c695d0730a605dde908ddf6`까지 포함한다.
+이 최종 제품 소스에서 `devtools run check:all`, 전체 `devtools run test:installed`가 다시 통과했다.
+임시 로그는 `/tmp/devtools-readable-text-final-check-all-r3.log`와
+`/tmp/devtools-readable-text-final-installed-r3.log`다.
+
+- [Windows full run 40281534138](https://github.com/jinyongp/devtools/actions/runs/40281534138):
+  success. 전체 페이지 조회 결과 23 success, failure/skip 0. amd64/arm64 native 검증을 포함한다.
+- [Unix run 40281534643](https://github.com/jinyongp/devtools/actions/runs/40281534643):
+  success. 전체 페이지 조회 결과 24 success, 3 intentional skip, failure 0.
+  Linux/macOS source 검사와 native installed handoff를 포함한다. skip은 선택하지 않은 실제
+  Tailscale/Cloudflared provider와 비활성화한 자동화 성능 측정이다.
+- 두 run 모두 위 최종 제품 SHA를 가리킨다. 중간 수정으로 대체된 run은 최종 근거로 합산하지 않는다.
+- 등록된 validation 8개의 method에도 D14 우선 적용과 장식 구분자 금지를 반영했다.
+  실제 시각 확인 gate와 stale prerequisite completion은 자동 검사 통과로 덮어쓰지 않는다.
+
 ## 남은 수용 조건
 
 - A11의 OS native 실행은 위 Actions로 검증했다. Windows console/ConPTY의 실제 화면 상태는

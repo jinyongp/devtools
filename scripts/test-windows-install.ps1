@@ -25,20 +25,20 @@ $completionProfiles = @('WindowsPowerShell', 'PowerShell') | ForEach-Object { Jo
 $completionBackup = @(@($completionFile) + $completionProfiles | ForEach-Object {
     @{ path = $_; existed = [IO.File]::Exists($_); bytes = $(if ([IO.File]::Exists($_)) { [IO.File]::ReadAllBytes($_) } else { $null }) }
 })
+$completionSnapshot = $completionBackup
 function Require([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Require-Completion([string]$Shell, [string]$Directory) {
-    Require ([IO.File]::Exists($completionFile)) 'Installer/update did not generate PowerShell completion.'
-    foreach ($profileFile in $completionProfiles) {
-        Require ([IO.File]::Exists($profileFile)) 'Installer/update did not register both PowerShell editions.'
-        $profileText = [IO.File]::ReadAllText($profileFile)
-        Require ([regex]::Matches($profileText, '(?m)^# devtools completion: begin\r?$').Count -eq 1) 'Completion loader missing or duplicated.'
+    foreach ($entry in $completionSnapshot) {
+        Require ([IO.File]::Exists($entry.path) -eq $entry.existed) 'Installer/update created or deleted completion settings.'
+        if ($entry.existed) {
+            Require ([Convert]::ToBase64String([IO.File]::ReadAllBytes($entry.path)) -ceq [Convert]::ToBase64String($entry.bytes)) 'Installer/update modified completion settings.'
+        }
     }
     $savedPath = $env:PATH
     try {
         $env:PATH = $Directory + ';' + $savedPath
-        # Deliberately omit -NoProfile: a fresh session must load completion itself.
-        $probe = Invoke-Json $Shell @('-NoLogo', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '$line="devtools command "; $names=@([Management.Automation.CommandCompletion]::CompleteInput($line,$line.Length,$null).CompletionMatches | ForEach-Object { $_.ListItemText }); [pscustomobject]@{registered=($names -contains "list")} | ConvertTo-Json -Compress')
-        Require ($probe.registered) 'A fresh PowerShell session did not automatically load completion.'
+        $probe = Invoke-Json $Shell @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', 'devtools completion powershell | Out-String | Invoke-Expression; $line="devtools command "; $names=@([Management.Automation.CommandCompletion]::CompleteInput($line,$line.Length,$null).CompletionMatches | ForEach-Object { $_.ListItemText }); [pscustomobject]@{registered=($names -contains "list")} | ConvertTo-Json -Compress')
+        Require ($probe.registered) 'Explicit PowerShell completion setup did not load completion.'
     } finally { $env:PATH = $savedPath }
 }
 function Save-InvocationFailure([string]$Executable, [string[]]$Arguments, [int]$ExitCode, [datetime]$Started, [string]$Output) {
@@ -258,17 +258,9 @@ irm https://jinyongp.dev/devtools/install.ps1 | iex
         Require ([Environment]::GetEnvironmentVariable('Path', 'User') -ceq $registeredPath) 'Repeated installer duplicated or rewrote user PATH.'
         Require ((Get-FileHash -Algorithm SHA256 -LiteralPath $main).Hash -ceq (Get-FileHash -Algorithm SHA256 -LiteralPath $alias).Hash) 'Repeated installer left different main and alias versions.'
         # Both invocations replace an image that is currently running.
-        # An existing installation may have no registration (upgrade migration)
-        # or may have lost the generated file. Update must repair both.
-        $repairProfile = $completionProfiles[1]
-        $withoutLoader = [regex]::Replace([IO.File]::ReadAllText($repairProfile), '(?ms)^# devtools completion: begin\r?\n.*?^# devtools completion: end(?:\r?\n|$)', '')
-        $repairPrefix = $withoutLoader + "`r`n# user settings preserved during completion repair 한글`r`n"
-        [IO.File]::WriteAllText($repairProfile, $repairPrefix, [Text.UTF8Encoding]::new($true))
-        Remove-Item -LiteralPath $completionFile -Force
         $updated = Invoke-Json $alias @('update', '--version', '0.0.0-test.1', '--source', $releases)
         Require ($updated.ok -and $updated.data.version -ceq '0.0.0-test.1' -and $updated.data.alias.status -eq 'unchanged') 'Alias-invoked native update failed.'
         Require-Completion $shell $bin
-        Require ([IO.File]::ReadAllText($repairProfile).StartsWith($repairPrefix)) 'Completion repair overwrote user profile settings.'
         $reported = Invoke-Json $main @('version')
         Require ($reported.data.version -ceq '0.0.0-test.1' -and $reported.data.commit -ceq $Commit) 'Updated main identity mismatch.'
         $reported = Invoke-Json $alias @('version')
@@ -288,11 +280,11 @@ irm https://jinyongp.dev/devtools/install.ps1 | iex
         $inlineVersion = Invoke-Json (Join-Path $bootstrapBin 'devtools.exe') @('version')
         Require ($inlineVersion.ok -and $inline.Contains($inlineVersion.data.version)) 'Human bootstrap did not describe the installed release.'
         # Upgrade an actual public stable installation with the candidate engine.
-        foreach ($profileFile in $completionProfiles) {
-            $text = [regex]::Replace([IO.File]::ReadAllText($profileFile), '(?ms)^# devtools completion: begin\r?\n.*?^# devtools completion: end(?:\r?\n|$)', '')
-            [IO.File]::WriteAllText($profileFile, $text, [Text.UTF8Encoding]::new($true))
-        }
-        Remove-Item -LiteralPath $completionFile -Force
+        # A released installer may still register completion. The candidate
+        # upgrade must leave that existing user configuration untouched.
+        $completionSnapshot = @(@($completionFile) + $completionProfiles | ForEach-Object {
+            @{ path = $_; existed = [IO.File]::Exists($_); bytes = $(if ([IO.File]::Exists($_)) { [IO.File]::ReadAllBytes($_) } else { $null }) }
+        })
         $legacyUpdate = Invoke-Text $shell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Version', '0.0.0-test.2', '-Source', $releases)
         Require-HumanGuidance $legacyUpdate $bootstrapBin
         Require ($legacyUpdate.Contains('Updated devtools ')) 'Installer rejected or misreported an existing public stable installation.'

@@ -27,6 +27,17 @@ import (
 
 const maxImage = 256 << 20
 
+// Installer child wire formats must not depend on presentation preferences.
+func installerEnvironment() []string {
+	var result []string
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(strings.ToUpper(entry), "DEVTOOLS_FORMAT=") {
+			result = append(result, entry)
+		}
+	}
+	return result
+}
+
 var versionToken = regexp.MustCompile(`^0\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$`)
 var identityToken = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 

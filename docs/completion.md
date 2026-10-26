@@ -46,27 +46,22 @@ PowerShell 자동완성은 Windows에서도 사용할 수 있습니다.
 지원 범위는 [Windows 안내](windows.md)를 확인하세요. 설치본이 이 셸을 지원하는지는
 `devtools completion --help`로 확인할 수 있습니다.
 
-Windows standalone 설치기와 이 기능이 포함된 `devtools update`는 자동완성을 등록합니다.
-설치 또는 업데이트 후 **새 PowerShell 창을 열면** 사용할 수 있습니다.
-PowerShell 5.1과 7의 Documents 아래 `WindowsPowerShell/profile.ps1`, `PowerShell/profile.ps1`
-(CurrentUserAllHosts)에 로더를 한 번 추가하고, 업데이트 때 로더가 없으면 복구합니다.
-기존 프로필 내용과 인코딩은 보존합니다. 생성한 스크립트는
-`%LOCALAPPDATA%\Programs\devtools\completion\powershell.ps1`에 두고 업데이트할 때 갱신합니다.
-등록 과정에서 실행 정책이나 Tab 키 설정은 바꾸지 않습니다. `-NoProfile`로 시작한 셸은 로더를 읽지 않습니다.
-
-이 기능이 없는 구버전의 updater는 새 등록 후처리를 실행하지 못합니다. 처음 전환할 때는
-새 버전의 Windows 설치기를 다시 실행하세요. 기존 설치를 업데이트하면서 자동완성도 등록합니다.
-이후에는 `devtools update`가 자동으로 관리합니다.
-프로필이 서명되어 있거나 쓰기 권한이 없으면 기존 내용을 덮어쓰지 않고 오류를 알립니다.
-이때 바이너리 설치는 완료된 상태입니다. 프로필 상태를 확인한 뒤 설치기나 업데이트를 다시 실행하세요.
-
-수동 설치나 현재 세션에서만 로드하려면 다음 명령도 사용할 수 있습니다.
-UTF-8을 명시해 한글을 보존합니다. 수동으로 관리하는 파일은 업데이트 후 다시 생성하세요.
+설치기와 `devtools update`는 PowerShell 프로필이나 자동완성 파일을 만들거나 수정하지 않습니다.
+사용하는 PowerShell에서 `$PROFILE`을 열고 다음 줄을 직접 추가하세요.
+PowerShell 5.1과 7은 서로 다른 프로필을 사용하므로 각 셸에서 설정하세요.
 
 ```powershell
-devtools completion powershell | Set-Content -Encoding utf8 .\devtools-completion.ps1
-. .\devtools-completion.ps1
+devtools completion powershell | Out-String | Invoke-Expression
 ```
+
+현재 창에서도 같은 줄을 실행하면 즉시 적용됩니다. 새 세션마다 현재 설치된 바이너리에서
+스크립트를 생성하므로 업데이트 후 자동완성 파일을 다시 만들 필요가 없습니다.
+`-NoProfile`로 시작한 셸은 프로필을 읽지 않습니다. 실행 정책과 Tab 키 설정은 변경하지 않습니다.
+
+v0.35.0의 자동 등록을 사용했다면 프로필의 `# devtools completion: begin`부터
+`# devtools completion: end`까지의 블록을 위 한 줄로 교체하세요.
+새 설치기와 updater는 기존 블록과 `%LOCALAPPDATA%\Programs\devtools\completion\powershell.ps1`을
+자동 삭제하지 않습니다. 더 이상 참조하지 않는 생성 파일은 사용자가 삭제할 수 있습니다.
 
 `devtools`/`dvt`와 `.exe` 이름에 native completer를 등록합니다. AST의 literal token만
 읽고 UTF-8 NUL-delimited stdin으로 이름을 조회합니다. `$()`·변수 등 동적 표현식이

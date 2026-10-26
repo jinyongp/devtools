@@ -12,6 +12,18 @@ import (
 	"testing"
 )
 
+func TestWindowsInstallerChildIgnoresPresentationPreference(t *testing.T) {
+	t.Setenv("DEVTOOLS_FORMAT", "text")
+	for _, entry := range installerEnvironment() {
+		if strings.HasPrefix(strings.ToUpper(entry), "DEVTOOLS_FORMAT=") {
+			t.Fatal("caller presentation leaked into installer child")
+		}
+	}
+	if os.Getenv("DEVTOOLS_FORMAT") != "text" {
+		t.Fatal("parent environment changed")
+	}
+}
+
 func TestWindowsInstallArtifactRejectsUnsafeArchivesAndChecksums(t *testing.T) {
 	version := "0.0.0-test.1"
 	arch, err := NativeArchitecture()

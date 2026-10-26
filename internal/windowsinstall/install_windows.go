@@ -172,10 +172,6 @@ func apply(ctx context.Context, options Options, invoked string, load func(conte
 	if err != nil {
 		return nil, err
 	}
-	stage, effects = "powershell_completion", "partial"
-	if err := registerPowerShellCompletion(ctx, filepath.Join(directory, "devtools.exe"), result.Alias.Status != "skipped_conflict"); err != nil {
-		return nil, err
-	}
 	return result, nil
 }
 

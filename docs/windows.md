@@ -61,7 +61,9 @@ An existing external `dvt` is preserved and reported as `skipped_conflict`.
   your user PATH by default, not the current session or system PATH. With `-NoPath`,
   add the reported directory yourself.
 - **Policy blocks execution:** follow your organization's PowerShell policy. The
-  installer does not change execution policy or shell profiles.
+  installer does not change execution policy. It adds a managed completion loader
+  to user profiles; signed or unwritable profiles are preserved and reported as
+  a completion setup failure after the executable installation.
 - **Storage rejected:** keep private data on local NTFS with permissions for the
   current user and SYSTEM; an AppContainer also needs its own container SID.
   Network shares and cloud-synced storage are unsupported.
@@ -220,3 +222,10 @@ unverified.
 [PowerShell completion](completion.md#powershell-51--7) supports both `devtools`
 and `dvt` in PowerShell 5.1/7. cmd supports execution only. Completion reads literal
 AST values without evaluating dynamic expressions.
+Standalone installation and updates register a managed loader in both editions'
+CurrentUserAllHosts profiles, preserving existing bytes and encoding. Open a new
+PowerShell session after installation. Updates regenerate the script and repair
+missing registration. Execution policy stays unchanged; signed or unwritable
+profiles produce a completion setup error after the executable has been installed.
+An updater released before this feature cannot run the new post-install step;
+rerun the new installer once to upgrade and register completion.

@@ -104,6 +104,7 @@ func smoke(ctx context.Context, path string, want identity) error {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, path, "version")
+	command.Env = installerEnvironment()
 	var output limitedOutput
 	command.Stdout = &output
 	command.Stderr = io.Discard

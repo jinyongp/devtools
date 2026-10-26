@@ -117,9 +117,13 @@ curl -fsSL https://jinyongp.dev/devtools/install.sh | sh -s -- --bin-dir "$HOME/
 For the Unix installer, add the chosen directory to PATH. The Windows installer
 adds it to your user PATH by default. To leave PATH unchanged, use `-NoPath` with
 a downloaded installer. The existing `-AddToPath` option remains supported;
-`-NoPath` takes precedence. The installer does not change the current session,
-shell profiles, execution policy, or system PATH. If Known
-Folders are redirected, use the actual path reported by the installer.
+`-NoPath` takes precedence. The Windows installer also registers PowerShell
+completion in user profiles, preserving their existing content and encoding.
+Updates refresh completion and repair missing registration. Open a new PowerShell
+session to load it; see the [completion guide](completion.md#powershell-51--7)
+for migration from an older updater. The installer does not change the current
+session, execution policy, or system PATH. If Known Folders are redirected, use
+the actual path reported by the installer.
 
 ### Automation output on Windows
 

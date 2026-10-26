@@ -168,7 +168,15 @@ func apply(ctx context.Context, options Options, invoked string, load func(conte
 		return nil, err
 	}
 	stage, effects = "publish", "unknown"
-	return e.transact(ctx, options, body, want, previous)
+	result, err := e.transact(ctx, options, body, want, previous)
+	if err != nil {
+		return nil, err
+	}
+	stage, effects = "powershell_completion", "partial"
+	if err := registerPowerShellCompletion(ctx, filepath.Join(directory, "devtools.exe"), result.Alias.Status != "skipped_conflict"); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // DecodeBootstrap never accepts unknown fields or a second JSON value.

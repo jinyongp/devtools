@@ -22,6 +22,9 @@ func Diagnostic(err error, operation string) *protocol.Error {
 		stage, effects = failure.Stage, failure.Effects
 	}
 	e := protocol.WithStorageDetails(protocol.NewError("install_failed", "Installation could not complete. Inspect the stage, installation ownership/lock and any retained recovery journal before retrying.", 1, nil), "installer", stage, "installation", err)
+	if stage == "powershell_completion" {
+		e.Message = "Devtools was installed, but PowerShell completion setup could not finish. Check your PowerShell profiles and the installed version, then rerun the installer or devtools update."
+	}
 	if e.Details == nil {
 		e.Details = map[string]any{}
 	}

@@ -16,7 +16,7 @@
 - CI covers x64 on Server 2025 (test host) and ARM64 on Windows 11. Full CPU/OS combinations and actual-PC UAC/browser/terminal behavior remain unverified.
 - Standalone exe needs no Go/Python/Git Bash/WSL; project tools are separate prerequisites.
 - Installer inputs: `-Version`, `-Source`, `-BinDir`, `-AddToPath`, `-NoPath`, `-Json`. Default adds user PATH and returns human text; `-NoPath` avoids PATH changes.
-- Re-running updates owned installation; same version succeeds. Never silently change execution policy or shell profiles.
+- Re-running updates owned installation; same version succeeds. Windows install/update registers one managed completion loader in both PowerShell editions' CurrentUserAllHosts profiles, preserving existing bytes/encoding and repairing missing registration. Open a new session. Never change execution policy; signed/unwritable profiles report a post-install partial failure. Updaters predating this feature need one rerun of the new installer to migrate.
 - `dvt.exe` is an owned copy. Updates journal old/main/alias replacement, retain mapped old images for cleanup and do not stop active daemons automatically.
 
 ## Storage and sandbox identity

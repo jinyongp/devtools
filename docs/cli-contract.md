@@ -159,6 +159,14 @@ UUID 문자열은 대소문자까지 동일하게 보존한다. 서로 다른 �
 profile 이동 이후의 중복 방지는 보장하지 않는다.
 
 guarded import는 CLI의 선택 계층 비교를 유지하며 500,000 bytes·5,000 keys로 제한한다.
+bundle import도 500,000 bytes로 제한하며 5,000 keys 제한은 guarded 모드에만 적용한다.
+두 모드 모두 dry-run에도 같은 byte 제한을 적용한다. 일반 dotenv와 var/sec의
+file/stdin 입력은 raw 128 MiB까지만 읽는다. 따라서 큰 주석을 제거하면 작아지는
+dotenv도 raw 입력이 이 상한을 넘으면 거절된다. 초과 입력을 잘라 저장하지 않는다.
+파일 크기를 먼저 확인하고 실제 읽기에도 상한을 적용한다. 스트림의 observed는
+읽은 하한(limit+1)이며 파일 stat 크기와 구분한다. 취소 시 OS stdin·파일·io.Pipe처럼
+닫을 수 있는 입력은 닫아서 읽기를 끝낸다. 임의 blocking non-Closer를 제공하는
+embedding host는 해당 읽기를 종료할 책임이 있다. 저장 문서의 기존 합산 한도도 유지한다.
 dashboard의 유효 값 유지/skip 동작은 별개다. `--dry-run`은 receipt를 만들지 않으므로
 같은 UUID로 실제 apply를 할 수 있다. 실제 저장 뒤에는 preview를 포함한 입력 변경에 새 ID가 필요하다.
 

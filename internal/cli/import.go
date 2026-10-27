@@ -7,6 +7,7 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 func (a *App) registerImport() {
@@ -43,7 +44,12 @@ func (a *App) importCommand(ctx context.Context, streams IO, request Request) (a
 			return nil, err
 		}
 	}
-	input, err := readValueInput(ctx, streams, map[string]string{"file": request.Options["file"]}, "dotenv")
+	limit := int64(vault.MaxDocumentBytes)
+	managed := guarded || request.Options["bundle"] != ""
+	if managed {
+		limit = 500000
+	}
+	input, err := readValueInputLimit(ctx, streams, map[string]string{"file": request.Options["file"]}, "dotenv", limit, managed)
 	if err != nil {
 		return nil, err
 	}

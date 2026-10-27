@@ -11,6 +11,7 @@ import (
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 func userDataDirectory() (string, *protocol.Error) {
@@ -238,6 +239,10 @@ func warningsSchema() map[string]any {
 }
 
 func readValueInput(ctx context.Context, streams IO, options map[string]string, role string) (string, *protocol.Error) {
+	return readValueInputLimit(ctx, streams, options, role, vault.MaxDocumentBytes, false)
+}
+
+func readValueInputLimit(ctx context.Context, streams IO, options map[string]string, role string, limit int64, managed bool) (string, *protocol.Error) {
 	filePath, fromFile := options["file"]
 	fromStdin := options["stdin"] == "true"
 	if fromFile == fromStdin {
@@ -254,6 +259,9 @@ func readValueInput(ctx context.Context, streams IO, options map[string]string, 
 		if err != nil || !info.Mode().IsRegular() {
 			return "", argumentError("File input requires a regular file.", "file")
 		}
+		if info.Size() > limit {
+			return "", inputLimitError(role, limit, info.Size(), true, managed)
+		}
 		reader = file
 	} else {
 		reader = streams.In
@@ -267,22 +275,13 @@ func readValueInput(ctx context.Context, streams IO, options map[string]string, 
 			}
 		}
 	}
-	type readResult struct {
-		data []byte
-		err  error
+	data, e := readBoundedInput(ctx, reader, limit, role)
+	if e != nil {
+		return "", e
 	}
-	result := make(chan readResult, 1)
-	go func() { data, err := io.ReadAll(reader); result <- readResult{data, err} }()
-	select {
-	case <-ctx.Done():
-		if closer, ok := reader.(io.Closer); ok {
-			_ = closer.Close()
-		}
-		return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
-	case read := <-result:
-		if read.err != nil {
-			return "", protocol.InputError(role, "read_input", read.err)
-		}
-		return string(read.data), nil
+	defer clear(data)
+	if int64(len(data)) > limit {
+		return "", inputLimitError(role, limit, int64(len(data)), false, managed)
 	}
+	return string(data), nil
 }

@@ -107,6 +107,16 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 			}
 			b.WriteByte('\n')
 		}
+		if len(exact.StaticRules) > 0 {
+			b.WriteString("\nInput rules:\n")
+			seen := map[string]bool{}
+			for _, rule := range exact.StaticRules {
+				if !seen[rule.message] {
+					fmt.Fprintf(&b, "  %s\n", rule.message)
+					seen[rule.message] = true
+				}
+			}
+		}
 		b.WriteString("\nRoot options (before the command):\n  --format auto|text|json   Output format; overrides DEVTOOLS_FORMAT. Schema stays JSON; native stdout is preserved.\n  --isolated-root PATH      Independent user paths; command-local support follows this command's options.\n")
 		if len(names) > 0 {
 			b.WriteByte('\n')

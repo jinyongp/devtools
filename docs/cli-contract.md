@@ -171,6 +171,11 @@ dashboard의 유효 값 유지/skip 동작은 별개다. `--dry-run`은 receipt�
 같은 UUID로 실제 apply를 할 수 있다. 실제 저장 뒤에는 preview를 포함한 입력 변경에 새 ID가 필요하다.
 
 명령 schema는 정적인 옵션 충돌·동반 필수 조건과 TCP 포트 1..65535를 검증한다.
+옵션 규칙은 실행 검사·schema·help에서 같은 조건과 설명을 사용한다. 정적 충돌은
+프로젝트·파일·stdin·인증 상태를 조회하기 전에 거절한다. `--proxy`와 `--no-proxy`는
+동시 지정할 수 없으며 두 값이 모두 false여도 같다. 반면 두 stdin 소비자의 충돌처럼
+활성화 여부를 검사하는 규칙에서는 명시적 false가 입력을 소비하지 않는다.
+오류의 `facts.rule_id`와 `facts.options`는 규칙과 참여 옵션을 식별하고 입력 값은 반환하지 않는다.
 doctor timeout은 Go duration의 소수·복합 단위와 선행 `+`를 허용한다.
 schema의 duration 패턴은 문법만 검사하며, 수치 overflow와 양수 여부는 실행 시
 `time.ParseDuration`으로 최종 판정한다. 파일 존재·인증·저장 상태도 실행 시 확인한다.

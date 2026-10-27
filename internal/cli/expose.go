@@ -32,9 +32,6 @@ func (a *App) registerExpose() {
 	c.Arguments[0].Completion = completeRoute
 	c.Output = map[string]any{"oneOf": []any{mutationSchema(map[string]any{"item": exposureSchema()}, "item"), object(map[string]any{"item": routeEndpointSchema(), "changed": boolSchema()}, "item", "changed")}}
 	c.Run = func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
-		if e := exposurePreflight(r); e != nil {
-			return nil, e
-		}
 		m, e := a.proxyStore()
 		if e != nil {
 			return nil, e
@@ -119,31 +116,6 @@ func (a *App) registerExpose() {
 		a.commands = append(a.commands, c)
 	}
 }
-func exposurePreflight(r Request) *protocol.Error {
-	o := r.Options
-	stdin, file, noAuth := o["auth-stdin"] == "true", o["auth-file"] != "", o["no-auth"] == "true"
-	if stdin && file || (stdin || file) && noAuth {
-		return argumentError("Select one authentication input or --no-auth.", "")
-	}
-	provider := o["provider"]
-	if provider == "" || provider == "local" {
-		if stdin || file || noAuth || o["alias"] != "" || o["serve-port"] != "" {
-			return argumentError("Authentication and provider options require an external provider.", "")
-		}
-		return nil
-	}
-	if provider != "tailscale" && o["serve-port"] != "" || provider != "lan" && o["alias"] != "" {
-		return argumentError("Option does not apply to the selected provider.", "")
-	}
-	if o["request-id"] == "" {
-		return argumentError("External sharing requires --request-id UUID.", "request-id")
-	}
-	if !stdin && !file && !noAuth {
-		return portFailure("authentication_required")
-	}
-	return nil
-}
-
 func readExposureAuth(ctx context.Context, streams IO, r Request) (string, *protocol.Error) {
 	stdin := r.Options["auth-stdin"] == "true"
 	path := r.Options["auth-file"]

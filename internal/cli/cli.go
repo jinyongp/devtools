@@ -55,6 +55,7 @@ type Command struct {
 	OutputMode  OutputMode                                                `json:"output_mode"`
 	InputOneOf  []map[string]any                                          `json:"-"`
 	InputAllOf  []map[string]any                                          `json:"-"`
+	StaticRules []staticOptionRule                                        `json:"-"`
 	Name        string                                                    `json:"name"`
 	Description string                                                    `json:"description"`
 	Options     []Option                                                  `json:"options"`

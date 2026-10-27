@@ -60,6 +60,33 @@ If cleanup fails, the runner retains the fixture and prints its path.
 
 ## Narrow down a slow area
 
+For proxy freshness costs independent of the end-to-end suite:
+
+```sh
+go test ./internal/proxy -run '^$' \
+  -bench 'BenchmarkProxy(GlobalFreshness|FreshnessStages|ChangedSources)$' \
+  -benchtime=100ms -count=3 -benchmem
+go test ./internal/proxy -run '^$' \
+  -bench 'BenchmarkProxyGlobalFreshness/projects200/parallelfalse$' \
+  -benchtime=2s -cpuprofile /tmp/proxy-cpu.pprof \
+  -memprofile /tmp/proxy-alloc.pprof -o /tmp/proxy-perf.test
+go test ./internal/tasks -run '^$' -bench BenchmarkQueryCursorCardinality \
+  -benchtime=100ms -count=3 -benchmem
+```
+
+GlobalFreshness targets an active global route with 0/1/50/200 registered projects,
+serially and with RunParallel. The transport is in-process; concurrent ns/op is
+aggregate throughput, not per-request latency. FreshnessStages separately measures
+warm registry identity, project identity, source hashing and forward handling.
+Those samples are not additive stage timings of one request. The list-gate sample
+holds no work and reports only a scheduling floor; it cannot identify the real
+request's lock-wait share. Product requests gain no instrumentation or skipped checks.
+ChangedSources hashes a 1 MiB source with/without equal-size, equal-mtime content
+changes. Fixture writes are outside the timer; stale activation detection is checked.
+First-page task materialization remains outside the cursor-continuation measurement.
+Preserve raw samples, CPU/alloc profiles, Go/OS/CPU and source identity when comparing.
+These local-filesystem fixtures do not simulate a slow filesystem or wire latency.
+
 ```sh
 devtools run perf:all tasks values --sizes 10,100,1000
 devtools run perf:all tasks --case workstream --body-kib 1,64,256 --sizes 10

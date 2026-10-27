@@ -100,14 +100,16 @@ func (s *State) explain(r Request, e *protocol.Error, profile string) *protocol.
 	}
 	if len(remedies) == 0 {
 		argv := []string{"devtools", "task", "current"}
+		message := "Inspect current execution state."
 		if e.Code == "not_found" {
 			argv = []string{"devtools", "task"}
 			if d := Find(r.Action); d != nil && d.Kind == "workstream" {
 				argv = append(argv, "workstream")
 			}
 			argv = append(argv, "list")
+			message = "Inspect the current selected scope."
 		}
-		remedies = append(remedies, protocol.LocalAction(append(argv, "--profile", profile), nil, "Inspect the current selected scope.", "read").Remedy(protocol.InvocationContext{}))
+		remedies = append(remedies, protocol.LocalAction(append(argv, "--profile", profile), nil, message, "read").Remedy(protocol.InvocationContext{}))
 	}
 	if w := s.Items[r.Target]; w != nil && w.Kind == "workstream" && (r.Action == "workstream.edited" || e.Code == "revision_conflict" || e.Code == "validation_required") {
 		command := "plan"

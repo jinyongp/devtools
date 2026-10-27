@@ -453,6 +453,7 @@ jobs:
             windows-race-toolchain.json
             windows-race-results.jsonl
             windows-product-identity.json
+            windows-install-completion.json
             windows-installed-product-results.json
             windows-legacy-vault.json
             windows-browser-results.json

@@ -26,6 +26,11 @@ U06의 실제 설치 검사에서 schema 안내에 `--isolated-root`가 붙어 �
 않도록 수정했다. 원 workstream의 plan/context 조회는 같은 저장소 범위를 유지한다.
 실패 뒤 task plan·값 revision·config bytes 불변, canary 비노출도 함께 검사한다.
 
+통합검증에서 기존 재암호화 ordering 테스트의 여러 실제 Argon2 연산이 전체 10초
+예산을 넘긴 사례를 확인해 30초로 조정했다. admission 차단·기존 ticket 거절·새 ticket
+허용 검사는 유지한다. PowerShell 설치기의 자동완성 등록 실패에는 생성 exit·함수 로드·
+metadata 수·완료 시간·후보를 보존해 단순 false 결과와 프로세스 크래시를 구분한다.
+
 최종 검증은 기존 `check:all`, 전체 `test:installed`, Release workflow의
 `publish=false`, `reuse_validation=false`를 사용한다. 최종 SHA의 Linux/macOS,
 Windows x64/ARM64, 실제 WSL2 재시작·터미널, native key backend, 배포물 identity와

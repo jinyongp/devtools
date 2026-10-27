@@ -37,7 +37,10 @@ function Require-Completion([string]$Shell, [string]$Directory) {
     $savedPath = $env:PATH
     try {
         $env:PATH = $Directory + ';' + $savedPath
-        $probe = Invoke-Json $Shell @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', 'devtools completion powershell | Out-String | Invoke-Expression; $line="devtools command "; $names=@([Management.Automation.CommandCompletion]::CompleteInput($line,$line.Length,$null).CompletionMatches | ForEach-Object { $_.ListItemText }); [pscustomobject]@{registered=($names -contains "list")} | ConvertTo-Json -Compress')
+        $probe = Invoke-Json $Shell @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '$generated=devtools completion powershell | Out-String; $generationExit=$LASTEXITCODE; $generated | Invoke-Expression; $line="devtools command "; $timer=[Diagnostics.Stopwatch]::StartNew(); $names=@([Management.Automation.CommandCompletion]::CompleteInput($line,$line.Length,$null).CompletionMatches | ForEach-Object { $_.ListItemText }); $timer.Stop(); [pscustomobject]@{registered=($names -contains "list");generation_exit=$generationExit;script_loaded=($null -ne (Get-Command __DevtoolsComplete -ErrorAction SilentlyContinue));node_count=@($script:DevtoolsCompletionNodes).Count;completion_ms=$timer.ElapsedMilliseconds;candidates=$names;command_path=(Get-Command devtools -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source} | ConvertTo-Json -Depth 3 -Compress')
+        if (-not $probe.registered) {
+            [IO.File]::WriteAllText((Join-Path $PWD 'windows-install-completion.json'), ($probe | ConvertTo-Json -Depth 3), [Text.UTF8Encoding]::new($false))
+        }
         Require ($probe.registered) 'Explicit PowerShell completion setup did not load completion.'
     } finally { $env:PATH = $savedPath }
 }

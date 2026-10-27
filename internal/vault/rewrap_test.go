@@ -407,7 +407,9 @@ func TestRewrapRecoveryAtDurableBoundaries(t *testing.T) {
 
 func TestRewrapDrainsAdmissionAndInvalidatesFrozenTicket(t *testing.T) {
 	dir, old, _ := sessionFixture(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Several real Argon2 derivations share this ordering test's context.
+	// Leave race-instrumented native runners time to reach the launch barriers.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	client, err := (SessionManager{Directory: dir}).Client(ctx)
 	if err != nil {

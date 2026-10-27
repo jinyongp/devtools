@@ -70,7 +70,8 @@ func CaptureCurrent(ctx context.Context, root, profile, env string, inject bool,
 	}
 	return CaptureVaultSession(ctx, root, profile, env, inject, now, client, selection...)
 }
-func (s ModernStore) PlanImport(ctx context.Context, input map[string]string, variables []string, env string, overwrite bool) ([]ImportItem, bool, *protocol.Error) {
+func (s ModernStore) PlanImport(ctx context.Context, input map[string]string, variables []string, env string, overwrite bool) (result []ImportItem, possible bool, condition *protocol.Error) {
+	defer func() { Recover(condition, s.root(), s.Profile, env, "", s.Invocation) }()
 	if !project.ValidProfile(s.Profile) {
 		return nil, false, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
@@ -204,7 +205,8 @@ func (s ModernStore) completionSnapshot() ([]byte, *protocol.Error) {
 // RequireSecretWrite checks reusable key access before a CLI consumes secret
 // input. Update still rechecks access, so a concurrent lock cannot authorize a
 // later write. No storage gate is held while stdin or a file is read.
-func (s ModernStore) RequireSecretWrite(ctx context.Context) *protocol.Error {
+func (s ModernStore) RequireSecretWrite(ctx context.Context) (condition *protocol.Error) {
+	defer func() { Recover(condition, s.root(), s.Profile, s.Invocation.Env, "", s.Invocation) }()
 	if !project.ValidProfile(s.Profile) {
 		return protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}

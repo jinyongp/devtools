@@ -29,7 +29,8 @@ type RequestItem struct {
 
 // InspectRequest borrows an existing warm session without using the write-key
 // providers, starting a daemon, unlocking protection or touching idle expiry.
-func (s ModernStore) InspectRequest(ctx context.Context, id string) (RequestView, *protocol.Error) {
+func (s ModernStore) InspectRequest(ctx context.Context, id string) (view RequestView, condition *protocol.Error) {
+	defer func() { Recover(condition, s.root(), s.Profile, "", id, s.Invocation) }()
 	out := RequestView{Profile: s.Profile, Item: RequestItem{RequestID: id}}
 	if !project.ValidProfile(s.Profile) || !modernRequestID.MatchString(id) {
 		return out, protocol.NewError("invalid_argument", "Provide profile and request UUID.", 2, nil)

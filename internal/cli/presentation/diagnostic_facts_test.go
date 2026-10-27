@@ -14,6 +14,9 @@ func TestCorrectionFactsSurviveConcisePresentation(t *testing.T) {
 		{`"facts":{"limit_kind":"pattern_bytes","observed":66000,"limit":65536}`, "Observed 66000 bytes per pattern; limit 65536."},
 		{`"facts":{"limit_kind":"patterns","observed":0,"limit":0}`, "Observed 0 patterns; limit 0."},
 		{`"facts":{"input_role":"dotenv","observed":501,"limit":500}`, "Observed 501 dotenv input bytes; limit 500."},
+		{`"facts":{"input_role":"variable","observed":65,"limit":64,"observed_exact":false}`, "Read at least 65 variable input bytes; limit 64."},
+		{`"facts":{"input_role":"variable","observed":65,"limit":64,"observed_exact":true}`, "Observed 65 variable input bytes; limit 64."},
+		{`"sources":[{"kind":"json","path":["operations","0","value","title"]}]`, "At operations[0].value.title."},
 	} {
 		doc, err := Build("import", []byte(`{"schema_version":1,"ok":false,"error":{"code":"test_error","message":"Correct the input.","details":{`+tc.details+`}}}`))
 		if err != nil {

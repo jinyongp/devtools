@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설정 모델](cli-config-redesign.md) · [진단 계약](diagnostic-contract.md)
 
-이 문서는 protocol 16 소스의 설정 편집 계약이다. 사용 순서는 [설정 편집 가이드](configuration.md)를 따른다.
+이 문서는 protocol 17 소스의 설정 편집 계약이다. 사용 순서는 [설정 편집 가이드](configuration.md)를 따른다.
 본문의 입력·응답 이름은 [schema의 $defs](../internal/configcontract/schema.json)를 가리킨다.
 JSON 표현을 선택하면 envelope는 기존처럼 성공을 stdout, 실패를 stderr에 한 개씩 반환한다.
 안정적인 소비자는 명령 앞의 `--format json`을 사용한다. `config schema`는 항상 JSON이다.

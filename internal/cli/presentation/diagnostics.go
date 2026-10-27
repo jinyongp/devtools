@@ -292,13 +292,27 @@ func diagnosticLocations(record map[string]any) []cliui.Block {
 	var result []cliui.Block
 	for _, value := range sources {
 		source, ok := value.(map[string]any)
-		if !ok || source["kind"] != "config" && source["kind"] != "dotenv" {
+		if !ok || source["kind"] != "config" && source["kind"] != "dotenv" && source["kind"] != "json" {
 			continue
 		}
 		path, _ := stringArray(source["path"])
 		var parts []string
 		if len(path) > 0 {
-			parts = append(parts, strings.Join(path, "."))
+			location := strings.Join(path, ".")
+			if source["kind"] == "json" {
+				location = ""
+				for _, field := range path {
+					if _, err := strconv.ParseUint(field, 10, 64); err == nil {
+						location += "[" + field + "]"
+					} else {
+						if location != "" {
+							location += "."
+						}
+						location += field
+					}
+				}
+			}
+			parts = append(parts, location)
 		}
 		if line, ok := source["line"]; ok && fmt.Sprint(line) != "0" {
 			parts = append(parts, "line "+fmt.Sprint(line))
@@ -341,7 +355,11 @@ func diagnosticFacts(facts map[string]any) []cliui.Block {
 			}
 		}
 		if label != "" {
-			result = append(result, cliui.Paragraph(cliui.Words(fmt.Sprintf("Observed %s %s; limit %s.", count, label, limit))))
+			prefix := "Observed"
+			if exact, ok := facts["observed_exact"].(bool); ok && !exact {
+				prefix = "Read at least"
+			}
+			result = append(result, cliui.Paragraph(cliui.Words(fmt.Sprintf("%s %s %s; limit %s.", prefix, count, label, limit))))
 		}
 	}
 	return result

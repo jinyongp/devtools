@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -116,6 +117,18 @@ func TestManagedImportReadBudget(t *testing.T) {
 				if size == 500001 {
 					if code != 2 || !strings.Contains(diagnostic, "invalid_argument") {
 						t.Fatal(code, diagnostic)
+					}
+					var envelope struct {
+						Error struct {
+							Details struct {
+								Facts struct {
+									ObservedExact *bool `json:"observed_exact"`
+								} `json:"facts"`
+							} `json:"details"`
+						} `json:"error"`
+					}
+					if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil || envelope.Error.Details.Facts.ObservedExact == nil || !*envelope.Error.Details.Facts.ObservedExact {
+						t.Fatal("file-size observation lost through public CLI", diagnostic, err)
 					}
 				} else if code != 0 {
 					t.Fatal(code, diagnostic)

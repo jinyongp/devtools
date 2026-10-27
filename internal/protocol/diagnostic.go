@@ -2,10 +2,11 @@ package protocol
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 )
 
-// Public projects domain details onto the protocol-13 allowlist. Private paths,
+// Public projects domain details onto the public diagnostic allowlist. Private paths,
 // request bodies and execution/session credentials never cross this boundary.
 func Public(e *Error, operation string) *Error {
 	copy := *e
@@ -62,7 +63,9 @@ func Public(e *Error, operation string) *Error {
 				facts[key] = v
 			}
 		}
+		projectCorrectionFacts(facts, value)
 	}
+	projectCorrectionFacts(facts, old)
 	if values, ok := facts["outcomes"]; ok {
 		out := []any{}
 		for _, value := range diagnosticArray(values) {
@@ -218,6 +221,51 @@ func Public(e *Error, operation string) *Error {
 		copy.Details["report"] = report
 	}
 	return &copy
+}
+
+var diagnosticName = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,127}$`)
+var diagnosticOption = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+var diagnosticUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// These fields are produced by validators, never by copying a request body.
+// Keep false and zero while rejecting differently typed or unbounded metadata.
+func projectCorrectionFacts(out, input map[string]any) {
+	if v, ok := input["observed_exact"].(bool); ok {
+		out["observed_exact"] = v
+	}
+	switch v := input["operation_index"].(type) {
+	case int:
+		if v >= 0 {
+			out["operation_index"] = v
+		}
+	case int64:
+		if v >= 0 {
+			out["operation_index"] = v
+		}
+	case json.Number:
+		if n, err := v.Int64(); err == nil && n >= 0 {
+			out["operation_index"] = v
+		}
+	}
+	for _, key := range []string{"edit_operation", "rule_id"} {
+		if v, ok := input[key].(string); ok && diagnosticName.MatchString(v) {
+			out[key] = v
+		}
+	}
+	if v, ok := input["reference_id"].(string); ok && diagnosticUUID.MatchString(v) {
+		out["reference_id"] = v
+	}
+	if values := diagnosticArray(input["options"]); len(values) > 0 && len(values) <= 64 {
+		names := []string{}
+		for _, value := range values {
+			name, ok := value.(string)
+			if !ok || !diagnosticOption.MatchString(name) {
+				return
+			}
+			names = append(names, name)
+		}
+		out["options"] = names
+	}
 }
 
 func diagnosticObject(value any) map[string]any {

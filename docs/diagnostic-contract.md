@@ -2,13 +2,19 @@
 
 [문서 목록](README.md) · [설정 모델](cli-config-redesign.md) · [설정 편집](config-edit-contract.md)
 
-이 문서는 protocol 16 소스의 진단 계약이다. 사용 순서는 [개발환경 진단](doctor.md)을 따른다.
+이 문서는 protocol 17 소스의 진단 계약이다. 사용 순서는 [개발환경 진단](doctor.md)을 따른다.
 JSON/text는 같은 public 진단 정본을 사용하며 표시 계층에서 message·action·효과를 재작성하지 않는다.
 공통 diagnostic과 Check·DoctorReport·ErrorDetails의 구조는
 [계약 schema](../internal/configcontract/schema.json)의 같은 이름의 정의를 따른다.
 명령의 문장은 설명에 사용하고 자동화는 code·reason·status·retry·effects를 읽는다.
 
 ## 공통 오류
+
+입력 오류는 검증기가 확인한 JSON 필드 경로와 안전한 facts를 보존한다.
+`operation_index`는 0부터 시작한다. `observed_exact: false`는 전체 크기가 아니라
+상한까지 읽은 관측치이며 text는 최소 읽은 양으로 표시한다. `rule_id`와 `options`는
+정적 옵션 규칙과 참여 옵션이고, `rule`의 정규식·검증 keyword와 구분한다.
+이 공개 계약 변경은 저장 형식이나 요청 fingerprint를 바꾸지 않는다.
 
 실패는 stderr에 `{"schema_version":1,"ok":false,"error":{...}}` 한 개를 반환한다.
 error에는 code, message, details가 필수다. 성공의 data를 실패와 함께 반환하지 않는다.

@@ -135,7 +135,7 @@ def request(host, tls=False):
 
 
 try:
-    assert api("version")["protocol_version"] == 16
+    assert api("version")["protocol_version"] == 17
     mutate("proxy", "configure", "--http-address", f"127.0.0.1:{http_port}", "--https-address", f"127.0.0.1:{tls_port}")
     api("instance", "name", "main")
     for flag in ("--no-proxy", "--proxy=false"):

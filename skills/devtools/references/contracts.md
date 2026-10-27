@@ -23,6 +23,7 @@
 - Lists: `data.items`. Single resources: `data.item`. Scalars/reports keep named fields.
 - Mutations expose `data.changed`; retry-safe ones also expose `data.replayed`, including false.
 - Protocol 16 adds `cleanup preview.retention`; rediscover its schema. `verification_pending` omits partial buckets. A verified bucket distinguishes physical files/bytes from logical requests and states why cleanup is eligible or unavailable. Inventory does not authorize deletion.
+- Protocol 17 preserves typed input-correction facts and JSON field paths in diagnostics. Operation indexes include zero; `observed_exact: false` marks a bounded-read observation rather than the full input size. `rule_id` and `options` identify a static option rule without returning input values. Rediscover the schema after an upgrade; request fingerprints and storage formats are unchanged.
 - Replays preserve the original changed result; do not count another mutation or infer current health.
 - On supporting builds `vault rewrap` returns `item`, `request_id`, `changed`, `replayed`. Optional vault status `item.rewrap` is unverified routing metadata; pending recovery uses `details.target.request_id`, `retry:same_request` and scoped remedies.
 - Devtools errors use the selected format; schema and malformed format inputs use JSON. Existing prompts/child streams can precede the diagnostic. Completion/help/artifact/child/private stdout retains its own wire even with --format json.

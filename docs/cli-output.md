@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v16 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v17 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
@@ -206,6 +206,16 @@ text 렌더 실패 시 기존 오류는 전체 escaped public 진단과 원 종�
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v17 마이그레이션
+
+오류의 `facts`에 `operation_index`, `edit_operation`, `reference_id`,
+`observed_exact`, `rule_id`, `options`를 추가합니다. edit 오류의 JSON 경로와
+config operation의 실제 실패 분기·기대/관측 타입을 보존합니다.
+`observed_exact:false`는 제한된 읽기로 확인한 최소 크기이며 전체 크기가 아닙니다.
+정적 옵션 충돌은 프로젝트·파일·인증 조회 전에 같은 규칙으로 검사합니다.
+JSON 제어 입력의 `--file path --stdin=false`는 파일을 선택하며 빈 파일 경로는 거절합니다.
+envelope 1, 업무 저장 형식과 요청 fingerprint는 유지합니다.
 
 ## protocol v16 마이그레이션
 

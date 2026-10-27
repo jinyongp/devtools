@@ -12,7 +12,19 @@ import time
 import uuid
 
 
-def check_cli_reliability(binary, root, environment=None, expected_commit=None, terminal=None):
+def build_diagnostic_validator(output, environment=None, target=None):
+    repository = Path(__file__).resolve().parents[1]
+    env = dict(environment or os.environ, CGO_ENABLED='0')
+    if target is None:
+        host = subprocess.check_output(['go', 'env', 'GOHOSTOS', 'GOHOSTARCH'], cwd=repository, env=env, text=True).splitlines()
+        target = host
+    env.update(GOOS=target[0], GOARCH=target[1])
+    subprocess.run(['go', 'build', '-o', str(output), './verify/diagnostic-contract'], cwd=repository,
+                   env=env, check=True, capture_output=True, timeout=120)
+    return output
+
+
+def check_cli_reliability(binary, root, environment=None, expected_commit=None, terminal=None, validator=None):
     # Select the physical spelling before the first session is created. Windows
     # temp roots may otherwise bind init to an 8.3 alias and handoff to a long path.
     binary, root = str(Path(binary).absolute()), Path(root).resolve()
@@ -25,6 +37,10 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
     env['DEVTOOLS_FORMAT'] = 'json'
     secret, password = 'synthetic-reliability-secret', 'synthetic-reliability-unlock'
     steps = []
+    documents = []
+    validator = validator or env.get('DEVTOOLS_TEST_DIAGNOSTIC_VALIDATOR')
+    if not validator:
+        validator = build_diagnostic_validator(root / ('diagnostic-validator.exe' if os.name == 'nt' else 'diagnostic-validator'), env)
 
     def argv(words, selected=source, format='json'):
         return [binary, '--isolated-root', str(selected), '--format', format, *map(str, words)]
@@ -35,7 +51,9 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
         assert secret not in p.stdout + p.stderr and password not in p.stdout + p.stderr, 'Private input reached output'
         if error:
             assert p.returncode != 0 and not p.stdout, 'Expected public failure'
-            result = json.loads(p.stderr)['error']
+            document = json.loads(p.stderr)
+            documents.append(document)
+            result = document['error']
             assert result['code'] == error, (words[:2], result['code'])
             return result
         if p.returncode or p.stderr:
@@ -110,10 +128,104 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
     before = call('values', 'revision', '--profile', 'reliable')['revision']
     error = call('import', '--profile', 'reliable', '--file', str(oversized), '--bundle', 'web', '--dry-run', error='invalid_argument')
     assert error['details']['facts']['limit'] == 500000
+    assert error['details']['facts']['observed_exact'] is True
     assert call('values', 'revision', '--profile', 'reliable')['revision'] == before
     call('proxy', 'configure', '--https-address', '127.0.0.1:9443', '--disable-https', '--request-id', str(uuid.uuid4()), error='invalid_argument')
     call('expose', 'start', 'missing', '--global', '--provider', 'lan', '--serve-port', '443', '--auth-stdin', '--request-id', str(uuid.uuid4()), error='invalid_argument')
     steps.append('managed_input_budget_and_static_preflight_without_effects')
+
+    # Presence conflicts must win before any project lookup. False is explicit.
+    for words in (['command','run'], ['process','start'], ['project','up']):
+        args = words + ['--proxy=false','--no-proxy=false']
+        if words[0] != 'command': args += ['--request-id',str(uuid.uuid4())]
+        error = call(*args,'serve',error='invalid_argument')
+        assert error['details']['facts']['rule_id'].endswith('proxy-selection')
+        assert error['details']['facts']['options'] == ['proxy','no-proxy']
+    steps.append('proxy_presence_conflict_before_project_lookup')
+
+    # Compare exact file size with the observation from a bounded stdin read.
+    raw = project / 'raw-limit-input'
+    with raw.open('wb') as stream: stream.truncate((128 << 20) + 1000)
+    before = call('values','revision','--profile','reliable')['revision']
+    error = call('var','set','LIMIT_PROBE','--profile','reliable','--file',str(raw),error='vault_input_too_large')
+    assert error['details']['facts']['observed_exact'] is True
+    with raw.open('rb') as stream:
+        streamed = subprocess.run(argv(['var','set','LIMIT_PROBE','--profile','reliable','--stdin']),
+                                  cwd=project,env=env,stdin=stream,capture_output=True,text=True,encoding='utf-8',timeout=30)
+    assert streamed.returncode == 3 and not streamed.stdout
+    document = json.loads(streamed.stderr); documents.append(document)
+    assert document['error']['details']['facts']['observed_exact'] is False
+    assert document['error']['details']['facts']['observed'] == (128 << 20) + 1
+    assert call('values','revision','--profile','reliable')['revision'] == before
+    raw.unlink()
+    steps.append('exact_file_and_bounded_stdin_observation_without_mutation')
+
+    workstream = call('task','workstream','create','--profile','diagnostic','--title','Diagnostic fixture','--request-id',str(uuid.uuid4()))
+    wid, revision = workstream['item']['id'], str(workstream['revision'])
+    before = call('task','workstream','plan','show',wid,'--profile','diagnostic')
+    terminal_edit = None
+    # Lower-level tests cover the full matrix; native journeys cover one of each.
+    for index, kind in enumerate(('operation','type','reference')):
+        operations = [{'op':'task.add','value':{'title':'valid'}} for _ in range(3)]
+        bad = {'operation':{'op':'unknown.operation'},
+               'type':{'op':'task.add','value':{'title':42,'description':secret}},
+               'reference':{'op':'task.update','id':'00000000-0000-4000-8000-000000000001','value':{'title':'changed'}}}[kind]
+        operations[index] = bad
+        body = json.dumps({'reason':'Diagnostic fixture','operations':operations})
+        args = ['task','workstream','edit',wid,'--profile','diagnostic','--stdin','--if-revision',revision,'--request-id',str(uuid.uuid4())]
+        error = call(*args,input=body,error='not_found' if kind == 'reference' else 'invalid_argument')
+        details = error['details']
+        path = ['operations',str(index)] + {'operation':['op'],'type':['value','title'],'reference':['id']}[kind]
+        assert details['sources'][0]['path'] == path and details['facts']['operation_index'] == index
+        if kind == 'type':
+            assert details['facts']['expected_type'] == 'string' and details['facts']['observed_type'] == 'number'
+            terminal_edit = (args, body)
+        location = 'operations['+str(index)+'].'+'.'.join(path[2:])
+        text = subprocess.run(argv(args,format='text'),cwd=project,env=env,input=body,capture_output=True,text=True,encoding='utf-8',timeout=30)
+        assert text.returncode in (2,3) and location in text.stderr and secret not in text.stderr
+        scoped = False
+        for remedy in details['remedies']:
+            assert remedy['effect'] == 'read' and not remedy['required_inputs']
+            result = subprocess.run([binary,'--format','json',*remedy['argv'][1:]],cwd=project,env=env,
+                                    capture_output=True,text=True,encoding='utf-8',timeout=30)
+            assert result.returncode == 0 and not result.stderr, ('Diagnostic remedy failed', remedy['argv'], result.returncode)
+            if remedy['argv'][1:5] == ['task','workstream','plan','show']:
+                assert wid in remedy['argv'] and str(source) in remedy['argv']
+                scoped = True
+        assert kind != 'reference' or scoped, 'Reference recovery lost original workstream'
+        assert call('task','workstream','plan','show',wid,'--profile','diagnostic') == before
+    error = call('task','workstream','activate',wid,'--profile','diagnostic','--if-revision',revision,'--request-id',str(uuid.uuid4()),error='validation_required')
+    assert len(error['details']['checks']) == 3 and all(c['reason'] == 'coverage' for c in error['details']['checks'])
+    steps.append('edit_locations_scoped_remedies_and_coverage_reasons')
+
+    call('init','--profile','reliable')
+    config_before = (project/'devtools.toml').read_bytes()
+    bad_config = json.dumps({'operations':[{'op':'command.add','name':'other','value':{'exec':[42]}}]})
+    args = ['config','edit','--revision','0'*64,'--stdin','--dry-run']
+    error = call(*args,input=bad_config,error='invalid_argument')
+    assert error['details']['sources'][0]['path'] == ['operations','0','value','exec','0']
+    assert error['details']['facts']['expected_type'] == 'string' and error['details']['facts']['observed_type'] == 'number'
+    assert (project/'devtools.toml').read_bytes() == config_before
+    if terminal:
+        edit_args, edit_body = terminal_edit
+        edit_file = project/'invalid-edit.json'; edit_file.write_text(edit_body,encoding='utf-8')
+        edit_args = [*edit_args]; edit_args[edit_args.index('--stdin')] = '--file'; edit_args.insert(edit_args.index('--file')+1,str(edit_file))
+        code, output = terminal(argv(edit_args,format='text'),env,project)
+        assert code == 2 and 'operations[1].value.title' in output and secret not in output
+        config_file = project/'invalid-config.json'; config_file.write_text(bad_config,encoding='utf-8')
+        code, output = terminal(argv(['config','edit','--revision','0'*64,'--file',str(config_file),'--dry-run'],format='text'),env,project)
+        assert code == 2 and 'operations[0].value.exec[0]' in output and 'received number' in output
+        steps.append('actual_terminal_edit_and_config_json_locations')
+    steps.append('config_discriminator_type_facts_and_unchanged_bytes')
+
+    control = json.dumps({'external_execution_id':'diagnostic-prepare','env':'local','selection':{'keys':['TOKEN']}})
+    control_file = project/'control.json'; control_file.write_text(control,encoding='utf-8')
+    request = str(uuid.uuid4())
+    prepared = call('values','execution','prepare','--profile','reliable','--file',str(control_file),'--stdin=false','--request-id',request)
+    replayed = call('values','execution','prepare','--profile','reliable','--stdin','--request-id',request,input=control)
+    assert not prepared['replayed'] and replayed['replayed'] and replayed['item'] == prepared['item']
+    call('values','execution','prepare','--profile','reliable','--file=','--stdin','--request-id',str(uuid.uuid4()),input=control,error='invalid_argument')
+    steps.append('inactive_stdin_file_selection_and_identical_request_replay')
 
     for n in range(34):
         call('task','add','--profile','cursor','--title','row-'+str(n),'--request-id',str(uuid.uuid4()))
@@ -177,7 +289,16 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
     assert applied['applied'] and not applied['replayed']
     assert call(*restore,'--apply',preview['digest'],'--request-id',request,selected=destination)['replayed']
     steps.append('backup_create_inspect_preview_other_root_restore_uuid_retry')
+    checked = subprocess.run([str(validator)],input=json.dumps(documents),capture_output=True,text=True,encoding='utf-8',timeout=30)
+    assert checked.returncode == 0, 'Installed diagnostic violates public Failure schema: '+checked.stderr
+    schema_result = json.loads(checked.stdout)
+    assert schema_result['validated'] == len(documents) and schema_result['protocol_version'] == identity['protocol_version']
+    broken = json.loads(json.dumps(documents[0])); broken['error']['details']['facts']['observed_exact'] = 'false'
+    negative = subprocess.run([str(validator)],input=json.dumps([broken]),capture_output=True,text=True,encoding='utf-8',timeout=30)
+    assert negative.returncode != 0, 'Diagnostic schema validator accepted a wrongly typed field'
+    steps.append('installed_failure_schema_and_independent_negative_control')
     return {'result':'pass','binary_identity':identity,'binary_sha256':hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
+            'diagnostic_schema':schema_result,
             'platform':sys.platform,'checks':steps}
 
 
@@ -210,9 +331,10 @@ def main():
     ap.add_argument('--root',type=Path,required=True)
     ap.add_argument('--commit')
     ap.add_argument('--evidence',type=Path,required=True)
+    ap.add_argument('--validator',type=Path)
     args=ap.parse_args()
     terminal=unix_terminal if os.name!='nt' else None
-    result=check_cli_reliability(args.binary,args.root,expected_commit=args.commit,terminal=terminal)
+    result=check_cli_reliability(args.binary,args.root,expected_commit=args.commit,terminal=terminal,validator=args.validator)
     args.evidence.write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
     print(json.dumps(result))
 

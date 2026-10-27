@@ -101,6 +101,7 @@ Design background is separate from public command availability.
 - [Installed-release verification](../verify/README.md): Unix scenarios and native Windows Actions.
 - [Network coverage](../verify/network-coverage.md): checks and unverified environments.
 - [Plan-editing regression verification](task-edit-verification.md): coverage and isolated test commands.
+- [Diagnostic contract follow-up review](cli-diagnostic-contract-review.md) (Korean): protocol 17 scope, review coverage, and native validation requirements.
 - [Performance](../perf/README.md) (English): Linux/WSL measurements and baselines.
 - [Agent Skill source](../skills/devtools/SKILL.md): operational guidance read by agents.
 

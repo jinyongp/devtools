@@ -219,7 +219,7 @@ jobs:
           echo "$PWD/bin" >> "$GITHUB_PATH"
       - run: devtools run build:cli
       - run: ./bin/devtools project inspect
-      - name: Verify installed CLI reliability journeys and simulated network failures
+      - name: Verify installed CLI diagnostics, schema, terminals and simulated network failures
         run: devtools run test:installed
       - name: Package macOS Agent Skill reference
         env:

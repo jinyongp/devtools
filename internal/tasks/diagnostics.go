@@ -155,7 +155,9 @@ func inputGuidance(r Request, e *protocol.Error) *protocol.Error {
 		return e
 	}
 	argv := append([]string{"devtools", "schema", "task"}, strings.Fields(d.Command)...)
-	guide := protocol.LocalAction(argv, nil, "Correct the indicated input location using this command's schema.", "read").Remedy(protocol.InvocationContext{})
+	// Schema discovery has no selected store. Appending store flags makes those
+	// flags part of the discovery target rather than command options.
+	guide := protocol.Action{Argv: argv, RequiredInputs: []string{}, Message: "Correct the indicated input location using this command's schema.", Effect: "read", Relation: protocol.DiscoveryAction}.Remedy(protocol.InvocationContext{})
 	remedies := []protocol.Remedy{guide}
 	// References need the selected plan as well as the input shape.
 	reference := false

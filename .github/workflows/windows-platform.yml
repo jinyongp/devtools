@@ -397,6 +397,8 @@ jobs:
           @{ commit = $identity.commit; version = $identity.version; architecture = '${{ matrix.arch }}'; zip = $archive.Name; zip_sha256 = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); exe_sha256 = (Get-FileHash -LiteralPath $env:DEVTOOLS_TEST_CLI_BINARY -Algorithm SHA256).Hash.ToLowerInvariant() } | ConvertTo-Json | Set-Content -Encoding utf8 windows-product-identity.json
           & python -B scripts/test-windows-product.py --release-dir dist-product --version $env:VERSION --commit $env:DEVTOOLS_SOURCE_COMMIT
           if ($LASTEXITCODE -ne 0) { throw 'Installed candidate reliability, ConPTY and recovery journey failed' }
+          $productProof = Get-Content -Raw -LiteralPath windows-installed-product-results.json | ConvertFrom-Json
+          if ($productProof.cli_reliability.diagnostic_schema.protocol_version -ne 17 -or $productProof.cli_reliability.diagnostic_schema.validated -lt 1 -or $productProof.cli_reliability.checks -notcontains 'actual_terminal_edit_and_config_json_locations') { throw 'Installed diagnostic schema or native terminal evidence missing' }
           & git fetch --no-tags --depth=1 origin 89100eb98888895a450b2ebd403e4e1c9b5f52d2
           if ($LASTEXITCODE -ne 0) { throw 'Pinned compatibility baseline is unavailable' }
           & python -B scripts/check-legacy-vault.py --current $env:DEVTOOLS_TEST_CLI_BINARY --evidence windows-legacy-vault.json

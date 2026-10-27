@@ -16,6 +16,11 @@ Go의 한도별 경계·손상 frame 검사와 native Windows suite를 대체하
 SIGINT와 실제 Unix PTY에서 같은 redaction 한도 실패도 확인한다. 같은 portable
 fixture를 Windows x64/ARM64 product lane과 실제 WSL2 adapter에서 실행한다.
 Windows는 native ConPTY의 오류 표시·Ctrl+C를 별도로 확인하며 시각 품질 판정은 하지 않는다.
+protocol 17 오류는 저장소의 schema 검증기로 각각 확인하고 잘못된 필드 타입의 음성
+대조도 실행한다. edit의 배열 위치·원 workstream 안내 실행·coverage 원인, config의
+discriminator 분기·타입, 파일/제한된 stdin의 관측치와 비활성 stdin의 파일 선택을 검사한다.
+Unix PTY·Windows ConPTY는 edit/config의 실제 JSON 경로 표시도 확인한다.
+검증기는 기존 Go 의존성으로 빌드하며 WSL2에는 같은 소스의 Linux 실행 파일을 전달한다.
 원격 검증은 기존 Release workflow를 `publish=false`, 최종 main SHA로 실행한다.
 native Secret Service/Keychain/DPAPI fixture에는 backend별 조기 복구 안내 검사도 포함한다.
 

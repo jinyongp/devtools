@@ -10,6 +10,7 @@ import time
 import uuid
 
 from vault_fixture import retire_home_sessions
+from cli_reliability_fixture import build_diagnostic_validator
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from fixture_paths import temporary_fixture
@@ -171,6 +172,10 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
     for name in selected:
         started = time.monotonic()
         with temporary_fixture(prefix=f"devtools-{name}-") as temporary:
+            validator = None
+            if name == 'cli_reliability':
+                # Build with the caller's Go cache before replacing HOME.
+                validator = build_diagnostic_validator(temporary / 'diagnostic-validator')
             home = temporary / "home"
             home.mkdir(mode=0o700)
             env = dict(
@@ -190,6 +195,8 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
             )
             for key in GIT_LOCAL_ENVIRONMENT:
                 env.pop(key, None)
+            if validator:
+                env['DEVTOOLS_TEST_DIAGNOSTIC_VALIDATOR'] = str(validator)
             for key in ("DEVTOOLS_ISOLATED_ROOT", "DEVTOOLS_TASK_CONTEXT"):
                 env.pop(key, None)
             print(f"Running scenario: {name}", flush=True)

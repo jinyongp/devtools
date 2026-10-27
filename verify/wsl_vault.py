@@ -10,6 +10,8 @@ import tempfile
 import urllib.request
 import uuid
 
+from cli_reliability_fixture import build_diagnostic_validator
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -48,6 +50,7 @@ def main():
         existing = wsl('--list', '--quiet').splitlines()
         if name in existing:
             raise RuntimeError('Refusing to reuse an existing distribution')
+        validator = build_diagnostic_validator(Path(temporary) / 'diagnostic-validator', target=('linux','amd64'))
         image = Path(temporary) / 'ubuntu.rootfs.tar.gz'
         # Canonical's published 24.04 initial WSL image; fixed digest from
         # https://cloud-images.ubuntu.com/wsl/releases/24.04/current/SHA256SUMS
@@ -66,7 +69,7 @@ def main():
         wsl('--import', name, str(Path(temporary) / 'instance'), str(image), '--version', '2')
         run('/usr/sbin/useradd', '--create-home', '--shell', '/bin/bash', 'dvtfixture')
         reliability=Path(__file__).with_name('cli_reliability_fixture.py').resolve()
-        for source, destination in [(binary, '/usr/local/bin/devtools'), (scenario, '/home/dvtfixture/scenario.py'),(reliability,'/home/dvtfixture/cli_reliability_fixture.py')]:
+        for source, destination in [(binary, '/usr/local/bin/devtools'), (validator,'/usr/local/bin/devtools-diagnostic-contract'), (scenario, '/home/dvtfixture/scenario.py'),(reliability,'/home/dvtfixture/cli_reliability_fixture.py')]:
             linux_source = run('/usr/bin/wslpath', '-u', str(source))
             run('/usr/bin/install', '-m', '755', linux_source, destination)
         for phase in ('prepare', 'after-manual-restart', 'after-unlocked-restart'):
@@ -85,10 +88,13 @@ def main():
                    '/usr/bin/env','HOME=/home/dvtfixture','/usr/bin/python3','-B',
                    '/home/dvtfixture/cli_reliability_fixture.py','--binary','/usr/local/bin/devtools',
                    '--root','/home/dvtfixture/reliability','--commit',args.commit,
+                   '--validator','/usr/local/bin/devtools-diagnostic-contract',
                    '--evidence','/home/dvtfixture/cli-reliability.json',timeout=180)
         reliability_result=json.loads(output)
         if reliability_result.get('result')!='pass' or reliability_result.get('binary_identity',{}).get('commit')!=args.commit:
             raise RuntimeError('Actual WSL reliability journey failed')
+        if reliability_result.get('diagnostic_schema',{}).get('protocol_version')!=17 or reliability_result['diagnostic_schema'].get('validated',0)<1:
+            raise RuntimeError('Actual WSL diagnostic schema evidence missing')
         report['cli_reliability']=reliability_result
         report['checks_passed'] = True
     finally:

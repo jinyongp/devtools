@@ -206,7 +206,7 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
                    {'op':'task.move','id':'@b','after_id':'@a'}]
     cases = [{'value':edit_body(operations),'valid':True}]
     fixture_id = '00000000-0000-4000-8000-000000000001'
-    for ref, valid in ((fixture_id,True),('@a',True),('',False),('not-an-id',False)):
+    for ref, valid in ((fixture_id,True),('@a',True),('',False),('not-an-id',False),(fixture_id+'\n',False),('@a\n',False)):
         cases.append({'value':edit_body([{'op':'task.move','id':fixture_id,'after_id':ref}]),'valid':valid})
     published = call('schema','task','workstream','edit')['body_schema']
     validated = subprocess.run([str(validator),'--body-schema'],input=json.dumps({'schema':published,'cases':cases}),

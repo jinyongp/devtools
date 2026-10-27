@@ -96,6 +96,8 @@ preview의 임시 `@ref`는 UUID fact로 노출하지 않는다. validation 소�
 입력 schema의 UUID 구조는 `pattern`으로 검사하므로 `format` assertion을 끈 소비자도
 UUID와 `@ref`를 구별한다. UUID만 허용하는 workstream 참조와 요청 내부 task/validation
 참조의 허용 범위는 유지한다.
+UUID는 정확히 36자이며 요청 내부 key와 `@ref`는 줄바꿈을 허용하지 않는다.
+정규식 `$`가 마지막 줄바꿈 앞에도 일치하는 소비자에서도 같은 판정을 유지한다.
 
 ## 저장 호환성
 

@@ -8,7 +8,7 @@ import (
 // UUID syntax must be enforced even when a schema consumer treats format as an
 // annotation. Keep this structure aligned with tasks.validID.
 func taskIDSchema() map[string]any {
-	return map[string]any{"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"}
+	return map[string]any{"type": "string", "format": "uuid", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"}
 }
 
 func taskBody(def tasks.Definition) map[string]any {
@@ -114,8 +114,10 @@ func taskOutput(mutation bool) map[string]any {
 
 func editBodySchema() map[string]any {
 	text := map[string]any{"type": "string", "minLength": 1, "maxLength": 16384}
-	key := map[string]any{"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"}
-	ref := map[string]any{"oneOf": []any{taskIDSchema(), map[string]any{"type": "string", "pattern": "^@[A-Za-z][A-Za-z0-9_-]{0,63}$"}}}
+	// Some regex engines let $ match before a final newline. Forbid line
+	// terminators explicitly so request-local keys retain runtime syntax.
+	key := map[string]any{"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$", "not": map[string]any{"pattern": "[\r\n]"}}
+	ref := map[string]any{"oneOf": []any{taskIDSchema(), map[string]any{"type": "string", "pattern": "^@[A-Za-z][A-Za-z0-9_-]{0,63}$", "not": map[string]any{"pattern": "[\r\n]"}}}}
 	array := func(v any) map[string]any { return map[string]any{"type": "array", "items": v} }
 	variants := []any{}
 	add := func(name string, props map[string]any, required ...string) {

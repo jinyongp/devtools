@@ -3,6 +3,7 @@ package cleanup
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -16,6 +17,62 @@ import (
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
+
+func TestIndexedQueryArchivePreservesExpiredRawFile(t *testing.T) {
+	root := privateTestRoot(t)
+	e := Engine{Data: filepath.Join(root, "data"), Cache: filepath.Join(root, "cache")}
+	ctx := context.Background()
+	token := tasks.ID()
+	path := filepath.Join(e.Cache, "task-queries", token+".json")
+	header, err := json.Marshal(map[string]any{"version": 2, "profile": "app", "projection_version": tasks.ProjectionVersion, "fingerprint": "fixture", "revision": 7, "expires": time.Now().Add(-time.Hour), "total": 1, "chunk_size": 32, "index_offset": 16 + 65536})
+	if err != nil {
+		t.Fatal(err)
+	}
+	part := []byte(`{"fingerprint":"fixture","revision":7,"start":0,"items":[{"title":"one"}]}`)
+	body := make([]byte, 16+65536+16)
+	copy(body, "DTQUERY2")
+	binary.LittleEndian.PutUint64(body[8:16], uint64(len(header)))
+	copy(body[16:], header)
+	binary.LittleEndian.PutUint64(body[16+65536:], uint64(len(body)))
+	binary.LittleEndian.PutUint64(body[16+65536+8:], uint64(len(part)))
+	body = append(body, part...)
+	if err := maintenance.Write(path, body); err != nil {
+		t.Fatal(err)
+	}
+	plan, failure := e.Preview(ctx, "")
+	if failure != nil || len(plan.Items) != 1 {
+		t.Fatal(plan, failure)
+	}
+	id, request := plan.Items[0].ID, tasks.ID()
+	if _, failure := e.Apply(ctx, plan.ID, []string{id}, request); failure != nil {
+		t.Fatal(failure)
+	}
+	if result, failure := e.Apply(ctx, plan.ID, []string{id}, request); failure != nil || !result.Replayed {
+		t.Fatal(result, failure)
+	}
+	if _, changed, failure := e.Restore(ctx, id); failure != nil || !changed {
+		t.Fatal(changed, failure)
+	}
+	restored, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(body, restored) {
+		t.Fatal("raw indexed cache changed", err)
+	}
+	store := tasks.Store{Directory: filepath.Join(e.Data, "tasks"), Profile: "app", Cache: filepath.Dir(path)}
+	if _, failure := store.Query(ctx, tasks.Query{Command: "list", Options: map[string]string{"cursor": token + ":0"}}); failure == nil || failure.Code != "cursor_invalid" {
+		t.Fatal("restore revived expired query", failure)
+	}
+	var archive Archive
+	if err := tasks.ReadPrivate(e.archivePath(id, "entry.json"), &archive); err != nil {
+		t.Fatal(err)
+	}
+	archive.ArchivedAt = time.Now().Add(-31 * 24 * time.Hour)
+	if err := write(e.archivePath(id, "entry.json"), archive); err != nil {
+		t.Fatal(err)
+	}
+	if _, changed, failure := e.Purge(ctx, id); failure != nil || !changed {
+		t.Fatal(changed, failure)
+	}
+}
 
 func TestPreviewConflictArchiveRestoreAndPurge(t *testing.T) {
 	root := privateTestRoot(t)

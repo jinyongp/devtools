@@ -1,11 +1,13 @@
 package tasks
 
 import (
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -72,7 +74,23 @@ func (s Store) pageCursorFast(q Query, limit int) (Object, *protocol.Error) {
 		return nil, failure("cursor_invalid", "Start a new query.")
 	}
 	var snapshot Snapshot
-	if err := ReadPrivate(filepath.Join(s.cacheDirectory(), parts[0]+".json"), &snapshot); err != nil ||
+	path := filepath.Join(s.cacheDirectory(), parts[0]+".json")
+	f, err := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, failure("cursor_invalid", "Start a new query.")
+	}
+	var magic [8]byte
+	_, readErr := f.ReadAt(magic[:], 0)
+	if readErr == nil && string(magic[:]) == queryCacheMagic {
+		out, err := readQueryPage(f, s.Profile, queryFingerprint(s.Profile, q), parts[0], offset, limit)
+		f.Close()
+		if err != nil {
+			return nil, failure("cursor_invalid", "Start a new query.")
+		}
+		return out, nil
+	}
+	f.Close()
+	if err := ReadPrivate(path, &snapshot); err != nil ||
 		snapshot.Projection != ProjectionVersion ||
 		snapshot.Fingerprint != queryFingerprint(s.Profile, q) ||
 		time.Now().After(snapshot.Expires) {

@@ -175,6 +175,12 @@ doctor timeout은 Go duration의 소수·복합 단위와 선행 `+`를 허용�
 schema의 duration 패턴은 문법만 검사하며, 수치 overflow와 양수 여부는 실행 시
 `time.ParseDuration`으로 최종 판정한다. 파일 존재·인증·저장 상태도 실행 시 확인한다.
 
+일반 task cursor의 캐시는 단일 v2 파일에 작은 header, 고정 폭 index와 32-item
+JSON chunk를 저장한다. 후속 페이지는 필요한 chunk만 읽고 원래 revision·필터·순서를
+유지한다. 공개 `token:offset` 형식과 30분 TTL은 같다. 기존 v1 캐시는 TTL 안에서
+계속 읽는다. 이전 실행 파일이 새 캐시를 거절하면 새 조회를 시작한다. graph/dashboard
+캐시 형식은 유지하며 cleanup은 만료 캐시의 raw 파일을 그대로 보관·복원한다.
+
 ### secret 자동 생성
 
 `secret generate KEY --revision REVISION --request-id UUID`는 명시적으로 초기화·해제한

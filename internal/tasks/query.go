@@ -615,7 +615,7 @@ func (s Store) page(q Query, out Object, items []any, limit int) (Object, *proto
 			return nil, storageErrorAt("create_query_cache", "query_cache", e)
 		}
 		token := ID()
-		if e := WritePrivate(filepath.Join(dir, token+".json"), snapshot); e != nil {
+		if e := writeQueryCache(filepath.Join(dir, token+".json"), s.Profile, snapshot); e != nil {
 			return nil, storageErrorAt("write_query_cache", "query_cache", e)
 		}
 		entries, _ := os.ReadDir(dir)

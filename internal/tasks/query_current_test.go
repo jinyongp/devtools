@@ -123,12 +123,8 @@ func TestOldProjectionCursorRejected(t *testing.T) {
 	}
 	token := str(page, "next_cursor")
 	id := token[:36]
-	var snapshot Snapshot
+	snapshot := Snapshot{Projection: 0}
 	path := s.cacheDirectory() + "/" + id + ".json"
-	if err := ReadPrivate(path, &snapshot); err != nil {
-		t.Fatal(err)
-	}
-	snapshot.Projection = 0
 	if err := WritePrivate(path, snapshot); err != nil {
 		t.Fatal(err)
 	}

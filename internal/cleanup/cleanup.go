@@ -252,16 +252,15 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 				continue
 			}
 			path := filepath.Join(dir, entry.Name())
+			expires, expiryErr := tasks.QueryCacheExpiry(path)
+			if expiryErr != nil || expires.IsZero() || !expires.Before(now) {
+				continue
+			}
 			b, err := maintenance.Read(path, 128<<20)
 			if err != nil {
 				continue
 			}
-			var value struct {
-				Expires time.Time `json:"expires"`
-			}
-			if json.Unmarshal(b, &value) == nil && !value.Expires.IsZero() && value.Expires.Before(now) {
-				add("expired_query", "", path, b)
-			}
+			add("expired_query", "", path, b)
 		}
 	}
 	taskDirectory := filepath.Join(e.Data, "tasks")

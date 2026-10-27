@@ -2,6 +2,8 @@ package tasks
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -60,8 +62,13 @@ func (s *State) explain(r Request, e *protocol.Error, profile string) *protocol.
 	}
 	e.Details["condition_code"] = e.Code
 	e.Details["current_revision"] = s.Revision
+	if e.Code == "revision_conflict" {
+		if expected, err := strconv.Atoi(r.Options["if-revision"]); err == nil {
+			e.Details["facts"] = map[string]any{"expected_revision": expected}
+		}
+	}
 	ids := arr(Object(e.Details), "ids")
-	if len(ids) == 0 && r.Target != "" {
+	if (len(ids) == 0 || r.Action == "workstream.edited") && r.Target != "" {
 		ids = []string{r.Target}
 	}
 	related := []Object{}
@@ -92,12 +99,84 @@ func (s *State) explain(r Request, e *protocol.Error, profile string) *protocol.
 		}
 	}
 	if len(remedies) == 0 {
-		remedies = append(remedies, protocol.LocalAction([]string{"devtools", "task", "current", "--profile", profile}, nil, "Inspect current execution state.", "read").Remedy(protocol.InvocationContext{}))
+		argv := []string{"devtools", "task", "current"}
+		if e.Code == "not_found" {
+			argv = []string{"devtools", "task"}
+			if d := Find(r.Action); d != nil && d.Kind == "workstream" {
+				argv = append(argv, "workstream")
+			}
+			argv = append(argv, "list")
+		}
+		remedies = append(remedies, protocol.LocalAction(append(argv, "--profile", profile), nil, "Inspect the current selected scope.", "read").Remedy(protocol.InvocationContext{}))
+	}
+	if w := s.Items[r.Target]; w != nil && w.Kind == "workstream" && (r.Action == "workstream.edited" || e.Code == "revision_conflict" || e.Code == "validation_required") {
+		command := "plan"
+		verb := "show"
+		if e.Code == "validation_required" {
+			command, verb = "check", ""
+		}
+		argv := []string{"devtools", "task", "workstream", command}
+		if verb != "" {
+			argv = append(argv, verb)
+		}
+		argv = append(argv, w.ID, "--profile", profile)
+		remedies = append(remedies, protocol.LocalAction(argv, nil, "Inspect the original workstream and its current definition.", "read").Remedy(protocol.InvocationContext{}))
+	}
+	if e.Code == "invalid_argument" {
+		e.Details["remedies"] = remedies
+		inputGuidance(r, e)
+		remedies = e.Details["remedies"].([]protocol.Remedy)
+	}
+	checks := []any{}
+	for _, issue := range objects(Object(e.Details), "issues") {
+		item := s.Items[str(issue, "target_id")]
+		if item == nil || str(issue, "code") != "coverage" {
+			continue
+		}
+		checks = append(checks, map[string]any{"id": fmt.Sprintf("task_coverage_%d", len(checks)), "status": "fail", "required": true, "reason": "coverage", "message": str(issue, "message"), "target": map[string]any{"kind": item.Kind, "name": item.ID, "id": item.ID}, "sources": []any{}, "facts": map[string]any{}, "remedies": remedies})
+	}
+	if len(checks) > 0 {
+		e.Details["checks"] = checks
 	}
 	e.Details["related"] = related
 	e.Details["remedies"] = remedies
 	if len(related) > 0 {
 		e.Details["target"] = related[0]
 	}
+	return e
+}
+
+func inputGuidance(r Request, e *protocol.Error) *protocol.Error {
+	if e.Details == nil {
+		e.Details = map[string]any{}
+	}
+	d := Find(r.Action)
+	if d == nil {
+		return e
+	}
+	argv := append([]string{"devtools", "schema", "task"}, strings.Fields(d.Command)...)
+	guide := protocol.LocalAction(argv, nil, "Correct the indicated input location using this command's schema.", "read").Remedy(protocol.InvocationContext{})
+	remedies := []protocol.Remedy{guide}
+	// References need the selected plan as well as the input shape.
+	reference := false
+	if sources, ok := e.Details["sources"].([]any); ok {
+		for _, value := range sources {
+			if source, ok := value.(map[string]any); ok {
+				if path, ok := source["path"].([]string); ok {
+					for _, field := range path {
+						if field == "id" || strings.HasSuffix(field, "_id") || field == "depends_on" || field == "ref" || field == "requirement_keys" || field == "acceptance_keys" {
+							reference = true
+						}
+					}
+				}
+			}
+		}
+	}
+	if reference {
+		if old, ok := e.Details["remedies"].([]protocol.Remedy); ok {
+			remedies = append(remedies, old...)
+		}
+	}
+	e.Details["remedies"] = remedies
 	return e
 }

@@ -297,7 +297,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	}
 	r.Body = body
 	if e := validateBody(def, body); e != nil {
-		return nil, e
+		return nil, inputGuidance(r, e)
 	}
 	if r.Action == "workstream.edited" && r.Options["dry-run"] == "true" {
 		profileRelease, lockErr := LockShared(ctx, s.path()+".lock")

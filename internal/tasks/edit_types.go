@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -13,30 +14,37 @@ type editOperation struct {
 	Body  Object
 }
 
-func editError(index int, message string) *protocol.Error {
-	e := failure("invalid_argument", message)
-	e.Details = map[string]any{"operation_index": index}
+func editError(index int, message string, field ...string) *protocol.Error {
+	e := inputFailure(message, append([]string{"operations", strconv.Itoa(index)}, field...)...)
+	e.Details["operation_index"] = index
 	return e
 }
 
-func parseEdit(body Object) ([]editOperation, *protocol.Error) {
+func parseEdit(body Object) (result []editOperation, condition *protocol.Error) {
+	var current *editOperation
+	defer func() {
+		if condition != nil && current != nil {
+			condition = editContext(*current, condition)
+		}
+	}()
 	if len(body) != 2 || strings.TrimSpace(str(body, "reason")) == "" || textTooLong(str(body, "reason"), 16384) {
 		return nil, failure("invalid_argument", "Provide reason and 1–200 operations.")
 	}
 	if _, ok := body["operations"]; !ok {
-		return nil, failure("invalid_argument", "Provide operations.")
+		return nil, inputFailure("Provide operations.", "operations")
 	}
 	entries, ok := body["operations"].([]any)
 	if !ok || len(entries) < 1 || len(entries) > 200 {
-		return nil, failure("invalid_argument", "Provide 1–200 operations.")
+		return nil, inputFailure("Provide 1–200 operations.", "operations")
 	}
 	out := []editOperation{}
 	for n, value := range entries {
+		current = nil
 		m := objectValue(value)
 		name := str(m, "op")
 		parts := strings.Split(name, ".")
 		if len(parts) != 2 {
-			return nil, editError(n, "Unknown edit operation.")
+			return nil, editError(n, "Unknown edit operation.", "op")
 		}
 		kind, action := parts[0], parts[1]
 		fields := []string{"op"}
@@ -68,25 +76,26 @@ func parseEdit(body Object) ([]editOperation, *protocol.Error) {
 				}
 			}
 		default:
-			return nil, editError(n, "Unknown edit operation.")
+			return nil, editError(n, "Unknown edit operation.", "op")
 		}
+		current = &editOperation{Name: name, Index: n, Body: m}
 		for k, v := range m {
 			if !contains(fields, k) || v == nil {
-				return nil, editError(n, "Unknown or null operation field.")
+				return nil, editError(n, "Unknown or null operation field.", k)
 			}
 		}
 		for _, k := range required {
 			if _, ok := m[k]; !ok {
-				return nil, editError(n, "Missing operation field: "+k)
+				return nil, editError(n, "Missing operation field: "+k, k)
 			}
 		}
 		if _, ok := m["value"]; ok && len(objectValue(m["value"])) == 0 {
-			return nil, editError(n, "Provide nonempty value object.")
+			return nil, editError(n, "Provide nonempty value object.", "value")
 		}
 		for _, k := range []string{"id", "ref", "key", "before_id", "after_id"} {
 			if v, ok := m[k]; ok {
 				if _, ok := v.(string); !ok || str(m, k) == "" {
-					return nil, editError(n, "Expected nonempty "+k)
+					return nil, editError(n, "Expected nonempty "+k, k)
 				}
 			}
 		}
@@ -112,23 +121,24 @@ func editOperations(body Object) ([]editOperation, *protocol.Error) {
 		m := objectValue(v)
 		name := str(m, "op")
 		if name == "task.depends.set" || name == "workstream.depends.set" {
+			op := editOperation{Name: name, Index: n, Body: m}
 			fields := []string{"op", "depends_on"}
 			if name == "task.depends.set" {
 				fields = append(fields, "id")
 			}
 			if len(m) != len(fields) {
-				return nil, editError(n, "Provide dependency operation fields.")
+				return nil, editContext(op, editError(n, "Provide dependency operation fields."))
 			}
 			for k := range m {
 				if !contains(fields, k) {
-					return nil, editError(n, "Unknown dependency field.")
+					return nil, editContext(op, editError(n, "Unknown dependency field.", k))
 				}
 			}
 			if e := stringArray(m["depends_on"], false); e != nil {
-				return nil, editError(n, e.Message)
+				return nil, editContext(editOperation{Name: name, Index: n, Body: m}, inputAt(e, "depends_on"))
 			}
 			if name == "task.depends.set" && str(m, "id") == "" {
-				return nil, editError(n, "Provide task id.")
+				return nil, editContext(op, editError(n, "Provide task id.", "id"))
 			}
 			relations[n] = m
 			normal[n] = Object{"op": "plan.update", "value": Object{"body": "placeholder"}}
@@ -150,13 +160,13 @@ func editOperations(body Object) ([]editOperation, *protocol.Error) {
 func operationValue(op editOperation, refs map[string]string) (Object, *protocol.Error) {
 	v := objectValue(op.Body["value"])
 	if v == nil {
-		return nil, editError(op.Index, "Expected value.")
+		return nil, editError(op.Index, "Expected value.", "value")
 	}
 	for _, field := range []string{"task_id", "workstream_id"} {
 		if ref := str(v, field); strings.HasPrefix(ref, "@") {
 			id, ok := refs[ref]
 			if !ok {
-				return nil, editError(op.Index, "Unknown reference: "+ref)
+				return nil, editError(op.Index, "Unknown item reference.", "value", field)
 			}
 			v[field] = id
 		}
@@ -197,7 +207,7 @@ func operationValue(op editOperation, refs map[string]string) (Object, *protocol
 		}
 	}
 	if e := validateBody(&d, check); e != nil {
-		return nil, editError(op.Index, e.Message)
+		return nil, editContext(op, inputAt(e, "value"))
 	}
 	for _, field := range []string{"acceptance_keys", "requirement_keys"} {
 		if _, ok := v[field]; ok {
@@ -205,11 +215,11 @@ func operationValue(op editOperation, refs map[string]string) (Object, *protocol
 		}
 	}
 	if k := str(v, "key"); k != "" && !key.MatchString(k) {
-		return nil, editError(op.Index, "Invalid document key.")
+		return nil, editError(op.Index, "Invalid document key.", "value", "key")
 	}
 	if name == "task.add" {
 		if _, exists := v["workstream_id"]; exists {
-			return nil, editError(op.Index, "Task ownership is selected by the edit target.")
+			return nil, editError(op.Index, "Task ownership is selected by the edit target.", "value", "workstream_id")
 		}
 	}
 	if strings.HasPrefix(name, "validation.") && strings.HasSuffix(name, "add") {

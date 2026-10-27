@@ -219,43 +219,46 @@ func validateBody(def *Definition, b Object) *protocol.Error {
 	}
 	for k, v := range b {
 		if !contains(def.Fields, k) || v == nil {
-			return failure("invalid_argument", "Unknown or null input field.")
+			return inputFailure("Unknown or null input field.", k)
 		}
 		switch k {
 		case "required":
 			if _, ok := v.(bool); !ok {
-				return failure("invalid_argument", "Expected a boolean.")
+				return inputTypeError("Expected a boolean.", "boolean", v, k)
 			}
 		case "requirements", "code", "evidence", "commits":
 			if _, ok := v.([]any); !ok {
-				return failure("invalid_argument", "Expected an array.")
+				return inputTypeError("Expected an array.", "array", v, k)
 			}
 		case "acceptance":
 			if def.Action == "spec.set" {
 				if _, ok := v.([]any); !ok {
-					return failure("invalid_argument", "Expected acceptance objects.")
+					return inputTypeError("Expected acceptance objects.", "array", v, k)
 				}
 			} else {
 				if e := stringArray(v, false); e != nil {
-					return e
+					return inputAt(e, k)
 				}
 			}
 		case "task_ids", "validation_ids", "depends_on", "validation_record_ids":
 			if e := stringArray(v, true); e != nil {
-				return e
+				return inputAt(e, k)
 			}
 			b[k] = unique(arr(b, k))
 		case "acceptance_keys", "requirement_keys", "decisions", "remaining", "blockers":
 			if e := stringArray(v, false); e != nil {
-				return e
+				return inputAt(e, k)
 			}
 			if k == "acceptance_keys" {
 				b[k] = unique(arr(b, k))
 			}
 		default:
 			s, ok := v.(string)
-			if !ok || !utf8.ValidString(s) || strings.ContainsRune(s, 0) {
-				return failure("invalid_argument", "Expected a UTF-8 string.")
+			if !ok {
+				return inputTypeError("Expected a UTF-8 string.", "string", v, k)
+			}
+			if !utf8.ValidString(s) || strings.ContainsRune(s, 0) {
+				return inputFailure("Expected a UTF-8 string.", k)
 			}
 			max := 16384
 			if k == "title" {
@@ -265,22 +268,24 @@ func validateBody(def *Definition, b Object) *protocol.Error {
 				max = 1 << 20
 			}
 			if textTooLong(s, max) {
-				return failure("invalid_argument", "Input string exceeds its size limit.")
+				e := inputFailure("Input string exceeds its size limit.", k)
+				e.Details["facts"] = map[string]any{"maximum": max, "actual_length": utf8.RuneCountInString(s)}
+				return e
 			}
 			if k == "body" && len(s) > 1<<20 {
-				return failure("invalid_argument", "Document body exceeds 1 MiB.")
+				return inputFailure("Document body exceeds 1 MiB.", k)
 			}
 			if k != "body" && k != "description" && strings.TrimSpace(s) == "" {
-				return failure("invalid_argument", "Expected nonempty input.")
+				return inputFailure("Expected nonempty input.", k)
 			}
 			if strings.HasSuffix(k, "_id") && !validID(s) {
-				return failure("invalid_argument", "Expected a UUID.")
+				return inputFailure("Expected a UUID.", k)
 			}
 		}
 	}
 	for _, k := range def.Required {
 		if _, ok := b[k]; !ok {
-			return failure("invalid_argument", "Required input field is missing.")
+			return inputFailure("Required input field is missing.", k)
 		}
 	}
 	if e := nestedBody(def, b); e != nil {
@@ -300,12 +305,13 @@ func nestedBody(def *Definition, b Object) *protocol.Error {
 		}
 		a, ok := value.([]any)
 		if !ok {
-			return failure("invalid_argument", "Expected object entries.")
+			return inputTypeError("Expected object entries.", "array", value, field)
 		}
-		for _, entry := range a {
+		for index, entry := range a {
+			path := []string{field, strconv.Itoa(index)}
 			m, ok := entry.(map[string]any)
 			if !ok {
-				return failure("invalid_argument", "Expected object entries.")
+				return inputTypeError("Expected object entries.", "object", entry, path...)
 			}
 			fields := []string{}
 			switch field {
@@ -320,46 +326,52 @@ func nestedBody(def *Definition, b Object) *protocol.Error {
 			case "commits":
 				fields = []string{"repository", "commit"}
 			}
-			if len(m) != len(fields) {
-				return failure("invalid_argument", "Nested object fields must match the request schema.")
+			for _, required := range fields {
+				if _, exists := m[required]; !exists {
+					return inputFailure("Required nested input field is missing.", append(append([]string{}, path...), required)...)
+				}
 			}
 			for k, v := range m {
+				fieldPath := append(append([]string{}, path...), k)
 				if !contains(fields, k) {
-					return failure("invalid_argument", "Unknown nested field.")
+					return inputFailure("Unknown nested field.", fieldPath...)
 				}
 				if k == "commit" && field == "code" && v == nil {
 					continue
 				}
 				if k == "dirty" {
 					if _, ok := v.(bool); !ok {
-						return failure("invalid_argument", "Expected dirty boolean.")
+						return inputTypeError("Expected dirty boolean.", "boolean", v, fieldPath...)
 					}
 					continue
 				}
 				if k == "requirement_keys" {
 					if e := stringArray(v, false); e != nil {
-						return e
+						return inputAt(e, fieldPath...)
 					}
 					continue
 				}
 				if k == "evidence" {
 					if s, ok := v.(string); ok {
 						if strings.TrimSpace(s) == "" || textTooLong(s, 16384) || strings.ContainsRune(s, 0) {
-							return failure("invalid_argument", "Invalid nested string.")
+							return inputFailure("Invalid nested string.", fieldPath...)
 						}
 						continue
 					}
 					if e := stringArray(v, false); e != nil {
-						return e
+						return inputAt(e, fieldPath...)
 					}
 					continue
 				}
 				s, ok := v.(string)
-				if !ok || strings.TrimSpace(s) == "" || textTooLong(s, 16384) || strings.ContainsRune(s, 0) {
-					return failure("invalid_argument", "Invalid nested string.")
+				if !ok {
+					return inputTypeError("Invalid nested string.", "string", v, fieldPath...)
+				}
+				if strings.TrimSpace(s) == "" || textTooLong(s, 16384) || strings.ContainsRune(s, 0) {
+					return inputFailure("Invalid nested string.", fieldPath...)
 				}
 				if k == "kind" && !contains([]string{"command", "file", "commit", "url", "note"}, s) {
-					return failure("invalid_argument", "Invalid evidence kind.")
+					return inputFailure("Invalid evidence kind.", fieldPath...)
 				}
 			}
 		}
@@ -375,13 +387,16 @@ func stringArray(v any, ids bool) *protocol.Error {
 				a = append(a, s)
 			}
 		} else {
-			return failure("invalid_argument", "Expected an array.")
+			return inputTypeError("Expected an array.", "array", v)
 		}
 	}
-	for _, x := range a {
+	for index, x := range a {
 		s, ok := x.(string)
-		if !ok || strings.TrimSpace(s) == "" || textTooLong(s, 16384) || (ids && !validID(s)) {
-			return failure("invalid_argument", "Invalid array entry.")
+		if !ok {
+			return inputTypeError("Invalid array entry.", "string", x, strconv.Itoa(index))
+		}
+		if strings.TrimSpace(s) == "" || textTooLong(s, 16384) || (ids && !validID(s)) {
+			return inputFailure("Invalid array entry.", strconv.Itoa(index))
 		}
 	}
 	return nil

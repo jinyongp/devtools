@@ -14,7 +14,7 @@ func TestWindowsExposureAuthFileRequiresPrivateACL(t *testing.T) {
 	if err := platformfs.WriteExternalPrivate(context.Background(), path, []byte("alice:fixture-password\r\n"), false); err != nil {
 		t.Fatal(err)
 	}
-	auth, failure := readExposureAuth(IO{}, Request{Options: map[string]string{"auth-file": path}})
+	auth, failure := readExposureAuth(context.Background(), IO{}, Request{Options: map[string]string{"auth-file": path}})
 	if failure != nil || auth != "alice:fixture-password" {
 		t.Fatal("private external authentication unavailable", failure)
 	}
@@ -22,7 +22,7 @@ func TestWindowsExposureAuthFileRequiresPrivateACL(t *testing.T) {
 	if err := os.WriteFile(insecure, []byte("must-not-use"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, failure := readExposureAuth(IO{}, Request{Options: map[string]string{"auth-file": insecure}}); failure == nil || failure.Code != "invalid_authentication_file" {
+	if _, failure := readExposureAuth(context.Background(), IO{}, Request{Options: map[string]string{"auth-file": insecure}}); failure == nil || failure.Code != "invalid_authentication_file" {
 		t.Fatal("public ACL accepted", failure)
 	}
 }

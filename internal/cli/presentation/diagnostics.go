@@ -1,7 +1,9 @@
 package presentation
 
 import (
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/jinyongp/devtools/internal/cliui"
@@ -103,6 +105,7 @@ func conciseError(e map[string]any, inputs []InputHint) cliui.Document {
 			blocks = append(blocks, cliui.Fields(scope...))
 		}
 		blocks = append(blocks, diagnosticLocations(details)...)
+		blocks = append(blocks, diagnosticFacts(facts)...)
 	}
 	blocks = append(blocks, recoveryNotes(details)...)
 	if conflicts, ok := facts["import_items"].([]any); ok && len(conflicts) > 0 {
@@ -254,6 +257,8 @@ func conciseDiagnostics(rows []any, showPassed bool) []cliui.Block {
 			result = append(result, cliui.Paragraph(text))
 		}
 		result = append(result, diagnosticLocations(row)...)
+		facts, _ := row["facts"].(map[string]any)
+		result = append(result, diagnosticFacts(facts)...)
 		for _, key := range []string{"checks", "causes", "issues", "warnings"} {
 			if nested, ok := row[key].([]any); ok {
 				result = append(result, conciseDiagnostics(nested, showPassed)...)
@@ -262,6 +267,9 @@ func conciseDiagnostics(rows []any, showPassed bool) []cliui.Block {
 		// Aggregate diagnostics wrap public error details in each subsystem issue.
 		// Keep their recovery guidance without exposing the wrapper's metadata.
 		if details, ok := row["details"].(map[string]any); ok {
+			facts, _ := details["facts"].(map[string]any)
+			result = append(result, diagnosticLocations(details)...)
+			result = append(result, diagnosticFacts(facts)...)
 			result = append(result, recoveryNotes(details)...)
 			for _, key := range []string{"checks", "causes", "issues", "warnings"} {
 				if nested, ok := details[key].([]any); ok {
@@ -284,7 +292,7 @@ func diagnosticLocations(record map[string]any) []cliui.Block {
 	var result []cliui.Block
 	for _, value := range sources {
 		source, ok := value.(map[string]any)
-		if !ok || source["kind"] != "config" {
+		if !ok || source["kind"] != "config" && source["kind"] != "dotenv" {
 			continue
 		}
 		path, _ := stringArray(source["path"])
@@ -300,6 +308,40 @@ func diagnosticLocations(record map[string]any) []cliui.Block {
 		}
 		if len(parts) > 0 {
 			result = append(result, cliui.Paragraph(cliui.Literal("At "+strings.Join(parts, ", ")+".")))
+		}
+	}
+	return result
+}
+
+// Only correction facts belong in text; parser offsets and unknown metadata
+// remain in the public JSON diagnostic.
+func diagnosticFacts(facts map[string]any) []cliui.Block {
+	var result []cliui.Block
+	expected, _ := facts["expected_type"].(string)
+	observed, _ := facts["observed_type"].(string)
+	if expected != "" && observed != "" {
+		result = append(result, cliui.Paragraph(cliui.Words(fmt.Sprintf("Expected %s; received %s.", expected, observed))))
+	}
+	number := func(key string) (string, bool) {
+		n, ok := facts[key].(json.Number)
+		if !ok {
+			return "", false
+		}
+		_, err := strconv.ParseUint(string(n), 10, 64)
+		return string(n), err == nil
+	}
+	count, countOK := number("observed")
+	limit, limitOK := number("limit")
+	if countOK && limitOK {
+		kind, _ := facts["limit_kind"].(string)
+		label := map[string]string{"patterns": "patterns", "pattern_bytes": "bytes per pattern", "total_pattern_bytes": "total pattern bytes", "states": "matcher states", "outputs_per_state": "outputs per matcher state"}[kind]
+		if label == "" {
+			if role, _ := facts["input_role"].(string); role != "" {
+				label = role + " input bytes"
+			}
+		}
+		if label != "" {
+			result = append(result, cliui.Paragraph(cliui.Words(fmt.Sprintf("Observed %s %s; limit %s.", count, label, limit))))
 		}
 	}
 	return result

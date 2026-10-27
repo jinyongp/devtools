@@ -233,6 +233,9 @@ func actionBlocks(value any) ([]cliui.Block, bool) {
 		if len(inputs) > 0 {
 			result = append(result, cliui.Paragraph(cliui.Words("Requires: "+strings.Join(inputs, ", ")+".")))
 		}
+		if len(argv) == 0 {
+			continue
+		}
 		if len(inputs) == 0 && len(argv) > 0 && argv[0] != "" {
 			command, _ := cliui.CommandLine(argv)
 			result = append(result, command)

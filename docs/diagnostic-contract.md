@@ -221,6 +221,14 @@ public/secret 이름 충돌과 Windows의 대소문자 환경 이름 충돌은 �
 | 환경·인증·상위 deadline 때문에 검사 불가 | unknown / 구체적 reason |
 | 해당 mode에서 요구하지 않는 검사 | not_applicable, required=false |
 
+복구 안내는 reason을 따른다. 확정한 실행 파일 부재·권한·버전 불일치는
+`system_write` 안내를 제공한다. 상위 deadline은 전체 진단 timeout·범위를,
+probe timeout은 고정 3s 제한과 `version_args` 응답성을 검토하도록 한다.
+취소는 의도한 경우에만 재개하고, 인증·binding 미확정은 해당 선행 검사를 먼저 해결한다.
+버전 token 판독·비정상 종료·출력 상한은 probe 설정과 결과를 검토한다.
+이 검토 안내의 effect는 `read`이며 설치 실패를 확정하지 않는다. 직접 executable 실행의
+상위 안내도 원인별 checks를 검토하도록 하고, 지원하지 않는 doctor 명령을 만들지 않는다.
+
 모든 결과는 도구 이름과 선언 executable을 제공한다. 버전 제약이 있으면 조기 검색 실패에도 expected_version에 원래 범위를 보존한다.
 교집합이 있지만 현재 관측 버전이 그 밖인 경우는 선언 충돌과 구분한다. 다른 명령이나 probe argv의 조건은 섞지 않는다.
 조회한 private PATH와 실제 절대 executable 경로를 자동 오류에 덤프하지 않는다.

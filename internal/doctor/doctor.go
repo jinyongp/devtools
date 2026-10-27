@@ -258,8 +258,7 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 			lookups = append(lookups, lookedUp{info: identity, args: string(args), version: t.Version, check: i})
 		}
 		if status != "pass" {
-			checks[i].Remedies = []protocol.Remedy{Remedy("Make the declared executable available at a version satisfying the requirement; verify version_args.", nil)}
-			checks[i].Remedies[0].Effect = "system_write"
+			checks[i].Remedies = []protocol.Remedy{toolRemedy(reason)}
 		}
 		if id == "command_executable" && in.Command == "" && in.ExecutableOffset != nil {
 			checks[i].Sources = append(checks[i].Sources, configcontract.Source{Kind: "argv", Path: []string{"child_args", "0"}, Offset: in.ExecutableOffset})
@@ -396,6 +395,31 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 	return checks
 }
 
+func toolRemedy(reason string) protocol.Remedy {
+	message, effect := "Review the selected search environment and preceding authentication or binding checks before diagnosing this executable again.", "read"
+	switch reason {
+	case "not_found", "not_executable", "permission_denied", "version_mismatch":
+		message, effect = "Make the declared executable available in the selected search environment at a version satisfying the requirement.", "system_write"
+	case "deadline_exceeded":
+		message = "The diagnosis did not finish within its overall timeout. Review the selected scope and diagnosis timeout before retrying."
+	case "timeout":
+		message = "The version probe exceeded its 3s limit. Review version_args and probe responsiveness; increasing the overall diagnosis timeout does not extend this limit."
+	case "canceled":
+		message = "Diagnosis was explicitly canceled. Resume checks only when intended."
+	case "version_unreadable":
+		message = "Review version_args and the probe's version output; no supported version token was read."
+	case "probe_failed":
+		message = "Review version_args and why the version probe could not exit successfully."
+	case "output_limit":
+		message = "Review version_args and reduce version probe output to the combined 16 KiB limit."
+	case "executable_changed":
+		message = "The executable changed during diagnosis. Review the selected executable before checking it again."
+	}
+	r := Remedy(message, nil)
+	r.Effect = effect
+	return r
+}
+
 func FailureFor(checks []Check, invocation protocol.InvocationContext) *protocol.Error {
 	command := invocation.Name
 	if State(checks) == "ready" {
@@ -442,7 +466,7 @@ func FailureFor(checks []Check, invocation protocol.InvocationContext) *protocol
 	remedies := []protocol.Remedy{invocation.DoctorAction()}
 	if invocation.Kind == "direct" {
 		message = fmt.Sprintf("Executable %q prerequisites failed: %s.", command, strings.Join(problems, ", "))
-		remedies = []protocol.Remedy{{Argv: []string{}, RequiredInputs: []string{}, Effect: "system_write", Message: "Review the executable and failed checks for this direct invocation, then retry the original command. Doctor diagnoses configured commands only."}}
+		remedies = []protocol.Remedy{Remedy("Review the reason-specific failed checks for this direct invocation. Doctor diagnoses configured commands only; resume the original command only when intended.", nil)}
 	}
 	return protocol.NewError(code, message, exit, map[string]any{"phase": "preflight", "reason": code, "target": invocation.Target(), "checks": checks, "remedies": remedies})
 }

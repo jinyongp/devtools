@@ -64,6 +64,9 @@ func TestProbeFailureAndCancellation(t *testing.T) {
 	if checks[0].Status != "fail" || strings.Contains(string(raw), "fixture-secret") {
 		t.Fatal(checks)
 	}
+	if checks[0].Reason != "probe_failed" || checks[0].Remedies[0].Effect != "read" || !strings.Contains(checks[0].Remedies[0].Message, "exit successfully") {
+		t.Fatal(checks)
+	}
 	in.Requirements.Tools["tool"] = project.Tool{Executable: doctorProbeFixture(t, dir, true), Version: "1.2.3"}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
@@ -71,6 +74,56 @@ func TestProbeFailureAndCancellation(t *testing.T) {
 	checks = CheckRequirements(ctx, in)
 	if checks[0].Status != "unknown" || checks[0].Reason != "deadline_exceeded" || time.Since(start) > 4*time.Second {
 		t.Fatal("probe did not cancel", checks)
+	}
+	if checks[0].Remedies[0].Effect != "read" || !strings.Contains(checks[0].Remedies[0].Message, "overall timeout") {
+		t.Fatal(checks)
+	}
+}
+
+func TestToolRecoveryReasons(t *testing.T) {
+	for _, row := range []struct{ reason, effect, phrase string }{
+		{"not_found", "system_write", "selected search environment"},
+		{"not_executable", "system_write", "declared executable"},
+		{"permission_denied", "system_write", "declared executable"},
+		{"version_mismatch", "system_write", "version satisfying"},
+		{"deadline_exceeded", "read", "overall timeout"},
+		{"timeout", "read", "3s limit"},
+		{"canceled", "read", "only when intended"},
+		{"version_unreadable", "read", "version token"},
+		{"probe_failed", "read", "exit successfully"},
+		{"output_limit", "read", "16 KiB"},
+		{"executable_changed", "read", "changed during diagnosis"},
+		{"environment_unresolved", "read", "authentication or binding"},
+		{"secret_search_environment", "read", "authentication or binding"},
+	} {
+		t.Run(row.reason, func(t *testing.T) {
+			r := toolRemedy(row.reason)
+			if r.Effect != row.effect || !strings.Contains(r.Message, row.phrase) || len(r.Argv) != 0 || len(r.RequiredInputs) != 0 {
+				t.Fatal(r)
+			}
+		})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	checks := CheckRequirements(ctx, Input{Executable: "must-not-be-looked-up", Profile: "fixture"})
+	if checks[0].Status != "unknown" || checks[0].Reason != "canceled" || checks[0].Remedies[0].Effect != "read" {
+		t.Fatal(checks)
+	}
+	e := FailureFor(checks, protocol.InvocationContext{Kind: "direct", Name: "must-not-be-looked-up"})
+	if e.Code != "canceled" || e.ExitCode != 130 || e.Details["remedies"].([]protocol.Remedy)[0].Effect != "read" {
+		t.Fatal(e)
+	}
+	checks = CheckRequirements(context.Background(), Input{Executable: "must-not-be-looked-up", EnvironmentUnknown: "environment_unresolved"})
+	if checks[0].Status != "unknown" || checks[0].Reason != "environment_unresolved" || checks[0].Remedies[0].Effect != "read" {
+		t.Fatal(checks)
+	}
+}
+
+func TestProbeTimeLimitKeepsFailWithReadRecovery(t *testing.T) {
+	dir := privateTempDir(t)
+	checks := CheckRequirements(context.Background(), Input{Directory: dir, Requirements: project.Requirements{Tools: map[string]project.Tool{"slow": {Executable: doctorProbeFixture(t, dir, true), Version: "1.2.3"}}}})
+	if checks[0].Status != "fail" || checks[0].Reason != "timeout" || checks[0].Remedies[0].Effect != "read" || !strings.Contains(checks[0].Remedies[0].Message, "3s limit") {
+		t.Fatal(checks)
 	}
 }
 func TestBoundedProbeOutput(t *testing.T) {

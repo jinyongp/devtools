@@ -2,9 +2,11 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/jinyongp/devtools/internal/doctor"
@@ -94,6 +96,57 @@ secs=["TOKEN"]
 	for _, key := range []string{"argv", "required_inputs", "message", "effect"} {
 		if remedyProps[key] == nil {
 			t.Fatalf("missing remedy field %s: %#v", key, remedyProps)
+		}
+	}
+}
+
+func TestDoctorDeadlineRecoverySurvivesReportAndText(t *testing.T) {
+	app := testApp(t)
+	dir := privateTempDir(t)
+	t.Chdir(dir)
+	probe := commandFixture(t, "hold")
+	args, _ := json.Marshal(probe[1:])
+	config := fmt.Sprintf("profile=\"app\"\n[tools.slow]\nexecutable=%s\nversion=\"1.2.3\"\nversion_args=%s\n[defaults]\ntools=[\"slow\"]\n[commands.check]\nexec=%s\ninject=false\n", mustJSON(t, probe[0]), args, fixtureExec(t, "true"))
+	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, check := range []bool{false, true} {
+		argv := []string{"doctor", "check", "--timeout", "50ms"}
+		if check {
+			argv = append(argv, "--check")
+		}
+		code, out, diagnostic := invoke(t, app, "", argv...)
+		var envelope map[string]any
+		var report map[string]any
+		if check {
+			if code != 3 || json.Unmarshal([]byte(diagnostic), &envelope) != nil {
+				t.Fatal(code, diagnostic)
+			}
+			assertContract(t, "Failure", envelope)
+			report = envelope["error"].(map[string]any)["details"].(map[string]any)["report"].(map[string]any)
+		} else {
+			if code != 0 || json.Unmarshal([]byte(out), &envelope) != nil {
+				t.Fatal(code, out, diagnostic)
+			}
+			report = envelope["data"].(map[string]any)
+		}
+		if report["ready"] != false {
+			t.Fatal(report)
+		}
+		found := false
+		for _, value := range report["commands"].([]any)[0].(map[string]any)["checks"].([]any) {
+			c := value.(map[string]any)
+			if c["id"] == "tool:slow" {
+				remedy := c["remedies"].([]any)[0].(map[string]any)
+				found = c["status"] == "unknown" && c["reason"] == "deadline_exceeded" && remedy["effect"] == "read" && strings.Contains(remedy["message"].(string), "overall timeout")
+			}
+		}
+		if !found {
+			t.Fatal(report)
+		}
+		code, out, diagnostic = invoke(t, app, "", append([]string{"--format", "text"}, argv...)...)
+		if code != map[bool]int{false: 0, true: 3}[check] || !strings.Contains(out+diagnostic, "overall timeout") || strings.Contains(out+diagnostic, "system_write") {
+			t.Fatal(code, out, diagnostic)
 		}
 	}
 }

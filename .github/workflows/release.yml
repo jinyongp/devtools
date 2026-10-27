@@ -114,7 +114,7 @@ jobs:
           cache: true
       - name: Prepare disposable native Secret Service fixture
         run: sudo apt-get update && sudo apt-get install -y gnome-keyring dbus
-      - name: Verify real Secret Service absent, unlocked, locked and stopped
+      - name: Verify Secret Service states and native early-recovery inputs
         env:
           DEVTOOLS_DISPOSABLE_HOST: '1'
         run: python3 -B scripts/check-linux-vault.py
@@ -164,7 +164,7 @@ jobs:
           cache: false
       - name: Verify actual native architecture
         run: test "$(go env GOHOSTARCH)" = '${{ matrix.arch }}'
-      - name: Verify disposable native Keychain and locked collection
+      - name: Verify native Keychain, locked collection and early-recovery inputs
         env:
           DEVTOOLS_DISPOSABLE_HOST: '1'
         run: python3 -B scripts/check-macos-vault.py
@@ -219,7 +219,7 @@ jobs:
           echo "$PWD/bin" >> "$GITHUB_PATH"
       - run: devtools run build:cli
       - run: ./bin/devtools project inspect
-      - name: Verify installed CLI and simulated network failures
+      - name: Verify installed CLI reliability journeys and simulated network failures
         run: devtools run test:installed
       - name: Package macOS Agent Skill reference
         env:
@@ -342,7 +342,7 @@ jobs:
           $env:CGO_ENABLED = '0'
           go build -trimpath -ldflags "-X main.commit=$env:DEVTOOLS_SOURCE_COMMIT -X main.version=0.0.0-wsl-validation" -o bin/devtools-wsl ./cmd/devtools
           if ($LASTEXITCODE -ne 0) { throw 'WSL candidate build failed' }
-      - name: Verify owned distro termination and explicit unlock after restart
+      - name: Verify actual WSL restart, CLI reliability and PTY recovery
         shell: pwsh
         env:
           DEVTOOLS_DISPOSABLE_HOST: '1'

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/platformfs"
@@ -23,6 +24,7 @@ const queryCacheChunk = 32
 const queryCacheChunkBytes = 128 << 20
 
 type queryCacheHeaderV2 struct {
+	Token       string    `json:"token"`
 	Version     int       `json:"version"`
 	Profile     string    `json:"profile"`
 	Projection  int       `json:"projection_version"`
@@ -34,6 +36,7 @@ type queryCacheHeaderV2 struct {
 	IndexOffset int64     `json:"index_offset"`
 }
 type queryCachePart struct {
+	Token       string `json:"token"`
 	Fingerprint string `json:"fingerprint"`
 	Revision    int    `json:"revision"`
 	Start       int    `json:"start"`
@@ -56,7 +59,11 @@ func writeQueryCache(path, profile string, snapshot Snapshot) error {
 	if len(snapshot.Items) == 0 || snapshot.Expires.IsZero() {
 		return errors.New("invalid query snapshot")
 	}
-	h := queryCacheHeaderV2{2, profile, snapshot.Projection, snapshot.Fingerprint, snapshot.Revision, snapshot.Expires, len(snapshot.Items), queryCacheChunk, queryCacheIndex}
+	token := strings.TrimSuffix(filepath.Base(path), ".json")
+	if !validID(token) {
+		return errors.New("invalid query token")
+	}
+	h := queryCacheHeaderV2{token, 2, profile, snapshot.Projection, snapshot.Fingerprint, snapshot.Revision, snapshot.Expires, len(snapshot.Items), queryCacheChunk, queryCacheIndex}
 	header, err := json.Marshal(h)
 	if err != nil {
 		return err
@@ -72,7 +79,7 @@ func writeQueryCache(path, profile string, snapshot Snapshot) error {
 	for n := 0; n < chunks; n++ {
 		start := n * queryCacheChunk
 		end := min(start+queryCacheChunk, len(snapshot.Items))
-		part, err := json.Marshal(queryCachePart{snapshot.Fingerprint, snapshot.Revision, start, snapshot.Items[start:end]})
+		part, err := json.Marshal(queryCachePart{token, snapshot.Fingerprint, snapshot.Revision, start, snapshot.Items[start:end]})
 		if err != nil {
 			return err
 		}
@@ -113,7 +120,7 @@ func queryHeader(f *platformfs.File) (queryCacheHeaderV2, int64, error) {
 	if err = decodeQueryCache(body, &h); err != nil {
 		return h, 0, err
 	}
-	if h.Version != 2 || h.Total < 1 || h.Total > math.MaxInt-queryCacheChunk || h.ChunkSize != queryCacheChunk || h.IndexOffset != queryCacheIndex || h.Expires.IsZero() {
+	if !validID(h.Token) || h.Version != 2 || h.Total < 1 || h.Total > math.MaxInt-queryCacheChunk || h.ChunkSize != queryCacheChunk || h.IndexOffset != queryCacheIndex || h.Expires.IsZero() {
 		return h, 0, errors.New("invalid query header")
 	}
 	chunks := (int64(h.Total) + queryCacheChunk - 1) / queryCacheChunk
@@ -151,7 +158,7 @@ func readQueryPage(f *platformfs.File, profile, fingerprint, token string, offse
 	if err != nil {
 		return nil, err
 	}
-	if h.Profile != profile || h.Projection != ProjectionVersion || h.Fingerprint != fingerprint || !time.Now().Before(h.Expires) || offset < 0 || offset > h.Total {
+	if h.Token != token || h.Profile != profile || h.Projection != ProjectionVersion || h.Fingerprint != fingerprint || !time.Now().Before(h.Expires) || offset < 0 || offset > h.Total {
 		return nil, errors.New("invalid query identity")
 	}
 	end := offset + min(limit, h.Total-offset)
@@ -183,7 +190,7 @@ func readQueryPage(f *platformfs.File, profile, fingerprint, token string, offse
 		}
 		start := n * queryCacheChunk
 		count := min(queryCacheChunk, h.Total-start)
-		if part.Fingerprint != h.Fingerprint || part.Revision != h.Revision || part.Start != start || len(part.Items) != count {
+		if part.Token != h.Token || part.Fingerprint != h.Fingerprint || part.Revision != h.Revision || part.Start != start || len(part.Items) != count {
 			return nil, errors.New("invalid query chunk identity")
 		}
 		items = append(items, part.Items[max(0, offset-start):min(count, end-start)]...)

@@ -10,6 +10,15 @@ root의 후속 행동, direct argv 위치, 신규 profile effects, kind 충돌, 
 한도를 검사한다. 기존 Release의 Linux/macOS `test:installed` 전체 선택에 포함된다.
 Go의 한도별 경계·손상 frame 검사와 native Windows suite를 대체하지 않는다.
 
+`python3 -B verify/run.py cli_reliability`는 같은 source SHA로 만든 archive의
+잠긴 입력 행렬·원 scope의 실제 unlock 안내 실행·UUID retry·passive 조회·보관 요약·
+입력 예산·32-item cursor 경계·별도 root backup restore를 검사한다. 열린 인증 pipe의
+SIGINT와 실제 Unix PTY에서 같은 redaction 한도 실패도 확인한다. 같은 portable
+fixture를 Windows x64/ARM64 product lane과 실제 WSL2 adapter에서 실행한다.
+Windows는 native ConPTY의 오류 표시·Ctrl+C를 별도로 확인하며 시각 품질 판정은 하지 않는다.
+원격 검증은 기존 Release workflow를 `publish=false`, 최종 main SHA로 실행한다.
+native Secret Service/Keychain/DPAPI fixture에는 backend별 조기 복구 안내 검사도 포함한다.
+
 `python3 -B verify/run.py sandbox_queries`는 설치 archive로 공개·legacy·보호 저장소의
 메타데이터 조회를 실제 읽기 전용 sandbox에서 검사한다. Linux는 bubblewrap,
 macOS는 sandbox-exec가 필요하다. 도구·정책 준비 실패는 skip하지 않는다.

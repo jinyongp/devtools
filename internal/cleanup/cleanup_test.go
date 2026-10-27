@@ -24,11 +24,11 @@ func TestIndexedQueryArchivePreservesExpiredRawFile(t *testing.T) {
 	ctx := context.Background()
 	token := tasks.ID()
 	path := filepath.Join(e.Cache, "task-queries", token+".json")
-	header, err := json.Marshal(map[string]any{"version": 2, "profile": "app", "projection_version": tasks.ProjectionVersion, "fingerprint": "fixture", "revision": 7, "expires": time.Now().Add(-time.Hour), "total": 1, "chunk_size": 32, "index_offset": 16 + 65536})
+	header, err := json.Marshal(map[string]any{"token": token, "version": 2, "profile": "app", "projection_version": tasks.ProjectionVersion, "fingerprint": "fixture", "revision": 7, "expires": time.Now().Add(-time.Hour), "total": 1, "chunk_size": 32, "index_offset": 16 + 65536})
 	if err != nil {
 		t.Fatal(err)
 	}
-	part := []byte(`{"fingerprint":"fixture","revision":7,"start":0,"items":[{"title":"one"}]}`)
+	part := []byte(`{"token":"` + token + `","fingerprint":"fixture","revision":7,"start":0,"items":[{"title":"one"}]}`)
 	body := make([]byte, 16+65536+16)
 	copy(body, "DTQUERY2")
 	binary.LittleEndian.PutUint64(body[8:16], uint64(len(header)))

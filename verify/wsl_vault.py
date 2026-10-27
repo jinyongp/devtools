@@ -65,7 +65,8 @@ def main():
         imported = True  # Retain recovery files if a partial import cannot be inspected.
         wsl('--import', name, str(Path(temporary) / 'instance'), str(image), '--version', '2')
         run('/usr/sbin/useradd', '--create-home', '--shell', '/bin/bash', 'dvtfixture')
-        for source, destination in [(binary, '/usr/local/bin/devtools'), (scenario, '/home/dvtfixture/scenario.py')]:
+        reliability=Path(__file__).with_name('cli_reliability_fixture.py').resolve()
+        for source, destination in [(binary, '/usr/local/bin/devtools'), (scenario, '/home/dvtfixture/scenario.py'),(reliability,'/home/dvtfixture/cli_reliability_fixture.py')]:
             linux_source = run('/usr/bin/wslpath', '-u', str(source))
             run('/usr/bin/install', '-m', '755', linux_source, destination)
         for phase in ('prepare', 'after-manual-restart', 'after-unlocked-restart'):
@@ -80,6 +81,15 @@ def main():
             if result.get('binary_identity', {}).get('commit') != args.commit:
                 raise RuntimeError('Executed WSL candidate identity mismatch')
             report['phases'].append(result)
+        output=wsl('--distribution',name,'--user','dvtfixture','--exec',
+                   '/usr/bin/env','HOME=/home/dvtfixture','/usr/bin/python3','-B',
+                   '/home/dvtfixture/cli_reliability_fixture.py','--binary','/usr/local/bin/devtools',
+                   '--root','/home/dvtfixture/reliability','--commit',args.commit,
+                   '--evidence','/home/dvtfixture/cli-reliability.json',timeout=180)
+        reliability_result=json.loads(output)
+        if reliability_result.get('result')!='pass' or reliability_result.get('binary_identity',{}).get('commit')!=args.commit:
+            raise RuntimeError('Actual WSL reliability journey failed')
+        report['cli_reliability']=reliability_result
         report['checks_passed'] = True
     finally:
         try:

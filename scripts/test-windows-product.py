@@ -20,6 +20,10 @@ from vault_test_support import retire_vaults
 from native_rewrap import check_native_rewrap
 from cli_json import json_argv, json_environment
 
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'verify'))
+from cli_reliability_fixture import check_cli_reliability
+from windows_console import windows_terminal
+
 
 class CLIError(RuntimeError):
     def __init__(self, arguments, code, details):
@@ -112,6 +116,9 @@ def main():
                                   text=True, encoding="utf-8", timeout=15)
         assert captured.returncode == 0 and args.version in captured.stdout and "\x1b[" not in captured.stdout
         steps.append("native_pipe_and_explicit_presentation")
+        reliability=check_cli_reliability(binary,root/'reliability',base_env,expected_commit=args.commit,terminal=windows_terminal)
+        assert reliability['result']=='pass'
+        steps.append("cli_reliability_recovery_inputs_inventory_cursor_backup")
         alias = binary.with_name("dvt.exe")
         assert hashlib.sha256(alias.read_bytes()).digest() == hashlib.sha256(binary.read_bytes()).digest()
         steps.append("candidate_install_and_alias")
@@ -298,7 +305,7 @@ timeout = "3s"
         steps.append("encrypted_profile_transfer_preview_apply_retry")
         result = {"commit": args.commit, "version": args.version, "final_version": update_version, "protocol": identity["protocol_version"],
                   "exe_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-                  "steps": {step: "pass" for step in steps}, "isolated": False,
+                  "steps": {step: "pass" for step in steps}, "isolated": False,"cli_reliability":reliability,
                   "isolated_transfer_and_managed_roots": True, "native_provider_disposable_user_root": True,
                   "os_trust_modified": False, "real_pc": "NOT RUN"}
     finally:
@@ -332,6 +339,7 @@ timeout = "3s"
         vault_roots = [root / "source" / "data" / "vault", root / "target" / "data" / "vault"]
         if native_root is not None:
             vault_roots.append(native_root / "data" / "vault")
+        vault_roots.extend(path.parent for path in (root/'reliability').rglob('vault/session.json'))
         retire_vaults(*vault_roots)
         # Mapped supervisor images and private directory pins may finish closing
         # just after successful control RPC; bounded cleanup does not hide failures.

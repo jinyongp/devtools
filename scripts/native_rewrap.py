@@ -67,6 +67,33 @@ def check_native_rewrap(binary, env, cwd, profile, directory, *, lock_backend=No
     slot = directory / 'key-slot.json'
     evidence = {'backend': initial['backend'], 'same_root_and_profile_bytes': False}
 
+    # Early secret/import/request failures must prescribe the actual native
+    # authentication without consuming the new value or starting it implicitly.
+    edit=api('values','revision','--profile',profile)['revision']
+    api('vault','lock')
+    locked=api('vault','status')
+    recovery_file=cwd/'native-recovery.env'
+    recovery_file.write_text('REWRAP_CANARY='+canary+'\n',encoding='utf-8');recovery_file.chmod(0o600)
+    recovery=None
+    for args in (
+        ['sec','set','REWRAP_CANARY','--profile',profile,'--stdin'],
+        ['sec','set','REWRAP_CANARY','--profile',profile,'--file',str(recovery_file),'--revision',edit,'--request-id',str(uuid.uuid4())],
+        ['import','--profile',profile,'--file',str(recovery_file),'--dry-run'],
+        ['values','request','show',str(uuid.uuid4()),'--profile',profile],
+    ):
+        p=subprocess.run(json_argv(binary,args,environment=env,cwd=cwd),cwd=cwd,env=env,
+                         input=canary,text=True,capture_output=True,timeout=45)
+        assert p.returncode==3 and canary not in p.stdout+p.stderr
+        error=json.loads(p.stderr)['error'];assert error['code']=='vault_locked'
+        assert error['details']['retry']=='after_dependency_change'
+        recovery=error['details']['remedies'][0]
+        assert '--interactive' in recovery['argv'] and recovery['required_inputs']==['os-authentication']
+    assert api('vault','status')==locked
+    api(*recovery['argv'][1:])
+    consume()
+    recovery_file.unlink()
+    evidence['native_early_recovery_matrix']='pass'
+
     if lock_backend is not None:
         previous = slot.read_bytes()
         lock_backend()

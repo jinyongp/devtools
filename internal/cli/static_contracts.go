@@ -78,13 +78,14 @@ func staticContract(c *Command) {
 		add(noTogether(presentInput("file"), trueFlag("stdin")))
 		fields := c.BodySchema["properties"].(map[string]any)
 		for _, option := range c.Options {
-			field := strings.ReplaceAll(option.Name, "-", "_")
-			if _, ok := fields[field]; ok {
-				add(noTogether(presentInput("file"), presentInput(option.Name)), noTogether(trueFlag("stdin"), presentInput(option.Name)))
+			for field := range fields {
+				if taskField(field) == option.Name {
+					add(noTogether(presentInput("file"), presentInput(option.Name)), noTogether(trueFlag("stdin"), presentInput(option.Name)))
+				}
 			}
 		}
 		if c.Name == "task claim" {
-			add(noTogether(presentInput("args"), presentInput("workstream")))
+			add(noTogether(map[string]any{"required": []string{"args"}, "properties": map[string]any{"args": map[string]any{"minItems": 1}}}, presentInput("workstream")))
 		}
 	}
 	for i := range c.Options {
@@ -139,6 +140,24 @@ func staticPreflight(name string, r Request) *protocol.Error {
 		conflict = o["all"] == "true" && (o["listener"] != "" || o["port"] != "")
 	case "proxy up", "proxy down":
 		conflict = (len(r.Args) > 0) == (o["all"] == "true")
+	case "task claim":
+		conflict = len(r.Args) > 0 && o["workstream"] != ""
+	case "vault init", "vault unlock":
+		conflict = o["passphrase-file"] != "" && o["passphrase-stdin"] == "true"
+		if name == "vault init" && o["backend"] != "passphrase" && (o["passphrase-file"] != "" || o["passphrase-stdin"] == "true") {
+			conflict = true
+		}
+	case "vault rewrap":
+		conflict = o["current-passphrase-stdin"] == "true" && o["new-passphrase-stdin"] == "true"
+		for _, side := range [][2]string{{"current", "from-backend"}, {"new", "backend"}} {
+			file, stdin := o[side[0]+"-passphrase-file"] != "", o[side[0]+"-passphrase-stdin"] == "true"
+			if file && stdin || o[side[1]] != "passphrase" && (file || stdin) {
+				conflict = true
+			}
+		}
+	}
+	if (strings.HasPrefix(name, "port ") || name == "instance list" || name == "instance show") && o["instance"] != "" && o["dir"] != "" {
+		conflict = true
 	}
 	if conflict {
 		return argumentError("Conflicting or incomplete options; inspect this command's input schema and help.", "")

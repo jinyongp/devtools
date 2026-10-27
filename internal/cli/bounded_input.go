@@ -14,6 +14,12 @@ func readBoundedInput(ctx context.Context, reader io.Reader, limit int64, role s
 	if ctx.Err() != nil {
 		return nil, protocol.NewError("canceled", "Execution canceled.", 130, nil)
 	}
+	prepared, cleanup, err := cancellableInput(reader)
+	if err != nil {
+		return nil, protocol.InputError(role, "prepare_input", err)
+	}
+	defer cleanup()
+	reader = prepared
 	type result struct {
 		body []byte
 		err  error

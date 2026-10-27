@@ -61,7 +61,7 @@ func TestIndexedQueryPagesAndLegacyCompatibility(t *testing.T) {
 }
 
 func TestIndexedQueryRejectsCorruption(t *testing.T) {
-	for _, kind := range []string{"truncated", "tail", "offset", "length", "header", "chunk", "expiry"} {
+	for _, kind := range []string{"truncated", "tail", "offset", "length", "header", "chunk", "expiry", "token"} {
 		t.Run(kind, func(t *testing.T) {
 			s := fixture(t)
 			q := Query{Command: "list", Options: map[string]string{}}
@@ -93,12 +93,16 @@ func TestIndexedQueryRejectsCorruption(t *testing.T) {
 				body[16] = 'x'
 			case "chunk":
 				body[queryCacheIndex+16*3] = 'x'
-			case "expiry":
+			case "expiry", "token":
 				var header queryCacheHeaderV2
 				if err := json.Unmarshal(body[16:16+binary.LittleEndian.Uint64(body[8:16])], &header); err != nil {
 					t.Fatal(err)
 				}
-				header.Expires = time.Now().Add(-time.Hour)
+				if kind == "token" {
+					header.Token = ID()
+				} else {
+					header.Expires = time.Now().Add(-time.Hour)
+				}
 				encoded, err := json.Marshal(header)
 				if err != nil {
 					t.Fatal(err)

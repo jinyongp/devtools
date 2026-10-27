@@ -47,12 +47,13 @@ def host_target(repository: Path):
 def package_test_releases(repository: Path, releases: Path) -> None:
     releases.mkdir(parents=True, exist_ok=True)
     target_os, target_arch = host_target(repository)
+    source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=repository,text=True).strip()
     for version in TEST_VERSIONS:
         env = dict(
             os.environ,
             VERSION=version,
             OUTPUT_DIR=str(releases),
-            COMMIT="verify",
+            COMMIT=source_commit,
             TARGET_OS=target_os,
             TARGET_ARCH=target_arch,
         )

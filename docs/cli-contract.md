@@ -162,6 +162,11 @@ guarded import는 CLI의 선택 계층 비교를 유지하며 500,000 bytes·5,0
 dashboard의 유효 값 유지/skip 동작은 별개다. `--dry-run`은 receipt를 만들지 않으므로
 같은 UUID로 실제 apply를 할 수 있다. 실제 저장 뒤에는 preview를 포함한 입력 변경에 새 ID가 필요하다.
 
+명령 schema는 정적인 옵션 충돌·동반 필수 조건과 TCP 포트 1..65535를 검증한다.
+doctor timeout은 Go duration의 소수·복합 단위와 선행 `+`를 허용한다.
+schema의 duration 패턴은 문법만 검사하며, 수치 overflow와 양수 여부는 실행 시
+`time.ParseDuration`으로 최종 판정한다. 파일 존재·인증·저장 상태도 실행 시 확인한다.
+
 ### secret 자동 생성
 
 `secret generate KEY --revision REVISION --request-id UUID`는 명시적으로 초기화·해제한

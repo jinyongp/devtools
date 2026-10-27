@@ -37,6 +37,9 @@ func exampleValue(name, pattern string) string {
 	return "sample"
 }
 func commandExamples(c Command) []string {
+	if c.Name == "backup keygen" {
+		return []string{"devtools backup keygen --identity-file ./backup.identity --recipient-file ./backup.recipient"}
+	}
 	line := "devtools " + c.Name
 	for _, arg := range c.Arguments {
 		if arg.Required {

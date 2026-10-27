@@ -191,6 +191,7 @@ func New(version, commit string) *App {
 		}
 	}
 	for i := range a.commands {
+		staticContract(&a.commands[i])
 		if a.commands[i].OutputMode == "" {
 			a.commands[i].OutputMode = OutputJSON
 		}

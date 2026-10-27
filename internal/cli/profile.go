@@ -137,22 +137,27 @@ func (a *App) profileCatalog() (profilecatalog.Catalog, *protocol.Error) {
 }
 
 func exclusiveInputAlternatives(names ...string) []map[string]any {
+	selected := func(name string) map[string]any {
+		if name == "passphrase-stdin" {
+			return trueFlag(name)
+		}
+		return presentInput(name)
+	}
 	required := make([]map[string]any, 0, len(names))
 	for _, name := range names {
-		required = append(required, map[string]any{"required": []string{name}})
+		required = append(required, selected(name))
 	}
 	out := []map[string]any{{"not": map[string]any{"anyOf": required}}}
 	for _, name := range names {
 		others := []map[string]any{}
 		for _, other := range names {
 			if other != name {
-				others = append(others, map[string]any{"required": []string{other}})
+				others = append(others, selected(other))
 			}
 		}
-		out = append(out, map[string]any{
-			"required": []string{name},
-			"not":      map[string]any{"anyOf": others},
-		})
+		mode := selected(name)
+		mode["not"] = map[string]any{"anyOf": others}
+		out = append(out, mode)
 	}
 	return out
 }

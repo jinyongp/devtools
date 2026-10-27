@@ -139,9 +139,9 @@ func (a *App) profileCatalog() (profilecatalog.Catalog, *protocol.Error) {
 func exclusiveInputAlternatives(names ...string) []map[string]any {
 	selected := func(name string) map[string]any {
 		if name == "passphrase-stdin" {
-			return trueFlag(name)
+			return activated(name).schema()
 		}
-		return presentInput(name)
+		return supplied(name).schema()
 	}
 	required := make([]map[string]any, 0, len(names))
 	for _, name := range names {

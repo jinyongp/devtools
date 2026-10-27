@@ -162,7 +162,7 @@ func passphraseOptionConflict(options map[string]string, incompatible ...string)
 		return nil
 	}
 	for _, name := range incompatible {
-		if options[name] != "" && options[name] != "false" {
+		if _, supplied := options[name]; supplied {
 			return argumentError("Passphrase input cannot be combined with "+name+".", name)
 		}
 	}

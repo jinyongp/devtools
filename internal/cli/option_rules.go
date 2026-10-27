@@ -92,6 +92,10 @@ type staticOptionRule struct {
 	code    string
 }
 
+func jsonSourceRule(command string) staticOptionRule {
+	return staticOptionRule{id: strings.ReplaceAll(command, " ", ".") + ".body-source", kind: "one", message: "Choose exactly one of --file or --stdin.", tests: []optionTest{supplied("file"), activated("stdin")}}
+}
+
 func (rule staticOptionRule) schema() map[string]any {
 	items := []map[string]any{}
 	for _, test := range rule.tests {
@@ -168,6 +172,21 @@ func optionRules(c *Command) []staticOptionRule {
 		rules = append(rules, staticOptionRule{id: strings.ReplaceAll(c.Name, " ", ".") + "." + id, kind: kind, message: message, tests: tests})
 	}
 	switch c.Name {
+	case "profile export", "profile import":
+		sources := []optionTest{supplied("passphrase-file"), activated("passphrase-stdin")}
+		if c.Name == "profile export" {
+			sources = append(sources, supplied("recipient"), supplied("recipient-file"))
+		} else {
+			sources = append(sources, supplied("identity-file"))
+		}
+		for i := range sources {
+			for j := i + 1; j < len(sources); j++ {
+				add("forbid", sources[i].name+"-"+sources[j].name, "Do not combine --"+sources[i].name+" with --"+sources[j].name+".", sources[i], sources[j])
+			}
+		}
+		if c.Name == "profile import" {
+			add("together", "apply-request", "--apply and --request-id must be provided together.", supplied("apply"), supplied("request-id"))
+		}
 	case "command run", "process start", "project up":
 		add("forbid", "proxy-selection", "Specify only one of --proxy and --no-proxy, including explicit false values.", supplied("proxy"), supplied("no-proxy"))
 	case "vault init", "vault unlock":
@@ -231,6 +250,9 @@ func optionRules(c *Command) []staticOptionRule {
 		rules[len(rules)-1].code = "authentication_required"
 		add("when", "alias-provider", "--alias requires --provider=lan.", supplied("alias"), valueIs("provider", "local", "lan"))
 		add("when", "serve-provider", "--serve-port requires --provider=tailscale.", supplied("serve-port"), valueIs("provider", "local", "tailscale"))
+	}
+	if c.BodySchema != nil && (strings.HasPrefix(c.Name, "values execution ") || c.Name == "values runner register") {
+		rules = append(rules, jsonSourceRule(c.Name))
 	}
 	if strings.HasPrefix(c.Name, "port ") || c.Name == "instance list" || c.Name == "instance show" {
 		add("forbid", "location", "Choose --instance or --dir.", supplied("instance"), supplied("dir"))

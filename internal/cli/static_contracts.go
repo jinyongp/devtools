@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"strings"
 
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -17,6 +18,9 @@ func staticContract(c *Command) {
 	}
 	for i := range c.Options {
 		o := &c.Options[i]
+		if (o.Name == "file" || strings.HasSuffix(o.Name, "-file")) && o.MinLength == 0 {
+			o.MinLength = 1
+		}
 		if c.Name == "doctor" && o.Name == "timeout" {
 			o.Pattern = `^\+?(([0-9]+(\.[0-9]*)?|\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$`
 		}

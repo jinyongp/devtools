@@ -50,8 +50,8 @@ func executionOptions() []Option {
 	return append(profileOptions(false), Option{Name: "request-id", Required: true, Pattern: valuehandoff.UUIDPattern, Description: "Canonical lowercase operation UUID; retry identical input."}, Option{Name: "file", Description: "Strict JSON control body file; contains no secret values."}, Option{Name: "stdin", Boolean: true, Description: "Read strict JSON control body from a pipe."})
 }
 func executionInput(ctx context.Context, streams IO, r Request, out any) *protocol.Error {
-	if (r.Options["file"] != "") == (r.Options["stdin"] == "true") {
-		return argumentError("Choose exactly one of --file or --stdin.", "")
+	if e := jsonSourceRule("values execution").failure(r); e != nil {
+		return e
 	}
 	body, e := taskInput(ctx, streams, r)
 	if e != nil {
@@ -63,7 +63,8 @@ func executionInput(ctx context.Context, streams IO, r Request, out any) *protoc
 	return nil
 }
 func inputSourceSchema() []map[string]any {
-	return []map[string]any{{"required": []string{"file"}, "not": map[string]any{"required": []string{"stdin"}}}, {"required": []string{"stdin"}, "properties": map[string]any{"stdin": map[string]any{"const": true}}, "not": map[string]any{"required": []string{"file"}}}}
+	rule := jsonSourceRule("values execution")
+	return []map[string]any{rule.tests[0].schema(), rule.tests[1].schema()}
 }
 func (a *App) registerValueExecutions() {
 	a.registerExecutionControls()

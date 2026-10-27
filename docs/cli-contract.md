@@ -176,6 +176,8 @@ dashboard의 유효 값 유지/skip 동작은 별개다. `--dry-run`은 receipt�
 동시 지정할 수 없으며 두 값이 모두 false여도 같다. 반면 두 stdin 소비자의 충돌처럼
 활성화 여부를 검사하는 규칙에서는 명시적 false가 입력을 소비하지 않는다.
 오류의 `facts.rule_id`와 `facts.options`는 규칙과 참여 옵션을 식별하고 입력 값은 반환하지 않는다.
+JSON 입력의 `--file PATH --stdin=false`는 파일만 읽는다. 명시한 빈 파일 경로
+`--file=`는 입력 오류다. 내용이 비어 있는 실제 파일이나 빈 값을 등록하는 `--value ""`와는 구분한다.
 doctor timeout은 Go duration의 소수·복합 단위와 선행 `+`를 허용한다.
 schema의 duration 패턴은 문법만 검사하며, 수치 overflow와 양수 여부는 실행 시
 `time.ParseDuration`으로 최종 판정한다. 파일 존재·인증·저장 상태도 실행 시 확인한다.

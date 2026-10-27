@@ -21,6 +21,11 @@ protocol 17 오류는 저장소의 schema 검증기로 각각 확인하고 잘�
 discriminator 분기·타입, 파일/제한된 stdin의 관측치와 비활성 stdin의 파일 선택을 검사한다.
 Unix PTY·Windows ConPTY는 edit/config의 실제 JSON 경로 표시도 확인한다.
 검증기는 기존 Go 의존성으로 빌드하며 WSL2에는 같은 소스의 Linux 실행 파일을 전달한다.
+같은 fixture에서 공개 edit schema를 format assertion off/on 양쪽으로 검사하고
+`@ref` preview/apply, 이동 anchor·의존성 원소·외부 validation owner의 정확한 위치와
+UUID, 원 plan 안내 실행, 실패 후 상태 보존을 확인한다. doctor는 실제 probe로
+상위 deadline·3초 timeout·판독 실패·비정상 종료·출력 상한과 정상/버전 불일치를 구별한다.
+PTY/ConPTY에서도 anchor 위치와 deadline의 `read` 복구 안내를 검사한다.
 원격 검증은 기존 Release workflow를 `publish=false`, 최종 main SHA로 실행한다.
 native Secret Service/Keychain/DPAPI fixture에는 backend별 조기 복구 안내 검사도 포함한다.
 

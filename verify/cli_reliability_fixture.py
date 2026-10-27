@@ -198,6 +198,97 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
     assert len(error['details']['checks']) == 3 and all(c['reason'] == 'coverage' for c in error['details']['checks'])
     steps.append('edit_locations_scoped_remedies_and_coverage_reasons')
 
+    # Published schema consumers must agree with and without format assertions.
+    def edit_body(operations):
+        return {'reason':'Reference fixture','operations':operations}
+    operations = [{'op':'task.add','ref':key,'value':{'title':key}} for key in ('a','b')]
+    operations += [{'op':'task.depends.set','id':'@b','depends_on':['@a']},
+                   {'op':'task.move','id':'@b','after_id':'@a'}]
+    cases = [{'value':edit_body(operations),'valid':True}]
+    fixture_id = '00000000-0000-4000-8000-000000000001'
+    for ref, valid in ((fixture_id,True),('@a',True),('',False),('not-an-id',False)):
+        cases.append({'value':edit_body([{'op':'task.move','id':fixture_id,'after_id':ref}]),'valid':valid})
+    published = call('schema','task','workstream','edit')['body_schema']
+    validated = subprocess.run([str(validator),'--body-schema'],input=json.dumps({'schema':published,'cases':cases}),
+                               capture_output=True,text=True,encoding='utf-8',timeout=30)
+    assert validated.returncode == 0, 'Published reference schema disagrees with independent cases: '+validated.stderr
+    reference_schema = json.loads(validated.stdout)
+    preview = call('task','workstream','edit',wid,'--profile','diagnostic','--stdin','--if-revision',revision,'--dry-run',input=json.dumps(edit_body(operations)))
+    assert preview['would_change'] and preview['revision'] == before['revision']
+    committed = call('task','workstream','edit',wid,'--profile','diagnostic','--stdin','--if-revision',revision,'--request-id',str(uuid.uuid4()),input=json.dumps(edit_body(operations)))
+    a, b = committed['created_refs']['a'], committed['created_refs']['b']
+    other = call('task','workstream','create','--profile','diagnostic','--title','Other','--request-id',str(uuid.uuid4()))['item']['id']
+    before = call('task','workstream','plan','show',wid,'--profile','diagnostic')
+    revision = str(before['revision'])
+    reference_terminal = None
+    for ops, path, target in (
+        ([{'op':'task.remove','id':a},{'op':'task.move','id':b,'after_id':a}], ['operations','1','after_id'], a),
+        ([{'op':'task.depends.set','id':b,'depends_on':[a,fixture_id]}], ['operations','0','depends_on','1'], fixture_id),
+        ([{'op':'validation.add','value':{'title':'Check','method':'Test','workstream_id':other}}], ['operations','0','value','workstream_id'], other),
+    ):
+        body = json.dumps(edit_body(ops))
+        args = ['task','workstream','edit',wid,'--profile','diagnostic','--stdin','--if-revision',revision,'--request-id',str(uuid.uuid4())]
+        details = call(*args,input=body,error='invalid_argument')['details']
+        assert details['sources'][0]['path'] == path and details['facts']['reference_id'] == target
+        assert details['facts']['operation_index'] == int(path[1])
+        scoped = False
+        for remedy in details['remedies']:
+            result = subprocess.run([binary,'--format','json',*remedy['argv'][1:]],cwd=project,env=env,
+                                    capture_output=True,text=True,encoding='utf-8',timeout=30)
+            assert result.returncode == 0 and not result.stderr
+            if remedy['argv'][1:5] == ['task','workstream','plan','show']:
+                assert wid in remedy['argv'] and str(source) in remedy['argv']
+                scoped = True
+        assert scoped and call('task','workstream','plan','show',wid,'--profile','diagnostic') == before
+        if path[-1] == 'after_id': reference_terminal = (args, body)
+    if terminal:
+        args, body = reference_terminal
+        file = project/'invalid-anchor.json'; file.write_text(body,encoding='utf-8')
+        args = list(args); args[args.index('--stdin')] = '--file'; args.insert(args.index('--file')+1,str(file))
+        code, output = terminal(argv(args,format='text'),env,project)
+        assert code == 2 and 'operations[1].after_id' in output and secret not in output
+        steps.append('actual_terminal_edit_reference_location')
+    steps.append('reference_schema_formats_and_exact_edit_provenance')
+
+    # Exercise actual probe processes on every native platform, with private
+    # output canaries and an independent fixture timeout above the probe budget.
+    doctor_dir = project/'doctor'; doctor_dir.mkdir()
+    def doctor_config(script):
+        config = ('profile="reliable"\n[tools.probe]\nexecutable='+json.dumps(sys.executable)+
+                  '\nversion="1.2.3"\nversion_args='+json.dumps(['-c',script])+
+                  '\n[defaults]\ntools=["probe"]\n[commands.check]\ninject=false\nexec='+json.dumps([sys.executable,'-c','pass'])+'\n')
+        (doctor_dir/'devtools.toml').write_text(config,encoding='utf-8')
+    def probe_check(report):
+        return next(c for c in report['commands'][0]['checks'] if c['id'] == 'tool:probe')
+    doctor_config('import time; time.sleep(1); print("1.2.3")')
+    doctor_args = ['doctor','check','--dir',str(doctor_dir),'--timeout','50ms']
+    check = probe_check(call(*doctor_args))
+    assert check['status'] == 'unknown' and check['reason'] == 'deadline_exceeded'
+    assert check['remedies'][0]['effect'] == 'read' and 'overall timeout' in check['remedies'][0]['message']
+    check = probe_check(call(*doctor_args,'--check',error='requirements_failed')['details']['report'])
+    assert check['reason'] == 'deadline_exceeded' and check['remedies'][0]['effect'] == 'read'
+    text = subprocess.run(argv(doctor_args,format='text'),cwd=project,env=env,capture_output=True,text=True,encoding='utf-8',timeout=30)
+    assert text.returncode == 0 and 'overall timeout' in text.stdout and secret not in text.stdout+text.stderr
+    if terminal:
+        code, output = terminal(argv(doctor_args,format='text'),env,project)
+        assert code == 0 and 'overall timeout' in output
+        steps.append('actual_terminal_doctor_reason_recovery')
+    for script, reason in (
+        ('print('+repr(secret)+')','version_unreadable'),
+        ('import sys; print('+repr(secret)+'); sys.exit(1)','probe_failed'),
+        ('print("x"*20000)','output_limit'),
+        ('import time; time.sleep(5); print("1.2.3")','timeout'),
+    ):
+        doctor_config(script)
+        check = probe_check(call('doctor','check','--dir',str(doctor_dir),'--timeout','10s'))
+        assert check['status'] == 'fail' and check['reason'] == reason and check['remedies'][0]['effect'] == 'read'
+    doctor_config('print("1.2.3")')
+    assert call('doctor','check','--dir',str(doctor_dir),'--timeout','10s')['ready']
+    doctor_config('print("9.0.0")')
+    check = probe_check(call('doctor','check','--dir',str(doctor_dir),'--timeout','10s'))
+    assert check['reason'] == 'version_mismatch' and check['remedies'][0]['effect'] == 'system_write'
+    steps.append('doctor_deadline_probe_reasons_and_recovery_effects')
+
     call('init','--profile','reliable')
     config_before = (project/'devtools.toml').read_bytes()
     bad_config = json.dumps({'operations':[{'op':'command.add','name':'other','value':{'exec':[42]}}]})
@@ -210,6 +301,7 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
         edit_args, edit_body = terminal_edit
         edit_file = project/'invalid-edit.json'; edit_file.write_text(edit_body,encoding='utf-8')
         edit_args = [*edit_args]; edit_args[edit_args.index('--stdin')] = '--file'; edit_args.insert(edit_args.index('--file')+1,str(edit_file))
+        edit_args[edit_args.index('--if-revision')+1] = revision
         code, output = terminal(argv(edit_args,format='text'),env,project)
         assert code == 2 and 'operations[1].value.title' in output and secret not in output
         config_file = project/'invalid-config.json'; config_file.write_text(bad_config,encoding='utf-8')
@@ -298,7 +390,7 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
     assert negative.returncode != 0, 'Diagnostic schema validator accepted a wrongly typed field'
     steps.append('installed_failure_schema_and_independent_negative_control')
     return {'result':'pass','binary_identity':identity,'binary_sha256':hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
-            'diagnostic_schema':schema_result,
+            'diagnostic_schema':schema_result,'reference_schema':reference_schema,
             'platform':sys.platform,'checks':steps}
 
 

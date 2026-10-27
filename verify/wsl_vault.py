@@ -95,6 +95,8 @@ def main():
             raise RuntimeError('Actual WSL reliability journey failed')
         if reliability_result.get('diagnostic_schema',{}).get('protocol_version')!=17 or reliability_result['diagnostic_schema'].get('validated',0)<1:
             raise RuntimeError('Actual WSL diagnostic schema evidence missing')
+        if reliability_result.get('reference_schema')!={'validated':5,'format_assertions':[False,True]} or not {'actual_terminal_edit_reference_location','actual_terminal_doctor_reason_recovery'} <= set(reliability_result['checks']):
+            raise RuntimeError('Actual WSL reference schema or reason-specific PTY evidence missing')
         report['cli_reliability']=reliability_result
         report['checks_passed'] = True
     finally:

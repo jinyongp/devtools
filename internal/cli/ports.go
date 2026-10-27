@@ -16,11 +16,7 @@ import (
 const instanceSelectorPattern = `^([A-Za-z0-9][A-Za-z0-9._-]{0,127}|id:[0-9a-fA-F]{32})$`
 
 func portFailure(code string) *protocol.Error {
-	exit := 3
-	if code == "io_error" {
-		exit = 1
-	}
-	return protocol.NewError(code, "The requested port or instance condition is not satisfied.", exit, nil)
+	return ports.ConditionError(code)
 }
 func (a *App) portStore() (ports.Store, *protocol.Error) {
 	d, e := a.dataDirectory()

@@ -91,7 +91,18 @@ func fail(code string, causes ...error) *protocol.Error {
 	case "storage_error":
 		exit = 1
 	}
-	failure := protocol.NewError(code, "Cleanup condition changed or could not be satisfied. Refresh the preview.", exit, nil)
+	message := map[string]string{
+		"preview_expired":   "The cleanup preview has expired. Create a new preview before selecting items.",
+		"revision_conflict": "The cleanup source or restore target no longer matches the saved selection. Inspect current state and refresh the preview before a new cleanup.",
+		"request_conflict":  "This request ID belongs to a different cleanup selection. Reuse the original selection when recovering a lost response.",
+		"archive_not_found": "The selected cleanup archive does not exist in this store. Inspect cleanup archives.",
+		"archive_purged":    "The cleanup archive payload was permanently purged and cannot be restored.",
+		"retention_active":  "The archive is still within its retention period. Keep it until the purge date.",
+	}[code]
+	if message == "" {
+		message = "Cleanup condition changed or could not be satisfied. Refresh the preview."
+	}
+	failure := protocol.NewError(code, message, exit, nil)
 	if code == "storage_error" {
 		var cause error
 		if len(causes) != 0 {

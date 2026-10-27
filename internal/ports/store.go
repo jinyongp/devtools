@@ -56,7 +56,33 @@ type Store struct {
 }
 
 func fail(code string) *protocol.Error {
-	return protocol.NewError(code, "Port operation could not satisfy the requested condition.", 3, nil)
+	return ConditionError(code)
+}
+
+// ConditionError keeps CLI and store failures for the same port condition aligned.
+func ConditionError(code string) *protocol.Error {
+	exit := 3
+	if code == "invalid_argument" {
+		exit = 2
+	}
+	if code == "io_error" {
+		exit = 1
+	}
+	message := map[string]string{
+		"instance_not_found":  "The selected project instance does not exist. Inspect instance list in the same store.",
+		"port_not_found":      "The selected port assignment does not exist. Inspect port list for the selected project.",
+		"listener_not_found":  "The selected listener is not configured. Inspect proxy status or configure the listener first.",
+		"route_not_found":     "The selected route does not exist. Inspect proxy list in the same store.",
+		"pinned":              "An active exposure pins this resource. Stop the exposure before changing it.",
+		"port_in_use":         "The requested port is occupied or reserved. Select a different port or stop its current owner.",
+		"host_conflict":       "Another route already uses this host and listener. Inspect the route declarations before changing them.",
+		"activation_required": "The route needs current network preparation. Activate it before running the selected command.",
+		"invalid_argument":    "The port or listener input is invalid. Check its option combinations and address range.",
+	}[code]
+	if message == "" {
+		message = "Port operation could not satisfy the requested condition."
+	}
+	return protocol.NewError(code, message, exit, nil)
 }
 func storageError(causes ...error) *protocol.Error {
 	var cause error

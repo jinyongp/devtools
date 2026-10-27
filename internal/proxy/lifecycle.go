@@ -183,6 +183,14 @@ func proxyFailure(code string) *protocol.Error {
 		}
 	case "listener_not_found":
 		message = "The selected listener is not configured; use proxy configure first."
+	case "route_not_found":
+		message = "The selected route does not exist. Inspect proxy list in the same store."
+	case "host_conflict":
+		message = "More than one route claims this host. Resolve the conflicting declarations before retrying."
+	case "activation_required":
+		message = "The route needs current activation before it can serve requests. Inspect proxy list and prepare the route."
+	case "stale_preview":
+		message = "The network selection changed after preview. Refresh the preview before applying it."
 	}
 	return protocol.NewError(code, message, exit, nil)
 }

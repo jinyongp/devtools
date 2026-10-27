@@ -188,7 +188,10 @@ func (st *State) Reference(name string, port int) (bool, *protocol.Error) {
 // The caller owns lifecycle locking and checks that the listener is stopped.
 func (s Store) ConfigureListener(ctx context.Context, name, httpAddress, httpsAddress string, disableHTTPS bool, identity ...string) (network.Listener, *protocol.Error) {
 	name = network.ListenerName(name)
-	if !project.ValidProfile(name) || disableHTTPS && httpsAddress != "" {
+	if disableHTTPS && httpsAddress != "" {
+		return network.Listener{}, protocol.NewError("invalid_argument", "Choose --https-address or --disable-https; they cannot be supplied together.", 2, nil)
+	}
+	if !project.ValidProfile(name) {
 		return network.Listener{}, fail("invalid_argument")
 	}
 	var result network.Listener

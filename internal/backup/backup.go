@@ -183,7 +183,19 @@ func failure(code string, causes ...error) *protocol.Error {
 	case "canceled":
 		exit = 130
 	}
-	failure := protocol.NewError(code, "Backup operation could not be completed; check the selected files and target state.", exit, nil)
+	message := map[string]string{
+		"backup_not_configured": "No backup destination or recipient is configured. Configure backups or supply an explicit public recipient and output path.",
+		"invalid_recipient":     "The backup recipient is not a valid age X25519 public recipient. Use the recipient file produced by backup keygen.",
+		"invalid_backup":        "The selected archive could not be authenticated or has an unsupported backup structure. Verify its identity file and preserve the original archive.",
+		"not_found":             "The requested profile is not present in the selected backup or store. Inspect the archive and profile selection.",
+		"profile_exists":        "The target profile already exists. Preview the restore and explicitly permit replacement when intended.",
+		"revision_conflict":     "The restore target changed after preview. Refresh the preview before applying it.",
+		"request_conflict":      "This request ID belongs to different backup input. Preserve the original ID and input when recovering a lost response.",
+	}[code]
+	if message == "" {
+		message = "Backup operation could not be completed; check the selected files and target state."
+	}
+	failure := protocol.NewError(code, message, exit, nil)
 	if code == "storage_error" || code == "backup_error" {
 		var cause error
 		if len(causes) != 0 {
@@ -216,7 +228,7 @@ func exclusive(path string, b []byte) error {
 
 func Keygen(identityPath, recipientPath string) (any, *protocol.Error) {
 	if filepath.Clean(identityPath) == filepath.Clean(recipientPath) {
-		return nil, failure("invalid_argument")
+		return nil, protocol.NewError("invalid_argument", "The identity and recipient output paths must be different.", 2, nil)
 	}
 	id, e := age.GenerateX25519Identity()
 	if e != nil {

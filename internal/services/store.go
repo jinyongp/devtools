@@ -169,7 +169,21 @@ func failure(code string) *protocol.Error {
 	case "execution_failed":
 		exit = 126
 	}
-	return protocol.NewError(code, "Process operation could not satisfy the requested condition.", exit, nil)
+	message := map[string]string{
+		"process_not_found":        "No execution with this ID exists in the selected store. Use process list to inspect available executions.",
+		"process_not_running":      "The selected execution is no longer running. Inspect its status before starting new work.",
+		"process_active":           "The selected execution is still active. Stop it before changing or removing its resources.",
+		"readiness_not_configured": "This execution has no readiness check. Configure readiness and start a new execution before waiting for it.",
+		"readiness_unavailable":    "The execution's readiness could not be inspected. Check its current status and captured logs.",
+		"logs_disabled":            "This execution did not enable log capture. Enable capture for a new execution to retain its output.",
+		"logs_expired":             "The retained output for this execution has expired.",
+		"request_conflict":         "This request ID belongs to different process input. Inspect the original request before choosing a new ID.",
+		"launch_outcome_unknown":   "The launch result is unknown. Inspect the execution before starting replacement work.",
+	}[code]
+	if message == "" {
+		message = "Process operation could not satisfy the requested condition."
+	}
+	return protocol.NewError(code, message, exit, nil)
 }
 func storageError(causes ...error) *protocol.Error {
 	var cause error

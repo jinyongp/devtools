@@ -15,7 +15,7 @@ class JSONCapabilityTests(unittest.TestCase):
         cli_json._capabilities.clear()
 
     def response(self, supported):
-        data = {"protocol_version": 15 if supported else 14}
+        data = {"protocol_version": 16 if supported else 14}
         if supported:
             data["global_options"] = [{"name": "format", "values": ["auto", "text", "json"], "placement": "root-prefix"}]
         return types.SimpleNamespace(returncode=0, stdout=json.dumps({"schema_version": 1, "ok": True, "data": data}))

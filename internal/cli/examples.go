@@ -40,6 +40,12 @@ func commandExamples(c Command) []string {
 	if c.Name == "backup keygen" {
 		return []string{"devtools backup keygen --identity-file ./backup.identity --recipient-file ./backup.recipient"}
 	}
+	if c.Name == "proxy setup" {
+		return []string{"devtools proxy setup --check"}
+	}
+	if c.Name == "proxy run" {
+		return []string{"devtools proxy run --global sample -- PROGRAM"}
+	}
 	line := "devtools " + c.Name
 	for _, arg := range c.Arguments {
 		if arg.Required {
@@ -74,6 +80,14 @@ func commandExamples(c Command) []string {
 	}
 	if c.Name == "values execution status" {
 		line += " " + strings.Repeat("0", 32)
+	}
+	switch c.Name {
+	case "proxy add", "proxy rm":
+		line += " --global"
+	case "proxy clear":
+		line += " --global --all"
+	case "proxy up", "proxy down":
+		line += " --all"
 	}
 	return []string{line}
 }

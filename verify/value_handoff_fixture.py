@@ -92,7 +92,7 @@ def run(binary, receiver, directory, base_env=None):
         return json.loads(result.stdout)
 
     try:
-        assert api("version")["protocol_version"] == 15
+        assert api("version")["protocol_version"] == 16
         api("init", "--profile", "handoff")
         api("vault", "init", "--backend", "passphrase", "--passphrase-stdin", text=passphrase + "\n")
         api("secret", "set", "TOKEN", "--stdin", text=canary)

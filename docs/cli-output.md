@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v15 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v16 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
@@ -79,7 +79,7 @@ stdout 선택이 JSON이면 stderr만 TTY여도 JSON 오류입니다. 기존 pro
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 15`입니다.
+`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 16`입니다.
 `version`과 `schema`의 `data.protocol_version`에서 확인합니다. TOML·저장소·dashboard/private wire
 버전은 별개입니다. format 지원 여부는 숫자 추측 대신 discovery의 `global_options`로 확인하세요.
 
@@ -202,10 +202,26 @@ text 렌더 실패 시 기존 오류는 전체 escaped public 진단과 원 종�
 | `project logs` | 활성 실행 `id`, `command`, 보관된 `content` (새 실행은 저장 전 마스킹) |
 | `project up/restart/down` | `action`, `profile`, `directory`, 명령별 `items`, `changed`, `replayed` |
 | `cleanup archives`, apply, restore/purge | 각각 `items`, `items`·`changed`·`replayed`, `item`·`changed` |
-| `cleanup preview` | 계획 ID·만료 시각·`items` |
+| `cleanup preview` | 계획 ID·만료 시각·`items`·`retention` |
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v16 마이그레이션
+
+`cleanup preview`에 `retention`을 추가합니다. `verification`이 `verified`일 때
+유형·수명 상태·범위별 `buckets`가 파일 수, 논리 항목 수, 물리 bytes와
+`cleanup_eligible`·이유를 제공합니다. 같은 파일을 여러 유형에 합산하지 않습니다.
+중복 legacy receipt는 파일 수·bytes에는 각각 포함하고 논리 요청은 한 번 셉니다.
+`scope:root`인 query cache는 profile 필터와 별개입니다. 인증 불가·손상·identity 변경·
+2초 협력적 예산 초과는 `verification_pending`이며 부분 합계는 생략합니다.
+`authenticated`는 보호된 메타데이터를 인증한 결과이고 `public_metadata`와
+`legacy_metadata`는 기존 공개/legacy receipt 검증 규칙을 뜻합니다. payload의
+`record_verified`는 참조 record를 인증하고 private 파일 크기만 확인했다는 뜻입니다.
+집계는 secret payload를 복호화하거나 삭제하지 않습니다. expired payload는 현재
+cleanup archive 대상이 아니며 인증된 변경에서 정리합니다. spent·기한 없는 receipt와
+unknown record는 재실행 방지를 위해 유지합니다. 실제 syscall은 hard deadline이 아닙니다.
+기존 preview의 복구·cache 저장 동작, envelope 1과 업무 저장 형식은 유지합니다.
 
 ## protocol v15 마이그레이션
 

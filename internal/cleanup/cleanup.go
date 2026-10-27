@@ -22,6 +22,8 @@ import (
 	"github.com/jinyongp/devtools/internal/retention"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
+	"github.com/jinyongp/devtools/internal/values"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 type Engine struct{ Data, Cache, Config string }
@@ -37,9 +39,10 @@ type candidate struct {
 	Stamp string `json:"stamp"`
 }
 type Plan struct {
-	ID      string    `json:"id"`
-	Expires time.Time `json:"expires"`
-	Items   []Item    `json:"items"`
+	ID        string              `json:"id"`
+	Expires   time.Time           `json:"expires"`
+	Items     []Item              `json:"items"`
+	Retention retention.Inventory `json:"retention"`
 }
 type snapshot struct {
 	ID      string      `json:"id"`
@@ -423,9 +426,33 @@ func (e Engine) Preview(ctx context.Context, profile string) (Plan, *protocol.Er
 	if profile != "" && !project.ValidProfile(profile) {
 		return out, fail("invalid_argument")
 	}
-	release, err := e.lock(ctx)
-	if err != nil {
-		return out, err
+	budget, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	inspection, _ := vault.PrepareInspection(budget, e.Data)
+	defer inspection.Close()
+	var publicKey *vault.Material
+	if inspection != nil && inspection.Master == nil {
+		publicKey, _ = values.PrepareReceiptInspection(budget, e.Data)
+	}
+	defer publicKey.Destroy()
+	// Authentication/IPC is complete. Acquire services -> slot -> maintenance.
+	service, lockErr := (services.Store{Data: e.Data}).Lock(ctx)
+	if lockErr != nil {
+		return out, fail("storage_error", lockErr)
+	}
+	defer service()
+	if inspection != nil {
+		slot, err := inspection.Lease(budget)
+		if err != nil {
+			inspection.Close()
+			inspection = nil
+		} else {
+			defer slot()
+		}
+	}
+	release, lockErr := maintenance.Acquire(ctx, e.Data)
+	if lockErr != nil {
+		return out, fail("storage_error", lockErr)
 	}
 	defer release()
 	items, err := e.scan(ctx, profile)
@@ -436,7 +463,7 @@ func (e Engine) Preview(ctx context.Context, profile string) (Plan, *protocol.Er
 	if err := write(filepath.Join(e.Cache, "cleanup", s.ID+".json"), s); err != nil {
 		return out, fail("storage_error", err)
 	}
-	out = Plan{ID: s.ID, Expires: s.Expires, Items: []Item{}}
+	out = Plan{ID: s.ID, Expires: s.Expires, Items: []Item{}, Retention: e.inventoryHeld(budget, profile, inspection, publicKey)}
 	for _, c := range items {
 		out.Items = append(out.Items, c.Item)
 	}

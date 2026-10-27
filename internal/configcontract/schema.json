@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:devtools:config-contract:protocol-15",
-  "title": "Project configuration, editing and diagnostic contract (protocol 15)",
+  "$id": "urn:devtools:config-contract:protocol-16",
+  "title": "Project configuration, editing and diagnostic contract (protocol 16)",
   "description": "Protocol-13 configuration, editing and diagnostic structures. Transport requires strict Unicode and signed-64-bit decimal integer tokens. x-maxUtf8Bytes asserts a UTF-8 byte constraint; x-npmRange asserts bounded nonempty npm SemVer range syntax. Linked normative contracts define references, state and filesystem checks.",
   "$ref": "#/$defs/Project",
   "$defs": {
@@ -2918,7 +2918,7 @@
       "type": "object",
       "properties": {
         "protocol_version": {
-          "const": 15
+          "const": 16
         },
         "schema": {
           "type": "object"

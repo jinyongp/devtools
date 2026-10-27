@@ -38,7 +38,7 @@ exec = ['cmd.exe', '/d', '/c', 'echo CANARY_NEVER_RUN']
     [IO.File]::WriteAllText((Join-Path $root 'devtools.toml'),$config,[Text.UTF8Encoding]::new($false))
     $main = Join-Path $bin 'devtools.exe'
     $version = & $main --format json version | ConvertFrom-Json
-    Require ($LASTEXITCODE -eq 0 -and $version.data.protocol_version -eq 15 -and $version.schema_version -eq 1) 'Version/envelope mismatch'
+    Require ($LASTEXITCODE -eq 0 -and $version.data.protocol_version -eq 16 -and $version.schema_version -eq 1) 'Version/envelope mismatch'
     $null = & $main --format json var set SAFE_NAME --value CANARY_VALUE
     Require ($LASTEXITCODE -eq 0) 'Public Windows value command failed'
     $diagnostics = & $main --format json diagnostics | ConvertFrom-Json
@@ -95,8 +95,8 @@ exec = ['cmd.exe', '/d', '/c', 'echo CANARY_NEVER_RUN']
         Require (-not (Test-Path -LiteralPath $canary)) 'Completion evaluated a dynamic expression'
     }
     $schema = & $main schema completion | ConvertFrom-Json
-    Require ($schema.data.protocol_version -eq 15 -and $schema.data.input_schema.properties.args.prefixItems[0].pattern.Contains('powershell')) 'Completion schema mismatch'
-    [pscustomobject]@{shell=$PSVersionTable.PSVersion.ToString();edition=$PSEdition;protocol=15;native_registration='pass';utf8_nul_dynamic_names='pass';single_quote='pass';child_boundary='pass';dynamic_expression_canary='pass';platform_schema='pass'} | ConvertTo-Json
+    Require ($schema.data.protocol_version -eq 16 -and $schema.data.input_schema.properties.args.prefixItems[0].pattern.Contains('powershell')) 'Completion schema mismatch'
+    [pscustomobject]@{shell=$PSVersionTable.PSVersion.ToString();edition=$PSEdition;protocol=16;native_registration='pass';utf8_nul_dynamic_names='pass';single_quote='pass';child_boundary='pass';dynamic_expression_canary='pass';platform_schema='pass'} | ConvertTo-Json
 } finally {
     Set-Location -LiteralPath $location.Path
     $env:DEVTOOLS_ISOLATED_ROOT = $beforeRoot; $env:PATH = $beforePath

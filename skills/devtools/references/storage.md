@@ -49,4 +49,5 @@
 - Partial failure: inspect error details and archives; do not assume rollback.
 - Cleanup archives, not purges. Inspect `cleanup archives`; recover with `cleanup restore ARCHIVE_ID`. Changed original location causes conflict.
 - `cleanup purge ARCHIVE_ID` permanently removes eligible payload after retention; requires explicit deletion scope.
+- Protocol 16 `cleanup preview` adds `retention.verification` and, only after a complete check, buckets with kind/lifecycle/scope, files/logical_items/bytes, verification and cleanup eligibility/reason. Root query caches remain separate from profile filters. A pending check has no partial totals. Protected metadata is authenticated; public/legacy metadata retains existing verification semantics. Payload `record_verified` measures private ciphertext bytes through its authenticated record without decrypting the payload. No inventory starts/unlocks a session, extends idle time, deletes receipts or sweeps expired payloads.
 - Restore/purge use archive IDs, no request UUID, and are repeatable. Port release/prune and proxy teardown remain separate operations.

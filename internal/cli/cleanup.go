@@ -22,7 +22,9 @@ func (a *App) registerCleanup() {
 		output := object(map[string]any{"items": items}, "items")
 		switch action {
 		case "preview":
-			output = object(map[string]any{"id": stringSchema(), "expires": stringSchema(), "items": items}, "id", "expires", "items")
+			bucket := object(map[string]any{"kind": stringSchema(), "lifecycle": stringSchema(), "scope": map[string]any{"enum": []string{"profile", "root"}}, "verification": stringSchema(), "cleanup_eligible": boolSchema(), "reason": stringSchema(), "files": map[string]any{"type": "integer", "minimum": 0}, "logical_items": map[string]any{"type": "integer", "minimum": 0}, "bytes": map[string]any{"type": "integer", "minimum": 0}}, "kind", "lifecycle", "scope", "verification", "cleanup_eligible", "reason", "files", "logical_items", "bytes")
+			inventory := object(map[string]any{"verification": map[string]any{"enum": []string{"verified", "verification_pending"}}, "profile": stringSchema(), "buckets": arraySchema(bucket)}, "verification")
+			output = object(map[string]any{"id": stringSchema(), "expires": stringSchema(), "items": items, "retention": inventory}, "id", "expires", "items", "retention")
 		case "apply":
 			output = object(map[string]any{"items": items, "changed": map[string]any{"type": "boolean"}, "replayed": map[string]any{"type": "boolean"}}, "items", "changed", "replayed")
 		case "restore", "purge":

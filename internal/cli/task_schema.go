@@ -5,12 +5,18 @@ import (
 	"strings"
 )
 
+// UUID syntax must be enforced even when a schema consumer treats format as an
+// annotation. Keep this structure aligned with tasks.validID.
+func taskIDSchema() map[string]any {
+	return map[string]any{"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"}
+}
+
 func taskBody(def tasks.Definition) map[string]any {
 	if def.Action == "workstream.edited" {
 		return editBodySchema()
 	}
 	text := func() map[string]any { return map[string]any{"type": "string", "minLength": 1, "maxLength": 16384} }
-	id := map[string]any{"type": "string", "format": "uuid"}
+	id := taskIDSchema()
 	array := func(item any) map[string]any { return map[string]any{"type": "array", "items": item} }
 	properties := map[string]any{}
 	for _, field := range def.Fields {
@@ -109,7 +115,7 @@ func taskOutput(mutation bool) map[string]any {
 func editBodySchema() map[string]any {
 	text := map[string]any{"type": "string", "minLength": 1, "maxLength": 16384}
 	key := map[string]any{"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"}
-	ref := map[string]any{"oneOf": []any{map[string]any{"type": "string", "format": "uuid"}, map[string]any{"type": "string", "pattern": "^@[A-Za-z][A-Za-z0-9_-]{0,63}$"}}}
+	ref := map[string]any{"oneOf": []any{taskIDSchema(), map[string]any{"type": "string", "pattern": "^@[A-Za-z][A-Za-z0-9_-]{0,63}$"}}}
 	array := func(v any) map[string]any { return map[string]any{"type": "array", "items": v} }
 	variants := []any{}
 	add := func(name string, props map[string]any, required ...string) {
@@ -142,7 +148,7 @@ func editBodySchema() map[string]any {
 				}
 				if kind == "validation" && action == "add" {
 					p["task_id"] = ref
-					p["workstream_id"] = map[string]any{"type": "string", "format": "uuid"}
+					p["workstream_id"] = taskIDSchema()
 				}
 			} else {
 				p := map[string]any{"text": text}
@@ -174,7 +180,7 @@ func editBodySchema() map[string]any {
 		}
 	}
 	add("task.depends.set", map[string]any{"id": ref, "depends_on": array(ref)}, "id", "depends_on")
-	add("workstream.depends.set", map[string]any{"depends_on": array(map[string]any{"type": "string", "format": "uuid"})}, "depends_on")
+	add("workstream.depends.set", map[string]any{"depends_on": array(taskIDSchema())}, "depends_on")
 	for _, anchor := range []string{"before_id", "after_id"} {
 		add("task.move", map[string]any{"id": ref, anchor: ref}, "id", anchor)
 	}

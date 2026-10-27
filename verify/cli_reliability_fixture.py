@@ -160,7 +160,7 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
     if terminal:
         code, output = terminal(argv(mask,format='text'), env, project)
         output = re.sub(r'\x1b\[[0-9;]*m','',output)
-        assert code == 3 and '66000' in output and '65536' in output and 'Command []' not in output
+        assert code == 3 and '66000' in output and '65536' in output and 'Command []' not in output, ('terminal_mask_failure',code,len(output),'66000' in output,'65536' in output)
         steps.append('actual_terminal_same_mask_failure_facts')
     steps.append('json_text_same_mask_failure_facts')
 

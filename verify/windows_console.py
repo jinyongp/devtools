@@ -48,6 +48,10 @@ def windows_terminal(argv, env, cwd, interrupt_after=None):
         checked(kernel.InitializeProcThreadAttributeList(attributes,1,0,ctypes.byref(size)))
         checked(kernel.UpdateProcThreadAttribute(attributes,0,0x20016,console,ctypes.sizeof(w.HANDLE),None,None))
         startup=StartupEx();startup.StartupInfo.cb=ctypes.sizeof(StartupEx)
+        # Like Windows Terminal's _LaunchAttachedClient, clear inherited stdio
+        # with STARTF_USESTDHANDLES so redirected Actions handles do not bypass
+        # the attached pseudoconsole's input/output channels.
+        startup.StartupInfo.dwFlags=0x100
         startup.lpAttributeList=ctypes.cast(attributes,ctypes.c_void_p)
         block=ctypes.create_unicode_buffer('\0'.join(k+'='+v for k,v in sorted(env.items(),key=lambda item:item[0].upper()))+'\0\0')
         command=ctypes.create_unicode_buffer(subprocess.list2cmdline(list(map(str,argv))))

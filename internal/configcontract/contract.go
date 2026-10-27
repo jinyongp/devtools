@@ -326,11 +326,36 @@ func Validate(name string, v any) []Issue {
 		panic(err)
 	}
 	issues := []Issue{}
-	var walk func(*jsonschema.ValidationError)
-	walk = func(e *jsonschema.ValidationError) {
+	var walk func(*jsonschema.ValidationError, []string)
+	walk = func(e *jsonschema.ValidationError, prefix []string) {
+		path := append(append([]string{}, prefix...), e.InstanceLocation...)
+		// Operation tags are disjoint. Report the tagged branch's failure,
+		// rather than a const failure from an unrelated oneOf alternative.
+		operation := compiled.definitions["Operation"]
+		if _, oneOf := e.ErrorKind.(*kind.OneOf); oneOf && e.SchemaURL == operation.Location {
+			instance := instanceAt(v, path)
+			if branch := operationFor(operation, instance); branch != nil {
+				var selected *jsonschema.ValidationError
+				if errors.As(branch.Validate(instance), &selected) {
+					walk(selected, path)
+					return
+				}
+			} else if object, ok := instance.(map[string]any); ok {
+				reason, rule := "invalid_value", "enum"
+				facts := map[string]any{}
+				if op, exists := object["op"]; !exists {
+					reason, rule = "missing_argument", "required"
+				} else if _, ok := op.(string); !ok {
+					reason, rule = "invalid_type", "type"
+					facts = map[string]any{"expected_type": "string", "observed_type": jsonValueKind(op)}
+				}
+				issues = append(issues, Issue{Path: append(append([]string{}, path...), "op"), Reason: reason, Rule: rule, Facts: facts})
+				return
+			}
+		}
 		if len(e.Causes) > 0 {
 			for _, child := range e.Causes {
-				walk(child)
+				walk(child, prefix)
 			}
 			return
 		}
@@ -364,12 +389,12 @@ func Validate(name string, v any) []Issue {
 		switch k := e.ErrorKind.(type) {
 		case *kind.AdditionalProperties:
 			for _, key := range k.Properties {
-				issues = append(issues, Issue{Path: append(append([]string{}, e.InstanceLocation...), key), Reason: "unknown_field", Rule: rule})
+				issues = append(issues, Issue{Path: append(append([]string{}, path...), key), Reason: "unknown_field", Rule: rule})
 			}
 			return
 		case *kind.Required:
 			for _, key := range k.Missing {
-				issues = append(issues, Issue{Path: append(append([]string{}, e.InstanceLocation...), key), Reason: "missing_argument", Rule: rule})
+				issues = append(issues, Issue{Path: append(append([]string{}, path...), key), Reason: "missing_argument", Rule: rule})
 			}
 			return
 		}
@@ -380,8 +405,62 @@ func Validate(name string, v any) []Issue {
 		if strings.HasPrefix(rule, "additionalProperties") {
 			reason = "unknown_field"
 		}
-		issues = append(issues, Issue{Path: append([]string{}, e.InstanceLocation...), Reason: reason, Rule: rule, Facts: facts})
+		issues = append(issues, Issue{Path: path, Reason: reason, Rule: rule, Facts: facts})
 	}
-	walk(validation)
+	walk(validation, nil)
 	return issues
+}
+
+func instanceAt(value any, path []string) any {
+	for _, part := range path {
+		switch v := value.(type) {
+		case map[string]any:
+			value = v[part]
+		case []any:
+			index, err := strconv.Atoi(part)
+			if err != nil || index < 0 || index >= len(v) {
+				return nil
+			}
+			value = v[index]
+		default:
+			return nil
+		}
+	}
+	return value
+}
+
+func operationFor(schema *jsonschema.Schema, value any) *jsonschema.Schema {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	op, ok := object["op"].(string)
+	if !ok {
+		return nil
+	}
+	for _, branch := range schema.OneOf {
+		if property := branch.Properties["op"]; property != nil && property.Const != nil {
+			if name, ok := (*property.Const).(string); ok && name == op {
+				return branch
+			}
+		}
+	}
+	return nil
+}
+
+func jsonValueKind(value any) string {
+	switch value.(type) {
+	case nil:
+		return "null"
+	case bool:
+		return "boolean"
+	case []any:
+		return "array"
+	case map[string]any:
+		return "object"
+	case int, int32, int64, uint64, float32, float64, json.Number:
+		return "number"
+	default:
+		return "unknown"
+	}
 }

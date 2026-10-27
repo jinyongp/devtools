@@ -3,6 +3,10 @@
 [문서 목록](README.md) · [설정 모델](cli-config-redesign.md) · [진단 계약](diagnostic-contract.md)
 
 이 문서는 protocol 17 소스의 설정 편집 계약이다. 사용 순서는 [설정 편집 가이드](configuration.md)를 따른다.
+
+편집 입력 오류는 알려진 `op`의 schema 분기를 기준으로 필드 경로와 안전한 타입·제한
+정보를 반환한다. 알 수 없거나 빠진 `op`는 해당 `op` 위치를 안내한다. JSON과 text는
+같은 진단을 사용하며, 검증 실패는 설정 내용이나 revision을 변경하지 않는다.
 본문의 입력·응답 이름은 [schema의 $defs](../internal/configcontract/schema.json)를 가리킨다.
 JSON 표현을 선택하면 envelope는 기존처럼 성공을 stdout, 실패를 stderr에 한 개씩 반환한다.
 안정적인 소비자는 명령 앞의 `--format json`을 사용한다. `config schema`는 항상 JSON이다.

@@ -120,7 +120,11 @@ func readConfigBody(ctx context.Context, streams IO, r Request, definition strin
 		return nil, protocol.NewError("invalid_argument", "Invalid strict JSON input; inspect the indicated field and rule.", 2, map[string]any{"reason": issue.Reason, "sources": []any{source}, "facts": map[string]any{"rule": issue.Rule}})
 	}
 	if issues := configcontract.Validate(definition, v); len(issues) > 0 {
-		return nil, protocol.NewError("invalid_argument", "The JSON input does not match its command schema.", 2, map[string]any{"reason": issues[0].Reason, "sources": []any{map[string]any{"kind": "json", "path": append([]string{}, issues[0].Path...)}}, "facts": map[string]any{"rule": issues[0].Rule}})
+		facts := map[string]any{"rule": issues[0].Rule}
+		for key, value := range issues[0].Facts {
+			facts[key] = value
+		}
+		return nil, protocol.NewError("invalid_argument", "The JSON input does not match its command schema.", 2, map[string]any{"reason": issues[0].Reason, "sources": []any{map[string]any{"kind": "json", "path": append([]string{}, issues[0].Path...)}}, "facts": facts})
 	}
 	return v.(map[string]any), nil
 }

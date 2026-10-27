@@ -3,6 +3,7 @@ package tasks
 import (
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -71,7 +72,7 @@ func inputAt(e *protocol.Error, prefix ...string) *protocol.Error {
 	return &copy
 }
 
-func editContext(op editOperation, e *protocol.Error) *protocol.Error {
+func editContext(op editOperation, e *protocol.Error, references ...map[string]string) *protocol.Error {
 	prefix := []string{"operations", strconv.Itoa(op.Index)}
 	already := false
 	if sources, ok := e.Details["sources"].([]any); ok && len(sources) > 0 {
@@ -102,8 +103,38 @@ func editContext(op editOperation, e *protocol.Error) *protocol.Error {
 	}
 	e.Details["operation_index"] = op.Index
 	e.Details["edit_operation"] = op.Name
-	if id := str(op.Body, "id"); validID(id) {
-		e.Details["reference_id"] = id
+	delete(e.Details, "reference_id")
+	if sources, ok := e.Details["sources"].([]any); ok && len(sources) > 0 {
+		if source, ok := sources[0].(map[string]any); ok {
+			if path, ok := source["path"].([]string); ok && len(path) > 2 {
+				var value any = op.Body
+				reference := false
+				for _, field := range path[2:] {
+					reference = reference || field == "id" || strings.HasSuffix(field, "_id") || field == "depends_on"
+					switch v := value.(type) {
+					case Object:
+						value = v[field]
+					case map[string]any:
+						value = v[field]
+					case []any:
+						n, err := strconv.Atoi(field)
+						value = nil
+						if err == nil && n >= 0 && n < len(v) {
+							value = v[n]
+						}
+					default:
+						value = nil
+					}
+				}
+				id, _ := value.(string)
+				if len(references) > 0 && strings.HasPrefix(id, "@") {
+					id = references[0][id]
+				}
+				if reference && validID(id) {
+					e.Details["reference_id"] = id
+				}
+			}
+		}
 	}
 	return e
 }

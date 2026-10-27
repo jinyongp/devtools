@@ -95,6 +95,52 @@ func TestTaskCoverageFailurePreservesChecks(t *testing.T) {
 	}
 }
 
+func TestTaskForeignValidationOwnerKeepsScopeAndRetry(t *testing.T) {
+	app := testApp(t)
+	create := func(title string) string {
+		w := outputData(t, app, []string{"task", "workstream", "create", "--profile", "app", "--title", title, "--request-id", tasks.ID()})
+		return w["item"].(map[string]any)["id"].(string)
+	}
+	wid, other := create("Selected"), create("Other")
+	before := outputData(t, app, []string{"task", "workstream", "plan", "show", wid, "--profile", "app"})
+	body := func(owner string) string {
+		return fmt.Sprintf(`{"reason":"PRIVATE-CONTEXT-CANARY","operations":[{"op":"validation.add","value":{"title":"Check","method":"Test","workstream_id":%q}}]}`, owner)
+	}
+	args := []string{"task", "workstream", "edit", wid, "--profile", "app", "--stdin", "--if-revision", fmt.Sprint(before["revision"]), "--request-id", tasks.ID()}
+	code, _, diagnostic := invoke(t, app, body(other), args...)
+	var env map[string]any
+	if code != 2 || json.Unmarshal([]byte(diagnostic), &env) != nil || strings.Contains(diagnostic, "PRIVATE-") {
+		t.Fatal(code, diagnostic)
+	}
+	assertContract(t, "Failure", env)
+	details := env["error"].(map[string]any)["details"].(map[string]any)
+	facts := details["facts"].(map[string]any)
+	if facts["operation_index"] != float64(0) || facts["reference_id"] != other || !reflect.DeepEqual(details["sources"].([]any)[0].(map[string]any)["path"], []any{"operations", "0", "value", "workstream_id"}) {
+		t.Fatal(details)
+	}
+	planRemedy := false
+	for _, value := range details["remedies"].([]any) {
+		argv := anyStrings(value.(map[string]any)["argv"].([]any))
+		if c, _, err := invoke(t, app, "", argv[1:]...); c != 0 {
+			t.Fatal(argv, c, err)
+		}
+		if strings.Contains(strings.Join(argv, " "), "task workstream plan show "+wid) {
+			planRemedy = true
+		}
+	}
+	if after := outputData(t, app, []string{"task", "workstream", "plan", "show", wid, "--profile", "app"}); !planRemedy || !reflect.DeepEqual(before, after) {
+		t.Fatal("missing selected scope or failed edit changed plan", after)
+	}
+	// Failed requests do not consume a UUID; fixing the owner can use it, and
+	// retrying that successful request must replay its original result.
+	for n := 0; n < 2; n++ {
+		c, out, err := invoke(t, app, body(wid), args...)
+		if c != 0 || json.Unmarshal([]byte(out), &env) != nil || env["data"].(map[string]any)["replayed"] != (n == 1) {
+			t.Fatal(c, out, err)
+		}
+	}
+}
+
 func TestTaskLeafDiagnosticsPreserveNestedTypesWithoutInputValues(t *testing.T) {
 	app := testApp(t)
 	for _, tc := range []struct{ body, path string }{

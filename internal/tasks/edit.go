@@ -15,6 +15,11 @@ type EditEvaluation struct {
 	Candidate *State
 }
 
+type editOrigin struct {
+	Operation editOperation
+	Path      []string
+}
+
 func copyObject(v Object) Object {
 	if v == nil {
 		return nil
@@ -30,9 +35,10 @@ func copyObject(v Object) Object {
 // to UUIDs; nil allocations leave stable request-local identifiers in previews.
 func EvaluateEdit(before *State, target string, body Object, allocations map[int]string) (outcome *EditEvaluation, condition *protocol.Error) {
 	var current *editOperation
+	refs := map[string]string{}
 	defer func() {
 		if condition != nil && current != nil {
-			condition = editContext(*current, condition)
+			condition = editContext(*current, condition, refs)
 		}
 	}()
 	ops, e := editOperations(copyObject(body))
@@ -54,13 +60,12 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 	}
 	w = s.Items[w.ID]
 	wb := s.definition(w.ID)
-	refs := map[string]string{}
 	created := map[int]string{}
 	lifecycle := map[string]string{}
 	changes := []Object{}
 	effects := []Object{}
 	explicit := map[string]map[string]bool{}
-	origins := map[string]map[string]editOperation{}
+	origins := map[string]map[string]editOrigin{}
 	mark := func(id, field string) {
 		if explicit[id] == nil {
 			explicit[id] = map[string]bool{}
@@ -68,21 +73,33 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 		explicit[id][field] = true
 		if current != nil {
 			if origins[id] == nil {
-				origins[id] = map[string]editOperation{}
+				origins[id] = map[string]editOrigin{}
 			}
-			origins[id][field] = *current
-		}
-	}
-	referenceFailure := func(id, field, message string) *protocol.Error {
-		e := inputFailure(message)
-		if op, ok := origins[id][field]; ok {
 			path := []string{field}
-			if field == "move" {
-				path = []string{"id"}
-			} else if _, exists := objectValue(op.Body["value"])[field]; exists {
+			if _, exists := objectValue(current.Body["value"])[field]; exists {
 				path = append([]string{"value"}, path...)
 			}
-			return editContext(op, inputAt(e, path...))
+			origins[id][field] = editOrigin{*current, path}
+		}
+	}
+	referenceFailure := func(id, field, message string, target ...string) *protocol.Error {
+		e := inputFailure(message)
+		if origin, ok := origins[id][field]; ok {
+			op, path := origin.Operation, append([]string{}, origin.Path...)
+			if len(target) > 0 {
+				body := op.Body
+				if len(path) == 2 && path[0] == "value" {
+					body = objectValue(body["value"])
+				}
+				for index, ref := range arr(body, field) {
+					resolved, _ := referenceID(ref, refs)
+					if ref == target[0] || resolved == target[0] {
+						path = append(path, fmt.Sprint(index))
+						break
+					}
+				}
+			}
+			return editContext(op, inputAt(e, path...), refs)
 		}
 		return e
 	}
@@ -335,6 +352,8 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 			wb.Order = order
 			mark(id, "move")
 			mark(resolved, "move")
+			origins[id]["move"] = editOrigin{op, []string{"id"}}
+			origins[resolved]["move"] = editOrigin{op, []string{anchorField}}
 		}
 	}
 	current = nil // Final-state invariants need their own evidence, not the last operation's index.
@@ -347,7 +366,7 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 			if keyed(objects(spec, "requirements"), k) != nil {
 				kept = append(kept, k)
 			} else if explicit["acceptance:"+str(ac, "key")]["requirement_keys"] {
-				return nil, referenceFailure("acceptance:"+str(ac, "key"), "requirement_keys", "Explicit requirement reference is not included.")
+				return nil, referenceFailure("acceptance:"+str(ac, "key"), "requirement_keys", "Explicit requirement reference is not included.", k)
 			}
 		}
 		ac["requirement_keys"] = kept
@@ -357,8 +376,8 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 			continue
 		}
 		owner := i.Workstream
+		ownerField := "workstream_id"
 		if i.Kind == "validation" {
-			ownerField := "workstream_id"
 			if str(i.Props, "task_id") != "" {
 				ownerField = "task_id"
 			}
@@ -373,7 +392,7 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 		}
 		if owner != target {
 			if _, isNew := createdIndex(created, i.ID); isNew {
-				return nil, failure("invalid_argument", "New item is outside selected workstream.")
+				return nil, referenceFailure(i.ID, ownerField, "New item is outside selected workstream.")
 			}
 			continue
 		}
@@ -385,7 +404,7 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 			if keyed(objects(spec, "acceptance"), k) != nil && (s.Included(i) || i.Kind == "validation" || explicit[i.ID]["acceptance_keys"] && lifecycle[i.ID] != "remove") {
 				keys = append(keys, k)
 			} else if explicit[i.ID]["acceptance_keys"] {
-				return nil, referenceFailure(i.ID, "acceptance_keys", "Explicit acceptance reference is not included.")
+				return nil, referenceFailure(i.ID, "acceptance_keys", "Explicit acceptance reference is not included.", k)
 			}
 		}
 		if !sameJSON(keys, arr(i.Props, "acceptance_keys")) {
@@ -397,12 +416,12 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 			for _, id := range i.Depends {
 				p := s.Items[id]
 				if p == nil || p.Kind != "task" || p.Workstream != target {
-					return nil, referenceFailure(i.ID, "depends_on", "Dependency must be a task in this workstream.")
+					return nil, referenceFailure(i.ID, "depends_on", "Dependency must be a task in this workstream.", id)
 				}
 				if s.Included(i) && s.Included(p) {
 					deps = append(deps, id)
 				} else if explicit[i.ID]["depends_on"] {
-					return nil, referenceFailure(i.ID, "depends_on", "Explicit dependency is excluded.")
+					return nil, referenceFailure(i.ID, "depends_on", "Explicit dependency is excluded.", id)
 				}
 			}
 			if !sameJSON(deps, i.Depends) {
@@ -413,7 +432,7 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 	}
 	for _, id := range w.Depends {
 		if p := s.Items[id]; p == nil || p.Kind != "workstream" {
-			return nil, referenceFailure(w.ID, "depends_on", "Workstream prerequisite is missing.")
+			return nil, referenceFailure(w.ID, "depends_on", "Workstream prerequisite is missing.", id)
 		}
 	}
 	for _, kind := range []string{"task", "workstream"} {

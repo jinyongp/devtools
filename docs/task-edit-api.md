@@ -86,6 +86,17 @@ edit 결과에는 dry_run, would_change, changes, effects, impact, issues, next_
 
 변경 판정 오류 details에는 current_revision, condition_code, 이름·상태, related, remedies를 제공한다. operation 입력 오류는 operation_index를 제공한다. remedies는 argv와 required_inputs로 표현하며 context 값은 포함하지 않는다. check는 valid, closable, execution_ready와 issues를 반환한다.
 
+참조 오류의 JSON source는 실제 필드와 배열 원소를 가리킨다. 예를 들어 이동 기준 작업이
+제외됐다면 `operations[1].after_id`, 없는 의존성이면 `operations[0].depends_on[2]`다.
+`facts.reference_id`가 있으면 해당 위치의 UUID이며 이동할 작업의 ID로 대신하지 않는다.
+preview의 임시 `@ref`는 UUID fact로 노출하지 않는다. validation 소유권 오류도 원 operation과
+선택한 workstream의 plan 조회 안내를 유지한다. 여러 관계가 만든 cycle처럼 단일 원인을
+정할 수 없는 최종 상태 오류에는 임의 operation index를 붙이지 않는다.
+
+입력 schema의 UUID 구조는 `pattern`으로 검사하므로 `format` assertion을 끈 소비자도
+UUID와 `@ref`를 구별한다. UUID만 허용하는 workstream 참조와 요청 내부 task/validation
+참조의 허용 범위는 유지한다.
+
 ## 저장 호환성
 
 아래 v1/v2는 논리 이벤트 형식이다. WAL·snapshot을 사용하는 물리 형식 v3와는

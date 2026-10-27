@@ -158,7 +158,9 @@ func editOperations(body Object) ([]editOperation, *protocol.Error) {
 }
 
 func operationValue(op editOperation, refs map[string]string) (Object, *protocol.Error) {
-	v := objectValue(op.Body["value"])
+	// Keep the original operation for diagnostic paths: resolving refs and
+	// deduplicating arrays must not change the input's element indexes.
+	v := copyObject(objectValue(op.Body["value"]))
 	if v == nil {
 		return nil, editError(op.Index, "Expected value.", "value")
 	}

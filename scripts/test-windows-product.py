@@ -50,6 +50,7 @@ def main():
         raise RuntimeError("This journey requires explicitly disposable native Windows Actions")
     repository = Path.cwd()
     root = Path(tempfile.mkdtemp(prefix="devtools-native-product-"))
+    reliability_root=(root/'reliability').resolve()
     project = root / "프로젝트 공백"
     project.mkdir()
     binary = root / "installed" / "bin" / "devtools.exe"
@@ -116,7 +117,7 @@ def main():
                                   text=True, encoding="utf-8", timeout=15)
         assert captured.returncode == 0 and args.version in captured.stdout and "\x1b[" not in captured.stdout
         steps.append("native_pipe_and_explicit_presentation")
-        reliability=check_cli_reliability(binary,root/'reliability',base_env,expected_commit=args.commit,terminal=windows_terminal)
+        reliability=check_cli_reliability(binary,reliability_root,base_env,expected_commit=args.commit,terminal=windows_terminal)
         assert reliability['result']=='pass'
         steps.append("cli_reliability_recovery_inputs_inventory_cursor_backup")
         alias = binary.with_name("dvt.exe")
@@ -339,7 +340,7 @@ timeout = "3s"
         vault_roots = [root / "source" / "data" / "vault", root / "target" / "data" / "vault"]
         if native_root is not None:
             vault_roots.append(native_root / "data" / "vault")
-        vault_roots.extend(path.parent for path in (root/'reliability').rglob('vault/session.json'))
+        vault_roots.extend(path.parent for path in reliability_root.rglob('vault/session.json'))
         retire_vaults(*vault_roots)
         # Mapped supervisor images and private directory pins may finish closing
         # just after successful control RPC; bounded cleanup does not hide failures.

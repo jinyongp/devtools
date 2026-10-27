@@ -13,7 +13,9 @@ import uuid
 
 
 def check_cli_reliability(binary, root, environment=None, expected_commit=None, terminal=None):
-    binary, root = str(Path(binary).absolute()), Path(root)
+    # Select the physical spelling before the first session is created. Windows
+    # temp roots may otherwise bind init to an 8.3 alias and handoff to a long path.
+    binary, root = str(Path(binary).absolute()), Path(root).resolve()
     root.mkdir(mode=0o700)
     project = root / 'project'
     project.mkdir(mode=0o700)
@@ -36,7 +38,14 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
             result = json.loads(p.stderr)['error']
             assert result['code'] == error, (words[:2], result['code'])
             return result
-        assert p.returncode == 0 and not p.stderr, 'Public CLI operation failed: ' + '/'.join(words[:2])
+        if p.returncode or p.stderr:
+            try:
+                error=json.loads(p.stderr)['error']
+                code=error['code'];details=error.get('details',{})
+                safe={key:details.get(key) for key in ('phase','reason','effects')}
+                safe['facts']={key:details.get('facts',{}).get(key) for key in ('domain','stage','resource','os_code')}
+            except (ValueError,KeyError,TypeError): code,safe='unstructured_failure',{}
+            raise RuntimeError('Public CLI operation failed: '+'/'.join(words[:2])+': '+str(code)+' '+json.dumps(safe))
         return json.loads(p.stdout)['data']
 
     identity = call('version')

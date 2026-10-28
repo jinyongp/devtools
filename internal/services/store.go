@@ -128,6 +128,7 @@ const (
 )
 
 type Request struct {
+	lockIdentity     string                                                      `json:"-"`
 	AutoGoal         *vault.InputIdentity                                        `json:"auto_goal,omitempty"`
 	Bundle           *string                                                     `json:"bundle,omitempty"`
 	stopPrevious     func(context.Context) *protocol.Error                       `json:"-"`
@@ -702,7 +703,9 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	if q.Action == "start" && q.ID != "" || q.Action != "start" && (q.Command != "" || q.Directory != "") {
 		return out, failure("invalid_argument")
 	}
-	unlock, e := tasks.Lock(ctx, filepath.Join(s.root(), "operations.lock"))
+	// Store.Lock remains exclusive for maintenance and old clients. Independent
+	// operations share that barrier and serialize only their request/resource.
+	unlock, e := tasks.LockShared(ctx, filepath.Join(s.root(), "operations.lock"))
 	if e != nil {
 		if ctx.Err() != nil {
 			return out, protocol.ContextError(ctx.Err())
@@ -710,6 +713,11 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 		return out, storageErrorAt("lock_process_operation", e)
 	}
 	defer unlock()
+	requestUnlock, lockErr := tasks.Lock(ctx, filepath.Join(s.root(), "operation-locks", "request-"+q.RequestID+".lock"))
+	if lockErr != nil {
+		return out, storageErrorAt("lock_process_request", lockErr)
+	}
+	defer requestUnlock()
 	b, _ := json.Marshal(q)
 	fingerprint := fmt.Sprintf("%x", sha256.Sum256(b))
 	receiptPath := filepath.Join(s.root(), "receipts", q.RequestID+".json")
@@ -727,7 +735,17 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	} else if !errors.Is(e, os.ErrNotExist) {
 		return out, storageErrorAt("read_operation_receipt", e)
 	}
-	if cleanupErr := s.cleanupLaunchStaging(); cleanupErr != nil {
+	identity, identityErr := s.operationIdentity(q)
+	if identityErr != nil {
+		return out, identityErr
+	}
+	resourceUnlock, lockErr := tasks.Lock(ctx, filepath.Join(s.root(), "operation-locks", "singleton-"+identity+".lock"))
+	if lockErr != nil {
+		return out, storageErrorAt("lock_process_singleton", lockErr)
+	}
+	defer resourceUnlock()
+	q.lockIdentity = identity
+	if cleanupErr := s.cleanupLaunchStagingContext(ctx); cleanupErr != nil {
 		return out, cleanupErr
 	}
 	if !receiptExists {
@@ -895,10 +913,10 @@ func launchResultFailure(action string, result Result) *protocol.Error {
 		return nil
 	}
 	code := ""
-	if r.State == "failed" && r.EndedAt != nil {
-		code = "execution_failed"
-	} else if r.State == "unknown" || r.State == "interrupted" {
+	if r.Reason == "launch_outcome_unknown" || r.State == "unknown" || r.State == "interrupted" {
 		code = "launch_outcome_unknown"
+	} else if r.State == "failed" && r.EndedAt != nil {
+		code = "execution_failed"
 	}
 	if code == "" {
 		return nil
@@ -941,6 +959,9 @@ func (s Store) start(ctx context.Context, q Request, previous string) (result Re
 	if e != nil {
 		return out, e
 	}
+	if q.lockIdentity != "" && singletonIdentity(p.Profile, p.Root, q.Command) != q.lockIdentity {
+		return out, failure("instance_conflict")
+	}
 	c, ok := p.Commands[q.Command]
 	if !ok {
 		return out, failure("command_not_found")
@@ -967,7 +988,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (result Re
 	}
 	capture := q.Capture != nil && *q.Capture
 	if q.BeforeStart != nil {
-		list, listErr := s.List(ctx, p.Profile)
+		list, listErr := s.singletonRecords(ctx, p.Profile, p.Root, q.Command)
 		if listErr != nil {
 			return out, listErr
 		}
@@ -1005,7 +1026,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (result Re
 		return out, e
 	}
 	if q.BeforeStart == nil {
-		list, listErr := s.List(ctx, p.Profile)
+		list, listErr := s.singletonRecords(ctx, p.Profile, p.Root, q.Command)
 		if listErr != nil {
 			return out, listErr
 		}
@@ -1069,7 +1090,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (result Re
 	if err != nil {
 		return out, storageErrorAt("resolve_executable", err)
 	}
-	lease, launchErr := s.prepareLaunch(r, q.Network)
+	lease, launchErr := s.prepareLaunchContext(ctx, r, q.Network)
 	if launchErr != nil {
 		return out, protocol.WithEffects(launchErr, "unknown")
 	}

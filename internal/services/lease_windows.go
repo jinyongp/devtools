@@ -117,7 +117,7 @@ func (s Store) readLaunchMarker(id string) (launchMarker, bool, *protocol.Error)
 	}
 	return marker, true, nil
 }
-func (s Store) prepareLaunch(record Record, snapshots ...*network.ExecutionSnapshot) (*lockedLease, *protocol.Error) {
+func (s Store) prepareLaunchUnlocked(record Record, snapshots ...*network.ExecutionSnapshot) (*lockedLease, *protocol.Error) {
 	if !validID(record.ID) {
 		return nil, storageErrorAt("validate_launch_id", nil)
 	}
@@ -187,7 +187,7 @@ func (s Store) prepareLaunch(record Record, snapshots ...*network.ExecutionSnaps
 	return lease, nil
 }
 
-func (s Store) cleanupLaunchStaging() *protocol.Error {
+func (s Store) cleanupLaunchStagingUnlocked() *protocol.Error {
 	root, err := platformfs.OpenRoot(s.root(), false)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil

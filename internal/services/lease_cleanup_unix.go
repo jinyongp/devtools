@@ -10,7 +10,7 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
-func (s Store) cleanupLaunchStaging() *protocol.Error {
+func (s Store) cleanupLaunchStagingUnlocked() *protocol.Error {
 	root := s.root()
 	entries, err := os.ReadDir(root)
 	if errors.Is(err, os.ErrNotExist) {

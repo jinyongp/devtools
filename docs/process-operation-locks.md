@@ -1,9 +1,8 @@
 # Process operation locks and recovery
 
 Scope: the v0.36.2 follow-up workstream
-`d19b52f2-2393-42b3-b04b-22769305bb89`. This document defines the protocol
-implemented by the next unit; it does not claim that the old global serialization
-has already been removed.
+`d19b52f2-2393-42b3-b04b-22769305bb89`. Store.Apply implements the protocol
+below; Store.Lock retains exclusive maintenance serialization.
 
 ## Ownership and order
 

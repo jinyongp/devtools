@@ -209,6 +209,10 @@ func TestTerminalLaunchFailureReceiptReplay(t *testing.T) {
 
 func TestLaunchResultDistinguishesSpawnFromUnknown(t *testing.T) {
 	now := time.Now().UTC()
+	uncertain := Record{ID: tasks.ID(), State: "failed", Reason: "launch_outcome_unknown", EndedAt: &now}
+	if e := launchResultFailure("start", Result{Item: uncertain}); e == nil || e.Code != "launch_outcome_unknown" {
+		t.Fatal("failed envelope guessed an unknown launch", e)
+	}
 	for _, tc := range []struct {
 		state   string
 		started bool

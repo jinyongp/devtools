@@ -39,7 +39,7 @@ func (s Store) readLaunchMarker(id string) (launchMarker, bool, *protocol.Error)
 	return marker, true, nil
 }
 
-func (s Store) prepareLaunch(record Record, snapshots ...*network.ExecutionSnapshot) (*lockedLease, *protocol.Error) {
+func (s Store) prepareLaunchUnlocked(record Record, snapshots ...*network.ExecutionSnapshot) (*lockedLease, *protocol.Error) {
 	if err := tasks.PrivateDir(s.root()); err != nil {
 		return nil, storageError()
 	}

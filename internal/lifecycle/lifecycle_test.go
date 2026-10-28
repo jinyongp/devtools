@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -206,6 +207,45 @@ func TestUpPartialFailureRetriesOnlyIncompleteChildren(t *testing.T) {
 	changed.Commands = []string{"api", "web"}
 	if _, err := manager.Apply(context.Background(), changed); err == nil || err.Code != "request_conflict" {
 		t.Fatalf("changed input reused request ID: %v", err)
+	}
+}
+
+func TestFrozenFailureReplayAndMixedResumeGuidance(t *testing.T) {
+	p := testProject(t, "failed", "pending", "ok")
+	processes := &fakeProcesses{}
+	processes.apply = func(q services.Request, count int) (services.Result, *protocol.Error) {
+		r := runningRecord(p, q.Command, q.RequestID)
+		r.InputSnapshotID = strings.Repeat("a", 32)
+		if q.Command == "failed" {
+			now := time.Now().UTC()
+			r.StartedAt, r.EndedAt, r.State = nil, &now, "failed"
+			return services.Result{Item: r, Changed: true}, protocol.NewError("execution_failed", "Could not spawn.", 126, nil)
+		}
+		if q.Command == "pending" && count == 1 {
+			r.StartedAt, r.State = nil, "starting"
+			return services.Result{Item: r, Changed: true}, protocol.NewError("process_pending", "Still starting.", 3, nil)
+		}
+		return services.Result{Item: r, Changed: true}, nil
+	}
+	m := Manager{Data: t.TempDir(), Processes: processes}
+	q := Request{Action: ActionUp, Project: p, Commands: []string{"failed", "pending", "ok"}, Timeout: time.Second, RequestID: tasks.ID()}
+	first, e := m.Apply(context.Background(), q)
+	if e == nil || e.Details["retry"] != "same_request" || !strings.Contains(e.Message, "completed failures remain unchanged") {
+		t.Fatal("mixed batch lost resume guidance", e)
+	}
+	failedID := first.Items[0].Item.ID
+	for i := 0; i < 2; i++ {
+		out, e := m.Apply(context.Background(), q)
+		if e == nil || e.Details["retry"] != "inspect_first" || !out.Replayed || out.Items[0].Item.ID != failedID {
+			t.Fatal("terminal replay suggested resume", out, e)
+		}
+		remedies := e.Details["remedies"].([]protocol.Remedy)
+		if len(remedies) != 2 || remedies[0].Argv[4] != p.Root || remedies[1].Argv[3] != failedID {
+			t.Fatal("inspection did not target original execution", remedies)
+		}
+	}
+	if processes.callCount("start", "failed") != 1 || processes.callCount("start", "ok") != 1 || processes.callCount("start", "pending") != 2 {
+		t.Fatal("replay duplicated a completed child", processes.calls)
 	}
 }
 

@@ -646,12 +646,19 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 	return nil
 }
 
-func batchFailure(result Result) *protocol.Error {
+func batchFailure(result Result, resumable bool) *protocol.Error {
 	for _, item := range result.Items {
 		if item.Condition != nil {
 			exit := 3
 			code := "project_operation_failed"
 			message := "One or more project lifecycle operations did not complete."
+			retry := "same_request"
+			if !resumable {
+				retry = "inspect_first"
+				message = "Project operations finished with failures. Inspect status and logs before a new attempt with a new request ID; this request ID only replays the saved result."
+			} else {
+				message += " The same request ID resumes only unfinished items; completed failures remain unchanged."
+			}
 			if item.Condition.Code == "canceled" {
 				exit = 130
 				code = "canceled"
@@ -663,7 +670,17 @@ func batchFailure(result Result) *protocol.Error {
 					effects = "partial"
 				}
 			}
-			return fail(code, message, exit, map[string]any{"phase": "observe", "retry": "same_request", "effects": effects, "action": result.Action, "items": result.Items})
+			remedies := []protocol.Remedy{{Effect: "read", Argv: []string{"devtools", "project", "status", "--dir", result.Directory}, RequiredInputs: []string{}, Message: "Inspect the original project's current executions before deciding on a new operation.", Relation: protocol.SameStoreAction}}
+			for _, child := range result.Items {
+				if child.Condition == nil || child.Item == nil || child.Item.ID == "" {
+					continue
+				}
+				remedies = append(remedies, protocol.Remedy{Effect: "read", Argv: []string{"devtools", "process", "status", child.Item.ID}, RequiredInputs: []string{}, Message: "Inspect this execution; a completed failure is replayed rather than relaunched.", Relation: protocol.SameStoreAction})
+				if child.Item.Capture {
+					remedies = append(remedies, protocol.Remedy{Effect: "read", Argv: []string{"devtools", "process", "logs", child.Item.ID}, RequiredInputs: []string{}, Message: "Read retained output for this execution.", Relation: protocol.SameStoreAction})
+				}
+			}
+			return fail(code, message, exit, map[string]any{"phase": "observe", "retry": retry, "effects": effects, "action": result.Action, "items": result.Items, "remedies": remedies})
 		}
 	}
 	return nil
@@ -722,7 +739,7 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 	}
 	if value.complete() {
 		result := value.result(replayed)
-		if failure := batchFailure(result); failure != nil {
+		if failure := batchFailure(result, false); failure != nil {
 			return result, failure
 		}
 		return result, nil
@@ -791,7 +808,7 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 	if runErr != nil {
 		return result, runErr
 	}
-	if failure := batchFailure(result); failure != nil {
+	if failure := batchFailure(result, !value.complete()); failure != nil {
 		return result, failure
 	}
 	return result, nil

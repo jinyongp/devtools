@@ -247,6 +247,38 @@ func TestLaunchResultDistinguishesSpawnFromUnknown(t *testing.T) {
 	}
 }
 
+func TestLaunchFailureGuidanceTargetsNewExecutionAndCapture(t *testing.T) {
+	now := time.Now().UTC()
+	for _, state := range []string{"failed", "unknown", "stopped"} {
+		for _, capture := range []bool{false, true} {
+			r := Record{ID: tasks.ID(), Previous: tasks.ID(), State: state, EndedAt: &now, Capture: capture, Outage: true, IsolatedRoot: privateTempDir(t)}
+			e := launchResultFailure("restart", Result{Item: r, Changed: true, Replayed: true})
+			if e == nil {
+				t.Fatal("launch failure lost")
+			}
+			public := protocol.Public(e, "process restart")
+			target := public.Details["target"].(map[string]any)
+			if target["id"] != r.ID || target["name"] != r.ID {
+				t.Fatal("guidance points at old execution", target)
+			}
+			remedies := e.Details["remedies"].([]protocol.Remedy)
+			want := 1
+			if capture {
+				want = 2
+			}
+			if len(remedies) != want || remedies[0].Argv[2] != "status" || remedies[0].Argv[3] != r.ID {
+				t.Fatal(remedies)
+			}
+			if capture && (remedies[1].Argv[2] != "logs" || remedies[1].Argv[3] != r.ID) {
+				t.Fatal(remedies)
+			}
+			if state == "unknown" && strings.Contains(e.Message, "complete") {
+				t.Fatal("unknown became completed failure", e)
+			}
+		}
+	}
+}
+
 func TestStoppedAndUnknownLaunchReceiptCompletion(t *testing.T) {
 	for _, state := range []string{"stopped", "unknown"} {
 		t.Run(state, func(t *testing.T) {

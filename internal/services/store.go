@@ -181,7 +181,7 @@ func failure(code string) *protocol.Error {
 		"logs_expired":             "The retained output for this execution has expired.",
 		"request_conflict":         "This request ID belongs to different process input. Inspect the original request before choosing a new ID.",
 		"launch_outcome_unknown":   "The launch result is unknown. Inspect the execution before starting replacement work.",
-		"execution_failed":         "The process failed before starting. Inspect its status and captured logs before a new attempt.",
+		"execution_failed":         "The process failed before starting. Inspect its execution status before a new attempt.",
 	}[code]
 	if message == "" {
 		message = "Process operation could not satisfy the requested condition."
@@ -929,8 +929,27 @@ func launchResultFailure(action string, result Result) *protocol.Error {
 		return nil
 	}
 	e := failure(code)
+	if code != "launch_outcome_unknown" {
+		e.Message = "The command did not start. This request is complete; retrying its UUID replays this failure."
+	}
+	target := map[string]any{"kind": "process", "name": r.ID, "id": r.ID}
+	if r.Profile != "" {
+		target["profile"] = r.Profile
+	}
+	if r.Directory != "" {
+		target["directory"] = r.Directory
+	}
+	if r.Command != "" {
+		target["command"] = r.Command
+	}
+	scope := protocol.InvocationContext{IsolatedRoot: r.IsolatedRoot}
+	remedies := []protocol.Remedy{protocol.LocalAction([]string{"devtools", "process", "status", r.ID}, nil, "Inspect this execution before choosing a new operation.", "read").Remedy(scope)}
+	if r.Capture {
+		remedies = append(remedies, protocol.LocalAction([]string{"devtools", "process", "logs", r.ID}, nil, "Read retained output for this execution.", "read").Remedy(scope))
+	}
 	e.Details = map[string]any{
 		"phase": "observe", "id": r.ID, "reason": r.Reason,
+		"target": target, "remedies": remedies,
 		"retry": "inspect_first", "effects": "committed",
 		"facts": map[string]any{"state": r.State, "outage": r.Outage, "previous_id": r.Previous, "changed": result.Changed, "replayed": result.Replayed},
 	}

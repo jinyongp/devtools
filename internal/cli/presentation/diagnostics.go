@@ -108,6 +108,7 @@ func conciseError(e map[string]any, inputs []InputHint) cliui.Document {
 		blocks = append(blocks, diagnosticFacts(facts)...)
 	}
 	blocks = append(blocks, recoveryNotes(details)...)
+	blocks = append(blocks, launchRecoveryNotes(e, details, facts)...)
 	if conflicts, ok := facts["import_items"].([]any); ok && len(conflicts) > 0 {
 		var names []string
 		for _, value := range conflicts {
@@ -199,6 +200,38 @@ func recoveryNotes(details map[string]any) []cliui.Block {
 		result = append(result, cliui.Paragraph(cliui.Words("Check the current state before trying again.")))
 	}
 	return result
+}
+
+func launchRecoveryNotes(e, details, facts map[string]any) []cliui.Block {
+	operation, _ := details["operation"].(string)
+	if operation != "process start" && operation != "process restart" {
+		return nil
+	}
+	code, _ := e["code"].(string)
+	if code != "execution_failed" && code != "process_not_running" && code != "launch_outcome_unknown" {
+		return nil
+	}
+	if phase, _ := details["phase"].(string); phase != "observe" {
+		return nil
+	}
+	var out []cliui.Block
+	target, _ := details["target"].(map[string]any)
+	current, _ := target["id"].(string)
+	previous, _ := facts["previous_id"].(string)
+	if previous != "" && current != "" {
+		out = append(out, cliui.Fields(cliui.Field{Label: cliui.Literal("Previous execution"), Value: cliui.Literal(previous)}, cliui.Field{Label: cliui.Literal("New execution"), Value: cliui.Literal(current)}))
+	}
+	if outage, _ := facts["outage"].(bool); outage {
+		message := "Recorded service gap: the previous execution stopped and the replacement did not start."
+		if code == "launch_outcome_unknown" {
+			message = "The previous execution stopped; the replacement outcome is unknown."
+		}
+		out = append(out, cliui.Paragraph(cliui.Words(message)))
+	}
+	if replayed, _ := facts["replayed"].(bool); replayed {
+		out = append(out, cliui.Paragraph(cliui.Words("Saved result replayed. Check current state separately before choosing a new request UUID.")))
+	}
+	return out
 }
 
 // Diagnostic records are sentences and actionable checks, not recursive dumps.

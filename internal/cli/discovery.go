@@ -186,6 +186,8 @@ func (a *App) commandSummary(name string) string {
 		"values execution":        "Prepare, approve, deliver, and report external execution inputs.",
 		"values runner":           "Register and inspect same-user execution receivers.",
 		"values request":          "Inspect saved value mutation results.",
+		"process request":         "Inspect saved process results without resuming work.",
+		"project request":         "Inspect saved project operation results without current configuration.",
 		"proxy ca":                "Manage the local certificate authority.",
 		"proxy hosts":             "Preview and apply local hostname mappings.",
 		"profile transfer":        "Prepare encrypted profile transfers.",

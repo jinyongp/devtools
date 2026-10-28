@@ -33,6 +33,12 @@
 
 ## Recover the same operation
 
+- Protocol 19 adds `process request show UUID` and `project request show UUID`.
+  They read saved operation results without current TOML, resuming work or touching
+  a vault session. `item.state` is pending/completed; optional `item.result` is
+  historical. A failed operation can be successfully queried. Inspect each saved
+  execution ID separately for current status; a reused start UUID is not its execution ID.
+
 - New operation: new UUID. Uncertain response: preserve UUID and exact input.
 - Read `error.details` before retrying. Stale revision/preview: refresh and reassess before a new decision.
 - A saved operation result and live state answer different questions. Inspect both when execution outcome is uncertain.

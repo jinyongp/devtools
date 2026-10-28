@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설정 모델](cli-config-redesign.md) · [설정 편집](config-edit-contract.md)
 
-이 문서는 protocol 18 소스의 진단 계약이다. 사용 순서는 [개발환경 진단](doctor.md)을 따른다.
+이 문서는 protocol 19 소스의 진단 계약이다. 사용 순서는 [개발환경 진단](doctor.md)을 따른다.
 JSON/text는 같은 public 진단 정본을 사용하며 표시 계층에서 message·action·효과를 재작성하지 않는다.
 공통 diagnostic과 Check·DoctorReport·ErrorDetails의 구조는
 [계약 schema](../internal/configcontract/schema.json)의 같은 이름의 정의를 따른다.

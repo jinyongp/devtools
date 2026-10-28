@@ -163,6 +163,7 @@ func New(version, commit string) *App {
 	a.registerBackup()
 	a.registerProfiles()
 	a.registerProcesses()
+	a.registerProcessRequests()
 	a.registerProjectLifecycle()
 	a.registerCleanup()
 	a.registerUpdate()

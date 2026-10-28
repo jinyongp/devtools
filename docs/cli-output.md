@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v18 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v19 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
@@ -79,7 +79,7 @@ stdout 선택이 JSON이면 stderr만 TTY여도 JSON 오류입니다. 기존 pro
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 18`입니다.
+`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 19`입니다.
 `version`과 `schema`의 `data.protocol_version`에서 확인합니다. TOML·저장소·dashboard/private wire
 버전은 별개입니다. format 지원 여부는 숫자 추측 대신 discovery의 `global_options`로 확인하세요.
 
@@ -206,6 +206,16 @@ text 렌더 실패 시 기존 오류는 전체 escaped public 진단과 원 종�
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v19 마이그레이션
+
+`process request show UUID`와 `project request show UUID`는 현재 TOML 없이
+저장된 요청을 읽습니다. `item.state`는 `pending` 또는 `completed`이며 저장 결과가
+있으면 `item.result`를 반환합니다. 완료된 실패도 조회 자체는 성공합니다.
+이 조회는 작업을 재개하거나 vault 세션을 갱신하지 않습니다. 저장 결과는 당시의
+결과이므로 현재 상태는 결과의 execution ID로 `process status`를 확인합니다.
+같은 UUID의 mutation 재시도는 원래 입력 동일성 검사를 계속 적용합니다.
+envelope 1과 기존 receipt fingerprint는 유지합니다.
 
 ## protocol v18 마이그레이션
 

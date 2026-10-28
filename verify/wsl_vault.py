@@ -94,7 +94,7 @@ def main():
         reliability_result=json.loads(output)
         if reliability_result.get('result')!='pass' or reliability_result.get('binary_identity',{}).get('commit')!=args.commit:
             raise RuntimeError('Actual WSL reliability journey failed')
-        if reliability_result.get('diagnostic_schema',{}).get('protocol_version')!=18 or reliability_result['diagnostic_schema'].get('validated',0)<1:
+        if reliability_result.get('diagnostic_schema',{}).get('protocol_version')!=19 or reliability_result['diagnostic_schema'].get('validated',0)<1:
             raise RuntimeError('Actual WSL diagnostic schema evidence missing')
         if reliability_result.get('reference_schema')!={'validated':7,'format_assertions':[False,True]} or not {'actual_terminal_edit_reference_location','actual_terminal_doctor_reason_recovery'} <= set(reliability_result['checks']):
             raise RuntimeError('Actual WSL reference schema or reason-specific PTY evidence missing')

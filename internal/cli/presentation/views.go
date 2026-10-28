@@ -25,7 +25,9 @@ type Omission struct{ Path, Rule string }
 type ViewColumn struct{ Path, Label, Display string }
 
 var readViews = map[string]Definition{
-	"version": {Family: "detail", Title: "Version", Required: []Requirement{{"version", "string"}, {"commit", "string"}, {"protocol_version", "number"}}},
+	"process request show": {Family: "detail", Title: "Saved process request", Required: []Requirement{{"item", "object"}}},
+	"project request show": {Family: "detail", Title: "Saved project request", Required: []Requirement{{"item", "object"}}},
+	"version":              {Family: "detail", Title: "Version", Required: []Requirement{{"version", "string"}, {"commit", "string"}, {"protocol_version", "number"}}},
 	"command list": {
 		Family: "commands", Title: "Commands",
 		Required:     []Requirement{{"profile", "string"}, {"items", "array"}, {"items.*.name", "string"}, {"items.*.exec", "strings"}, {"items.*.inject", "boolean"}, {"items.*.env", "string"}, {"items.*.serve", "strings"}},

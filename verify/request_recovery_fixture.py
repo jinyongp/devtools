@@ -247,12 +247,14 @@ while True:time.sleep(.05)
                 pass  # An orderly shutdown may close its response.
             finally:
                 connection.close()
-            deadline = time.monotonic() + 5
+            deadline = time.monotonic() + 15
             while True:
                 try:
-                    with socket.create_connection(('127.0.0.1', address.port), timeout=1): pass
+                    with socket.create_connection(('127.0.0.1', address.port), timeout=5): pass
                 except ConnectionRefusedError:
                     break
+                except TimeoutError:
+                    pass  # Windows may defer a closed-loopback refusal.
                 assert time.monotonic() < deadline, 'Owned controller survived fixture cleanup'
                 time.sleep(.05)
         cleanup['proxy_controller_stopped'] = True

@@ -132,6 +132,9 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 		s.Items[id] = &Item{ID: id, Kind: kind, State: "open", Props: Object{}, Depends: []string{}, Order: revision, Revision: revision}
 		if kind == "task" {
 			s.Items[id].Workstream = target
+			// Forward moves need both identity and default membership before
+			// input-order evaluation. Adding properties must not append it again.
+			wb.Order = append(wb.Order, id)
 		}
 		s.Tracking[id] = newDefinitionBasis(revision)
 		lifecycle[id] = "add"
@@ -283,7 +286,6 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 			if name == "task.add" {
 				v["workstream_id"] = target
 				item.Workstream = target
-				wb.Order = append(wb.Order, id)
 			}
 			for field, x := range v {
 				item.Props[field] = x
@@ -444,8 +446,19 @@ func EvaluateEdit(before *State, target string, body Object, allocations map[int
 		}
 	}
 	taskIDs, valIDs := []string{}, []string{}
+	ordered := map[string]bool{}
+	for _, id := range wb.Order {
+		t := s.Items[id]
+		if ordered[id] || t == nil || t.Kind != "task" || t.Workstream != target {
+			return nil, inputAt(inputFailure("Task order is inconsistent. Repair the selected order explicitly before changing its definition."), "operations")
+		}
+		ordered[id] = true
+	}
 	for _, i := range s.List("task") {
 		if i.Workstream == target && s.Included(i) {
+			if !ordered[i.ID] {
+				return nil, inputAt(inputFailure("An included task is missing from the order. Repair the selected order explicitly."), "operations")
+			}
 			taskIDs = append(taskIDs, i.ID)
 		}
 	}

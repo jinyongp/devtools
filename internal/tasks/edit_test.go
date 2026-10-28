@@ -58,6 +58,63 @@ func TestAtomicEditAddsForwardReferences(t *testing.T) {
 	}
 }
 
+func TestEditForwardMovesHaveDefaultMembership(t *testing.T) {
+	for _, anchorNew := range []bool{false, true} {
+		for _, field := range []string{"before_id", "after_id"} {
+			t.Run(fmt.Sprint(anchorNew, field), func(t *testing.T) {
+				s, w, a, b := assessmentFixture(t)
+				n := ID()
+				moving, anchor := "@new", a
+				if anchorNew {
+					moving, anchor = a, "@new"
+				}
+				x, e := EvaluateEdit(s, w, editBody(
+					Object{"op": "task.move", "id": moving, field: anchor},
+					Object{"op": "task.add", "ref": "new", "value": Object{"title": "New"}},
+				), map[int]string{1: n})
+				if e != nil {
+					t.Fatal(e)
+				}
+				want := []string{n, a, b}
+				if anchorNew {
+					want = []string{b, a, n}
+					if field == "after_id" {
+						want = []string{b, n, a}
+					}
+				} else if field == "after_id" {
+					want = []string{a, n, b}
+				}
+				if hash(x.Candidate.definition(w).Order) != hash(want) {
+					t.Fatal("wrong forward order", x.Candidate.definition(w).Order, want)
+				}
+				applyTestEvent(s, "workstream.edited", w, x.Event.Data)
+				if hash(s.definition(w).Order) != hash(want) {
+					t.Fatal("persisted order differs")
+				}
+			})
+		}
+	}
+}
+
+func TestEditCorruptOrderRequiresExplicitRepair(t *testing.T) {
+	s, w, a, b := assessmentFixture(t)
+	s.definition(w).Order = []string{a, b, a}
+	before := hash(s)
+	if _, e := EvaluateEdit(s, w, editBody(Object{"op": "task.update", "id": a, "value": Object{"title": "Rename"}}), nil); e == nil {
+		t.Fatal("corrupt order silently accepted")
+	}
+	if hash(s) != before {
+		t.Fatal("failed candidate changed history")
+	}
+	x, e := EvaluateEdit(s, w, editBody(Object{"op": "task.move", "id": a, "before_id": b}), nil)
+	if e != nil || hash(x.Candidate.definition(w).Order) != hash([]string{a, b}) {
+		t.Fatal("explicit repair failed", e)
+	}
+	if hash(s) != before {
+		t.Fatal("repair changed its historical input")
+	}
+}
+
 func TestEditRemovesAndRestoresWithoutResurrectingEdges(t *testing.T) {
 	s, w, a, b := assessmentFixture(t)
 	applyTestEvent(s, "task.depends", b, Object{"depends_on": []string{a}})

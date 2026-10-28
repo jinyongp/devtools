@@ -32,6 +32,14 @@ devtools task workstream edit WORKSTREAM_ID --file edit.json --if-revision N --r
 
 새 ID는 요청 내부 `@ref`로 앞·뒤 참조한다. task 소속은 edit 대상 workstream이며 validation은 정확히 한 owner를 가진다. 소유권·참조 존재·DAG는 최종 후보에서 검사한다. 동일 항목의 add/remove, remove/restore 조합은 오류다. 여러 update는 입력 순서대로 적용하고 빈 update는 거절한다. 알 수 없는 필드와 중복 JSON 키도 거절한다.
 
+새 task는 먼저 기본 순서에 한 번 배정되므로 `task.add`보다 앞선 `task.move`에서도
+이동 대상과 anchor로 쓸 수 있다. move는 입력 순서대로 적용한다. 제거된 task의
+위치는 복원을 위해 보존하며 순서는 claim 우선순위나 완료 근거를 바꾸지 않는다.
+이전 빌드에서 저장된 중복 순서는 조회로 자동 수정하지 않는다. 예를 들어 `[N,A,N]`은
+`task.move id:N before_id:A`를 `--dry-run --if-revision`으로 확인한 뒤 적용하면
+현재 순서만 `[N,A]`로 복구한다. anchor가 없거나 손상이 더 크면 자동 복구하지 말고
+기존 이력을 보존한 상태에서 유효한 순서를 먼저 확인한다. 과거 revision은 그대로다.
+
 예를 들어 기존 작업 뒤에 검증 작업을 삽입한다.
 
 ```json

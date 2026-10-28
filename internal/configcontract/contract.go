@@ -20,7 +20,7 @@ import (
 )
 
 const Limit = 2 << 20
-const schemaURL = "urn:devtools:config-contract:protocol-17"
+const schemaURL = "urn:devtools:config-contract:protocol-18"
 
 //go:embed schema.json
 var schemaBytes []byte

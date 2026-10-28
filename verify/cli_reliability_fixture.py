@@ -11,6 +11,8 @@ import sys
 import time
 import uuid
 
+from operation_reliability_fixture import check_operations
+
 
 def build_diagnostic_validator(output, environment=None, target=None):
     repository = Path(__file__).resolve().parents[1]
@@ -67,7 +69,7 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
         return json.loads(p.stdout)['data']
 
     identity = call('version')
-    assert identity['protocol_version'] == 17
+    assert identity['protocol_version'] == 18
     if expected_commit:
         assert identity['commit'] == expected_commit, 'Candidate SHA mismatch'
     call('vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input=password+'\n')
@@ -381,6 +383,8 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
     assert applied['applied'] and not applied['replayed']
     assert call(*restore,'--apply',preview['digest'],'--request-id',request,selected=destination)['replayed']
     steps.append('backup_create_inspect_preview_other_root_restore_uuid_retry')
+    operations = check_operations(binary, root/'operations', source, env, documents)
+    steps.append('operation_order_terminal_replay_and_lock_contracts')
     checked = subprocess.run([str(validator)],input=json.dumps(documents),capture_output=True,text=True,encoding='utf-8',timeout=30)
     assert checked.returncode == 0, 'Installed diagnostic violates public Failure schema: '+checked.stderr
     schema_result = json.loads(checked.stdout)
@@ -390,7 +394,7 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
     assert negative.returncode != 0, 'Diagnostic schema validator accepted a wrongly typed field'
     steps.append('installed_failure_schema_and_independent_negative_control')
     return {'result':'pass','binary_identity':identity,'binary_sha256':hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
-            'diagnostic_schema':schema_result,'reference_schema':reference_schema,
+            'diagnostic_schema':schema_result,'reference_schema':reference_schema,'operations':operations,
             'platform':sys.platform,'checks':steps}
 
 

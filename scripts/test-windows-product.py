@@ -103,7 +103,7 @@ def main():
         ], cwd=repository, env=base_env, text=True, encoding="utf-8", capture_output=True, timeout=180)
         assert install.returncode == 0, "Candidate installer did not complete (raw output withheld)"
         identity = api("version")
-        assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 17
+        assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 18
         # Real native Windows pipe/explicit modes. Console VT and ConPTY visual
         # acceptance are separate gates; a captured pipe cannot establish them.
         clean = {key: value for key, value in base_env.items() if key not in (

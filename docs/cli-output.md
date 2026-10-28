@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v17 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v18 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
@@ -79,7 +79,7 @@ stdout 선택이 JSON이면 stderr만 TTY여도 JSON 오류입니다. 기존 pro
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 17`입니다.
+`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 18`입니다.
 `version`과 `schema`의 `data.protocol_version`에서 확인합니다. TOML·저장소·dashboard/private wire
 버전은 별개입니다. format 지원 여부는 숫자 추측 대신 discovery의 `global_options`로 확인하세요.
 
@@ -206,6 +206,17 @@ text 렌더 실패 시 기존 오류는 전체 escaped public 진단과 원 종�
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v18 마이그레이션
+
+`process start/restart`의 실행 전 확정 실패는 `execution_failed`와 exit 126을
+반환합니다. 저장된 완료 실패도 같은 UUID에서 같은 실행 결과로 재생합니다.
+`facts.state`, `outage`, `previous_id`, `changed`, `replayed`로 시작 실패와 이미
+발생한 종료 효과를 확인합니다. 결과 불명은 `launch_outcome_unknown`을 유지합니다.
+`project up/restart`의 완료 실패는 `inspect_first`와 상태·로그 조회를 안내하고,
+미완료 항목이 남으면 같은 UUID로 해당 항목만 이어갑니다. Task 전방 move와 anchor는
+add 이전에도 기본 순서 membership을 사용하며 순서 중복을 저장하지 않습니다.
+envelope 1, 요청 fingerprint, 영수증·Task journal 저장 형식은 유지합니다.
 
 ## protocol v17 마이그레이션
 

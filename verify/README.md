@@ -4,7 +4,7 @@
 
 CI·로컬 검사 선택과 수동 진단의 구분은 [검증 구성](../docs/verification.md)을 따른다.
 
-`python3 -B verify/run.py cli_guidance`는 protocol 17 archive를 설치해 A/B isolation
+`python3 -B verify/run.py cli_guidance`는 protocol 18 archive를 설치해 A/B isolation
 root의 후속 행동, direct argv 위치, 신규 profile effects, kind 충돌, revision/request
 복구, help/status 계약, import·설정 safe facts와 실제 managed launcher의 redaction
 한도를 검사한다. 기존 Release의 Linux/macOS `test:installed` 전체 선택에 포함된다.
@@ -15,8 +15,13 @@ Go의 한도별 경계·손상 frame 검사와 native Windows suite를 대체하
 입력 예산·32-item cursor 경계·별도 root backup restore를 검사한다. 열린 인증 pipe의
 SIGINT와 실제 Unix PTY에서 같은 redaction 한도 실패도 확인한다. 같은 portable
 fixture를 Windows x64/ARM64 product lane과 실제 WSL2 adapter에서 실행한다.
+Task 전방 move·anchor의 순서, preview 무변경·UUID/과거 조회, direct 시작·재시작의
+실행 전 실패·outage·완료 재생, project 확정 실패의 상태 조회 안내도 검사한다.
+Unix·WSL2에서는 TERM 유예 중 독립 시작을 3회 측정하고 B 시작이 A 종료보다
+먼저인지 확인한다. Windows 잠금 동시성과 Job/CTRL_BREAK는 기존 native Go lane의
+인과 marker 검사와 프로세스 트리 검사로 검증하며 Unix TERM으로 대체하지 않는다.
 Windows는 native ConPTY의 오류 표시·Ctrl+C를 별도로 확인하며 시각 품질 판정은 하지 않는다.
-protocol 17 오류는 저장소의 schema 검증기로 각각 확인하고 잘못된 필드 타입의 음성
+protocol 18 오류는 저장소의 schema 검증기로 각각 확인하고 잘못된 필드 타입의 음성
 대조도 실행한다. edit의 배열 위치·원 workstream 안내 실행·coverage 원인, config의
 discriminator 분기·타입, 파일/제한된 stdin의 관측치와 비활성 stdin의 파일 선택을 검사한다.
 Unix PTY·Windows ConPTY는 edit/config의 실제 JSON 경로 표시도 확인한다.

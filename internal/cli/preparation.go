@@ -28,7 +28,7 @@ func preparationMode(options map[string]string) (network.PreparationMode, *proto
 
 // prepareLifecycle freezes selection before the lifecycle receipt is created.
 // Its parent journal holds no process or network locks during Manager.Apply.
-func (a *App) prepareLifecycle(ctx context.Context, manager *lifecycle.Manager, request *lifecycle.Request, mode network.PreparationMode, streams IO) *protocol.Error {
+func (a *App) prepareLifecycle(ctx context.Context, manager *lifecycle.Manager, request *lifecycle.Request, mode network.PreparationMode, streams IO, callerDirectory ...string) *protocol.Error {
 	store := netops.Store{Data: manager.Data}
 	exists, intent, e := store.ExecutionKind(request.RequestID)
 	if e != nil {
@@ -42,6 +42,14 @@ func (a *App) prepareLifecycle(ctx context.Context, manager *lifecycle.Manager, 
 		request.ProxyMode = mode == network.PrepareOn
 		a.networkLifecycle(manager, streams)
 		return nil
+	}
+	caller := request.Project.Root
+	if len(callerDirectory) > 0 {
+		var err error
+		caller, err = location.Canonical(callerDirectory[0])
+		if err != nil {
+			return services.RequestRecoveryError("project", request.RequestID)
+		}
 	}
 	plan, e := store.ChooseExecution(ctx, request.RequestID, *request, mode, func() (netops.ExecutionPlan, *protocol.Error) {
 		plan := netops.ExecutionPlan{Reused: map[string]*network.ExecutionSnapshot{}, ReuseIDs: map[string]string{}}
@@ -96,7 +104,7 @@ func (a *App) prepareLifecycle(ctx context.Context, manager *lifecycle.Manager, 
 			plan.Commands = fresh
 		}
 		return plan, nil
-	})
+	}, caller)
 	if e != nil {
 		return e
 	}

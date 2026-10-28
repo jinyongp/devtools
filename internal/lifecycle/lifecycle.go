@@ -43,15 +43,16 @@ type Manager struct {
 }
 
 type Request struct {
-	Bundle    *string
-	ProxyMode bool
-	Action    string
-	Project   project.Context
-	Commands  []string
-	Env       *string
-	Capture   *bool
-	Timeout   time.Duration
-	RequestID string
+	RecoverOnly bool `json:"-"`
+	Bundle      *string
+	ProxyMode   bool
+	Action      string
+	Project     project.Context
+	Commands    []string
+	Env         *string
+	Capture     *bool
+	Timeout     time.Duration
+	RequestID   string
 }
 
 type Condition struct {
@@ -161,13 +162,31 @@ func validateRequest(request Request) *protocol.Error {
 			return fail("invalid_argument", "Project lifecycle command selection is invalid.", 2, map[string]any{"command": name})
 		}
 		seen[name] = true
-		if request.Action == ActionUp || request.Action == ActionRestart {
+	}
+	return nil
+}
+
+func validateDefinitions(request Request) *protocol.Error {
+	if request.Action == ActionUp || request.Action == ActionRestart {
+		for _, name := range request.Commands {
 			if _, ok := request.Project.Commands[name]; !ok {
 				return fail("command_not_found", "The selected project command is not defined.", 3, map[string]any{"command": name})
 			}
 		}
 	}
 	return nil
+}
+
+// Frozen admitted outcomes cannot become a new child merely by retrying their
+// parent. Unknown and canceled operations retain their existing recovery path.
+func terminalChild(record services.Record, err *protocol.Error) bool {
+	if record.InputSnapshotID == "" || record.State == "unknown" || record.State == "interrupted" || record.Reason == "launch_outcome_unknown" {
+		return false
+	}
+	if err != nil {
+		return !pending(err) && err.Code != "canceled"
+	}
+	return record.EndedAt != nil || record.State == "failed" || record.State == "stopped"
 }
 
 func condition(err *protocol.Error) *Condition {
@@ -405,15 +424,11 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 			}
 			child.Result.Condition = condition(err)
 			if err.Code != "canceled" && !pending(err) {
-				if result.Item.InputSnapshotID != "" {
+				if terminalChild(result.Item, err) {
 					child.Done = true
 				} else {
-					if result.Item.InputSnapshotID != "" {
-						child.Done = true
-					} else {
-						child.RequestID = tasks.ID()
-						child.ExecutionID = ""
-					}
+					child.RequestID = tasks.ID()
+					child.ExecutionID = ""
 				}
 			}
 			if writeErr := writeReceipt(path, *value); writeErr != nil {
@@ -427,7 +442,7 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 		if result.Item.EndedAt != nil || result.Item.State == "failed" || result.Item.State == "interrupted" {
 			child.Result.Status = "failed"
 			child.Result.Condition = &Condition{Code: "process_failed", Message: "Managed process did not remain running."}
-			if result.Item.InputSnapshotID != "" {
+			if terminalChild(result.Item, nil) {
 				child.Done = true
 			} else {
 				child.RequestID = tasks.ID()
@@ -454,7 +469,7 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 				if pending(waitErr) {
 					child.Result.Status = "pending"
 				} else if waitErr.Code != "canceled" {
-					if result.Item.InputSnapshotID != "" {
+					if terminalChild(result.Item, waitErr) {
 						child.Done = true
 					} else {
 						child.RequestID = tasks.ID()
@@ -576,7 +591,7 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 			}
 			child.Result.Condition = condition(err)
 			if err.Code != "canceled" && !pending(err) {
-				if result.Item.InputSnapshotID != "" {
+				if terminalChild(result.Item, err) {
 					child.Done = true
 				} else {
 					child.RequestID = tasks.ID()
@@ -593,7 +608,7 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 		if result.Item.EndedAt != nil || result.Item.State == "failed" || result.Item.State == "interrupted" {
 			child.Result.Status = "failed"
 			child.Result.Condition = &Condition{Code: "process_failed", Message: "Restarted process did not remain running."}
-			if result.Item.InputSnapshotID != "" {
+			if terminalChild(result.Item, nil) {
 				child.Done = true
 			} else {
 				child.RequestID = tasks.ID()
@@ -619,7 +634,7 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 				if pending(waitErr) {
 					child.Result.Status = "pending"
 				} else if waitErr.Code != "canceled" {
-					if result.Item.InputSnapshotID != "" {
+					if terminalChild(result.Item, waitErr) {
 						child.Done = true
 					} else {
 						child.RequestID = tasks.ID()
@@ -725,6 +740,12 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 	} else if !errors.Is(readErr, os.ErrNotExist) {
 		return Result{}, storageError(readErr)
 	} else {
+		if request.RecoverOnly {
+			return Result{}, services.RequestRecoveryError("project", request.RequestID)
+		}
+		if err := validateDefinitions(request); err != nil {
+			return Result{}, err
+		}
 		var initErr *protocol.Error
 		switch request.Action {
 		case ActionUp:
@@ -750,6 +771,9 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 	}
 	needsNetwork := request.Action == ActionUp && request.ProxyMode || request.Action == ActionRestart && value.hasProxyExecutions()
 	if needsNetwork && !value.NetworkPrepared {
+		if request.RecoverOnly {
+			return value.result(replayed), services.RequestRecoveryError("project", request.RequestID)
+		}
 		if m.PrepareNetwork == nil {
 			return value.result(replayed), fail("internal_error", "Network preparation is unavailable.", 1, nil)
 		}

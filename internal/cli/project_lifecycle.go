@@ -199,19 +199,18 @@ func resolveLifecycleProject(directory string) (project.Context, *protocol.Error
 }
 
 func (a *App) projectUp(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
-	p, err := resolveLifecycleProject(request.Options["dir"])
-	if err != nil {
-		return nil, err
+	return a.projectMutation(ctx, streams, request, lifecycle.ActionUp)
+}
+
+func (a *App) projectMutation(ctx context.Context, streams IO, request Request, action string) (any, *protocol.Error) {
+	input := lifecycle.Request{Action: action, Commands: append([]string{}, request.Args...), RequestID: request.Options["request-id"]}
+	if action != lifecycle.ActionDown {
+		timeout, parseErr := time.ParseDuration(request.Options["timeout"])
+		if parseErr != nil || timeout <= 0 || timeout > 10*time.Minute {
+			return nil, argumentError("Expected a positive duration up to 10m.", "timeout")
+		}
+		input.Timeout = timeout
 	}
-	timeout, parseErr := time.ParseDuration(request.Options["timeout"])
-	if parseErr != nil || timeout <= 0 || timeout > 10*time.Minute {
-		return nil, argumentError("Expected a positive duration up to 10m.", "timeout")
-	}
-	manager, err := a.projectLifecycleManager()
-	if err != nil {
-		return nil, err
-	}
-	input := lifecycle.Request{Action: lifecycle.ActionUp, Project: p, Commands: append([]string{}, request.Args...), Timeout: timeout, RequestID: request.Options["request-id"]}
 	if bundle, ok := request.Options["bundle"]; ok {
 		input.Bundle = &bundle
 	}
@@ -222,56 +221,48 @@ func (a *App) projectUp(ctx context.Context, streams IO, request Request) (any, 
 		value := capture == "true"
 		input.Capture = &value
 	}
-	mode, modeErr := preparationMode(request.Options)
-	if modeErr != nil {
-		return nil, modeErr
+	mode := network.PrepareAuto
+	if action == lifecycle.ActionUp {
+		var e *protocol.Error
+		mode, e = preparationMode(request.Options)
+		if e != nil {
+			return nil, e
+		}
 	}
-	if err := a.prepareLifecycle(ctx, &manager, &input, mode, streams); err != nil {
+	manager, err := a.projectLifecycleManager()
+	if err != nil {
 		return nil, err
+	}
+	a.networkLifecycle(&manager, streams)
+	if out, recovered, e := manager.RecoverRequest(ctx, input, request.Options["dir"], mode); recovered || e != nil {
+		return out, e
+	}
+	p, err := resolveLifecycleProject(request.Options["dir"])
+	if err != nil {
+		recorded, readErr := manager.HasRequest(input.RequestID)
+		if readErr != nil {
+			return nil, readErr
+		}
+		if recorded {
+			return nil, services.RequestRecoveryError("project", input.RequestID)
+		}
+		return nil, err
+	}
+	input.Project = p
+	if action != lifecycle.ActionDown {
+		if err := a.prepareLifecycle(ctx, &manager, &input, mode, streams, request.Options["dir"]); err != nil {
+			return nil, err
+		}
 	}
 	return manager.Apply(ctx, input)
 }
 
 func (a *App) projectRestart(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
-	p, err := resolveLifecycleProject(request.Options["dir"])
-	if err != nil {
-		return nil, err
-	}
-	timeout, parseErr := time.ParseDuration(request.Options["timeout"])
-	if parseErr != nil || timeout <= 0 || timeout > 10*time.Minute {
-		return nil, argumentError("Expected a positive duration up to 10m.", "timeout")
-	}
-	manager, err := a.projectLifecycleManager()
-	if err != nil {
-		return nil, err
-	}
-	input := lifecycle.Request{Action: lifecycle.ActionRestart, Project: p, Commands: append([]string{}, request.Args...), Timeout: timeout, RequestID: request.Options["request-id"]}
-	if bundle, ok := request.Options["bundle"]; ok {
-		input.Bundle = &bundle
-	}
-	if env, ok := request.Options["env"]; ok {
-		input.Env = &env
-	}
-	if capture, ok := request.Options["capture-logs"]; ok {
-		value := capture == "true"
-		input.Capture = &value
-	}
-	if err := a.prepareLifecycle(ctx, &manager, &input, network.PrepareAuto, streams); err != nil {
-		return nil, err
-	}
-	return manager.Apply(ctx, input)
+	return a.projectMutation(ctx, streams, request, lifecycle.ActionRestart)
 }
 
-func (a *App) projectDown(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
-	p, err := resolveLifecycleProject(request.Options["dir"])
-	if err != nil {
-		return nil, err
-	}
-	manager, err := a.projectLifecycleManager()
-	if err != nil {
-		return nil, err
-	}
-	return manager.Apply(ctx, lifecycle.Request{Action: lifecycle.ActionDown, Project: p, Commands: append([]string{}, request.Args...), RequestID: request.Options["request-id"]})
+func (a *App) projectDown(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
+	return a.projectMutation(ctx, streams, request, lifecycle.ActionDown)
 }
 
 func (a *App) projectStatus(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {

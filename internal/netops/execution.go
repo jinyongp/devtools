@@ -2,6 +2,8 @@ package netops
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -28,6 +30,51 @@ type executionInput struct {
 	Action string
 	Mode   network.PreparationMode
 	Input  any
+	Caller string `json:"-"`
+}
+
+// ExecutionRecovery contains only immutable selection metadata. Reading it does
+// not create a journal, acquire preparation resources or invoke a chooser.
+type ExecutionRecovery struct {
+	Plan        ExecutionPlan
+	Caller      string
+	fingerprint string
+}
+
+func (r ExecutionRecovery) Validate(input any, mode network.PreparationMode, caller string) *protocol.Error {
+	body, e := json.Marshal(executionInput{Action: "execution-request-v1", Mode: mode, Input: input})
+	digest := sha256.Sum256(body)
+	if e != nil || r.fingerprint != hex.EncodeToString(digest[:]) || r.Plan.Mode != mode || r.Caller != "" && r.Caller != caller {
+		return Failure("request_conflict", "Request UUID belongs to different execution input or location.")
+	}
+	return nil
+}
+
+func (s Store) ReadExecution(id string) (ExecutionRecovery, bool, *protocol.Error) {
+	var out ExecutionRecovery
+	_, intent, e := s.ExecutionKind(id)
+	if e != nil || !intent {
+		return out, false, e
+	}
+	var j Journal
+	if err := tasks.ReadPrivate(filepath.Join(s.Data, "network-operations", strings.ToLower(id)+".json"), &j); err != nil {
+		return out, true, Failure("invalid_storage", "Cannot read execution recovery metadata.")
+	}
+	found, e := j.Get("execution-plan", &out.Plan)
+	if e != nil {
+		return out, true, e
+	}
+	if !j.Done || !found || out.Plan.Version != 1 || !out.Plan.Mode.Valid() || !uuid.MatchString(out.Plan.NetworkID) {
+		return out, true, Failure("invalid_storage", "Execution selection has not completed.")
+	}
+	if _, e := j.Get("execution-caller-v1", &out.Caller); e != nil {
+		return out, true, e
+	}
+	if out.Caller != "" && !filepath.IsAbs(out.Caller) {
+		return out, true, Failure("invalid_storage", "Invalid execution recovery location.")
+	}
+	out.fingerprint = j.Fingerprint
+	return out, true, nil
 }
 
 // ExecutionKind distinguishes new intent journals from legacy prepare-execution
@@ -74,11 +121,18 @@ func (s Store) PlanExecution(ctx context.Context, id string, input any, mode net
 }
 
 // ChooseExecution can retain the exact snapshot of a reused active execution.
-func (s Store) ChooseExecution(ctx context.Context, id string, input any, mode network.PreparationMode, choose func() (ExecutionPlan, *protocol.Error)) (ExecutionPlan, *protocol.Error) {
+func (s Store) ChooseExecution(ctx context.Context, id string, input any, mode network.PreparationMode, choose func() (ExecutionPlan, *protocol.Error), caller ...string) (ExecutionPlan, *protocol.Error) {
 	if !mode.Valid() {
 		return ExecutionPlan{}, Failure("invalid_argument", "Invalid preparation mode.")
 	}
-	result, e := s.Apply(ctx, id, executionInput{"execution-request-v1", mode, input}, []string{"execution-request/" + strings.ToLower(id)}, func(j *Journal) (any, *protocol.Error) {
+	request := executionInput{Action: "execution-request-v1", Mode: mode, Input: input}
+	if len(caller) > 0 {
+		request.Caller = caller[0]
+	}
+	if request.Caller != "" && !filepath.IsAbs(request.Caller) {
+		return ExecutionPlan{}, Failure("invalid_argument", "Expected a canonical execution directory.")
+	}
+	result, e := s.Apply(ctx, id, request, []string{"execution-request/" + strings.ToLower(id)}, func(j *Journal) (any, *protocol.Error) {
 		var plan ExecutionPlan
 		found, e := j.Get("execution-plan", &plan)
 		if e != nil {

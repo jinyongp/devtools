@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jinyongp/devtools/internal/lifecycle"
+	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/project"
@@ -147,7 +148,7 @@ func (a *App) needsProxyPreparation(p project.Context, names []string, mode netw
 
 // prepareManagedNetwork keeps the legacy path for existing receipts. New intent
 // and child journal locks are released before the caller enters services.Apply.
-func (a *App) prepareManagedNetwork(ctx context.Context, p project.Context, q *services.Request, original *services.Record, mode network.PreparationMode, streams IO) *protocol.Error {
+func (a *App) prepareManagedNetwork(ctx context.Context, p project.Context, q *services.Request, original *services.Record, mode network.PreparationMode, streams IO, callerDirectory ...string) *protocol.Error {
 	s, e := a.serviceStore()
 	if e != nil {
 		return e
@@ -195,6 +196,14 @@ func (a *App) prepareManagedNetwork(ctx context.Context, p project.Context, q *s
 		Profile, Root string
 		Request       services.Request
 	}{p.Profile, p.Root, *q}
+	caller := p.Root
+	if len(callerDirectory) > 0 {
+		var err error
+		caller, err = location.Canonical(callerDirectory[0])
+		if err != nil {
+			return services.RequestRecoveryError("process", q.RequestID)
+		}
+	}
 	plan, e := store.ChooseExecution(ctx, q.RequestID, input, mode, func() (netops.ExecutionPlan, *protocol.Error) {
 		if original != nil {
 			return netops.ExecutionPlan{Commands: []string{name}}, nil
@@ -232,7 +241,7 @@ func (a *App) prepareManagedNetwork(ctx context.Context, p project.Context, q *s
 			return netops.ExecutionPlan{Commands: []string{name}}, nil
 		}
 		return netops.ExecutionPlan{}, nil
-	})
+	}, caller)
 	if e != nil {
 		return e
 	}

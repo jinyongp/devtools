@@ -128,6 +128,7 @@ const (
 )
 
 type Request struct {
+	ReplayOnly       bool                                                        `json:"-"`
 	lockIdentity     string                                                      `json:"-"`
 	AutoGoal         *vault.InputIdentity                                        `json:"auto_goal,omitempty"`
 	Bundle           *string                                                     `json:"bundle,omitempty"`
@@ -735,6 +736,9 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 		}
 	} else if !errors.Is(e, os.ErrNotExist) {
 		return out, storageErrorAt("read_operation_receipt", e)
+	}
+	if q.ReplayOnly {
+		return out, failure("process_pending")
 	}
 	identity, identityErr := s.operationIdentity(q)
 	if identityErr != nil {

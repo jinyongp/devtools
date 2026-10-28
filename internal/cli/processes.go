@@ -121,13 +121,8 @@ func (a *App) registerProcesses() {
 			q := services.Request{Action: action, RequestID: r.Options["request-id"]}
 			var startProject project.Context
 			if action == "start" {
-				p, resolveErr := project.Resolve(r.Options["dir"], "")
-				if resolveErr != nil {
-					return nil, resolveErr
-				}
-				startProject = p
 				q.Command = r.Args[0]
-				q.Directory = p.Root
+				q.Directory = r.Options["dir"]
 			} else {
 				q.ID = r.Args[0]
 			}
@@ -141,13 +136,32 @@ func (a *App) registerProcesses() {
 				v := capture == "true"
 				q.Capture = &v
 			}
+			mode := network.PrepareAuto
 			if action == "start" {
-				command, env := q.Command, q.Env
-				mode, e := preparationMode(r.Options)
+				var e *protocol.Error
+				mode, e = preparationMode(r.Options)
 				if e != nil {
 					return nil, e
 				}
-				if e := a.prepareManagedNetwork(ctx, startProject, &q, nil, mode, streams); e != nil {
+			}
+			if out, recovered, e := s.RecoverCompleted(ctx, q, q.Directory, mode); recovered || e != nil {
+				return out, e
+			}
+			if action == "start" {
+				p, resolveErr := project.Resolve(r.Options["dir"], "")
+				if resolveErr != nil {
+					recorded, readErr := s.HasRequest(q.RequestID)
+					if readErr != nil {
+						return nil, readErr
+					}
+					if recorded {
+						return nil, services.RequestRecoveryError("process", q.RequestID)
+					}
+					return nil, resolveErr
+				}
+				startProject, q.Directory = p, p.Root
+				command, env := q.Command, q.Env
+				if e := a.prepareManagedNetwork(ctx, startProject, &q, nil, mode, streams, r.Options["dir"]); e != nil {
 					return nil, e
 				}
 				reuseCheck := q.BeforeStart

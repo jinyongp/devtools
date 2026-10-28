@@ -149,6 +149,16 @@ func (s Store) Apply(ctx context.Context, id string, input any, resources []stri
 		if j.Fingerprint != hex.EncodeToString(digest[:]) {
 			return nil, Failure("request_conflict", "Request UUID belongs to different input.")
 		}
+		if execution, ok := input.(executionInput); ok && execution.Caller != "" {
+			var caller string
+			found, err := j.Get("execution-caller-v1", &caller)
+			if err != nil {
+				return nil, err
+			}
+			if found && caller != execution.Caller {
+				return nil, Failure("request_conflict", "Request UUID belongs to a different execution location.")
+			}
+		}
 		if j.Done {
 			var result map[string]any
 			if json.Unmarshal(j.Result, &result) != nil {
@@ -162,10 +172,14 @@ func (s Store) Apply(ctx context.Context, id string, input any, resources []stri
 	} else {
 		j.Fingerprint = hex.EncodeToString(digest[:])
 		j.Phase = "preparing"
-		if _, execution := input.(executionInput); execution {
+		if execution, ok := input.(executionInput); ok {
 			// Publish the intent marker with the first journal, including when
 			// selection fails or the initiating CLI exits before saving a plan.
 			j.Private = map[string]json.RawMessage{"execution-intent-version": json.RawMessage("1")}
+			if execution.Caller != "" {
+				encoded, _ := json.Marshal(execution.Caller)
+				j.Private["execution-caller-v1"] = encoded
+			}
 		}
 		if e := j.Save(); e != nil {
 			return nil, e

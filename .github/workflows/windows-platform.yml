@@ -45,6 +45,8 @@ on:
       - internal/**
       - cmd/devtools/**
       - scripts/**
+      - verify/**
+      - playwright.config.mjs
       - devtools.toml
       - pnpm-lock.yaml
       - package.json

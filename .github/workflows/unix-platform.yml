@@ -39,6 +39,7 @@ on:
       - go.mod
       - go.sum
       - package.json
+      - playwright.config.mjs
       - pnpm-lock.yaml
 
 permissions:

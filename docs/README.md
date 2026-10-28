@@ -69,6 +69,8 @@ Some linked topic guides are currently in Korean.
 - [Diagnostics](doctor.md): `doctor`, `diagnostics`, required tools, and recovery.
 - [Ports](ports.md): assignments, bindings, project URLs, and worktree names.
 - [Processes](processes.md): start, logs, restart, stop, and partial batch failures.
+- [Process operation locks](process-operation-locks.md): request/singleton ownership, maintenance barriers and crash recovery.
+- [Operation reliability review](operation-reliability-review.md): protocol 18 scope, review coverage and final verification requirements.
 - [Readiness](process-readiness.md): wait until a server can accept requests.
 - [Local networking and sharing](local-network.md): domains, HTTPS, listeners, external sharing, and cleanup.
 - [Development server compatibility](proxy-compatibility.md): Host policy, framework allowlists, real RPC/HMR and recovery.

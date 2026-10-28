@@ -213,6 +213,8 @@ text 렌더 실패 시 기존 오류는 전체 escaped public 진단과 원 종�
 반환합니다. 저장된 완료 실패도 같은 UUID에서 같은 실행 결과로 재생합니다.
 `facts.state`, `outage`, `previous_id`, `changed`, `replayed`로 시작 실패와 이미
 발생한 종료 효과를 확인합니다. 결과 불명은 `launch_outcome_unknown`을 유지합니다.
+시작 전 중단된 실행은 `process_not_running`을 반환하고, 불명 효과는 project 집계에서도
+`unknown`을 유지합니다.
 `project up/restart`의 완료 실패는 `inspect_first`와 상태·로그 조회를 안내하고,
 미완료 항목이 남으면 같은 UUID로 해당 항목만 이어갑니다. Task 전방 move와 anchor는
 add 이전에도 기본 순서 membership을 사용하며 순서 중복을 저장하지 않습니다.

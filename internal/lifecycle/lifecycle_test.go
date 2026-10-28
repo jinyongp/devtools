@@ -249,6 +249,17 @@ func TestFrozenFailureReplayAndMixedResumeGuidance(t *testing.T) {
 	}
 }
 
+func TestBatchFailurePreservesUnknownEffects(t *testing.T) {
+	result := Result{Action: ActionRestart, Directory: t.TempDir(), Items: []Item{
+		{Command: "known", Changed: true, Status: "running"},
+		{Command: "uncertain", Changed: true, Status: "pending", Condition: &Condition{Code: "launch_outcome_unknown"}},
+	}}
+	e := batchFailure(result, true)
+	if e == nil || e.Details["effects"] != "unknown" || e.Details["retry"] != "same_request" {
+		t.Fatal("batch guessed unknown effects", e)
+	}
+}
+
 func TestUpPersistsPartialProcessResultAcrossPendingRetry(t *testing.T) {
 	p := testProject(t, "web")
 	processes := &fakeProcesses{}

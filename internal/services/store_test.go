@@ -96,6 +96,17 @@ func TestFilteredListSkipsUnrelatedSupervisorRPC(t *testing.T) {
 		t.Fatal("filtered list contacted unrelated supervisor")
 	default:
 	}
+	sameProfileHit := make(chan struct{}, 1)
+	_ = addRunning("wanted", sameProfileHit)
+	items, err = s.singletonRecords(context.Background(), "wanted", wanted.Directory, wanted.Command)
+	if err != nil || len(items) != 1 || items[0].ID != wanted.ID {
+		t.Fatal("singleton lookup lost its execution", err)
+	}
+	select {
+	case <-sameProfileHit:
+		t.Fatal("singleton lookup contacted another instance")
+	default:
+	}
 }
 
 func TestIncompleteReceiptRetryPreservesChangedAndReportsReplay(t *testing.T) {
@@ -210,7 +221,7 @@ func TestTerminalLaunchFailureReceiptReplay(t *testing.T) {
 func TestLaunchResultDistinguishesSpawnFromUnknown(t *testing.T) {
 	now := time.Now().UTC()
 	uncertain := Record{ID: tasks.ID(), State: "failed", Reason: "launch_outcome_unknown", EndedAt: &now}
-	if e := launchResultFailure("start", Result{Item: uncertain}); e == nil || e.Code != "launch_outcome_unknown" {
+	if e := launchResultFailure("start", Result{Item: uncertain}); e == nil || e.Code != "launch_outcome_unknown" || e.Details["effects"] != "unknown" {
 		t.Fatal("failed envelope guessed an unknown launch", e)
 	}
 	for _, tc := range []struct {
@@ -220,6 +231,7 @@ func TestLaunchResultDistinguishesSpawnFromUnknown(t *testing.T) {
 	}{
 		{"exited", true, ""}, {"failed", true, ""}, {"failed", false, "execution_failed"},
 		{"interrupted", false, "launch_outcome_unknown"}, {"unknown", false, "launch_outcome_unknown"}, {"starting", false, ""},
+		{"stopped", false, "process_not_running"}, {"stopped", true, ""},
 	} {
 		r := Record{ID: tasks.ID(), State: tc.state, EndedAt: &now}
 		if tc.started {
@@ -232,6 +244,34 @@ func TestLaunchResultDistinguishesSpawnFromUnknown(t *testing.T) {
 		if e := launchResultFailure("stop", Result{Item: r}); e != nil {
 			t.Fatal("stop was reclassified", e)
 		}
+	}
+}
+
+func TestStoppedAndUnknownLaunchReceiptCompletion(t *testing.T) {
+	for _, state := range []string{"stopped", "unknown"} {
+		t.Run(state, func(t *testing.T) {
+			s := Store{Data: privateTempDir(t)}
+			now := time.Now().UTC()
+			r := Record{ID: tasks.ID(), Profile: "app", Directory: privateTempDir(t), Command: "web", State: state, CreatedAt: now, EndedAt: &now}
+			if e := writePrivate(s.path(r.ID, "record.json"), r); e != nil {
+				t.Fatal(e)
+			}
+			q := Request{Action: "start", RequestID: r.ID, Directory: r.Directory, Command: r.Command}
+			want := "process_not_running"
+			if state == "unknown" {
+				want = "launch_outcome_unknown"
+			}
+			for i := 0; i < 2; i++ {
+				out, e := s.Apply(context.Background(), q)
+				if e == nil || e.Code != want || out.Item.ID != r.ID || out.Item.StartedAt != nil {
+					t.Fatal("unspawned receipt became success", out, e)
+				}
+				var saved receipt
+				if e := tasks.ReadPrivate(filepath.Join(s.root(), "receipts", r.ID+".json"), &saved); e != nil || saved.Done != (state == "stopped") {
+					t.Fatal("incorrect terminal/pending receipt", e, saved.Done)
+				}
+			}
+		})
 	}
 }
 

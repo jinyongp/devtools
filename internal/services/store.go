@@ -180,6 +180,7 @@ func failure(code string) *protocol.Error {
 		"logs_expired":             "The retained output for this execution has expired.",
 		"request_conflict":         "This request ID belongs to different process input. Inspect the original request before choosing a new ID.",
 		"launch_outcome_unknown":   "The launch result is unknown. Inspect the execution before starting replacement work.",
+		"execution_failed":         "The process failed before starting. Inspect its status and captured logs before a new attempt.",
 	}[code]
 	if message == "" {
 		message = "Process operation could not satisfy the requested condition."
@@ -892,7 +893,7 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	if err == nil {
 		err = launchErr
 	}
-	terminal := launchErr != nil && launchErr.Code == "execution_failed" && err == launchErr
+	terminal := launchErr != nil && launchErr.Code != "launch_outcome_unknown" && err == launchErr
 	if err != nil && !terminal {
 		if writeErr := writePrivate(receiptPath, receipt{Fingerprint: fingerprint, Result: stored}); writeErr != nil {
 			return out, storageErrorAt("save_pending_receipt", writeErr)
@@ -917,6 +918,8 @@ func launchResultFailure(action string, result Result) *protocol.Error {
 		code = "launch_outcome_unknown"
 	} else if r.State == "failed" && r.EndedAt != nil {
 		code = "execution_failed"
+	} else if r.State == "stopped" && r.EndedAt != nil {
+		code = "process_not_running"
 	}
 	if code == "" {
 		return nil
@@ -927,7 +930,9 @@ func launchResultFailure(action string, result Result) *protocol.Error {
 		"retry": "inspect_first", "effects": "committed",
 		"facts": map[string]any{"state": r.State, "outage": r.Outage, "previous_id": r.Previous, "changed": result.Changed, "replayed": result.Replayed},
 	}
-	if r.Outage {
+	if code == "launch_outcome_unknown" {
+		e.Details["effects"] = "unknown"
+	} else if r.Outage {
 		e.Details["effects"] = "partial"
 	}
 	return e

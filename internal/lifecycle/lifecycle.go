@@ -666,6 +666,10 @@ func batchFailure(result Result, resumable bool) *protocol.Error {
 			}
 			effects := "none"
 			for _, sibling := range result.Items {
+				if sibling.Condition != nil && (sibling.Condition.Code == "launch_outcome_unknown" || sibling.Condition.Details["effects"] == "unknown") {
+					effects = "unknown"
+					break
+				}
 				if sibling.Changed {
 					effects = "partial"
 				}

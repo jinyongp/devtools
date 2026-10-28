@@ -84,7 +84,7 @@ func (m Manager) runNetwork(ctx context.Context, request Request, value *receipt
 			if e.Code != "canceled" && !pending(e) {
 				if terminalChild(result.Item, e) {
 					child.Done = true
-				} else {
+				} else if unadmittedChild(result.Item) {
 					child.RequestID = tasks.ID()
 					if request.Action == ActionUp {
 						child.ExecutionID = ""
@@ -107,7 +107,7 @@ func (m Manager) runNetwork(ctx context.Context, request Request, value *receipt
 				child.Result.Condition.Code = "process_failed"
 				if terminalChild(result.Item, nil) {
 					child.Done = true
-				} else {
+				} else if unadmittedChild(result.Item) {
 					child.RequestID = tasks.ID()
 				}
 			}
@@ -142,7 +142,7 @@ func (m Manager) runNetwork(ctx context.Context, request Request, value *receipt
 				if !pending(e) && e.Code != "canceled" {
 					if terminalChild(record, e) {
 						child.Done = true
-					} else {
+					} else if unadmittedChild(record) {
 						child.Launched = false
 						child.RequestID = tasks.ID()
 					}

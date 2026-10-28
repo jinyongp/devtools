@@ -29,6 +29,13 @@ A negative-control regression test demonstrates the original exposure with
 synthetic private markers and checks that safe failure facts and receipt bytes
 remain unchanged after the fix.
 
+The final transition review also reproduced child UUID rotation when an already
+observed launch returns an interrupted record without a launch error. Both
+ordinary and proxy batches now rotate only unadmitted children; uncertain
+admitted outcomes retain the original request and restart target. A matrix over
+up/restart and proxy/ordinary callers checks this distinction alongside explicit
+unknown-launch errors, terminal failures and retryable preparation failures.
+
 Final exact-SHA source/native/installed/browser results belong to T08/VFINAL.
 Local passes are not native CI evidence. Live providers, real-user hosts/trust
 changes, power-loss guarantees, payload expiry and receipt compression remain

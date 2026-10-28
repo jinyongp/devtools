@@ -189,6 +189,10 @@ func terminalChild(record services.Record, err *protocol.Error) bool {
 	return record.EndedAt != nil || record.State == "failed" || record.State == "stopped"
 }
 
+func unadmittedChild(record services.Record) bool {
+	return record.InputSnapshotID == "" && record.State != "unknown" && record.State != "interrupted" && record.Reason != "launch_outcome_unknown"
+}
+
 func condition(err *protocol.Error) *Condition {
 	if err == nil {
 		return nil
@@ -426,7 +430,7 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 			if err.Code != "canceled" && !pending(err) {
 				if terminalChild(result.Item, err) {
 					child.Done = true
-				} else {
+				} else if unadmittedChild(result.Item) {
 					child.RequestID = tasks.ID()
 					child.ExecutionID = ""
 				}
@@ -444,7 +448,7 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 			child.Result.Condition = &Condition{Code: "process_failed", Message: "Managed process did not remain running."}
 			if terminalChild(result.Item, nil) {
 				child.Done = true
-			} else {
+			} else if unadmittedChild(result.Item) {
 				child.RequestID = tasks.ID()
 				child.ExecutionID = ""
 			}
@@ -471,7 +475,7 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 				} else if waitErr.Code != "canceled" {
 					if terminalChild(result.Item, waitErr) {
 						child.Done = true
-					} else {
+					} else if unadmittedChild(result.Item) {
 						child.RequestID = tasks.ID()
 						child.ExecutionID = ""
 					}
@@ -593,7 +597,7 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 			if err.Code != "canceled" && !pending(err) {
 				if terminalChild(result.Item, err) {
 					child.Done = true
-				} else {
+				} else if unadmittedChild(result.Item) {
 					child.RequestID = tasks.ID()
 				}
 			}
@@ -610,7 +614,7 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 			child.Result.Condition = &Condition{Code: "process_failed", Message: "Restarted process did not remain running."}
 			if terminalChild(result.Item, nil) {
 				child.Done = true
-			} else {
+			} else if unadmittedChild(result.Item) {
 				child.RequestID = tasks.ID()
 			}
 			if writeErr := writeReceipt(path, *value); writeErr != nil {
@@ -636,7 +640,7 @@ func (m Manager) runRestart(ctx context.Context, request Request, value *receipt
 				} else if waitErr.Code != "canceled" {
 					if terminalChild(result.Item, waitErr) {
 						child.Done = true
-					} else {
+					} else if unadmittedChild(result.Item) {
 						child.RequestID = tasks.ID()
 					}
 				}

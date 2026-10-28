@@ -1,5 +1,6 @@
 """Installed request recovery journeys through real CLI, supervisors and HTTP."""
 import hashlib
+from http.client import HTTPConnection, HTTPException
 import json
 import os
 from pathlib import Path
@@ -19,7 +20,7 @@ def check_request_recovery(binary, root, environment, documents):
     state = root / 'state'
     env = {k: v for k, v in environment.items() if k not in ('DEVTOOLS_TASK_CONTEXT', 'DEVTOOLS_ISOLATED_ROOT')}
     env['DEVTOOLS_FORMAT'] = 'json'
-    owned, rows, checks, identities = set(), [], [], []
+    owned, rows, checks, identities, cleanup = set(), [], [], [], {}
     dashboard = False
 
     def uid(): return str(uuid.uuid4())
@@ -224,8 +225,34 @@ while True:time.sleep(.05)
         body['profile'] = 'other'
         assert http('/api/actions', body, credential)[0] != 200
         checks.append('live_dashboard_authenticated_replay_preserves_profile_boundary')
-        return {'result': 'pass', 'binary_sha256': hashlib.sha256(Path(binary).read_bytes()).hexdigest(), 'checks': checks, 'identities': identities, 'rows': rows}
+        return {'result': 'pass', 'binary_sha256': hashlib.sha256(Path(binary).read_bytes()).hexdigest(), 'checks': checks, 'identities': identities, 'rows': rows, 'cleanup': cleanup}
     finally:
         if dashboard: api('dashboard', 'stop', private=True)
         for execution in owned: api('process', 'stop', execution, '--request-id', uid())
         if (state / 'data').exists(): mutation('proxy', 'stop', '--all')
+        # Listener stop retains the controller. Retire only this fixture's
+        # authenticated daemon so native Windows can release its mapped image.
+        control_path = state / 'data' / 'proxy' / 'control.json'
+        if control_path.is_file():
+            control = json.loads(control_path.read_text(encoding='utf-8'))
+            address, token = urlsplit(control.get('address', '')), control.get('token', '')
+            assert address.scheme == 'http' and address.hostname == '127.0.0.1' and address.port and not address.username and len(token) == 64, 'Invalid owned controller metadata'
+            connection = HTTPConnection('127.0.0.1', address.port, timeout=5)
+            try:
+                connection.request('POST', '/stop', headers={'Authorization': 'Bearer ' + token})
+                response = connection.getresponse()
+                assert response.status == 200, 'Owned controller rejected shutdown'
+                response.read()
+            except (OSError, HTTPException):
+                pass  # An orderly shutdown may close its response.
+            finally:
+                connection.close()
+            deadline = time.monotonic() + 5
+            while True:
+                try:
+                    with socket.create_connection(('127.0.0.1', address.port), timeout=1): pass
+                except ConnectionRefusedError:
+                    break
+                assert time.monotonic() < deadline, 'Owned controller survived fixture cleanup'
+                time.sleep(.05)
+        cleanup['proxy_controller_stopped'] = True

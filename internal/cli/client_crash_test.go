@@ -154,9 +154,30 @@ func TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop(t *testing.T) {
 					return e == nil && (candidate.EndedAt != nil || candidate.State == "interrupted")
 				})
 			}
+			validOutcome := func(result services.Result, e *protocol.Error) bool {
+				if stage != "old-stop" {
+					return e == nil
+				}
+				if e == nil {
+					return false
+				}
+				// A live supervisor can confirm cancellation after the client
+				// closes its channel. A lost supervisor only proves uncertainty.
+				// Scheduling and native process lifetime determine which is seen.
+				switch result.Item.Reason {
+				case "launch_canceled":
+					return result.Item.State == "failed" && e.Code == "execution_failed" && e.ExitCode == 126
+				case "stop_requested":
+					return result.Item.State == "stopped" && e.Code == "process_not_running"
+				case "supervisor_lost":
+					return result.Item.State == "interrupted" && e.Code == "launch_outcome_unknown"
+				case "launch_outcome_unknown":
+					return e.Code == "launch_outcome_unknown"
+				}
+				return false
+			}
 			result, e := service.Apply(ctx, request)
-			unknown := stage == "old-stop"
-			if (!unknown && e != nil) || (unknown && (e == nil || e.Code != "launch_outcome_unknown")) || !result.Replayed || result.Item.ID != request.RequestID {
+			if !validOutcome(result, e) || !result.Replayed || result.Item.ID != request.RequestID {
 				diagnostic, _ := json.Marshal(e)
 				t.Fatalf("crash retry did not reuse original execution: error=%s state=%s phase=%s replayed=%v same_id=%v", diagnostic, result.Item.State, result.Item.LaunchPhase, result.Replayed, result.Item.ID == request.RequestID)
 			}
@@ -172,7 +193,7 @@ func TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop(t *testing.T) {
 			}
 			for range 3 {
 				replay, e := service.Apply(ctx, request)
-				if (!unknown && e != nil) || (unknown && (e == nil || e.Code != "launch_outcome_unknown")) || !replay.Replayed || replay.Item.ID != result.Item.ID {
+				if !validOutcome(replay, e) || !replay.Replayed || replay.Item.ID != result.Item.ID || stage == "old-stop" && (replay.Item.StartedAt != nil || !replay.Item.Outage) {
 					t.Fatal("same UUID duplicated crash retry", e)
 				}
 			}

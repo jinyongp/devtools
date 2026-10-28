@@ -22,6 +22,11 @@ preserves that uncertainty. Pass 3 found stopped-before-spawn success and unknow
 effects lost in a batch; both have regression coverage. Same-profile singleton
 discovery now has an explicit negative control against unrelated supervisor RPC.
 
+Native Windows found a crash-test assumption: a surviving supervisor confirms
+`launch_canceled`, whereas a lost supervisor reports an unknown launch. The test
+now checks each recorded cause against its required error rather than requiring
+one scheduling outcome. Every retry still preserves identity, no spawn and outage.
+
 Local Playwright initially discovered an old ignored worktree's tests. That run
 is not final evidence. `playwright.config.mjs` now fixes discovery to this
 checkout's scripts; `--list` reports four tests in one file and the main-only

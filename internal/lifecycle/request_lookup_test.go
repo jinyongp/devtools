@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -35,6 +36,34 @@ func TestInspectProjectRequestNeverResumesChildren(t *testing.T) {
 		if !bytes.Equal(before, after) || len(f.calls) != 0 || len(f.waitCalls) != 0 {
 			t.Fatal("query resumed or rewrote operation")
 		}
+	}
+}
+
+func TestInspectProjectRequestPublishesOnlySafeConditionDetails(t *testing.T) {
+	m := Manager{Data: t.TempDir()}
+	id := tasks.ID()
+	v := receipt{Fingerprint: strings.Repeat("a", 64), Action: ActionUp, Profile: "app", Directory: t.TempDir(), Items: []receiptItem{{Command: "web", RequestID: tasks.ID(), Done: true, Result: Item{Command: "web", Status: "failed", Condition: &Condition{Code: "execution_failed", Message: "Child did not start.", Details: map[string]any{
+		"fingerprint": "private-query-canary", "supervisor_token": "private-query-canary", "facts": map[string]any{"state": "failed", "private_marker": "private-query-canary"},
+	}}}}}}
+	if e := writeReceipt(m.receiptPath(id), v); e != nil {
+		t.Fatal(e)
+	}
+	before, _ := os.ReadFile(m.receiptPath(id))
+	out, e := m.InspectRequest(id)
+	if e != nil {
+		t.Fatal(e)
+	}
+	encoded, _ := json.Marshal(out)
+	if bytes.Contains(encoded, []byte("private-query-canary")) {
+		t.Fatal("raw private error details reached the public request query")
+	}
+	condition := out.Result.Items[0].Condition
+	if condition.Code != "execution_failed" || condition.Message != "Child did not start." || condition.Details["facts"].(map[string]any)["state"] != "failed" {
+		t.Fatal("lost public failure facts")
+	}
+	after, _ := os.ReadFile(m.receiptPath(id))
+	if !bytes.Equal(before, after) {
+		t.Fatal("sanitization rewrote saved history")
 	}
 }
 

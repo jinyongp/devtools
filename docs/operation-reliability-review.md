@@ -22,6 +22,13 @@ Dashboard credentials remain in memory, outside reports and diagnostic fixtures.
 Unix, Windows and WSL reuse this journey through the existing CLI reliability
 suite, with required evidence markers and protocol 19 schema validation.
 
+The follow-up review found that passive lifecycle queries could return raw
+stored child-condition details, bypassing the existing public diagnostic
+allowlist. Queries now project a returned copy through that same allowlist.
+A negative-control regression test demonstrates the original exposure with
+synthetic private markers and checks that safe failure facts and receipt bytes
+remain unchanged after the fix.
+
 Final exact-SHA source/native/installed/browser results belong to T08/VFINAL.
 Local passes are not native CI evidence. Live providers, real-user hosts/trust
 changes, power-loss guarantees, payload expiry and receipt compression remain

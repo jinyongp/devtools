@@ -37,6 +37,12 @@ func (m Manager) InspectRequest(id string) (RequestStatus, *protocol.Error) {
 		out.State = "completed"
 	}
 	result := value.result(false)
+	for i := range result.Items {
+		if condition := result.Items[i].Condition; condition != nil {
+			public := protocol.Public(&protocol.Error{Code: condition.Code, Message: condition.Message, Details: condition.Details}, "project "+string(value.Action))
+			result.Items[i].Condition = &Condition{Code: public.Code, Message: public.Message, Details: public.Details}
+		}
+	}
 	out.Result = &result
 	return out, nil
 }

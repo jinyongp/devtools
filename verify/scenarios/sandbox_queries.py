@@ -30,7 +30,7 @@ checks = []
 
 def invoke(root, profile, args, sandbox=None, state=None, error=None, input=None):
     command = [str(binary), *args, "--isolated-root", str(root)]
-    if args[0] not in ("vault", "version"):
+    if args[0] not in ("vault", "version", "process", "project"):
         command += ["--profile", profile]
     result = sandbox.run(command, check=False) if sandbox else subprocess.run(
         command, cwd=home, text=True, capture_output=True, input=input, timeout=20)
@@ -75,11 +75,22 @@ for protected in (False, True):
         api("vault", "init", "--backend", "passphrase", "--passphrase-stdin", input=passphrase + "\n")
         api("secret", "set", "TOKEN", "--stdin", input=secret)
     data = root / "data"
+    process_request, project_request = str(uuid.uuid4()), str(uuid.uuid4())
+    saved = {
+        "processes": (process_request, {"fingerprint": "a" * 64, "done": True, "result": {"item": {"id": str(uuid.uuid4()), "profile": profile, "directory": str(root), "state": "failed", "ended_at": "2026-01-01T00:00:00Z", "reason": "execution_failed"}, "changed": True, "replayed": False}}),
+        "project-operations": (project_request, {"fingerprint": "b" * 64, "action": "up", "profile": profile, "directory": str(root), "items": [{"command": "web", "request_id": str(uuid.uuid4()), "done": True, "result": {"command": "web", "status": "failed", "changed": True}}]}),
+    }
+    for group, (request, receipt) in saved.items():
+        path = data / group / "receipts" / (request + ".json")
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        path.chmod(0o600)
     sandbox = Sandbox(data, scratch)
     queries = [(name, "list") for name in ("variable", "var", "secret", "sec", "env")]
     queries += [(name, "get", key, *scope) for name in ("variable", "var")
                 for key in ("URL", "EMPTY") for scope in ((), ("--env", "local"))]
     queries += [(name, "list", "--env", "local") for name in ("variable", "var", "secret", "sec")]
+    queries += [("process", "request", "show", process_request), ("project", "request", "show", project_request)]
     expected = [api(*args) for args in queries]
     for locked in ((False, True) if protected else (False,)):
         if locked:

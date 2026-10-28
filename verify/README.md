@@ -17,6 +17,11 @@ SIGINT와 실제 Unix PTY에서 같은 redaction 한도 실패도 확인한다. 
 fixture를 Windows x64/ARM64 product lane과 실제 WSL2 adapter에서 실행한다.
 Task 전방 move·anchor의 순서, preview 무변경·UUID/과거 조회, direct 시작·재시작의
 실행 전 실패·outage·완료 재생, project 확정 실패의 상태 조회 안내도 검사한다.
+`request_recovery_fixture.py`는 TOML 오류·삭제 후 완료 결과 재생/요청 조회,
+설정 삭제 상태의 frozen readiness 완료, proxy 배치 확정 실패의 같은 child ID,
+capture별 실제 status/logs 안내 실행과 인증된 실제 Dashboard HTTP 재시도를 검사한다.
+이전 v0.36.3 바이너리에는 설정 오류 후 process 재생에서 실패하는 음성 대조를 실행한다.
+같은 fixture가 기존 Unix·Windows·WSL lane에서 실행되고 evidence marker를 확인한다.
 Unix·WSL2에서는 TERM 유예 중 독립 시작을 3회 측정하고 B 시작이 A 종료보다
 먼저인지 확인한다. Windows 잠금 동시성과 Job/CTRL_BREAK는 기존 native Go lane의
 인과 marker 검사와 프로세스 트리 검사로 검증하며 Unix TERM으로 대체하지 않는다.

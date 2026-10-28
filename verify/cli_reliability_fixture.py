@@ -12,6 +12,7 @@ import time
 import uuid
 
 from operation_reliability_fixture import check_operations
+from request_recovery_fixture import check_request_recovery
 
 
 def build_diagnostic_validator(output, environment=None, target=None):
@@ -385,6 +386,8 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
     steps.append('backup_create_inspect_preview_other_root_restore_uuid_retry')
     operations = check_operations(binary, root/'operations', source, env, documents)
     steps.append('operation_order_terminal_replay_and_lock_contracts')
+    recovery = check_request_recovery(binary, root/'request-recovery', env, documents)
+    steps.append('request_result_config_recovery_proxy_terminal_and_dashboard')
     checked = subprocess.run([str(validator)],input=json.dumps(documents),capture_output=True,text=True,encoding='utf-8',timeout=30)
     assert checked.returncode == 0, 'Installed diagnostic violates public Failure schema: '+checked.stderr
     schema_result = json.loads(checked.stdout)
@@ -394,7 +397,7 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
     assert negative.returncode != 0, 'Diagnostic schema validator accepted a wrongly typed field'
     steps.append('installed_failure_schema_and_independent_negative_control')
     return {'result':'pass','binary_identity':identity,'binary_sha256':hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
-            'diagnostic_schema':schema_result,'reference_schema':reference_schema,'operations':operations,
+            'diagnostic_schema':schema_result,'reference_schema':reference_schema,'operations':operations,'request_recovery':recovery,
             'platform':sys.platform,'checks':steps}
 
 

@@ -95,3 +95,36 @@ func TestLegacyRecoveryWithoutScopeUsesOrdinaryRetry(t *testing.T) {
 		t.Fatal("ordinary legacy replay changed", out, e)
 	}
 }
+
+func TestCompletedRestartAndStopRecoveryNeedsNoConfiguration(t *testing.T) {
+	for _, action := range []string{"restart", "stop"} {
+		t.Run(action, func(t *testing.T) {
+			s := Store{Data: privateTempDir(t)}
+			root := privateTempDir(t)
+			now := time.Now().UTC()
+			old := tasks.ID()
+			q := Request{Action: action, ID: old, RequestID: tasks.ID()}
+			r := Record{ID: tasks.ID(), Profile: "app", Directory: root, Command: "web", CreatedAt: now, EndedAt: &now, State: "failed", Reason: "execution_failed", Previous: old, Outage: true}
+			if action == "stop" {
+				r.ID = old
+				r.Previous = ""
+				r.Outage = false
+				r.StartedAt = &now
+				r.State = "stopped"
+				r.Reason = "stop_requested"
+			}
+			body, _ := json.Marshal(q)
+			if e := writePrivate(filepath.Join(s.root(), "receipts", q.RequestID+".json"), receipt{Fingerprint: fmt.Sprintf("%x", sha256.Sum256(body)), Done: true, Result: Result{Item: r, Changed: true}}); e != nil {
+				t.Fatal(e)
+			}
+			out, found, e := s.RecoverCompleted(context.Background(), q, "", network.PrepareAuto)
+			if !found || !out.Replayed || out.Item.ID != r.ID || action == "stop" && e != nil || action == "restart" && (e == nil || e.Code != "execution_failed") {
+				t.Fatal(out, found, e)
+			}
+			q.ID = tasks.ID()
+			if _, found, e := s.RecoverCompleted(context.Background(), q, "", network.PrepareAuto); !found || e == nil || e.Code != "request_conflict" {
+				t.Fatal(found, e)
+			}
+		})
+	}
+}

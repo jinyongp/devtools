@@ -83,6 +83,15 @@ their existing access requirements; metadata queries do not unlock or renew a va
 
 ## Restart and retry
 
+- On protocol 19, use `process request show UUID` or `project request show UUID`
+  after response loss, including when TOML is broken or deleted. These are passive
+  historical queries. Inspect the saved execution IDs for current state; a reused
+  start's UUID or project parent UUID is not necessarily an execution ID.
+- Completed retries verify the original scope and input before current setup.
+  If legacy metadata cannot prove identity, use request lookup instead of guessing.
+  Already launched batch children can resume frozen readiness without TOML; new
+  preparation retains current configuration and protection checks.
+
 - Restart/down freeze original execution targets. Retry identical input/UUID to continue unfinished children; successful siblings remain running.
 - On protocol 10 partial failures, inspect `error.details.facts.outcomes` and `causes`; older builds use `error.details.items`.
 - Batch `replayed: true` can include updated progress. Completed requests replay saved results; query current state separately.

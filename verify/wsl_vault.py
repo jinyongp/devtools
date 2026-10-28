@@ -70,7 +70,8 @@ def main():
         run('/usr/sbin/useradd', '--create-home', '--shell', '/bin/bash', 'dvtfixture')
         reliability=Path(__file__).with_name('cli_reliability_fixture.py').resolve()
         operations=Path(__file__).with_name('operation_reliability_fixture.py').resolve()
-        for source, destination in [(binary, '/usr/local/bin/devtools'), (validator,'/usr/local/bin/devtools-diagnostic-contract'), (scenario, '/home/dvtfixture/scenario.py'),(reliability,'/home/dvtfixture/cli_reliability_fixture.py'),(operations,'/home/dvtfixture/operation_reliability_fixture.py')]:
+        recovery=Path(__file__).with_name('request_recovery_fixture.py').resolve()
+        for source, destination in [(binary, '/usr/local/bin/devtools'), (validator,'/usr/local/bin/devtools-diagnostic-contract'), (scenario, '/home/dvtfixture/scenario.py'),(reliability,'/home/dvtfixture/cli_reliability_fixture.py'),(operations,'/home/dvtfixture/operation_reliability_fixture.py'),(recovery,'/home/dvtfixture/request_recovery_fixture.py')]:
             linux_source = run('/usr/bin/wslpath', '-u', str(source))
             run('/usr/bin/install', '-m', '755', linux_source, destination)
         for phase in ('prepare', 'after-manual-restart', 'after-unlocked-restart'):
@@ -100,6 +101,8 @@ def main():
             raise RuntimeError('Actual WSL reference schema or reason-specific PTY evidence missing')
         if reliability_result.get('operations',{}).get('result')!='pass' or len(reliability_result['operations'].get('lock_samples',[]))!=3:
             raise RuntimeError('Actual WSL ordering, terminal replay or TERM contention evidence missing')
+        if reliability_result.get('request_recovery',{}).get('result')!='pass' or 'live_dashboard_authenticated_replay_preserves_profile_boundary' not in reliability_result['request_recovery'].get('checks',[]):
+            raise RuntimeError('Actual WSL request recovery, proxy terminal or Dashboard evidence missing')
         report['cli_reliability']=reliability_result
         report['checks_passed'] = True
     finally:

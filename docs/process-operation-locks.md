@@ -4,6 +4,12 @@ Scope: the v0.36.2 follow-up workstream
 `d19b52f2-2393-42b3-b04b-22769305bb89`. Store.Apply implements the protocol
 below; Store.Lock retains exclusive maintenance serialization.
 
+The protocol 19 request-recovery follow-up is workstream
+`5236358a-3984-491b-b688-e506670ced9b`. Its CLI, Dashboard and automatic
+coordinator recover completed operations before current configuration or network
+preparation. Private request queries read atomic receipts without acquiring
+mutation locks, initializing storage or contacting supervisors.
+
 ## Ownership and order
 
 Use existing private-file RW locks, request receipts and inherited execution
@@ -31,6 +37,23 @@ process lock while one is held. Resolve existing request receipts before project
 configuration so replay still works after files change or disappear. For a
 pending start, use its persisted execution identity when one exists. Re-read
 mutable execution state after acquiring the singleton lock.
+
+Recovery verifies the existing parent preparation fingerprint and the process or
+project fingerprint. New intent journals store only the canonical caller in the
+extensible `execution-caller-v1` private key; profile/root and explicit options
+remain protected by existing receipts and fingerprints. Old projections and the
+intent version stay unchanged. Legacy records that cannot prove caller/snapshot
+identity use the valid-configuration path or passive request lookup. Readers do
+not rewrite them. Replay-only entry rechecks the receipt under the ordinary
+request lock and cannot admit a missing operation after a concurrent removal.
+
+Lifecycle validates request shape before locking and current command definitions
+only for new requests. Existing admitted children retain frozen launch/readiness
+state; a new launch still runs current preflight. Proxy and non-proxy terminal
+admitted failures keep their child UUID/result; pre-admission failures and unknown
+outcomes preserve their separate retry rules. Dashboard checks saved profile
+ownership before replay, and automatic delivery rechecks live state after replay
+of a historical success.
 
 The old `operations.lock` path stays in use. Old binaries take it exclusively,
 so mixed old/new processes serialize safely. New binaries share the barrier and

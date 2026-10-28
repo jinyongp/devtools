@@ -44,6 +44,29 @@ restart로 기존 실행이 이미 종료됐으면 outage를 보고한다. 같�
 실행 결과 불명은 `launch_outcome_unknown`과 `effects:unknown`을 유지한다.
 종료가 불확실하면 상태·실제 포트 점유·진단을 확인한다. 저장된 PID만으로 외부 프로세스를 종료하지 않는다.
 
+## 저장된 요청 결과 복구
+
+응답을 놓쳤다면 `process request show UUID` 또는 `project request show UUID`로
+원래 요청을 조회한다. 현재 `devtools.toml`이 잘못되거나 없어도 조회하며 실행·준비·
+vault 세션 갱신을 하지 않는다. `item.state`는 요청의 `pending`/`completed`이고,
+`item.result`는 저장된 원래 결과다. 실패 요청도 조회 자체는 성공할 수 있다.
+
+요청 UUID와 execution ID는 다를 수 있다. 기존 서버를 재사용한 start와 project의
+parent UUID는 곧바로 `process status`의 ID로 사용할 수 없다. 저장 결과 안의
+execution ID로 현재 상태를 따로 확인한다. 완료 결과의 `running`은 현재 생존 보장이 아니다.
+
+같은 UUID의 mutation 재시도는 입력 동일성 검사를 유지한다. 완료 결과를 검증할 수
+있으면 현재 명령 선언·네트워크 준비 전에 재생한다. 기존 기록에 원래 caller 위치나
+network metadata가 부족하면 추측해서 실행하지 않고 읽기 전용 요청 조회를 안내한다.
+이미 시작된 project child의 readiness는 frozen 실행으로 이어가며, 새 준비가 필요한
+child는 현재 설정과 보호 검사를 거친다. proxy 배치의 확정 실패도 같은 child ID로
+재생하며 미완료 sibling만 재개한다.
+
+직접 start/restart의 실패 안내는 새 execution의 status를 먼저 제시한다. logs는
+캡처가 켜진 실행에만 제시한다. restart의 old/new ID와 서비스 공백은 해당 작업의
+기록이며 이후 복구 여부는 현재 status로 확인한다. 완료된 실패는 파일을 고쳐도 같은
+UUID에서 재실행하지 않는다. 상태 검토 후 새 시도에 새 UUID를 사용한다.
+
 ## 대상과 요청 ID 선택
 
 `UUID`에는 `uuidgen` 등으로 생성한 새 요청 ID를 넣고, `EXECUTION_ID`에는

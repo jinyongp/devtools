@@ -696,7 +696,7 @@ func (s Store) Lock(ctx context.Context) (func(), error) {
 }
 func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	var out Result
-	if q.AutoGoal != nil && (q.Action != "restart" || s.PrepareInput == nil) {
+	if q.AutoGoal != nil && (q.Action != "restart" || s.PrepareInput == nil && !q.ReplayOnly) {
 		return out, failure("invalid_argument")
 	}
 	if !validID(q.RequestID) || q.Bundle != nil && (!project.ValidProfile(*q.Bundle) || (q.Action != "start" && q.Action != "restart")) {

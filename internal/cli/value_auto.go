@@ -36,31 +36,40 @@ func ServeValueRestart(ctx context.Context, data, body string) error {
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	finish := func(next, reason string) error { return store.CompleteValueApply(request, next, reason) }
-	original, failure := store.Status(ctx, request.ExecutionID)
-	if failure != nil {
-		return finish("", failure.Code)
-	}
-	app := New("dev", "unknown")
-	app.isolatedRoot = original.IsolatedRoot
-	app.dataDirectory = func() (string, *protocol.Error) { return filepath.Join(data, "profiles"), nil }
-	store.PrepareInput = app.prepareManagedInput
-	store.IsolatedRoot = original.IsolatedRoot
-	q := services.Request{Action: "restart", ID: original.ID, RequestID: request.RequestID, AutoGoal: request.Goal}
-	if original.ProxyMode {
-		p, failure := project.Resolve(original.Directory, "")
-		if failure != nil {
-			return finish("", failure.Code)
+	q := services.Request{Action: "restart", ID: request.ExecutionID, RequestID: request.RequestID, AutoGoal: request.Goal}
+	result, recovered, failure := store.RecoverCompleted(ctx, q, "", network.PrepareAuto)
+	if !recovered && failure == nil {
+		original, e := store.Status(ctx, request.ExecutionID)
+		if e != nil {
+			return finish("", e.Code)
 		}
-		// Existing network preparation remains noninteractive: no implicit privilege
-		// grant, credential prompt, key backend installation or route policy change.
-		failure = app.prepareManagedNetwork(ctx, p, &q, &original, network.PrepareAuto, IO{In: nil, Out: io.Discard, Err: io.Discard})
-		if failure != nil {
-			return finish("", failure.Code)
+		app := New("dev", "unknown")
+		app.isolatedRoot = original.IsolatedRoot
+		app.dataDirectory = func() (string, *protocol.Error) { return filepath.Join(data, "profiles"), nil }
+		store.PrepareInput = app.prepareManagedInput
+		store.IsolatedRoot = original.IsolatedRoot
+		if original.ProxyMode {
+			p, e := project.Resolve(original.Directory, "")
+			if e != nil {
+				return finish("", e.Code)
+			}
+			// Preparation remains noninteractive and retains the original policy.
+			if e := app.prepareManagedNetwork(ctx, p, &q, &original, network.PrepareAuto, IO{In: nil, Out: io.Discard, Err: io.Discard}); e != nil {
+				return finish("", e.Code)
+			}
 		}
+		result, failure = store.Apply(ctx, q)
 	}
-	result, failure := store.Apply(ctx, q)
 	if failure != nil {
 		return finish(result.Item.ID, failure.Code)
+	}
+	if result.Replayed {
+		// Historical spawn success does not establish current value delivery.
+		current, e := store.Status(ctx, result.Item.ID)
+		if e != nil {
+			return finish(result.Item.ID, e.Code)
+		}
+		result.Item = current
 	}
 	// Apply confirms the mutation/record even when the child failed to start.
 	// Delivery requires an observed start, independently of the mutation result.

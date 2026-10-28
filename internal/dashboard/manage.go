@@ -17,6 +17,7 @@ import (
 	"github.com/jinyongp/devtools/internal/cleanup"
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -225,6 +226,23 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		manager := services.Store{Data: filepath.Dir(s.data), PrepareInput: s.prepareManagedInput}
 		if directories, e := paths.Current(); e == nil {
 			manager.IsolatedRoot = directories.IsolatedRoot
+		}
+		if req.Process.Action == "start" || req.Process.Action == "restart" || req.Process.Action == "stop" {
+			saved, e := manager.InspectRequest(req.Process.RequestID)
+			if e != nil && e.Code != "request_not_found" {
+				apiError(w, e)
+				return
+			}
+			// The saved operation's scope remains authoritative after config edits.
+			// Legacy receipts without scope use the existing guarded path below.
+			if saved.Result != nil && saved.Result.Item.Profile != "" && saved.Result.Item.Profile != req.Profile {
+				invalidAction(w)
+				return
+			}
+			if out, recovered, e := manager.RecoverCompleted(r.Context(), *req.Process, req.Process.Directory, network.PrepareAuto); recovered || e != nil {
+				result, err = out, e
+				break
+			}
 		}
 		if req.Process.Action == "start" {
 			p, e := project.Resolve(req.Process.Directory, "")

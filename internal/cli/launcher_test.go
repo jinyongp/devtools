@@ -501,11 +501,11 @@ func TestFrozenLauncherRealProcessRestartAndLock(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("post-stop spawn failure not observed")
 	}
-	if result.err != nil || result.result.Item.State != "failed" || !result.result.Item.Outage || result.result.Item.Reason != "input_changed" {
+	if result.err == nil || result.err.Code != "execution_failed" || result.result.Item.State != "failed" || !result.result.Item.Outage || result.result.Item.Reason != "input_changed" {
 		t.Fatalf("post-stop failure not separated: %v state=%s outage=%v reason=%s", result.err, result.result.Item.State, result.result.Item.Outage, result.result.Item.Reason)
 	}
 	failedReplay, replayErr := service.Apply(ctx, failedRequest)
-	if replayErr != nil || !failedReplay.Replayed || failedReplay.Item.ID != result.result.Item.ID {
+	if replayErr == nil || replayErr.Code != "execution_failed" || !failedReplay.Replayed || failedReplay.Item.ID != result.result.Item.ID {
 		t.Fatal("failed UUID was relaunched", replayErr)
 	}
 	if err = client.Lock(ctx); err != nil {

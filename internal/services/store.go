@@ -722,7 +722,7 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 		}
 		if old.Done {
 			old.Result.Replayed = true
-			return old.Result, nil
+			return old.Result, launchResultFailure(q.Action, old.Result)
 		}
 	} else if !errors.Is(e, os.ErrNotExist) {
 		return out, storageErrorAt("read_operation_receipt", e)
@@ -864,9 +864,18 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 		out.Item = old.Result.Item
 	}
 	out.Changed = out.Changed || old.Result.Changed
+	out.Replayed = receiptExists
 	stored := out
 	stored.Replayed = false
-	if err != nil {
+	// The immutable result already contains the terminal launch outcome. Derive
+	// its failure on both commit and replay, including receipts from old builds,
+	// without changing the receipt format or ever launching a second child.
+	launchErr := launchResultFailure(q.Action, out)
+	if err == nil {
+		err = launchErr
+	}
+	terminal := launchErr != nil && launchErr.Code == "execution_failed" && err == launchErr
+	if err != nil && !terminal {
 		if writeErr := writePrivate(receiptPath, receipt{Fingerprint: fingerprint, Result: stored}); writeErr != nil {
 			return out, storageErrorAt("save_pending_receipt", writeErr)
 		}
@@ -877,7 +886,33 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 		return out, storageErrorAt("commit_operation_receipt", writeErr)
 	}
 	out.Replayed = receiptExists
-	return out, nil
+	return out, err
+}
+
+func launchResultFailure(action string, result Result) *protocol.Error {
+	r := result.Item
+	if action == "stop" || r.ID == "" || r.StartedAt != nil {
+		return nil
+	}
+	code := ""
+	if r.State == "failed" && r.EndedAt != nil {
+		code = "execution_failed"
+	} else if r.State == "unknown" || r.State == "interrupted" {
+		code = "launch_outcome_unknown"
+	}
+	if code == "" {
+		return nil
+	}
+	e := failure(code)
+	e.Details = map[string]any{
+		"phase": "observe", "id": r.ID, "reason": r.Reason,
+		"retry": "inspect_first", "effects": "committed",
+		"facts": map[string]any{"state": r.State, "outage": r.Outage, "previous_id": r.Previous, "changed": result.Changed, "replayed": result.Replayed},
+	}
+	if r.Outage {
+		e.Details["effects"] = "partial"
+	}
+	return e
 }
 func (s Store) start(ctx context.Context, q Request, previous string) (result Result, condition *protocol.Error) {
 	var out Result

@@ -162,6 +162,75 @@ func TestIncompleteStartReceiptStaysPendingUntilExecutionStarts(t *testing.T) {
 	}
 }
 
+func TestTerminalLaunchFailureReceiptReplay(t *testing.T) {
+	for _, done := range []bool{false, true} {
+		for _, action := range []string{"start", "restart"} {
+			t.Run(fmt.Sprint(done, action), func(t *testing.T) {
+				s := Store{Data: privateTempDir(t)}
+				now := time.Now().UTC()
+				id, old := tasks.ID(), tasks.ID()
+				dir := privateTempDir(t)
+				r := Record{ID: id, Profile: "app", Directory: dir, Command: "web", CreatedAt: now, EndedAt: &now, State: "failed", Reason: "execution_failed"}
+				q := Request{Action: action, RequestID: id}
+				if action == "start" {
+					q.Directory, q.Command = dir, "web"
+				} else {
+					q.ID, r.Previous, r.Outage = old, old, true
+					if e := writePrivate(s.path(old, "record.json"), Record{ID: old, Profile: "app", Directory: dir, Command: "web", CreatedAt: now, EndedAt: &now, State: "stopped"}); e != nil {
+						t.Fatal(e)
+					}
+				}
+				if e := writePrivate(s.path(id, "record.json"), r); e != nil {
+					t.Fatal(e)
+				}
+				body, _ := json.Marshal(q)
+				path := filepath.Join(s.root(), "receipts", id+".json")
+				if e := writePrivate(path, receipt{Fingerprint: fmt.Sprintf("%x", sha256.Sum256(body)), Result: Result{Item: r, Changed: true}, Done: done}); e != nil {
+					t.Fatal(e)
+				}
+				for attempt := 0; attempt < 2; attempt++ {
+					out, e := s.Apply(context.Background(), q)
+					if e == nil || e.Code != "execution_failed" || e.ExitCode != 126 || !out.Replayed || !out.Changed || out.Item.ID != id || out.Item.Outage != r.Outage {
+						t.Fatal("terminal outcome lost", out, e)
+					}
+					public := protocol.Public(e, "process "+action)
+					if public.Details["facts"].(map[string]any)["outage"] != r.Outage {
+						t.Fatal("public outcome lost", public)
+					}
+					var saved receipt
+					if e := tasks.ReadPrivate(path, &saved); e != nil || !saved.Done {
+						t.Fatal("terminal receipt stayed pending", e)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestLaunchResultDistinguishesSpawnFromUnknown(t *testing.T) {
+	now := time.Now().UTC()
+	for _, tc := range []struct {
+		state   string
+		started bool
+		want    string
+	}{
+		{"exited", true, ""}, {"failed", true, ""}, {"failed", false, "execution_failed"},
+		{"interrupted", false, "launch_outcome_unknown"}, {"unknown", false, "launch_outcome_unknown"}, {"starting", false, ""},
+	} {
+		r := Record{ID: tasks.ID(), State: tc.state, EndedAt: &now}
+		if tc.started {
+			r.StartedAt = &now
+		}
+		e := launchResultFailure("start", Result{Item: r})
+		if tc.want == "" && e != nil || tc.want != "" && (e == nil || e.Code != tc.want) {
+			t.Fatal(tc, e)
+		}
+		if e := launchResultFailure("stop", Result{Item: r}); e != nil {
+			t.Fatal("stop was reclassified", e)
+		}
+	}
+}
+
 func TestStopPendingReturnsAcceptedMutation(t *testing.T) {
 	s := Store{Data: privateTempDir(t)}
 	id := tasks.ID()

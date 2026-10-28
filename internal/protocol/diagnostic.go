@@ -65,6 +65,17 @@ func Public(e *Error, operation string) *Error {
 		}
 		projectCorrectionFacts(facts, value)
 	}
+	// Process failures expose outcome metadata, never the complete private record.
+	if value, ok := old["facts"].(map[string]any); ok {
+		for _, key := range []string{"outage", "changed", "replayed"} {
+			if v, ok := value[key].(bool); ok {
+				facts[key] = v
+			}
+		}
+		if v, ok := value["previous_id"].(string); ok && diagnosticUUID.MatchString(v) {
+			facts["previous_id"] = v
+		}
+	}
 	projectCorrectionFacts(facts, old)
 	if values, ok := facts["outcomes"]; ok {
 		out := []any{}

@@ -155,7 +155,8 @@ func TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop(t *testing.T) {
 				})
 			}
 			result, e := service.Apply(ctx, request)
-			if e != nil || !result.Replayed || result.Item.ID != request.RequestID {
+			unknown := stage == "old-stop"
+			if (!unknown && e != nil) || (unknown && (e == nil || e.Code != "launch_outcome_unknown")) || !result.Replayed || result.Item.ID != request.RequestID {
 				diagnostic, _ := json.Marshal(e)
 				t.Fatalf("crash retry did not reuse original execution: error=%s state=%s phase=%s replayed=%v same_id=%v", diagnostic, result.Item.State, result.Item.LaunchPhase, result.Replayed, result.Item.ID == request.RequestID)
 			}
@@ -171,7 +172,7 @@ func TestRestartRealClientCrashBeforeAdmissionAndDuringOldStop(t *testing.T) {
 			}
 			for range 3 {
 				replay, e := service.Apply(ctx, request)
-				if e != nil || !replay.Replayed || replay.Item.ID != result.Item.ID {
+				if (!unknown && e != nil) || (unknown && (e == nil || e.Code != "launch_outcome_unknown")) || !replay.Replayed || replay.Item.ID != result.Item.ID {
 					t.Fatal("same UUID duplicated crash retry", e)
 				}
 			}

@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v19 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v20 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
@@ -206,6 +206,14 @@ text 렌더 실패 시 기존 오류는 전체 escaped public 진단과 원 종�
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v20 마이그레이션
+
+공개 task/workstream/validation 조회에 `--query-cache-dir PATH`가 추가됩니다.
+절대 private 경로를 지정하고 cursor를 잇는 모든 실행에서 같은 디렉터리를 사용합니다.
+Linux/macOS의 정상 초기화된 task 저장소는 데이터와 잠금이 읽기 전용이어도 조회할 수 있습니다.
+새 page/graph snapshot은 쓰기 가능한 캐시가 필요합니다. 초기화·복구 안내와 범위는
+[작업 가이드](tasks.md)를 따릅니다. envelope·저장소·cursor 포맷은 바꾸지 않습니다.
 
 ## protocol v19 마이그레이션
 

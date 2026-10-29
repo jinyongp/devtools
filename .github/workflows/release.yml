@@ -210,7 +210,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: false
       - name: Bootstrap project CLI
@@ -266,7 +266,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: false
       - name: Bootstrap project CLI
@@ -454,7 +454,7 @@ jobs:
         with:
           go-version: '1.27.1'
           cache: true
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: false
       - name: Bootstrap project CLI
@@ -540,7 +540,7 @@ jobs:
         run: sh scripts/publish-release-tag.sh
       - name: Publish release
         id: publication
-        uses: releaseway/actions@a188ef51e8e5f9947e770260888b7346d9b68ba8 # v0.7.3
+        uses: releaseway/actions@b6f17f2ffe2c8fd92bdf6be4729e1e56d151bef3 # v0.8.0
         with:
           tag: ${{ needs.validate-release.outputs.tag }}
           commit: ${{ inputs.commit }}

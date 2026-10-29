@@ -39,5 +39,10 @@ func TestTaskQueryPreparationError(t *testing.T) {
 		if e.Code != protocol.ContextError(cause).Code {
 			t.Fatal(e)
 		}
+		wrapped := storageerr.Wrap("write_file", "private_file", "", cause)
+		cacheError := (Store{}).queryCacheError(Query{Command: "tree"}, "write_query_cache", wrapped)
+		if cacheError.Code != protocol.ContextError(cause).Code || cacheError.ExitCode != protocol.ContextError(cause).ExitCode {
+			t.Fatal("cache publication hid cancellation", cacheError)
+		}
 	}
 }

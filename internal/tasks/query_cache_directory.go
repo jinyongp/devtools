@@ -163,6 +163,9 @@ func (s Store) writeGraphCache(ctx context.Context, name string, snapshot GraphS
 }
 
 func (s Store) queryCacheError(q Query, stage string, cause error) *protocol.Error {
+	if e := protocol.ContextError(cause); e != nil {
+		return e
+	}
 	e := storageErrorAt(stage, "query_cache", cause)
 	argv := append([]string{"devtools", "task"}, strings.Fields(q.Command)...)
 	if q.Target != "" {

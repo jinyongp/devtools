@@ -15,7 +15,7 @@ func TestQueryCacheSyntaxPrecedesProfileAndStorage(t *testing.T) {
 		a := New("test", "test")
 		a.dataDirectory = func() (string, *protocol.Error) { t.Fatal("invalid cache accessed data path"); return "", nil }
 		var out, err bytes.Buffer
-		code := a.Run(context.Background(), []string{"task", "next", "--profile", "invalid/profile", "--query-cache-dir", path}, IO{Out: &out, Err: &err})
+		code := a.Run(context.Background(), []string{"task", "next", "--profile", "app", "--query-cache-dir", path}, IO{Out: &out, Err: &err})
 		if code != 2 || out.Len() != 0 {
 			t.Fatal(code, out.String(), err.String())
 		}

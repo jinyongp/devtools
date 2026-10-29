@@ -62,6 +62,11 @@ func TestProfileQueryLockInitializationAndSafety(t *testing.T) {
 			if errors.As(err, &preparation) {
 				t.Fatal("unsafe lock attempted initialization")
 			}
+			turn, acquired, err := tryAcquireFileLock(context.Background(), path+".turnstile", lockExclusive)
+			if err != nil || !acquired {
+				t.Fatal("failed profile query retained turnstile", err)
+			}
+			unlockFile(turn)
 		})
 	}
 }

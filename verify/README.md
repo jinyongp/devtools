@@ -47,6 +47,15 @@ macOS는 sandbox-exec가 필요하다. 도구·정책 준비 실패는 skip하�
 기존 Unix validation의 macos-15/ubuntu-24.04 job이 source·환경·binary hash·결과를 보존한다.
 이 Seatbelt 증거는 실제 Codex macOS 세션의 성공 여부와 구분한다.
 
+task/workstream/validation의 22개 조회는 `task_sandbox_fixture.py`로 검사한다.
+data와 cache의 RO/RO·RO/RW·RW/RW 각각에 쓰기 open·생성·변경·rename·unlink 대조를 수행하고,
+page/graph cursor, 네 잠금의 경합·취소, 초기화/전역 복구 왕복과 cache-only continuation을 확인한다.
+기준 commit `f8c22ac3674a14c8d57ed919e866fc104d6d7b5f`의 실제 CLI를 별도 빌드해 v3 저장소를
+교차 변경·조회한다. CI는 full-history checkout과 해당 binary의 identity/hash를 보존한다.
+Linux Actions는 strace로 task data/lock에 대한 쓰기 시도 0도 검사한다. raw trace와 context
+credential은 artifact에 남기지 않는다. baseline binary는 `DEVTOOLS_TEST_TASK_BASELINE`으로
+전달할 수 있고, 로컬 installed 검증은 없으면 같은 commit을 일회용 경로에 빌드한다.
+
 ## Framework·Library·Provider 호환성
 
 protocol 12의 기본 준비는 `devtools run test:installed proxy_auto`로 검사한다.

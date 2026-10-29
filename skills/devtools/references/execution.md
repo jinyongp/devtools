@@ -22,8 +22,10 @@ take the ordinary maintenance locks. Missing locks or pending recovery can requi
 writes: inspect `facts.state` (`initialization_required` / `recovery_required`) and
 the `value_write` remedy, run the scoped query in an authorized writable context,
 then retry. Do not change permissions, remove locks, or elevate automatically.
-Read denial is a separate storage failure. Windows and other query commands retain
-their existing access requirements; metadata queries do not unlock or renew a vault.
+Read denial is a separate storage failure. Protocol 20 extends read-only support
+to public task/workstream/validation queries; new paginated snapshots need a
+writable query cache (see [tasks.md](tasks.md)). Windows and remaining query
+commands retain their existing access requirements; metadata queries do not unlock or renew a vault.
 
 ## Project configuration
 

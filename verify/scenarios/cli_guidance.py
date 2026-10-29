@@ -1,4 +1,4 @@
-"""Installed protocol-19 guidance follows the observed target and failure phase."""
+"""Installed protocol-20 guidance follows the observed target and failure phase."""
 import json
 import os
 from pathlib import Path

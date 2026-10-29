@@ -217,17 +217,16 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		}
 	}
 
-	release, gateErr := maintenance.AcquireShared(ctx, maintenance.Root(store.Directory))
+	release, gateErr := maintenance.AcquireQuery(ctx, maintenance.Root(store.Directory))
 	if gateErr != nil {
-		return nil, gateError(ctx, gateErr)
+		return nil, store.queryGateError(ctx, gateErr)
 	}
 	defer release()
-	profileRelease, profileErr := LockShared(ctx, store.path()+".lock")
+	profileRelease, profileErr := maintenance.LockQueryShared(ctx, store.path()+".lock")
 	if profileErr != nil {
-		return nil, gateError(ctx, profileErr)
+		return nil, store.queryGateError(ctx, profileErr)
 	}
 	defer profileRelease()
-	pruneQueries(store.cacheDirectory())
 
 	historyRequired := q.Options["at-revision"] != "" || cmd == "export" || cmd == "history" || cmd == "checkpoint list"
 	var s *State

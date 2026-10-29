@@ -42,15 +42,36 @@ func AcquireQuery(ctx context.Context, root string) (func(), error) {
 }
 
 func acquireQueryGate(ctx context.Context, root string) (func(), error) {
-	directory := filepath.Join(root, ".maintenance")
+	return acquireQueryPair(ctx, filepath.Join(root, ".maintenance", "lock"))
+}
+
+// LockQueryShared shares the writer's profile lock without creating or opening
+// existing lock objects for writing. Only missing objects use initialization.
+func LockQueryShared(ctx context.Context, path string) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	release, err := acquireQueryPair(ctx, path)
+	if err == nil || !errors.Is(err, os.ErrNotExist) {
+		return release, err
+	}
+	release, err = LockShared(ctx, path)
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return release, err
+	}
+	return nil, &QueryPreparationError{State: "initialization_required", Cause: err}
+}
+
+func acquireQueryPair(ctx context.Context, path string) (func(), error) {
+	directory := filepath.Dir(path)
 	if err := platformfs.CheckDirectory(directory); err != nil {
 		return nil, err
 	}
-	turnstile, err := acquireQueryFileLock(ctx, filepath.Join(directory, "lock.turnstile"))
+	turnstile, err := acquireQueryFileLock(ctx, path+".turnstile")
 	if err != nil {
 		return nil, err
 	}
-	gate, err := acquireQueryFileLock(ctx, filepath.Join(directory, "lock"))
+	gate, err := acquireQueryFileLock(ctx, path)
 	unlockFile(turnstile)
 	if err != nil {
 		return nil, err

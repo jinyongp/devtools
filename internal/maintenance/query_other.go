@@ -8,3 +8,7 @@ import "context"
 func AcquireQuery(ctx context.Context, root string) (func(), error) {
 	return AcquireShared(ctx, root)
 }
+
+func LockQueryShared(ctx context.Context, path string) (func(), error) {
+	return LockShared(ctx, path)
+}

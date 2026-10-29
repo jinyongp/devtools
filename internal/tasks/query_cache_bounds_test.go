@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,7 +25,7 @@ func TestQueryCachePruneBoundsActualJSONReads(t *testing.T) {
 			suffix = `"}}`
 		}
 		body := prefix + strings.Repeat("x", 2*queryCacheHeader) + suffix
-		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		if err := WritePrivate(path, json.RawMessage(body)); err != nil {
 			t.Fatal(err)
 		}
 		f, err := platformfs.OpenPrivate(path, os.O_RDONLY, 0)

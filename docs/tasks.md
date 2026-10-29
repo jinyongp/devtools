@@ -161,6 +161,42 @@ devtools task workstream tree --direction downstream
 Lists return `next_cursor`. Graphs return a `cursor` and continuation roots when
 truncated. Continue with the same cursor to keep the original revision for up to
 30 minutes. A fresh query observes the latest profile revision.
+
+On Linux/macOS (including WSL), an initialized, clean store supports all public
+task/workstream/validation queries with read-only task data and lock files. Missing
+locks or pending global recovery still require write access; the error distinguishes
+`initialization_required` from `recovery_required`. Run the suggested `task next`
+with write access to the same store, then retry the original query. `task next`
+does not need a paginated snapshot, even with more than 50 tasks.
+
+New paginated lists and truncated graphs need a writable snapshot cache. Protocol
+20 adds `--query-cache-dir` to these queries and the other public task queries:
+
+```sh
+cache_dir=$(mktemp -d)
+cache_dir=$(cd "$cache_dir" && pwd -P)
+devtools task list --limit 1 --query-cache-dir "$cache_dir"
+devtools task list --cursor 'CURSOR_FROM_FIRST_RESPONSE' --query-cache-dir "$cache_dir"
+```
+
+Use an absolute private directory separate from the entire data root and its
+ancestors. Symlinks/reparse points and insecure directory permissions are rejected
+when the cache is used. Every continuation must select the same directory; another
+directory returns `cursor_invalid`. Without the option, the normal cache location
+is unchanged. The option is unavailable on task mutations.
+
+Single-result queries and cached continuations neither create nor prune caches.
+An existing cursor can be read with read-only cache access, independently of the
+current task data. New snapshots fail with `storage_error`/`query_cache` when the
+selected cache cannot be written. After successful publication, only recognized
+expired snapshots in that directory are eligible for best-effort cleanup. Custom
+cache directories are not registered for global cleanup; the caller owns their
+lifetime. Remove a temporary cache after finishing its cursor chain.
+
+Windows supports explicit caches with the existing private storage/ACL rules;
+read-only task locks are a Linux/macOS capability. Direct Store.Read/ReadCurrent,
+dashboard/profile summaries, backup, cleanup and mutations keep their existing
+storage contracts.
 Graph depth accepts 0 through 20. Depth 0 returns only the selected root nodes,
 without dependency edges or continuations beyond those nodes. Follow each emitted
 continuation's ID, direction, and depth with the graph cursor; a depth-0 continuation

@@ -30,7 +30,15 @@ Linux/macOS의 `env list`, `variable list/get`(`var`), `secret list`(`sec`)는
 잠금 누락은 기존 `AcquireShared`의 초기화 경로로, pending/orphan은 잠금을 놓은 뒤
 기존 exclusive 재검사·복구 경로로 들어간다. 쓰기가 막히면 조회도 실패한다.
 읽기·권한·소유권·no-follow 검사 실패를 빈 저장소나 초기화 조건으로 해석하지 않는다.
-Windows와 다른 조회·변경·실행·dashboard/task 경로는 기존 shared gate 계약을 유지한다.
+공개 task/workstream/validation 조회도 전역 `AcquireQuery`를 사용한다.
+프로필은 `LockQueryShared`로 기존 turnstile → gate를 O_RDONLY로 열며 같은 writer와 경합한다.
+프로필 잠금 누락에만 기존 초기화 경로로 전환한다. 전역 → 프로필 순서를 유지한다.
+단일 조회·cursor read는 캐시 생성·정리를 하지 않는다. 새 page/graph publication만
+기본 캐시나 명시적 private `--query-cache-dir`에 쓰며, 성공 후 같은 디렉터리의
+인식 가능한 만료 snapshot만 metadata 범위 내에서 판독·정리한다.
+명시 캐시는 data root와 분리하며 root/parent guard를 읽기와 쓰기에 모두 적용한다.
+cursor continuation은 현재 data root·잠금·WAL 없이 고정 revision을 읽는다.
+Windows와 다른 조회·변경·실행·dashboard 및 task의 일반 Read API는 기존 shared gate 계약을 유지한다.
 
 여러 파일을 바꾸는 작업은 복구 가능한 transaction으로 게시한다.
 저장 성공 응답 이전에 필요한 flush와 commit 경계를 확인하며,

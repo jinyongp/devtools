@@ -79,7 +79,7 @@ stdout 선택이 JSON이면 stderr만 TTY여도 JSON 오류입니다. 기존 pro
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 19`입니다.
+`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 20`입니다.
 `version`과 `schema`의 `data.protocol_version`에서 확인합니다. TOML·저장소·dashboard/private wire
 버전은 별개입니다. format 지원 여부는 숫자 추측 대신 discovery의 `global_options`로 확인하세요.
 

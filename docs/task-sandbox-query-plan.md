@@ -3,7 +3,8 @@
 작성: 2026-10-29 (Asia/Seoul).
 기준 소스: `f8c22ac3674a14c8d57ed919e866fc104d6d7b5f`, CLI protocol 19.
 상태: 2026-10-29 후속 요청으로 구현·작업 claim·단위별 commit·최종 리뷰루프를 진행한다.
-push·CI dispatch·릴리스·사용자 CLI 교체는 별도 요청 범위다.
+후속 사용자 지시로 main에서만 작업하고 기존 GitHub Actions 검증을 사용한다.
+이를 위한 main push·기존 검증 workflow dispatch를 포함한다. 릴리스·사용자 CLI 교체는 포함하지 않는다.
 2026-10-29 계획 리뷰 수정: 캐시 경로 경계·정리 판독·준비 안내·native 정책/구버전 증거·검증 소유권을 보완했다.
 대상 profile: `devtools`. Workstream: `74903b6d-3154-4d82-8dc3-e43ddc700e3e`.
 제안: https://github.com/jinyongp/devtools/issues/9
@@ -281,16 +282,17 @@ Go target suite와 relevant installed 시나리오를 실행하고 Windows nativ
 T04 완료는 자체 writable/Windows/소비자 검사와 목표·미검증 상태가 정확한 문서로 판정한다.
 이 단계에서 문서의 macOS Codex 검증 상태를 pass로 올리지 않는다.
 
-### T05 — 전체 영향 리뷰와 실제 macOS Codex 증거를 확정한다
+### T05 — 전체 영향 리뷰와 macOS Actions 증거를 확정한다
 
 대상: T01–T04 전체 diff와 실행 증거, 이 계획의 검증 상태.
 각 in-scope query·failure path·직접 소비자와 제외 경계를 다시 대조한다.
-실제 macOS Codex read-only 정책에서 초기화된 synthetic 저장소를 읽고,
+후속 사용자 지시에 따라 기존 GitHub Actions macOS native sandbox에서 초기화된 synthetic 저장소를 읽고,
 단일/다중 page·graph 및 지정 private scratch cache의 성공을 확인한다.
 Go race 및 project-prescribed check:all, 관련 installed/native 결과를 최종 소스 기준으로 모은다.
 완료: A01–A08 근거와 검증 한계, rollback·data migration 불필요성을 자체 설명 가능한 기록으로 남긴다.
 계획만 저장한 현재 상태나 baseline 재현을 개선 완료로 표시하지 않는다.
-실제 macOS Codex 환경을 확보하지 못하면 해당 gate는 pending이며 모의 결과로 pass/close하지 않는다.
+실제 Codex 앱의 원래 EPERM 환경은 CI로 재현했다고 주장하지 않는다. 이 별도 수동 확인 한계를 기록한다.
+최종 플랫폼 gate는 사용자가 선택한 기존 Actions의 macOS/Linux native·Windows 검증이다.
 의존성: T03, T04. A01–A08.
 
 ## 5. 완료 조건과 검증 행렬
@@ -304,13 +306,13 @@ Go race 및 project-prescribed check:all, 관련 installed/native 결과를 최�
 | A05 | 단일/cursor 조회 무정리와 bounded metadata에 의한 소유 캐시 한정 정리 | RO cache success, publication 후 expired cache, 대형 payload 무판독, expiry-only/unknown JSON·symlink·live-old-mtime 보존 |
 | A06 | task·cache·context 오류와 실제 실행 가능한 준비 안내·비노출 계약 유지 | JSON schema/exit/stdout-stderr, state/effects/retry/resource, 51-task/RO cache의 task next 준비, 원 query 재시도·private sentinel |
 | A07 | 현재 CLI protocol와 실제 baseline writer·기존 소비자 호환 | protocol 20/envelope 1, schema/help/alias, flag mutation 거절, baseline/candidate 교차 변경·조회, writable/Windows regressions |
-| A08 | data/cache 독립 정책 대조와 새 제품 경로의 플랫폼별 실제 증거·문서 일치 | Linux/macOS RO/RO·RO/RW·writable, WSL2, 실제 macOS Codex, final full checks+coverage review |
+| A08 | data/cache 독립 정책 대조와 새 제품 경로의 플랫폼별 실제 증거·문서 일치 | Linux/macOS RO/RO·RO/RW·writable, WSL2, 기존 macOS/Linux·Windows Actions, final full checks+coverage review; 실제 Codex 앱 재현은 별도 수동 한계 |
 
 검증 소유권과 실행 순서:
 
 - V01은 T01의 잠금·복구·준비 안내 단위 검사만, V02는 T02의 cache/CLI 단위 검사만 판정한다.
 - V03은 T03의 Linux/macOS native matrix·실제 baseline CLI 호환을, V04는 T04의 writable/Windows·소비자 회귀를 판정한다.
-- V05는 T03/T04 완료 뒤 실제 macOS Codex와 최종 full checks·전체 리뷰를 판정한다.
+- V05는 T03/T04 완료 뒤 기존 Actions 플랫폼 결과와 최종 full checks·전체 리뷰를 판정한다. 실제 Codex 앱은 별도 수동 확인 한계로 남긴다.
 - V06은 workstream의 A01–A08 전체를 최종 통합 판정한다. task의 acceptance_keys는 각 조건에 대한 기여 연결이며,
   각 선행 task가 모든 플랫폼의 최종 증거를 먼저 갖춰야 한다는 의미가 아니다.
 - T01/T02 완료에는 후행 V03–V06 결과가 필요하지 않고, T03/T04 완료에는 V05/V06 결과가 필요하지 않다.
@@ -328,10 +330,9 @@ read 결과는 synthetic fixture의 task/run/edge와 명시된 contract로 검�
 항상 생성하는 요구는 채택하지 않았다. 정상 데이터 단일 조회와 기존 cursor 읽기는 계속 지원한다.
 다른 cache 정책을 선택하면 D04/D05와 T02–T05/A04–A08을 함께 재검토해야 한다.
 
-새 workstream은 draft로 저장한다. task/required validation을 연결하고 구조 check만 수행한다.
-실행 claim/activate/완료·passing evidence 등록은 현재 계획 요청의 결과로 수행하지 않는다.
+최초 계획 요청에서는 draft와 구조 check만 수행했다. 후속 구현 요청으로 activate/claim·단위 commit과 실제 검증 증거 등록을 수행한다.
 선행 done workstream의 완료 이력과 다른 진행 작업은 유지한다.
-제품 실행은 후속 구현 요청의 범위에서 수행하며, 기존 CI dispatch/commit/push 승인은 새 작업에 상속하지 않는다.
+CI dispatch/main push는 이전 작업 승인을 상속하지 않고 이번 사용자의 main·기존 Actions 지시를 근거로 수행한다.
 
 ## 7. 계획 리뷰에서 보완한 근거
 

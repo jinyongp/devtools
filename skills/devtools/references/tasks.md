@@ -7,6 +7,10 @@
 - Workstreams connect requirements, acceptance criteria, tasks and validations. Set complete plan references, then check and activate.
 - Task dependencies stay within a workstream; workstream dependencies stay within a profile.
 - Discover each exact command schema. JSON bodies use `--file` or `--stdin`, not equivalent body flags together.
+- Protocol 20 adds query-only `--query-cache-dir PATH`: an absolute private snapshot directory separate from the entire data root and its ancestors. Use the same directory for every cursor continuation; no automatic cache search or temporary fallback occurs. Discover support before passing it to an installed CLI.
+- Linux/macOS initialized, clean task stores support public queries with read-only data/locks. New paginated lists/truncated graphs still need a writable cache. Single queries/cursor reads do not create or prune cache files; cached cursors are independent of current data storage. Windows locks retain their existing access contract.
+- On `initialization_required`/`recovery_required`, run the suggested `task next` with write access to the same profile/isolated root, then retry the original query/options. This preparation may write storage. On `query_cache` failure select a writable private cache; never accept a missing cursor as complete pagination.
+- Custom cache lifetime belongs to the caller. Publication opportunistically prunes only recognized expired snapshots in that directory; global cleanup does not register custom paths.
 - Use bounded list/tree queries; follow cursors/continuations for full requested coverage. Cursors bind filters/revision; `cursor_invalid` requires a fresh query.
 
 ## Edit and claim

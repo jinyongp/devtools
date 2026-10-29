@@ -2,13 +2,21 @@
 
 [문서 목록](README.md) · [설정 모델](cli-config-redesign.md) · [설정 편집](config-edit-contract.md)
 
-이 문서는 protocol 19 소스의 진단 계약이다. 사용 순서는 [개발환경 진단](doctor.md)을 따른다.
+이 문서는 protocol 20 소스의 진단 계약이다. 사용 순서는 [개발환경 진단](doctor.md)을 따른다.
 JSON/text는 같은 public 진단 정본을 사용하며 표시 계층에서 message·action·효과를 재작성하지 않는다.
 공통 diagnostic과 Check·DoctorReport·ErrorDetails의 구조는
 [계약 schema](../internal/configcontract/schema.json)의 같은 이름의 정의를 따른다.
 명령의 문장은 설명에 사용하고 자동화는 code·reason·status·retry·effects를 읽는다.
 
 ## 공통 오류
+
+task query의 쓰기 가능한 준비 경로 실패는 기존 storage 오류 reason/stage/resource를
+보존하고 `facts.state`에 `initialization_required` 또는 `recovery_required`를 추가한다.
+준비 중 일부 쓰기가 가능하므로 `effects: unknown`, `retry: after_dependency_change`다.
+remedy는 같은 profile/isolated-root에서 `task next`를 쓰기 가능한 실행으로 수행한 뒤
+원래 query 옵션으로 재시도하도록 안내한다. 취소(130)·deadline(3)은 준비 오류로 덮지 않는다.
+캐시 publication 실패는 `resource: query_cache`이며 쓰기 가능한 절대 private
+`--query-cache-dir`를 선택하는 remedy를 제공한다. 불완전한 페이지를 성공으로 반환하지 않는다.
 
 입력 오류는 검증기가 확인한 JSON 필드 경로와 안전한 facts를 보존한다.
 `operation_index`는 0부터 시작한다. `observed_exact: false`는 전체 크기가 아니라

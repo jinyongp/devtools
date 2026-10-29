@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설정 모델](cli-config-redesign.md) · [진단 계약](diagnostic-contract.md)
 
-이 문서는 protocol 19 소스의 설정 편집 계약이다. 사용 순서는 [설정 편집 가이드](configuration.md)를 따른다.
+이 문서는 protocol 20 소스의 설정 편집 계약이다. 사용 순서는 [설정 편집 가이드](configuration.md)를 따른다.
 
 편집 입력 오류는 알려진 `op`의 schema 분기를 기준으로 필드 경로와 안전한 타입·제한
 정보를 반환한다. 알 수 없거나 빠진 `op`는 해당 `op` 위치를 안내한다. JSON과 text는

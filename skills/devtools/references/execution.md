@@ -80,6 +80,7 @@ their existing access requirements; metadata queries do not unlock or renew a va
 - Recovery argv for the same store retains the selected isolation root. Inspect
   `retry`, `effects`, and `required_inputs` before acting; passphrase unlock needs
   private stdin/file, while native unlock may need explicit OS authentication.
+- Task query preparation uses non-paged `task next` with write access to the same store. Afterwards retry the original query and preserve its target, filters, directory and `--query-cache-dir`. The cache option is query-only, requires protocol 20, and must be repeated for continuations.
 
 ## Restart and retry
 

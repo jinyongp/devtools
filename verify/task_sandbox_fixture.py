@@ -237,7 +237,9 @@ def run(binary, baseline, probe, trace=None):
         assert remedy["argv"][remedy["argv"].index("--profile") + 1] == profile
         assert remedy["argv"][remedy["argv"].index("--isolated-root") + 1] == str(root)
         assert inventory(data) == before
-        preparation = Sandbox(cache, scratch, writable=[data])
+        # Darwin is allow-default outside explicit deny paths. Deny both the
+        # selected and default cache when checking the preparation remedy.
+        preparation = Sandbox(cache, scratch, readonly=[root / "cache"], writable=[data])
         api("next", sandbox=preparation)
         assert profile_path.exists()
         # With >50 tasks, next remains a valid preparation action even when the

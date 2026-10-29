@@ -70,7 +70,7 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
         return json.loads(p.stdout)['data']
 
     identity = call('version')
-    assert identity['protocol_version'] == 19
+    assert identity['protocol_version'] == 20
     if expected_commit:
         assert identity['commit'] == expected_commit, 'Candidate SHA mismatch'
     call('vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input=password+'\n')

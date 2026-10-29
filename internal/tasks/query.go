@@ -3,8 +3,6 @@ package tasks
 import (
 	"bytes"
 	"context"
-	"github.com/jinyongp/devtools/internal/platformfs"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -203,6 +201,13 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 	if ctx.Err() != nil {
 		return nil, protocol.ContextError(ctx.Err())
 	}
+	if path, present := q.Options["query-cache-dir"]; present {
+		var e *protocol.Error
+		store, e = store.withQueryCache(path)
+		if e != nil {
+			return nil, e
+		}
+	}
 	kind, cmd := queryKindCommand(q.Command)
 	limit, limitErr := positive(q.Options, "limit", 50, 200)
 	if limitErr != nil {
@@ -382,15 +387,15 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		if out["truncated"] == true {
 			token := q.Options["cursor"]
 			if token == "" {
-				dir := store.cacheDirectory()
-				if e := PrivateDir(dir); e != nil {
-					return nil, storageErrorAt("create_query_cache", "query_cache", e)
+				if e := store.prepareQueryCache(); e != nil {
+					return nil, store.queryCacheError(q, "create_query_cache", e)
 				}
 				token = ID()
 				snapshot := s.graphSnapshot(store.Profile, kind)
-				if e := WritePrivate(filepath.Join(dir, token+".json"), snapshot); e != nil {
-					return nil, storageErrorAt("write_query_cache", "query_cache", e)
+				if e := store.writeGraphCache(ctx, token+".json", snapshot); e != nil {
+					return nil, store.queryCacheError(q, "write_query_cache", e)
 				}
+				store.pruneQueryCaches(ctx)
 			}
 			out["cursor"] = token
 		}
@@ -574,26 +579,14 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 	default:
 		return nil, failure("invalid_argument", "Unknown task query.")
 	}
-	return store.page(q, out, items, limit)
+	return store.pageWithContext(ctx, q, out, items, limit)
 }
 
-func pruneQueries(dir string) {
-	entries, e := os.ReadDir(dir)
-	if e != nil {
-		return
-	}
-	for _, entry := range entries {
-		if !validID(strings.TrimSuffix(entry.Name(), ".json")) || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		path := filepath.Join(dir, entry.Name())
-		info, e := platformfs.StatPrivate(path)
-		if e == nil && info.Mode().IsRegular() && time.Since(info.ModTime()) > retention.QuerySnapshotTTL {
-			_ = os.Remove(path)
-		}
-	}
-}
 func (s Store) page(q Query, out Object, items []any, limit int) (Object, *protocol.Error) {
+	return s.pageWithContext(context.Background(), q, out, items, limit)
+}
+
+func (s Store) pageWithContext(ctx context.Context, q Query, out Object, items []any, limit int) (Object, *protocol.Error) {
 	if q.Options["cursor"] != "" {
 		return nil, failure("cursor_invalid", "Start a new query.")
 	}
@@ -610,19 +603,14 @@ func (s Store) page(q Query, out Object, items []any, limit int) (Object, *proto
 	out["items"] = items[:end]
 	out["next_cursor"] = nil
 	if end < len(items) {
-		if e := PrivateDir(dir); e != nil {
-			return nil, storageErrorAt("create_query_cache", "query_cache", e)
+		if e := s.prepareQueryCache(); e != nil {
+			return nil, s.queryCacheError(q, "create_query_cache", e)
 		}
 		token := ID()
 		if e := writeQueryCache(filepath.Join(dir, token+".json"), s.Profile, snapshot); e != nil {
-			return nil, storageErrorAt("write_query_cache", "query_cache", e)
+			return nil, s.queryCacheError(q, "write_query_cache", e)
 		}
-		entries, _ := os.ReadDir(dir)
-		for _, entry := range entries {
-			if info, e := entry.Info(); e == nil && time.Since(info.ModTime()) > retention.QuerySnapshotTTL && strings.HasSuffix(entry.Name(), ".json") {
-				_ = os.Remove(filepath.Join(dir, entry.Name()))
-			}
-		}
+		s.pruneQueryCaches(ctx)
 		out["next_cursor"] = token + ":" + strconv.Itoa(end)
 	}
 	return out, nil

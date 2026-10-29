@@ -329,6 +329,7 @@ func (a *App) registerTasks() {
 			}
 			opts = append(opts, Option{Name: n, Pattern: pattern, Completion: completion, Description: description})
 		}
+		opts = append(opts, Option{Name: "query-cache-dir", Description: "Absolute private task-query snapshot directory, separate from data. Use the same directory for each cursor continuation."})
 		if name == "list" || name == "validation list" {
 			opts = append(opts, Option{Name: "scope", Pattern: `^(included|removed|all)$`, Description: "Scope: included (default), removed, or all."})
 		}
@@ -356,6 +357,11 @@ func (a *App) registerTasks() {
 			args = append(args, Argument{Name: taskTargetArgument(kind), Required: required, Pattern: uuidPattern, Completion: completionSource(kind)})
 		}
 		a.commands = append(a.commands, Command{Name: "task " + name, Description: taskQueryDescription(name), Options: opts, Arguments: args, Output: taskQueryOutput(name), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+			if path, present := r.Options["query-cache-dir"]; present {
+				if e := tasks.ValidateQueryCachePath(path); e != nil {
+					return nil, e
+				}
+			}
 			store, e := a.taskStore(r)
 			if e != nil {
 				return nil, e

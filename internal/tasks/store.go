@@ -30,9 +30,10 @@ type Journal struct {
 	Contexts map[string]string  `json:"contexts"`
 }
 type Store struct {
-	Directory string
-	Profile   string
-	Cache     string
+	Directory          string
+	Profile            string
+	Cache              string
+	queryCacheExplicit bool
 	// Test seam around the active-v3 WAL fsync commit point.
 	commitV3 func(func() error) error
 	// Test seam between a lockless completion read and its stability recheck.

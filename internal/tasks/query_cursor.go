@@ -1,13 +1,10 @@
 package tasks
 
 import (
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -37,7 +34,7 @@ func pagedQueryCommand(cmd string) bool {
 func queryFingerprint(profile string, q Query) string {
 	opts := Object{}
 	for key, value := range q.Options {
-		if key != "cursor" && key != "limit" {
+		if key != "cursor" && key != "limit" && key != "query-cache-dir" {
 			opts[key] = value
 		}
 	}
@@ -74,8 +71,7 @@ func (s Store) pageCursorFast(q Query, limit int) (Object, *protocol.Error) {
 		return nil, failure("cursor_invalid", "Start a new query.")
 	}
 	var snapshot Snapshot
-	path := filepath.Join(s.cacheDirectory(), parts[0]+".json")
-	f, err := platformfs.OpenPrivate(path, os.O_RDONLY, 0)
+	f, err := s.openQueryCache(parts[0] + ".json")
 	if err != nil {
 		return nil, failure("cursor_invalid", "Start a new query.")
 	}
@@ -89,8 +85,11 @@ func (s Store) pageCursorFast(q Query, limit int) (Object, *protocol.Error) {
 		}
 		return out, nil
 	}
-	f.Close()
-	if err := ReadPrivate(path, &snapshot); err != nil ||
+	defer f.Close()
+	if _, err := f.Seek(0, 0); err != nil {
+		return nil, failure("cursor_invalid", "Start a new query.")
+	}
+	if err := decodeQuerySnapshot(f, &snapshot); err != nil ||
 		snapshot.Projection != ProjectionVersion ||
 		snapshot.Fingerprint != queryFingerprint(s.Profile, q) ||
 		time.Now().After(snapshot.Expires) {
@@ -105,7 +104,7 @@ func (s Store) graphCursorFast(q Query, kind string, limit int) (Object, *protoc
 		return nil, failure("cursor_invalid", "Start a new graph query.")
 	}
 	var snapshot GraphSnapshot
-	if err := ReadPrivate(filepath.Join(s.cacheDirectory(), token+".json"), &snapshot); err != nil ||
+	if err := s.readQuerySnapshot(token+".json", &snapshot); err != nil ||
 		snapshot.Version != graphSnapshotVersion ||
 		snapshot.Nodes == nil || snapshot.Upstream == nil || snapshot.Downstream == nil ||
 		snapshot.Projection != ProjectionVersion ||

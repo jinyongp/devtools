@@ -38,7 +38,7 @@ def checks(failure):
     return {c["id"]: c for c in failure["details"]["checks"]}
 
 
-assert api("version")["protocol_version"] == 19
+assert api("version")["protocol_version"] == 20
 config = project / "devtools.toml"
 config.write_text("profile='guidance'\n[commands.missing]\nexec=['__missing_guidance__']\n")
 root_a, root_b = home / "A", home / "B"

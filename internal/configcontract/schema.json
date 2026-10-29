@@ -2928,7 +2928,7 @@
       "type": "object",
       "properties": {
         "protocol_version": {
-          "const": 19
+          "const": 20
         },
         "schema": {
           "type": "object"

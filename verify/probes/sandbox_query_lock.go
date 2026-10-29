@@ -25,12 +25,15 @@ func main() {
 		os.Exit(2)
 	}
 	operation, path := os.Args[1], os.Args[2]
-	if operation == "init-query" || operation == "hold-query" || operation == "query" {
+	if operation == "init-query" || operation == "hold-query" || operation == "query" || operation == "profile-query" || operation == "hold-profile-query" {
 		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 		defer cancel()
 		acquire := maintenance.AcquireQuery
 		if operation == "init-query" {
 			acquire = maintenance.AcquireShared
+		}
+		if operation == "profile-query" || operation == "hold-profile-query" {
+			acquire = maintenance.LockQueryShared
 		}
 		release, err := acquire(ctx, path)
 		if err != nil {
@@ -43,12 +46,12 @@ func main() {
 		}
 		defer release()
 		emit(map[string]any{"event": "acquired"})
-		if operation == "hold-query" {
+		if operation == "hold-query" || operation == "hold-profile-query" {
 			_, _ = bufio.NewReader(os.Stdin).ReadByte()
 		}
 		return
 	}
-	if operation == "deny-writes" {
+	if operation == "deny-writes" || operation == "allow-writes" {
 		checks := map[string]func() error{
 			"read_write_open": func() error {
 				f, err := os.OpenFile(filepath.Join(path, "lock"), os.O_CREATE|os.O_RDWR, 0600)
@@ -67,7 +70,7 @@ func main() {
 			err := check()
 			denied := errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EROFS)
 			emit(map[string]any{"check": name, "denied": denied})
-			passed = passed && denied
+			passed = passed && (operation == "deny-writes" && denied || operation == "allow-writes" && err == nil)
 		}
 		if !passed {
 			os.Exit(1)

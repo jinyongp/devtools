@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import selectors
+import shutil
 import subprocess
 import sys
 import uuid
@@ -12,6 +13,7 @@ import uuid
 repository = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repository / "verify"))
 from sandbox_query_fixture import Sandbox, held, inventory, native_probe
+from task_sandbox_fixture import BASELINE_COMMIT, run as task_queries
 
 home = Path.home()
 subprocess.run(["sh", os.environ["DEVTOOLS_TEST_INSTALLER"], "install", "--version",
@@ -169,7 +171,24 @@ for protected in (False, True):
     assert inventory(data) == before
     pending.unlink()
 
+baseline = Path(os.environ.get("DEVTOOLS_TEST_TASK_BASELINE", home / "task-query-baseline"))
+if not baseline.is_file():
+    # The CI job supplies this binary; local installed verification builds the
+    # same immutable source without replacing the user's installed command.
+    baseline_source = home / "task-query-baseline-source"
+    baseline_source.mkdir(mode=0o700)
+    archive = subprocess.Popen(["git", "archive", BASELINE_COMMIT], cwd=repository, stdout=subprocess.PIPE)
+    try:
+        subprocess.run(["tar", "-x", "-C", str(baseline_source)], stdin=archive.stdout, check=True, timeout=30)
+        archive.stdout.close()
+        assert archive.wait(timeout=30) == 0
+    finally:
+        if archive.poll() is None:
+            archive.kill(); archive.wait(timeout=5)
+    subprocess.run(["go", "build", "-buildvcs=false", "-ldflags", "-X main.version=issue9-baseline -X main.commit=" + BASELINE_COMMIT,
+                    "-o", str(baseline), "./cmd/devtools"], cwd=baseline_source, check=True, timeout=90)
+task_checks = task_queries(binary, baseline, probe, Path(shutil.which("strace")) if sys.platform == "linux" and shutil.which("strace") else None)
 print(json.dumps({"binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
                   "version": invoke(home / "public", "sandbox-fixture", ("version",)),
                   "native_controls": controls, "fixtures": checks,
-                  "recovery_round_trips": True, "writer_exclusion": True}))
+                  "recovery_round_trips": True, "writer_exclusion": True, "task_queries":task_checks}))

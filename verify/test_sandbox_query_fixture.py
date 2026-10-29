@@ -34,6 +34,17 @@ class SandboxBoundary(unittest.TestCase):
         scratch = str(self.root / "scratch")
         self.assertEqual(command[4:7], ["--bind", scratch, scratch])
 
+    def test_cache_policy_is_independent_of_data_and_scratch(self):
+        data, scratch, cache = (self.root / name for name in ("data", "scratch", "cache"))
+        mac = sandbox_command(data, scratch, ["tool"], system="darwin", readonly=[cache])
+        for path in (data, cache):
+            self.assertIn('(deny file-write* (subpath ' + json.dumps(str(path)) + '))', mac[2])
+        linux = sandbox_command(data, scratch, ["tool"], system="linux", writable=[cache])
+        start = linux.index(str(cache))
+        self.assertEqual(linux[start - 1:start + 2], ["--bind", str(cache), str(cache)])
+        with self.assertRaises(ValueError):
+            sandbox_command(data, scratch, ["tool"], readonly=[scratch / "cache"])
+
     def test_privileged_linux_launcher_drops_to_invoking_host_identity(self):
         command = sandbox_command(self.root / "data", self.root / "scratch", ["tool"], system="linux", privileged=True)
         self.assertEqual(command[:3], ["sudo", "-n", "bwrap"])

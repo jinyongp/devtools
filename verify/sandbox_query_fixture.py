@@ -14,13 +14,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from fixture_paths import fixture_path, temporary_fixture
 
 
-def sandbox_command(data, scratch, command, system=None, privileged=False):
+def sandbox_command(data, scratch, command, system=None, privileged=False, readonly=(), writable=()):
     system = system or sys.platform
     data, scratch = fixture_path(data), fixture_path(scratch)
     if data == scratch or data in scratch.parents or scratch in data.parents:
         raise ValueError("data and writable scratch must be disjoint")
+    readonly = [data, *map(fixture_path, readonly)]
+    writable = [scratch, *map(fixture_path, writable)]
+    for read in readonly:
+        for write in writable:
+            if read == write or read in write.parents or write in read.parents:
+                raise ValueError("read-only and writable sandbox paths must be disjoint")
     if system == "darwin":
-        policy = '(version 1) (allow default) (deny file-write* (subpath ' + json.dumps(str(data)) + '))'
+        policy = '(version 1) (allow default) ' + ' '.join(
+            '(deny file-write* (subpath ' + json.dumps(str(path)) + '))' for path in readonly)
         return ["/usr/bin/sandbox-exec", "-p", policy, *map(str, command)]
     if system == "linux":
         prefix = ["sudo", "-n"] if privileged else []
@@ -29,7 +36,8 @@ def sandbox_command(data, scratch, command, system=None, privileged=False):
         capabilities = ["--cap-add", "CAP_SETUID", "--cap-add", "CAP_SETGID"] if privileged else []
         identity = ["/usr/bin/setpriv", "--reuid", str(os.getuid()), "--regid", str(os.getgid()),
                     "--clear-groups", "--"] if privileged else []
-        return [*prefix, "bwrap", "--ro-bind", "/", "/", "--bind", str(scratch), str(scratch),
+        binds = [arg for path in writable for arg in ("--bind", str(path), str(path))]
+        return [*prefix, "bwrap", "--ro-bind", "/", "/", *binds,
                 "--dev", "/dev", "--proc", "/proc", "--die-with-parent", *capabilities, "--chdir", str(scratch),
                 "--", *identity, *map(str, command)]
     raise RuntimeError("native sandbox queries require Linux or macOS")
@@ -45,9 +53,10 @@ def fixture_environment(scratch):
 
 
 class Sandbox:
-    def __init__(self, data, scratch):
+    def __init__(self, data, scratch, readonly=(), writable=()):
         self.data, self.scratch = fixture_path(data), fixture_path(scratch)
         self.environment = fixture_environment(scratch)
+        self.readonly, self.writable = readonly, writable
         self.privileged = False
         preflight = self.run(["/usr/bin/true"], check=False)
         if preflight.returncode and sys.platform == "linux":
@@ -57,7 +66,8 @@ class Sandbox:
             raise RuntimeError("native sandbox unavailable: " + preflight.stderr.strip())
 
     def command(self, command):
-        return sandbox_command(self.data, self.scratch, command, privileged=self.privileged)
+        return sandbox_command(self.data, self.scratch, command, privileged=self.privileged,
+                               readonly=self.readonly, writable=self.writable)
 
     def run(self, command, check=True, timeout=15):
         return subprocess.run(self.command(command), env=self.environment, cwd=self.scratch,

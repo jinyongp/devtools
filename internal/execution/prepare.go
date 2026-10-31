@@ -101,7 +101,11 @@ func prepare(ctx context.Context, command Command, dependencies Dependencies, pr
 			}
 		}
 	}
-	return prepareResolved(ctx, command, state, dependencies, preparationOptions{preview: preview, injectValues: !preview, managedParentEnvironment: managedParentEnvironment})
+	prepared, err := prepareResolved(ctx, command, state, dependencies, preparationOptions{preview: preview, injectValues: !preview, managedParentEnvironment: managedParentEnvironment, parentEnvironment: managedParentEnvironment})
+	if err != nil {
+		return Prepared{Command: command, State: state, Release: func() {}}, err
+	}
+	return prepared, nil
 }
 
 // Preview resolves diagnostic bindings and ports from an already observed value
@@ -444,7 +448,7 @@ func Preflight(ctx context.Context, command Command, dependencies Dependencies, 
 	command.Invocation.IsolatedRoot = dependencies.IsolatedRoot
 	prepared, err := prepare(ctx, command, dependencies, true, &parentEnvironment)
 	if err != nil {
-		return PreparationFailure(ctx, command, parentEnvironment, "managed", err)
+		return preparationFailure(ctx, command, parentEnvironment, "managed", prepared.State, err)
 	}
 	prepared.mode = "managed"
 	defer func() {

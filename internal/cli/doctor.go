@@ -224,7 +224,15 @@ func (a *App) passiveChecks(ctx context.Context, command execution.Command, dire
 	if len(command.Bind)+len(command.Serve) > 0 {
 		prepared, e := a.previewExecution(ctx, command, values.DiagnosticPublicState(command.Project.Profile, command.Env, public))
 		if e != nil {
-			checks = append(checks, doctor.NewCheck("bindings", "unknown", e.Code, "Network/value bindings could not be resolved without execution."))
+			status, message := "unknown", "Network/value bindings could not be resolved without execution."
+			switch e.Code {
+			case "port_run_active", "port_in_use", "port_not_found", "instance_not_found", "port_assignment_changed":
+				status, message = "fail", e.Message
+			}
+			check := doctor.NewCheck("bindings", status, e.Code, message)
+			projected := protocol.Public(e, "doctor")
+			check.Facts, _ = projected.Details["facts"].(map[string]any)
+			checks = append(checks, check)
 			for key := range command.Bind {
 				if strings.EqualFold(key, "PATH") || strings.EqualFold(key, "PATHEXT") {
 					input.EnvironmentUnknown = "binding_unresolved"

@@ -28,6 +28,16 @@ GitHub의 `Dependabot Updates`는 서비스가 생성하는 항목이다. 저장
 
 ## 로컬 검사의 선택
 
+작업 단위는 diff·변경 파일 형식·작은 focused test 같은 가벼운 확인 후 커밋한다.
+`check:static`도 여러 회귀 검사와 전체 vet를 포함하므로 가벼운 기본 검사로 취급하지 않는다.
+전체 race/vet·설치·패키징·브라우저·필요한 native 검증은 구현 단위가 모두 끝난 마지막에
+모아서 수행한다. 가벼운 확인만 통과한 커밋을 전체 수용 완료로 기록하지 않는다.
+
+로컬 Go는 기본 공유 `GOCACHE`를 재사용한다. 명령·커밋마다 별도 캐시를 만들거나
+`go clean -cache/-testcache`, `GOCACHE=off`로 반복 cold build를 만들지 않는다.
+마지막 검증에서 별도 격리가 꼭 필요하면 캐시 하나를 재사용하고 종료 후 소유한 임시 캐시만
+정리한다. 다른 작업의 캐시와 CI의 runner별 캐시 정책은 임의 변경하지 않는다.
+
 `go build -o bin/devtools ./cmd/devtools` 후 checkout CLI를 PATH 앞에 둔다.
 Windows에서는 실행 파일 이름에 `.exe`를 사용한다. 아래 명령은 저장소 루트 기준이다.
 

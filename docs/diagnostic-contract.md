@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설정 모델](cli-config-redesign.md) · [설정 편집](config-edit-contract.md)
 
-이 문서는 protocol 20 소스의 진단 계약이다. 사용 순서는 [개발환경 진단](doctor.md)을 따른다.
+이 문서는 protocol 21 소스의 진단 계약이다. 사용 순서는 [개발환경 진단](doctor.md)을 따른다.
 JSON/text는 같은 public 진단 정본을 사용하며 표시 계층에서 message·action·효과를 재작성하지 않는다.
 공통 diagnostic과 Check·DoctorReport·ErrorDetails의 구조는
 [계약 schema](../internal/configcontract/schema.json)의 같은 이름의 정의를 따른다.
@@ -37,7 +37,8 @@ error에는 code, message, details가 필수다. 성공의 data를 실패와 함
 | reason | 해당 code 안에서 구분하는 안정된 snake_case 판정 이유 |
 | facts | schema가 허용한 기대/관찰 버전·revision·상태·입력 규칙·numeric OS code 등 |
 | checks | 별도로 수행한 검사. 없으면 [] |
-| causes | 하위 오류의 code·reason·target·source·허용 facts. 없으면 [] |
+| causes | 안정적인 id, fail/unknown status, 안전한 message, caused_by, remedies와 기존 code·reason·target·sources·facts. 없으면 [] |
+| primary_cause_id | 직접 원인의 cN ID 또는 null. 다른 원인에 종속된 node를 가리키지 않음 |
 | remedies | argv·required_inputs·message·effect. 없으면 [] |
 | retry | never, after_input_change, after_refresh, after_dependency_change, inspect_first, same_request |
 | effects | none, committed, partial, unknown |
@@ -47,6 +48,16 @@ error에는 code, message, details가 필수다. 성공의 data를 실패와 함
 다중 명령의 부분 성공은 `facts.outcomes`에 kind·name·state·changed와 알려진 ID·code를 보존한다.
 task의 정수 revision과 설정의 문자열 revision은 각 도메인의 타입을 유지한다.
 code·reason을 만들기 위해 원문 메시지를 파싱하지 않는다.
+각 Check는 blocked_by 배열로 실제 선행 원인을 참조한다. 원인 ID는 응답 안에서 고유하며
+참조는 존재해야 하고 cycle이 없어야 한다. 독립적인 중첩 도메인 오류는 namespace를 분리한 뒤
+공개 cN ID로 평탄화하여 같은 c1이 다른 원인으로 합쳐지지 않게 한다.
+
+서비스 충돌 facts는 service/instance_id, port와 port_observation, owner를 제공한다.
+TCP 연결 관찰과 실행 claim은 별개다. owner는 기존 OS lease에 기록한 세대와 프로세스 생성
+identity를 확인한 경우에만 verified이며 controller PID와 앱 PID를 혼동하지 않는다.
+legacy·판독 실패·PID 재사용·상태 변경은 구체적인 unavailable 이유로 남긴다. 추가 loopback
+관찰은 registry lock을 놓은 뒤 남은 deadline과 최대 1초 안에서 수행하며, 실패해도 최초
+code/exit/effects/retry를 교체하지 않는다. 진단 때문에 stop/unlock/reserve/provider 실행을 하지 않는다.
 도메인 오류는 typed condition을 만들고 CLI wrapper가 scope·작업·source를 붙인다.
 I/O 오류는 errors.Is/As와 numeric OS code에서 reason을 결정하며 err.Error() 원문을 덧붙이지 않는다.
 
@@ -278,8 +289,9 @@ argv[0] 미발견과 다른 도구 누락이 겹쳐도 모든 checks를 포함�
 하위 vault·port·storage 원인은 causes로 보존한다.
 환경을 결정하지 못한 상태를 executable_not_found로 바꾸지 않는다.
 
-remedy는 실패한 이름·dir·명시 profile/env/bundle·mode를 유지한 doctor 호출을 제공한다.
-이를 위해 새 doctor가 받지 않는 옵션이나 다른 기본 범위로 안내하지 않는다.
+remedy는 이미 확보한 원인·선택 범위에 근거한 조치다. 진단한 실패를 같은 doctor 호출로
+다시 돌리지 않는다. 인증된 검색 환경은 무관한 서비스 claim 실패 뒤에도 유지하며,
+PATH/PATHEXT나 executable이 실제 미해결 binding에 의존할 때만 종속된 unknown으로 남긴다.
 --env 같은 옵션은 doctor에서는 이름 앞뒤에 허용하지만 기존 run에서는 명령 이름 앞에 두는 경계를 유지한다.
 
 ## 도메인별 적용과 수용 기준

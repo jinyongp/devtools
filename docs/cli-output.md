@@ -97,8 +97,21 @@ parser offset·target 구조·`effects:none`·`retry:after_input_change` 같은 
 목록 제목은 `Commands for devtools`처럼 종류와 profile을 함께 식별합니다. 같은 profile을
 별도 행에 반복하지 않고 개수는 목록 아래의 보조 정보로 둡니다. 가운데점 같은 장식 구분자에
 정보 위계를 맡기지 않습니다.
-그 밖의 목록은 비교 표 또는 폭에 맞는 세로 배치를 사용합니다. 표시하는 ID·cursor·URL은 자르지 않습니다.
+그 밖의 목록도 한 항목 한 행의 비교 표를 사용합니다. 좁은 화면에서는 선언한 보조 열만
+생략하고 항목별 세로 카드로 바꾸지 않습니다. 표시하는 ID·cursor·URL은 자르지 않습니다.
 미리보기·재전송·변경 없음과 task의 lifecycle/completion/execution은 구분합니다.
+
+실패 화면은 직접 원인, Profile/Directory/Environment/Bundle/Mode, 관련 리소스,
+수정 위치, 중요한 효과와 미확인 검사, Next 순서로 표시합니다. 관련 사실의 Port는 Owner보다
+항상 먼저입니다. 소유자를 검증할 수 없으면 같은 Owner 위치에 구체적인 이유를 표시합니다.
+도구가 정상이면 성공 row와 선언 위치를 실패 화면에 반복하지 않습니다. 선행 조건 때문에
+검사하지 못한 도구는 하나의 Unverified checks 문장으로 묶습니다.
+
+proxy 목록은 Host / Route, Port, Listener, State를 Global과 profile/directory별로 비교합니다.
+누락된 디렉터리는 Missing locations 표에 한 번씩 표시합니다. task 목록과 mutation은
+전체 spec/plan/history를 자동 첨부하지 않으며, 명시한 document/context 조회만 본문을 표시합니다.
+미리보기 여부는 changed와 독립적인 dry_run으로 판정합니다. restore/import/teardown은
+apply digest를 생략한 기본 호출도 Preview입니다.
 
 완성된 Next 행동은 설명 아래의 독립된 한 줄을 전체 복사할 수 있습니다. prompt·번호·SGR·
 삽입 개행·말줄임 없이 필요한 shell 인용을 적용합니다. Unix POSIX/Fish 표현이 다르면
@@ -112,8 +125,8 @@ shell label을 윗줄에 나눠 표시하고 Windows는 PowerShell 대상입니�
 셸 라벨을 붙이지 않고, 셸별 인용 결과가 달라 여러 줄이 필요할 때만 셸 이름을 표시합니다.
 필요한 복구 설명, 부분 적용 여부, 재시도 ID와 설정 파일 위치는 유지합니다.
 
-`Details`라는 포괄적인 구획은 사용하지 않습니다. 전용 화면에서 처리하지 않은 공개 필드는
-원래 이름으로 직접 표시합니다. 업데이트는 `Updated devtools to VERSION.` 또는
+`Details`라는 포괄적인 구획은 사용하지 않습니다. 전용 화면은 명령 목적별 필드와 중요한
+미확인 상태·경고를 표시하며 전체 공개 데이터는 JSON에 보존합니다. 업데이트는 `Updated devtools to VERSION.` 또는
 `Devtools VERSION is already installed.`로 결과를 알리고, 별칭 생성·충돌·실패가 있을 때만
 추가 문장을 표시합니다.
 
@@ -123,6 +136,10 @@ shell label을 윗줄에 나눠 표시하고 Windows는 PowerShell 대상입니�
 비기본 실행 설정과 복구 명령은 dim으로 낮추지 않습니다. 빈 environment는 `common`으로 안내합니다.
 non-TTY·TERM=dumb·지원 관측 실패는 plain입니다. 비어 있지 않은 NO_COLOR는 전경색을
 끄고 bold/dim은 유지합니다. 중요 경고·ID·복구 행동은 dim으로 숨기지 않습니다.
+표는 테두리 없이 왼쪽 정렬하고 열과 label/value 사이에 두 칸을 둡니다. 구획 사이 빈 줄은
+한 개, 표 row와 연속 field 사이 추가 빈 줄은 없습니다. 복사 명령은 두 칸 들여쓰고 장식하지 않습니다.
+오류는 빨강, 경고·미확인은 노랑, 확인된 완료는 초록, 진행·미리보기는 청록이며 상태 단어나
+접두사에만 적용합니다. 의미 없는 아이콘·박스·대문자 상태 배너를 추가하지 않습니다.
 색·공백·열 정렬은 machine 파싱 계약이 아니므로 자동화는 `--format json`을 사용하세요.
 text 렌더 실패 시 기존 오류는 전체 escaped public 진단과 원 종료 코드를 보존합니다.
 성공 결과를 표시할 수 없으면 internal_error/1, 인코딩·쓰기 실패는 io_error/1이며

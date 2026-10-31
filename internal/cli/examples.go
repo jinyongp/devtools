@@ -37,6 +37,13 @@ func exampleValue(name, pattern string) string {
 	return "sample"
 }
 func commandExamples(c Command) []string {
+	if reviewed, ok := reviewedExamples[c.Name]; ok {
+		examples := make([]string, len(reviewed))
+		for i, example := range reviewed {
+			examples[i] = example.Command
+		}
+		return examples
+	}
 	if c.Name == "backup keygen" {
 		return []string{"devtools backup keygen --identity-file ./backup.identity --recipient-file ./backup.recipient"}
 	}
@@ -93,6 +100,9 @@ func commandExamples(c Command) []string {
 }
 
 func commandWorkflow(c Command) []string {
+	if _, ok := reviewedExamples[c.Name]; ok {
+		return reviewedExampleWorkflow(c)
+	}
 	switch c.Name {
 	case "vault rewrap":
 		return []string{

@@ -93,8 +93,7 @@ func TestEveryPublishedInvocationExampleParses(t *testing.T) {
 	for index, command := range app.commands {
 		for _, example := range command.Examples {
 			t.Run(command.Name, func(t *testing.T) {
-				// Generated examples contain separate, unquoted synthetic tokens.
-				tokens := strings.Fields(example)
+				tokens := reviewedExampleTokens(t, example)
 				var rest []string
 				for _, name := range append([]string{command.Name}, command.Aliases...) {
 					prefix := append([]string{"devtools"}, strings.Fields(name)...)

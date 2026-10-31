@@ -160,6 +160,9 @@ func TestStatefulGenerateExampleUsesInspectedRevisionAndSameRequest(t *testing.T
 	argv := strings.Fields(entry["examples"].([]any)[0].(string))[1:]
 	requestID := tasks.ID()
 	for i := range argv {
+		if argv[i] == "--profile" {
+			argv[i+1] = "audit"
+		}
 		if argv[i] == "--revision" {
 			argv[i+1] = revision
 		}

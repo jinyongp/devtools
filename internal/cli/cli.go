@@ -169,6 +169,18 @@ func New(version, commit string) *App {
 	a.registerUpdate()
 	a.registerCompletion()
 	for i := range a.commands {
+		if a.commands[i].Name == "proxy list" {
+			a.commands[i].Description = "List routes and instance problems across all profiles and global scope."
+			for j := range a.commands[i].Options {
+				o := &a.commands[i].Options[j]
+				if o.Name == "profile" {
+					o.Description = "Show one profile across all its worktrees."
+				}
+				if o.Name == "global" {
+					o.Description = "Show global routes only; excludes --profile."
+				}
+			}
+		}
 		if a.commands[i].Name == "command run" {
 			for j := range a.commands[i].Options {
 				if a.commands[i].Options[j].Name == "env" {
@@ -313,7 +325,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 			}
 			return output.success(data)
 		} else {
-			err = writeHelp(streams.Out, text)
+			err = writeHelp(streams.Out, styledHelp(text, textOptions(environment, false).SGR))
 		}
 		if err != nil {
 			return fail(protocol.NewError("io_error", "Cannot write output.", 1, nil))
@@ -355,7 +367,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	}
 	if request.Help {
 		_, text, _ := a.discovery(selected.Name, false)
-		if writeHelp(streams.Out, text) != nil {
+		if writeHelp(streams.Out, styledHelp(text, textOptions(environment, false).SGR)) != nil {
 			return fail(protocol.NewError("io_error", "Cannot write output.", 1, nil))
 		}
 		return 0

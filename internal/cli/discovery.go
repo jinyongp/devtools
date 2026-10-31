@@ -80,15 +80,25 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 			b.WriteString(" [args...]")
 		}
 		fmt.Fprintf(&b, "\n\n%s\n", exact.Description)
-		if len(exact.Options) > 0 {
+		hasLocalOptions := false
+		for _, option := range exact.Options {
+			hasLocalOptions = hasLocalOptions || option.Name != "isolated-root"
+		}
+		if hasLocalOptions {
 			b.WriteString("\nOptions:\n")
 		}
 		for _, o := range exact.Options {
+			if o.Name == "isolated-root" {
+				continue
+			}
 			label := "--" + o.Name
 			if !o.Boolean {
 				label += " VALUE"
+				if o.Name == "profile" {
+					label = "--profile NAME"
+				}
 			}
-			fmt.Fprintf(&b, "  %-24s %s", label, o.Description)
+			fmt.Fprintf(&b, "  %-24s  %s", label, o.Description)
 			if o.Required {
 				b.WriteString(" (required)")
 			}
@@ -108,38 +118,47 @@ func (a *App) discovery(target string, schema bool) (any, string, bool) {
 			b.WriteByte('\n')
 		}
 		if len(exact.StaticRules) > 0 {
-			b.WriteString("\nInput rules:\n")
 			seen := map[string]bool{}
+			wrote := false
 			for _, rule := range exact.StaticRules {
-				if !seen[rule.message] {
-					fmt.Fprintf(&b, "  %s\n", rule.message)
-					seen[rule.message] = true
+				message := humanRule(*exact, rule)
+				if message != "" && !seen[message] {
+					if !wrote {
+						b.WriteString("\nInput rules:\n")
+						wrote = true
+					}
+					fmt.Fprintf(&b, "  %s\n", message)
+					seen[message] = true
 				}
 			}
 		}
-		b.WriteString("\nRoot options (before the command):\n  --format auto|text|json   Output format; overrides DEVTOOLS_FORMAT. Schema stays JSON; native stdout is preserved.\n  --isolated-root PATH      Independent user paths; command-local support follows this command's options.\n")
 		if len(names) > 0 {
 			b.WriteByte('\n')
 			b.WriteString(a.commandHelp(target, names))
 		}
-		fmt.Fprintf(&b, "\nJSON schema: devtools schema %s\n", exact.Name)
-		if len(exact.Examples) > 0 {
-			b.WriteString("\nSyntax examples use placeholder IDs/revisions/UUIDs. Replace them with inspected identifiers and one new UUID per new operation.\n")
-			b.WriteString("\nExamples:\n")
-			for _, example := range exact.Examples {
-				fmt.Fprintf(&b, "  %s\n", example)
-			}
-		}
+		writeExamples(&b, *exact)
 		if len(exact.Workflow) > 0 {
 			b.WriteString("\nWorkflow:\n")
 			for i, step := range exact.Workflow {
 				fmt.Fprintf(&b, "  %d. %s\n", i+1, step)
 			}
 		}
-		if exact.BodyExample != nil {
+		bodyObject, _ := exact.BodyExample.(map[string]any)
+		if exact.BodyExample != nil && len(bodyObject) > 0 {
 			body, _ := json.MarshalIndent(exact.BodyExample, "  ", "  ")
 			fmt.Fprintf(&b, "\nJSON input example:\n  %s\n", body)
 		}
+		b.WriteString("\nCommon options:\n  --format auto|text|json   Output format; place before the command.\n                           Overrides DEVTOOLS_FORMAT.\n  --isolated-root PATH     Independent paths; shared OS changes are prohibited.\n")
+		localRoot := false
+		for _, option := range exact.Options {
+			localRoot = localRoot || option.Name == "isolated-root"
+		}
+		if localRoot {
+			b.WriteString("                           Accepted before or after this command.\n")
+		} else {
+			b.WriteString("                           Accepted before this command.\n")
+		}
+		fmt.Fprintf(&b, "\nSchema: devtools schema %s\n", exact.Name)
 		return nil, b.String(), true
 	}
 	if len(children) == 0 {

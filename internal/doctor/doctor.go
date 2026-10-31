@@ -21,15 +21,24 @@ import (
 )
 
 type Check struct {
-	ID       string                  `json:"id"`
-	Status   string                  `json:"status"`
-	Required bool                    `json:"required"`
-	Reason   string                  `json:"reason"`
-	Message  string                  `json:"message"`
-	Target   map[string]any          `json:"target"`
-	Sources  []configcontract.Source `json:"sources"`
-	Facts    map[string]any          `json:"facts"`
-	Remedies []protocol.Remedy       `json:"remedies"`
+	ID        string                  `json:"id"`
+	Status    string                  `json:"status"`
+	Required  bool                    `json:"required"`
+	Reason    string                  `json:"reason"`
+	Message   string                  `json:"message"`
+	Target    map[string]any          `json:"target"`
+	Sources   []configcontract.Source `json:"sources"`
+	Facts     map[string]any          `json:"facts"`
+	Remedies  []protocol.Remedy       `json:"remedies"`
+	BlockedBy []string                `json:"blocked_by"`
+}
+
+func (c Check) MarshalJSON() ([]byte, error) {
+	type wire Check
+	if c.BlockedBy == nil {
+		c.BlockedBy = []string{}
+	}
+	return json.Marshal(wire(c))
 }
 
 func Remedy(message string, argv []string, inputs ...string) protocol.Remedy {
@@ -42,7 +51,7 @@ func Remedy(message string, argv []string, inputs ...string) protocol.Remedy {
 	return protocol.LocalAction(argv, inputs, message, "read").Remedy(protocol.InvocationContext{})
 }
 func NewCheck(id, status, reason, message string) Check {
-	return Check{ID: id, Status: status, Required: status != "not_applicable", Reason: reason, Message: message, Target: map[string]any{"kind": "prerequisite", "name": id}, Sources: []configcontract.Source{}, Facts: map[string]any{}, Remedies: []protocol.Remedy{}}
+	return Check{ID: id, Status: status, Required: status != "not_applicable", Reason: reason, Message: message, Target: map[string]any{"kind": "prerequisite", "name": id}, Sources: []configcontract.Source{}, Facts: map[string]any{}, Remedies: []protocol.Remedy{}, BlockedBy: []string{}}
 }
 func State(checks []Check) string {
 	state := "ready"

@@ -1,5 +1,101 @@
 package cli
 
+import (
+	"context"
+	"encoding/json"
+	"strings"
+
+	"github.com/jinyongp/devtools/internal/protocol"
+)
+
+var previewCommands = map[string]bool{
+	"config fmt": true, "config edit": true, "config migrate": true,
+	"config tool add": true, "config tool update": true, "config tool remove": true,
+	"config preset add": true, "config preset update": true, "config preset remove": true,
+	"command add": true, "command update": true, "command remove": true, "command rename": true,
+	"bundle set": true, "bundle rename": true, "bundle remove": true,
+	"profile import": true, "backup restore": true, "proxy teardown": true,
+}
+
+// Invocation presentation metadata belongs at the public boundary, never in
+// value receipts, journals, replay fingerprints or persisted cursor identities.
+func previewResultContract(c *Command) {
+	if c.Name == "values execution list" {
+		c.Output["properties"].(map[string]any)["next_actions"] = arraySchema(remedySchema())
+		run := c.Run
+		c.Run = func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+			value, failure := run(ctx, streams, r)
+			if failure != nil {
+				return value, failure
+			}
+			out := publicResultObject(value)
+			if out == nil {
+				return value, nil
+			}
+			if cursor, ok := out["next_cursor"].(string); ok && cursor != "" {
+				argv := []string{"devtools", "values", "execution", "list", "--profile", out["profile"].(string)}
+				for _, key := range []string{"limit", "query-cache-dir"} {
+					if v := r.Options[key]; v != "" {
+						argv = append(argv, "--"+key, v)
+					}
+				}
+				argv = append(argv, "--cursor", cursor)
+				out["next_actions"] = []protocol.Remedy{protocol.LocalAction(argv, nil, "Read the next page.", "read").Remedy(r.Invocation)}
+			}
+			return out, nil
+		}
+	}
+	if !previewCommands[c.Name] {
+		return
+	}
+	if properties, ok := c.Output["properties"].(map[string]any); ok {
+		properties["dry_run"] = map[string]any{"type": "boolean"}
+		if required, ok := c.Output["required"].([]string); ok {
+			found := false
+			for _, key := range required {
+				found = found || key == "dry_run"
+			}
+			if !found {
+				c.Output["required"] = append(required, "dry_run")
+			}
+		}
+	}
+	run := c.Run
+	c.Run = func(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
+		result, failure := run(ctx, streams, request)
+		dry := request.Options["dry-run"] == "true" || c.Name == "config fmt" && request.Options["check"] == "true" || c.Name == "config migrate" && request.Options["apply"] == ""
+		project := func(value any) any {
+			out := publicResultObject(value)
+			if out == nil {
+				return value
+			}
+			out["dry_run"] = dry
+			return out
+		}
+		if failure != nil {
+			if report := failure.Details["report"]; report != nil {
+				failure.Details["report"] = project(report)
+			}
+			return result, failure
+		}
+		return project(result), nil
+	}
+}
+
+func publicResultObject(value any) map[string]any {
+	b, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+	var out map[string]any
+	d := json.NewDecoder(strings.NewReader(string(b)))
+	d.UseNumber()
+	if d.Decode(&out) != nil {
+		return nil
+	}
+	return out
+}
+
 // OutputMode describes who owns stdout. Only JSON data is envelope-encoded.
 type OutputMode string
 

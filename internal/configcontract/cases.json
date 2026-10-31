@@ -602,7 +602,8 @@
         "facts": {
           "executable": "node"
         },
-        "remedies": []
+        "remedies": [],
+        "blocked_by": []
       }
     },
     {
@@ -622,7 +623,8 @@
         "facts": {
           "executable": "node"
         },
-        "remedies": []
+        "remedies": [],
+        "blocked_by": []
       }
     },
     {
@@ -642,7 +644,8 @@
         "facts": {
           "executable": "node"
         },
-        "remedies": []
+        "remedies": [],
+        "blocked_by": []
       }
     },
     {
@@ -682,7 +685,8 @@
                 "facts": {
                   "executable": "node"
                 },
-                "remedies": []
+                "remedies": [],
+                "blocked_by": []
               }
             ]
           }
@@ -736,7 +740,8 @@
                 "facts": {
                   "executable": "node"
                 },
-                "remedies": []
+                "remedies": [],
+                "blocked_by": []
               }
             ]
           }
@@ -790,7 +795,8 @@
                 "facts": {
                   "executable": "node"
                 },
-                "remedies": []
+                "remedies": [],
+                "blocked_by": []
               }
             ]
           }
@@ -892,7 +898,8 @@
                 "facts": {
                   "executable": "node"
                 },
-                "remedies": []
+                "remedies": [],
+                "blocked_by": []
               }
             ],
             "causes": [],
@@ -933,7 +940,8 @@
                       "facts": {
                         "executable": "node"
                       },
-                      "remedies": []
+                      "remedies": [],
+                      "blocked_by": []
                     }
                   ]
                 }
@@ -948,7 +956,8 @@
                 "failed": 1,
                 "unknown_checks": 0
               }
-            }
+            },
+            "primary_cause_id": null
           }
         }
       }
@@ -987,7 +996,8 @@
                 "facts": {
                   "executable": "node"
                 },
-                "remedies": []
+                "remedies": [],
+                "blocked_by": []
               }
             ],
             "causes": [],
@@ -1028,7 +1038,8 @@
                       "facts": {
                         "executable": "node"
                       },
-                      "remedies": []
+                      "remedies": [],
+                      "blocked_by": []
                     }
                   ]
                 }
@@ -1043,7 +1054,8 @@
                 "failed": 1,
                 "unknown_checks": 0
               }
-            }
+            },
+            "primary_cause_id": null
           }
         },
         "data": {
@@ -1080,7 +1092,8 @@
                   "facts": {
                     "executable": "node"
                   },
-                  "remedies": []
+                  "remedies": [],
+                  "blocked_by": []
                 }
               ]
             }

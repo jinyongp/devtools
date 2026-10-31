@@ -20,7 +20,7 @@ import (
 )
 
 const Limit = 2 << 20
-const schemaURL = "urn:devtools:config-contract:protocol-19"
+const schemaURL = "urn:devtools:config-contract:protocol-21"
 
 //go:embed schema.json
 var schemaBytes []byte
@@ -319,7 +319,7 @@ func Validate(name string, v any) []Issue {
 	}
 	err := sch.Validate(v)
 	if err == nil {
-		return nil
+		return diagnosticRelations(name, v)
 	}
 	var validation *jsonschema.ValidationError
 	if !errors.As(err, &validation) {

@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -77,6 +78,7 @@ func Public(e *Error, operation string) *Error {
 		}
 	}
 	projectCorrectionFacts(facts, old)
+	projectResourceFacts(facts, diagnosticObject(old["facts"]))
 	if values, ok := facts["outcomes"]; ok {
 		out := []any{}
 		for _, value := range diagnosticArray(values) {
@@ -196,6 +198,15 @@ func Public(e *Error, operation string) *Error {
 	if allChecks == nil {
 		allChecks = []any{}
 	}
+	for i, item := range allChecks {
+		check := diagnosticObject(item)
+		if check != nil {
+			if check["blocked_by"] == nil {
+				check["blocked_by"] = []any{}
+			}
+			allChecks[i] = check
+		}
+	}
 	checks = allChecks
 	remedies := old["remedies"]
 	if remedies == nil && len(childRemedies) > 0 {
@@ -227,7 +238,35 @@ func Public(e *Error, operation string) *Error {
 	if value, ok := old["effects"].(string); ok {
 		effects = value
 	}
-	copy.Details = map[string]any{"operation": operation, "phase": phase, "target": target, "sources": sources, "reason": reason, "facts": facts, "checks": checks, "causes": causes, "remedies": remedies, "retry": retry, "effects": effects}
+	used := map[string]bool{}
+	for _, item := range projectedCauses {
+		if id, ok := diagnosticObject(item)["id"].(string); ok && causeID.MatchString(id) {
+			used[id] = true
+		}
+	}
+	for i, item := range projectedCauses {
+		cause := diagnosticObject(item)
+		if id, _ := cause["id"].(string); !causeID.MatchString(id) {
+			for n := 1; ; n++ {
+				id := fmt.Sprintf("c%d", n)
+				if !used[id] {
+					cause["id"], used[id] = id, true
+					break
+				}
+			}
+		}
+		projectedCauses[i] = cause
+	}
+	var primary any
+	if id, ok := old["primary_cause_id"].(string); ok {
+		for _, item := range projectedCauses {
+			cause := diagnosticObject(item)
+			if cause["id"] == id && len(diagnosticArray(cause["caused_by"])) == 0 {
+				primary = id
+			}
+		}
+	}
+	copy.Details = map[string]any{"operation": operation, "phase": phase, "target": target, "sources": sources, "reason": reason, "facts": facts, "checks": checks, "causes": causes, "primary_cause_id": primary, "remedies": remedies, "retry": retry, "effects": effects}
 	if report, ok := old["report"]; ok {
 		copy.Details["report"] = report
 	}
@@ -237,6 +276,7 @@ func Public(e *Error, operation string) *Error {
 var diagnosticName = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,127}$`)
 var diagnosticOption = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 var diagnosticUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+var causeID = regexp.MustCompile(`^c[1-9][0-9]*$`)
 
 // These fields are produced by validators, never by copying a request body.
 // Keep false and zero while rejecting differently typed or unbounded metadata.
@@ -337,8 +377,20 @@ func publicCause(value map[string]any, operation string) []any {
 		copy["target"] = merged
 		details = copy
 	}
-	projected := Public(&Error{Code: code, Message: "Dependency condition.", Details: details, ExitCode: 3}, operation)
-	out := []any{map[string]any{"code": code, "reason": projected.Details["reason"], "target": projected.Details["target"], "sources": projected.Details["sources"], "facts": projected.Details["facts"]}}
+	message, _ := value["message"].(string)
+	if message == "" {
+		message = "The dependency condition could not be described."
+	}
+	projected := Public(&Error{Code: code, Message: message, Details: details, ExitCode: 3}, operation)
+	status, _ := value["status"].(string)
+	if status != "unknown" {
+		status = "fail"
+	}
+	parents := diagnosticArray(value["caused_by"])
+	if parents == nil {
+		parents = []any{}
+	}
+	out := []any{map[string]any{"id": value["id"], "status": status, "message": message, "caused_by": parents, "remedies": projected.Details["remedies"], "code": code, "reason": projected.Details["reason"], "target": projected.Details["target"], "sources": projected.Details["sources"], "facts": projected.Details["facts"]}}
 	return append(out, diagnosticArray(projected.Details["causes"])...)
 }
 

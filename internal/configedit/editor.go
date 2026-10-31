@@ -38,6 +38,7 @@ type Impact struct {
 	RunningProcesses string   `json:"running_processes"`
 }
 type Result struct {
+	DryRun           bool     `json:"dry_run"`
 	ConfigPath       string   `json:"config_path"`
 	PreviousRevision string   `json:"previous_revision"`
 	Revision         string   `json:"revision"`
@@ -352,7 +353,7 @@ func Evaluate(ctx context.Context, path string, in Input) (out any, editErr *pro
 		return nil, failure("config_preservation_failed", "document_changed", nil)
 	}
 	digest := sha256.Sum256(candidate)
-	result := Result{ConfigPath: path, PreviousRevision: snapshot.Revision, Revision: snapshot.Revision, WouldChange: !bytes.Equal(candidate, doc.Bytes), CandidateDigest: hex.EncodeToString(digest[:]), Changes: changes, Impact: impact(doc.Context, next.Context), Format: doc.Format, CandidateFormat: next.Format}
+	result := Result{DryRun: in.DryRun, ConfigPath: path, PreviousRevision: snapshot.Revision, Revision: snapshot.Revision, WouldChange: !bytes.Equal(candidate, doc.Bytes), CandidateDigest: hex.EncodeToString(digest[:]), Changes: changes, Impact: impact(doc.Context, next.Context), Format: doc.Format, CandidateFormat: next.Format}
 	applyDigest := sha256.Sum256(append([]byte("config-migrate-v1\x00"+snapshot.Revision+"\x0010\x00registry-v1\x00"), candidate...))
 	if in.Migrate && in.ApplyDigest != "" && in.ApplyDigest != hex.EncodeToString(applyDigest[:]) {
 		return nil, failure("config_migration_conflict", "digest_mismatch", nil)

@@ -1712,9 +1712,37 @@
       ],
       "additionalProperties": false
     },
+    "CauseIDs": {"type":"array","uniqueItems":true,"items":{"type":"string","pattern":"^c[1-9][0-9]*$"}},
+    "PortObservation": {
+      "type":"object",
+      "properties":{"status":{"enum":["free","in_use","not_checked","unavailable"]},"tcp_reachable":{"type":["boolean","null"]},"reason":{"type":["string","null"]}},
+      "required":["status","tcp_reachable","reason"],"additionalProperties":false
+    },
+    "OwnerObservation": {
+      "type":"object",
+      "properties":{"status":{"enum":["verified","unavailable"]},"kind":{"enum":["foreground","managed","global",null]},"pid":{"type":["integer","null"],"minimum":1},"execution_id":{"type":["string","null"],"format":"uuid"},"command":{"type":["string","null"]},"reason":{"enum":["legacy_run","metadata_unavailable","permission_denied","state_changed","deadline_exceeded","unsupported_owner_query",null]}},
+      "required":["status","kind","pid","execution_id","command","reason"],"additionalProperties":false,
+      "allOf":[{"if":{"properties":{"status":{"const":"verified"}}},"then":{"properties":{"kind":{"enum":["foreground","managed","global"]},"reason":{"type":"null"}},"anyOf":[{"properties":{"pid":{"type":"integer"}}},{"properties":{"execution_id":{"type":"string"}}}]},"else":{"properties":{"kind":{"type":"null"},"pid":{"type":"null"},"execution_id":{"type":"null"},"command":{"type":"null"},"reason":{"type":"string"}}}}]
+    },
+    "Observation": {
+      "type":"object","properties":{"status":{"enum":["partial","unavailable"]},"reason":{"type":"string"},"missing":{"type":"array","items":{"type":"string"}}},
+      "required":["status","reason","missing"],"additionalProperties":false
+    },
+    "RelatedItem": {
+      "type":"object",
+      "properties":{"id":{"type":"string"},"kind":{"type":"string"},"state":{"type":"string"},"completion_status":{"type":"string"},"execution_status":{"type":"string"},"blockers":{"type":"array","items":{"type":"object","properties":{"code":{"type":"string"},"message":{"type":"string"},"target_id":{"type":["string","null"]}},"required":["code","message","target_id"],"additionalProperties":false}}},
+      "required":["id","kind","state","completion_status","execution_status","blockers"],"additionalProperties":false
+    },
     "Facts": {
       "type": "object",
       "properties": {
+        "service": {"type":"string"},
+        "instance_id": {"type":"string"},
+        "port": {"type":["integer","null"],"minimum":1,"maximum":65535},
+        "port_observation": {"$ref":"#/$defs/PortObservation"},
+        "owner": {"$ref":"#/$defs/OwnerObservation"},
+        "observation": {"$ref":"#/$defs/Observation"},
+        "related_items": {"type":"array","items":{"$ref":"#/$defs/RelatedItem"}},
         "expected_kind": {"type":"string"},
         "actual_kind": {"type":"string"},
         "expected_type": {"type":"string"},
@@ -1829,12 +1857,18 @@
           "minimum": 0
         }
       },
+      "allOf": [{"if":{"required":["port"]},"then":{"required":["port_observation"]}}],
       "required": [],
       "additionalProperties": false
     },
     "Cause": {
       "type": "object",
       "properties": {
+        "id": {"type":"string","pattern":"^c[1-9][0-9]*$"},
+        "status": {"enum":["fail","unknown"]},
+        "message": {"type":"string","minLength":1},
+        "caused_by": {"$ref":"#/$defs/CauseIDs"},
+        "remedies": {"type":"array","items":{"$ref":"#/$defs/Remedy"}},
         "code": {
           "type": "string",
           "minLength": 1
@@ -1857,6 +1891,7 @@
         }
       },
       "required": [
+        "id", "status", "message", "caused_by", "remedies",
         "code",
         "reason",
         "target",
@@ -1868,6 +1903,7 @@
     "Check": {
       "type": "object",
       "properties": {
+        "blocked_by": {"$ref":"#/$defs/CauseIDs"},
         "id": {
           "type": "string",
           "minLength": 1
@@ -1919,7 +1955,7 @@
         "target",
         "sources",
         "facts",
-        "remedies"
+        "remedies", "blocked_by"
       ],
       "additionalProperties": false,
       "allOf": [
@@ -2370,6 +2406,7 @@
     "EditResult": {
       "type": "object",
       "properties": {
+        "dry_run": {"type":"boolean"},
         "config_path": {
           "type": "string"
         },
@@ -2413,6 +2450,7 @@
         }
       },
       "required": [
+        "dry_run",
         "config_path",
         "previous_revision",
         "revision",
@@ -2429,6 +2467,7 @@
     "MigrationResult": {
       "type": "object",
       "properties": {
+        "dry_run": {"type":"boolean"},
         "config_path": {
           "type": "string"
         },
@@ -2478,6 +2517,7 @@
         }
       },
       "required": [
+        "dry_run",
         "config_path",
         "previous_revision",
         "revision",
@@ -2745,6 +2785,7 @@
     "ErrorDetails": {
       "type": "object",
       "properties": {
+        "primary_cause_id": {"type":["string","null"],"pattern":"^c[1-9][0-9]*$"},
         "operation": {
           "type": "string",
           "minLength": 1
@@ -2837,6 +2878,7 @@
         "facts",
         "checks",
         "causes",
+        "primary_cause_id",
         "remedies",
         "retry",
         "effects"

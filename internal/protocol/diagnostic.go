@@ -378,7 +378,12 @@ func publicCause(value map[string]any, operation string) []any {
 	code, _ := value["code"].(string)
 	details := diagnosticObject(value["details"])
 	if details == nil {
-		details = value
+		details = map[string]any{}
+		for key, item := range value {
+			if key != "id" {
+				details[key] = item
+			}
+		}
 	} else if target, ok := value["target"]; ok {
 		copy := map[string]any{}
 		for key, v := range details {

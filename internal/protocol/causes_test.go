@@ -14,6 +14,7 @@ func TestPublicRetainsCauseRelationshipsAndResourceObservations(t *testing.T) {
 		"primary_cause_id": "c1",
 		"causes": []any{map[string]any{
 			"id": "c1", "code": "port_run_active", "status": "fail", "message": "Service web is already claimed.",
+			"target":    map[string]any{"kind": "service", "name": "web", "id": "service-web"},
 			"caused_by": []any{}, "remedies": []Remedy{},
 			"facts": map[string]any{"service": "web", "port": 3000,
 				"port_observation": map[string]any{"status": "free", "tcp_reachable": false, "reason": nil},
@@ -26,6 +27,10 @@ func TestPublicRetainsCauseRelationshipsAndResourceObservations(t *testing.T) {
 		e = Public(e, "command run")
 		if e.Details["primary_cause_id"] != "c1" {
 			t.Fatal("primary cause lost")
+		}
+		cause := e.Details["causes"].([]any)[0].(map[string]any)
+		if cause["target"].(map[string]any)["id"] != "service-web" {
+			t.Fatal("cause identifier replaced the resource identity", cause)
 		}
 		var output bytes.Buffer
 		if err := Failure(&output, e); err != nil {

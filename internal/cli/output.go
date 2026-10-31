@@ -48,33 +48,35 @@ func previewResultContract(c *Command) {
 	if !previewCommands[c.Name] {
 		return
 	}
-	if properties, ok := c.Output["properties"].(map[string]any); ok {
-		properties["dry_run"] = map[string]any{"type": "boolean"}
-		if required, ok := c.Output["required"].([]string); ok {
-			found := false
-			for _, key := range required {
-				found = found || key == "dry_run"
-			}
-			if !found {
-				c.Output["required"] = append(required, "dry_run")
-			}
-		}
-	}
+	publicResultField(c.Output, "dry_run", map[string]any{"type": "boolean"}, true)
+	publicResultField(c.Output, "next_actions", arraySchema(remedySchema()), false)
 	run := c.Run
 	c.Run = func(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
 		result, failure := run(ctx, streams, request)
 		dry := request.Options["dry-run"] == "true" || c.Name == "config fmt" && request.Options["check"] == "true" || c.Name == "config migrate" && request.Options["apply"] == ""
+		if c.Name == "backup restore" || c.Name == "profile import" || c.Name == "proxy teardown" {
+			dry = request.Options["apply"] == ""
+		}
 		project := func(value any) any {
 			out := publicResultObject(value)
 			if out == nil {
 				return value
 			}
 			out["dry_run"] = dry
+			if dry {
+				out["next_actions"] = []protocol.Remedy{previewApplyAction(*c, request, out)}
+			}
 			return out
 		}
 		if failure != nil {
 			if report := failure.Details["report"]; report != nil {
-				failure.Details["report"] = project(report)
+				projected := project(report)
+				failure.Details["report"] = projected
+				if c.Name == "config fmt" {
+					if value, ok := projected.(map[string]any); ok {
+						failure.Details["remedies"] = value["next_actions"]
+					}
+				}
 			}
 			return result, failure
 		}

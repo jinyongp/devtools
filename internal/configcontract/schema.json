@@ -1668,6 +1668,9 @@
         },
         "bundle": {
           "type": "string"
+        },
+        "mode": {
+          "enum": ["foreground", "managed"]
         }
       },
       "required": [
@@ -2406,6 +2409,7 @@
     "EditResult": {
       "type": "object",
       "properties": {
+        "next_actions": {"type":"array","items":{"$ref":"#/$defs/Remedy"}},
         "dry_run": {"type":"boolean"},
         "config_path": {
           "type": "string"
@@ -2467,6 +2471,7 @@
     "MigrationResult": {
       "type": "object",
       "properties": {
+        "next_actions": {"type":"array","items":{"$ref":"#/$defs/Remedy"}},
         "dry_run": {"type":"boolean"},
         "config_path": {
           "type": "string"

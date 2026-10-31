@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v20 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v21 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
@@ -67,7 +67,7 @@ devtools command run test
 JSON 실패는 `data` 대신 `error`를 제공합니다. `error.code`는 분기에 사용하고 `message`는 설명으로 사용합니다. protocol 10부터 공통 `details`를 항상 제공합니다.
 
 ```json
-{"schema_version":1,"ok":false,"error":{"code":"command_not_found","message":"The selected project command is not defined.","details":{"operation":"command run","phase":"validate","target":{"kind":"command","name":"dev:web"},"sources":[],"reason":"command_not_found","facts":{},"checks":[],"causes":[],"remedies":[],"retry":"after_input_change","effects":"none"}}}
+{"schema_version":1,"ok":false,"error":{"code":"command_not_found","message":"The selected project command is not defined.","details":{"operation":"command run","phase":"validate","target":{"kind":"command","name":"dev:web"},"sources":[],"reason":"command_not_found","facts":{},"checks":[],"causes":[],"primary_cause_id":null,"remedies":[],"retry":"after_input_change","effects":"none"}}}
 ```
 
 도움말·artifact·run의 devtools 오류도 선택된 형식을 사용하고 native stdout은 변환하지 않습니다.

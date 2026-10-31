@@ -115,7 +115,7 @@ Design background is separate from public command availability.
 
 ## Implementation contracts
 
-These contracts describe source behavior through protocol 20. Check the installed binary's
+These contracts describe source behavior through protocol 21. Check the installed binary's
 `version` and `schema` before using a new interface. Platform acceptance requires
 native execution; cross compilation alone does not establish publication or ACL behavior.
 

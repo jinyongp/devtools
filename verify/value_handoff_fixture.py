@@ -44,10 +44,16 @@ def run(binary, receiver, directory, base_env=None):
             assert not response["ok"] and response["error"]["code"] == error, (args[:3], response.get("error", {}).get("code"))
             return response["error"]
         assert result.returncode == 0 and response["ok"], (args[:3], response.get("error", {}).get("code"))
-        encoded = json.dumps(response)
-        for field in ('"patterns"', '"ticket"', '"values"', '"master_key"'):
-            if args[:2] == ("values", "execution"):
-                assert field not in encoded, "private field reached public execution output"
+        def public_fields(value):
+            if isinstance(value, dict):
+                assert not {"patterns", "ticket", "values", "master_key"}.intersection(value), "private field reached public execution output"
+                for nested in value.values():
+                    public_fields(nested)
+            elif isinstance(value, list):
+                for nested in value:
+                    public_fields(nested)
+        if args[:2] == ("values", "execution"):
+            public_fields(response)
         return response["data"]
 
     def execution(action, execution_id=None, body=None, request=None, error=None):

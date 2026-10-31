@@ -168,6 +168,11 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
     readme = repository / "README.md"
     install_doc = repository / "docs/install.md"
     canonical_skill = repository / "skills/devtools/SKILL.md"
+    # Resolve before replacing HOME so fixture Go helpers and baseline builds
+    # reuse the caller's caches instead of rebuilding inside every scenario.
+    go_caches = json.loads(subprocess.check_output(
+        ["go", "env", "-json", "GOCACHE", "GOMODCACHE"], cwd=repository, text=True
+    ))
 
     for name in selected:
         started = time.monotonic()
@@ -192,6 +197,7 @@ def run_scenarios(selected, scenarios, repository: Path, releases: Path) -> int:
                 DEVTOOLS_TEST_INSTALL_DOC=str(install_doc),
                 DEVTOOLS_TEST_CANONICAL_SKILL=str(canonical_skill),
                 DEVTOOLS_FORMAT="json",
+                **go_caches,
             )
             for key in GIT_LOCAL_ENVIRONMENT:
                 env.pop(key, None)

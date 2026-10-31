@@ -100,13 +100,17 @@ class ScenarioTimeoutTest(unittest.TestCase):
             (caller / "private.txt").write_text("must remain untracked")
             scenario = root / "git_fixture.py"
             scenario.write_text(
-                "import subprocess\nfrom pathlib import Path\n"
+                "import os,subprocess\nfrom pathlib import Path\n"
+                f"assert os.environ['GOCACHE'] == {str(caller / 'build-cache')!r}\n"
+                f"assert os.environ['GOMODCACHE'] == {str(caller / 'module-cache')!r}\n"
                 "Path('fixture').write_text('fixture')\n"
                 "for args in [('init', '--quiet'), ('add', '.'), ('commit', '--quiet', '-m', 'fixture')]:\n"
                 "    subprocess.run(['git', *args], check=True)\n"
             )
             inherited = dict(env, GIT_DIR=str(caller / ".git"), GIT_WORK_TREE=str(caller),
-                             GIT_INDEX_FILE=str(caller / ".git/index"))
+                             GIT_INDEX_FILE=str(caller / ".git/index"),
+                             GOCACHE=str(caller / "build-cache"),
+                             GOMODCACHE=str(caller / "module-cache"))
             with patch.dict(os.environ, inherited, clear=True), \
                     patch.object(run, "cleanup_managed_processes", return_value=True):
                 self.assertEqual(run.run_scenarios(["git_fixture"], {"git_fixture": scenario}, root, root), 0)

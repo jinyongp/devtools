@@ -21,6 +21,9 @@ func TestIssuesRetainStorageDetailsWithoutDomainPayloads(t *testing.T) {
 	if details["facts"].(map[string]any)["os_code"] != uint64(5) || details["path"] != nil || details["items"] != nil || report.Issues[0].Message == "SECRET-MESSAGE" {
 		t.Fatal(details)
 	}
+	if report.Issues[0].Message != "Cannot inspect profiles: access was denied." {
+		t.Fatal(report.Issues[0].Message)
+	}
 }
 
 func TestExpiredDiagnosticsDeadlineIsNotUserCancellation(t *testing.T) {

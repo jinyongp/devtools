@@ -93,7 +93,13 @@ func (s *State) explain(r Request, e *protocol.Error, profile string) *protocol.
 			argv = append(argv, "context")
 		}
 		argv = append(argv, i.ID, "--profile", profile)
-		remedies = append(remedies, protocol.LocalAction(argv, nil, "Read the current item and its blocking conditions.", "read").Remedy(protocol.InvocationContext{}))
+		if len(a.Blockers) == 0 {
+			remedies = append(remedies, protocol.LocalAction(argv, nil, "Read the current item and its blocking conditions.", "read").Remedy(protocol.InvocationContext{}))
+		} else {
+			for _, blocker := range a.Blockers {
+				remedies = append(remedies, protocol.Action{Relation: protocol.ManualAction, Message: str(blocker, "message"), Effect: "read"}.Remedy(protocol.InvocationContext{}))
+			}
+		}
 		if i.Kind == "task" && a.ExecutionStatus == "stale" {
 			remedies = append(remedies, protocol.Remedy{Relation: protocol.SameStoreAction, Effect: "value_write", Argv: []string{"devtools", "task", "sync", i.ID, "--profile", profile}, RequiredInputs: []string{"context", "if-revision", "request-id", "reason"}, Message: "Review the changed definition, then sync with the current execution context."})
 		}
@@ -141,6 +147,12 @@ func (s *State) explain(r Request, e *protocol.Error, profile string) *protocol.
 		e.Details["checks"] = checks
 	}
 	e.Details["related"] = related
+	facts, _ := e.Details["facts"].(map[string]any)
+	if facts == nil {
+		facts = map[string]any{}
+	}
+	facts["related_items"] = related
+	e.Details["facts"] = facts
 	e.Details["remedies"] = remedies
 	if len(related) > 0 {
 		e.Details["target"] = related[0]

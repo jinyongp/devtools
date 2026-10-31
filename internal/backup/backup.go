@@ -215,7 +215,7 @@ func archiveFailure(err error) *protocol.Error {
 }
 
 func outputExistsFailure() *protocol.Error {
-	return protocol.NewError("backup_error", "Backup operation could not be completed; check the selected files and target state.", 3, map[string]any{"cause": "output_exists"})
+	return protocol.NewError("backup_error", "The backup output file already exists. The existing file was preserved.", 3, map[string]any{"cause": "output_exists", "reason": "output_exists", "facts": map[string]any{"field": "output", "input_role": "output"}, "effects": "none", "remedies": []protocol.Remedy{{Message: "Choose an unused --output path, then retry the backup command.", Effect: "read", Argv: []string{}, RequiredInputs: []string{}}}})
 }
 func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 func file(domain, profile string) string {

@@ -126,6 +126,19 @@ func (r *Report) issue(section string, err *protocol.Error) {
 	message := "Subsystem inspection could not complete."
 	if err != nil {
 		details = protocol.Public(err, "diagnostics "+section).Details
+		reason, _ := details["reason"].(string)
+		explanation := map[string]string{
+			"access_denied": "access was denied", "permission_denied": "access was denied",
+			"not_found": "the required state is missing", "integrity_failed": "state integrity verification failed",
+			"vault_locked": "the vault is locked", "key_backend_locked": "the native key backend is locked",
+			"key_interaction_required": "native authentication is required", "recovery_required": "stored protection needs recovery",
+			"deadline_exceeded": "the inspection deadline elapsed", "canceled": "inspection was canceled",
+			"unsupported_storage": "private storage requires a supported local filesystem",
+		}[reason]
+		if explanation == "" {
+			explanation = "the subsystem state could not be read or verified"
+		}
+		message = "Cannot inspect " + section + ": " + explanation + "."
 	}
 	r.Issues = append(r.Issues, Issue{Section: section, Code: code, Details: details, Message: message})
 }

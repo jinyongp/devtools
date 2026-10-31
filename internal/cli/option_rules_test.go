@@ -90,7 +90,14 @@ func TestStaticRuleDiagnosticsAndHelpShareActionableConditions(t *testing.T) {
 			t.Fatal(facts)
 		}
 		_, help, err := invoke(t, app, "", append(strings.Fields(tc.command), "--help")...)
-		if err != "" || !strings.Contains(help, tc.message) {
+		helpMessage := tc.message
+		switch tc.command {
+		case "vault rewrap":
+			helpMessage = "Do not combine --current-passphrase-stdin and --new-passphrase-stdin."
+		case "proxy teardown":
+			helpMessage = "Provide --apply and --request-id together."
+		}
+		if err != "" || !strings.Contains(help, helpMessage) {
 			t.Fatal(fmt.Sprint(help, err))
 		}
 	}

@@ -128,10 +128,10 @@ assert code == 0 and '\x1b[' not in output and '0.0.0-test.1' in output
 # Execute the exact standalone Next line; the path requires shell literal quoting.
 code, output, error = call('--format', 'text', 'doctor', 'not-declared', '--dir', str(project))
 assert code == 0 and not error
-lines = [line for line in output.splitlines() if line.startswith('devtools ') and 'command list' in line]
+lines = [line for line in output.splitlines() if line.startswith('  devtools ') and 'command list' in line]
 assert lines, output
 for line in lines:
-    assert '\x1b' not in line and not line.startswith((' ', '$', '>'))
+    assert '\x1b' not in line and not line.lstrip().startswith(('$', '>'))
     result = subprocess.run(['sh', '-c', line], cwd=project, env=dict(environment, DEVTOOLS_FORMAT='json'),
                             text=True, capture_output=True, timeout=15)
     assert result.returncode == 0 and json.loads(result.stdout)['data']['items'][0]['name'] == 'echo'

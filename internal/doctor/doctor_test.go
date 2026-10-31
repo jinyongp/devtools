@@ -135,17 +135,13 @@ func TestBoundedProbeOutput(t *testing.T) {
 	}
 }
 
-func TestFailureRemedyPreservesInjectionSelection(t *testing.T) {
+func TestFailureDoesNotSendTheUserThroughAnotherDiagnosis(t *testing.T) {
 	checks := []Check{NewCheck("command_executable", "fail", "not_found", "The executable is missing.")}
 	for _, inject := range []bool{false, true} {
 		e := FailureFor(checks, protocol.InvocationContext{Kind: "command", Name: "web", Directory: "/project", Profile: "sample", Env: "", Bundle: "none", Mode: "foreground", Inject: inject, ProfileKnown: true, EnvKnown: true, BundleKnown: true})
 		remedy := e.Details["remedies"].([]protocol.Remedy)[0]
-		hasEnv := false
-		for _, arg := range remedy.Argv {
-			hasEnv = hasEnv || arg == "--env"
-		}
-		if hasEnv != inject {
-			t.Fatal("remedy changes injection semantics", remedy.Argv)
+		if len(remedy.Argv) != 0 || e.Details["target"].(map[string]any)["bundle"] != "none" {
+			t.Fatal("failure lost scope or requires another diagnosis", e.Details)
 		}
 	}
 }

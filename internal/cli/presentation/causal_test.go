@@ -62,3 +62,16 @@ func TestMutationPreviewDoesNotClaimChangesAndTaskBodyAppearsOnce(t *testing.T) 
 		t.Fatal(s)
 	}
 }
+
+func TestUnverifiedDoctorRetainsReasonSpecificRecoveryOnce(t *testing.T) {
+	action := map[string]any{"message": "The diagnosis exceeded its overall timeout. Review the timeout before retrying.", "argv": []any{}, "required_inputs": []any{}, "effect": "read"}
+	checks := []any{}
+	for _, name := range []string{"node", "pnpm"} {
+		checks = append(checks, map[string]any{"id": "tool:" + name, "status": "unknown", "reason": "deadline_exceeded", "facts": map[string]any{"executable": name}, "remedies": []any{action}})
+	}
+	doc := publicDocument(t, "doctor", map[string]any{"ready": false, "state": "unknown", "checks": []any{}, "commands": []any{map[string]any{"name": "dev", "state": "unknown", "checks": checks}}})
+	out, err := cliui.Render(doc, cliui.Options{Width: 120})
+	if err != nil || !strings.Contains(string(out), "Unverified checks: node, pnpm") || strings.Count(string(out), "overall timeout") != 1 || strings.Count(string(out), "Next:") != 1 {
+		t.Fatal(string(out), err)
+	}
+}

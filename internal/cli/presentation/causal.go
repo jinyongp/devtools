@@ -23,6 +23,16 @@ func causalErrorView(e map[string]any) (cliui.Document, bool) {
 	var roots []map[string]any
 	for _, value := range causes {
 		cause, _ := value.(map[string]any)
+		if cause == nil {
+			continue
+		}
+		if text(cause["message"]) == "" {
+			message := map[string]string{"unknown_field": "Unknown configuration field.", "invalid_type": "Invalid value type.", "syntax_error": "Invalid TOML syntax."}[text(cause["reason"])]
+			if message == "" {
+				message = strings.ReplaceAll(text(cause["code"]), "_", " ")
+			}
+			cause["message"] = message
+		}
 		parents, _ := cause["caused_by"].([]any)
 		if len(parents) == 0 {
 			roots = append(roots, cause)
@@ -335,7 +345,14 @@ func diagnosisPurposeView(d Definition, data map[string]any) cliui.Document {
 		if readiness["reason"] == "not_configured" {
 			blocks = append(blocks, cliui.Paragraph(cliui.Literal("No readiness check is configured.")))
 		} else if readiness["ready"] == false {
-			blocks = append(blocks, cliui.Paragraph(cliui.Words("The configured readiness condition has not been satisfied.")))
+			message := map[string]string{"probe_timeout": "The readiness check timed out.", "probe_execution_failed": "The readiness check could not start.", "probe_failed": "The readiness check failed."}[text(readiness["reason"])]
+			if message == "" {
+				message = "The configured readiness condition has not been satisfied."
+			}
+			blocks = append(blocks, cliui.Paragraph(cliui.Words(message)))
+			if code, exists := readiness["exit_code"]; exists && code != nil && fmt.Sprint(code) != "0" {
+				blocks = append(blocks, cliui.Paragraph(cliui.Literal("Readiness check exit code: "+fmt.Sprint(code))))
+			}
 		}
 	}
 	blocks = append(blocks, inventoryNotes(data)...)
@@ -386,6 +403,11 @@ func doctorReportBlocks(data map[string]any, heading bool) []cliui.Block {
 	seen := map[string]bool{}
 	for _, value := range failed {
 		check, _ := value.(map[string]any)
+		if check["status"] == "unknown" {
+			if remedies, ok := check["remedies"].([]any); ok {
+				actions = append(actions, remedies...)
+			}
+		}
 		if check["status"] != "fail" {
 			continue
 		}
@@ -395,7 +417,13 @@ func doctorReportBlocks(data map[string]any, heading bool) []cliui.Block {
 			continue
 		}
 		seen[string(identity)] = true
-		blocks = append(blocks, cliui.Paragraph(cliui.Words(text(check["message"]))))
+		message := text(check["message"])
+		if target, ok := check["target"].(map[string]any); ok {
+			if name := text(target["name"]); name != "" && !mentionsTarget(message, name) {
+				message = name + ": " + message
+			}
+		}
+		blocks = append(blocks, cliui.Paragraph(cliui.Words(message)))
 		blocks = append(blocks, resourceFacts(facts, text(check["message"]))...)
 		blocks = append(blocks, causalLocations(check, map[string]any{"config_path": data["config_path"]})...)
 		if remedies, ok := check["remedies"].([]any); ok {
@@ -403,6 +431,8 @@ func doctorReportBlocks(data map[string]any, heading bool) []cliui.Block {
 		}
 	}
 	blocks = append(blocks, unverifiedChecks(failed)...)
+	blocks = append(blocks, recoveryNotes(data)...)
+	blocks = append(blocks, inventoryNotes(data)...)
 	if next, ok := actionBlocks(actions); ok {
 		blocks = append(blocks, next...)
 	}

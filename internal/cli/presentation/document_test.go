@@ -50,9 +50,9 @@ func TestPublicActionsRetainRawArgvAndRequiredInputs(t *testing.T) {
 		}
 	}
 	visit(doc.Blocks())
-	want := [][]string{{"devtools", "command", "list", "--dir", "/workspace/my project"}}
+	want := [][]string{{"devtools", "command", "list", "--dir", "/workspace/my project"}, {"devtools", "task", "show"}}
 	if !reflect.DeepEqual(commands, want) {
-		t.Fatalf("action changed or template advertised as runnable: %#v", commands)
+		t.Fatalf("action or template argv changed: %#v", commands)
 	}
 	out, err := cliui.Render(doc, cliui.Options{CommandShells: []cliui.Shell{cliui.POSIX, cliui.Fish}})
 	if err != nil || !strings.Contains(string(out), "Original action.") || !strings.Contains(string(out), "Requires: task-id.") || !strings.Contains(string(out), "Command template") || strings.Contains(string(out), "new_metadata") || strings.Contains(string(out), "effect") {

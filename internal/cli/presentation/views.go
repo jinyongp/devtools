@@ -153,6 +153,13 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 	if !ok {
 		return cliui.Document{}, false
 	}
+	for _, key := range []string{"changed", "replayed", "dry_run"} {
+		if value, exists := data[key]; exists {
+			if _, valid := value.(bool); !valid {
+				return cliui.Document{}, false
+			}
+		}
+	}
 	if document, handled := purposeView(definition, data); handled {
 		return document, true
 	}

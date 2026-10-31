@@ -67,7 +67,7 @@ func TestReadinessExplainsFailureWithoutReportMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"NOT READY", "process-id", "The readiness check failed.", "exit code: 7"} {
+	for _, expected := range []string{"Not ready", "process-id", "The readiness check failed.", "exit code: 7"} {
 		if !strings.Contains(string(output), expected) {
 			t.Fatalf("lost %q: %s", expected, output)
 		}
@@ -92,7 +92,7 @@ func TestAggregateDiagnosticKeepsSubsystemRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"vault: Subsystem inspection", "Changes may have been applied.", "same request ID: recovery-uuid", "Unlock the vault", "Inspect the vault.", "\ndevtools vault status\n"} {
+	for _, expected := range []string{"vault: Subsystem inspection", "Changes may have been applied.", "same request ID: recovery-uuid", "Unlock the vault", "Inspect the vault.", "\n  devtools vault status\n"} {
 		if !strings.Contains(string(output), expected) {
 			t.Fatalf("lost subsystem recovery %q: %s", expected, output)
 		}
@@ -105,8 +105,7 @@ func TestAggregateDiagnosticKeepsSubsystemRecovery(t *testing.T) {
 }
 
 func TestConfigDiagnosticKeepsActionableSourceLocation(t *testing.T) {
-	// Public causes intentionally omit their original message. The reason and
-	// source must still identify the input to correct without a JSON dump.
+	// Older causes without a message still identify the input to correct.
 	const public = `{"schema_version":1,"ok":false,"error":{"code":"invalid_config","message":"Project configuration is invalid.","details":{"reason":"unknown_field","target":{"config_path":"/demo/devtools.toml"},"effects":"none","retry":"after_input_change","causes":[{"code":"invalid_config","reason":"unknown_field","sources":[{"kind":"config","path":["commands","test","typo"],"line":5,"column":3}]}]}}}`
 	doc, err := Build("config check", []byte(public))
 	if err != nil {
@@ -116,7 +115,7 @@ func TestConfigDiagnosticKeepsActionableSourceLocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"Unknown configuration field.", "/demo/devtools.toml", "At commands.test.typo, line 5, column 3."} {
+	for _, expected := range []string{"Unknown configuration field.", "At /demo/devtools.toml:5:3 (commands.test.typo)."} {
 		if !strings.Contains(string(output), expected) {
 			t.Fatalf("lost actionable config diagnostic %q: %s", expected, output)
 		}

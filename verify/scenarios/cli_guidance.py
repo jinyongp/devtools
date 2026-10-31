@@ -54,7 +54,10 @@ assert str(root_b) in remedy["argv"]
 status = api(*remedy["argv"][1:], cwd=home)["item"]
 assert status["state"] == "uninitialized"
 failure = api("run", "--isolated-root", str(root_b), "missing", expected=127)
-assert str(root_b) in failure["details"]["remedies"][0]["argv"]
+assert failure["details"]["target"]["directory"] == str(project)
+assert failure["details"]["target"]["profile"] == "guidance"
+assert checks(failure)["command_executable"]["reason"] == "not_found"
+assert all(not r["argv"] for r in failure["details"]["remedies"])
 assert "--isolated-root" in json.dumps(api("command", "explain", "missing", "--env", "", "--isolated-root", str(root_b)))
 
 # Direct diagnostics identify the actual argv token, without a fictitious config path.

@@ -523,7 +523,11 @@ func taskPurposeView(d Definition, data map[string]any) cliui.Document {
 
 func taskIdentity(item map[string]any) []cliui.Block {
 	var values []cliui.Field
-	for _, pair := range [][2]string{{"id", title(text(item["kind"])) + " ID"}, {"title", "Title"}, {"state", "Lifecycle"}, {"completion_status", "Completion"}, {"execution_status", "Execution"}} {
+	idLabel := "ID"
+	if kind, ok := item["kind"].(string); ok && kind != "" {
+		idLabel = title(kind) + " ID"
+	}
+	for _, pair := range [][2]string{{"id", idLabel}, {"title", "Title"}, {"state", "Lifecycle"}, {"completion_status", "Completion"}, {"execution_status", "Execution"}} {
 		if value, ok := item[pair[0]]; ok && value != nil {
 			displayed := display(value)
 			if pair[0] != "id" && pair[0] != "title" {

@@ -65,7 +65,7 @@ func TestReadViewsEmptyValuesAndDefinitionOwnership(t *testing.T) {
 		data     any
 		contains []string
 	}{
-		{"env list", map[string]any{"profile": "demo", "items": []string{}}, []string{"Environments for demo", "No items."}},
+		{"env list", map[string]any{"profile": "demo", "items": []string{}}, []string{"Environments for demo", "No environments."}},
 		{"env list", map[string]any{"profile": "demo", "items": []string{"z", "a"}}, []string{"Environments for demo", "2 results", "Environment", "z", "a"}},
 		{"variable get", map[string]any{"profile": "demo", "value": "", "metadata": map[string]any{"key": "EMPTY", "source": "common", "overrides": false}, "integrity_verified": false}, []string{"Variable", "EMPTY", `""`, "false"}},
 		{"process logs", map[string]any{"id": "log-id", "content": "first\nsecond\x1b[31m"}, []string{"Process logs", "log-id", "first\n", "second", `\u001b[31m`}},

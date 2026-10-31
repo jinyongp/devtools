@@ -2975,7 +2975,7 @@
       "type": "object",
       "properties": {
         "protocol_version": {
-          "const": 20
+          "const": 21
         },
         "schema": {
           "type": "object"

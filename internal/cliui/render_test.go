@@ -190,7 +190,7 @@ func TestCopyLineHasNoPresentationBytes(t *testing.T) {
 	block, _ := CommandLine(argv)
 	argv[0] = "changed"
 	doc := NewDocument(Section(Styled("Next", Info), Paragraph(Words("List configured commands.")), block))
-	want := "devtools command list --dir '/workspace/my project'"
+	want := "  devtools command list --dir '/workspace/my project'"
 	for _, width := range []int{40, 80, 120} {
 		out, err := Render(doc, Options{Width: width, SGR: true, Color: true, CommandShells: []Shell{POSIX, Fish}})
 		if err != nil || strings.Count(string(out), want+"\n") != 1 {
@@ -203,7 +203,7 @@ func TestCopyLineHasNoPresentationBytes(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Fatal("copy line has indentation, styling, or wrapping", string(out))
+			t.Fatal("copy line lost its two-space indent or contains styling or wrapping", string(out))
 		}
 	}
 	for _, shell := range []Shell{POSIX, Fish, PowerShell} {

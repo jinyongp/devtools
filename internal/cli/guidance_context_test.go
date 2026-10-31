@@ -96,9 +96,8 @@ func TestExecutionGuidanceKeepsRootAndDirectTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := filepath.Join(privateTempDir(t), "selected")
-	rootJSON, _ := json.Marshal(root)
 	code, _, diagnostic := invoke(t, a, "", "run", "--isolated-root", root, "missing")
-	if code != 127 || !strings.Contains(diagnostic, string(rootJSON)) {
+	if code != 127 || !strings.Contains(diagnostic, `"reason":"not_found"`) || strings.Contains(diagnostic, `"argv":["devtools","doctor"`) {
 		t.Fatal(code, diagnostic)
 	}
 	initializeTestVault(t, a)

@@ -28,15 +28,15 @@ func TestInputErrorsExplainTheCorrectionWithoutRepeatedLabels(t *testing.T) {
 		want []string
 	}{
 		{[]string{"completion"}, []string{"Error: 'completion' requires a shell argument.", "Choose zsh, bash, fish or powershell.", "devtools help completion"}},
-		{[]string{"completion", "cmd"}, []string{"'completion'", "Invalid value for argument 'shell'.", "zsh, bash, fish, powershell", "devtools help completion"}},
+		{[]string{"completion", "cmd"}, []string{"Invalid value for argument 'shell'.", "zsh, bash, fish, powershell", "devtools help completion"}},
 		{[]string{"command", "explain"}, []string{"'command explain' requires a name argument.", "devtools help command explain"}},
 		{[]string{"profile", "diff"}, []string{"'profile diff'", "argument.", "devtools help profile diff"}},
-		{[]string{"command", "list", "--dir"}, []string{"'command list'", "--dir requires a value", "devtools help command list"}},
-		{[]string{"command", "list", "--dir", "a", "--dir", "b"}, []string{"'command list'", "Specify --dir once.", "devtools help command list"}},
-		{[]string{"completion", "bash", "extra"}, []string{"'completion'", "Unexpected positional arguments", "devtools help completion"}},
+		{[]string{"command", "list", "--dir"}, []string{"--dir requires a value", "devtools help command list"}},
+		{[]string{"command", "list", "--dir", "a", "--dir", "b"}, []string{"Specify --dir once.", "devtools help command list"}},
+		{[]string{"completion", "bash", "extra"}, []string{"Unexpected positional arguments", "devtools help completion"}},
 		{[]string{"command", "list", "-q"}, []string{"Unknown option -q for 'command list'.", "devtools help command list"}},
-		{[]string{"run"}, []string{"'command run'", "Supply a configured command name or an executable after --.", "devtools help command run"}},
-		{[]string{"cmd", "run"}, []string{"'command run'", "Supply a configured command name or an executable after --.", "devtools help command run"}},
+		{[]string{"run"}, []string{"Supply a configured command name or an executable after --.", "devtools help command run"}},
+		{[]string{"cmd", "run"}, []string{"Supply a configured command name or an executable after --.", "devtools help command run"}},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			a := presentationApp(presentation.Environment{})

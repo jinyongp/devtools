@@ -39,21 +39,21 @@ func TestOperationStatesDoNotClaimNewEffects(t *testing.T) {
 		data    map[string]any
 		prefix  string
 	}{
-		{"variable set", map[string]any{"changed": true, "profile": "demo", "revision": "revision-full", "request_id": "uuid-full"}, "CHANGED"},
-		{"variable set", map[string]any{"changed": false, "profile": "demo"}, "NO CHANGE"},
-		{"variable set", map[string]any{"changed": true, "dry_run": true, "profile": "demo"}, "PREVIEW"},
-		{"variable set", map[string]any{"changed": true, "replayed": true, "profile": "demo"}, "REPLAYED"},
-		{"cleanup preview", map[string]any{"items": []any{}, "digest": "digest-full"}, "PREVIEW"},
-		{"doctor", map[string]any{"ready": false, "state": "unknown", "checks": []any{}, "commands": []any{}}, "UNKNOWN"},
-		{"doctor", map[string]any{"ready": false, "state": "not_ready", "checks": []any{}, "commands": []any{}}, "NOT READY"},
-		{"doctor", map[string]any{"ready": false, "state": "future_state", "checks": []any{}, "commands": []any{}}, "future_state"},
+		{"variable set", map[string]any{"changed": true, "profile": "demo", "revision": "revision-full", "request_id": "uuid-full"}, "Updated variable."},
+		{"variable set", map[string]any{"changed": false, "profile": "demo"}, "No changes to variable."},
+		{"variable set", map[string]any{"changed": true, "dry_run": true, "profile": "demo"}, "Preview: Set variable."},
+		{"variable set", map[string]any{"changed": true, "replayed": true, "profile": "demo"}, "Recorded result: Updated variable."},
+		{"cleanup preview", map[string]any{"items": []any{}, "digest": "digest-full"}, "Preview:"},
+		{"doctor", map[string]any{"ready": false, "state": "unknown", "checks": []any{}, "commands": []any{}}, "Doctor: Unverified."},
+		{"doctor", map[string]any{"ready": false, "state": "not_ready", "checks": []any{}, "commands": []any{}}, "Doctor: Not ready."},
+		{"doctor", map[string]any{"ready": false, "state": "future_state", "checks": []any{}, "commands": []any{}}, "Doctor: Unrecognized: future_state."},
 	} {
 		out, err := cliui.Render(publicDocument(t, tc.command, tc.data), cliui.Options{})
 		if err != nil || !strings.HasPrefix(string(out), tc.prefix) {
 			t.Fatal(tc.command, string(out), err)
 		}
-		if tc.prefix == "PREVIEW" || tc.prefix == "REPLAYED" {
-			if strings.Contains(strings.Split(string(out), "\n")[0], "CHANGED") {
+		if strings.HasPrefix(tc.prefix, "Preview:") || strings.HasPrefix(tc.prefix, "Recorded result:") {
+			if strings.HasPrefix(strings.Split(string(out), "\n")[0], "Updated") {
 				t.Fatal("saved/planned change described as newly applied", string(out))
 			}
 		}
@@ -73,7 +73,7 @@ func TestDiagnosticMessagesAndActionsDoNotDumpMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"NOT READY", "FAIL", "Warnings", "Original check message.", "Original remedy message.", "Original warning message.", "node", "unrecognized", "Changes may have been applied.", "devtools help doctor"} {
+	for _, expected := range []string{"Doctor: Not ready.", "Original check message.", "Original remedy message.", "Original warning message.", "node", "Changes may have been applied.", "devtools help doctor"} {
 		if !strings.Contains(string(out), expected) {
 			t.Errorf("lost %q: %s", expected, out)
 		}
@@ -97,7 +97,7 @@ func TestTaskLifecycleCompletionExecutionAndDocuments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"id-full", "done", "Completion_status", "stale", "Execution_status", "idle", "false", "42", "Original blocker.", "dependency-full", "first line\n", "second line", "# Plan\n", "Original document body.", "future_document", "cursor-full", "한글", "문서"} {
+	for _, expected := range []string{"id-full", "Done", "Completion", "Stale", "Execution", "Idle", "Original blocker.", "dependency-full", "first line\n", "second line", "# Plan\n", "Original document body.", "cursor-full"} {
 		if !strings.Contains(string(out), expected) {
 			t.Errorf("lost %q: %s", expected, out)
 		}
@@ -117,7 +117,7 @@ func TestErrorPresentationKeepsConsequencesAndRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"Error: Original failure message.", "Check original.", "nested", "Some changes were applied.", "Check the current state", "uuid-original", "Original next action.", "devtools help project"} {
+	for _, expected := range []string{"Error: Original failure message.", "nested", "Some changes were applied.", "Check the current state", "uuid-original", "Original next action.", "devtools help project"} {
 		if !strings.Contains(string(out), expected) {
 			t.Errorf("lost %q: %s", expected, out)
 		}

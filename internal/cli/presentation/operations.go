@@ -262,21 +262,21 @@ func operationView(definition Definition, data map[string]any) (cliui.Document, 
 func stateLabel(state string) (string, cliui.Role) {
 	switch state {
 	case "pass":
-		return "OK", cliui.Success
+		return "Ready", cliui.Success
 	case "ready":
-		return "READY", cliui.Success
+		return "Ready", cliui.Success
 	case "fail":
-		return "FAIL", cliui.Failure
+		return "Not ready", cliui.Failure
 	case "not_ready":
-		return "NOT READY", cliui.Failure
+		return "Not ready", cliui.Failure
 	case "unknown":
-		return "UNKNOWN", cliui.Warning
+		return "Unverified", cliui.Warning
 	case "skipped":
-		return "SKIPPED", cliui.Primary
+		return "Unverified", cliui.Warning
 	case "not_applicable":
-		return "NOT APPLICABLE", cliui.Primary
+		return "Not applicable", cliui.Primary
 	}
-	return state, cliui.Primary
+	return inventoryState(state)
 }
 
 func diagnosticSection(key string, value any) ([]cliui.Block, bool) {

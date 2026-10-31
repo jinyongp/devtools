@@ -56,6 +56,7 @@ type Block struct {
 	fields   []Field
 	columns  []Column
 	rows     []Row
+	optional []int
 	children []Block
 	argv     []string
 }
@@ -75,7 +76,7 @@ func Fields(fields ...Field) Block {
 	return cloneBlock(Block{kind: FieldsBlock, fields: fields})
 }
 func Table(columns []Column, rows []Row) (Block, error) {
-	if len(columns) < 1 || len(columns) > 4 || len(rows) == 0 {
+	if len(columns) < 1 || len(columns) > 8 || len(rows) == 0 {
 		return Block{}, ErrInvalidDocument
 	}
 	for _, row := range rows {
@@ -84,6 +85,22 @@ func Table(columns []Column, rows []Row) (Block, error) {
 		}
 	}
 	return cloneBlock(Block{kind: TableBlock, columns: columns, rows: rows}), nil
+}
+
+// CompactTable declares ancillary columns that may be omitted, rightmost first.
+// Required identities remain intact even when a terminal wraps a long token.
+func CompactTable(columns []Column, rows []Row, optional ...int) (Block, error) {
+	b, err := Table(columns, rows)
+	if err != nil {
+		return b, err
+	}
+	for _, index := range optional {
+		if index < 0 || index >= len(columns) {
+			return Block{}, ErrInvalidDocument
+		}
+	}
+	b.optional = append([]int(nil), optional...)
+	return b, nil
 }
 func Section(title Text, children ...Block) Block {
 	return cloneBlock(Block{kind: SectionBlock, text: title, children: children})
@@ -116,6 +133,7 @@ func cloneBlocks(blocks []Block) []Block {
 	return result
 }
 func cloneBlock(b Block) Block {
+	b.optional = append([]int(nil), b.optional...)
 	b.text = cloneText(b.text)
 	b.argv = append([]string(nil), b.argv...)
 	b.children = cloneBlocks(b.children)
@@ -170,7 +188,7 @@ func validateBlocks(blocks []Block) bool {
 				}
 			}
 		case TableBlock:
-			if len(b.columns) < 1 || len(b.columns) > 4 || len(b.rows) == 0 {
+			if len(b.columns) < 1 || len(b.columns) > 8 || len(b.rows) == 0 {
 				return false
 			}
 			for _, c := range b.columns {

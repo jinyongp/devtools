@@ -13,6 +13,7 @@ import (
 // Definition records why a field may be summarized or omitted. Unknown fields
 // never enter an implicit omission rule, including fields added inside a row.
 type Definition struct {
+	Command      string
 	Family       string
 	Title        string
 	Required     []Requirement
@@ -86,6 +87,7 @@ func DefinitionFor(command string) Definition {
 	if d.Family == "" {
 		d = operationDefinition(command)
 	}
+	d.Command = command
 	d.Required = append([]Requirement(nil), d.Required...)
 	d.Optional = append([]string(nil), d.Optional...)
 	d.KnownOmitted = append([]Omission(nil), d.KnownOmitted...)
@@ -151,7 +153,7 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 		return cliui.Document{}, false
 	}
 	if definition.Family == "list" {
-		return listView(definition, data), true
+		return inventoryView(definition, data), true
 	}
 	if definition.Family == "commands" {
 		return commandListView(data), true
@@ -208,16 +210,25 @@ func identity(data map[string]any, consumed map[string]bool) []cliui.Block {
 
 func scope(data map[string]any, consumed map[string]bool) []cliui.Block {
 	var fields []cliui.Field
-	for _, key := range []string{"profile", "env", "directory"} {
+	for _, key := range []string{"profile", "directory", "env", "selection", "mode"} {
 		if consumed[key] {
 			continue
 		}
 		if value, exists := data[key]; exists {
 			if text, ok := value.(string); ok {
+				if key == "selection" && (text == "" || text == "all") {
+					consumed[key] = true
+					continue
+				}
+				if key == "mode" && text == "foreground" {
+					consumed[key] = true
+					continue
+				}
 				if key == "env" && text == "" {
 					text = "common"
 				}
-				fields = append(fields, cliui.Field{Label: cliui.Literal(title(key)), Value: display(text)})
+				label := map[string]string{"profile": "Profile", "directory": "Directory", "env": "Environment", "selection": "Bundle", "mode": "Mode"}[key]
+				fields = append(fields, cliui.Field{Label: cliui.Literal(label), Value: display(text)})
 				consumed[key] = true
 			}
 		}
@@ -466,70 +477,4 @@ func listTitle(title string, data map[string]any) string {
 		return title + " for " + profile
 	}
 	return title
-}
-
-func listView(definition Definition, data map[string]any) cliui.Document {
-	items := data["items"].([]any)
-	blocks := []cliui.Block{cliui.Heading(cliui.Literal(listTitle(definition.Title, data)), 1)}
-	consumed := map[string]bool{"items": true}
-	if profile, ok := data["profile"].(string); ok && profile != "" {
-		consumed["profile"] = true // The heading already identifies this scope.
-	}
-	blocks = append(blocks, scope(data, consumed)...)
-	if len(items) == 0 {
-		blocks = append(blocks, cliui.Paragraph(cliui.Words("No items.")))
-	} else {
-		columns := make([]cliui.Column, len(definition.Columns))
-		for i, column := range definition.Columns {
-			columns[i] = cliui.Column{Label: cliui.Literal(column.Label)}
-		}
-		rows := make([]cliui.Row, len(items))
-		for i, item := range items {
-			row, _ := item.(map[string]any)
-			used := map[string]bool{}
-			var extra []cliui.Block
-			for _, column := range definition.Columns {
-				value := item
-				if column.Path != "" {
-					value = row[column.Path]
-					used[column.Path] = true
-				}
-				text := display(value)
-				if column.Path == "env" && value == "" {
-					text = cliui.Literal("common")
-				}
-				switch column.Display {
-				case "onoff":
-					label := "Off"
-					if value == true {
-						label = "On"
-					}
-					text = cliui.Literal(label)
-				case "argv":
-					argv, _ := stringArray(value)
-					text = cliui.Styled(argvDisplay(argv), cliui.Muted)
-				}
-				rows[i].Cells = append(rows[i].Cells, text)
-			}
-			if row != nil {
-				extra = append(extra, remaining(row, used, "items.*", definition)...)
-			}
-			if len(extra) > 0 {
-				label := fmt.Sprintf("Item %d", i+1)
-				if len(rows[i].Cells) > 0 {
-					label += ": " + rows[i].Cells[0].Spans[0].Text
-				}
-				rows[i].Details = []cliui.Block{cliui.Section(cliui.Literal(label), extra...)}
-			}
-		}
-		table, _ := cliui.Table(columns, rows)
-		blocks = append(blocks, table)
-		count := fmt.Sprintf("%d results", len(items))
-		if len(items) == 1 {
-			count = "1 result"
-		}
-		blocks = append(blocks, cliui.Paragraph(cliui.Styled(count, cliui.Muted)))
-	}
-	blocks = append(blocks, remaining(data, consumed, "", definition)...)
-	return cliui.NewDocument(blocks...)
 }

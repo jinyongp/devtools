@@ -41,15 +41,15 @@ func TestTableAndStyleFallbacks(t *testing.T) {
 		return NewDocument(Heading(Literal("Items"), 1), b)
 	}
 	for _, tc := range []struct {
-		name    string
-		width   int
-		stacked bool
-	}{{"한글", 80, false}, {"short", 79, true}, {"short", 40, true}, {"emoji🙂", 120, true}, {"e\u0301", 120, true}, {strings.Repeat("x", 120), 120, true}} {
+		name  string
+		width int
+	}{{"한글", 80}, {"short", 79}, {"short", 40}, {"emoji🙂", 120}, {"e\u0301", 120}, {strings.Repeat("x", 120), 120}} {
 		out, err := Render(makeDoc(tc.name), Options{Width: tc.width})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if stacked := !strings.Contains(string(out), "Name  State"); stacked != tc.stacked {
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		if len(lines) != 4 || !strings.Contains(lines[3], tc.name) || !strings.Contains(lines[3], "READY") {
 			t.Errorf("name=%q width=%d: %s", tc.name, tc.width, out)
 		}
 	}
@@ -82,7 +82,7 @@ func TestCommandLabelsOnlyDisambiguateDifferentShellSyntax(t *testing.T) {
 	for _, shells := range [][]Shell{{PowerShell}, {POSIX, Fish}, {PowerShell, PowerShell}} {
 		block, _ := CommandLine([]string{"devtools", "help", "completion"})
 		out, err := Render(NewDocument(block), Options{CommandShells: shells})
-		if err != nil || string(out) != "devtools help completion\n" {
+		if err != nil || string(out) != "  devtools help completion\n" {
 			t.Fatalf("single copyable line gained a label: %q %v", out, err)
 		}
 	}

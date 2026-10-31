@@ -152,6 +152,7 @@ func (r *renderer) continuedLine(t Text, indent int, bold, firstAlreadyStarted b
 		}
 	}
 	used := 0
+	pendingSpace := false
 	if !firstAlreadyStarted {
 		r.out.WriteString(padding)
 	}
@@ -159,14 +160,12 @@ func (r *renderer) continuedLine(t Text, indent int, bold, firstAlreadyStarted b
 		if chars[i].r == '\n' {
 			r.out.WriteString("\n" + padding)
 			used = 0
+			pendingSpace = false
 			i++
 			continue
 		}
 		if unicode.IsSpace(chars[i].r) {
-			if used > 0 {
-				r.out.WriteByte(' ')
-				used++
-			}
+			pendingSpace = used > 0
 			i++
 			continue
 		}
@@ -177,10 +176,18 @@ func (r *renderer) continuedLine(t Text, indent int, bold, firstAlreadyStarted b
 			end++
 		}
 		w := cellWidth(word.String())
-		if used > 0 && used+w > r.options.Width-indent {
+		separator := 0
+		if pendingSpace {
+			separator = 1
+		}
+		if used > 0 && used+separator+w > r.options.Width-indent {
 			r.out.WriteString("\n" + padding)
 			used = 0
+		} else if pendingSpace {
+			r.out.WriteByte(' ')
+			used++
 		}
+		pendingSpace = false
 		for i < end {
 			j := i + 1
 			for j < end && chars[j].role == chars[i].role {
@@ -203,15 +210,8 @@ func (r *renderer) fields(fields []Field, indent int) {
 	for _, f := range fields {
 		labelWidth = max(labelWidth, cellWidth(plain(f.Label)))
 	}
-	labelLimit := min(40, r.options.Width/2)
-	labelWidth = min(labelWidth, labelLimit)
 	for _, f := range fields {
 		label := plain(f.Label)
-		if cellWidth(label) > labelLimit || r.options.Width-indent-labelWidth-2 < 24 || strings.Contains(label, "\n") {
-			r.line(f.Label, indent, false)
-			r.line(f.Value, indent+2, false)
-			continue
-		}
 		r.out.WriteString(strings.Repeat(" ", indent) + r.text(f.Label, false) + strings.Repeat(" ", labelWidth-cellWidth(label)+2))
 		// First line shares the label; later logical lines retain the value column.
 		r.continuedLine(f.Value, indent+labelWidth+2, false, true)
@@ -229,7 +229,7 @@ func (r *renderer) block(b Block, indent int) {
 	case SectionBlock:
 		r.line(b.text, indent, true)
 		for _, child := range b.children {
-			r.block(child, indent+2)
+			r.block(child, indent)
 		}
 	case TableBlock:
 		r.table(b, indent)
@@ -240,47 +240,46 @@ func (r *renderer) block(b Block, indent int) {
 
 func (r *renderer) table(b Block, indent int) {
 	widths := make([]int, len(b.columns))
-	fits := r.options.Width >= 80
+	selected := make([]bool, len(b.columns))
 	for i, col := range b.columns {
+		selected[i] = true
 		s := plain(col.Label)
 		widths[i] = cellWidth(s)
-		fits = fits && !complexCell(s)
 	}
 	for _, row := range b.rows {
 		for i, cell := range row.Cells {
 			s := plain(cell)
 			widths[i] = max(widths[i], cellWidth(s))
-			fits = fits && !complexCell(s)
 		}
 	}
-	needed := indent + (len(widths)-1)*2
-	for _, w := range widths {
-		needed += w
-	}
-	fits = fits && needed <= r.options.Width
-	if !fits {
-		for i, row := range b.rows {
-			if i > 0 {
-				r.out.WriteByte('\n')
-			}
-			fields := make([]Field, len(row.Cells))
-			for j, cell := range row.Cells {
-				fields[j] = Field{b.columns[j].Label, cell}
-			}
-			r.fields(fields, indent)
-			for _, detail := range row.Details {
-				r.block(detail, indent+2)
+	needed := func() int {
+		n, count := indent, 0
+		for i, w := range widths {
+			if selected[i] {
+				n += w
+				count++
 			}
 		}
-		return
+		return n + max(0, count-1)*2
+	}
+	omitted := false
+	for i := len(b.optional) - 1; i >= 0 && needed() > r.options.Width; i-- {
+		if selected[b.optional[i]] {
+			selected[b.optional[i]], omitted = false, true
+		}
 	}
 	writeRow := func(cells []Text, header bool) {
 		r.out.WriteString(strings.Repeat(" ", indent))
+		previous := -1
 		for i, cell := range cells {
-			r.out.WriteString(r.text(cell, header))
-			if i+1 < len(cells) {
-				r.out.WriteString(strings.Repeat(" ", widths[i]-cellWidth(plain(cell))+2))
+			if !selected[i] {
+				continue
 			}
+			if previous >= 0 {
+				r.out.WriteString(strings.Repeat(" ", widths[previous]-cellWidth(plain(cells[previous]))+2))
+			}
+			r.out.WriteString(r.text(cell, header))
+			previous = i
 		}
 		r.out.WriteByte('\n')
 	}
@@ -291,11 +290,12 @@ func (r *renderer) table(b Block, indent int) {
 	writeRow(headers, true)
 	for _, row := range b.rows {
 		writeRow(row.Cells, false)
-	}
-	for _, row := range b.rows {
 		for _, detail := range row.Details {
 			r.block(detail, indent)
 		}
+	}
+	if omitted {
+		r.line(Words("Optional columns omitted."), indent, false)
 	}
 }
 
@@ -325,6 +325,6 @@ func (r *renderer) commands(argv []string) {
 		if len(lines) > 1 {
 			r.out.WriteString(c.label + "\n")
 		}
-		r.out.WriteString(c.line + "\n")
+		r.out.WriteString("  " + c.line + "\n")
 	}
 }

@@ -312,7 +312,7 @@ func ServePreparedProcessWithLease(ctx context.Context, data, id string, lease *
 			return e
 		}
 		defer input.Destroy()
-		release, e := (ports.Store{Directory: filepath.Join(data, "ports")}).ClaimPrepared(ctx, input.Served)
+		release, e := (ports.Store{Directory: filepath.Join(data, "ports"), Owner: ports.RunOwner{Kind: "managed", Command: r.Command, ExecutionID: r.ID}}).ClaimPrepared(ctx, input.Served)
 		if e != nil {
 			return e
 		}

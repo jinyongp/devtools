@@ -123,6 +123,9 @@ type preparationOptions struct {
 }
 
 func prepareResolved(ctx context.Context, command Command, state *values.State, dependencies Dependencies, options preparationOptions) (Prepared, *protocol.Error) {
+	if dependencies.Ports.Owner.Kind == "" {
+		dependencies.Ports.Owner = ports.RunOwner{Kind: "foreground", Command: command.Name}
+	}
 	out := Prepared{
 		Command:  command,
 		Args:     command.Arguments(),

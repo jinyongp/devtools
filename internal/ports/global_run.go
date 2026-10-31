@@ -9,6 +9,7 @@ import (
 // PrepareGlobalRun claims the exact declared backend. Fixed route references
 // may point at busy ports; a managed child must own a free port before exec.
 func (s Store) PrepareGlobalRun(ctx context.Context, name string) (map[string]string, func(), *protocol.Error) {
+	s.Owner = RunOwner{Kind: "global", Command: name}
 	var env map[string]string
 	release := func() {}
 	e := s.Update(ctx, func(st *State) (bool, *protocol.Error) {
@@ -31,7 +32,7 @@ func (s Store) PrepareGlobalRun(ctx context.Context, name string) (map[string]st
 		}
 		claimed, e := s.Claim(ctx, "global-"+route.ID, []string{"backend"})
 		if e != nil {
-			return false, e
+			return false, describeRunFailure(e, "", "", "global-"+route.ID, name, reservation.Port)
 		}
 		release = claimed
 		free, e := s.Available(reservation.Port)
@@ -39,13 +40,13 @@ func (s Store) PrepareGlobalRun(ctx context.Context, name string) (map[string]st
 			return false, e
 		}
 		if !free {
-			return false, fail("port_in_use")
+			return false, describeRunFailure(fail("port_in_use"), "", "", "global-"+route.ID, name, reservation.Port)
 		}
 		return false, nil
 	})
 	if e != nil {
 		release()
-		return nil, func() {}, e
+		return nil, func() {}, observeRunFailure(ctx, e)
 	}
 	return env, release, nil
 }

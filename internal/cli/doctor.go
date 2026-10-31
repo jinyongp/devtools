@@ -232,6 +232,9 @@ func (a *App) passiveChecks(ctx context.Context, command execution.Command, dire
 			check := doctor.NewCheck("bindings", status, e.Code, message)
 			projected := protocol.Public(e, "doctor")
 			check.Facts, _ = projected.Details["facts"].(map[string]any)
+			if remedies, ok := e.Details["remedies"].([]protocol.Remedy); ok {
+				check.Remedies = remedies
+			}
 			checks = append(checks, check)
 			for key := range command.Bind {
 				if strings.EqualFold(key, "PATH") || strings.EqualFold(key, "PATHEXT") {

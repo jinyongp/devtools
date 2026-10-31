@@ -53,6 +53,7 @@ type AvailabilityProbe func(int) (bool, *protocol.Error)
 type Store struct {
 	Directory string
 	Probe     AvailabilityProbe
+	Owner     RunOwner
 }
 
 func fail(code string) *protocol.Error {
@@ -69,6 +70,7 @@ func ConditionError(code string) *protocol.Error {
 		exit = 1
 	}
 	message := map[string]string{
+		"port_run_active":     "The service already has an active run claim.",
 		"instance_not_found":  "The selected project instance does not exist. Inspect instance list in the same store.",
 		"port_not_found":      "The selected port assignment does not exist. Inspect port list for the selected project.",
 		"listener_not_found":  "The selected listener is not configured. Inspect proxy status or configure the listener first.",
@@ -328,16 +330,22 @@ func (s Store) Claim(ctx context.Context, id string, names []string) (func(), *p
 	files := []io.Closer{}
 	release := func() {
 		for _, f := range files {
+			clearRunOwner(f)
 			f.Close()
 		}
 	}
 	for _, name := range names {
 		f, e := s.lock(ctx, runLock(id, name), false, true)
 		if e != nil {
+			if e.Code == "port_run_active" {
+				facts, _ := e.Details["facts"].(map[string]any)
+				facts["service"], facts["instance_id"] = name, id
+			}
 			release()
 			return nil, e
 		}
 		files = append(files, f)
+		publishRunOwner(f, s.Owner)
 	}
 	return release, nil
 }

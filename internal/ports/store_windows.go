@@ -45,8 +45,9 @@ func (s Store) lock(ctx context.Context, name string, wait, create bool) (io.Clo
 			return file, nil
 		}
 		if !wait {
+			condition := activeRunError(file)
 			_ = file.Close()
-			return nil, fail("port_run_active")
+			return nil, condition
 		}
 		timer := time.NewTimer(10 * time.Millisecond)
 		select {

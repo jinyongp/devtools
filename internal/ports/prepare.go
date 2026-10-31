@@ -57,7 +57,11 @@ func (s Store) PrepareForLauncher(ctx context.Context, p project.Context, c proj
 			}
 			if !deferServing {
 				if e := s.Active(ctx, i.ID, name); e != nil {
-					return false, e
+					port := 0
+					if assignment := st.Get(i.ID, name); assignment != nil {
+						port = assignment.Port
+					}
+					return false, describeRunFailure(e, p.Profile, p.Root, i.ID, name, port)
 				}
 			}
 			a, created, e := s.Allocate(ctx, st, *i, name, def, defaults)
@@ -70,7 +74,7 @@ func (s Store) PrepareForLauncher(ctx context.Context, p project.Context, c proj
 					return false, e
 				}
 				if !free {
-					return false, fail("port_in_use")
+					return false, describeRunFailure(fail("port_in_use"), p.Profile, p.Root, i.ID, name, a.Port)
 				}
 			}
 			changed = changed || created
@@ -99,6 +103,15 @@ func (s Store) PrepareForLauncher(ctx context.Context, p project.Context, c proj
 			var e *protocol.Error
 			release, e = s.Claim(ctx, i.ID, names)
 			if e != nil {
+				for _, name := range names {
+					if facts, ok := e.Details["facts"].(map[string]any); ok && facts["service"] != nil && facts["service"] != name {
+						continue
+					}
+					if assignment := st.Get(i.ID, name); assignment != nil {
+						e = describeRunFailure(e, p.Profile, p.Root, i.ID, name, assignment.Port)
+						break
+					}
+				}
 				return false, e
 			}
 		}
@@ -116,7 +129,7 @@ func (s Store) PrepareForLauncher(ctx context.Context, p project.Context, c proj
 	}
 	if e != nil {
 		release()
-		return Prepared{}, func() {}, e
+		return Prepared{}, func() {}, observeRunFailure(ctx, e)
 	}
 	return result, release, nil
 }
@@ -301,18 +314,18 @@ func (s Store) ClaimPrepared(ctx context.Context, assignments []Assignment) (fun
 				return false, fail("port_assignment_changed")
 			}
 			if err := s.Active(ctx, a.Instance.ID, a.Name); err != nil {
-				return false, err
+				return false, describeRunFailure(err, a.Profile, a.Directory, a.Instance.ID, a.Name, a.Port)
 			}
 			free, err := s.Available(a.Port)
 			if err != nil {
 				return false, err
 			}
 			if !free {
-				return false, fail("port_in_use")
+				return false, describeRunFailure(fail("port_in_use"), a.Profile, a.Directory, a.Instance.ID, a.Name, a.Port)
 			}
 			claimed, err := s.Claim(ctx, a.Instance.ID, []string{a.Name})
 			if err != nil {
-				return false, err
+				return false, describeRunFailure(err, a.Profile, a.Directory, a.Instance.ID, a.Name, a.Port)
 			}
 			releases = append(releases, claimed)
 		}
@@ -320,7 +333,7 @@ func (s Store) ClaimPrepared(ctx context.Context, assignments []Assignment) (fun
 	})
 	if err != nil {
 		release()
-		return func() {}, err
+		return func() {}, observeRunFailure(ctx, err)
 	}
 	return release, nil
 }

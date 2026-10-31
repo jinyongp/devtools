@@ -59,8 +59,9 @@ func (s Store) lock(ctx context.Context, name string, wait bool, create bool) (i
 			return nil, storageError(e)
 		}
 		if !wait {
+			condition := activeRunError(f)
 			f.Close()
-			return nil, fail("port_run_active")
+			return nil, condition
 		}
 		select {
 		case <-ctx.Done():

@@ -17,6 +17,7 @@ type outputController struct {
 	operation       string
 	invocation      protocol.InvocationContext
 	requestID       string
+	displayContext  presentation.DisplayContext
 	handlerReturned bool
 }
 
@@ -67,7 +68,7 @@ func (o *outputController) publish(public []byte, exit int, failure bool) int {
 		build, render := o.app.buildDocument, o.app.renderDocument
 		if build == nil {
 			build = func(command string, public []byte) (cliui.Document, error) {
-				return presentation.BuildWithInputs(command, public, o.app.presentationInputs(command))
+				return presentation.BuildWithContext(command, public, o.app.presentationInputs(command), o.displayContext)
 			}
 		}
 		if render == nil {

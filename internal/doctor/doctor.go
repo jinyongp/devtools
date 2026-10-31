@@ -472,10 +472,28 @@ func FailureFor(checks []Check, invocation protocol.InvocationContext) *protocol
 	if code == "canceled" {
 		message = "Command prerequisite checks were explicitly canceled."
 	}
-	remedies := []protocol.Remedy{invocation.DoctorAction()}
+	remedies := []protocol.Remedy{}
+	causes := []any{}
+	for _, check := range checks {
+		if !check.Required || check.Status != "fail" && check.Status != "unknown" || len(check.BlockedBy) > 0 {
+			continue
+		}
+		remedies = append(remedies, check.Remedies...)
+		causes = append(causes, map[string]any{"id": fmt.Sprintf("c%d", len(causes)+1), "status": check.Status, "code": check.Reason, "message": check.Message, "caused_by": []string{}, "target": check.Target, "sources": check.Sources, "facts": check.Facts, "remedies": check.Remedies})
+	}
+	if len(remedies) == 0 {
+		remedies = []protocol.Remedy{Remedy("Correct the failed prerequisites, then retry the original command.", nil)}
+	}
 	if invocation.Kind == "direct" {
 		message = fmt.Sprintf("Executable %q prerequisites failed: %s.", command, strings.Join(problems, ", "))
 		remedies = []protocol.Remedy{Remedy("Review the reason-specific failed checks for this direct invocation. Doctor diagnoses configured commands only; resume the original command only when intended.", nil)}
 	}
-	return protocol.NewError(code, message, exit, map[string]any{"phase": "preflight", "reason": code, "target": invocation.Target(), "checks": checks, "remedies": remedies})
+	if code == "requirements_failed" {
+		message = fmt.Sprintf("Requirements not met for %q.", command)
+	}
+	details := map[string]any{"phase": "preflight", "reason": code, "target": invocation.Target(), "checks": checks, "causes": causes, "remedies": remedies}
+	if len(causes) > 0 {
+		details["primary_cause_id"] = "c1"
+	}
+	return protocol.NewError(code, message, exit, details)
 }

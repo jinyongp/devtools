@@ -78,6 +78,17 @@ type InputHint struct {
 }
 
 func BuildWithInputs(command string, public []byte, inputs []InputHint) (cliui.Document, error) {
+	return BuildWithContext(command, public, inputs, DisplayContext{})
+}
+
+// DisplayContext is supplied only by explicit CLI allowlists. It contains public
+// target names and scope, never raw options, child arguments or secret values.
+type DisplayContext struct {
+	Target, Destination, Environment string
+	EnvironmentKnown                 bool
+}
+
+func BuildWithContext(command string, public []byte, inputs []InputHint, context DisplayContext) (cliui.Document, error) {
 	e, err := decode(public)
 	if err != nil {
 		return cliui.Document{}, err
@@ -86,6 +97,12 @@ func BuildWithInputs(command string, public []byte, inputs []InputHint) (cliui.D
 		return conciseError(e.value.(map[string]any), inputs), nil
 	}
 	definition := DefinitionFor(command)
+	definition.Target, definition.Destination = context.Target, context.Destination
+	if data, ok := e.value.(map[string]any); ok && context.EnvironmentKnown {
+		if _, exists := data["env"]; !exists {
+			data["env"] = context.Environment
+		}
+	}
 	if document, valid := buildView(definition, e.value); valid {
 		return document, nil
 	}
@@ -214,6 +231,8 @@ func actionBlocks(value any) ([]cliui.Block, bool) {
 		return nil, false
 	}
 	var result []cliui.Block
+	seen := map[string]bool{}
+	nextLabel := false
 	for _, value := range array {
 		action, ok := value.(map[string]any)
 		if !ok {
@@ -225,10 +244,20 @@ func actionBlocks(value any) ([]cliui.Block, bool) {
 		if !ok || !argvOK || !inputsOK {
 			return nil, false
 		}
+		identity, _ := json.Marshal([]any{argv, inputs, message, action["effect"]})
+		if seen[string(identity)] {
+			continue
+		}
+		seen[string(identity)] = true
 		// A complete help invocation already says what to inspect. Keep
 		// substantive recovery instructions and unfinished templates verbatim.
 		if len(inputs) > 0 || !routineHelp(message, argv) {
-			result = append(result, cliui.Paragraph(cliui.Words(message)))
+			spans := []cliui.Span{{Text: message}}
+			if !nextLabel {
+				spans = append([]cliui.Span{{Text: "Next: ", Role: cliui.Emphasis}}, spans...)
+				nextLabel = true
+			}
+			result = append(result, cliui.Paragraph(cliui.Text{Flow: cliui.Prose, Spans: spans}))
 		}
 		if len(inputs) > 0 {
 			result = append(result, cliui.Paragraph(cliui.Words("Requires: "+strings.Join(inputs, ", ")+".")))
@@ -236,7 +265,10 @@ func actionBlocks(value any) ([]cliui.Block, bool) {
 		if len(argv) == 0 {
 			continue
 		}
-		if len(inputs) == 0 && len(argv) > 0 && argv[0] != "" {
+		if len(inputs) > 0 {
+			result = append(result, cliui.Paragraph(cliui.Literal("Command template:")))
+		}
+		if len(argv) > 0 && argv[0] != "" {
 			command, _ := cliui.CommandLine(argv)
 			result = append(result, command)
 		} else {
@@ -247,7 +279,10 @@ func actionBlocks(value any) ([]cliui.Block, bool) {
 			result = append(result, cliui.Fields(cliui.Field{Label: cliui.Literal(label), Value: cliui.Literal(argvDisplay(argv))}))
 		}
 	}
-	return result, true
+	if len(result) == 0 {
+		return nil, true
+	}
+	return []cliui.Block{cliui.Stack(result...)}, true
 }
 
 func routineHelp(message string, argv []string) bool {
@@ -264,6 +299,16 @@ func routineHelp(message string, argv []string) bool {
 }
 
 func title(command string) string {
+	if command == "" {
+		return `""`
+	}
+	words := strings.Fields(strings.ReplaceAll(command, "_", " "))
+	for i, word := range words {
+		if replacement := map[string]string{"id": "ID", "pid": "PID", "url": "URL", "http": "HTTP", "https": "HTTPS", "json": "JSON", "tcp": "TCP", "ca": "CA", "cli": "CLI"}[word]; replacement != "" {
+			words[i] = replacement
+		}
+	}
+	command = strings.Join(words, " ")
 	if command == "" {
 		return `""`
 	}

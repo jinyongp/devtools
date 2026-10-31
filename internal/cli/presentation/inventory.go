@@ -229,6 +229,9 @@ func inventoryCell(item any, column ViewColumn) cliui.Text {
 		value = row[column.Path]
 	}
 	s := text(value)
+	if column.Display == "" && (column.Path == "state" || column.Path == "completion_status" || column.Path == "execution_status" || column.Path == "execution_state" || column.Path == "delivery_state") {
+		return domainState(value)
+	}
 	if column.Path == "env" && s == "" {
 		return cliui.Literal("common")
 	}
@@ -245,6 +248,34 @@ func inventoryCell(item any, column ViewColumn) cliui.Text {
 		return cliui.Literal("Absent")
 	}
 	switch column.Display {
+	case "yesno":
+		if value == true {
+			return cliui.Literal("Yes")
+		}
+		return cliui.Literal("No")
+	case "check_state":
+		label, role := stateLabel(s)
+		return cliui.Styled(label, role)
+	case "summary":
+		if object, ok := value.(map[string]any); ok {
+			if summary := text(object["summary"]); summary != "" {
+				return cliui.Literal(summary)
+			}
+			return cliui.Literal("Recorded event")
+		}
+	case "run":
+		if object, ok := value.(map[string]any); ok {
+			return display(object["run_id"])
+		}
+	case "result":
+		if object, ok := value.(map[string]any); ok {
+			if result := text(object["result"]); result != "" {
+				return cliui.Literal(result)
+			}
+		}
+		if value == nil || s == "" {
+			return cliui.Literal("Not recorded")
+		}
 	case "count":
 		if items, ok := value.([]any); ok {
 			return cliui.Literal(fmt.Sprint(len(items)))
@@ -299,6 +330,28 @@ func inventoryCell(item any, column ViewColumn) cliui.Text {
 		return cliui.Styled("Unavailable", cliui.Warning)
 	}
 	return display(value)
+}
+
+func domainState(value any) cliui.Text {
+	state := text(value)
+	labels := map[string]string{"open": "Open", "done": "Done", "canceled": "Canceled", "active": "Active", "inactive": "Inactive", "draft": "Draft", "none": "None", "current": "Current", "stale": "Stale", "idle": "Idle", "blocked": "Blocked", "ready": "Ready", "running": "Running", "starting": "Starting", "stopped": "Stopped", "failed": "Failed", "unknown": "Unknown", "prepared": "Prepared", "approved": "Approved", "delivering": "Delivering", "delivered": "Delivered", "expired": "Expired", "not_started": "Not started", "unreported": "Unreported", "reported_started": "Reported started", "reported_finished": "Reported finished", "reported_failed": "Reported failed", "reported_unknown": "Reported unknown", "finished": "Finished", "completed": "Completed", "needs_work": "Needs work"}
+	label, ok := labels[state]
+	if !ok {
+		if value == nil {
+			return cliui.Styled("Unavailable", cliui.Warning)
+		}
+		return cliui.Styled("Unrecognized: "+state, cliui.Warning)
+	}
+	role := cliui.Primary
+	switch state {
+	case "unknown", "stale", "blocked", "expired", "needs_work":
+		role = cliui.Warning
+	case "failed", "reported_failed":
+		role = cliui.Failure
+	case "running", "starting", "delivering":
+		role = cliui.Info
+	}
+	return cliui.Styled(label, role)
 }
 
 func inventoryState(state string) (string, cliui.Role) {

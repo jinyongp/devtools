@@ -15,6 +15,7 @@ const (
 	Warning
 	Failure
 	Info
+	Emphasis
 )
 
 type Flow uint8
@@ -47,6 +48,7 @@ const (
 	TableBlock
 	SectionBlock
 	CommandLineBlock
+	StackBlock
 )
 
 type Block struct {
@@ -105,6 +107,8 @@ func CompactTable(columns []Column, rows []Row, optional ...int) (Block, error) 
 func Section(title Text, children ...Block) Block {
 	return cloneBlock(Block{kind: SectionBlock, text: title, children: children})
 }
+
+func Stack(children ...Block) Block { return cloneBlock(Block{kind: StackBlock, children: children}) }
 func CommandLine(argv []string) (Block, error) {
 	if len(argv) == 0 || argv[0] == "" {
 		return Block{}, ErrInvalidDocument
@@ -164,7 +168,7 @@ func validateText(t Text) bool {
 		return false
 	}
 	for _, span := range t.Spans {
-		if span.Role > Info {
+		if span.Role > Emphasis {
 			return false
 		}
 	}
@@ -206,7 +210,7 @@ func validateBlocks(blocks []Block) bool {
 					}
 				}
 			}
-		case SectionBlock:
+		case SectionBlock, StackBlock:
 			if !validateBlocks(b.children) {
 				return false
 			}

@@ -13,13 +13,14 @@ import (
 // Definition records why a field may be summarized or omitted. Unknown fields
 // never enter an implicit omission rule, including fields added inside a row.
 type Definition struct {
-	Command      string
-	Family       string
-	Title        string
-	Required     []Requirement
-	Optional     []string
-	KnownOmitted []Omission
-	Columns      []ViewColumn
+	Command             string
+	Target, Destination string
+	Family              string
+	Title               string
+	Required            []Requirement
+	Optional            []string
+	KnownOmitted        []Omission
+	Columns             []ViewColumn
 }
 type Requirement struct{ Path, Type string }
 type Omission struct{ Path, Rule string }
@@ -152,6 +153,9 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 	if !ok {
 		return cliui.Document{}, false
 	}
+	if document, handled := purposeView(definition, data); handled {
+		return document, true
+	}
 	if definition.Family == "list" {
 		return inventoryView(definition, data), true
 	}
@@ -169,6 +173,12 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 	}
 	blocks := []cliui.Block{cliui.Heading(cliui.Literal(definition.Title), 1)}
 	consumed := map[string]bool{}
+	if verified, exists := data["integrity_verified"].(bool); exists {
+		consumed["integrity_verified"] = true
+		if !verified {
+			blocks = append(blocks, cliui.Paragraph(cliui.Literal("Metadata only; value integrity was not checked.")))
+		}
+	}
 	blocks = append(blocks, identity(data, consumed)...)
 	blocks = append(blocks, scope(data, consumed)...)
 	if item, ok := data["item"].(map[string]any); ok {

@@ -3,6 +3,7 @@ package ports
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"time"
@@ -40,7 +41,7 @@ func describeRunFailure(e *protocol.Error, profile, directory, instance, service
 	e.Details["target"] = map[string]any{"kind": "service", "name": service, "profile": profile, "directory": directory}
 	e.Details["phase"] = "prepare"
 	if e.Code == "port_run_active" {
-		e.Message = "Service " + service + " already has an active run claim."
+		e.Message = fmt.Sprintf("Service %q is claimed by another run.", service)
 	} else {
 		e.Message = "The TCP port for service " + service + " is already in use."
 	}

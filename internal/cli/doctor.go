@@ -57,7 +57,7 @@ func (a *App) diagnose(parent context.Context, _ IO, r Request) (any, *protocol.
 			return nil, e
 		}
 		if r.Options["check"] == "true" && !report.Ready {
-			return nil, protocol.NewError("requirements_failed", "Diagnosis found failed or unverified required checks. Inspect the complete report.", 3, map[string]any{"reason": report.State, "report": report})
+			return nil, protocol.NewError("requirements_failed", "Required checks did not pass.", 3, map[string]any{"reason": report.State, "report": report})
 		}
 		return report, nil
 	}

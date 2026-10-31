@@ -32,7 +32,7 @@ func Public(e *Error, operation string) *Error {
 	}
 	target := map[string]any{"kind": "command", "name": operation}
 	if value := diagnosticObject(old["target"]); value != nil {
-		for _, key := range []string{"kind", "name", "command", "profile", "env", "directory", "config_path", "id", "request_id", "revision", "bundle"} {
+		for _, key := range []string{"kind", "name", "command", "profile", "env", "directory", "config_path", "id", "request_id", "revision", "bundle", "mode"} {
 			if v, ok := value[key].(string); ok {
 				target[key] = v
 			}
@@ -173,6 +173,7 @@ func Public(e *Error, operation string) *Error {
 		causes = []any{}
 	}
 	projectedCauses := []any{}
+	groupNumber := 0
 	childRemedies := []any{}
 	if list := diagnosticArray(causes); list != nil {
 		for _, item := range list {
@@ -180,18 +181,28 @@ func Public(e *Error, operation string) *Error {
 			if value["code"] == nil {
 				continue
 			}
-			projectedCauses = append(projectedCauses, publicCause(value, operation)...)
+			group := publicCause(value, operation)
+			if len(group) > 1 {
+				groupNumber++
+				namespaceCauseGraph(group, nil, fmt.Sprintf("g%d:", groupNumber))
+			}
+			projectedCauses = append(projectedCauses, group...)
 		}
 	}
 	for _, item := range diagnosticArray(old["items"]) {
 		value := diagnosticObject(item)
 		if condition := diagnosticObject(value["condition"]); condition != nil {
 			condition["target"] = map[string]any{"kind": "command", "name": value["command"]}
-			projectedCauses = append(projectedCauses, publicCause(condition, operation)...)
+			group := publicCause(condition, operation)
+			var childChecks []any
 			if details := diagnosticObject(condition["details"]); details != nil {
-				allChecks = append(allChecks, diagnosticArray(details["checks"])...)
+				childChecks = diagnosticArray(details["checks"])
 				childRemedies = append(childRemedies, diagnosticArray(details["remedies"])...)
 			}
+			groupNumber++
+			namespaceCauseGraph(group, childChecks, fmt.Sprintf("g%d:", groupNumber))
+			projectedCauses = append(projectedCauses, group...)
+			allChecks = append(allChecks, childChecks...)
 		}
 	}
 	causes = projectedCauses
@@ -244,19 +255,25 @@ func Public(e *Error, operation string) *Error {
 			used[id] = true
 		}
 	}
+	renames := map[string]string{}
 	for i, item := range projectedCauses {
 		cause := diagnosticObject(item)
-		if id, _ := cause["id"].(string); !causeID.MatchString(id) {
+		if oldID, _ := cause["id"].(string); !causeID.MatchString(oldID) {
 			for n := 1; ; n++ {
 				id := fmt.Sprintf("c%d", n)
 				if !used[id] {
 					cause["id"], used[id] = id, true
+					if oldID != "" {
+						renames[oldID] = id
+					}
 					break
 				}
 			}
 		}
 		projectedCauses[i] = cause
 	}
+	remapCauseReferences(projectedCauses, "caused_by", renames)
+	remapCauseReferences(allChecks, "blocked_by", renames)
 	var primary any
 	if id, ok := old["primary_cause_id"].(string); ok {
 		for _, item := range projectedCauses {
@@ -389,6 +406,12 @@ func publicCause(value map[string]any, operation string) []any {
 	parents := diagnosticArray(value["caused_by"])
 	if parents == nil {
 		parents = []any{}
+		for _, item := range diagnosticArray(projected.Details["causes"]) {
+			child := diagnosticObject(item)
+			if len(diagnosticArray(child["caused_by"])) == 0 {
+				parents = append(parents, child["id"])
+			}
+		}
 	}
 	out := []any{map[string]any{"id": value["id"], "status": status, "message": message, "caused_by": parents, "remedies": projected.Details["remedies"], "code": code, "reason": projected.Details["reason"], "target": projected.Details["target"], "sources": projected.Details["sources"], "facts": projected.Details["facts"]}}
 	return append(out, diagnosticArray(projected.Details["causes"])...)

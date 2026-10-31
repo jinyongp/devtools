@@ -320,6 +320,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		out["issues"] = issues
 		out["closable"] = s.CanClose(item) == nil
 		out["execution_ready"] = false
+		out["blockers"] = s.Assessment(item.ID).Blockers
 		for _, task := range s.List("task") {
 			if task.Workstream == item.ID && s.CanClaim(task.ID) {
 				out["execution_ready"] = true

@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"fmt"
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
@@ -51,7 +52,11 @@ func preparationFailure(ctx context.Context, c Command, parent []string, mode st
 	if failure == nil {
 		failure = protocol.NewError("requirements_failed", "Cannot start command "+c.Name+".", 3, map[string]any{"phase": "preflight", "target": c.Diagnostic(mode).Target(), "checks": checks})
 	}
-	failure.Message = "Cannot start command " + c.Name + "."
+	name := c.Name
+	if name == "" && len(c.Exec) > 0 {
+		name = c.Exec[0]
+	}
+	failure.Message = fmt.Sprintf("Cannot start %q.", name)
 	protocol.PreserveRecovery(failure, cause)
 	if cause.Code == "canceled" || cause.Code == "deadline_exceeded" {
 		failure.Code = cause.Code

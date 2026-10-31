@@ -239,9 +239,10 @@ func Materialize(ctx context.Context, snapshot *AuthenticatedSnapshot, dependenc
 	ctx, cancel := context.WithDeadline(ctx, snapshot.deadline)
 	defer cancel()
 	plan := snapshot.plan
-	prepared, e := prepareResolved(ctx, cloneCommand(plan.command), snapshot.values.StateCopy(), dependencies, preparationOptions{injectValues: true, parentEnvironment: &plan.parent})
+	state := snapshot.values.StateCopy()
+	prepared, e := prepareResolved(ctx, cloneCommand(plan.command), state, dependencies, preparationOptions{injectValues: true, parentEnvironment: &plan.parent})
 	if e != nil {
-		return Prepared{}, preparationFailure(ctx, plan.command, plan.parent, plan.mode, snapshot.values.StateCopy(), e)
+		return Prepared{}, preparationFailure(ctx, plan.command, plan.parent, plan.mode, state, e)
 	}
 	prepared.mode = plan.mode
 	if dependencies.IsolatedRoot != "" {

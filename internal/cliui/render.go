@@ -48,15 +48,6 @@ func cellWidth(s string) int {
 	return n
 }
 
-func complexCell(s string) bool {
-	for _, r := range s {
-		if r == '\n' || unicode.IsMark(r) || unicode.Is(unicode.So, r) || unicode.Is(unicode.Sk, r) || r == 0x200d || r >= 0xfe00 && r <= 0xfe0f || r >= 0xe0100 && r <= 0xe01ef || r >= 0x1100 && r <= 0x11ff || r >= 0xa960 && r <= 0xa97f || r >= 0xd7b0 && r <= 0xd7ff {
-			return true
-		}
-	}
-	return false
-}
-
 func plain(t Text) string {
 	var b strings.Builder
 	for _, s := range t.Spans {
@@ -78,11 +69,16 @@ func Render(document Document, options Options) ([]byte, error) {
 	options.Color = options.Color && options.SGR
 	options.CommandShells = append([]Shell(nil), options.CommandShells...)
 	r := renderer{options: options}
-	for i, block := range document.blocks {
-		if i > 0 {
+	for _, block := range document.blocks {
+		part := renderer{options: options}
+		part.block(block, 0)
+		if part.out.Len() == 0 {
+			continue
+		}
+		if r.out.Len() > 0 {
 			r.out.WriteByte('\n')
 		}
-		r.block(block, 0)
+		r.out.WriteString(part.out.String())
 	}
 	return []byte(r.out.String()), nil
 }
@@ -97,7 +93,7 @@ func (r *renderer) styled(s string, role Role, bold bool) string {
 		return s
 	}
 	codes := []string{}
-	if bold {
+	if bold || role == Emphasis {
 		codes = append(codes, "1")
 	}
 	if role == Muted {
@@ -134,6 +130,9 @@ func (r *renderer) continuedLine(t Text, indent int, bold, firstAlreadyStarted b
 	if t.Flow == Verbatim {
 		lines := strings.Split(r.text(t, bold), "\n")
 		for i, line := range lines {
+			if i == len(lines)-1 && i > 0 && line == "" {
+				break
+			}
 			if i != 0 || !firstAlreadyStarted {
 				r.out.WriteString(padding)
 			}
@@ -231,6 +230,10 @@ func (r *renderer) block(b Block, indent int) {
 		for _, child := range b.children {
 			r.block(child, indent)
 		}
+	case StackBlock:
+		for _, child := range b.children {
+			r.block(child, indent)
+		}
 	case TableBlock:
 		r.table(b, indent)
 	case CommandLineBlock:
@@ -239,6 +242,20 @@ func (r *renderer) block(b Block, indent int) {
 }
 
 func (r *renderer) table(b Block, indent int) {
+	b = cloneBlock(b)
+	singleLine := func(t *Text) {
+		for i := range t.Spans {
+			t.Spans[i].Text = strings.ReplaceAll(t.Spans[i].Text, "\n", `\n`)
+		}
+	}
+	for i := range b.columns {
+		singleLine(&b.columns[i].Label)
+	}
+	for i := range b.rows {
+		for j := range b.rows[i].Cells {
+			singleLine(&b.rows[i].Cells[j])
+		}
+	}
 	widths := make([]int, len(b.columns))
 	selected := make([]bool, len(b.columns))
 	for i, col := range b.columns {

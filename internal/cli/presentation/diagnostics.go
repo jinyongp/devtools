@@ -13,6 +13,9 @@ import (
 // parser offsets, machine retry codes and the complete diagnostic record.
 func conciseError(e map[string]any, inputs []InputHint) cliui.Document {
 	details, _ := e["details"].(map[string]any)
+	if document, handled := causalErrorView(e); handled {
+		return document
+	}
 	target, _ := details["target"].(map[string]any)
 	facts, _ := details["facts"].(map[string]any)
 	reason, _ := details["reason"].(string)
@@ -68,7 +71,7 @@ func conciseError(e map[string]any, inputs []InputHint) cliui.Document {
 			}
 		}
 	}
-	if name != "" && kind != "" && reason != "unknown_command" && reason != "unknown_option" && !mentionsTarget(message, name) {
+	if name != "" && kind != "" && name != text(details["operation"]) && reason != "unknown_command" && reason != "unknown_option" && !mentionsTarget(message, name) {
 		label, known := map[string]string{"command": "", "profile": "Profile ", "variable": "Variable ", "secret": "Secret ", "environment": "Environment ", "process": "Process ", "execution": "Execution "}[kind]
 		if !known {
 			label = "Resource "

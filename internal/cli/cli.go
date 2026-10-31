@@ -414,6 +414,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	}
 	output.invocation = request.Invocation
 	output.requestID = request.Options["request-id"]
+	output.displayContext = commandDisplayContext(selected.Name, request)
 	data, err := selected.Run(ctx, streams, request)
 	if err != nil {
 		if err.Details == nil {

@@ -8,10 +8,10 @@ import (
 // InvocationContext contains only public selection metadata. It never owns
 // execution inputs, credentials, stores, or a mutable execution plan.
 type InvocationContext struct {
-	Operation, Directory, IsolatedRoot, RootSource string
-	Kind, Name, Profile, Env, Bundle, Mode         string
-	ProfileKnown, EnvKnown, BundleKnown, Inject    bool
-	ExecutableOffset                               *int
+	Operation, Directory, ConfigPath, IsolatedRoot, RootSource string
+	Kind, Name, Profile, Env, Bundle, Mode                     string
+	ProfileKnown, EnvKnown, BundleKnown, Inject                bool
+	ExecutableOffset                                           *int
 }
 
 type ActionRelation uint8
@@ -149,6 +149,12 @@ func (c InvocationContext) Target() map[string]any {
 	}
 	if c.Directory != "" {
 		t["directory"] = c.Directory
+	}
+	if c.ConfigPath != "" {
+		t["config_path"] = c.ConfigPath
+	}
+	if c.Mode != "" && c.Mode != "foreground" {
+		t["mode"] = c.Mode
 	}
 	if kind == "command" && c.Name != "" {
 		t["command"] = c.Name

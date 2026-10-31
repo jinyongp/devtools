@@ -38,7 +38,9 @@ func (c Command) Diagnostic(mode string) protocol.InvocationContext {
 		}
 	}
 	d.Directory, d.Profile, d.Env, d.Bundle, d.Mode, d.Inject = c.Directory, c.Project.Profile, c.Env, c.Selection, mode, c.Inject
+	d.ConfigPath = c.Project.ConfigPath
 	d.ProfileKnown, d.EnvKnown, d.BundleKnown = true, true, true
+	d.EnvKnown = c.Inject
 	if d.Bundle == "" {
 		d.Bundle = "all"
 	}

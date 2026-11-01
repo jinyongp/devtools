@@ -98,3 +98,36 @@ func TestNestedCauseNamespacesKeepReferencesDistinct(t *testing.T) {
 		}
 	}
 }
+
+func TestNestedProjectionRetainsExplicitPrimaryAndBlockedReferences(t *testing.T) {
+	e := NewError("requirements_failed", "Top.", 3, map[string]any{
+		"primary_cause_id": "c3",
+		"causes":           []any{map[string]any{"id": "c3", "status": "fail", "code": "outer", "message": "Primary wrapper.", "caused_by": []any{}, "details": map[string]any{"causes": []any{map[string]any{"id": "c3", "status": "fail", "code": "nested", "message": "Independent nested failure.", "caused_by": []any{}}}}}},
+		"checks":           []any{map[string]any{"id": "tool:node", "status": "unknown", "required": true, "reason": "binding_unresolved", "message": "Blocked.", "target": map[string]any{"kind": "tool", "name": "node"}, "sources": []any{}, "facts": map[string]any{}, "remedies": []Remedy{}, "blocked_by": []string{"c3"}}},
+	})
+	for range 2 {
+		e = Public(e, "command run")
+		var output bytes.Buffer
+		if err := Failure(&output, e); err != nil {
+			t.Fatal(err)
+		}
+		value, issue := configcontract.Decode(output.Bytes())
+		if issue != nil || len(configcontract.Validate("Failure", value)) != 0 {
+			t.Fatal("invalid public graph", output.String())
+		}
+		id := e.Details["primary_cause_id"]
+		if id == nil {
+			t.Fatal("primary lost", output.String())
+		}
+		for _, value := range e.Details["causes"].([]any) {
+			cause := value.(map[string]any)
+			if cause["id"] == id && cause["message"] != "Primary wrapper." {
+				t.Fatal("primary retargeted", cause)
+			}
+		}
+		check := e.Details["checks"].([]any)[0].(map[string]any)
+		if diagnosticArray(check["blocked_by"])[0] != id {
+			t.Fatal("check retargeted", output.String())
+		}
+	}
+}

@@ -168,11 +168,14 @@ func Public(e *Error, operation string) *Error {
 		checks = []any{}
 	}
 	allChecks := diagnosticArray(checks)
+	topChecks := append([]any(nil), allChecks...)
 	causes := old["causes"]
 	if causes == nil {
 		causes = []any{}
 	}
 	projectedCauses := []any{}
+	topCauses := map[string]map[string]any{}
+	topParents := map[string][]any{}
 	groupNumber := 0
 	childRemedies := []any{}
 	if list := diagnosticArray(causes); list != nil {
@@ -182,8 +185,17 @@ func Public(e *Error, operation string) *Error {
 				continue
 			}
 			group := publicCause(value, operation)
+			originalID, _ := value["id"].(string)
+			if originalID != "" {
+				topCauses[originalID] = diagnosticObject(group[0])
+				if parents := diagnosticArray(value["caused_by"]); parents != nil {
+					topParents[originalID] = append([]any{}, parents...)
+				}
+			}
 			if len(group) > 1 {
 				groupNumber++
+				// The wrapper and its child graph use separate ID namespaces.
+				diagnosticObject(group[0])["id"] = "wrapper"
 				namespaceCauseGraph(group, nil, fmt.Sprintf("g%d:", groupNumber))
 			}
 			projectedCauses = append(projectedCauses, group...)
@@ -200,10 +212,22 @@ func Public(e *Error, operation string) *Error {
 				childRemedies = append(childRemedies, diagnosticArray(details["remedies"])...)
 			}
 			groupNumber++
+			if len(group) > 1 {
+				diagnosticObject(group[0])["id"] = "wrapper"
+			}
 			namespaceCauseGraph(group, childChecks, fmt.Sprintf("g%d:", groupNumber))
 			projectedCauses = append(projectedCauses, group...)
 			allChecks = append(allChecks, childChecks...)
 		}
+	}
+	outerIDs := map[string]string{}
+	for id, cause := range topCauses {
+		outerIDs[id], _ = cause["id"].(string)
+	}
+	remapCauseReferences(topChecks, "blocked_by", outerIDs)
+	for id, parents := range topParents {
+		topCauses[id]["caused_by"] = parents
+		remapCauseReferences([]any{topCauses[id]}, "caused_by", outerIDs)
 	}
 	causes = projectedCauses
 	if allChecks == nil {
@@ -276,6 +300,9 @@ func Public(e *Error, operation string) *Error {
 	remapCauseReferences(allChecks, "blocked_by", renames)
 	var primary any
 	if id, ok := old["primary_cause_id"].(string); ok {
+		if cause := topCauses[id]; cause != nil {
+			id, _ = cause["id"].(string)
+		}
 		for _, item := range projectedCauses {
 			cause := diagnosticObject(item)
 			if cause["id"] == id && len(diagnosticArray(cause["caused_by"])) == 0 {

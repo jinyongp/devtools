@@ -180,12 +180,27 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 	}
 	blocks := []cliui.Block{cliui.Heading(cliui.Literal(definition.Title), 1)}
 	consumed := map[string]bool{}
-	blocks = append(blocks, scope(data, consumed)...)
-	blocks = append(blocks, identity(data, consumed)...)
+	scopeData := map[string]any{}
+	for _, key := range []string{"profile", "directory", "env", "selection", "mode"} {
+		if value, ok := data[key]; ok {
+			scopeData[key] = value
+		} else if item, ok := data["item"].(map[string]any); ok {
+			if value, ok := item[key]; ok && (key != "env" || item["inject"] != false) && (key != "directory" || detailLocationScope(definition.Command)) {
+				scopeData[key] = value
+			}
+		}
+	}
+	blocks = append(blocks, scope(scopeData, consumed)...)
+	if definition.Command == "version" || definition.Family == "value" || definition.Family == "log" {
+		blocks = append(blocks, identity(data, consumed)...)
+	}
+	var integrity []cliui.Block
 	if verified, exists := data["integrity_verified"].(bool); exists {
 		consumed["integrity_verified"] = true
-		if !verified {
-			blocks = append(blocks, cliui.Paragraph(cliui.Literal("Metadata only; value integrity was not checked.")))
+		if verified {
+			integrity = append(integrity, cliui.Fields(cliui.Field{Label: cliui.Literal("Integrity"), Value: cliui.Literal("Verified")}))
+		} else {
+			integrity = append(integrity, cliui.Paragraph(cliui.Literal("Metadata only; value integrity was not checked.")))
 		}
 	}
 	if item, ok := data["item"].(map[string]any); ok {
@@ -200,6 +215,8 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 			consumed["metadata"] = true
 			blocks = append(blocks, detail(metadata, "metadata", definition)...)
 		}
+		blocks = append(blocks, integrity...)
+		integrity = nil
 		consumed[key] = true
 		text := data[key].(string)
 		if text == "" {
@@ -207,6 +224,7 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 		}
 		blocks = append(blocks, cliui.Section(cliui.Literal(title(key)), cliui.Paragraph(cliui.Literal(text))))
 	}
+	blocks = append(blocks, integrity...)
 	blocks = append(blocks, remaining(data, consumed, "", definition)...)
 	return cliui.NewDocument(blocks...), true
 }
@@ -297,6 +315,9 @@ func omit(path string, value any, definition Definition) bool {
 }
 
 func remaining(data map[string]any, consumed map[string]bool, prefix string, definition Definition) []cliui.Block {
+	if definition.Family != "" {
+		return detailRemainder(data, consumed, prefix, definition)
+	}
 	rest := map[string]any{}
 	for key, value := range data {
 		path := key
@@ -314,6 +335,9 @@ func remaining(data map[string]any, consumed map[string]bool, prefix string, def
 }
 
 func detail(data map[string]any, prefix string, definition Definition) []cliui.Block {
+	if definition.Family != "" {
+		return detailRemainder(data, map[string]bool{}, prefix, definition)
+	}
 	consumed := map[string]bool{}
 	var fields []cliui.Field
 	for _, key := range []string{"name", "key", "id", "profile", "state", "status", "completion_status", "execution_status", "env", "inject", "selection", "exec"} {

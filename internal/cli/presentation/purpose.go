@@ -143,7 +143,7 @@ func mutationPurposeView(d Definition, data map[string]any) cliui.Document {
 	for _, key := range []string{"profile", "directory", "env", "selection", "mode"} {
 		if value, ok := data[key]; ok {
 			scopeData[key] = value
-		} else if value, ok := item[key]; ok && key != "env" {
+		} else if value, ok := item[key]; ok && key != "env" && (key != "directory" || detailLocationScope(d.Command)) {
 			scopeData[key] = value
 		}
 	}
@@ -158,6 +158,12 @@ func mutationPurposeView(d Definition, data map[string]any) cliui.Document {
 	}
 	if item != nil {
 		blocks = append(blocks, mutationItemFacts(item)...)
+		if strings.HasPrefix(d.Command, "backup ") {
+			blocks = append(blocks, selectedFields(item, "directory"))
+		}
+		if strings.HasPrefix(d.Command, "values execution ") {
+			blocks = append(blocks, selectedFields(item, "revision"))
+		}
 	}
 	blocks = append(blocks, selectedFields(data, "id", "execution_id", "path", "output", "archive_id", "plan_id", "record_id", "basis_id", "recipient"))
 	for _, key := range []string{"removed", "retained", "archives", "targets", "outcomes"} {
@@ -258,26 +264,10 @@ func completedSentence(d Definition) string {
 }
 
 func mutationItemFacts(item map[string]any) []cliui.Block {
-	ordered := []string{"id", "name", "key", "command", "state", "status", "delivery_state", "execution_state", "url", "endpoint", "path", "output", "fingerprint", "runner_id", "instance_id", "execution_id", "expires_at", "identity_file", "recipient_file", "backend", "pid", "exit_code", "reason"}
-	consumed := map[string]bool{}
-	for _, key := range ordered {
-		consumed[key] = true
-	}
+	ordered := []string{"previous_id", "id", "name", "alias", "key", "command", "state", "status", "delivery_state", "execution_state", "host", "listener", "url", "endpoint", "port", "origin_port", "serve_port", "path", "output", "fingerprint", "not_after", "runner_id", "instance_id", "execution_id", "expires_at", "idle_expires_at", "identity_file", "recipient_file", "recipient", "backend", "provider", "pid", "exit_code", "reason"}
 	blocks := []cliui.Block{selectedFields(item, ordered...)}
 	if _, exists := item["ready_configured"]; exists {
 		blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Readiness"), Value: inventoryCell(item, ViewColumn{Path: "readiness", Display: "readiness"})}))
-	}
-	omitted := map[string]bool{"profile": true, "env": true, "created_at": true, "updated_at": true, "started_at": true, "ended_at": true, "generation": true, "revision": true, "request_id": true, "definition_revision": true, "root_id": true, "vault_id": true, "scope": true, "kind": true, "format": true, "schema_version": true, "ready_configured": true, "requires_explicit_unlock": true, "client_restart_may_be_required": true, "log_path": true}
-	var fields []cliui.Field
-	for _, key := range keys(item) {
-		value := item[key]
-		if key == "directory" || key == "digest" || key == "route_url" && text(value) != "" && text(value) == text(item["url"]) || consumed[key] || omitted[key] || value == nil || value == "" || !scalar(value) {
-			continue
-		}
-		fields = append(fields, cliui.Field{Label: cliui.Literal(title(key)), Value: display(value)})
-	}
-	if len(fields) > 0 {
-		blocks = append(blocks, cliui.Fields(fields...))
 	}
 	if item["requires_explicit_unlock"] == true {
 		blocks = append(blocks, cliui.Paragraph(cliui.Literal("Explicit unlock is required.")))

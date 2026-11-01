@@ -90,3 +90,24 @@ func TestValidationProducerKeepsRecordedOutcomeInListAndMutation(t *testing.T) {
 		}
 	}
 }
+
+func TestDetailSectionsKeepContractOrderWithoutExtensionTrees(t *testing.T) {
+	data := map[string]any{"profile": "app", "directory": "/work/app", "revision": "revision-id", "future_root": "ROOT-NOISE", "item": map[string]any{"name": "web", "exec": []string{"node", "server.js"}, "env": "", "inject": true, "serve": []string{"http"}, "bind": map[string]any{"PORT": "http"}, "requirements": map[string]any{"tools": map[string]any{"node": "24.x"}}, "output": map[string]any{"mode": "raw"}, "future_item": "ITEM-NOISE"}}
+	out, err := cliui.Render(publicDocument(t, "command explain", data), cliui.Options{Width: 80})
+	s := string(out)
+	last := -1
+	for _, label := range []string{"Profile", "Directory", "Environment", "Exec", "Services", "Bindings", "Requirements", "Output policy"} {
+		at := strings.Index(s, label)
+		if err != nil || at <= last {
+			t.Fatalf("field %q missing or reordered: %s (%v)", label, s, err)
+		}
+		last = at
+	}
+	if strings.Contains(s, "ROOT-NOISE") || strings.Contains(s, "ITEM-NOISE") {
+		t.Fatal("extension fields expanded text", s)
+	}
+	out, _ = cliui.Render(publicDocument(t, "vault status", map[string]any{"item": map[string]any{"state": "locked_manual", "backend": "passphrase", "vault_id": "INTERNAL-ID"}}), cliui.Options{})
+	if !strings.Contains(string(out), "Manually locked") || strings.Contains(string(out), "Unrecognized") || strings.Contains(string(out), "INTERNAL-ID") {
+		t.Fatal(string(out))
+	}
+}

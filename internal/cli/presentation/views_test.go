@@ -84,15 +84,15 @@ func TestReadViewsEmptyValuesAndDefinitionOwnership(t *testing.T) {
 	}
 }
 
-func TestKnownOmissionsNeverHideNewNestedData(t *testing.T) {
+func TestCommandDetailKeepsDeclaredFieldsWithoutDumpingExtensions(t *testing.T) {
 	base := map[string]any{"profile": "demo", "item": map[string]any{
 		"name": "dev", "exec": []string{"pnpm", "dev"}, "env": "", "inject": true,
 		"serve": []string{}, "bind": map[string]any{}, "ready": nil,
-		"output":       map[string]any{"mode": "auto", "future_output": false},
-		"requirements": map[string]any{"tools": map[string]any{}, "vars": []any{}, "secs": []any{}, "future_requirement": 0},
+		"output":       map[string]any{"mode": "raw", "future_output": false},
+		"requirements": map[string]any{"tools": map[string]any{}, "vars": []any{"API"}, "secs": []any{}, "future_requirement": 0},
 	}}
 	out, err := cliui.Render(publicDocument(t, "command inspect", base), cliui.Options{})
-	if err != nil || !strings.Contains(string(out), "future_output") || !strings.Contains(string(out), "future_requirement") || !strings.Contains(string(out), "false") || !strings.Contains(string(out), "0") {
+	if err != nil || strings.Contains(string(out), "future_output") || strings.Contains(string(out), "future_requirement") || !strings.Contains(string(out), "raw") || !strings.Contains(string(out), "API") {
 		t.Fatal(string(out), err)
 	}
 }

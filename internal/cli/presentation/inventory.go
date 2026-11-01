@@ -341,6 +341,17 @@ func inventoryCell(item any, column ViewColumn) cliui.Text {
 
 func domainState(value any) cliui.Text {
 	state := text(value)
+	protection := map[string]string{"uninitialized": "Uninitialized", "locked": "Locked", "unlocked": "Unlocked", "locking": "Locking", "locked_manual": "Manually locked", "recovery_required": "Recovery required", "released": "Released", "revoked": "Revoked", "taken_over": "Taken over", "interrupted": "Interrupted"}
+	if label, ok := protection[state]; ok {
+		role := cliui.Primary
+		if state == "locking" {
+			role = cliui.Info
+		}
+		if state == "recovery_required" {
+			role = cliui.Warning
+		}
+		return cliui.Styled(label, role)
+	}
 	labels := map[string]string{"open": "Open", "done": "Done", "canceled": "Canceled", "active": "Active", "inactive": "Inactive", "draft": "Draft", "none": "None", "current": "Current", "stale": "Stale", "idle": "Idle", "blocked": "Blocked", "ready": "Ready", "running": "Running", "starting": "Starting", "stopped": "Stopped", "failed": "Failed", "unknown": "Unknown", "prepared": "Prepared", "approved": "Approved", "delivering": "Delivering", "delivered": "Delivered", "expired": "Expired", "not_started": "Not started", "unreported": "Unreported", "reported_started": "Reported started", "reported_finished": "Reported finished", "reported_failed": "Reported failed", "reported_unknown": "Reported unknown", "finished": "Finished", "completed": "Completed", "needs_work": "Needs work"}
 	label, ok := labels[state]
 	if !ok {

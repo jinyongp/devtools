@@ -25,10 +25,10 @@ func TestUpdateReportsOutcomeAndShortcutWarningsWithoutDetails(t *testing.T) {
 			t.Fatal(string(out), err)
 		}
 	}
-	// Future public data remains visible without reviving a catch-all heading.
+	// Unrequested extension fields remain in JSON and do not expand text.
 	data := map[string]any{"action": "update", "version": "0.35.0", "changed": true, "alias": map[string]any{"name": "dvt", "status": "unchanged"}, "new_field": "preserved"}
 	out, _ := cliui.Render(publicDocument(t, "update", data), cliui.Options{})
-	if !strings.Contains(string(out), "preserved") || strings.Contains(string(out), "Details") {
+	if strings.Contains(string(out), "preserved") || strings.Contains(string(out), "Details") {
 		t.Fatal(string(out))
 	}
 }

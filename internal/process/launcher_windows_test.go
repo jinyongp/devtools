@@ -274,6 +274,37 @@ func TestWindowsJobForceCancellationReapsIgnoringTree(t *testing.T) {
 		t.Fatalf("forced cancellation: %#v", result)
 	}
 }
+
+func TestWindowsEmptyAccountingKeepsCancellationDeadlineArmed(t *testing.T) {
+	job, err := newNativeJob()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Reproduce an empty accounting snapshot while the direct-process wait
+	// has not yet signaled. An impossible PID prevents signaling this console.
+	child := &nativeChild{job: job, pid: ^uint32(0), done: make(chan struct{})}
+	defer child.closeJob()
+	type stopped struct {
+		code int
+		err  error
+	}
+	result := make(chan stopped, 1)
+	go func() { code, err := child.stop(); result <- stopped{code, err} }()
+	deadline := time.Now().Add(nativeStopGrace + 2*time.Second)
+	closed := false
+	for time.Now().Before(deadline) {
+		if _, err := child.activeProcesses(); errors.Is(err, windows.ERROR_INVALID_HANDLE) {
+			closed = true
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	close(child.done)
+	r := <-result
+	if !closed || r.code != 137 || r.err != nil {
+		t.Fatalf("empty accounting bypassed cancellation deadline: closed=%v result=%+v", closed, r)
+	}
+}
 func TestWindowsJobNormalEarlyExitReapsDescendantsAndPipes(t *testing.T) {
 	result := runJobConsoleScenario(t, "early")
 	if result.Code != 23 || result.StopMillis >= 5000 {

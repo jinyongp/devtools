@@ -232,8 +232,13 @@ func (c *nativeChild) stop() (int, error) {
 			return 0, err
 		}
 		if active == 0 {
-			<-c.done
-			return 130, c.waitErr
+			// Accounting can become empty before the direct process wait is
+			// signaled. Keep the grace deadline armed until both agree.
+			select {
+			case <-c.done:
+				return 130, c.waitErr
+			default:
+			}
 		}
 		select {
 		case <-ticker.C:

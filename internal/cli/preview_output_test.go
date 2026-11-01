@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -58,12 +59,25 @@ func TestPreviewApplyDoesNotEchoPrivateInputsOrChildArguments(t *testing.T) {
 }
 
 func TestPreviewApplyPinsDirectoryAndRevisionForDeclarations(t *testing.T) {
+	directory := t.TempDir()
+	input, err := filepath.Abs("tool.json")
+	if err != nil {
+		t.Fatal(err)
+	}
 	c := Command{Name: "config tool add", Options: []Option{{Name: "dir"}, {Name: "revision"}, {Name: "file"}}}
 	r := Request{Args: []string{"node"}, Options: map[string]string{"dir": ".", "file": "tool.json"}}
-	action := previewApplyAction(c, r, map[string]any{"config_path": "/work/app/devtools.toml", "revision": strings.Repeat("a", 64)})
-	joined := strings.Join(action.Argv, " ")
-	if !strings.Contains(joined, "--dir /work/app") || !strings.Contains(joined, "--revision "+strings.Repeat("a", 64)) || strings.Contains(joined, "--file tool.json") {
-		t.Fatal("apply lost reviewed input scope", action)
+	action := previewApplyAction(c, r, map[string]any{"config_path": filepath.Join(directory, "devtools.toml"), "revision": strings.Repeat("a", 64)})
+	for option, expected := range map[string]string{"--dir": directory, "--revision": strings.Repeat("a", 64), "--file": input} {
+		found := false
+		for i, arg := range action.Argv {
+			if arg == option && i+1 < len(action.Argv) {
+				found = action.Argv[i+1] == expected
+				break
+			}
+		}
+		if !found {
+			t.Fatal("apply lost reviewed input scope", option, action)
+		}
 	}
 }
 

@@ -180,14 +180,14 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 	}
 	blocks := []cliui.Block{cliui.Heading(cliui.Literal(definition.Title), 1)}
 	consumed := map[string]bool{}
+	blocks = append(blocks, scope(data, consumed)...)
+	blocks = append(blocks, identity(data, consumed)...)
 	if verified, exists := data["integrity_verified"].(bool); exists {
 		consumed["integrity_verified"] = true
 		if !verified {
 			blocks = append(blocks, cliui.Paragraph(cliui.Literal("Metadata only; value integrity was not checked.")))
 		}
 	}
-	blocks = append(blocks, identity(data, consumed)...)
-	blocks = append(blocks, scope(data, consumed)...)
 	if item, ok := data["item"].(map[string]any); ok {
 		consumed["item"] = true
 		blocks = append(blocks, detail(item, "item", definition)...)
@@ -213,7 +213,7 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 
 func identity(data map[string]any, consumed map[string]bool) []cliui.Block {
 	var fields []cliui.Field
-	for _, key := range []string{"name", "id", "command", "version", "protocol_version", "commit", "state", "status", "revision", "request_id"} {
+	for _, key := range []string{"name", "id", "command", "version", "commit", "protocol_version", "state", "status", "revision", "request_id"} {
 		if value, exists := data[key]; exists && !consumed[key] && scalar(value) {
 			fields = append(fields, cliui.Field{Label: cliui.Literal(title(key)), Value: display(value)})
 			consumed[key] = true

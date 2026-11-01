@@ -7,6 +7,7 @@ import (
 	"github.com/jinyongp/devtools/internal/cliui"
 	"github.com/jinyongp/devtools/internal/diagnostics"
 	"github.com/jinyongp/devtools/internal/profiles"
+	"github.com/jinyongp/devtools/internal/tasks"
 )
 
 func TestIntegratedDiagnosticsShowSubsystemStatesWithoutSuccessfulRecords(t *testing.T) {
@@ -49,5 +50,43 @@ func TestDoctorKeepsBundleAndDistinguishesCommandFailureTargets(t *testing.T) {
 	out, _ = cliui.Render(publicDocument(t, "doctor", map[string]any{"state": "not_ready", "ready": false, "checks": []any{}, "commands": commands}), cliui.Options{})
 	if !strings.Contains(string(out), "web, api") {
 		t.Fatal("shared cause lost affected command names", string(out))
+	}
+}
+
+func TestScopeAndVersionOrderAndEquivalentActionsFollowContract(t *testing.T) {
+	out, _ := cliui.Render(publicDocument(t, "version", map[string]any{"version": "v-test", "commit": "commit-id", "protocol_version": 21}), cliui.Options{})
+	if strings.Index(string(out), "Commit") > strings.Index(string(out), "Protocol") {
+		t.Fatal("version fields reordered", string(out))
+	}
+	out, _ = cliui.Render(publicDocument(t, "variable get", map[string]any{"profile": "app", "env": "", "directory": "/work/app", "value": "actual-value", "metadata": map[string]any{"key": "MODE", "source": "common"}, "integrity_verified": false}), cliui.Options{})
+	s := string(out)
+	if strings.Index(s, "Profile") > strings.Index(s, "Directory") || strings.Index(s, "Directory") > strings.Index(s, "Environment") || strings.Index(s, "Environment") > strings.Index(s, "Metadata only") {
+		t.Fatal("scope changed with integrity observation", s)
+	}
+	actions := []any{}
+	for _, message := range []string{"Read the page.", "Continue the same query."} {
+		actions = append(actions, map[string]any{"message": message, "argv": []any{"devtools", "task", "list"}, "required_inputs": []any{}, "effect": "read"})
+	}
+	blocks, _ := actionBlocks(actions)
+	out, _ = cliui.Render(cliui.NewDocument(blocks...), cliui.Options{CommandShells: []cliui.Shell{cliui.POSIX}})
+	if strings.Count(string(out), "devtools task list") != 1 {
+		t.Fatal("same action repeated", string(out))
+	}
+}
+
+func TestValidationProducerKeepsRecordedOutcomeInListAndMutation(t *testing.T) {
+	state := &tasks.State{}
+	for _, result := range []string{"pass", "fail", "blocked"} {
+		item := &tasks.Item{ID: "validation-id", Kind: "validation", State: "open", Title: "Check", Props: tasks.Object{"required": true, "records": []any{map[string]any{"record_id": "record-id", "result": result, "applicable": false, "evidence": []any{"PRIVATE-RECORD-BODY"}}}}}
+		view := state.View(item)
+		data := map[string]any{"profile": "app", "revision": 1, "items": []any{view}}
+		out, err := cliui.Render(publicDocument(t, "task validation list", data), cliui.Options{})
+		if err != nil || !strings.Contains(string(out), "Recorded "+result+" (not applicable)") || strings.Contains(string(out), "Not recorded") || strings.Contains(string(out), "PRIVATE-RECORD-BODY") {
+			t.Fatal(string(out), err)
+		}
+		out, _ = cliui.Render(publicDocument(t, "task validation record", map[string]any{"profile": "app", "revision": 1, "item": view, "record_id": "record-id", "changed": true}), cliui.Options{})
+		if !strings.Contains(string(out), "Recorded validation result: "+result+".") {
+			t.Fatal("record outcome hidden", string(out))
+		}
 	}
 }

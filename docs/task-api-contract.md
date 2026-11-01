@@ -95,6 +95,8 @@ workstream item은 `id`, `title`, `description`, `state`, `depends_on`, `blocker
 
 run은 `id`, `task_id`, `state`(running·released·revoked·taken_over·completed), `previous_run_id: UUID|null`, `directory`, 시작·마지막 활동 시각, `ended_at: timestamp|null`, 기준 spec·plan·task 정의 리비전을 가진다. 일반 run 객체에는 컨텍스트나 점유 증명을 넣지 않는다.
 
+validation item의 `latest_result`는 기록이 없으면 null이며, 있으면 최근 `record_id`, `result`, 확인 가능한 경우 `applicable_when_recorded`를 제공한다. 마지막 필드는 기록 당시의 적용 여부이며 현재 정의에 대한 유효성 판정을 대신하지 않는다. 전체 근거와 basis는 `validation show`의 `records`와 `bases`에 유지한다. text 목록은 이 결과를 `Recorded pass/fail/blocked/skipped`로 구분한다.
+
 각 변경이 여러 업무 기록을 원자적으로 적용할 수 있어 action_ids는 배열이다. `previous_revision`과 `revision`은 원자 변경 전후의 profile 리비전이며 재시도 응답에서도 원래 값을 유지한다. `current_revision`은 응답 시점의 최신 profile 리비전이다. `affected_ids`와 `affected_count`는 실제 저장으로 투영이 바뀐 항목을 나타낸다. 기존 버전의 성공 영수증을 재생할 때도 저장된 action 경계에서 이 필드를 복원한다. 실제 domain 상태가 같은 정의·관계·lifecycle 변경은 `no_change`로 실패하며 action·영수증·리비전을 만들지 않는다. checkpoint·resume·검증 결과처럼 호출 자체가 새 이력인 append-only action, 자동 claim의 `claimed:false`, dry-run은 의도적인 예외다.
 
 checkpoint는 run 이력 변경이다. 성공하면 profile `revision`과 task의 `updated_at`/`current_run` 투영이 바뀌고 해당 task가 `affected_ids`에 포함되지만 `definition_revision`은 유지된다. checkpoint 본문은 `checkpoint list RUN_ID`나 history에서 확인한다.

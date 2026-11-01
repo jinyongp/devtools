@@ -59,7 +59,7 @@ func TestOperationStatesDoNotClaimNewEffects(t *testing.T) {
 		}
 	}
 	out, _ := cliui.Render(publicDocument(t, "variable set", map[string]any{"changed": "new-type", "effects": "unknown"}), cliui.Options{})
-	if !strings.HasPrefix(string(out), "Result\n") || !strings.Contains(string(out), "new-type") {
+	if !strings.HasPrefix(string(out), "Cannot summarize this result with the current text contract.\n") || !strings.Contains(string(out), "new-type") {
 		t.Fatal("invalid optional state was interpreted as success", string(out))
 	}
 }

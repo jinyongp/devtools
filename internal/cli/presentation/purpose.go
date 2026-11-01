@@ -467,6 +467,14 @@ func taskPurposeView(d Definition, data map[string]any) cliui.Document {
 		if method, ok := item["method"].(string); ok && method != "" {
 			blocks = append(blocks, cliui.Section(cliui.Literal("Method"), cliui.Paragraph(cliui.Literal(method))), selectedFields(item, "required", "latest_result"))
 		}
+		if d.Command == "task validation show" {
+			blocks = append(blocks, selectedFields(item, "required", "task_id", "workstream_id"))
+		}
+	}
+	if d.Command == "task validation show" {
+		if records, ok := data["records"].([]any); ok && len(records) > 0 {
+			blocks = append(blocks, cliui.Section(cliui.Literal("Recorded results"), inventoryTable(inventoryLayout{columns: []ViewColumn{{"record_id", "Record ID", ""}, {"basis_id", "Basis ID", ""}, {"result", "Result", ""}, {"summary", "Summary", ""}}}, records)))
+		}
 	}
 	if strings.HasSuffix(d.Command, " next") && item == nil {
 		blocks = append(blocks, cliui.Paragraph(cliui.Literal("No ready task.")))
@@ -579,6 +587,11 @@ func taskMutationView(d Definition, data map[string]any) cliui.Document {
 	}
 	if d.Command == "task validation record" {
 		message = "Recorded validation result."
+		if item, ok := data["item"].(map[string]any); ok {
+			if latest, ok := item["latest_result"].(map[string]any); ok && text(latest["result"]) != "" {
+				message = "Recorded validation result: " + text(latest["result"]) + "."
+			}
+		}
 	}
 	if d.Command == "task validation waive" {
 		message = "Waived validation requirement."

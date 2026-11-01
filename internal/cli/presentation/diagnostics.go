@@ -98,15 +98,8 @@ func conciseError(e map[string]any, inputs []InputHint) cliui.Document {
 	}
 	// Scope is useful for a failed operation, but adds nothing to a parse typo.
 	if reason != "unknown_command" && reason != "unknown_option" {
-		var scope []cliui.Field
-		for _, key := range []string{"profile", "env", "directory", "config_path"} {
-			if value, ok := target[key].(string); ok && value != "" {
-				scope = append(scope, cliui.Field{Label: cliui.Literal(map[string]string{"profile": "Profile", "env": "Environment", "directory": "Directory", "config_path": "Configuration"}[key]), Value: cliui.Literal(value)})
-			}
-		}
-		if len(scope) > 0 {
-			blocks = append(blocks, cliui.Fields(scope...))
-		}
+		blocks = append(blocks, errorScope(target)...)
+		blocks = append(blocks, selectedFields(target, "config_path"))
 		blocks = append(blocks, diagnosticLocations(details)...)
 		blocks = append(blocks, diagnosticFacts(facts)...)
 	}

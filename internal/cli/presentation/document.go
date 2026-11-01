@@ -106,6 +106,11 @@ func BuildWithContext(command string, public []byte, inputs []InputHint, context
 	if document, valid := buildView(definition, e.value); valid {
 		return document, nil
 	}
+	if definition.Family != "" {
+		blocks := []cliui.Block{cliui.Paragraph(cliui.Literal("Cannot summarize this result with the current text contract."))}
+		blocks = append(blocks, generic(e).Blocks()...)
+		return cliui.NewDocument(blocks...), nil
+	}
 	return generic(e), nil
 }
 
@@ -244,7 +249,11 @@ func actionBlocks(value any) ([]cliui.Block, bool) {
 		if !ok || !argvOK || !inputsOK {
 			return nil, false
 		}
-		identity, _ := json.Marshal([]any{argv, inputs, message, action["effect"]})
+		manualMessage := ""
+		if len(argv) == 0 {
+			manualMessage = message
+		}
+		identity, _ := json.Marshal([]any{argv, inputs, manualMessage, action["effect"]})
 		if seen[string(identity)] {
 			continue
 		}

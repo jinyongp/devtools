@@ -48,7 +48,7 @@ func TestCommandListIsAnInventoryWithUsefulSettings(t *testing.T) {
 	// data is still shown by generic rendering, rather than silently dropping a row.
 	data["items"].([]any)[1].(map[string]any)["inject"] = "unexpected-type"
 	out, _ := cliui.Render(publicDocument(t, "command list", data), cliui.Options{})
-	if !strings.HasPrefix(string(out), "Result\n") || !strings.Contains(string(out), "unexpected-type") || !strings.Contains(string(out), longArg) {
+	if !strings.HasPrefix(string(out), "Cannot summarize this result with the current text contract.\n") || !strings.Contains(string(out), "unexpected-type") || !strings.Contains(string(out), longArg) {
 		t.Fatal("incompatible shape was partially summarized", string(out))
 	}
 }

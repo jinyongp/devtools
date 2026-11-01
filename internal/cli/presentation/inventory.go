@@ -270,10 +270,17 @@ func inventoryCell(item any, column ViewColumn) cliui.Text {
 	case "result":
 		if object, ok := value.(map[string]any); ok {
 			if result := text(object["result"]); result != "" {
-				return cliui.Literal(result)
+				label := "Recorded " + result
+				if object["applicable_when_recorded"] == false {
+					label += " (not applicable)"
+				}
+				return cliui.Literal(label)
 			}
 		}
 		if value == nil || s == "" {
+			if _, exists := row[column.Path]; !exists {
+				return cliui.Styled("Unavailable", cliui.Warning)
+			}
 			return cliui.Literal("Not recorded")
 		}
 	case "count":

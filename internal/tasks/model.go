@@ -466,6 +466,17 @@ func (s *State) View(i *Item) Object {
 			v[k] = x
 		}
 	}
+	if i.Kind == "validation" {
+		v["latest_result"] = nil
+		if records := objects(i.Props, "records"); len(records) > 0 {
+			record := records[len(records)-1]
+			latest := Object{"record_id": record["record_id"], "result": record["result"]}
+			if applicable, ok := record["applicable"].(bool); ok {
+				latest["applicable_when_recorded"] = applicable
+			}
+			v["latest_result"] = latest
+		}
+	}
 	if i.Kind == "task" {
 		for _, k := range []string{"acceptance", "acceptance_keys"} {
 			if _, ok := v[k]; !ok {

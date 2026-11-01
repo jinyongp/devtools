@@ -48,7 +48,7 @@ func describeRunFailure(e *protocol.Error, profile, directory, instance, service
 	action := protocol.Action{Relation: protocol.ManualAction, Effect: "read", Message: "Stop the existing run with Ctrl+C in its original terminal or through its controller, then retry this command."}
 	if owner["status"] == "verified" && owner["kind"] == "managed" {
 		if id, ok := owner["execution_id"].(string); ok && id != "" {
-			action = protocol.LocalAction([]string{"devtools", "process", "stop", id, "--profile", profile, "--request-id", "REQUEST_UUID"}, []string{"new request UUID"}, "Stop the existing managed execution, then retry this command.", "config_write")
+			action = protocol.LocalAction([]string{"devtools", "process", "stop", id, "--profile", profile, "--request-id", "REQUEST_UUID"}, []string{"new request UUID"}, "Stop the existing managed execution, then retry this command.", "system_write")
 		}
 	}
 	e.Details["remedies"] = []protocol.Remedy{action.Remedy(protocol.InvocationContext{})}

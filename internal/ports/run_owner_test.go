@@ -62,3 +62,12 @@ func TestRunFailureKeepsAssignmentAndUnknownOwner(t *testing.T) {
 		t.Fatal(observed)
 	}
 }
+
+func TestManagedOwnerStopActionDeclaresItsSystemEffect(t *testing.T) {
+	id := "11111111-1111-4111-8111-111111111111"
+	e := describeRunFailure(protocol.NewError("port_run_active", "Original.", 3, map[string]any{"facts": map[string]any{"owner": map[string]any{"status": "verified", "kind": "managed", "execution_id": id}}}), "app", "/work/app", "instance", "web", 3000)
+	action := e.Details["remedies"].([]protocol.Remedy)[0]
+	if action.Effect != "system_write" || len(action.RequiredInputs) != 1 || len(action.Argv) < 4 || action.Argv[3] != id {
+		t.Fatal(action)
+	}
+}

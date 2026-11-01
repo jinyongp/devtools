@@ -75,3 +75,19 @@ func TestUnverifiedDoctorRetainsReasonSpecificRecoveryOnce(t *testing.T) {
 		t.Fatal(string(out), err)
 	}
 }
+
+func TestIndependentUnknownCauseDoesNotRepeatAsUnverifiedCheck(t *testing.T) {
+	target := map[string]any{"kind": "tool", "name": "node"}
+	facts := map[string]any{"executable": "node"}
+	check := map[string]any{"id": "tool:node", "status": "unknown", "reason": "timeout", "target": target, "facts": facts, "blocked_by": []any{}}
+	cause := map[string]any{"id": "c1", "status": "unknown", "code": "timeout", "message": "The Node version probe timed out.", "target": target, "facts": facts, "caused_by": []any{}}
+	b, _ := json.Marshal(map[string]any{"schema_version": 1, "ok": false, "error": map[string]any{"code": "requirements_failed", "message": "Requirements not met.", "details": map[string]any{"causes": []any{cause}, "checks": []any{check}}}})
+	doc, err := Build("command run", b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := cliui.Render(doc, cliui.Options{})
+	if err != nil || !strings.Contains(string(out), "The Node version probe timed out.") || strings.Contains(string(out), "Unverified checks:") {
+		t.Fatal(string(out), err)
+	}
+}

@@ -102,7 +102,20 @@ func causalErrorView(e map[string]any) (cliui.Document, bool) {
 	blocks = append(blocks, recoveryNotes(details)...)
 	blocks = append(blocks, launchRecoveryNotes(e, details, facts)...)
 	if checks, ok := details["checks"].([]any); ok {
-		blocks = append(blocks, unverifiedChecks(checks)...)
+		covered := map[string]bool{}
+		for _, cause := range roots {
+			key, _ := json.Marshal([]any{cause["code"], cause["target"], cause["facts"]})
+			covered[string(key)] = true
+		}
+		var remaining []any
+		for _, value := range checks {
+			check, _ := value.(map[string]any)
+			key, _ := json.Marshal([]any{check["reason"], check["target"], check["facts"]})
+			if !covered[string(key)] {
+				remaining = append(remaining, value)
+			}
+		}
+		blocks = append(blocks, unverifiedChecks(remaining)...)
 	}
 	var actions []any
 	if values, ok := details["remedies"].([]any); ok {

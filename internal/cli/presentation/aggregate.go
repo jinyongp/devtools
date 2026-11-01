@@ -69,7 +69,13 @@ func aggregateDiagnosisView(data map[string]any) cliui.Document {
 	} else if unverified {
 		state = "Unverified"
 	}
-	blocks := []cliui.Block{cliui.Heading(cliui.Literal("Diagnostics: "+state+"."), 1)}
+	role := cliui.Success
+	if state == "Not ready" {
+		role = cliui.Failure
+	} else if state == "Unverified" {
+		role = cliui.Warning
+	}
+	blocks := []cliui.Block{stateHeading("Diagnostics", state, role)}
 	if len(rows) > 0 {
 		table, _ := cliui.Table([]cliui.Column{{Label: cliui.Literal("Subsystem")}, {Label: cliui.Literal("State")}}, rows)
 		blocks = append(blocks, table)

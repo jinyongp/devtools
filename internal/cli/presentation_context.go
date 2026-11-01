@@ -3,7 +3,11 @@ package cli
 import "github.com/jinyongp/devtools/internal/cli/presentation"
 
 func commandDisplayContext(command string, r Request) presentation.DisplayContext {
-	c := presentation.DisplayContext{}
+	_, bundleExplicit := r.OptionOffsets["bundle"]
+	c := presentation.DisplayContext{BundleExplicit: bundleExplicit}
+	if command == "bundle set" {
+		c.MembersKnown, c.MemberNames = true, append([]string(nil), r.ListOptions["key"]...)
+	}
 	switch command {
 	case "variable set", "variable unset", "secret set", "secret unset", "secret generate":
 		c.EnvironmentKnown, c.Environment = true, r.Options["env"]

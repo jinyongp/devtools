@@ -2,6 +2,9 @@ package presentation
 
 import (
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/jinyongp/devtools/internal/cliui"
@@ -9,6 +12,32 @@ import (
 
 func variantView(d Definition, data map[string]any) (cliui.Document, bool) {
 	switch d.Command {
+	case "proxy hosts preview":
+		return hostsPreviewView(data), true
+	case "proxy hosts apply", "proxy hosts remove":
+		if ref, ok := data["route_ref"].(map[string]any); ok {
+			message := "Applied hosts mappings."
+			if d.Command == "proxy hosts remove" {
+				message = "Removed hosts mappings."
+			}
+			if data["changed"] == false {
+				message = "No changes to hosts mappings."
+			}
+			blocks := []cliui.Block{outcomeHeading(message), cliui.Fields(cliui.Field{Label: cliui.Literal("Route"), Value: cliui.Literal(routeIdentity(ref))})}
+			if data["replayed"] == true {
+				blocks = append(blocks, cliui.Paragraph(cliui.Literal("Saved result replayed.")))
+			}
+			blocks = append(blocks, inventoryNotes(data)...)
+			return cliui.NewDocument(blocks...), true
+		}
+	case "proxy setup":
+		if item, ok := data["item"].(map[string]any); ok && item["bind_check"] != nil {
+			return setupCheckView(item), true
+		}
+	case "proxy teardown":
+		if plan, ok := data["item"].(map[string]any); ok {
+			return teardownView(data, plan), true
+		}
 	case "proxy status", "proxy start", "proxy stop", "proxy restart":
 		items, _ := data["items"].([]any)
 		single, _ := data["item"].(map[string]any)
@@ -28,6 +57,15 @@ func variantView(d Definition, data map[string]any) (cliui.Document, bool) {
 			if text(copy["name"]) == "" {
 				copy["name"] = "default"
 			}
+			copy["http_url"] = item["url"]
+			if port, err := strconv.Atoi(fmt.Sprint(item["https_port"])); err == nil {
+				if port == 0 {
+					copy["https_url"] = "Disabled"
+				} else if address, err := url.Parse(text(item["url"])); err == nil && address.Hostname() != "" {
+					address.Scheme, address.Host = "https", net.JoinHostPort(address.Hostname(), strconv.Itoa(port))
+					copy["https_url"] = address.String()
+				}
+			}
 			rows = append(rows, copy)
 		}
 		message := "Proxy listeners"
@@ -37,12 +75,14 @@ func variantView(d Definition, data map[string]any) (cliui.Document, bool) {
 				message = "No changes to proxy listeners."
 			}
 		}
-		blocks := []cliui.Block{cliui.Heading(cliui.Literal(message), 1), inventoryTable(inventoryLayout{columns: []ViewColumn{{"name", "Listener", ""}, {"state", "State", "state"}, {"port", "HTTP", ""}, {"https_port", "HTTPS", ""}}}, rows)}
+		blocks := []cliui.Block{outcomeHeading(message), inventoryTable(inventoryLayout{columns: []ViewColumn{{"name", "Listener", ""}, {"state", "State", "state"}, {"http_url", "HTTP", ""}, {"https_url", "HTTPS", ""}}}, rows)}
 		if single != nil {
-			blocks = append(blocks, selectedFields(single, "url"))
 			if reason := text(single["reason"]); reason != "" {
 				blocks = append(blocks, cliui.Paragraph(cliui.Words("Condition: "+reason+".")))
 			}
+		}
+		if len(rows) > 1 {
+			blocks = append(blocks, cliui.Paragraph(cliui.Styled(fmt.Sprintf("%d listeners", len(rows)), cliui.Muted)))
 		}
 		if data["replayed"] == true {
 			blocks = append(blocks, cliui.Paragraph(cliui.Literal("Saved result replayed.")))
@@ -63,7 +103,13 @@ func variantView(d Definition, data map[string]any) (cliui.Document, bool) {
 			}
 			ref, _ := item["route_ref"].(map[string]any)
 			name := text(item["host"])
-			if name == "" {
+			if text(ref["scope"]) != "" {
+				if name != "" {
+					name = routeIdentity(ref) + " (" + name + ")"
+				} else {
+					name = routeIdentity(ref)
+				}
+			} else if name == "" {
 				name = routeIdentity(ref)
 			}
 			state := "Unverified"
@@ -99,14 +145,30 @@ func variantView(d Definition, data map[string]any) (cliui.Document, bool) {
 		if data["changed"] == false {
 			message = "No changes to global routes."
 		}
-		blocks := []cliui.Block{cliui.Heading(cliui.Literal(message), 1)}
+		blocks := []cliui.Block{outcomeHeading(message)}
 		if len(items) > 0 {
-			blocks = append(blocks, inventoryTable(inventoryLayout{columns: []ViewColumn{{"name", "Route", ""}, {"host", "Host", ""}, {"id", "Route ID", ""}}}, items))
+			rows := make([]any, 0, len(items))
+			for _, value := range items {
+				item, _ := value.(map[string]any)
+				name := "Global " + text(item["name"])
+				if id := text(item["id"]); id != "" {
+					name += " (" + id + ")"
+				}
+				outcome := "Removed"
+				if data["changed"] == false {
+					outcome = "No change"
+				}
+				if data["replayed"] == true {
+					outcome = "Recorded removal"
+				}
+				rows = append(rows, map[string]any{"route": name, "outcome": outcome})
+			}
+			blocks = append(blocks, inventoryTable(inventoryLayout{columns: []ViewColumn{{"route", "Route", ""}, {"outcome", "Outcome", ""}}}, rows))
 		}
 		blocks = append(blocks, inventoryNotes(data)...)
 		return cliui.NewDocument(blocks...), true
 	case "cleanup preview":
-		blocks := []cliui.Block{cliui.Heading(cliui.Literal("Preview: Clean recoverable storage."), 1)}
+		blocks := []cliui.Block{outcomeHeading("Preview: Clean recoverable storage.")}
 		blocks = append(blocks, scope(data, map[string]bool{})...)
 		items, _ := data["items"].([]any)
 		if len(items) == 0 {
@@ -126,7 +188,7 @@ func variantView(d Definition, data map[string]any) (cliui.Document, bool) {
 		if data["changed"] == false {
 			message = "No changes to cleanup state."
 		}
-		blocks := []cliui.Block{cliui.Heading(cliui.Literal(message), 1)}
+		blocks := []cliui.Block{outcomeHeading(message)}
 		if len(items) > 0 {
 			blocks = append(blocks, inventoryTable(inventoryLayout{columns: []ViewColumn{{"id", "Archive ID", ""}, {"kind", "Kind", ""}, {"source", "Target", ""}}}, items))
 		}

@@ -15,6 +15,8 @@ import (
 type Definition struct {
 	Command             string
 	Target, Destination string
+	MembersKnown        bool
+	MemberNames         []string
 	Family              string
 	Title               string
 	Required            []Requirement
@@ -251,7 +253,7 @@ func scope(data map[string]any, consumed map[string]bool) []cliui.Block {
 		}
 		if value, exists := data[key]; exists {
 			if text, ok := value.(string); ok {
-				if key == "selection" && (text == "" || text == "all") {
+				if key == "selection" && (text == "" || text == "all" && data["_display_bundle_explicit"] != true) {
 					consumed[key] = true
 					continue
 				}

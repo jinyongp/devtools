@@ -23,6 +23,7 @@ func (a *App) registerHosts() {
 		}
 		if action == "preview" {
 			c.Output = object(map[string]any{"digest": stringSchema(), "changed": boolSchema(), "mappings": arraySchema(object(map[string]any{"host": stringSchema(), "address": stringSchema()}, "host", "address"))}, "digest", "changed", "mappings")
+			c.Output["properties"].(map[string]any)["next_actions"] = arraySchema(remedySchema())
 		} else {
 			c.Output = mutationSchema(map[string]any{"route_ref": routeRefSchema()}, "route_ref")
 		}
@@ -42,6 +43,7 @@ func (a *App) registerHosts() {
 			name := r.Args[0]
 			var ref network.RouteRef
 			var definition project.Proxy
+			directory := ""
 			if r.Options["global"] == "true" {
 				route := st.GlobalRoute(name)
 				if route == nil {
@@ -58,6 +60,7 @@ func (a *App) registerHosts() {
 				if e != nil {
 					return nil, e
 				}
+				directory = p.Root
 				instance := st.Find(p.Profile, "", p.Root)
 				if instance == nil {
 					return nil, portFailure("instance_not_found")
@@ -87,7 +90,18 @@ func (a *App) registerHosts() {
 			}
 			owner := ref.Key() + "/" + listener.ID
 			if action == "preview" {
-				return hm.PreviewChange(owner, desired)
+				result, e := hm.PreviewChange(owner, desired)
+				if e != nil {
+					return nil, e
+				}
+				argv := []string{"devtools", "proxy", "hosts", "apply", name, "--apply", result["digest"].(string), "--request-id", "REQUEST_UUID"}
+				if r.Options["global"] == "true" {
+					argv = append(argv, "--global")
+				} else {
+					argv = append(argv, "--dir", directory)
+				}
+				result["next_actions"] = []protocol.Remedy{protocol.LocalAction(argv, []string{"a new request UUID"}, "Apply the reviewed hosts mappings.", "system_write").Remedy(r.Invocation)}
+				return result, nil
 			}
 			return (netops.Store{Data: m.Data}).Apply(ctx, r.Options["request-id"], struct {
 				Action, Owner, Digest string

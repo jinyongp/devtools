@@ -335,9 +335,6 @@ func (r *renderer) commands(argv []string) {
 		r.out.WriteString("Arguments (not copyable)\n" + Escape(argumentDisplay(argv)) + "\n")
 		return
 	}
-	if r.out.Len() > 0 && !strings.HasSuffix(r.out.String(), "\n\n") {
-		r.out.WriteByte('\n')
-	}
 	for _, c := range lines {
 		if len(lines) > 1 {
 			r.out.WriteString(c.label + "\n")

@@ -56,3 +56,21 @@ func TestPreviewApplyDoesNotEchoPrivateInputsOrChildArguments(t *testing.T) {
 		t.Fatal(action)
 	}
 }
+
+func TestPreviewApplyPinsDirectoryAndRevisionForDeclarations(t *testing.T) {
+	c := Command{Name: "config tool add", Options: []Option{{Name: "dir"}, {Name: "revision"}, {Name: "file"}}}
+	r := Request{Args: []string{"node"}, Options: map[string]string{"dir": ".", "file": "tool.json"}}
+	action := previewApplyAction(c, r, map[string]any{"config_path": "/work/app/devtools.toml", "revision": strings.Repeat("a", 64)})
+	joined := strings.Join(action.Argv, " ")
+	if !strings.Contains(joined, "--dir /work/app") || !strings.Contains(joined, "--revision "+strings.Repeat("a", 64)) || strings.Contains(joined, "--file tool.json") {
+		t.Fatal("apply lost reviewed input scope", action)
+	}
+}
+
+func TestPreviewApplyPinsResolvedProfileWhenNoFlagWasProvided(t *testing.T) {
+	c := Command{Name: "bundle set", Options: []Option{{Name: "profile"}, {Name: "revision"}, {Name: "request-id"}}}
+	action := previewApplyAction(c, Request{Args: []string{"web"}, Options: map[string]string{}}, map[string]any{"profile": "resolved-app", "revision": strings.Repeat("a", 64)})
+	if !strings.Contains(strings.Join(action.Argv, " "), "--profile resolved-app") {
+		t.Fatal(action)
+	}
+}

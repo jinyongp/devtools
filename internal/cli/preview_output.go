@@ -113,18 +113,38 @@ func previewApplyAction(c Command, r Request, out map[string]any) protocol.Remed
 				appendValue(name, value)
 			}
 		} else {
-			appendValue(name, r.Options[name])
+			value := r.Options[name]
+			if name == "dir" {
+				if path, ok := out["config_path"].(string); ok && path != "" {
+					value = filepath.Dir(path)
+				}
+			}
+			if name == "dir" || name == "file" {
+				if absolute, err := filepath.Abs(value); err == nil {
+					value = absolute
+				} else {
+					required = append(required, "the same working directory for --"+name)
+				}
+			}
+			appendValue(name, value)
 		}
 	}
-	if c.Name == "config fmt" || c.Name == "config migrate" {
-		if !added["dir"] {
+	for _, option := range c.Options {
+		if option.Name == "profile" && !added["profile"] {
+			if profile, ok := out["profile"].(string); ok && profile != "" {
+				appendValue("profile", profile)
+			}
+		}
+		if option.Name == "dir" && !added["dir"] {
 			if path, ok := out["config_path"].(string); ok {
 				appendValue("dir", filepath.Dir(path))
 			}
 		}
 		if !added["revision"] {
-			if revision, ok := out["revision"].(string); ok {
-				appendValue("revision", revision)
+			if option.Name == "revision" {
+				if revision, ok := out["revision"].(string); ok && revision != "" {
+					appendValue("revision", revision)
+				}
 			}
 		}
 	}
@@ -155,5 +175,9 @@ func previewApplyAction(c Command, r Request, out map[string]any) protocol.Remed
 	if c.Name == "proxy teardown" {
 		effect = "system_write"
 	}
-	return protocol.LocalAction(argv, required, "Apply the reviewed operation using the same inputs.", effect).Remedy(r.Invocation)
+	message := "Apply the reviewed operation using the same inputs."
+	if c.Name == "config fmt" {
+		message = "Apply the reviewed formatting."
+	}
+	return protocol.LocalAction(argv, required, message, effect).Remedy(r.Invocation)
 }

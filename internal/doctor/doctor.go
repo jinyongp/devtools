@@ -213,6 +213,9 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 			}
 		} else if in.EnvironmentUnknown != "" && !independent {
 			status, reason, message = "unknown", in.EnvironmentUnknown, "The selected search environment could not be authenticated."
+			if explanation := map[string]string{"binding_unresolved": "The selected PATH depends on an unresolved binding.", "secret_search_environment": "The selected PATH contains protected values and was not opened for this check."}[reason]; explanation != "" {
+				message = explanation
+			}
 		} else {
 			path, e := process.LookPath(t.Executable, in.Directory, parent)
 			info, statErr := os.Stat(path)
@@ -234,7 +237,11 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 					}
 				}
 				if reason != "not_found" {
-					message = "Executable " + t.Executable + " is unavailable: " + reason + "."
+					explanation := map[string]string{"permission_denied": "permission to execute it was denied", "not_executable": "the selected file is not executable", "invalid_search_environment": "the selected PATH/PATHEXT is invalid"}[reason]
+					if explanation == "" {
+						explanation = "the selected executable could not be inspected"
+					}
+					message = "Executable " + t.Executable + " is unavailable: " + explanation + "."
 				}
 			} else if t.Version != "" {
 				var observed string
@@ -256,7 +263,11 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 				if reason == "deadline_exceeded" || reason == "canceled" {
 					status = "unknown"
 				}
-				message = "Executable " + t.Executable + ": " + reason + " (expected " + t.Version + ")."
+				explanation := map[string]string{"version_match": "satisfies the declared version requirement", "version_mismatch": "does not satisfy the declared version requirement", "deadline_exceeded": "could not be checked before the diagnosis deadline", "canceled": "was not checked because diagnosis was canceled", "timeout": "did not finish its version probe within 3s", "version_unreadable": "did not return a supported version token", "probe_failed": "did not complete its version probe successfully", "output_limit": "exceeded the version probe output limit", "executable_changed": "changed during the version check"}[reason]
+				if explanation == "" {
+					explanation = "could not complete its version check"
+				}
+				message = "Executable " + t.Executable + " " + explanation + "."
 			}
 		}
 		i := add(id, status, reason, message)
@@ -268,6 +279,9 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 		}
 		if status != "pass" {
 			checks[i].Remedies = []protocol.Remedy{toolRemedy(reason)}
+			if reason == "version_mismatch" {
+				checks[i].Remedies[0].Message = fmt.Sprintf("Use %s %s in the selected execution environment, then retry the original command.", t.Executable, t.Version)
+			}
 		}
 		if id == "command_executable" && in.Command == "" && in.ExecutableOffset != nil {
 			checks[i].Sources = append(checks[i].Sources, configcontract.Source{Kind: "argv", Path: []string{"child_args", "0"}, Offset: in.ExecutableOffset})

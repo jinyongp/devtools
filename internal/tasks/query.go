@@ -291,6 +291,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 	case "spec show", "plan show":
 		name := strings.Fields(cmd)[0]
 		out["item"] = item.Props[name]
+		out["title"] = item.Title
 		if name == "plan" {
 			out["documents"] = Object{"spec": item.Props["spec"], "plan": item.Props["plan"]}
 			order := []string{}
@@ -312,6 +313,13 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 				}
 			}
 			out["tasks"] = members
+			references := []Object{}
+			for _, id := range arr(objectValue(item.Props["plan"]), "validation_ids") {
+				if validation := s.Items[id]; validation != nil && validation.Kind == "validation" {
+					references = append(references, Object{"id": validation.ID, "title": validation.Title})
+				}
+			}
+			out["validations"] = references
 		}
 		return out, nil
 	case "check":

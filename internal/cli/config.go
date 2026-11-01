@@ -188,7 +188,7 @@ func (a *App) configAction(action string) func(context.Context, IO, Request) (an
 			return nil, e
 		}
 		if action == "fmt" && r.Options["check"] == "true" && result.(configedit.Result).WouldChange {
-			return nil, protocol.NewError("config_format_required", "Formatting is required. Run devtools config fmt after reviewing this preview.", 3, map[string]any{"reason": "formatting_required", "report": result})
+			return nil, protocol.NewError("config_format_required", "Configuration formatting is required.", 3, map[string]any{"reason": "formatting_required", "report": result})
 		}
 		return result, nil
 	}

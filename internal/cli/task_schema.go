@@ -103,6 +103,7 @@ func taskOutput(mutation bool) map[string]any {
 	props["created_refs"] = map[string]any{"type": "object"}
 	props["impact"] = map[string]any{"type": "object"}
 	required := []string{"profile", "revision"}
+	props["title"] = str
 	if mutation {
 		for k, v := range map[string]any{"previous_revision": integer, "current_revision": integer, "affected_count": integer, "affected_ids": map[string]any{"type": "array", "items": str}, "request_id": str, "replayed": boolean, "changed": boolean, "action_ids": map[string]any{"type": "array", "items": str}, "claimed": boolean, "run": map[string]any{"type": []string{"object", "null"}}, "context": nullable, "context_valid": boolean, "basis_id": str, "record_id": str} {
 			props[k] = v

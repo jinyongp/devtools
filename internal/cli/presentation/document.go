@@ -86,6 +86,9 @@ func BuildWithInputs(command string, public []byte, inputs []InputHint) (cliui.D
 type DisplayContext struct {
 	Target, Destination, Environment string
 	EnvironmentKnown                 bool
+	MembersKnown                     bool
+	MemberNames                      []string
+	BundleExplicit                   bool
 }
 
 func BuildWithContext(command string, public []byte, inputs []InputHint, context DisplayContext) (cliui.Document, error) {
@@ -93,11 +96,16 @@ func BuildWithContext(command string, public []byte, inputs []InputHint, context
 	if err != nil {
 		return cliui.Document{}, err
 	}
+	if context.BundleExplicit {
+		// Annotate only decoded rendering scopes, never the public envelope.
+		markExplicitBundle(e.value, true)
+	}
 	if !e.ok {
 		return conciseError(e.value.(map[string]any), inputs), nil
 	}
 	definition := DefinitionFor(command)
 	definition.Target, definition.Destination = context.Target, context.Destination
+	definition.MembersKnown, definition.MemberNames = context.MembersKnown, append([]string(nil), context.MemberNames...)
 	if data, ok := e.value.(map[string]any); ok && context.EnvironmentKnown {
 		if _, exists := data["env"]; !exists {
 			data["env"] = context.Environment
@@ -106,12 +114,28 @@ func BuildWithContext(command string, public []byte, inputs []InputHint, context
 	if document, valid := buildView(definition, e.value); valid {
 		return document, nil
 	}
+	markExplicitBundle(e.value, false)
 	if definition.Family != "" {
 		blocks := []cliui.Block{cliui.Paragraph(cliui.Literal("Cannot summarize this result with the current text contract."))}
 		blocks = append(blocks, generic(e).Blocks()...)
 		return cliui.NewDocument(blocks...), nil
 	}
 	return generic(e), nil
+}
+
+func markExplicitBundle(value any, explicit bool) {
+	data, ok := value.(map[string]any)
+	if !ok {
+		return
+	}
+	if explicit {
+		data["_display_bundle_explicit"] = true
+	} else {
+		delete(data, "_display_bundle_explicit")
+	}
+	for _, key := range []string{"details", "target", "report"} {
+		markExplicitBundle(data[key], explicit)
+	}
 }
 
 func BuildGeneric(public []byte) (cliui.Document, error) {

@@ -3,6 +3,7 @@ package presentation
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/jinyongp/devtools/internal/cliui"
@@ -16,7 +17,10 @@ func causalErrorView(e map[string]any) (cliui.Document, bool) {
 	causes, _ := details["causes"].([]any)
 	facts, _ := details["facts"].(map[string]any)
 	report, _ := details["report"].(map[string]any)
-	if len(causes) == 0 && facts["owner"] == nil && facts["related_items"] == nil && report == nil {
+	if e["code"] == "config_format_required" && report != nil {
+		return cliui.NewDocument(append([]cliui.Block{errorLine(text(e["message"]))}, formattingReviewBlocks(report)...)...), true
+	}
+	if len(causes) == 0 && facts["owner"] == nil && facts["related_items"] == nil && report == nil && details["reason"] != "output_exists" {
 		return cliui.Document{}, false
 	}
 	target, _ := details["target"].(map[string]any)
@@ -69,6 +73,12 @@ func causalErrorView(e map[string]any) (cliui.Document, bool) {
 		}
 	}
 	blocks = append(blocks, resourceFacts(facts, text(e["message"]))...)
+	if details["reason"] == "output_exists" {
+		if target["kind"] == "file" {
+			blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Output"), Value: display(target["name"])}))
+		}
+		blocks = append(blocks, cliui.Paragraph(cliui.Literal("The existing file was preserved.")))
+	}
 	if len(roots) == 0 {
 		blocks = append(blocks, causalLocations(details, target)...)
 		blocks = append(blocks, diagnosticFacts(facts)...)
@@ -147,7 +157,7 @@ func errorScopeWithMode(target map[string]any, foreground bool) []cliui.Block {
 		if !exists {
 			continue
 		}
-		if pair[0] == "bundle" && (value == "" || value == "all") || pair[0] == "mode" && value == "foreground" && !foreground {
+		if pair[0] == "bundle" && (value == "" || value == "all" && target["_display_bundle_explicit"] != true) || pair[0] == "mode" && value == "foreground" && !foreground {
 			continue
 		}
 		if pair[0] == "env" && value == "" {
@@ -349,9 +359,23 @@ func diagnosisPurposeView(d Definition, data map[string]any) cliui.Document {
 	if data["ready_configured"] == false {
 		state = "Not configured"
 	}
-	blocks := []cliui.Block{cliui.Heading(cliui.Literal(d.Title+": "+state+"."), 1)}
+	role := cliui.Primary
+	switch state {
+	case "Ready", "Valid", "Available":
+		role = cliui.Success
+	case "Not ready", "Invalid":
+		role = cliui.Failure
+	case "Unverified", "Unavailable":
+		role = cliui.Warning
+	}
+	blocks := []cliui.Block{stateHeading(d.Title, state, role)}
 	blocks = append(blocks, scope(data, map[string]bool{})...)
-	blocks = append(blocks, selectedFields(data, "id", "port"))
+	if d.Command == "config check" {
+		if path := text(data["config_path"]); path != "" {
+			blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Directory"), Value: cliui.Literal(filepath.Dir(path))}, cliui.Field{Label: cliui.Literal("Input"), Value: cliui.Literal(path)}))
+		}
+	}
+	blocks = append(blocks, selectedFields(data, "id", "name", "port"))
 	for _, key := range []string{"checks"} {
 		if rows, ok := data[key].([]any); ok {
 			blocks = append(blocks, conciseDiagnostics(rows, false)...)
@@ -378,11 +402,11 @@ func diagnosisPurposeView(d Definition, data map[string]any) cliui.Document {
 func doctorReportBlocks(data map[string]any, heading bool) []cliui.Block {
 	var blocks []cliui.Block
 	if heading {
-		state, _ := stateLabel(text(data["state"]))
-		blocks = append(blocks, cliui.Heading(cliui.Literal("Doctor: "+state+"."), 1))
+		state, role := stateLabel(text(data["state"]))
+		blocks = append(blocks, stateHeading("Doctor", state, role))
 	}
 	target := map[string]any{}
-	for _, key := range []string{"profile", "directory"} {
+	for _, key := range []string{"profile", "directory", "_display_bundle_explicit"} {
 		if value, ok := data[key]; ok {
 			target[key] = value
 		}

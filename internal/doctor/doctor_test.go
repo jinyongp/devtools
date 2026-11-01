@@ -54,6 +54,9 @@ func TestMetadataAndVersionChecks(t *testing.T) {
 	if checks[0].Status != "fail" {
 		t.Fatal("prefix version accepted")
 	}
+	if strings.Contains(checks[0].Message, "version_mismatch") || !strings.Contains(checks[0].Message, "does not satisfy") || !strings.Contains(checks[0].Remedies[0].Message, "1.2.30") {
+		t.Fatal("version correction is still a machine reason", checks[0])
+	}
 }
 func TestProbeFailureAndCancellation(t *testing.T) {
 	dir := privateTempDir(t)

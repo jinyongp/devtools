@@ -16,6 +16,10 @@ func purposeView(d Definition, data map[string]any) (cliui.Document, bool) {
 		return document, true
 	}
 	switch d.Command {
+	case "config fmt":
+		if data["dry_run"] == true {
+			return cliui.NewDocument(append([]cliui.Block{outcomeHeading("Preview: Format configuration.")}, formattingReviewBlocks(data)...)...), true
+		}
 	case "profile diff":
 		return comparisonView(data), true
 	case "values runner address":
@@ -103,7 +107,14 @@ func mutationPurposeView(d Definition, data map[string]any) cliui.Document {
 		message = "No changes to " + operationResource(d.Command) + "."
 	}
 	if preview {
-		message = "Preview: " + phrase + "."
+		message = "Preview: " + phrase
+		if d.Target != "" {
+			message += fmt.Sprintf(" %q", d.Target)
+		}
+		if d.Destination != "" {
+			message += fmt.Sprintf(" to %q", d.Destination)
+		}
+		message += "."
 	}
 	if d.Command == "dashboard" {
 		message = "Dashboard is stopped."
@@ -138,7 +149,7 @@ func mutationPurposeView(d Definition, data map[string]any) cliui.Document {
 	if boolField(data, "replayed") {
 		message = "Recorded result: " + message
 	}
-	blocks := []cliui.Block{cliui.Heading(cliui.Literal(message), 1)}
+	blocks := []cliui.Block{outcomeHeading(message)}
 	scopeData := map[string]any{}
 	for _, key := range []string{"profile", "directory", "env", "selection", "mode"} {
 		if value, ok := data[key]; ok {
@@ -152,7 +163,25 @@ func mutationPurposeView(d Definition, data map[string]any) cliui.Document {
 			scopeData["env"] = value
 		}
 	}
+	if path := text(data["config_path"]); !preview && path != "" && scopeData["directory"] == nil {
+		scopeData["directory"] = filepath.Dir(path)
+	}
 	blocks = append(blocks, scope(scopeData, map[string]bool{})...)
+	if d.Command == "bundle set" && d.MembersKnown {
+		if len(d.MemberNames) == 0 {
+			blocks = append(blocks, cliui.Paragraph(cliui.Literal("No bundle members selected.")))
+		} else {
+			members := make([]any, 0, len(d.MemberNames))
+			seen := map[string]bool{}
+			for _, name := range d.MemberNames {
+				if !seen[name] {
+					seen[name] = true
+					members = append(members, name)
+				}
+			}
+			blocks = append(blocks, inventoryTable(inventoryLayout{columns: []ViewColumn{{"", "Key", ""}}}, members))
+		}
+	}
 	if preview && text(data["config_path"]) != "" {
 		blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Directory"), Value: cliui.Literal(filepath.Dir(text(data["config_path"])))}, cliui.Field{Label: cliui.Literal("Input"), Value: display(data["config_path"])}))
 	}
@@ -168,7 +197,31 @@ func mutationPurposeView(d Definition, data map[string]any) cliui.Document {
 	blocks = append(blocks, selectedFields(data, "id", "execution_id", "path", "output", "archive_id", "plan_id", "record_id", "basis_id", "recipient"))
 	for _, key := range []string{"removed", "retained", "archives", "targets", "outcomes"} {
 		if rows, ok := data[key].([]any); ok && len(rows) > 0 {
+			if key == "targets" {
+				first, _ := rows[0].(map[string]any)
+				if first["profile"] != nil {
+					targets := make([]any, 0, len(rows))
+					for _, value := range rows {
+						row, _ := value.(map[string]any)
+						state := "Unavailable"
+						if exists, ok := row["exists"].(bool); ok {
+							state = "New"
+							if exists {
+								state = "Exists"
+							}
+						}
+						targets = append(targets, map[string]any{"source": row["source"], "target": row["profile"], "state": state})
+					}
+					blocks = append(blocks, inventoryTable(inventoryLayout{columns: []ViewColumn{{"source", "Source", ""}, {"target", "Target", ""}, {"state", "State", "literal"}}}, targets))
+					continue
+				}
+			}
 			blocks = append(blocks, cliui.Section(cliui.Literal(title(key)), batchTable(rows)))
+		}
+	}
+	if d.Command == "profile import" {
+		if diff, ok := data["diff"].(map[string]any); ok {
+			blocks = append(blocks, comparisonView(diff).Blocks()...)
 		}
 	}
 	if rows, ok := data["changes"].([]any); ok {
@@ -176,6 +229,14 @@ func mutationPurposeView(d Definition, data map[string]any) cliui.Document {
 			blocks = append(blocks, cliui.Paragraph(cliui.Literal("No proposed changes.")))
 		} else if len(rows) > 0 {
 			blocks = append(blocks, changeTable(rows))
+		}
+	}
+	if impact, ok := data["impact"].(map[string]any); ok && d.Command != "config fmt" {
+		if names, ok := impact["commands"].([]any); ok && len(names) > 0 {
+			blocks = append(blocks, cliui.Section(cliui.Literal(fmt.Sprintf("Affected commands (%d)", len(names))), inventoryTable(inventoryLayout{columns: []ViewColumn{{"", "Command", ""}}}, names)))
+		}
+		if impact["running_processes"] == "not_checked" || impact["external_usage"] == "not_checked" {
+			blocks = append(blocks, cliui.Paragraph(cliui.Literal("Running process and external usage impact was not checked.")))
 		}
 	}
 	if rows, ok := data["items"].([]any); ok && len(rows) > 0 {
@@ -224,6 +285,8 @@ func mutationPurposeView(d Definition, data map[string]any) cliui.Document {
 
 func operationResource(command string) string {
 	switch command {
+	case "task checkpoint", "task release":
+		return "run"
 	case "init":
 		return "project configuration"
 	case "import":
@@ -355,12 +418,14 @@ func batchTable(items []any) cliui.Block {
 }
 
 func comparisonView(data map[string]any) cliui.Document {
-	blocks := []cliui.Block{cliui.Heading(cliui.Literal("Profile comparison"), 1), selectedFields(data, "left", "right")}
+	message := "Profiles differ."
 	if data["different"] == false {
-		blocks = append(blocks, cliui.Paragraph(cliui.Literal("No differences.")))
+		message = "No differences."
+	}
+	blocks := []cliui.Block{outcomeHeading(message), selectedFields(data, "left", "right")}
+	if data["different"] == false {
 		return cliui.NewDocument(blocks...)
 	}
-	blocks = append(blocks, cliui.Paragraph(cliui.Literal("Profiles differ.")))
 	var rows []cliui.Row
 	for _, kind := range []string{"envs", "variables", "secrets", "items", "instances"} {
 		items, _ := data[kind].([]any)
@@ -389,12 +454,28 @@ func comparisonView(data map[string]any) cliui.Document {
 					right = "Absent"
 				}
 			}
-			rows = append(rows, cliui.Row{Cells: []cliui.Text{cliui.Literal(kind), cliui.Literal(key), display(item["action"]), cliui.Literal(left), cliui.Literal(right)}})
+			change := map[string]string{"added": "Added", "removed": "Removed", "changed": "Different"}[text(item["action"])]
+			if change == "" {
+				change = "Unrecognized: " + text(item["action"])
+			}
+			if item["action"] == "changed" && left != right {
+				change += ": " + left + " to " + right
+			}
+			label := map[string]string{"envs": "Environment", "variables": "Variable", "secrets": "Secret", "items": "Item", "instances": "Instance"}[kind]
+			if kind == "items" && text(item["kind"]) != "" {
+				label = title(text(item["kind"]))
+			}
+			rows = append(rows, cliui.Row{Cells: []cliui.Text{cliui.Literal(label), cliui.Literal(key), cliui.Literal(change)}})
 		}
 	}
 	if len(rows) > 0 {
-		table, _ := cliui.Table([]cliui.Column{{Label: cliui.Literal("Kind")}, {Label: cliui.Literal("Target")}, {Label: cliui.Literal("Change")}, {Label: cliui.Literal("Left")}, {Label: cliui.Literal("Right")}}, rows)
+		table, _ := cliui.Table([]cliui.Column{{Label: cliui.Literal("Kind")}, {Label: cliui.Literal("Key")}, {Label: cliui.Literal("Change")}}, rows)
 		blocks = append(blocks, table)
+		count := fmt.Sprintf("%d differences", len(rows))
+		if len(rows) == 1 {
+			count = "1 difference"
+		}
+		blocks = append(blocks, cliui.Paragraph(cliui.Styled(count, cliui.Muted)))
 	}
 	return cliui.NewDocument(blocks...)
 }
@@ -410,7 +491,30 @@ func taskPurposeView(d Definition, data map[string]any) cliui.Document {
 	if !read {
 		return taskMutationView(d, data)
 	}
-	blocks := []cliui.Block{cliui.Heading(cliui.Literal(d.Title), 1)}
+	if (d.Command == "task next" || d.Command == "task current") && data["item"] == nil {
+		items, _ := data["items"].([]any)
+		if len(items) == 0 {
+			message := "No ready task"
+			if d.Command == "task current" {
+				message = "No active run"
+			}
+			if profile := text(data["profile"]); profile != "" {
+				message += " for " + profile
+			}
+			return cliui.NewDocument(cliui.Paragraph(cliui.Literal(message + ".")))
+		}
+	}
+	heading := d.Title
+	if strings.HasSuffix(d.Command, "spec show") || strings.HasSuffix(d.Command, "plan show") {
+		heading = "Specification"
+		if strings.HasSuffix(d.Command, "plan show") {
+			heading = "Plan"
+		}
+		if workstream := text(data["title"]); workstream != "" {
+			heading += " for " + workstream
+		}
+	}
+	blocks := []cliui.Block{cliui.Heading(cliui.Literal(heading), 1)}
 	blocks = append(blocks, scope(data, map[string]bool{})...)
 	if strings.HasSuffix(d.Command, "spec show") || strings.HasSuffix(d.Command, "plan show") {
 		item, _ := data["item"].(map[string]any)
@@ -423,12 +527,39 @@ func taskPurposeView(d Definition, data map[string]any) cliui.Document {
 			}
 		}
 		if refs, ok := data["task_order"].([]any); ok && len(refs) > 0 {
-			blocks = append(blocks, cliui.Section(cliui.Literal("Task order"), inventoryTable(inventoryLayout{columns: []ViewColumn{{"", "Task ID", ""}}}, refs)))
+			names := map[string]string{}
+			members, _ := data["tasks"].([]any)
+			for _, value := range members {
+				task, _ := value.(map[string]any)
+				names[text(task["id"])] = text(task["title"])
+			}
+			rows := make([]any, 0, len(refs))
+			for i, ref := range refs {
+				name := names[text(ref)]
+				if name == "" {
+					name = "Unavailable"
+				}
+				rows = append(rows, map[string]any{"order": i + 1, "title": name, "id": ref})
+			}
+			blocks = append(blocks, cliui.Section(cliui.Literal("Task order"), inventoryTable(inventoryLayout{columns: []ViewColumn{{"order", "#", ""}, {"title", "Task", ""}, {"id", "ID", ""}}}, rows)))
 		}
 		if refs, ok := item["validation_ids"].([]any); ok && len(refs) > 0 {
-			blocks = append(blocks, cliui.Section(cliui.Literal("Validation references"), inventoryTable(inventoryLayout{columns: []ViewColumn{{"", "Validation ID", ""}}}, refs)))
+			names := map[string]string{}
+			members, _ := data["validations"].([]any)
+			for _, value := range members {
+				validation, _ := value.(map[string]any)
+				names[text(validation["id"])] = text(validation["title"])
+			}
+			rows := make([]any, 0, len(refs))
+			for _, ref := range refs {
+				name := names[text(ref)]
+				if name == "" {
+					name = "Unavailable"
+				}
+				rows = append(rows, map[string]any{"title": name, "id": ref})
+			}
+			blocks = append(blocks, cliui.Section(cliui.Literal("Validation references"), inventoryTable(inventoryLayout{columns: []ViewColumn{{"title", "Validation", ""}, {"id", "ID", ""}}}, rows)))
 		}
-		blocks = append(blocks, selectedFields(data, "revision"))
 		return cliui.NewDocument(blocks...)
 	}
 	if d.Command == "task workstream check" {
@@ -562,6 +693,15 @@ func taskIdentity(item map[string]any) []cliui.Block {
 }
 
 func taskMutationView(d Definition, data map[string]any) cliui.Document {
+	if data["claimed"] == false {
+		message := "No ready task"
+		if profile := text(data["profile"]); profile != "" {
+			message += " for " + profile
+		}
+		blocks := []cliui.Block{cliui.Paragraph(cliui.Literal(message + "."))}
+		blocks = append(blocks, inventoryNotes(data)...)
+		return cliui.NewDocument(blocks...)
+	}
 	if item, ok := data["item"].(map[string]any); ok {
 		d.Target = text(item["title"])
 	}
@@ -586,19 +726,39 @@ func taskMutationView(d Definition, data map[string]any) cliui.Document {
 	if d.Command == "task validation waive" {
 		message = "Waived validation requirement."
 	}
-	blocks := []cliui.Block{cliui.Heading(cliui.Literal(message), 1)}
+	if data["replayed"] == true {
+		message = "Recorded result: " + message
+	}
+	blocks := []cliui.Block{outcomeHeading(message)}
 	blocks = append(blocks, scope(data, map[string]bool{})...)
 	if item, ok := data["item"].(map[string]any); ok {
-		blocks = append(blocks, taskIdentity(item)...)
+		if d.Command == "task add" {
+			blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Task ID"), Value: display(item["id"])}), selectedFields(item, "workstream_id"))
+			if blockers, ok := item["blockers"].([]any); ok {
+				blocks = append(blocks, conciseDiagnostics(blockers, false)...)
+			}
+		} else {
+			copy := map[string]any{}
+			for key, value := range item {
+				copy[key] = value
+			}
+			if d.Target != "" && strings.Contains(message, fmt.Sprintf("%q", d.Target)) {
+				delete(copy, "title")
+			}
+			blocks = append(blocks, taskIdentity(copy)...)
+		}
 	}
 	if run, ok := data["run"].(map[string]any); ok {
 		blocks = append(blocks, cliui.Section(cliui.Literal("Run"), selectedFields(run, "id", "directory", "state")))
 	}
-	blocks = append(blocks, selectedFields(data, "record_id", "basis_id", "affected_count"))
+	blocks = append(blocks, selectedFields(data, "record_id", "basis_id"))
+	if count := data["affected_count"]; count != nil && fmt.Sprint(count) != "0" && fmt.Sprint(count) != "1" {
+		blocks = append(blocks, selectedFields(data, "affected_count"))
+	}
 	if data["applicable"] == false {
 		blocks = append(blocks, cliui.Paragraph(cliui.Literal("The recorded evidence does not apply to the current definition.")))
 	}
-	if data["context_valid"] == false {
+	if data["context_valid"] == false && d.Command != "task done" && d.Command != "task release" {
 		blocks = append(blocks, cliui.Paragraph(cliui.Literal("The execution context is not valid for the current definition.")))
 	}
 	if refs, ok := data["created_refs"].(map[string]any); ok && len(refs) > 0 {

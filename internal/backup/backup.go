@@ -214,8 +214,12 @@ func archiveFailure(err error) *protocol.Error {
 	return failure("invalid_backup")
 }
 
-func outputExistsFailure() *protocol.Error {
-	return protocol.NewError("backup_error", "The backup output file already exists. The existing file was preserved.", 3, map[string]any{"cause": "output_exists", "reason": "output_exists", "facts": map[string]any{"field": "output", "input_role": "output"}, "effects": "none", "remedies": []protocol.Remedy{{Message: "Choose an unused --output path, then retry the backup command.", Effect: "read", Argv: []string{}, RequiredInputs: []string{}}}})
+func outputExistsFailure(output, profile string) *protocol.Error {
+	target := map[string]any{"kind": "file", "name": output}
+	if profile != "" {
+		target["profile"] = profile
+	}
+	return protocol.NewError("backup_error", "Cannot create backup because the output file already exists.", 3, map[string]any{"cause": "output_exists", "reason": "output_exists", "target": target, "facts": map[string]any{"field": "output", "input_role": "output"}, "effects": "none", "remedies": []protocol.Remedy{{Message: "Choose an unused path with --output.", Effect: "read", Argv: []string{}, RequiredInputs: []string{}}}})
 }
 func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 func file(domain, profile string) string {
@@ -512,7 +516,7 @@ func (e Engine) createArchive(ctx context.Context, profile, output string, encod
 			return CreateResult{}, failure("canceled")
 		}
 		if errors.Is(err, os.ErrExist) {
-			return CreateResult{}, outputExistsFailure()
+			return CreateResult{}, outputExistsFailure(output, profile)
 		}
 		return CreateResult{}, failure("backup_error")
 	}

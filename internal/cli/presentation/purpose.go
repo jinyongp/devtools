@@ -383,11 +383,27 @@ func comparisonView(data map[string]any) cliui.Document {
 			if key == "" {
 				key = text(item["id"])
 			}
-			rows = append(rows, cliui.Row{Cells: []cliui.Text{cliui.Literal(kind), cliui.Literal(key), display(item["action"])}})
+			left, right := comparisonSide(item["left"], kind), comparisonSide(item["right"], kind)
+			if kind == "instances" {
+				key = right
+				if item["right"] == nil {
+					key = left
+				}
+			}
+			if kind == "envs" {
+				left, right = "Present", "Present"
+				if item["action"] == "added" {
+					left = "Absent"
+				}
+				if item["action"] == "removed" {
+					right = "Absent"
+				}
+			}
+			rows = append(rows, cliui.Row{Cells: []cliui.Text{cliui.Literal(kind), cliui.Literal(key), display(item["action"]), cliui.Literal(left), cliui.Literal(right)}})
 		}
 	}
 	if len(rows) > 0 {
-		table, _ := cliui.Table([]cliui.Column{{Label: cliui.Literal("Kind")}, {Label: cliui.Literal("Key")}, {Label: cliui.Literal("Change")}}, rows)
+		table, _ := cliui.Table([]cliui.Column{{Label: cliui.Literal("Kind")}, {Label: cliui.Literal("Target")}, {Label: cliui.Literal("Change")}, {Label: cliui.Literal("Left")}, {Label: cliui.Literal("Right")}}, rows)
 		blocks = append(blocks, table)
 	}
 	return cliui.NewDocument(blocks...)

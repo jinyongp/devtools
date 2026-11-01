@@ -304,6 +304,9 @@ func unverifiedChecks(checks []any) []cliui.Block {
 }
 
 func diagnosisPurposeView(d Definition, data map[string]any) cliui.Document {
+	if d.Command == "diagnostics" {
+		return aggregateDiagnosisView(data)
+	}
 	if d.Command == "doctor" {
 		return cliui.NewDocument(doctorReportBlocks(data, true)...)
 	}
@@ -377,6 +380,9 @@ func doctorReportBlocks(data map[string]any, heading bool) []cliui.Block {
 		if env, ok := command["env"].(string); ok {
 			target["env"] = env
 		}
+		if bundle, ok := command["selection"].(string); ok {
+			target["bundle"] = bundle
+		}
 	}
 	if mode := text(data["mode"]); mode != "" {
 		target["mode"] = mode
@@ -391,6 +397,11 @@ func doctorReportBlocks(data map[string]any, heading bool) []cliui.Block {
 		blocks = append(blocks, inventoryTable(inventoryLayout{columns: columns}, commands))
 	}
 	var failed, actions []any
+	affected := map[string][]string{}
+	checkIdentity := func(check map[string]any) string {
+		identity, _ := json.Marshal([]any{check["reason"], check["target"], check["facts"], check["sources"], check["status"], check["message"], check["blocked_by"]})
+		return string(identity)
+	}
 	if checks, ok := data["checks"].([]any); ok {
 		failed = append(failed, checks...)
 	}
@@ -398,12 +409,22 @@ func doctorReportBlocks(data map[string]any, heading bool) []cliui.Block {
 		command, _ := value.(map[string]any)
 		if checks, ok := command["checks"].([]any); ok {
 			failed = append(failed, checks...)
+			for _, value := range checks {
+				check, _ := value.(map[string]any)
+				if check["status"] == "fail" {
+					id := checkIdentity(check)
+					name := text(command["name"])
+					if names := affected[id]; len(names) == 0 || names[len(names)-1] != name {
+						affected[id] = append(names, name)
+					}
+				}
+			}
 		}
 	}
 	seen := map[string]bool{}
 	for _, value := range failed {
 		check, _ := value.(map[string]any)
-		if check["status"] == "unknown" {
+		if check["status"] == "unknown" || check["status"] == "fail" {
 			if remedies, ok := check["remedies"].([]any); ok {
 				actions = append(actions, remedies...)
 			}
@@ -412,11 +433,11 @@ func doctorReportBlocks(data map[string]any, heading bool) []cliui.Block {
 			continue
 		}
 		facts, _ := check["facts"].(map[string]any)
-		identity, _ := json.Marshal([]any{check["reason"], check["target"], facts})
-		if seen[string(identity)] {
+		identity := checkIdentity(check)
+		if seen[identity] {
 			continue
 		}
-		seen[string(identity)] = true
+		seen[identity] = true
 		message := text(check["message"])
 		if target, ok := check["target"].(map[string]any); ok {
 			if name := text(target["name"]); name != "" && !mentionsTarget(message, name) {
@@ -424,11 +445,11 @@ func doctorReportBlocks(data map[string]any, heading bool) []cliui.Block {
 			}
 		}
 		blocks = append(blocks, cliui.Paragraph(cliui.Words(message)))
+		if names := affected[identity]; len(commands) > 1 && len(names) > 0 {
+			blocks = append(blocks, cliui.Paragraph(cliui.Words("Commands: "+strings.Join(names, ", ")+".")))
+		}
 		blocks = append(blocks, resourceFacts(facts, text(check["message"]))...)
 		blocks = append(blocks, causalLocations(check, map[string]any{"config_path": data["config_path"]})...)
-		if remedies, ok := check["remedies"].([]any); ok {
-			actions = append(actions, remedies...)
-		}
 	}
 	blocks = append(blocks, unverifiedChecks(failed)...)
 	blocks = append(blocks, recoveryNotes(data)...)

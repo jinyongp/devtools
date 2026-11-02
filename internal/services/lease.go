@@ -53,7 +53,7 @@ func (s Store) leaseAvailable(ctx context.Context, id string, allowMissing bool)
 	if ctx.Err() != nil {
 		return false, protocol.ContextError(ctx.Err())
 	}
-	lease, acquired, err := tryLease(s.leasePath(id), false)
+	lease, acquired, err := tryQueryLease(s.leasePath(id))
 	if errors.Is(err, os.ErrNotExist) {
 		if allowMissing {
 			return true, nil

@@ -44,6 +44,11 @@ func tryLease(path string, create bool) (*lockedLease, bool, error) {
 	}
 	return &lockedLease{file: file.File, closeGuard: file.Close}, true, nil
 }
+
+// Windows observations retain the established exclusive handle/ACL protocol.
+func tryQueryLease(path string) (*lockedLease, bool, error) {
+	return tryLease(path, false)
+}
 func validateLeaseIdentity(file *os.File, path string) error {
 	root, err := platformfs.OpenRoot(filepath.Dir(path), false)
 	if err != nil {

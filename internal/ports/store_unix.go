@@ -30,9 +30,9 @@ func (s Store) lock(ctx context.Context, name string, wait bool, create bool) (i
 	if e != nil || !i.IsDir() || i.Mode().Perm()&0077 != 0 {
 		return nil, storageError()
 	}
-	flags := os.O_RDWR | syscall.O_NOFOLLOW | syscall.O_NONBLOCK
+	flags := os.O_RDONLY | syscall.O_NOFOLLOW | syscall.O_NONBLOCK
 	if create {
-		flags |= os.O_CREATE
+		flags = os.O_RDWR | os.O_CREATE | syscall.O_NOFOLLOW | syscall.O_NONBLOCK
 	}
 	f, e := os.OpenFile(filepath.Join(s.Directory, name), flags, 0600)
 	if errors.Is(e, os.ErrNotExist) && !create {

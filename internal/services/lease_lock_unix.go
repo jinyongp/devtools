@@ -26,7 +26,20 @@ func (l *lockedLease) unlockClose() error {
 }
 
 func tryLease(path string, create bool) (*lockedLease, bool, error) {
-	flags := os.O_RDWR | syscall.O_NOFOLLOW | syscall.O_NONBLOCK
+	return openLease(path, create, false)
+}
+
+func tryQueryLease(path string) (*lockedLease, bool, error) {
+	return openLease(path, false, true)
+}
+
+func openLease(path string, create, query bool) (*lockedLease, bool, error) {
+	flags := syscall.O_NOFOLLOW | syscall.O_NONBLOCK
+	if query {
+		flags |= os.O_RDONLY
+	} else {
+		flags |= os.O_RDWR
+	}
 	if create {
 		flags |= os.O_CREATE
 		if err := tasks.PrivateDir(filepath.Dir(path)); err != nil {

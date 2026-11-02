@@ -261,7 +261,11 @@ func (m Manager) Status(ctx context.Context) (Status, *protocol.Error) {
 	if record.State == "starting" && !record.CreatedAt.IsZero() && time.Since(record.CreatedAt) < 2*time.Second {
 		return status, nil
 	}
-	if m.leaseFree(ctx) {
+	free, leaseErr := m.queryLeaseFree(ctx)
+	if leaseErr != nil {
+		return Status{}, leaseErr
+	}
+	if free {
 		status.State = "interrupted"
 		status.Reason = "supervisor_lost"
 	} else {
@@ -1132,6 +1136,29 @@ func (m Manager) leaseFree(ctx context.Context) bool {
 	}
 	release()
 	return true
+}
+
+func (m Manager) queryLeaseFree(ctx context.Context) (bool, *protocol.Error) {
+	release, acquired, err := maintenance.TryQueryExclusive(ctx, m.path("lease.lock"))
+	var preparation *maintenance.QueryPreparationError
+	if errors.As(err, &preparation) {
+		// Older records can precede lock preparation. Preserve writable first
+		// use; a denied preparation is an error, never evidence of a free lease.
+		release, acquired, err = maintenance.TryLockExclusive(ctx, m.path("lease.lock"))
+	}
+	if err != nil {
+		failure := protocol.WithStorageDetails(proxyStorageError(), "proxy", "observe_lease", "lease", err)
+		if preparation != nil && failure.Code != "canceled" && failure.Code != "deadline_exceeded" {
+			failure.Details["state"] = preparation.State
+			failure.Details["effects"] = "unknown"
+			failure.Details["retry"] = "after_dependency_change"
+		}
+		return false, failure
+	}
+	if acquired {
+		release()
+	}
+	return acquired, nil
 }
 
 func validRequestID(value string) bool {

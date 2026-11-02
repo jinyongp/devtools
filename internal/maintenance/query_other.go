@@ -12,3 +12,8 @@ func AcquireQuery(ctx context.Context, root string) (func(), error) {
 func LockQueryShared(ctx context.Context, path string) (func(), error) {
 	return LockShared(ctx, path)
 }
+
+// Retain the platform's established ACL and byte-range locking behavior.
+func TryQueryExclusive(ctx context.Context, path string) (func(), bool, error) {
+	return TryLockExclusive(ctx, path)
+}

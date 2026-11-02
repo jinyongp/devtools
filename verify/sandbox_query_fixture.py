@@ -141,16 +141,22 @@ def native_probe(binary, data, scratch):
     gate = store / ".maintenance" / "lock"
     with held([str(binary), "hold-write", str(gate)]):
         assert json.loads(sandbox.run([binary, "query", store]).stdout) == {"event": "deadline_exceeded"}
+        assert json.loads(sandbox.run([binary, "try-query-exclusive", gate]).stdout) == {"event": "busy"}
     with held(sandbox.command([binary, "hold-query", store]), sandbox.environment, scratch):
         writer = subprocess.run([binary, "try-write", gate], text=True, capture_output=True, check=True, timeout=10)
         assert json.loads(writer.stdout) == {"event": "busy"}
         assert json.loads(sandbox.run([binary, "query", store]).stdout) == {"event": "acquired"}
+        assert json.loads(sandbox.run([binary, "try-query-exclusive", gate]).stdout) == {"event": "busy"}
+    assert json.loads(sandbox.run([binary, "try-query-exclusive", gate]).stdout) == {"event": "acquired"}
+    turnstile = Path(str(gate) + ".turnstile")
+    with held([str(binary), "hold-write", str(turnstile)]):
+        assert json.loads(sandbox.run([binary, "try-query-exclusive", gate]).stdout) == {"event": "busy"}
     assert inventory(data) == before_query, "AcquireQuery changed fixture"
     return {"os": sys.platform, "kernel": platform.release(), "arch": platform.machine(),
             "binary_sha256": hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
             "checks": denied, "old_writer_blocks_reader": True, "reader_blocks_old_writer": True,
             "concurrent_readers": True, "cancellation": True, "close_releases_lock": True,
-            "inventory_unchanged": True, "product_query_gate": True}
+            "inventory_unchanged": True, "product_query_gate": True, "readonly_exclusive_pair_probe": True}
 
 
 def main():

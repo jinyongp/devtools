@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/jinyongp/devtools/internal/platformfs"
 )
@@ -80,6 +81,14 @@ func acquireQueryPair(ctx context.Context, path string) (func(), error) {
 }
 
 func acquireQueryFileLock(ctx context.Context, path string) (*lockedFile, error) {
+	file, err := openQueryFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return waitForFileLock(ctx, file, lockShared)
+}
+
+func openQueryFile(path string) (*os.File, error) {
 	file, err := platformfs.OpenNoFollow(path, os.O_RDONLY, 0)
 	if err != nil {
 		return nil, err
@@ -88,5 +97,63 @@ func acquireQueryFileLock(ctx context.Context, path string) (*lockedFile, error)
 		_ = file.Close()
 		return nil, err
 	}
-	return waitForFileLock(ctx, file, lockShared)
+	return file, nil
+}
+
+// TryQueryExclusive observes the writer's existing pair without creating files
+// or opening them for writing. A missing pair requires preparation; it is never
+// evidence that a lease is free. The returned gate has the ordinary EX lifetime.
+func TryQueryExclusive(ctx context.Context, path string) (func(), bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	if err := platformfs.CheckDirectory(filepath.Dir(path)); err != nil {
+		return nil, false, queryProbeError(err)
+	}
+	turnstile, acquired, err := tryQueryFileLock(ctx, path+".turnstile")
+	if err != nil || !acquired {
+		return nil, false, queryProbeError(err)
+	}
+	defer unlockFile(turnstile)
+	gate, acquired, err := tryQueryFileLock(ctx, path)
+	if err != nil || !acquired {
+		return nil, false, queryProbeError(err)
+	}
+	return func() { unlockFile(gate) }, true, nil
+}
+
+func queryProbeError(err error) error {
+	if errors.Is(err, os.ErrNotExist) {
+		return &QueryPreparationError{State: "initialization_required", Cause: err}
+	}
+	return err
+}
+
+func tryQueryFileLock(ctx context.Context, path string) (*lockedFile, bool, error) {
+	file, err := openQueryFile(path)
+	if err != nil {
+		return nil, false, err
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			_ = file.Close()
+			return nil, false, err
+		}
+		err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if errors.Is(err, syscall.EINTR) {
+			continue
+		}
+		if err != nil {
+			_ = file.Close()
+			if errors.Is(err, syscall.EWOULDBLOCK) {
+				return nil, false, nil
+			}
+			return nil, false, err
+		}
+		if err := ctx.Err(); err != nil {
+			_ = file.Close()
+			return nil, false, err
+		}
+		return &lockedFile{File: file}, true, nil
+	}
 }

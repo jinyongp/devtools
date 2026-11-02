@@ -25,6 +25,20 @@ func main() {
 		os.Exit(2)
 	}
 	operation, path := os.Args[1], os.Args[2]
+	if operation == "try-query-exclusive" {
+		release, acquired, err := maintenance.TryQueryExclusive(context.Background(), path)
+		if err != nil {
+			emit(map[string]any{"event": "query_failed"})
+			os.Exit(1)
+		}
+		if !acquired {
+			emit(map[string]any{"event": "busy"})
+			return
+		}
+		defer release()
+		emit(map[string]any{"event": "acquired"})
+		return
+	}
 	if operation == "init-query" || operation == "hold-query" || operation == "query" || operation == "profile-query" || operation == "hold-profile-query" {
 		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 		defer cancel()

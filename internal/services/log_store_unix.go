@@ -12,16 +12,32 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
 )
 
 func acquireLogLock(ctx context.Context, logPath string, exclusive bool) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	dir := filepath.Dir(logPath)
 	if err := privateLogDirectory(dir); err != nil {
 		return nil, err
 	}
 	lockPath := logPath + ".lock"
-	file, err := platformfs.OpenNoFollow(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+	flags := os.O_RDONLY
+	if exclusive {
+		flags = os.O_CREATE | os.O_RDWR
+	}
+	file, err := platformfs.OpenNoFollow(lockPath, flags, 0600)
+	if !exclusive && errors.Is(err, os.ErrNotExist) {
+		// Only first-use preparation needs write access. A missing lock never
+		// admits an unlocked snapshot, even when log bytes are already present.
+		file, err = platformfs.OpenNoFollow(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+		if err != nil {
+			return nil, &maintenance.QueryPreparationError{State: "initialization_required", Cause: err}
+		}
+	}
 	if err != nil {
 		return nil, err
 	}

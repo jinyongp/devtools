@@ -22,6 +22,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/archiveproof"
 	"github.com/jinyongp/devtools/internal/execution"
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
@@ -199,7 +200,15 @@ func storageError(causes ...error) *protocol.Error {
 // Safe failure metadata retains the operation and numeric OS error without
 // exposing a path, record, argv, or control credential.
 func storageErrorAt(operation string, cause error) *protocol.Error {
-	return protocol.WithStorageDetails(protocol.NewError("io_error", "Cannot access private process storage.", 1, nil), "services", operation, "process_store", cause)
+	condition := protocol.WithStorageDetails(protocol.NewError("io_error", "Cannot access private process storage.", 1, nil), "services", operation, "process_store", cause)
+	var preparation *maintenance.QueryPreparationError
+	if errors.As(cause, &preparation) {
+		condition.Details["state"] = preparation.State
+		condition.Details["effects"] = "unknown"
+		condition.Details["retry"] = "after_dependency_change"
+		condition.Details["remedies"] = []protocol.Remedy{{Relation: protocol.SameStoreAction, Argv: []string{"devtools", "process", "logs"}, RequiredInputs: []string{"execution_id"}, Effect: "value_write", Message: "Repeat this log query with its execution ID in a context with write access to initialize the missing log lock, then retry."}}
+	}
+	return condition
 }
 func validID(s string) bool {
 	b, e := hex.DecodeString(strings.ReplaceAll(s, "-", ""))

@@ -85,6 +85,8 @@ func causalErrorView(e map[string]any) (cliui.Document, bool) {
 	}
 	if report != nil {
 		switch {
+		case report["scope"] == "storage":
+			blocks = append(blocks, storageReportBlocks(report)...)
 		case report["changes"] != nil:
 			if path := text(report["config_path"]); path != "" {
 				blocks = append(blocks, selectedFields(report, "config_path"))
@@ -331,6 +333,9 @@ func diagnosisPurposeView(d Definition, data map[string]any) cliui.Document {
 		return aggregateDiagnosisView(data)
 	}
 	if d.Command == "doctor" {
+		if data["scope"] == "storage" {
+			return cliui.NewDocument(storageReportBlocks(data)...)
+		}
 		return cliui.NewDocument(doctorReportBlocks(data, true)...)
 	}
 	state := "Unverified"

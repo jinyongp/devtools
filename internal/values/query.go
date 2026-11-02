@@ -39,6 +39,9 @@ func (s ModernStore) queryError(ctx context.Context, cause error) *protocol.Erro
 	failure.Message = "Storage initialization or recovery is required before this query can proceed."
 	failure.Details["state"] = preparation.State
 	failure.Details["effects"] = "unknown"
+	if preparation.Passive {
+		failure.Details["effects"] = "none"
+	}
 	failure.Details["retry"] = "after_dependency_change"
 	failure.Details["remedies"] = []protocol.Remedy{{
 		Relation: protocol.SameStoreAction,

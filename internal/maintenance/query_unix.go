@@ -46,6 +46,10 @@ func acquireQueryGate(ctx context.Context, root string) (func(), error) {
 	return acquireQueryPair(ctx, filepath.Join(root, ".maintenance", "lock"))
 }
 
+func acquirePassivePair(ctx context.Context, root string) (func(), error) {
+	return acquireQueryGate(ctx, root)
+}
+
 // LockQueryShared shares the writer's profile lock without creating or opening
 // existing lock objects for writing. Only missing objects use initialization.
 func LockQueryShared(ctx context.Context, path string) (func(), error) {
@@ -124,7 +128,7 @@ func TryQueryExclusive(ctx context.Context, path string) (func(), bool, error) {
 
 func queryProbeError(err error) error {
 	if errors.Is(err, os.ErrNotExist) {
-		return &QueryPreparationError{State: "initialization_required", Cause: err}
+		return &QueryPreparationError{State: "initialization_required", Cause: err, Passive: true}
 	}
 	return err
 }

@@ -2158,6 +2158,39 @@
       ]
     },
     "DoctorReport": {
+      "oneOf": [
+        { "$ref": "#/$defs/ProjectDoctorReport" },
+        { "$ref": "#/$defs/StorageUpgradeReport" }
+      ]
+    },
+    "StorageUpgradeStep": {
+      "type": "object",
+      "properties": {
+        "domain": { "type": "string" },
+        "profile": { "$ref": "#/$defs/Name" },
+        "source": { "type": "string" },
+        "target": { "type": "string" },
+        "state": { "enum": ["current", "migration_required", "blocked", "unsupported"] },
+        "reason": { "type": "string" }
+      },
+      "required": ["domain", "source", "target", "state"],
+      "additionalProperties": false
+    },
+    "StorageUpgradeReport": {
+      "type": "object",
+      "properties": {
+        "scope": { "const": "storage" },
+        "directory": { "type": "string" },
+        "state": { "enum": ["current", "migration_required", "blocked"] },
+        "ready": { "type": "boolean" },
+        "changed": { "type": "boolean" },
+        "effects": { "enum": ["none", "committed", "unknown"] },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/StorageUpgradeStep" } }
+      },
+      "required": ["scope", "directory", "state", "ready", "changed", "effects", "items"],
+      "additionalProperties": false
+    },
+    "ProjectDoctorReport": {
       "type": "object",
       "properties": {
         "scope": {

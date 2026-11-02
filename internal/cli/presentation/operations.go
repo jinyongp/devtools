@@ -44,7 +44,7 @@ func operationDefinition(command string) Definition {
 	case "update":
 		return Definition{Family: "update", Title: "Update", Required: []Requirement{{"version", "string"}, {"action", "string"}, {"changed", "boolean"}, {"alias", "object"}, {"alias.name", "string"}, {"alias.status", "string"}}}
 	case "doctor":
-		return Definition{Family: "diagnostic", Title: "Doctor", Required: []Requirement{{"state", "string"}, {"ready", "boolean"}, {"checks", "array"}, {"commands", "array"}}, Optional: []string{"summary", "scope", "selection", "mode", "profile", "directory", "config_path"}}
+		return Definition{Family: "diagnostic", Title: "Doctor", Required: []Requirement{{"state", "string"}, {"ready", "boolean"}}, Optional: []string{"checks", "commands", "summary", "scope", "selection", "mode", "profile", "directory", "config_path", "items", "changed", "effects"}}
 	case "diagnostics":
 		base.Family = "diagnostic"
 		base.Required = []Requirement{{"ready", "boolean"}, {"issues", "array"}}

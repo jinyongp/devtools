@@ -15,12 +15,14 @@ import (
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/storageupgrade"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
 )
 
 func (a *App) registerDoctor() {
 	opts := configOptions()
+	opts = append(opts, Option{Name: "storage", Boolean: true, Description: "Inspect managed storage in the selected data root without project lookup, initialization or migration."}, Option{Name: "fix", Boolean: true, Description: "With --storage, explicitly prepare, upgrade and verify managed storage."})
 	opts = append(opts, Option{Name: "profile", Pattern: project.ProfilePattern, Completion: completeProfile, Description: "Override the profile while retaining project configuration lookup."}, Option{Name: "env", Pattern: `^$|` + project.ProfilePattern, Completion: completeEnv, Description: "Override every selected command's env and enable injection; empty selects common."}, Option{Name: "bundle", Pattern: project.ProfilePattern, Completion: completeSelection, Description: "Override value selection (all, none or one bundle)."}, Option{Name: "project-only", Boolean: true, Description: "Inspect only project defaults; incompatible with command names."}, Option{Name: "check", Boolean: true, Description: "Exit 3 when required checks fail or remain unknown; report is preserved."}, Option{Name: "mode", Default: "foreground", Pattern: `^(foreground|managed)$`, Description: "Use foreground run or managed process preparation constraints."}, Option{Name: "timeout", Default: "30s", Description: "Positive Go duration bounding the complete diagnosis, including all probes."})
 	a.commands = append(a.commands, Command{Name: "doctor", Description: "Diagnose all configured commands by default, or named commands; inspect state, per-command checks and summary.", Arguments: []Argument{{Name: "command", Repeatable: true, Pattern: project.CommandPattern, Completion: completeCommand}}, Options: opts, Output: configcontract.Definition("DoctorReport"), Run: a.diagnose})
 }
@@ -34,6 +36,9 @@ func (a *App) diagnose(parent context.Context, _ IO, r Request) (any, *protocol.
 	}
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
+	if r.Options["storage"] == "true" {
+		return a.diagnoseStorage(ctx, r)
+	}
 	report := doctor.Diagnosis{Scope: "all", Mode: r.Options["mode"], Directory: r.Options["dir"], Selection: []string{}, Checks: []doctor.Check{}, Commands: []doctor.CommandReport{}}
 	if len(r.Args) > 0 {
 		report.Scope = "selected"
@@ -152,6 +157,33 @@ func (a *App) diagnose(parent context.Context, _ IO, r Request) (any, *protocol.
 		report.Commands = append(report.Commands, doctor.CommandReport{Name: name, Profile: &profile, Env: &envName, Selection: &bundle, Checks: checks})
 	}
 	return finish()
+}
+
+func (a *App) storageEngine(root string) storageupgrade.Engine {
+	return storageupgrade.Engine{Root: root, Adapters: []storageupgrade.Adapter{storageupgrade.Layout("values"), storageupgrade.Layout("tasks")}}
+}
+
+func (a *App) diagnoseStorage(ctx context.Context, r Request) (any, *protocol.Error) {
+	directory, condition := a.dataDirectory()
+	if condition != nil {
+		return nil, condition
+	}
+	engine := a.storageEngine(filepath.Dir(directory))
+	report, condition := engine.Inspect(ctx)
+	if r.Options["fix"] == "true" {
+		report, condition = engine.Fix(ctx)
+	}
+	if condition != nil {
+		return nil, condition
+	}
+	if !report.Ready && (r.Options["check"] == "true" || r.Options["fix"] == "true") {
+		condition = protocol.NewError("requirements_failed", "Managed storage requires preparation, upgrade or user action.", 3, map[string]any{
+			"reason": report.State, "report": report, "effects": report.Effects, "retry": "after_dependency_change",
+			"remedies": []protocol.Remedy{protocol.LocalAction([]string{"devtools", "doctor", "--storage", "--fix"}, []string{}, "Resolve reported storage prerequisites and resume the upgrade.", "value_write").Remedy(r.Invocation)},
+		})
+		return nil, condition
+	}
+	return report, nil
 }
 
 func (a *App) passiveChecks(ctx context.Context, command execution.Command, directory, mode string, executable bool) []doctor.Check {

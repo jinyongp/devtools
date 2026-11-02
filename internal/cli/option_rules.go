@@ -233,6 +233,12 @@ func optionRules(c *Command) []staticOptionRule {
 		add("required", "child", "Provide a program after --.", positional("child_args"))
 	case "doctor":
 		add("forbid", "project-selection", "--project-only cannot be combined with command names.", activated("project-only"), positional("args"))
+		add("when", "fix-storage", "--fix requires --storage.", activated("fix"), activated("storage"))
+		add("forbid", "fix-check", "--fix and --check cannot be combined.", activated("fix"), activated("check"))
+		add("forbid", "storage-commands", "--storage cannot be combined with command names.", activated("storage"), positional("args"))
+		for _, name := range []string{"profile", "env", "bundle", "project-only", "mode", "dir"} {
+			add("forbid", "storage-"+name, "--storage cannot be combined with --"+name+".", activated("storage"), supplied(name))
+		}
 	case "expose start":
 		auth := []optionTest{supplied("auth-file"), activated("auth-stdin"), activated("no-auth")}
 		for i := range auth {

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
-	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
@@ -56,10 +55,7 @@ func (e Engine) valueSnapshotHeld(ctx context.Context, name string) ([]byte, err
 	if e.vaultMaster != nil {
 		return e.vaultStore().LogicalSnapshotHeld(ctx, name)
 	}
-	if e.VaultMaster != nil {
-		return values.PublicLogicalSnapshotHeld(ctx, e.Data, name)
-	}
-	return profilekey.Snapshot(filepath.Join(e.Data, "profiles"), name, "values", limit)
+	return values.PublicLogicalSnapshotHeld(ctx, e.Data, name)
 }
 func receiptScope(id string) string { return strings.ToLower(strings.ReplaceAll(id, "-", "")) }
 func (e Engine) decodeReceipt(ctx context.Context, id string, body []byte) ([]byte, error) {
@@ -85,10 +81,7 @@ func (e Engine) restoreValueFilesHeld(ctx context.Context, name string, data []b
 	if e.vaultMaster != nil {
 		return values.PrepareVaultRestoreHeld(ctx, e.Data, e.vaultID, e.vaultMaster, name, data)
 	}
-	if e.VaultMaster != nil {
-		return values.PreparePublicRestoreHeld(ctx, e.Data, name, data)
-	}
-	return profilekey.Replacement(filepath.Join(e.Data, "profiles"), name, "values", data)
+	return values.PreparePublicRestoreHeld(ctx, e.Data, name, data)
 }
 func (e Engine) checkVaultRootHeld() error {
 	if e.VaultMaster != nil && e.vaultMaster == nil {

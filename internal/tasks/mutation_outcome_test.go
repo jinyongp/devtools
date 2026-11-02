@@ -221,6 +221,7 @@ func TestLegacyReceiptNormalizationAndIrrelevantContext(t *testing.T) {
 	if e := WritePrivate(s.path(), journal); e != nil {
 		t.Fatal(e)
 	}
+	upgradeTaskFixture(t, s)
 	call(t, s, "task.add", "", Object{"title": "Advance"})
 
 	request.Options["context"] = "ambient-new"

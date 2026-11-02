@@ -58,6 +58,10 @@ func TestManagedRequestCaseSafePathsAndLegacySpelling(t *testing.T) {
 	if _, e := store.InspectRequest(ctx, lower); e == nil || e.Code != "request_not_found" {
 		t.Fatal("legacy case alias was treated as this request", e)
 	}
+	if _, e := store.InspectRequest(ctx, upper); e == nil || e.Code != "migration_required" {
+		t.Fatal("legacy receipt was read by ordinary query", e)
+	}
+	upgradeReceiptFixture(t, root, nil, "")
 	if got, e := store.InspectRequest(ctx, upper); e != nil || got.Item.Result == nil || got.Item.Result.Revision != old.Revision {
 		t.Fatal("exact legacy spelling not readable", e)
 	}
@@ -70,7 +74,10 @@ func TestManagedRequestCaseSafePathsAndLegacySpelling(t *testing.T) {
 	if e != nil {
 		t.Fatal("distinct UUID spelling could not commit", e)
 	}
-	after, err := os.ReadFile(oldPath)
+	if _, err := os.Lstat(oldPath); !os.IsNotExist(err) {
+		t.Fatal("legacy receipt remained live", err)
+	}
+	after, err := os.ReadFile(filepath.Join(root, store.receiptRelative(upper)))
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatal("new case variant overwrote historical receipt", err)
 	}
@@ -124,7 +131,7 @@ func TestManagedCaseVariantsCannotSwapProtectedReceipts(t *testing.T) {
 	}
 }
 
-func TestManagedProtectedLegacyCaseSpellingRetainsOldScope(t *testing.T) {
+func TestManagedProtectedLegacyCaseSpellingPreservesReplayAcrossScopeUpgrade(t *testing.T) {
 	ctx := context.Background()
 	root, files, master, _ := vaultSnapshotFixture(t, 0)
 	var calls atomic.Int32
@@ -167,6 +174,10 @@ func TestManagedProtectedLegacyCaseSpellingRetainsOldScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, e := store.Apply(ctx, c); e == nil || e.Code != "migration_required" {
+		t.Fatal("ordinary mutation read legacy protected scope", e)
+	}
+	upgradeReceiptFixture(t, root, master, files.VaultID)
 	if replay, e := store.Apply(ctx, c); e != nil || !replay.Replayed || replay.Revision != first.Revision {
 		t.Fatal("historical protected scope no longer replays", e)
 	}

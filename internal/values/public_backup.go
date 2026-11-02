@@ -9,7 +9,7 @@ import (
 )
 
 // PublicLogicalSnapshotHeld exports public-only modern data without creating a
-// vault. Legacy images stay portable through the existing encrypted-age path.
+// vault. Old portable images are accepted only by the restore boundary.
 // The caller holds the data gate and checked public-root classification.
 func PublicLogicalSnapshotHeld(ctx context.Context, root, name string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
@@ -19,15 +19,11 @@ func PublicLogicalSnapshotHeld(ctx context.Context, root, name string) ([]byte, 
 	if err != nil || raw == nil {
 		return raw, err
 	}
-	p, err := vault.DecodeProfile(raw)
-	if err != nil {
-		if _, err = InspectSnapshot(raw, name); err != nil {
-			clear(raw)
-			return nil, vault.ErrInvalid
-		}
-		return raw, nil
-	}
 	defer clear(raw)
+	p, err := decodeCurrentProfile(raw, name)
+	if err != nil {
+		return nil, err
+	}
 	if p.Name != name {
 		return nil, vault.ErrIntegrity
 	}
@@ -95,12 +91,9 @@ func PublicSnapshotIdentityHeld(root, name string) (vault.InputIdentity, error) 
 	if raw == nil {
 		return vault.InputIdentity{}, nil
 	}
-	p, err := vault.DecodeProfile(raw)
+	p, err := decodeCurrentProfile(raw, name)
 	if err != nil {
-		if _, err = InspectSnapshot(raw, name); err != nil {
-			return vault.InputIdentity{}, vault.ErrInvalid
-		}
-		return vault.InputIdentity{}, nil
+		return vault.InputIdentity{}, err
 	}
 	if p.Name != name || p.Sealed {
 		return vault.InputIdentity{}, vault.ErrIntegrity

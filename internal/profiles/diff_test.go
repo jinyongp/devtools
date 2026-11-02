@@ -3,6 +3,7 @@ package profiles
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,12 +12,19 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
+	"github.com/jinyongp/devtools/internal/vault"
 )
 
 func writeDiffValues(t *testing.T, data, profile string, right bool) {
 	t.Helper()
-	store := values.Store{Directory: filepath.Join(data, "profiles"), Profile: profile}
-	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	master := diffFixtureMaster(t, data)
+	defer master.Destroy()
+	store := values.ModernStore{Directory: filepath.Join(data, "profiles"), Profile: profile, Master: func(context.Context) (*vault.Material, error) {
+		raw := master.CopyBytes()
+		defer clear(raw)
+		return vault.NewMaterial(raw), nil
+	}}
+	if _, err := store.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		changed := false
 		for _, env := range []string{"local"} {
 			itemChanged, itemErr := state.CreateEnv(env)
@@ -66,6 +74,38 @@ func writeDiffValues(t *testing.T, data, profile string, right bool) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func diffFixtureMaster(t *testing.T, data string) *vault.Material {
+	t.Helper()
+	ctx := context.Background()
+	store := vault.KeyFileStore{Directory: filepath.Join(data, "vault")}
+	pass := vault.NewMaterial([]byte("synthetic-profile-diff-protection"))
+	defer pass.Destroy()
+	slot, err := store.Read()
+	if errors.Is(err, vault.ErrKeyMissing) {
+		id, err := vault.NewID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		master, err := store.Initialize(ctx, id, "passphrase", vault.PassphraseProtector{VaultID: id, Passphrase: pass})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := (vault.FileStore{Root: data, VaultID: id, CatalogKey: master}).Initialize(ctx); err != nil {
+			master.Destroy()
+			t.Fatal(err)
+		}
+		return master
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	master, err := slot.Unlock(ctx, "passphrase", vault.PassphraseProtector{VaultID: slot.VaultID, Passphrase: pass})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return master
 }
 
 func writeDiffTask(t *testing.T, data, profile, title string) {

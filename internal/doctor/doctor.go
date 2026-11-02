@@ -21,16 +21,17 @@ import (
 )
 
 type Check struct {
-	ID        string                  `json:"id"`
-	Status    string                  `json:"status"`
-	Required  bool                    `json:"required"`
-	Reason    string                  `json:"reason"`
-	Message   string                  `json:"message"`
-	Target    map[string]any          `json:"target"`
-	Sources   []configcontract.Source `json:"sources"`
-	Facts     map[string]any          `json:"facts"`
-	Remedies  []protocol.Remedy       `json:"remedies"`
-	BlockedBy []string                `json:"blocked_by"`
+	ID         string                  `json:"id"`
+	Status     string                  `json:"status"`
+	Required   bool                    `json:"required"`
+	Reason     string                  `json:"reason"`
+	Message    string                  `json:"message"`
+	Target     map[string]any          `json:"target"`
+	Sources    []configcontract.Source `json:"sources"`
+	Facts      map[string]any          `json:"facts"`
+	Remedies   []protocol.Remedy       `json:"remedies"`
+	BlockedBy  []string                `json:"blocked_by"`
+	Diagnostic map[string]any          `json:"diagnostic,omitempty"`
 }
 
 func (c Check) MarshalJSON() ([]byte, error) {

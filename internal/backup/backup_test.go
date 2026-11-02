@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -18,6 +19,7 @@ import (
 func TestEncryptedRestoreAndReplay(t *testing.T) {
 	root := privateTestRoot(t)
 	e := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
+	e, files, master, _ := protectedBackupFixtureAt(t, e)
 	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
 	if _, err := Keygen(identity, recipient); err != nil {
 		t.Fatal(err)
@@ -25,8 +27,8 @@ func TestEncryptedRestoreAndReplay(t *testing.T) {
 	if _, err := e.Configure(filepath.Join(root, "backups"), recipient); err != nil {
 		t.Fatal(err)
 	}
-	store := values.Store{Directory: filepath.Join(e.Data, "profiles"), Profile: "source"}
-	if _, err := store.Update(context.Background(), func(s *values.State) (bool, *protocol.Error) {
+	store := values.ModernStore{Directory: filepath.Join(e.Data, "profiles"), Profile: "source", Master: e.VaultMaster}
+	if _, err := store.Update(context.Background(), func(s *values.Editor) (bool, *protocol.Error) {
 		return s.Set(values.Secret, "TOKEN", "", "SECRET_CANARY")
 	}); err != nil {
 		t.Fatal(err)
@@ -71,12 +73,13 @@ func TestEncryptedRestoreAndReplay(t *testing.T) {
 	if err != nil || again.Digest != result.Digest || !again.Replayed {
 		t.Fatal("retry failed", err)
 	}
-	restored, err := (values.Store{Directory: store.Directory, Profile: "copy"}).Read(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	restored, key, readErr := files.ReadWithMaster(context.Background(), "copy", master)
+	if readErr != nil {
+		t.Fatal(readErr)
 	}
-	env, err := restored.Environment("")
-	if err != nil || env["TOKEN"] != "SECRET_CANARY" {
+	defer key.Destroy()
+	env, _, readErr := restored.Environment("", key, time.Now())
+	if readErr != nil || env["TOKEN"] != "SECRET_CANARY" {
 		t.Fatal("secret not restored")
 	}
 	taskCopy := tasks.Store{Directory: ts.Directory, Profile: "copy"}
@@ -117,6 +120,24 @@ func TestEncryptedRestoreAndReplay(t *testing.T) {
 	}
 }
 
+// Old archive payloads are constructed at the codec boundary, without routing
+// an ordinary live-store export through a legacy reader.
+func legacyArchiveFixture(t *testing.T, path, recipientPath string, profile Profile) []byte {
+	t.Helper()
+	key, err := recipient(recipientPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := encode(Snapshot{Version: 1, Created: "2026-10-19T00:00:00Z", Profiles: []Profile{profile}}, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := exclusive(path, cipher); err != nil {
+		t.Fatal(err)
+	}
+	return cipher
+}
+
 func TestConcurrentImportReplaysSameRequest(t *testing.T) {
 	root := privateTestRoot(t)
 	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
@@ -125,8 +146,8 @@ func TestConcurrentImportReplaysSameRequest(t *testing.T) {
 	if _, err := Keygen(identity, recipient); err != nil {
 		t.Fatal(err)
 	}
-	store := values.Store{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
-	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	store := values.ModernStore{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
+	if _, err := store.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		return state.Set(values.Variable, "VALUE", "", "transferred")
 	}); err != nil {
 		t.Fatal(err)
@@ -165,7 +186,7 @@ func TestConcurrentImportReplaysSameRequest(t *testing.T) {
 	if first.result.Diff.Different != second.result.Diff.Different {
 		t.Fatalf("replay returned a different preview diff: %#v %#v", first.result.Diff, second.result.Diff)
 	}
-	restored, err := (values.Store{Directory: filepath.Join(destination.Data, "profiles"), Profile: "portable"}).Read(context.Background())
+	restored, err := (values.ModernStore{Directory: filepath.Join(destination.Data, "profiles"), Profile: "portable"}).Read(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,6 +200,8 @@ func TestImportPreviewApplyAndStaleProtection(t *testing.T) {
 	root := privateTestRoot(t)
 	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
 	destination := Engine{Data: filepath.Join(root, "destination", "data"), Config: filepath.Join(root, "destination", "config"), Cache: filepath.Join(root, "destination", "cache")}
+	source, _, _, _ = protectedBackupFixtureAt(t, source)
+	destination, _, _, _ = protectedBackupFixtureAt(t, destination)
 	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
 	if _, err := Keygen(identity, recipient); err != nil {
 		t.Fatal(err)
@@ -186,8 +209,8 @@ func TestImportPreviewApplyAndStaleProtection(t *testing.T) {
 	if _, err := destination.Configure(filepath.Join(root, "safety"), recipient); err != nil {
 		t.Fatal(err)
 	}
-	sourceStore := values.Store{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
-	if _, err := sourceStore.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	sourceStore := values.ModernStore{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable", Master: source.VaultMaster}
+	if _, err := sourceStore.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		changed, setErr := state.Set(values.Variable, "VALUE", "", "imported")
 		if setErr != nil {
 			return false, setErr
@@ -201,8 +224,8 @@ func TestImportPreviewApplyAndStaleProtection(t *testing.T) {
 	if _, err := source.Create(context.Background(), "portable", archive, recipient); err != nil {
 		t.Fatal(err)
 	}
-	targetStore := values.Store{Directory: filepath.Join(destination.Data, "profiles"), Profile: "portable"}
-	if _, err := targetStore.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	targetStore := values.ModernStore{Directory: filepath.Join(destination.Data, "profiles"), Profile: "portable", Master: destination.VaultMaster}
+	if _, err := targetStore.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		return state.Set(values.Variable, "VALUE", "", "before")
 	}); err != nil {
 		t.Fatal(err)
@@ -228,7 +251,7 @@ func TestImportPreviewApplyAndStaleProtection(t *testing.T) {
 		t.Fatalf("existing target applied without replace: %v", err)
 	}
 
-	if _, err := targetStore.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	if _, err := targetStore.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		return state.Set(values.Variable, "VALUE", "", "changed-after-preview")
 	}); err != nil {
 		t.Fatal(err)
@@ -262,12 +285,8 @@ func TestImportPreviewApplyAndStaleProtection(t *testing.T) {
 	if _, err = destination.Import(context.Background(), conflicting); err == nil || err.Code != "request_conflict" {
 		t.Fatalf("changed retry input did not conflict: %v", err)
 	}
-	restored, err := targetStore.Read(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	restoredEnv, err := restored.Environment("")
-	if err != nil || restoredEnv["VALUE"] != "imported" || restoredEnv["TOKEN"] != "IMPORT_SECRET_CANARY" {
+	restoredEnv := fixtureProtectedEnvironment(t, destination, "portable")
+	if restoredEnv["VALUE"] != "imported" || restoredEnv["TOKEN"] != "IMPORT_SECRET_CANARY" {
 		t.Fatalf("replacement import mismatch: %#v %v", restoredEnv, err)
 	}
 }
@@ -280,8 +299,8 @@ func TestImportRejectsWrongIdentityAndTamperedArchive(t *testing.T) {
 	if _, err := Keygen(identity, recipient); err != nil {
 		t.Fatal(err)
 	}
-	store := values.Store{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
-	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	store := values.ModernStore{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
+	if _, err := store.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		return state.Set(values.Variable, "VALUE", "", "portable")
 	}); err != nil {
 		t.Fatal(err)
@@ -316,8 +335,8 @@ func TestStalePreviewPreservesTarget(t *testing.T) {
 	e := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
 	key, pub := filepath.Join(root, "key"), filepath.Join(root, "pub")
 	Keygen(key, pub)
-	s := values.Store{Directory: filepath.Join(e.Data, "profiles"), Profile: "source"}
-	if _, err := s.Update(context.Background(), func(s *values.State) (bool, *protocol.Error) { return s.Set(values.Variable, "A", "", "old") }); err != nil {
+	s := values.ModernStore{Directory: filepath.Join(e.Data, "profiles"), Profile: "source"}
+	if _, err := s.Update(context.Background(), func(s *values.Editor) (bool, *protocol.Error) { return s.Set(values.Variable, "A", "", "old") }); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(root, "backup.age")
@@ -328,8 +347,8 @@ func TestStalePreviewPreservesTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := values.Store{Directory: s.Directory, Profile: "target"}
-	target.Update(context.Background(), func(s *values.State) (bool, *protocol.Error) { return s.Set(values.Variable, "A", "", "new") })
+	target := values.ModernStore{Directory: s.Directory, Profile: "target"}
+	target.Update(context.Background(), func(s *values.Editor) (bool, *protocol.Error) { return s.Set(values.Variable, "A", "", "new") })
 	if _, err = e.Restore(context.Background(), path, key, "source", "target", plan.Digest, tasks.ID(), false); err == nil || err.Code != "revision_conflict" {
 		t.Fatal("stale preview applied", err)
 	}
@@ -352,8 +371,8 @@ func TestBackupStatusAndDirectRecipient(t *testing.T) {
 		t.Fatal(readErr)
 	}
 	recipientValue := strings.TrimSpace(string(recipientBytes))
-	store := values.Store{Directory: filepath.Join(e.Data, "profiles"), Profile: "portable"}
-	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	store := values.ModernStore{Directory: filepath.Join(e.Data, "profiles"), Profile: "portable"}
+	if _, err := store.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		return state.Set(values.Variable, "VALUE", "", "portable")
 	}); err != nil {
 		t.Fatal(err)
@@ -406,8 +425,8 @@ func TestRestoreDeletesTaskDomainAbsentFromBackup(t *testing.T) {
 	if _, err := Keygen(identity, recipient); err != nil {
 		t.Fatal(err)
 	}
-	sourceValues := values.Store{Directory: filepath.Join(source.Data, "profiles"), Profile: "source"}
-	if _, err := sourceValues.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	sourceValues := values.ModernStore{Directory: filepath.Join(source.Data, "profiles"), Profile: "source"}
+	if _, err := sourceValues.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		return state.Set(values.Variable, "VALUE", "", "from-backup")
 	}); err != nil {
 		t.Fatal(err)
@@ -438,7 +457,7 @@ func TestRestoreDeletesTaskDomainAbsentFromBackup(t *testing.T) {
 		t.Fatalf("replace apply failed: %#v %v", applied, err)
 	}
 
-	targetValues := values.Store{Directory: filepath.Join(destination.Data, "profiles"), Profile: "target"}
+	targetValues := values.ModernStore{Directory: filepath.Join(destination.Data, "profiles"), Profile: "target"}
 	valueState, valueErr := targetValues.Read(context.Background())
 	if valueErr != nil {
 		t.Fatal(valueErr)
@@ -464,9 +483,9 @@ func TestRestoreDeletesTaskDomainAbsentFromBackup(t *testing.T) {
 func TestSnapshotExcludesProfileTransferIdentityState(t *testing.T) {
 	root := privateTestRoot(t)
 	engine := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
-	store := values.Store{Directory: filepath.Join(engine.Data, "profiles"), Profile: "app"}
-	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
-		return state.Set(values.Secret, "TOKEN", "", "PROFILE_VALUE_CANARY")
+	store := values.ModernStore{Directory: filepath.Join(engine.Data, "profiles"), Profile: "app"}
+	if _, err := store.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
+		return state.Set(values.Variable, "PUBLIC", "", "PROFILE_VALUE_CANARY")
 	}); err != nil {
 		t.Fatal(err)
 	}

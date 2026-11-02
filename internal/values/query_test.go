@@ -38,6 +38,16 @@ func TestQueryReadsExistingMetadataWithoutUsingMaster(t *testing.T) {
 				return nil, vault.ErrLocked
 			}
 			old, err := store.Read(context.Background())
+			if kind == "legacy" {
+				if err == nil || err.Code != "migration_required" {
+					t.Fatal("ordinary metadata decoded old storage", err)
+				}
+				_, err = store.ReadForQuery(context.Background())
+				if err == nil || err.Code != "migration_required" {
+					t.Fatal("query decoded old storage", err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -69,7 +79,7 @@ func TestQueryPreparationErrorPreservesStorageAndContextContract(t *testing.T) {
 			t.Fatal("failed writable recovery claimed no effects")
 		}
 		remedies := public.Details["remedies"].([]protocol.Remedy)
-		if len(remedies) != 1 || remedies[0].Effect != "value_write" || !reflect.DeepEqual(remedies[0].Argv, []string{"devtools", "variable", "list", "--profile", "app"}) {
+		if len(remedies) != 1 || remedies[0].Effect != "value_write" || !reflect.DeepEqual(remedies[0].Argv, []string{"devtools", "doctor", "--storage", "--fix"}) {
 			t.Fatal("unsafe or unusable recovery remedy")
 		}
 		encoded, _ := json.Marshal(public)

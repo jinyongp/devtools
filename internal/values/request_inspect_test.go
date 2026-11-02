@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -249,11 +250,23 @@ func TestManagedRequestLookupRejectsConflictingReceiptExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, e := store.InspectRequest(ctx, id); e == nil || e.Code != "integrity_failed" {
+	if _, e := store.InspectRequest(ctx, id); e == nil || e.Code != "migration_required" {
 		t.Fatal("conflicting copies changed lookup expiry", e)
 	}
-	if _, e := store.Apply(ctx, c); e == nil || e.Code != "integrity_failed" {
+	if _, e := store.Apply(ctx, c); e == nil || e.Code != "migration_required" {
 		t.Fatal("conflicting copies changed replay expiry", e)
+	}
+	release, err = maintenance.AcquireExclusive(ctx, store.root())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	steps, err := inspectReceiptUpgrades(store.root())
+	if err != nil || len(steps) != 1 {
+		t.Fatal(steps, err)
+	}
+	if _, err := upgradeReceiptHeld(ctx, store.root(), steps[0], nil, ""); !errors.Is(err, vault.ErrIntegrity) {
+		t.Fatal("migration accepted conflicting expiry", err)
 	}
 }
 

@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/storageupgrade"
 	"github.com/jinyongp/devtools/internal/vault"
 )
 
@@ -283,6 +285,10 @@ func VaultError(ctx context.Context, err error) *protocol.Error {
 	}
 	if e := protocol.ContextError(err); e != nil {
 		return e
+	}
+	var inner *protocol.Error
+	if errors.Is(err, profilekey.ErrMigrationRequired) || errors.As(err, &inner) && inner.Code == "migration_required" {
+		return storageupgrade.Required("values")
 	}
 	code := "storage_error"
 	for _, known := range []error{vault.ErrLocked, vault.ErrKeyMissing, vault.ErrIntegrity, vault.ErrInvalid, vault.ErrTooLarge, vault.ErrUnavailable, vault.ErrRecovery, vault.ErrLockPending, vault.ErrDenied, vault.ErrInteractionRequired, vault.ErrBackendLocked, vault.ErrSessionProtocol, vault.ErrInputChanged} {

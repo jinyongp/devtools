@@ -91,7 +91,7 @@ func TestCatalogListDoesNotMigrateLegacyState(t *testing.T) {
 	}
 
 	items, err := (Catalog{Data: data}).List(context.Background())
-	if err != nil || len(items) != 1 || items[0].Profile != "passive" || items[0].EnvCount != 1 {
+	if err == nil || err.Code != "migration_required" || len(items) != 0 {
 		t.Fatalf("unexpected passive catalog result: %#v %v", items, err)
 	}
 	if _, err := os.Lstat(filepath.Join(directory, ".identity")); !os.IsNotExist(err) {

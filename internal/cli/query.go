@@ -9,7 +9,7 @@ func (a *App) scopeQueryRemedy(failure *protocol.Error, env string) {
 	}
 	remedies, _ := failure.Details["remedies"].([]protocol.Remedy)
 	for i := range remedies {
-		if env != "" {
+		if env != "" && len(remedies[i].Argv) > 1 && remedies[i].Argv[1] != "doctor" {
 			remedies[i].Argv = append(remedies[i].Argv, "--env", env)
 		}
 		r := remedies[i]

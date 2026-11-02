@@ -16,6 +16,7 @@ import (
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/storageupgrade"
+	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
 )
@@ -160,7 +161,7 @@ func (a *App) diagnose(parent context.Context, _ IO, r Request) (any, *protocol.
 }
 
 func (a *App) storageEngine(root string) storageupgrade.Engine {
-	return storageupgrade.Engine{Root: root, Adapters: []storageupgrade.Adapter{storageupgrade.Layout("values"), storageupgrade.Layout("tasks")}}
+	return storageupgrade.Engine{Root: root, Adapters: []storageupgrade.Adapter{values.StorageUpgradeAdapter(root), tasks.StorageUpgradeAdapter()}}
 }
 
 func (a *App) diagnoseStorage(ctx context.Context, r Request) (any, *protocol.Error) {
@@ -174,6 +175,10 @@ func (a *App) diagnoseStorage(ctx context.Context, r Request) (any, *protocol.Er
 		report, condition = engine.Fix(ctx)
 	}
 	if condition != nil {
+		if condition.Details == nil {
+			condition.Details = map[string]any{}
+		}
+		condition.Details["report"] = report
 		return nil, condition
 	}
 	if !report.Ready && (r.Options["check"] == "true" || r.Options["fix"] == "true") {
@@ -206,7 +211,7 @@ func (a *App) passiveChecks(ctx context.Context, command execution.Command, dire
 			}
 			status := "unknown"
 			switch e.Code {
-			case "env_not_found", "bundle_not_found", "value_expired", "key_not_found", "kind_conflict", "vault_locked_manual", "vault_recovery_required":
+			case "env_not_found", "bundle_not_found", "value_expired", "key_not_found", "kind_conflict", "vault_locked_manual", "vault_recovery_required", "migration_required":
 				status = "fail"
 			}
 			if e.Code == vault.ErrIntegrity.Error() || e.Code == vault.ErrInvalid.Error() || e.Code == vault.ErrRecovery.Error() || e.Code == vault.ErrKeyMissing.Error() || e.Code == "storage_error" {
@@ -215,7 +220,13 @@ func (a *App) passiveChecks(ctx context.Context, command execution.Command, dire
 			if command.Inject {
 				environmentUnknown = "environment_unresolved"
 			}
-			checks = append(checks, doctor.NewCheck("value_inputs", status, e.Code, "Selected value metadata could not be authenticated; inspect the profile, env, bundle and vault state."))
+			a.scopeQueryRemedy(e, command.Env)
+			check := doctor.NewCheck("value_inputs", status, e.Code, "Selected value metadata could not be authenticated; inspect the reported storage and protection state.")
+			check.Diagnostic = protocol.ObservationDiagnostic(e)
+			if remedies, ok := e.Details["remedies"].([]protocol.Remedy); ok {
+				check.Remedies = remedies
+			}
+			checks = append(checks, check)
 			if vaultStatus, err := vault.InspectSession(ctx, filepath.Join(filepath.Dir(directory), "vault")); err == nil {
 				vaultCheck := doctor.NewCheck("vault_session", "unknown", string(vaultStatus.State), "The vault is not opened by diagnosis.")
 				if vaultStatus.State == vault.LockedManual || vaultStatus.State == vault.Locking || vaultStatus.State == vault.RecoveryRequired || vaultStatus.State == vault.Locked && vaultStatus.Backend == "passphrase" {

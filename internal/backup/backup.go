@@ -44,9 +44,8 @@ const restoreReceiptLimit int64 = 128 << 20
 
 type Engine struct {
 	Data, Config, Cache string
-	// VaultMaster selects current logical storage. Protected operations call it
+	// Protected operations call VaultMaster
 	// once before disk/launch gates; public-only roots never call the provider.
-	// Nil preserves the legacy reader/writer for roots not yet migrated.
 	VaultMaster func(context.Context) (*vault.Material, error)
 	vaultMaster *vault.Material
 	vaultID     string
@@ -813,15 +812,23 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	if selected == nil {
 		return plan, failure("not_found")
 	}
-	if values.IsLogicalSnapshot(selected.Values) && e.VaultMaster == nil {
-		return plan, failure("unsupported_storage")
-	}
 	scoped, closeScope, scopeErr := e.withVault(ctx)
 	if scopeErr != nil {
 		return plan, scopeErr
 	}
 	defer closeScope()
 	e = scoped
+	if e.vaultMaster == nil && selected.Values != nil {
+		state, err := values.InspectSnapshot(selected.Values, source)
+		if err != nil {
+			return plan, values.VaultError(ctx, err)
+		}
+		for _, entry := range state.Keys {
+			if entry.Kind == values.Secret {
+				return plan, values.VaultError(ctx, vault.ErrKeyMissing)
+			}
+		}
+	}
 	if e.VaultMaster != nil && expected != "" {
 		releaseLaunch, err := vault.AcquireLaunchMutation(ctx, filepath.Join(e.Data, "vault"))
 		if err != nil {
@@ -834,8 +841,8 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		return plan, failure("storage_error", err)
 	}
 	defer release()
-	// The legacy restore writer must not recreate plaintext values, including
-	// a previously absent target profile, inside a protected root. The keyed
+	// A restore without a root key cannot publish profiles inside a protected
+	// root, including a previously absent target. The keyed
 	// logical restore adapter will own this path once configured.
 	if err := e.checkVaultRootHeld(); err != nil {
 		if err.Error() == "unsupported_storage" {

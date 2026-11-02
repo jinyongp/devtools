@@ -80,7 +80,7 @@ func inspectLegacyHeld(root string, master *vault.Material) (*legacyMigrationSta
 	}
 	totalBytes := 0
 	for _, name := range names {
-		b, err := profilekey.Snapshot(directory, name, "values", vault.MaxDocumentBytes)
+		b, err := profilekey.MigrationSnapshot(directory, name, "values", vault.MaxDocumentBytes)
 		if err != nil {
 			return nil, vault.ErrRecovery
 		}
@@ -366,12 +366,30 @@ func convertLegacy(state *State, vaultID string, master *vault.Material) (*vault
 // Callers pass the fingerprint returned by InspectLegacyMigration, so edits
 // after preview fail before publication. Root-key creation/unwrap is external.
 func MigrateLegacy(ctx context.Context, root, vaultID string, master *vault.Material, id, fingerprint string) (vault.ForwardResult, error) {
+	return migrateLegacy(ctx, root, vaultID, master, id, fingerprint, nil)
+}
+
+func migrateLegacy(ctx context.Context, root, vaultID string, master *vault.Material, id, fingerprint string, identity *[32]byte) (vault.ForwardResult, error) {
 	forward := vault.ForwardStore{Root: root, VaultID: vaultID, Master: master}
 	releaseLaunch, err := vault.AcquireLaunchMutation(ctx, filepath.Join(root, "vault"))
 	if err != nil {
 		return vault.ForwardResult{}, err
 	}
 	defer releaseLaunch()
+	if identity != nil {
+		releaseSlot, err := maintenance.LockShared(ctx, filepath.Join(root, "vault", "key-slot-write.lock"))
+		if err != nil {
+			return vault.ForwardResult{}, err
+		}
+		defer releaseSlot()
+		actual, err := (vault.KeyFileStore{Directory: filepath.Join(root, "vault")}).WriteIdentity()
+		if err != nil {
+			return vault.ForwardResult{}, err
+		}
+		if actual != *identity {
+			return vault.ForwardResult{}, vault.ErrInputChanged
+		}
+	}
 	release, err := maintenance.AcquireExclusive(ctx, root)
 	if err != nil {
 		return vault.ForwardResult{}, vault.ErrRecovery
@@ -380,7 +398,14 @@ func MigrateLegacy(ctx context.Context, root, vaultID string, master *vault.Mate
 	if _, protected, err := maintenance.ProtectedRootHeld(root); err != nil {
 		return vault.ForwardResult{}, err
 	} else if protected {
-		return forward.ReplaceHeld(ctx, id, fingerprint, map[string][]byte{"profiles/vault-catalog.json": nil})
+		result, found, err := forward.CompletedHeld(ctx, id, fingerprint)
+		if err != nil {
+			return result, err
+		}
+		if !found {
+			return result, vault.ErrInputChanged
+		}
+		return result, migrateLegacyReceiptsHeld(ctx, root, master, vaultID)
 	}
 	legacy, err := inspectLegacyHeld(root, master)
 	if err != nil {
@@ -470,5 +495,25 @@ func MigrateLegacy(ctx context.Context, root, vaultID string, master *vault.Mate
 		}
 		after["backup-receipts/"+name] = encrypted
 	}
-	return forward.ReplaceHeld(ctx, id, fingerprint, after)
+	result, err := forward.ReplaceHeld(ctx, id, fingerprint, after)
+	if err != nil {
+		return result, err
+	}
+	return result, migrateLegacyReceiptsHeld(ctx, root, master, vaultID)
+}
+
+func migrateLegacyReceiptsHeld(ctx context.Context, root string, master *vault.Material, vaultID string) error {
+	steps, err := inspectReceiptUpgrades(root)
+	if err != nil {
+		return err
+	}
+	for _, step := range steps {
+		if step.State != "migration_required" {
+			return vault.ErrInvalid
+		}
+		if _, err := upgradeReceiptHeld(ctx, root, step, master, vaultID); err != nil {
+			return err
+		}
+	}
+	return nil
 }

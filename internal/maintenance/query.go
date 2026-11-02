@@ -18,6 +18,18 @@ type QueryPreparationError struct {
 func (e *QueryPreparationError) Error() string { return "cannot prepare storage for query" }
 func (e *QueryPreparationError) Unwrap() error { return e.Cause }
 
+// LockPassiveShared never prepares an absent nested lock pair.
+func LockPassiveShared(ctx context.Context, path string) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	release, err := acquirePassiveFilePair(ctx, path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, &QueryPreparationError{State: "initialization_required", Cause: err, Passive: true}
+	}
+	return release, err
+}
+
 // AcquirePassiveQuery never initializes or recovers storage. Doctor inspection
 // and namespace probes use it when a writable Query fallback would be a side
 // effect of diagnosis itself.

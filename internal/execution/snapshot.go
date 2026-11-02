@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/doctor"
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/redact"
@@ -119,11 +120,7 @@ func loadSnapshot(ctx context.Context, command Command, dependencies Dependencie
 	if dependencies.ValueSnapshot != nil {
 		return dependencies.ValueSnapshot(ctx, command.Project.Profile, command.Env, includeSecrets)
 	}
-	state, e := (values.Store{Directory: dependencies.ValuesDirectory, Profile: command.Project.Profile}).Read(ctx)
-	if e != nil {
-		return nil, e
-	}
-	return values.CaptureLegacy(state, command.Env, includeSecrets)
+	return values.CaptureCurrent(ctx, maintenance.Root(dependencies.ValuesDirectory), command.Project.Profile, command.Env, includeSecrets, time.Now(), command.Selection)
 }
 func snapshotState(command Command, snapshot *values.Snapshot) (*values.State, *protocol.Error) {
 	if snapshot == nil {

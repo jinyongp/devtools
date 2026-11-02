@@ -16,8 +16,8 @@ import (
 func TestPrepareInjectsSelectedEnvironment(t *testing.T) {
 	root := privateTempDir(t)
 	valuesDir := filepath.Join(root, "profiles")
-	store := values.Store{Directory: valuesDir, Profile: "app"}
-	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	store := values.ModernStore{Directory: valuesDir, Profile: "app"}
+	if _, err := store.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		changed, e := state.CreateEnv("local")
 		if e != nil {
 			return false, e
@@ -282,8 +282,8 @@ func TestValidatePendingPathStillChecksInjectionRequirements(t *testing.T) {
 	root := privateTempDir(t)
 	dependencies := Dependencies{ValuesDirectory: filepath.Join(root, "profiles"),
 		Ports: ports.Store{Directory: filepath.Join(root, "ports")}}
-	store := values.Store{Directory: dependencies.ValuesDirectory, Profile: "app"}
-	if _, err := store.Update(context.Background(), func(s *values.State) (bool, *protocol.Error) {
+	store := values.ModernStore{Directory: dependencies.ValuesDirectory, Profile: "app"}
+	if _, err := store.Update(context.Background(), func(s *values.Editor) (bool, *protocol.Error) {
 		return s.Set(values.Variable, "TOKEN", "", "registered")
 	}); err != nil {
 		t.Fatal(err)

@@ -70,8 +70,8 @@ func TestInspectDoesNotExposeStoredSecret(t *testing.T) {
 			t.Fatalf("diagnostics leaked forbidden material %q: %s", forbidden, text)
 		}
 	}
-	if len(report.Profiles.Items) != 1 || report.Profiles.Items[0].Profile != "app" || !report.Profiles.Items[0].Values {
-		t.Fatalf("profile metadata missing: %+v", report.Profiles)
+	if report.Profiles.Status != "fail" || report.Profiles.ErrorCode != "migration_required" || len(report.Profiles.Items) != 0 {
+		t.Fatalf("legacy profiles need explicit migration: %+v", report.Profiles)
 	}
 }
 

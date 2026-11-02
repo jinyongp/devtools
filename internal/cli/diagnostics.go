@@ -76,6 +76,7 @@ func diagnosticsOutputSchema() map[string]any {
 	}, "section", "code", "message")
 	return object(map[string]any{
 		"external_executions": object(map[string]any{
+			"diagnostic":       configcontract.Definition("ObservationDiagnostic"),
 			"verification":     map[string]any{"type": "string", "enum": []string{"verified", "verification_pending"}},
 			"total":            map[string]any{"type": "integer", "minimum": 0},
 			"pending_inputs":   map[string]any{"type": "integer", "minimum": 0},

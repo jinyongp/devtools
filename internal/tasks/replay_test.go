@@ -70,12 +70,17 @@ func TestUpgradePreservesLegacyEvidenceAndRuns(t *testing.T) {
 		t.Fatal(beforeErr)
 	}
 	read, e := store.Read(context.Background())
-	if e != nil || read.Version != 1 {
+	if e == nil || e.Code != "migration_required" {
 		t.Fatal(read, e)
 	}
 	rawAfter, _ := os.ReadFile(legacyPath)
 	if string(rawBefore) != string(rawAfter) {
 		t.Fatal("read rewrote legacy journal")
+	}
+	upgradeTaskFixture(t, store)
+	read, e = store.Read(context.Background())
+	if e != nil || read.Version != 1 || read.Revision != before.Revision {
+		t.Fatal("physical upgrade changed logical history", read, e)
 	}
 	var run *Run
 	for _, r := range before.Runs {
@@ -116,6 +121,10 @@ func TestUpgradePreservesLegacyEvidenceAndRuns(t *testing.T) {
 
 func TestNoOpDoesNotUpgrade(t *testing.T) {
 	store, _, _, _, _ := legacyFixture(t)
+	if _, e := store.Execute(context.Background(), Request{Action: "run.claimed", Body: Object{}, Options: map[string]string{"request-id": ID()}}); e == nil || e.Code != "migration_required" {
+		t.Fatal(e)
+	}
+	upgradeTaskFixture(t, store)
 	o := call(t, store, "run.claimed", "", Object{})
 	if o["changed"] != false || o["claimed"] != false {
 		t.Fatal(o)
@@ -177,6 +186,7 @@ func TestUpgradeDoesNotAdoptStaleLegacyBasis(t *testing.T) {
 	if e := WritePrivate(profilekey.LegacyPath(store.Directory, store.Profile), j); e != nil {
 		t.Fatal(e)
 	}
+	upgradeTaskFixture(t, store)
 	call(t, store, "task.add", "", Object{"title": "unrelated"})
 	after, e := store.Read(context.Background())
 	if e != nil || len(after.definition(val).LegacyBases) != 0 {

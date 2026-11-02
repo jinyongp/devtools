@@ -10,7 +10,11 @@ import (
 )
 
 func acquirePassivePair(ctx context.Context, root string) (func(), error) {
-	directory, err := platformfs.OpenRoot(filepath.Join(root, ".maintenance"), false)
+	return acquirePassiveFilePair(ctx, filepath.Join(root, ".maintenance", "lock"))
+}
+
+func acquirePassiveFilePair(ctx context.Context, path string) (func(), error) {
+	directory, err := platformfs.OpenRoot(filepath.Dir(path), false)
 	if err != nil {
 		return nil, err
 	}
@@ -43,11 +47,11 @@ func acquirePassivePair(ctx context.Context, root string) (func(), error) {
 			}
 		}
 	}
-	turn, err := acquire("lock.turnstile")
+	turn, err := acquire(filepath.Base(path) + ".turnstile")
 	if err != nil {
 		return nil, err
 	}
-	gate, err := acquire("lock")
+	gate, err := acquire(filepath.Base(path))
 	_ = turn.Close()
 	if err != nil {
 		return nil, err

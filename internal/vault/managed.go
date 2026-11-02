@@ -45,9 +45,17 @@ func (s FileStore) PublishManagedHeld(ctx context.Context, p *Profile, key *Mate
 	return s.PublishManagedWithFilesHeld(ctx, p, key, nil)
 }
 func (s FileStore) PublishManagedWithFilesHeld(ctx context.Context, p *Profile, key *Material, extra map[string][]byte) error {
-	catalog, err := s.readCatalog()
+	catalog, err := s.managedCatalog(p)
 	if err != nil {
 		return err
+	}
+	return s.publishWithFiles(ctx, catalog, p, key, extra)
+}
+
+func (s FileStore) managedCatalog(p *Profile) (*Catalog, error) {
+	catalog, err := s.readCatalog()
+	if err != nil {
+		return nil, err
 	}
 	index := -1
 	for i, entry := range catalog.Entries {
@@ -56,13 +64,13 @@ func (s FileStore) PublishManagedWithFilesHeld(ctx context.Context, p *Profile, 
 		}
 		index = i
 		if entry.ID != p.ID || entry.Generation != p.Generation || p.Revision < entry.Revision {
-			return ErrInputChanged
+			return nil, ErrInputChanged
 		}
 		if entry.Sealed && !p.Sealed {
-			return ErrIntegrity
+			return nil, ErrIntegrity
 		}
 		if entry.KeyEpoch != p.KeyEpoch && !(entry.KeyEpoch == 0 && !entry.Sealed && p.Sealed && p.KeyEpoch == 1) {
-			return ErrInputChanged
+			return nil, ErrInputChanged
 		}
 	}
 	if p.Sealed || index >= 0 {
@@ -72,5 +80,5 @@ func (s FileStore) PublishManagedWithFilesHeld(ctx context.Context, p *Profile, 
 			catalog.Entries[index] = entryFor(p)
 		}
 	}
-	return s.publishWithFiles(ctx, catalog, p, key, extra)
+	return catalog, nil
 }

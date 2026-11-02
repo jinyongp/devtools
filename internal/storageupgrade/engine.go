@@ -18,13 +18,15 @@ import (
 )
 
 type Step struct {
-	Domain      string `json:"domain"`
-	Profile     string `json:"profile,omitempty"`
-	Source      string `json:"source"`
-	Target      string `json:"target"`
-	State       string `json:"state"`
-	Reason      string `json:"reason,omitempty"`
-	Fingerprint string `json:"-"`
+	Domain      string         `json:"domain"`
+	Profile     string         `json:"profile,omitempty"`
+	Resource    string         `json:"resource,omitempty"`
+	Source      string         `json:"source"`
+	Target      string         `json:"target"`
+	State       string         `json:"state"`
+	Reason      string         `json:"reason,omitempty"`
+	Diagnostic  map[string]any `json:"diagnostic,omitempty"`
+	Fingerprint string         `json:"-"`
 }
 
 type Report struct {
@@ -45,6 +47,7 @@ type Adapter struct {
 	InspectHeld func(context.Context, string) ([]Step, error)
 	Authorize   func(context.Context, []Step) (func(), error)
 	Apply       func(context.Context, string, Step) (bool, error)
+	Recover     func(context.Context, string) (bool, error)
 }
 
 type Engine struct {
@@ -58,6 +61,8 @@ type progress struct {
 	Steps        []Step            `json:"steps"`
 	Fingerprints map[string]string `json:"fingerprints,omitempty"`
 }
+
+func stepKey(step Step) string { return step.Domain + "/" + step.Profile + "/" + step.Resource }
 
 // Required is shared by current-format readers and writers. The CLI scopes this
 // same-store remedy to the caller's selected isolation root.
@@ -84,7 +89,19 @@ func planFingerprint(items []Step) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func failure(stage string, cause error) *protocol.Error {
+func failure(stage string, cause error) (result *protocol.Error) {
+	defer func() {
+		if result.Details == nil {
+			result.Details = map[string]any{}
+		}
+		if result.Details["effects"] == nil {
+			result.Details["effects"] = "none"
+		}
+	}()
+	var condition *protocol.Error
+	if errors.As(cause, &condition) {
+		return protocol.WithStorageDetails(condition, "storage", stage, "managed_storage", cause)
+	}
 	return protocol.WithStorageDetails(protocol.NewError("storage_error", "Cannot inspect or upgrade managed storage.", 1, map[string]any{"effects": "none"}), "storage", stage, "managed_storage", cause)
 }
 
@@ -104,6 +121,14 @@ func reason(err error) string {
 		return "deadline_exceeded"
 	}
 	return "storage_error"
+}
+
+func diagnostic(domain, stage string, cause error) map[string]any {
+	var condition *protocol.Error
+	if !errors.As(cause, &condition) {
+		condition = protocol.WithStorageDetails(protocol.NewError("storage_error", "Managed storage is unavailable.", 1, nil), domain, stage, "managed_storage", cause)
+	}
+	return protocol.ObservationDiagnostic(condition)
 }
 
 func (e Engine) result() Report {
@@ -143,14 +168,23 @@ func (r *Report) finalize() {
 	}
 	sort.SliceStable(r.Items, func(i, j int) bool {
 		if r.Items[i].Domain == r.Items[j].Domain {
+			if r.Items[i].Profile == r.Items[j].Profile {
+				return r.Items[i].Resource < r.Items[j].Resource
+			}
 			return r.Items[i].Profile < r.Items[j].Profile
 		}
 		return r.Items[i].Domain < r.Items[j].Domain
 	})
 }
 
-func (e Engine) Inspect(ctx context.Context) (Report, *protocol.Error) {
-	r := e.result()
+func (e Engine) Inspect(ctx context.Context) (r Report, condition *protocol.Error) {
+	r = e.result()
+	defer func() {
+		if condition != nil {
+			r.Ready = false
+			r.State = "blocked"
+		}
+	}()
 	if !filepath.IsAbs(e.Root) {
 		return r, protocol.NewError("invalid_argument", "An absolute data root is required.", 2, nil)
 	}
@@ -179,10 +213,13 @@ func (e Engine) Inspect(ctx context.Context) (Report, *protocol.Error) {
 		}
 		steps, err := adapter.InspectHeld(ctx, e.Root)
 		if err != nil {
-			r.Items = append(r.Items, Step{Domain: adapter.Name, Source: "unknown", Target: "current", State: "blocked", Reason: reason(err)})
+			r.Items = append(r.Items, Step{Domain: adapter.Name, Source: "unknown", Target: "current", State: "blocked", Reason: reason(err), Diagnostic: diagnostic(adapter.Name, "inspect_storage", err)})
 			continue
 		}
 		r.Items = append(r.Items, steps...)
+	}
+	if err := ctx.Err(); err != nil {
+		return r, failure("inspect_storage", err)
 	}
 	if pending, err := e.pendingProgress(); err != nil {
 		return r, failure("inspect_progress", err)
@@ -203,25 +240,76 @@ func (e Engine) writeProgress(p progress) error {
 
 // Fix resumes from the actual domain state, never from unverified journal claims.
 // Existing domain transactions own data backup, atomic publication and recovery.
-func (e Engine) Fix(ctx context.Context) (Report, *protocol.Error) {
+func (e Engine) Fix(ctx context.Context) (report Report, condition *protocol.Error) {
+	wrote := false
+	defer func() {
+		if wrote {
+			report.Changed = true
+			if report.Effects == "none" {
+				report.Effects = "committed"
+			}
+		}
+		if condition != nil {
+			report.Ready = false
+			report.State = "blocked"
+			if wrote {
+				report.Effects = "unknown"
+				if condition.Details == nil {
+					condition.Details = map[string]any{}
+				}
+				condition.Details["effects"] = "unknown"
+			} else if effect, _ := condition.Details["effects"].(string); effect != "" && effect != "none" {
+				report.Effects = "unknown"
+			}
+		}
+	}()
 	before, condition := e.Inspect(ctx)
 	if condition != nil || before.Ready {
 		return before, condition
 	}
 	prepared := false
+	recovery := false
 	for _, step := range before.Items {
 		if step.Domain == "maintenance" {
 			prepared = true
+			recovery = step.Reason == "recovery_required"
 		}
 	}
 	if prepared {
 		release, err := maintenance.AcquireExclusive(ctx, e.Root)
+		if err != nil && recovery {
+			for _, adapter := range e.Adapters {
+				if adapter.Recover == nil {
+					continue
+				}
+				var destroy func()
+				if adapter.Authorize != nil {
+					destroy, err = adapter.Authorize(ctx, nil)
+					if err != nil {
+						if destroy != nil {
+							destroy()
+						}
+						break
+					}
+				}
+				_, err = adapter.Recover(ctx, e.Root)
+				if destroy != nil {
+					destroy()
+				}
+				if err != nil {
+					break
+				}
+				release, err = maintenance.AcquireExclusive(ctx, e.Root)
+				break
+			}
+		}
 		if err != nil {
 			condition = failure("prepare_storage", err)
 			condition.Details["effects"] = "unknown"
 			return before, condition
 		}
 		release()
+		wrote = true
 	}
 	plan, condition := e.Inspect(ctx)
 	if condition != nil {
@@ -235,7 +323,7 @@ func (e Engine) Fix(ctx context.Context) (Report, *protocol.Error) {
 		}
 		return plan, nil
 	}
-	blocked := map[string]string{}
+	blocked := map[string]error{}
 	authorizedPlan := planFingerprint(plan.Items)
 	for _, adapter := range e.Adapters {
 		var steps []Step
@@ -252,7 +340,7 @@ func (e Engine) Fix(ctx context.Context) (Report, *protocol.Error) {
 			if release != nil {
 				release()
 			}
-			blocked[adapter.Name] = reason(err)
+			blocked[adapter.Name] = err
 			continue
 		}
 		if release != nil {
@@ -278,21 +366,22 @@ func (e Engine) Fix(ctx context.Context) (Report, *protocol.Error) {
 	}
 	p := progress{Version: 1, Steps: append([]Step{}, plan.Items...), Fingerprints: map[string]string{}}
 	for _, step := range plan.Items {
-		p.Fingerprints[step.Domain+"/"+step.Profile] = step.Fingerprint
+		p.Fingerprints[stepKey(step)] = step.Fingerprint
 	}
 	if err := e.writeProgress(p); err != nil {
 		condition = failure("stage_upgrade", err)
 		condition.Details["effects"] = "unknown"
 		return plan, condition
 	}
+	wrote = true
 	changed := prepared
-	failed := map[string]string{}
+	failed := map[string]error{}
 	for _, step := range plan.Items {
 		if step.State != "migration_required" || step.Domain == "coordinator" {
 			continue
 		}
-		if why := blocked[step.Domain]; why != "" {
-			failed[step.Domain+"/"+step.Profile] = why
+		if why := blocked[step.Domain]; why != nil {
+			failed[stepKey(step)] = why
 			continue
 		}
 		for _, adapter := range e.Adapters {
@@ -300,13 +389,13 @@ func (e Engine) Fix(ctx context.Context) (Report, *protocol.Error) {
 				continue
 			}
 			if adapter.Apply == nil {
-				failed[step.Domain+"/"+step.Profile] = "migration_required"
+				failed[stepKey(step)] = Required(step.Domain)
 				break
 			}
 			didChange, err := adapter.Apply(ctx, e.Root, step)
 			changed = changed || didChange
 			if err != nil {
-				failed[step.Domain+"/"+step.Profile] = reason(err)
+				failed[stepKey(step)] = err
 			}
 			if ctx.Err() != nil {
 				condition = failure("apply_upgrade", ctx.Err())
@@ -337,9 +426,10 @@ func (e Engine) Fix(ctx context.Context) (Report, *protocol.Error) {
 		if step.State != "current" {
 			dataReady = false
 		}
-		if why := failed[step.Domain+"/"+step.Profile]; why != "" {
+		if why := failed[stepKey(*step)]; why != nil {
 			step.State = "blocked"
-			step.Reason = why
+			step.Reason = reason(why)
+			step.Diagnostic = diagnostic(step.Domain, "upgrade_storage", why)
 			dataReady = false
 		}
 	}

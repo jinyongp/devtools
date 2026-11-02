@@ -50,6 +50,11 @@ async function loadProcesses(version) {
       if(input){
         const labels={current:"Current values",pending:"Value changes pending · restart to apply",failed:"Cannot apply current values",unknown:"Value delivery unknown",verification_pending:"Value verification pending · unlock explicitly"};
         text("p",`${labels[input.state]||"Value delivery unknown"} · ${input.reason.replaceAll("_"," ")}`,section);
+        const cause=input.diagnostic?.details;
+        if(cause){
+          const parts=[cause.reason,cause.state,cause.retry].filter(Boolean).map(value=>value.replaceAll("_"," "));
+          if(parts.length)text("p",`Storage: ${parts.join(" · ")}`,section);
+        }
         if(input.delivered){
           text("p",`Recorded delivery: ${input.delivered.slots.length} values · generation ${input.delivered.identity.storage_generation||"none"}`,section);
           text("p",input.delivered.slots.map(slot=>`${slot.name} (${slot.env||"common"}, ${slot.value_version})`).join(", ")||"No profile values delivered.",section);

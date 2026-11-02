@@ -508,6 +508,7 @@ func commandInspectView(definition Definition, data map[string]any) (cliui.Docum
 				prefix, role = "Value verification pending. ", cliui.Warning
 			}
 			blocks = append(blocks, cliui.Paragraph(cliui.Text{Spans: []cliui.Span{{Text: prefix, Role: role}, {Text: message}}, Flow: cliui.Prose}))
+			blocks = append(blocks, observationDiagnosticBlocks(observation["diagnostic"])...)
 			consumed["values"] = true
 		}
 	}

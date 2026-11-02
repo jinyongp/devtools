@@ -27,7 +27,15 @@ func (s Store) observed(ctx context.Context, r record) (Execution, error) {
 		item.DeliveryState = "expired"
 	}
 	if item.DeliveryState == "delivering" {
-		release, free, err := maintenance.TryLockExclusive(ctx, filepath.Join(s.Root, "value-execution-locks", profilekey.Key(s.Profile), item.ID+".lock"))
+		path := filepath.Join(s.Root, "value-execution-locks", profilekey.Key(s.Profile), item.ID+".lock")
+		release, free, err := maintenance.TryQueryExclusive(ctx, path)
+		var preparation *maintenance.QueryPreparationError
+		if errors.As(err, &preparation) {
+			release, free, err = maintenance.TryLockExclusive(ctx, path)
+			if err != nil {
+				err = &maintenance.QueryPreparationError{State: preparation.State, Cause: err}
+			}
+		}
 		if err != nil {
 			return item, err
 		}
@@ -49,9 +57,9 @@ func (s Store) Status(ctx context.Context, id, requestID string) (View, *protoco
 		return View{}, values.VaultError(ctx, err)
 	}
 	defer a.master.Destroy()
-	release, err := maintenance.AcquireShared(ctx, s.Root)
+	release, err := maintenance.AcquireQuery(ctx, s.Root)
 	if err != nil {
-		return View{}, values.VaultError(ctx, err)
+		return View{}, values.QueryError(ctx, err)
 	}
 	if requestID != "" {
 		var rr receipt
@@ -73,11 +81,11 @@ func (s Store) Status(ctx context.Context, id, requestID string) (View, *protoco
 		return View{}, failure("execution_not_found")
 	}
 	if err != nil {
-		return View{}, values.VaultError(ctx, err)
+		return View{}, values.QueryError(ctx, err)
 	}
 	item, err := s.observed(ctx, r)
 	if err != nil {
-		return View{}, values.VaultError(ctx, err)
+		return View{}, values.QueryError(ctx, err)
 	}
 	return View{s.Profile, item}, nil
 }
@@ -107,9 +115,9 @@ func (s Store) List(ctx context.Context, limit int, cursor string) (ListResult, 
 		return out, values.VaultError(ctx, err)
 	}
 	defer a.master.Destroy()
-	release, err := maintenance.AcquireShared(ctx, s.Root)
+	release, err := maintenance.AcquireQuery(ctx, s.Root)
 	if err != nil {
-		return out, values.VaultError(ctx, err)
+		return out, values.QueryError(ctx, err)
 	}
 	dir := filepath.Join(s.Root, "value-executions", profilekey.Key(s.Profile))
 	guard, err := platformfs.OpenRoot(dir, false)
@@ -177,7 +185,7 @@ func (s Store) List(ctx context.Context, limit int, cursor string) (ListResult, 
 	for _, r := range records[offset:end] {
 		item, err := s.observed(ctx, r)
 		if err != nil {
-			return out, values.VaultError(ctx, err)
+			return out, values.QueryError(ctx, err)
 		}
 		out.Items = append(out.Items, item)
 	}

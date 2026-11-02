@@ -6,6 +6,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/storageupgrade"
 )
 
 // Reuse only the checkpoint metadata from this request's validated snapshot.
@@ -131,12 +132,8 @@ func (s Store) loadCurrentResolved() (*State, taskStorageInfo, *protocol.Error) 
 	switch info.Profile.Mode {
 	case profilekey.ModeNone:
 		return NewState(), info, nil
-	case profilekey.ModeLegacy:
-		_, state, err := s.loadPath(info.Profile.LegacyPath)
-		return state, info, err
-	case profilekey.ModeCanonical:
-		_, state, err := s.loadPath(info.Profile.CanonicalPath)
-		return state, info, err
+	case profilekey.ModeLegacy, profilekey.ModeCanonical:
+		return nil, info, storageupgrade.Required("tasks")
 	default:
 		return nil, info, storageError()
 	}
@@ -180,10 +177,8 @@ func (s Store) completionState() (*State, *protocol.Error) {
 			switch before.Profile.Mode {
 			case profilekey.ModeNone:
 				state = NewState()
-			case profilekey.ModeLegacy:
-				_, state, readErr = s.loadPath(before.Profile.LegacyPath)
-			case profilekey.ModeCanonical:
-				_, state, readErr = s.loadPath(before.Profile.CanonicalPath)
+			case profilekey.ModeLegacy, profilekey.ModeCanonical:
+				return nil, storageupgrade.Required("tasks")
 			default:
 				readErr = storageError()
 			}
@@ -235,12 +230,8 @@ func (s Store) loadHistory() (*State, *protocol.Error) {
 	switch info.Profile.Mode {
 	case profilekey.ModeNone:
 		return NewState(), nil
-	case profilekey.ModeLegacy:
-		_, state, err := s.loadPath(info.Profile.LegacyPath)
-		return state, err
-	case profilekey.ModeCanonical:
-		_, state, err := s.loadPath(info.Profile.CanonicalPath)
-		return state, err
+	case profilekey.ModeLegacy, profilekey.ModeCanonical:
+		return nil, storageupgrade.Required("tasks")
 	default:
 		return nil, storageError()
 	}

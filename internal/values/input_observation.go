@@ -5,10 +5,11 @@ import "github.com/jinyongp/devtools/internal/protocol"
 // InputObservation compares recorded delivery to a freshly inspected goal. It
 // neither observes application reads nor proves an external credential works.
 type InputObservation struct {
-	State     string        `json:"state"`
-	Reason    string        `json:"reason"`
-	Delivered *InputVersion `json:"delivered"`
-	Current   *InputVersion `json:"current"`
+	State      string         `json:"state"`
+	Reason     string         `json:"reason"`
+	Delivered  *InputVersion  `json:"delivered"`
+	Current    *InputVersion  `json:"current"`
+	Diagnostic map[string]any `json:"diagnostic,omitempty"`
 }
 
 func ObserveInput(delivered, current *InputVersion, inspectionError *protocol.Error) InputObservation {
@@ -16,6 +17,7 @@ func ObserveInput(delivered, current *InputVersion, inspectionError *protocol.Er
 	if inspectionError != nil {
 		out.State = "failed"
 		out.Reason = inspectionError.Code
+		out.Diagnostic = protocol.ObservationDiagnostic(inspectionError)
 		switch inspectionError.Code {
 		case "vault_locked", "lock_pending", "key_missing", "key_backend_unavailable", "key_access_denied", "key_interaction_required", "key_backend_locked", "key_session_protocol_mismatch", "vault_recovery_required":
 			out.State = "verification_pending"

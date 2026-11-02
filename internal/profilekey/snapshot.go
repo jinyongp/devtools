@@ -11,9 +11,19 @@ import (
 	"github.com/jinyongp/devtools/internal/project"
 )
 
-// Snapshot reads logical state while the caller holds the maintenance gate.
-// A missing domain returns nil; migration markers are never snapshot payloads.
+var ErrMigrationRequired = errors.New("migration_required")
+
+// Snapshot reads current profile addresses while the maintenance gate is held.
 func Snapshot(directory, profile, domain string, limit int64) ([]byte, error) {
+	return snapshot(directory, profile, domain, limit, false)
+}
+
+// MigrationSnapshot is the explicit codec boundary for old profile addresses.
+func MigrationSnapshot(directory, profile, domain string, limit int64) ([]byte, error) {
+	return snapshot(directory, profile, domain, limit, true)
+}
+
+func snapshot(directory, profile, domain string, limit int64, legacy bool) ([]byte, error) {
 	if !project.ValidProfile(profile) || domain != "values" && domain != "tasks" {
 		return nil, errors.New("invalid profile snapshot")
 	}
@@ -32,6 +42,9 @@ func Snapshot(directory, profile, domain string, limit int64) ([]byte, error) {
 	case ModeNone:
 		return nil, nil
 	case ModeLegacy:
+		if !legacy {
+			return nil, ErrMigrationRequired
+		}
 		path = resolved.LegacyPath
 	case ModeCanonical:
 		path = resolved.CanonicalPath

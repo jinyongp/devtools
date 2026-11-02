@@ -50,6 +50,10 @@ func acquirePassivePair(ctx context.Context, root string) (func(), error) {
 	return acquireQueryGate(ctx, root)
 }
 
+func acquirePassiveFilePair(ctx context.Context, path string) (func(), error) {
+	return acquireQueryPair(ctx, path)
+}
+
 // LockQueryShared shares the writer's profile lock without creating or opening
 // existing lock objects for writing. Only missing objects use initialization.
 func LockQueryShared(ctx context.Context, path string) (func(), error) {

@@ -30,9 +30,11 @@ func TestLegacyRestoreCannotCreatePlaintextProfileInProtectedRoot(t *testing.T) 
 		t.Fatal(err)
 	}
 	archive := filepath.Join(root, "source.age")
-	if _, err := source.Create(ctx, "app", archive, recipient); err != nil {
+	raw, err := os.ReadFile(profilekey.CanonicalPath(filepath.Join(source.Data, "profiles"), "app"))
+	if err != nil {
 		t.Fatal(err)
 	}
+	legacyArchiveFixture(t, archive, recipient, Profile{Name: "app", Values: raw})
 	master, err := vault.NewKey()
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +49,7 @@ func TestLegacyRestoreCannotCreatePlaintextProfileInProtectedRoot(t *testing.T) 
 	if _, err = values.MigrateLegacy(ctx, target.Data, vid, master, id, preview.Fingerprint); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := target.Import(ctx, ImportRequest{Path: archive, IdentityPath: identity, Target: "brand-new"}); err == nil || err.Code != "unsupported_storage" {
+	if _, err := target.Import(ctx, ImportRequest{Path: archive, IdentityPath: identity, Target: "brand-new"}); err == nil || err.Code != "key_missing" {
 		t.Fatal("legacy restore admitted", err)
 	}
 	if _, err := os.Stat(filepath.Join(target.Data, "profiles", profilekey.CanonicalFilename("brand-new"))); !os.IsNotExist(err) {
@@ -92,7 +94,7 @@ func TestLegacyRestoreRejectsLogicalSecretArchiveOnEmptyRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	engine := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
-	if _, err := engine.Import(ctx, ImportRequest{Path: archive, IdentityPath: identity, Target: "brand-new"}); err == nil || err.Code != "unsupported_storage" {
+	if _, err := engine.Import(ctx, ImportRequest{Path: archive, IdentityPath: identity, Target: "brand-new"}); err == nil || err.Code != "key_missing" {
 		t.Fatal("legacy engine accepted logical secret payload", err)
 	}
 	if _, err = os.Stat(filepath.Join(engine.Data, "profiles", profilekey.CanonicalFilename("brand-new"))); !os.IsNotExist(err) {

@@ -25,6 +25,11 @@ func (s ModernStore) ReadForQuery(ctx context.Context) (*State, *protocol.Error)
 }
 
 func (s ModernStore) queryError(ctx context.Context, cause error) *protocol.Error {
+	return QueryError(ctx, cause)
+}
+
+// QueryError retains required preparation and its effects for read consumers.
+func QueryError(ctx context.Context, cause error) *protocol.Error {
 	failure := VaultError(ctx, cause)
 	if failure.Code == "canceled" || failure.Code == "deadline_exceeded" {
 		return failure
@@ -45,9 +50,9 @@ func (s ModernStore) queryError(ctx context.Context, cause error) *protocol.Erro
 	failure.Details["retry"] = "after_dependency_change"
 	failure.Details["remedies"] = []protocol.Remedy{{
 		Relation: protocol.SameStoreAction,
-		Argv:     []string{"devtools", "variable", "list", "--profile", s.Profile},
+		Argv:     []string{"devtools", "doctor", "--storage", "--fix"},
 		Effect:   "value_write", RequiredInputs: []string{},
-		Message: "Run this query in an execution context with write access to the existing store, then retry. Initialization or recovery may write storage.",
+		Message: "Prepare or recover the existing storage in a context with write access, then retry the query.",
 	}}
 	return failure
 }

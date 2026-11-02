@@ -312,8 +312,10 @@ func (s Store) migrateToV3(journal *Journal, state *State, storage taskStorageIn
 	if err := s.historicalFrames(resolution, canonical, beforeRevision, triggerRequestID, triggerContextHash); err != nil {
 		return err
 	}
-	if err := s.appendTriggerFrame(resolution, canonical, beforeRevision, triggerRequestID, triggerContextHash); err != nil {
-		return err
+	if triggerRequestID != "" {
+		if err := s.appendTriggerFrame(resolution, canonical, beforeRevision, triggerRequestID, triggerContextHash); err != nil {
+			return err
+		}
 	}
 	info, err := os.Stat(resolution.WAL)
 	if err != nil {

@@ -204,9 +204,9 @@ func (s Store) Runner(ctx context.Context, id string) (Runner, *protocol.Error) 
 		return Runner{}, values.VaultError(ctx, err)
 	}
 	defer a.master.Destroy()
-	release, err := maintenance.AcquireShared(ctx, s.Root)
+	release, err := maintenance.AcquireQuery(ctx, s.Root)
 	if err != nil {
-		return Runner{}, values.VaultError(ctx, err)
+		return Runner{}, values.QueryError(ctx, err)
 	}
 	defer release()
 	r, err := s.readRunner(ctx, a, id)

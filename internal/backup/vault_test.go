@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/profilekey"
+	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
@@ -19,7 +22,12 @@ import (
 func protectedBackupFixture(t *testing.T) (Engine, vault.FileStore, *vault.Material, *atomic.Int32) {
 	t.Helper()
 	root := privateTestRoot(t)
-	data := filepath.Join(root, "data")
+	return protectedBackupFixtureAt(t, Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")})
+}
+
+func protectedBackupFixtureAt(t *testing.T, engine Engine) (Engine, vault.FileStore, *vault.Material, *atomic.Int32) {
+	t.Helper()
+	data := engine.Data
 	vid, err := vault.NewID()
 	if err != nil {
 		t.Fatal(err)
@@ -36,13 +44,37 @@ func protectedBackupFixture(t *testing.T) (Engine, vault.FileStore, *vault.Mater
 		t.Fatal(err)
 	}
 	var calls atomic.Int32
-	engine := Engine{Data: data, Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache"), VaultMaster: func(context.Context) (*vault.Material, error) {
+	engine.VaultMaster = func(context.Context) (*vault.Material, error) {
 		calls.Add(1)
 		b := master.CopyBytes()
 		defer clear(b)
 		return vault.NewMaterial(b), nil
-	}}
+	}
 	return engine, store, master, &calls
+}
+
+func fixtureProtectedEnvironment(t *testing.T, engine Engine, profile string) map[string]string {
+	t.Helper()
+	ctx := context.Background()
+	master, err := engine.VaultMaster(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer master.Destroy()
+	slot, err := (vault.KeyFileStore{Directory: filepath.Join(engine.Data, "vault")}).Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, key, err := (vault.FileStore{Root: engine.Data, VaultID: slot.VaultID, CatalogKey: master}).ReadWithMaster(ctx, profile, master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer key.Destroy()
+	environment, _, err := p.Environment("", key, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return environment
 }
 func addProtectedBackupProfile(t *testing.T, store vault.FileStore, master *vault.Material, sealed bool) (*vault.Profile, *vault.Material) {
 	t.Helper()
@@ -228,19 +260,32 @@ func TestLegacyBackupReceiptReplaysAfterProtectedMigration(t *testing.T) {
 	}
 	identity, recipient := backupIdentity(t)
 	archive := filepath.Join(privateTestRoot(t), "legacy.age")
-	if _, e := engine.Create(ctx, "app", archive, recipient); e != nil {
-		t.Fatal(e)
+	raw, err := os.ReadFile(profilekey.CanonicalPath(store.Directory, "app"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	request := ImportRequest{Path: archive, IdentityPath: identity, Target: "copy"}
-	preview, e := engine.Import(ctx, request)
-	if e != nil {
-		t.Fatal(e)
+	cipher := legacyArchiveFixture(t, archive, recipient, Profile{Name: "app", Values: raw})
+	request := ImportRequest{Path: archive, IdentityPath: identity, Target: "copy", Expected: strings.Repeat("a", 64), RequestID: "00000000-0000-4000-8000-000000000103"}
+	fingerprint := restoreFingerprint(restoreFingerprintInput{Cipher: cipher, Source: "app", Target: "copy", Expected: request.Expected})
+	applied := ImportResult{Plan: Plan{Digest: request.Expected, Applied: true, Targets: []Target{{Source: "app", Profile: "copy"}}}}
+	sourceCanonical, err := profilecatalog.CanonicalSnapshot("app", raw, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	request.Expected = preview.Plan.Digest
-	request.RequestID = "00000000-0000-4000-8000-000000000103"
-	applied, e := engine.Import(ctx, request)
-	if e != nil || !applied.Plan.Applied {
-		t.Fatal(e)
+	empty, err := profilecatalog.CanonicalSnapshot("copy", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := restoreReceipt{Fingerprint: fingerprint, OperationFingerprint: fingerprint, Plan: applied.Plan, Import: &importReceiptData{Source: Summary{Profile: "app", Values: true}, Target: "copy", Diff: profilecatalog.Compare(empty, sourceCanonical, false)}}
+	body, err := json.Marshal(saved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := maintenance.Write(filepath.Join(engine.Data, "backup-receipts", request.RequestID+".json"), body); err != nil {
+		t.Fatal(err)
+	}
+	if err := maintenance.Write(filepath.Join(engine.Data, ".maintenance", "preview-key"), bytes.Repeat([]byte{7}, 32)); err != nil {
+		t.Fatal(err)
 	}
 	vid, _ := vault.NewID()
 	pass := vault.NewMaterial([]byte("synthetic-migration-root-key"))

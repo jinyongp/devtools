@@ -441,7 +441,7 @@ func doctorReportBlocks(data map[string]any, heading bool) []cliui.Block {
 	var failed, actions []any
 	affected := map[string][]string{}
 	checkIdentity := func(check map[string]any) string {
-		identity, _ := json.Marshal([]any{check["reason"], check["target"], check["facts"], check["sources"], check["status"], check["message"], check["blocked_by"]})
+		identity, _ := json.Marshal([]any{check["reason"], check["target"], check["facts"], check["sources"], check["status"], check["message"], check["blocked_by"], check["diagnostic"]})
 		return string(identity)
 	}
 	if checks, ok := data["checks"].([]any); ok {
@@ -487,6 +487,7 @@ func doctorReportBlocks(data map[string]any, heading bool) []cliui.Block {
 			}
 		}
 		blocks = append(blocks, cliui.Paragraph(cliui.Words(message)))
+		blocks = append(blocks, observationDiagnosticBlocks(check["diagnostic"])...)
 		if names := affected[identity]; len(commands) > 1 && len(names) > 0 {
 			blocks = append(blocks, cliui.Paragraph(cliui.Words("Commands: "+strings.Join(names, ", ")+".")))
 		}

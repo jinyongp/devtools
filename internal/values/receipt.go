@@ -21,10 +21,14 @@ func (s Store) receiptRelative(requestID string) string {
 // New managed receipts map exact UUID text to lowercase filenames. A UUID-shaped
 // scope suffix keeps historical vault receipt enumeration/pruning compatible.
 func (s ModernStore) receiptRelative(requestID string) string {
+	return currentReceiptRelative(profilekey.Key(s.Profile), requestID)
+}
+
+func currentReceiptRelative(profileKey, requestID string) string {
 	key := valueRequestKey(requestID)
 	scope := key[:32]
 	id := scope[:8] + "-" + scope[8:12] + "-" + scope[12:16] + "-" + scope[16:20] + "-" + scope[20:]
-	return "backup-receipts/values-" + profilekey.Key(s.Profile) + "-s2-" + key + "-" + id + ".json"
+	return "backup-receipts/values-" + profileKey + "-s2-" + key + "-" + id + ".json"
 }
 
 func valueRequestKey(id string) string {

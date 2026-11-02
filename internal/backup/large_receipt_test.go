@@ -17,13 +17,15 @@ func TestLargeImportReceiptReplaysCompleteResult(t *testing.T) {
 	root := privateTestRoot(t)
 	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
 	target := Engine{Data: filepath.Join(root, "target", "data"), Config: filepath.Join(root, "target", "config"), Cache: filepath.Join(root, "target", "cache")}
+	source, _, _, _ = protectedBackupFixtureAt(t, source)
+	target, _, _, _ = protectedBackupFixtureAt(t, target)
 	ctx := context.Background()
 	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
 	if _, e := Keygen(identity, recipient); e != nil {
 		t.Fatal(e)
 	}
-	store := values.Store{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
-	if _, e := store.Update(ctx, func(s *values.State) (bool, *protocol.Error) {
+	store := values.ModernStore{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable", Master: source.VaultMaster}
+	if _, e := store.Update(ctx, func(s *values.Editor) (bool, *protocol.Error) {
 		for i := 0; i < 6500; i++ {
 			if _, e := s.Set(values.Secret, fmt.Sprintf("K%063d", i), "", "dummy"); e != nil {
 				return false, e
@@ -57,12 +59,8 @@ func TestLargeImportReceiptReplaysCompleteResult(t *testing.T) {
 	if e != nil || !replay.Plan.Applied || !replay.Plan.Replayed || replay.Plan.Digest != applied.Plan.Digest || !reflect.DeepEqual(replay.Diff, applied.Diff) || replay.Target != applied.Target || replay.Source != applied.Source {
 		t.Fatal("large import replay changed result", e)
 	}
-	state, e := (values.Store{Directory: filepath.Join(target.Data, "profiles"), Profile: "portable"}).Read(ctx)
-	if e != nil {
-		t.Fatal(e)
-	}
-	env, e := state.Environment("")
-	if e != nil || len(env) != 6500 {
-		t.Fatal("imported keys missing", len(env), e)
+	env := fixtureProtectedEnvironment(t, target, "portable")
+	if len(env) != 6500 {
+		t.Fatal("imported keys missing", len(env))
 	}
 }

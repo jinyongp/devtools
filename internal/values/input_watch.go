@@ -63,6 +63,20 @@ func (s *reconcileSchedule) reconciled(now time.Time) {
 func cloneObservation(v InputObservation) InputObservation {
 	v.Delivered = v.Delivered.Clone()
 	v.Current = v.Current.Clone()
+	if v.Diagnostic != nil {
+		copy := map[string]any{}
+		for key, value := range v.Diagnostic {
+			copy[key] = value
+		}
+		if details, ok := copy["details"].(map[string]any); ok {
+			cloned := map[string]any{}
+			for key, value := range details {
+				cloned[key] = value
+			}
+			copy["details"] = cloned
+		}
+		v.Diagnostic = copy
+	}
 	return v
 }
 func publishLatest(ch chan InputObservation, v InputObservation) {

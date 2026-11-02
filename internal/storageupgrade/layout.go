@@ -51,7 +51,7 @@ func ProfileLayout(directory, profile, domain string) (Step, error) {
 	if err != nil {
 		return Step{}, err
 	}
-	raw, err := profilekey.Snapshot(directory, profile, domain, 128<<20)
+	raw, err := profilekey.MigrationSnapshot(directory, profile, domain, 128<<20)
 	if err != nil {
 		return Step{}, err
 	}

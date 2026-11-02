@@ -17,8 +17,8 @@ func TestPassphraseArchiveCreateImportAndRecovery(t *testing.T) {
 	target := Engine{Data: filepath.Join(root, "target", "data"), Config: filepath.Join(root, "target", "config"), Cache: filepath.Join(root, "target", "cache")}
 	const passphrase = "PASS-PHRASE-CANARY"
 
-	sourceStore := values.Store{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
-	if _, err := sourceStore.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	sourceStore := values.ModernStore{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
+	if _, err := sourceStore.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		return state.Set(values.Variable, "VALUE", "", "from-source")
 	}); err != nil {
 		t.Fatal(err)
@@ -41,7 +41,7 @@ func TestPassphraseArchiveCreateImportAndRecovery(t *testing.T) {
 	if importErr != nil || !imported.Plan.Applied {
 		t.Fatalf("apply: %#v %v", imported.Plan, importErr)
 	}
-	got, readErr := (values.Store{Directory: filepath.Join(target.Data, "profiles"), Profile: "portable"}).Read(context.Background())
+	got, readErr := (values.ModernStore{Directory: filepath.Join(target.Data, "profiles"), Profile: "portable"}).Read(context.Background())
 	if readErr != nil {
 		t.Fatal(readErr)
 	}
@@ -50,7 +50,7 @@ func TestPassphraseArchiveCreateImportAndRecovery(t *testing.T) {
 		t.Fatalf("imported value: %#v %v", env, envErr)
 	}
 
-	if _, err := (values.Store{Directory: filepath.Join(target.Data, "profiles"), Profile: "portable"}).Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	if _, err := (values.ModernStore{Directory: filepath.Join(target.Data, "profiles"), Profile: "portable"}).Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		return state.Set(values.Variable, "VALUE", "", "before-replace")
 	}); err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestPassphraseArchiveCreateImportAndRecovery(t *testing.T) {
 	if importErr != nil || !recovered.Plan.Applied {
 		t.Fatalf("recovery apply: %#v %v", recovered.Plan, importErr)
 	}
-	recoveredState, recoveredReadErr := (values.Store{Directory: filepath.Join(target.Data, "profiles"), Profile: "recovered"}).Read(context.Background())
+	recoveredState, recoveredReadErr := (values.ModernStore{Directory: filepath.Join(target.Data, "profiles"), Profile: "recovered"}).Read(context.Background())
 	if recoveredReadErr != nil {
 		t.Fatal(recoveredReadErr)
 	}
@@ -99,8 +99,8 @@ func TestArchiveEncryptionModeRecognizesX25519(t *testing.T) {
 	if _, err := Keygen(identity, recipient); err != nil {
 		t.Fatal(err)
 	}
-	store := values.Store{Directory: filepath.Join(engine.Data, "profiles"), Profile: "portable"}
-	if _, err := store.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	store := values.ModernStore{Directory: filepath.Join(engine.Data, "profiles"), Profile: "portable"}
+	if _, err := store.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		return state.Set(values.Variable, "VALUE", "", "x25519")
 	}); err != nil {
 		t.Fatal(err)
@@ -120,8 +120,8 @@ func TestPassphraseImportRejectsWrongPassphraseWithoutMutation(t *testing.T) {
 	source := Engine{Data: filepath.Join(root, "source", "data"), Config: filepath.Join(root, "source", "config"), Cache: filepath.Join(root, "source", "cache")}
 	target := Engine{Data: filepath.Join(root, "target", "data"), Config: filepath.Join(root, "target", "config"), Cache: filepath.Join(root, "target", "cache")}
 
-	sourceStore := values.Store{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
-	if _, err := sourceStore.Update(context.Background(), func(state *values.State) (bool, *protocol.Error) {
+	sourceStore := values.ModernStore{Directory: filepath.Join(source.Data, "profiles"), Profile: "portable"}
+	if _, err := sourceStore.Update(context.Background(), func(state *values.Editor) (bool, *protocol.Error) {
 		return state.Set(values.Variable, "VALUE", "", "source")
 	}); err != nil {
 		t.Fatal(err)

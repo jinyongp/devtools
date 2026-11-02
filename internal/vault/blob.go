@@ -90,25 +90,39 @@ func SealProtected(ctx context.Context, master *Material, vaultID, scope, purpos
 	return encoded, nil
 }
 
+// InspectProtected validates only envelope structure and public bindings. It
+// neither decrypts nor authenticates ciphertext and never borrows a key.
+func InspectProtected(encoded []byte, vaultID, scope, purpose string) error {
+	_, _, err := inspectProtected(encoded, vaultID, scope, purpose)
+	return err
+}
+
+func inspectProtected(encoded []byte, vaultID, scope, purpose string) (envelope protectedMaterial, aad []byte, err error) {
+	if err := StrictDecode(encoded, &envelope); err != nil {
+		return envelope, nil, err
+	}
+	if envelope.VaultID != vaultID || envelope.Scope != scope || envelope.Purpose != purpose {
+		return envelope, nil, ErrIntegrity
+	}
+	aad, err = envelope.aad()
+	if err != nil {
+		return envelope, nil, err
+	}
+	if len(envelope.Nonce) != chacha20poly1305.NonceSizeX || len(envelope.Ciphertext) < chacha20poly1305.Overhead || len(envelope.Ciphertext) > MaxProtectedPlainBytes+chacha20poly1305.Overhead {
+		return envelope, nil, ErrInvalid
+	}
+	return envelope, aad, nil
+}
+
 // OpenProtected authenticates expected identity and purpose before returning an
 // owned plaintext buffer. Missing/damaged material is never an empty key/state.
 func OpenProtected(ctx context.Context, master *Material, vaultID, scope, purpose string, encoded []byte) (*Material, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	var envelope protectedMaterial
-	if err := StrictDecode(encoded, &envelope); err != nil {
-		return nil, err
-	}
-	if envelope.VaultID != vaultID || envelope.Scope != scope || envelope.Purpose != purpose {
-		return nil, ErrIntegrity
-	}
-	aad, err := envelope.aad()
+	envelope, aad, err := inspectProtected(encoded, vaultID, scope, purpose)
 	if err != nil {
 		return nil, err
-	}
-	if len(envelope.Nonce) != chacha20poly1305.NonceSizeX || len(envelope.Ciphertext) < chacha20poly1305.Overhead || len(envelope.Ciphertext) > MaxProtectedPlainBytes+chacha20poly1305.Overhead {
-		return nil, ErrInvalid
 	}
 	key, err := derive(master, vaultID, scope, "material/"+purpose)
 	if err != nil {

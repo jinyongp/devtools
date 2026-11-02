@@ -10,10 +10,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
@@ -21,6 +19,7 @@ import (
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/retention"
+	"github.com/jinyongp/devtools/internal/storageupgrade"
 	"github.com/jinyongp/devtools/internal/vault"
 )
 
@@ -39,15 +38,9 @@ func (s ModernStore) Inspect(ctx context.Context, env string) (ManagedView, *pro
 	if !project.ValidProfile(s.Profile) {
 		return out, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, nil)
 	}
-	p, exists, needsExclusive, e := s.inspectionProfile(ctx, false)
+	p, exists, e := s.inspectionProfile(ctx)
 	if e != nil {
 		return out, e
-	}
-	if needsExclusive {
-		p, exists, _, e = s.inspectionProfile(ctx, true)
-		if e != nil {
-			return out, e
-		}
 	}
 	state, err := metadataState(p)
 	if err != nil {
@@ -78,53 +71,31 @@ func (s ModernStore) Inspect(ctx context.Context, env string) (ManagedView, *pro
 	return out, nil
 }
 
-// inspectionProfile releases the shared gate before retrying a legacy conversion.
-// Every retry rereads storage, so a concurrent writer or initialization wins.
-func (s ModernStore) inspectionProfile(ctx context.Context, exclusive bool) (*vault.Profile, bool, bool, *protocol.Error) {
-	acquire := maintenance.AcquireShared
-	if exclusive {
-		acquire = maintenance.AcquireExclusive
-	}
-	release, err := acquire(ctx, s.root())
+func (s ModernStore) inspectionProfile(ctx context.Context) (*vault.Profile, bool, *protocol.Error) {
+	release, err := maintenance.AcquireQuery(ctx, s.root())
 	if err != nil {
-		return nil, false, false, VaultError(ctx, err)
+		return nil, false, QueryError(ctx, err)
 	}
 	defer release()
 	raw, err := profilekey.Snapshot(s.Directory, s.Profile, "values", vault.MaxDocumentBytes)
 	if err != nil {
-		return nil, false, false, storageErrorAt("read_profile", err)
+		return nil, false, storageErrorAt("read_profile", err)
 	}
 	defer clear(raw)
 	var p *vault.Profile
 	exists := raw != nil
 	if exists {
-		p, err = vault.DecodeProfile(raw)
+		p, err = decodeCurrentProfile(raw, s.Profile)
 		if err != nil {
-			legacy, legacyErr := InspectSnapshot(raw, s.Profile)
-			if legacyErr != nil || hasSecret(legacy) {
-				return nil, false, false, failure("migration_required", "Migrate the legacy profile before managed changes.")
-			}
-			if _, protected, e := maintenance.ProtectedRootHeld(s.root()); e != nil || protected {
-				return nil, false, false, failure("migration_required", "Migrate the legacy profile before managed changes.")
-			}
-			if !exclusive {
-				return nil, false, true, nil
-			}
-			p, err = convertLegacy(legacy, "", nil)
-			if err != nil {
-				return nil, false, false, VaultError(ctx, err)
-			}
-			if err = s.publishHeld(ctx, p, nil, nil, ""); err != nil {
-				return nil, false, false, VaultError(ctx, err)
-			}
+			return nil, false, VaultError(ctx, err)
 		}
 	} else {
 		p, err = vault.NewProfile(s.Profile)
 		if err != nil {
-			return nil, false, false, VaultError(ctx, err)
+			return nil, false, VaultError(ctx, err)
 		}
 	}
-	return p, exists, false, nil
+	return p, exists, nil
 }
 func sharedReceiptKey(ctx context.Context, root, vaultID string, master *vault.Material, create bool) (*vault.Material, map[string][]byte, error) {
 	if master == nil {
@@ -184,48 +155,26 @@ func requestMAC(key *vault.Material, c Change) (string, error) {
 }
 func (s ModernStore) receiptHeld(ctx context.Context, master *vault.Material, vaultID, id string) (vault.ValueReceipt, ChangeResult, bool, error) {
 	legacy := Store{Directory: s.Directory, Profile: s.Profile}
-	legacyScope := strings.ToLower(strings.ReplaceAll(id, "-", ""))
-	paths := []struct {
-		path, scope string
-		legacy      bool
-	}{
-		{s.receiptRelative(id), valueReceiptScope(id), false},
-		{legacy.receiptRelative(id), legacyScope, true},
-		{"backup-receipts/values-" + hex.EncodeToString([]byte(s.Profile)) + "-" + id + ".json", legacyScope, true},
-	}
 	var receipt vault.ValueReceipt
 	var result ChangeResult
-	found := false
-	store := vault.FileStore{Root: s.root(), VaultID: vaultID, CatalogKey: master}
-	for _, entry := range paths {
-		path := entry.path
+	for _, path := range []string{legacy.receiptRelative(id), "backup-receipts/values-" + hex.EncodeToString([]byte(s.Profile)) + "-" + id + ".json"} {
 		if len(filepath.Base(path)) > 255 {
 			continue
 		}
-		if entry.legacy {
-			exact, err := exactLegacyReceipt(filepath.Join(s.root(), path))
-			if err != nil {
-				return receipt, result, false, err
-			}
-			if !exact {
-				continue
-			}
-		}
-		candidate, present, err := store.ReadValueReceiptHeld(ctx, path, entry.scope)
+		exact, err := exactLegacyReceipt(filepath.Join(s.root(), path))
 		if err != nil {
 			return receipt, result, false, err
 		}
-		if !present {
-			continue
+		if exact {
+			return receipt, result, false, storageupgrade.Required("values")
 		}
-		var value ChangeResult
-		if vault.StrictDecode(candidate.Result, &value) != nil || value.Profile != s.Profile {
-			return receipt, result, false, vault.ErrInvalid
-		}
-		if found && (candidate.Fingerprint != receipt.Fingerprint || candidate.ProfileID != receipt.ProfileID || candidate.KeyEpoch != receipt.KeyEpoch || candidate.CreatedAt != receipt.CreatedAt || candidate.ExpiresAt != receipt.ExpiresAt || !reflect.DeepEqual(value, result)) {
-			return receipt, result, false, vault.ErrIntegrity
-		}
-		receipt, result, found = candidate, value, true
+	}
+	receipt, found, err := (vault.FileStore{Root: s.root(), VaultID: vaultID, CatalogKey: master}).ReadValueReceiptHeld(ctx, s.receiptRelative(id), valueReceiptScope(id))
+	if err != nil {
+		return receipt, result, false, err
+	}
+	if found && (vault.StrictDecode(receipt.Result, &result) != nil || result.Profile != s.Profile) {
+		return receipt, result, false, vault.ErrInvalid
 	}
 	return receipt, result, found, nil
 }

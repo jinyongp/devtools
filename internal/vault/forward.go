@@ -80,6 +80,26 @@ type ForwardStore struct {
 	checkpoint func(string)
 }
 
+// CompletedHeld checks a committed operation without treating a missing receipt
+// as permission to publish a new replacement. The maintenance gate is held.
+func (s ForwardStore) CompletedHeld(ctx context.Context, id, fingerprint string) (ForwardResult, bool, error) {
+	result := ForwardResult{ID: id, RecoveryPath: filepath.Join(s.Root, recoveryName(id))}
+	if !s.valid() || !validID(id) || !validForwardFingerprint(fingerprint) {
+		return result, false, ErrInvalid
+	}
+	root, err := platformfs.OpenRoot(s.Root, false)
+	if err != nil {
+		return result, false, err
+	}
+	defer root.Close()
+	found, err := s.receipt(ctx, root, id, fingerprint)
+	if err != nil {
+		return result, false, err
+	}
+	result.Committed, result.Replayed = found, found
+	return result, found, nil
+}
+
 func recoveryName(id string) string { return ".maintenance/values-recovery-" + id + ".json" }
 func recoveryReceiptName(id string) string {
 	return ".maintenance/values-recovery-" + id + ".done.json"
@@ -92,7 +112,7 @@ func validForwardPath(path string) bool {
 	if !filepath.IsLocal(path) || strings.Contains(path, "\\") {
 		return false
 	}
-	if path == ".maintenance/values-key" || path == ".maintenance/preview-key" || path == "vault/legacy-verification.json" || path == "profiles/vault-catalog.json" {
+	if path == maintenance.ValueChangeHintPath || path == ".maintenance/values-key" || path == ".maintenance/preview-key" || path == "vault/legacy-verification.json" || path == "profiles/vault-catalog.json" {
 		return true
 	}
 	parts := strings.Split(path, "/")
@@ -372,6 +392,16 @@ func (s ForwardStore) ReplaceHeld(ctx context.Context, id, fingerprint string, a
 // Recover must be an explicit key-aware recovery path. Ordinary and older
 // maintenance readers reject version 3 and cannot copy a plaintext rollback.
 func (s ForwardStore) Recover(ctx context.Context) (ForwardResult, error) {
+	return s.recover(ctx, nil)
+}
+
+// RecoverWithIdentity prevents a cached migration key from crossing a rewrap
+// or durable manual lock while acquiring the existing launch/storage gates.
+func (s ForwardStore) RecoverWithIdentity(ctx context.Context, identity [32]byte) (ForwardResult, error) {
+	return s.recover(ctx, &identity)
+}
+
+func (s ForwardStore) recover(ctx context.Context, identity *[32]byte) (ForwardResult, error) {
 	var result ForwardResult
 	if !s.valid() {
 		return result, ErrInvalid
@@ -381,6 +411,20 @@ func (s ForwardStore) Recover(ctx context.Context) (ForwardResult, error) {
 		return result, err
 	}
 	defer releaseLaunch()
+	if identity != nil {
+		releaseSlot, err := maintenance.LockShared(ctx, filepath.Join(s.Root, "vault", "key-slot-write.lock"))
+		if err != nil {
+			return result, err
+		}
+		defer releaseSlot()
+		actual, err := (KeyFileStore{Directory: filepath.Join(s.Root, "vault")}).WriteIdentity()
+		if err != nil {
+			return result, err
+		}
+		if actual != *identity {
+			return result, ErrInputChanged
+		}
+	}
 	release, err := maintenance.AcquireForRecovery(ctx, s.Root)
 	if err != nil {
 		return result, ErrRecovery

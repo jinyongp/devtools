@@ -286,6 +286,7 @@ func conciseDiagnostics(rows []any, showPassed bool) []cliui.Block {
 			result = append(result, cliui.Paragraph(text))
 		}
 		result = append(result, diagnosticLocations(row)...)
+		result = append(result, observationDiagnosticBlocks(row["diagnostic"])...)
 		facts, _ := row["facts"].(map[string]any)
 		result = append(result, diagnosticFacts(facts)...)
 		for _, key := range []string{"checks", "causes", "issues", "warnings"} {

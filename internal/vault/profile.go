@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"io"
 	"regexp"
 	"sort"
@@ -334,6 +335,14 @@ func (p *Profile) Encode() ([]byte, error) {
 	return b, nil
 }
 func DecodeProfile(data []byte) (*Profile, error) {
+	var header struct {
+		Version       int  `json:"version"`
+		VaultFormat   *int `json:"vault_format"`
+		LogicalFormat *int `json:"logical_values_format"`
+	}
+	if json.Unmarshal(data, &header) == nil && header.Version == 1 && header.VaultFormat == nil && header.LogicalFormat == nil {
+		return nil, profilekey.ErrMigrationRequired
+	}
 	var p Profile
 	if err := StrictDecode(data, &p); err != nil {
 		return nil, err

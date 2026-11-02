@@ -251,6 +251,9 @@ func readPointer(root string) (transactionPointer, bool, []byte, error) {
 	if pointer.Version == 3 && pointer.Phase == "ready" && pointer.TransactionID == "" && validVaultID(pointer.VaultID) {
 		return pointer, false, body, nil
 	}
+	if pointer.Version == 3 && validVaultID(pointer.VaultID) && validVaultID(pointer.TransactionID) && (pointer.Phase == "applying" || pointer.Phase == "committed") {
+		return pointer, false, body, nil
+	}
 	if (pointer.Version != transactionVersion && pointer.Version != 4) || (pointer.Version == 4 && !validVaultID(pointer.VaultID)) || !validTransactionID(pointer.TransactionID) || pointer.Phase != "applying" && pointer.Phase != "committed" {
 		return pointer, false, nil, errors.New("invalid recovery journal")
 	}

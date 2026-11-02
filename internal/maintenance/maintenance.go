@@ -67,6 +67,9 @@ func recoverPending(root string) error {
 	if !legacy && pointer.Version == 3 && pointer.Phase == "ready" {
 		return cleanupOrphanTransactions(root, "")
 	}
+	if !legacy && pointer.Version == 3 {
+		return errors.New("protected recovery requires an explicit storage upgrade")
+	}
 	if legacy {
 		if err := recoverLegacy(root, body); err != nil {
 			return err

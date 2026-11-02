@@ -435,7 +435,7 @@ func TestV3ZeroEventFirstPublicationKeepsLogicalVersionOne(t *testing.T) {
 	}
 }
 
-func TestV2ReceiptReplayDoesNotMigrateStorage(t *testing.T) {
+func TestV2ReceiptReplayRequiresExplicitStorageUpgrade(t *testing.T) {
 	s := fixture(t)
 	requestID := ID()
 	request := Request{
@@ -451,12 +451,16 @@ func TestV2ReceiptReplayDoesNotMigrateStorage(t *testing.T) {
 	if _, ok, err := resolveV3(s.Directory, s.Profile); err != nil || ok {
 		t.Fatalf("fixture is not v2: ok=%v err=%v", ok, err)
 	}
-	replay, replayErr := s.Execute(context.Background(), request)
-	if replayErr != nil || replay["replayed"] != true || num(replay, "revision") != num(first, "revision") {
-		t.Fatalf("v2 receipt replay failed: %#v %v", replay, replayErr)
+	if _, err := s.Execute(context.Background(), request); err == nil || err.Code != "migration_required" {
+		t.Fatal("ordinary replay decoded old container", err)
 	}
 	if _, ok, err := resolveV3(s.Directory, s.Profile); err != nil || ok {
 		t.Fatalf("receipt replay migrated storage: ok=%v err=%v", ok, err)
+	}
+	upgradeTaskFixture(t, s)
+	replay, replayErr := s.Execute(context.Background(), request)
+	if replayErr != nil || replay["replayed"] != true || num(replay, "revision") != num(first, "revision") {
+		t.Fatal("explicit upgrade lost replay", replay, replayErr)
 	}
 }
 
@@ -474,20 +478,25 @@ func TestV2NoChangeDoesNotMigrateStorage(t *testing.T) {
 			"if-revision": fmt.Sprint(len(journal.Events)),
 		},
 	}
-	if _, err := s.Execute(context.Background(), request); err == nil || err.Code != "no_change" {
-		t.Fatalf("expected no_change, got %v", err)
+	if _, err := s.Execute(context.Background(), request); err == nil || err.Code != "migration_required" {
+		t.Fatalf("expected migration_required, got %v", err)
 	}
 	if _, ok, err := resolveV3(s.Directory, s.Profile); err != nil || ok {
 		t.Fatalf("no-change request migrated storage: ok=%v err=%v", ok, err)
 	}
+	upgradeTaskFixture(t, s)
+	if _, err := s.Execute(context.Background(), request); err == nil || err.Code != "no_change" {
+		t.Fatal("logical no-op changed after migration", err)
+	}
 }
 
-func TestV2MutationMigratesWithTriggerFrame(t *testing.T) {
+func TestV2MutationRunsAfterExplicitUpgrade(t *testing.T) {
 	s := fixture(t)
 	created := call(t, s, "task.add", "", Object{"title": "before"})
 	id := itemID(created)
 	journal := forceV2Storage(t, s)
 	beforeRevision := len(journal.Events)
+	upgradeTaskFixture(t, s)
 	requestID := ID()
 	result, err := s.Execute(context.Background(), Request{
 		Action: "task.update",

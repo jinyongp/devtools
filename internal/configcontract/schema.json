@@ -1903,9 +1903,34 @@
       ],
       "additionalProperties": false
     },
+    "ObservationDiagnostic": {
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "details": {
+          "type": "object",
+          "properties": {
+            "domain": { "type": "string" },
+            "operation": { "type": "string" },
+            "resource": { "type": "string" },
+            "reason": { "type": "string" },
+            "os_error_domain": { "enum": ["errno", "win32", "hresult"] },
+            "os_error": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+            "state": { "enum": ["initialization_required", "recovery_required", "migration_required"] },
+            "effects": { "enum": ["none", "committed", "partial", "unknown"] },
+            "retry": { "enum": ["never", "after_input_change", "after_refresh", "after_dependency_change", "inspect_first", "same_request"] },
+            "phase": { "enum": ["parse", "resolve", "validate", "prepare", "execute", "commit", "observe", "cleanup"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": ["code", "details"],
+      "additionalProperties": false
+    },
     "Check": {
       "type": "object",
       "properties": {
+        "diagnostic": { "$ref": "#/$defs/ObservationDiagnostic" },
         "blocked_by": {"$ref":"#/$defs/CauseIDs"},
         "id": {
           "type": "string",
@@ -2168,10 +2193,12 @@
       "properties": {
         "domain": { "type": "string" },
         "profile": { "$ref": "#/$defs/Name" },
+        "resource": { "type": "string" },
         "source": { "type": "string" },
         "target": { "type": "string" },
         "state": { "enum": ["current", "migration_required", "blocked", "unsupported"] },
-        "reason": { "type": "string" }
+        "reason": { "type": "string" },
+        "diagnostic": { "$ref": "#/$defs/ObservationDiagnostic" }
       },
       "required": ["domain", "source", "target", "state"],
       "additionalProperties": false

@@ -56,9 +56,9 @@ func (s ModernStore) InspectRequest(ctx context.Context, id string) (view Reques
 		return out, VaultError(ctx, err)
 	}
 	// Acquisition recovers pending transactions before a missing-record result.
-	release, err := maintenance.AcquireShared(ctx, s.root())
+	release, err := maintenance.AcquireQuery(ctx, s.root())
 	if err != nil {
-		return out, VaultError(ctx, err)
+		return out, QueryError(ctx, err)
 	}
 	defer release()
 	if master == nil {

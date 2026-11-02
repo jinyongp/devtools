@@ -9,12 +9,17 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/testfs"
 )
 
 func preparedRoot(t *testing.T) string {
 	t.Helper()
-	root := filepath.Join(t.TempDir(), "data")
-	if err := platformfs.MkdirPrivate(root); err != nil {
+	root := filepath.Join(testfs.TempDir(t), "data")
+	guard, err := platformfs.OpenRoot(root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := guard.Close(); err != nil {
 		t.Fatal(err)
 	}
 	release, err := maintenance.AcquireExclusive(context.Background(), root)
@@ -26,7 +31,7 @@ func preparedRoot(t *testing.T) string {
 }
 
 func TestInspectAbsentRootAndCurrentFixHaveNoWrites(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "absent")
+	root := filepath.Join(testfs.TempDir(t), "absent")
 	report, err := (Engine{Root: root}).Inspect(context.Background())
 	if err != nil || !report.Ready || report.Changed || report.Effects != "none" {
 		t.Fatal(report, err)
@@ -121,5 +126,31 @@ func TestUnknownProgressIsPreserved(t *testing.T) {
 	raw, readErr := maintenance.Read(path, 1024)
 	if readErr != nil || string(raw) != `{"version":999,"complete":false}` {
 		t.Fatal("unknown progress overwritten", readErr)
+	}
+}
+
+func TestCanceledCommitReportsEffectsAndResumes(t *testing.T) {
+	root := preparedRoot(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	current := false
+	adapter := Adapter{Name: "test", InspectHeld: func(context.Context, string) ([]Step, error) {
+		state := "migration_required"
+		if current {
+			state = "current"
+		}
+		return []Step{{Domain: "test", Source: "old", Target: "current", State: state, Fingerprint: state}}, nil
+	}, Apply: func(context.Context, string, Step) (bool, error) { current = true; cancel(); return true, ctx.Err() }}
+	engine := Engine{Root: root, Adapters: []Adapter{adapter}}
+	report, condition := engine.Fix(ctx)
+	if condition == nil || condition.Code != "canceled" || condition.Details["effects"] != "unknown" || report.Ready || !report.Changed || report.Effects != "unknown" {
+		t.Fatal(report, condition)
+	}
+	report, condition = engine.Fix(context.Background())
+	if condition != nil || !report.Ready || !current {
+		t.Fatal("resumption lost commit", report, condition)
+	}
+	report, condition = engine.Fix(context.Background())
+	if condition != nil || !report.Ready || report.Changed || report.Effects != "none" {
+		t.Fatal("completed resumption wrote again", report, condition)
 	}
 }

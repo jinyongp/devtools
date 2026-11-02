@@ -50,8 +50,7 @@ func (s ModernStore) readForEdit(ctx context.Context, master *vault.Material, va
 	p, key, exists, err := s.readHeld(ctx, master, vaultID)
 	if err == nil {
 		base.exists = exists
-		// Legacy conversion generates fresh IDs on every read. Compare the stored
-		// source, not its transient converted representation, at commit time.
+		// Compare committed source bytes again before publishing the candidate.
 		base.original, err = profilekey.Snapshot(s.Directory, s.Profile, "values", vault.MaxDocumentBytes)
 	}
 	if err == nil {

@@ -237,6 +237,13 @@ func (s FileStore) ReadWithMasterHeld(ctx context.Context, name string, master *
 	if !namePattern.MatchString(name) {
 		return nil, nil, ErrInvalid
 	}
+	resolution, err := profilekey.Resolve(filepath.Join(s.Root, "profiles"), name, "values")
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, nil, ErrRecovery
+	}
+	if resolution.Mode == profilekey.ModeLegacy {
+		return nil, nil, profilekey.ErrMigrationRequired
+	}
 	c, err := s.readCatalog()
 	if err != nil {
 		return nil, nil, err
@@ -278,46 +285,54 @@ func (s FileStore) publish(ctx context.Context, c *Catalog, p *Profile, key *Mat
 	return s.publishWithFiles(ctx, c, p, key, nil)
 }
 func (s FileStore) publishWithFiles(ctx context.Context, c *Catalog, p *Profile, key *Material, extra map[string][]byte) error {
+	files, err := s.publicationFiles(ctx, c, p, key, extra)
+	if err != nil {
+		return err
+	}
+	return maintenance.Replace(s.Root, files)
+}
+
+func (s FileStore) publicationFiles(ctx context.Context, c *Catalog, p *Profile, key *Material, extra map[string][]byte) (map[string][]byte, error) {
 	if p.Sealed && p.VaultID != s.VaultID {
-		return ErrIntegrity
+		return nil, ErrIntegrity
 	}
 	if err := p.Verify(key); err != nil {
-		return err
+		return nil, err
 	}
 	if err := c.Sign(s.CatalogKey); err != nil {
-		return err
+		return nil, err
 	}
 	pb, err := p.Encode()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cb, err := json.Marshal(c)
 	if err != nil {
-		return ErrInvalid
+		return nil, ErrInvalid
 	}
 	if len(cb) > MaxDocumentBytes {
-		return ErrTooLarge
+		return nil, ErrTooLarge
 	}
 	if err = ctx.Err(); err != nil {
-		return err
+		return nil, err
 	}
 	// Ordinary writes only accept already encrypted profiles. Legacy plaintext
 	// migration must use its own encrypted recovery journal, not this helper.
 	files, err := profilekey.Replacement(filepath.Join(s.Root, "profiles"), p.Name, "values", pb)
 	if err != nil {
-		return ErrRecovery
+		return nil, ErrRecovery
 	}
 	files[catalogRelative] = cb
 	if err = AddCommitHint(files, p); err != nil {
-		return err
+		return nil, err
 	}
 	for path, data := range extra {
 		if _, exists := files[path]; exists {
-			return ErrInvalid
+			return nil, ErrInvalid
 		}
 		files[path] = data
 	}
-	return maintenance.Replace(s.Root, files)
+	return files, nil
 }
 func (s FileStore) Create(ctx context.Context, p *Profile, key *Material) error {
 	if err := p.Verify(key); err != nil {

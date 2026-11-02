@@ -17,8 +17,8 @@ func TestPortableSnapshotExcludesHostNetworkState(t *testing.T) {
 	if err := os.Chmod(e.Data, 0700); err != nil {
 		t.Fatal(err)
 	}
-	store := values.Store{Directory: filepath.Join(e.Data, "profiles"), Profile: "app"}
-	if _, err := store.Update(context.Background(), func(s *values.State) (bool, *protocol.Error) {
+	store := values.ModernStore{Directory: filepath.Join(e.Data, "profiles"), Profile: "app"}
+	if _, err := store.Update(context.Background(), func(s *values.Editor) (bool, *protocol.Error) {
 		return s.Set(values.Variable, "PUBLIC", "", "portable")
 	}); err != nil {
 		t.Fatal(err)

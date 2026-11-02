@@ -98,7 +98,24 @@ func executionSnapshotFixture(t *testing.T) (Command, Dependencies, values.Store
 	}); e != nil {
 		t.Fatal(e)
 	}
-	return Command{Project: project.Context{Profile: "app", Root: root}, Directory: root, Exec: []string{exe, "-test.run=^TestFrozenInputChild$"}, Inject: true}, Dependencies{ValuesDirectory: store.Directory}, store
+	// This freezing unit fixture supplies its deliberately plaintext state through
+	// an explicit provider. The production default requires current storage.
+	dependencies := Dependencies{ValuesDirectory: store.Directory, ValueSnapshot: func(ctx context.Context, _ string, env string, inject bool) (*values.Snapshot, *protocol.Error) {
+		state, condition := store.Read(ctx)
+		if condition != nil {
+			return nil, condition
+		}
+		return values.CaptureLegacy(state, env, inject)
+	}}
+	return Command{Project: project.Context{Profile: "app", Root: root}, Directory: root, Exec: []string{exe, "-test.run=^TestFrozenInputChild$"}, Inject: true}, dependencies, store
+}
+
+func TestDefaultSnapshotProviderRejectsLegacyStorage(t *testing.T) {
+	command, dependencies, _ := executionSnapshotFixture(t)
+	dependencies.ValueSnapshot = nil
+	if _, condition := loadSnapshot(context.Background(), command, dependencies, true); condition == nil || condition.Code != "migration_required" {
+		t.Fatal("default execution decoded old disk storage", condition)
+	}
 }
 func TestActualInputSurvivesStoreAndCallerChanges(t *testing.T) {
 	command, dependencies, store := executionSnapshotFixture(t)

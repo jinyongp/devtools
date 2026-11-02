@@ -60,10 +60,32 @@ new identity or a new logical task revision during migration.
 
 ## User entry points and update
 
-The planned `doctor --storage` performs passive root inspection. The planned
+`doctor --storage` performs passive root inspection.
 `doctor --storage --fix` uses the same coordinator to prepare/recover/migrate and
 reinspect. Ordinary doctor, `--check`, and normal reader/writer paths do not run
 schema migration; they report `migration_required` with the same-root remedy.
+
+The implementation now converts public/secret value profiles, old profile
+addresses, physical v1/v2 task journals, and pre-s2 value receipts through these
+adapters. Value protection initialization and recovery reuse the receipt converter;
+archive import normalizes legacy logical payloads before current publication.
+Current queries classify old headers/addresses without decoding their bodies.
+Task logical history and its valid historical reducers remain supported inside
+current v3 containers; physical conversion adds no synthetic task event.
+
+Public/task source images are retained privately under `.storage-upgrade/recovery`.
+Protected conversion uses the existing encrypted `.maintenance/values-recovery-*`
+material, including receipt scope changes. Ordinary maintenance refuses an
+incomplete protected transition; explicit doctor fix obtains an existing key and
+resumes the forward transaction. It preserves the cached key's original idle
+deadline and validates the key-slot/manual-lock identity under writer leases.
+Reports distinguish no writes, committed writes, and uncertain effects; failures
+retain the non-ready report and safe typed diagnostics without raw private errors.
+
+The public changes in this workstream require the next CLI protocol revision
+(22 from the current 21). The final contract/documentation step updates that
+revision together with init/update and strict consumers. Envelope and existing
+vault/task storage versions are separate from the CLI protocol version.
 
 Owned Unix/Windows updates invoke the installed new executable's coordinator,
 including a same-version update with pending work. Keep executable replacement and

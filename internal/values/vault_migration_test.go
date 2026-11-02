@@ -100,7 +100,7 @@ func TestLegacyMigrationPreservesLayersAndRetryReceipts(t *testing.T) {
 		}
 	}
 	// The shared old key stays available only inside encrypted verification
-	// material. Existing retry receipts are preserved byte-for-byte.
+	// material. Existing retry outcomes and MACs survive the s2 address/scope.
 	encrypted, err := maintenance.Read(filepath.Join(root, "vault", "legacy-verification.json"), vault.MaxDocumentBytes)
 	if err != nil {
 		t.Fatal(err)
@@ -115,12 +115,13 @@ func TestLegacyMigrationPreservesLayersAndRetryReceipts(t *testing.T) {
 	if !bytes.Equal(mac, oldMAC) {
 		t.Fatal("legacy verification key changed")
 	}
-	receiptAfter, err := os.ReadFile(receiptPath)
-	if err != nil || !bytes.Equal(receiptBefore, receiptAfter) {
-		t.Fatal("legacy receipt changed", err)
+	if _, err := os.Lstat(receiptPath); !os.IsNotExist(err) {
+		t.Fatal("legacy receipt remained live", err)
 	}
-	var receipt changeReceipt
-	if json.Unmarshal(receiptAfter, &receipt) != nil || receipt.Fingerprint != signed(mac, change) || receipt.Result.Revision != first.Revision {
+	receiptAfter, present, err := store.ReadValueReceiptHeld(ctx, (ModernStore{Profile: "app"}).receiptRelative(change.RequestID), valueReceiptScope(change.RequestID))
+	var original changeReceipt
+	var savedResult ChangeResult
+	if err != nil || !present || json.Unmarshal(receiptBefore, &original) != nil || json.Unmarshal(receiptAfter.Result, &savedResult) != nil || receiptAfter.Fingerprint != signed(mac, change) || receiptAfter.Fingerprint != original.Fingerprint || savedResult.Revision != first.Revision || !reflect.DeepEqual(original.Result, savedResult) {
 		t.Fatal("legacy replay cannot be verified")
 	}
 	// Public-only profiles do not receive an encrypted keyset or catalog entry.

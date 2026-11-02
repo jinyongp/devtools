@@ -74,6 +74,9 @@ func (s ModernStore) scope(ctx context.Context) (*vault.Material, string, error)
 func (s ModernStore) readPublicHeld() (*vault.Profile, bool, error) {
 	raw, err := profilekey.Snapshot(s.Directory, s.Profile, "values", vault.MaxDocumentBytes)
 	if err != nil {
+		if errors.Is(err, profilekey.ErrMigrationRequired) {
+			return nil, false, err
+		}
 		return nil, false, vault.ErrRecovery
 	}
 	if raw == nil {
@@ -81,25 +84,7 @@ func (s ModernStore) readPublicHeld() (*vault.Profile, bool, error) {
 		return p, false, err
 	}
 	defer clear(raw)
-	p, err := vault.DecodeProfile(raw)
-	if err == nil {
-		return p, true, nil
-	}
-	// Only actual legacy disk state is eligible for public-format conversion.
-	// Portable logical archives must never become plaintext profile files.
-	if IsLogicalSnapshot(raw) {
-		return nil, true, vault.ErrInvalid
-	}
-	legacy, err := InspectSnapshot(raw, s.Profile)
-	if err != nil {
-		return nil, true, vault.ErrInvalid
-	}
-	for _, entry := range legacy.Keys {
-		if entry.Kind == Secret {
-			return nil, true, vault.ErrKeyMissing
-		}
-	}
-	p, err = convertLegacy(legacy, "", nil)
+	p, err := decodeCurrentProfile(raw, s.Profile)
 	return p, true, err
 }
 func (s ModernStore) readHeld(ctx context.Context, master *vault.Material, vaultID string) (*vault.Profile, *vault.Material, bool, error) {
@@ -203,7 +188,7 @@ func metadataFromRaw(raw []byte, profile string) (*State, *protocol.Error) {
 	if raw == nil {
 		return newState(profile), nil
 	}
-	p, err := vault.DecodeProfile(raw)
+	p, err := decodeCurrentProfile(raw, profile)
 	if err == nil {
 		if p.Name != profile {
 			return nil, VaultError(ctx, vault.ErrIntegrity)
@@ -214,27 +199,7 @@ func metadataFromRaw(raw []byte, profile string) (*State, *protocol.Error) {
 		}
 		return state, nil
 	}
-	if IsLogicalSnapshot(raw) {
-		return nil, VaultError(ctx, vault.ErrInvalid)
-	}
-	state, err := InspectSnapshot(raw, profile)
-	if err != nil {
-		return nil, VaultError(ctx, vault.ErrInvalid)
-	}
-	for _, entry := range state.Keys {
-		if entry.Kind != Secret {
-			continue
-		}
-		state.sealedUnverified = true
-		if entry.Common != nil {
-			empty := ""
-			entry.Common = &empty
-		}
-		for env := range entry.Envs {
-			entry.Envs[env] = ""
-		}
-	}
-	return state, nil
+	return nil, VaultError(ctx, err)
 }
 func hasSecret(state *State) bool {
 	for _, entry := range state.Keys {

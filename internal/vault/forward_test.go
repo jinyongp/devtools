@@ -16,9 +16,65 @@ import (
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
+	"github.com/jinyongp/devtools/internal/storageupgrade"
 )
 
 const forwardCanary = "synthetic-forward-transition-secret"
+
+func TestStorageUpgradeEngineResumesEncryptedForwardIntent(t *testing.T) {
+	store, _, after, key := forwardFixture(t)
+	defer key.Destroy()
+	id, _ := NewID()
+	request := forwardFixtureRequest{VaultID: store.VaultID, ID: id, Fingerprint: strings.Repeat("1", 64), CrashAt: "intent-published", Master: store.Master.CopyBytes(), After: after}
+	raw, err := json.Marshal(request)
+	clear(request.Master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(raw)
+	executable, _ := os.Executable()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	child := exec.CommandContext(ctx, executable, "__vault-forward-fixture", store.Root)
+	child.Stdin = bytes.NewReader(raw)
+	var exit *exec.ExitError
+	if err := child.Run(); !errors.As(err, &exit) || exit.ExitCode() != 99 {
+		t.Fatal("crash checkpoint not reached", err)
+	}
+	authorized := false
+	adapter := storageupgrade.Adapter{Name: "values", InspectHeld: func(context.Context, string) ([]storageupgrade.Step, error) {
+		_, protected, err := maintenance.ProtectedRootHeld(store.Root)
+		if err != nil {
+			return nil, err
+		}
+		if !protected {
+			return nil, ErrRecovery
+		}
+		return []storageupgrade.Step{}, nil
+	}, Authorize: func(ctx context.Context, _ []storageupgrade.Step) (func(), error) {
+		release, err := maintenance.LockExclusive(ctx, filepath.Join(store.Root, ".maintenance", "lock"))
+		if err != nil {
+			return nil, err
+		}
+		release()
+		authorized = true
+		return nil, nil
+	}, Recover: func(ctx context.Context, _ string) (bool, error) {
+		result, err := store.RecoverWithIdentity(ctx, [32]byte{})
+		return result.Committed, err
+	}}
+	report, condition := (storageupgrade.Engine{Root: store.Root, Adapters: []storageupgrade.Adapter{adapter}}).Fix(ctx)
+	if condition != nil || !report.Ready || !report.Changed || !authorized {
+		t.Fatal(report, condition)
+	}
+	for path, want := range after {
+		got, err := os.ReadFile(filepath.Join(store.Root, path))
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatal("forward goal not recovered", path, err)
+		}
+	}
+	scanForwardCanaries(t, store.Root, nil)
+}
 
 type forwardFixtureRequest struct {
 	VaultID, ID, Fingerprint, CrashAt string

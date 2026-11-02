@@ -79,9 +79,9 @@ func inspectInput(ctx context.Context, root, profile, env string, spec InputSpec
 	} else if !errors.Is(keyErr, vault.ErrKeyMissing) {
 		return nil, VaultError(ctx, keyErr)
 	}
-	release, err := maintenance.AcquireShared(ctx, root)
+	release, err := maintenance.AcquireQuery(ctx, root)
 	if err != nil {
-		return nil, VaultError(ctx, err)
+		return nil, QueryError(ctx, err)
 	}
 	defer release()
 	var p *vault.Profile
@@ -106,7 +106,7 @@ func inspectInput(ctx context.Context, root, profile, env string, spec InputSpec
 			p, err = vault.NewProfile(profile)
 			absent = true
 		} else {
-			p, err = vault.DecodeProfile(raw)
+			p, err = decodeCurrentProfile(raw, profile)
 		}
 		if err != nil {
 			return nil, VaultError(ctx, err)

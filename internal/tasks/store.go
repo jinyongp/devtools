@@ -15,6 +15,7 @@ import (
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/storageerr"
+	"github.com/jinyongp/devtools/internal/storageupgrade"
 )
 
 type Receipt struct {
@@ -102,18 +103,6 @@ func (s Store) emptyJournal() *Journal {
 	return &Journal{Version: 1, Profile: s.Profile, Events: []Event{}, Receipts: map[string]Receipt{}, Contexts: map[string]string{}}
 }
 
-func (s Store) loadPath(path string) (*Journal, *State, *protocol.Error) {
-	j := s.emptyJournal()
-	if e := ReadPrivate(path, j); e != nil {
-		return nil, nil, storageErrorAt("read_journal", "task_journal", e)
-	}
-	if j.Profile != s.Profile || j.Receipts == nil || j.Contexts == nil {
-		return nil, nil, storageErrorAt("validate_journal", "task_journal", storageerr.ErrCorrupt)
-	}
-	state, err := replayJournal(j)
-	return j, state, err
-}
-
 func (s Store) loadResolved() (*Journal, *State, taskStorageInfo, *protocol.Error) {
 	info, resolveErr := s.resolveStorage()
 	if resolveErr != nil {
@@ -128,12 +117,8 @@ func (s Store) loadResolved() (*Journal, *State, taskStorageInfo, *protocol.Erro
 		journal := s.emptyJournal()
 		state, err := replayJournal(journal)
 		return journal, state, info, err
-	case profilekey.ModeLegacy:
-		journal, state, err := s.loadPath(info.Profile.LegacyPath)
-		return journal, state, info, err
-	case profilekey.ModeCanonical:
-		journal, state, err := s.loadPath(info.Profile.CanonicalPath)
-		return journal, state, info, err
+	case profilekey.ModeLegacy, profilekey.ModeCanonical:
+		return nil, nil, info, storageupgrade.Required("tasks")
 	default:
 		return nil, nil, info, corruptStorage("resolve_profile", "task_store")
 	}

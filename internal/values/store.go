@@ -12,6 +12,7 @@ import (
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/storageupgrade"
 )
 
 type Store struct {
@@ -30,6 +31,9 @@ func storageError(causes ...error) *protocol.Error {
 }
 
 func storageErrorAt(operation string, cause error) *protocol.Error {
+	if errors.Is(cause, profilekey.ErrMigrationRequired) {
+		return storageupgrade.Required("values")
+	}
 	return protocol.WithStorageDetails(protocol.NewError("storage_error", "Cannot access private profile storage.", 1, nil), "values", operation, "profile_store", cause)
 }
 

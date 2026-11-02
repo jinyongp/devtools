@@ -71,7 +71,10 @@ def windows_terminal(argv, env, cwd, interrupt_after=None, input_steps=()):
         search_from=0
         for prompt,value in input_steps:
             deadline=time.monotonic()+15
-            while output.find(prompt.encode(),search_from)<0:
+            # ConPTY can encode the final blank cell as CSI 1 C instead of a
+            # literal space. Match the visible prompt before that blank cell.
+            needle=prompt.rstrip().encode()
+            while output.find(needle,search_from)<0:
                 if kernel.WaitForSingleObject(process.hProcess,0)!=258 or time.monotonic()>deadline:
                     # input_steps is used only for public init profile entry.
                     # Keep diagnostics bounded and escape terminal controls.

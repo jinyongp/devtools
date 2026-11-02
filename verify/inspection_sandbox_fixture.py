@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import threading
 import time
@@ -225,7 +226,9 @@ def run(binary, probe=None):
                 assert inventory(root / "data") == before
             ports_project = scratch / "ports"
             ports_project.mkdir(mode=0o700)
-            (ports_project / "devtools.toml").write_text('profile="port-fixture"\n[ports.web]\nrange=[42000,43000]\n[commands.serving]\nexec=["/usr/bin/sleep","600"]\ninject=false\nserve=["web"]\n', encoding="utf-8")
+            sleep = shutil.which("sleep")
+            assert sleep, "native sleep executable is unavailable"
+            (ports_project / "devtools.toml").write_text('profile="port-fixture"\n[ports.web]\nrange=[42000,43000]\n[commands.serving]\nexec='+json.dumps([sleep,"600"])+ '\ninject=false\nserve=["web"]\n', encoding="utf-8")
             serving_id = setup(["process", "start", "serving", "--dir", str(ports_project), "--no-proxy", "--request-id", str(uuid.uuid4())])["item"]["id"]
             for state in ("busy", "idle"):
                 if state == "idle":

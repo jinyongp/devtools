@@ -44,3 +44,12 @@ Workstream `76536172-4285-4efa-9ad6-528d3fa1de5f`의 구현 범위를 검토했�
   저장소의 doctor remedy를 보존하게 수정했다. 일반 실행의 legacy decoder는 복원하지 않았다.
 - 수정한 상태에서 로컬 `test:installed` 전체 39개 시나리오와 `check:all`이 통과했다.
   최종 커밋의 native 검사·패키징·게시 결과는 해당 커밋의 Release 실행을 정본으로 사용한다.
+- 다음 [Release 실행](https://github.com/jinyongp/devtools/actions/runs/41456213010)은
+  58개 작업이 통과했으나 보호 자동화 측정의 구형 receipt 직접 조회 가정에서 실패했다.
+  Unix aggregate도 이 필수 실패를 보존하여 게시를 막았다.
+- 측정의 현재 arm은 같은 logical receipt를 준비 단계에서 명시적으로 전환한 후 조회한다.
+  역사적 arm은 기존 조회를 유지한다. 결과는 같은 completed request이며 전환 비용은 측정하지 않는다.
+  이 경계를 문서와 `protected-automation-receipts-v2` 보고서에 표시한다.
+- 로컬에서 현재 values 측정의 1천·1만 receipt 네 작업이 통과했다. 전용 overlay harness의
+  여섯 작업 실행 검증과 `check:static`도 통과했다. 이 실행 검증의 두 arm은 현재 소스이며,
+  역사적 baseline의 최종 paired 결과는 새 Release 실행에서 확인한다.

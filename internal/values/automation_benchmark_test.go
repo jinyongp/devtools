@@ -174,6 +174,9 @@ func automationMutationFixture(b *testing.B, size int, mode string) (ModernStore
 	}
 	release()
 	released = true
+	if mode == "legacy_lookup" {
+		prepareAutomationLegacyLookup(b, root)
+	}
 	for _, n := range []int{1, size - 1} {
 		c := Change{Action: "secret.set", Key: "TOKEN", Value: &current, Revision: view.Revision, RequestID: automationMutationID(n)}
 		r, e := s.Apply(ctx, c)

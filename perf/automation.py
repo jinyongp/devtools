@@ -67,6 +67,14 @@ def overlay(repo, candidate, package, scratch):
                         "compiler_input_sha256": digest(raw)})
 
     add(f"internal/{package}/automation_benchmark_test.go", source=f"internal/{package}/automation_benchmark_test.go")
+    if package == "values":
+        helper = "internal/values/automation_upgrade_benchmark_test.go"
+        if (repo / "internal/storageupgrade/engine.go").is_file():
+            add(helper, source=helper)
+        else:
+            # Historical arms already support direct legacy receipt lookup.
+            # Keep setup API-compatible without adding a production decoder.
+            add(helper, '//go:build automationbench\n\npackage values\n\nimport "testing"\n\nfunc prepareAutomationLegacyLookup(b *testing.B, root string) {}\n')
     if package == "valuehandoff":
         for name in ("prepare_test.go", "runner_test.go"):
             # Identical owned fixture setup; the candidate adapters accept TB
@@ -153,7 +161,7 @@ def main():
     env = {k: v for k, v in os.environ.items() if k not in GIT_ENV and not k.startswith("DEVTOOLS_")}
     env.update(LC_ALL="C", CGO_ENABLED="0", GOMAXPROCS="1", GODEBUG="", GOFLAGS="", GOWORK="off")
     args.output.mkdir(parents=True, exist_ok=False)
-    report = {"measurement": "protected-automation-receipts-v1", "complete": False, "rows": [],
+    report = {"measurement": "protected-automation-receipts-v2", "complete": False, "rows": [],
               "platform": platform.platform(), "runtime": subprocess.check_output(["go", "version"], text=True, env=env).strip(),
               "source": {name: identity(path, env) for name, path in paths.items()},
               "build": {"race": False, "cgo": False, "gomaxprocs": 1, "benchtime": f"{args.repeats}x", "trimpath": True},
@@ -165,7 +173,8 @@ def main():
                               "Repeated operations share one authenticated corpus per arm/case/size; owned target metadata is reset untimed. Samples are correlated and caches warm.",
                               "Arm order alternates between case/size blocks. Three samples describe spread, not equivalence, significance or a release SLO.",
                               "Receipt counts apply to the relevant namespace; constant setup metadata and transport leases are separate.",
-                              "Legacy lookup directory scanning is intentionally a separate workload; no crypto/fsync/masking/expiry check is removed."]}
+                              "Legacy-input lookup compares the same completed request: historical arms read the legacy receipt directly; current arms explicitly upgrade it during untimed setup.",
+                              "Legacy-input samples measure steady-state lookup after preparation, not migration cost; physical layout and lookup strategy differ. No crypto/fsync/masking/expiry check is removed."]}
     started = time.monotonic()
     deadline = started + args.budget_seconds
 

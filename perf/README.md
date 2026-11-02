@@ -192,7 +192,7 @@ Release requests this measurement from Unix validation on Linux with the Go vers
 from `go.mod`. For an independent run, dispatch Unix validation with
 `measure_automation=true`. PRs and default manual runs keep the performance
 runner's unit checks, without repeating this descriptive historical comparison.
-It measures fresh secret edits, replay, request lookup, legacy
+It measures fresh secret edits, replay, request lookup, legacy-input
 receipt lookup, input preparation and private delivery at 1,000 and 10,000
 authenticated receipts. To reproduce with clean checkouts:
 
@@ -226,7 +226,12 @@ The separate key daemon and C allocations are excluded. These descriptive sample
 do not establish statistical significance, a latency SLO, process RSS or bounded
 storage growth. There is no latency regression threshold; the job checks that
 measurement and cleanup complete. An explicitly requested measurement must pass
-before the Unix aggregate succeeds. Legacy lookup's directory scan is a separate workload. The run
+before the Unix aggregate succeeds. Legacy-input lookup remains a separate workload:
+historical arms read the legacy receipt directly, while current arms explicitly
+upgrade the same logical receipt during untimed setup. Both must return the same
+completed request result. These samples compare steady-state lookup strategies and
+physical layouts; they do not measure migration cost. The report identifies this
+boundary as `protected-automation-receipts-v2`. The run
 has a 20-minute budget, rejects incomplete samples, and retires only its owned
 sessions. A cleanup failure retains its private fixture. CI uploads only numeric
 results and synthetic logs, with 30-day artifact retention.

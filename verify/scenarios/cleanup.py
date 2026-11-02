@@ -44,19 +44,31 @@ for sequence,event in enumerate(history,start=1):
     event["sequence"]=sequence
     event["occurred_at"]="2000-01-01T00:00:00Z"
 # Replace the production v3 task store with a marker-era legacy v1 journal.
-# This verifies old cleanup Source metadata and restore-to-v3 compatibility
-# without editing v3 WAL/generation internals.
+# Ordinary cleanup must require the explicit upgrade before it can archive
+# tasks. This avoids editing v3 WAL/generation internals to age the fixture.
 task_root=data/"tasks"
 shutil.rmtree(task_root)
 task_root.mkdir(mode=0o700)
 legacy=task_root/("cleanup-fixture".encode().hex()+".json")
 legacy.write_text(json.dumps({"version":1,"profile":"cleanup-fixture","events":history,"receipts":{},"contexts":{}}))
 legacy.chmod(0o600)
+legacy_before=legacy.read_bytes()
+required=api("cleanup","preview","--profile","cleanup-fixture",expected=3)
+assert required["code"]=="migration_required"
+assert any(r["argv"]==["devtools","doctor","--storage","--fix"] for r in required["details"]["remedies"])
+assert legacy.read_bytes()==legacy_before
+upgraded=api("doctor","--storage","--fix")
+assert upgraded["ready"] and upgraded["changed"]
 plan=api("cleanup","preview","--profile","cleanup-fixture")
 item=next(i for i in plan["items"] if i["kind"]=="completed_tasks")
-assert item["source"]==str(legacy)
+assert item["source"]!=str(legacy)
 api("cleanup","apply",plan["id"],"--item",item["id"],"--request-id",str(uuid.uuid4()))
 assert api("task","list")["items"]==[]
+# Previously created archives can still carry their original legacy Source.
+# Restore imports the logical payload into current storage.
+archive_path=data/"archives"/item["id"]/"entry.json"
+archive=json.loads(archive_path.read_text());archive["source"]=str(legacy)
+archive_path.write_text(json.dumps(archive));archive_path.chmod(0o600)
 api("cleanup","restore",item["id"])
 assert api("task","show",tid)["item"]["state"]=="canceled"
 canonical=[

@@ -54,7 +54,7 @@ func (s Store) ExportSnapshotHeld(limit int64) (LogicalSnapshot, error) {
 	}
 	info, resolveErr := s.resolveStorage()
 	if resolveErr != nil {
-		return out, errors.New(resolveErr.Message)
+		return out, resolveErr
 	}
 	if info.Profile.Mode == profilekey.ModeNone {
 		return out, nil
@@ -72,7 +72,7 @@ func (s Store) ExportSnapshotHeld(limit int64) (LogicalSnapshot, error) {
 		var loadErr *protocol.Error
 		journal, loadErr = s.loadJournalV3ForExport(*info.V3)
 		if loadErr != nil {
-			return out, errors.New(loadErr.Message)
+			return out, loadErr
 		}
 		if err := canonicalizeExportJournal(journal); err != nil {
 			return out, err
@@ -82,7 +82,7 @@ func (s Store) ExportSnapshotHeld(limit int64) (LogicalSnapshot, error) {
 		var loadErr *protocol.Error
 		journal, state, _, loadErr = s.loadResolved()
 		if loadErr != nil {
-			return out, errors.New(loadErr.Message)
+			return out, loadErr
 		}
 		if err := canonicalizeJournalReceipts(journal, state); err != nil {
 			return out, err

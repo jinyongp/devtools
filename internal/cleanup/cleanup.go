@@ -111,6 +111,10 @@ func fail(code string, causes ...error) *protocol.Error {
 		if len(causes) != 0 {
 			cause = causes[0]
 		}
+		var inner *protocol.Error
+		if errors.As(cause, &inner) && inner.Code == "migration_required" {
+			return inner
+		}
 		return protocol.WithStorageDetails(failure, "cleanup", "access_storage", "cleanup_store", cause)
 	}
 	return failure

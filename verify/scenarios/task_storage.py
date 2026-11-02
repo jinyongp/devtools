@@ -34,7 +34,7 @@ data = Path(api("project", "inspect")["paths"]["data"])
 data.mkdir(mode=0o700, parents=True, exist_ok=True)
 data.chmod(0o700)
 
-# Legacy task storage is passive on read and migrates only on the first committed mutation.
+# Ordinary reads and mutations reject legacy storage until the explicit upgrade.
 legacy_profile = "legacy-task-storage"
 legacy_path = data / "tasks" / (legacy_profile.encode().hex() + ".json")
 private_json(legacy_path, {
@@ -45,11 +45,17 @@ private_json(legacy_path, {
     "contexts": {},
 })
 legacy_before = legacy_path.read_bytes()
-assert api("task", "list", "--profile", legacy_profile)["items"] == []
+assert api("task", "list", "--profile", legacy_profile, expected=3)["code"] == "migration_required"
 assert legacy_path.read_bytes() == legacy_before
 assert not (data / "tasks" / (key(legacy_profile) + ".json")).exists()
 
 legacy_request = str(uuid.uuid4())
+assert api("task", "add", "--title", "Migrated task", "--profile", legacy_profile,
+           "--request-id", legacy_request, expected=3)["code"] == "migration_required"
+assert legacy_path.read_bytes() == legacy_before
+upgraded = api("doctor", "--storage", "--fix")
+assert upgraded["ready"] and upgraded["changed"]
+assert api("task", "list", "--profile", legacy_profile)["items"] == []
 created = api("task", "add", "--title", "Migrated task", "--profile", legacy_profile,
               "--request-id", legacy_request)
 assert api("task", "add", "--title", "Migrated task", "--profile", legacy_profile,
@@ -95,4 +101,4 @@ assert len(api("task", "list", "--profile", legacy_profile)["items"]) == 2
 
 # The live context remains usable after the storage transitions above.
 assert claim["context_valid"]
-print("Installed task v3 lazy migration, live-context continuity, WAL-tail repair and corruption rejection verified")
+print("Installed explicit task v3 upgrade, live-context continuity, WAL-tail repair and corruption rejection verified")

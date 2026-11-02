@@ -32,3 +32,15 @@ Workstream `76536172-4285-4efa-9ad6-528d3fa1de5f`의 구현 범위를 검토했�
   임의 project 디렉터리를 검색하거나 이름을 예약하는 registry를 추가하지 않는다.
 - 새 vault backend 선택·자동 unlock·이전 writer 강제 종료·실사용 저장소 전환·설치 CLI 교체·릴리스는 수행하지 않았다.
 - Native Windows의 기존 handle/lease protocol을 유지한다. Unix read-only flock 결과를 Windows의 read-only 정책 보장으로 확대하지 않는다.
+
+배포 준비 중 추가로 확인·수정한 사항:
+
+- 첫 [v0.40.0 Release 실행](https://github.com/jinyongp/devtools/actions/runs/41454402356)의
+  macOS·Linux 전체 설치 검사가 `cleanup` fixture의 이전 자동 전환 가정에서 실패했다.
+  앞선 선택 실행에는 `cleanup`·`storage_migration`·`task_storage`가 포함되지 않았다.
+- 세 설치 시나리오는 일반 조회·변경의 `migration_required`, 원본 보존, 명시 doctor 전환 후
+  정상 동작을 검증한다. Cleanup은 과거 Source를 가진 archive의 복원 호환성도 계속 검사한다.
+- Task logical snapshot이 typed 진단을 잃지 않게 하고, cleanup이 전환 필요 오류와 같은
+  저장소의 doctor remedy를 보존하게 수정했다. 일반 실행의 legacy decoder는 복원하지 않았다.
+- 수정한 상태에서 로컬 `test:installed` 전체 39개 시나리오와 `check:all`이 통과했다.
+  최종 커밋의 native 검사·패키징·게시 결과는 해당 커밋의 Release 실행을 정본으로 사용한다.

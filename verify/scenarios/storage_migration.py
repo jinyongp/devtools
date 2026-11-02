@@ -44,13 +44,21 @@ legacy_tasks = data / "tasks" / (legacy_profile.encode().hex() + ".json")
 private_json(legacy_values, {"version": 1, "profile": legacy_profile, "envs": {}, "keys": {}})
 private_json(legacy_tasks, {"version": 1, "profile": legacy_profile, "events": [], "receipts": {}, "contexts": {}})
 values_before, tasks_before = legacy_values.read_bytes(), legacy_tasks.read_bytes()
-api("var", "list", "--profile", legacy_profile)
-api("task", "list", "--profile", legacy_profile)
+assert api("var", "list", "--profile", legacy_profile, expected=3)["code"] == "migration_required"
+assert api("task", "list", "--profile", legacy_profile, expected=3)["code"] == "migration_required"
 assert legacy_values.read_bytes() == values_before
 assert legacy_tasks.read_bytes() == tasks_before
 assert not (data / "profiles" / (key(legacy_profile) + ".json")).exists()
 assert not (data / "tasks" / (key(legacy_profile) + ".json")).exists()
 
+assert api("var", "set", "READY", "--value", "migrated", "--profile", legacy_profile, expected=3)["code"] == "migration_required"
+inspection = api("doctor", "--storage")
+assert not inspection["ready"] and not inspection["changed"]
+assert legacy_values.read_bytes() == values_before
+assert legacy_tasks.read_bytes() == tasks_before
+upgraded = api("doctor", "--storage", "--fix")
+assert upgraded["ready"] and upgraded["changed"]
+assert not api("doctor", "--storage", "--fix")["changed"]
 api("var", "set", "READY", "--value", "migrated", "--profile", legacy_profile)
 request_id = str(uuid.uuid4())
 first = api("task", "add", "--title", "Legacy migration", "--profile", legacy_profile, "--request-id", request_id)
@@ -91,4 +99,4 @@ try:
 finally:
     legacy_values.write_bytes(marker)
 assert api("var", "list", "--profile", legacy_profile)["profile"] == legacy_profile
-print("Installed 128-character profiles, legacy lazy migration, replay, identity catalog and split-brain rejection verified")
+print("Installed 128-character profiles, explicit storage upgrade, replay, identity catalog and split-brain rejection verified")

@@ -214,7 +214,7 @@ jobs:
             echo 'Required precondition missing: test-tailnet TS_OAUTH_CLIENT_ID repository variable, GitHub OIDC permission and tailnet HTTPS/Serve permissions.' >&2
             exit 2
           fi
-      - uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4
+      - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4
         with:
           oauth-client-id: ${{ env.TS_OAUTH_CLIENT_ID }}
           audience: ${{ env.TS_AUDIENCE }}

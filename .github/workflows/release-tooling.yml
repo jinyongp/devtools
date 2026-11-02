@@ -42,14 +42,14 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Resolve and verify the stable release tag
         id: release
-        uses: releaseway/actions/prepare@a188ef51e8e5f9947e770260888b7346d9b68ba8 # v0.7.3
+        uses: releaseway/actions/prepare@b6f17f2ffe2c8fd92bdf6be4729e1e56d151bef3 # v0.8.0
         with:
           mode: resolve
           tag: ${{ steps.source.outputs.tag }}
           tag-prefix: v
       - name: Preview release notes without publishing
         id: preview
-        uses: releaseway/actions@a188ef51e8e5f9947e770260888b7346d9b68ba8 # v0.7.3
+        uses: releaseway/actions@b6f17f2ffe2c8fd92bdf6be4729e1e56d151bef3 # v0.8.0
         with:
           tag: ${{ steps.release.outputs.tag }}
           commit: ${{ steps.release.outputs.commit }}
@@ -64,7 +64,7 @@ jobs:
           test "$NOTES_STATE" = prepared
       - name: Prepare published installers without deploying
         id: installers
-        uses: releaseway/actions/distribute@a188ef51e8e5f9947e770260888b7346d9b68ba8 # v0.7.3
+        uses: releaseway/actions/distribute@b6f17f2ffe2c8fd92bdf6be4729e1e56d151bef3 # v0.8.0
         with:
           tag: ${{ steps.release.outputs.tag }}
           commit: ${{ steps.release.outputs.commit }}

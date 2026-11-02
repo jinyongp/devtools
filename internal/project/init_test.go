@@ -3,6 +3,7 @@ package project
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -108,5 +109,71 @@ func TestInitInvalidInputAndSymlink(t *testing.T) {
 	_, err = Init(root, "myapp")
 	if err == nil || err.Code != "invalid_config" {
 		t.Fatalf("symlink: %v", err)
+	}
+}
+
+func TestInitInferredNameBoundaries(t *testing.T) {
+	for _, name := range []string{"App_1.test-web", strings.Repeat("a", 128), strings.Repeat("b", 129), "한글", "-leading", ".leading"} {
+		t.Run(name, func(t *testing.T) {
+			directory := filepath.Join(t.TempDir(), name)
+			if err := os.Mkdir(directory, 0700); err != nil {
+				t.Fatal(err)
+			}
+			selected, failure := InspectInit(directory, "", false)
+			if failure != nil || selected.Profile != name || selected.ProfileSource != "directory" {
+				t.Fatalf("%+v %v", selected, failure)
+			}
+			_, failure = PublishInit(directory, selected, false)
+			valid := name == "App_1.test-web" || name == strings.Repeat("a", 128)
+			if valid && failure != nil || !valid && (failure == nil || failure.Code != "invalid_argument") {
+				t.Fatalf("name=%q failure=%v", name, failure)
+			}
+			if !valid {
+				if entries, err := os.ReadDir(directory); err != nil || len(entries) != 0 {
+					t.Fatal("invalid inferred name wrote files")
+				}
+			}
+		})
+	}
+	// Inspect only: no attempted publication into the host filesystem root.
+	current, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.VolumeName(current) + string(os.PathSeparator)
+	selected, failure := InspectInit(root, "", false)
+	if failure == nil && !selected.Existing && selected.Profile != "" {
+		t.Fatalf("filesystem root inferred a name: %+v", selected)
+	}
+}
+
+func TestConcurrentImplicitInitAdoptsPublishedConfiguration(t *testing.T) {
+	directory := t.TempDir()
+	var group sync.WaitGroup
+	results := make(chan InitResult, 2)
+	for _, profile := range []string{"first", "second"} {
+		group.Go(func() {
+			result, failure := PublishInit(directory, InitResult{Profile: profile, ProfileSource: "prompt", ProfilePresence: "absent"}, false)
+			if failure != nil {
+				t.Errorf("concurrent init: %v", failure)
+				return
+			}
+			results <- result
+		})
+	}
+	group.Wait()
+	close(results)
+	created, profile := 0, ""
+	for result := range results {
+		if result.Created {
+			created++
+		}
+		if profile != "" && result.Profile != profile {
+			t.Fatal("implicit initializer returned an unpublished profile")
+		}
+		profile = result.Profile
+	}
+	if created != 1 {
+		t.Fatalf("created %d configurations", created)
 	}
 }

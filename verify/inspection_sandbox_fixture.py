@@ -210,6 +210,16 @@ def run(binary, probe=None):
                     assert body["data"]["item"]["profile_presence"] == "absent"
                     assert body["data"]["item"]["profile_source"] == "directory"
                 records.append({"case":"init readonly namespace: "+profile,"exit":expected})
+            denied_project = scratch / "denied-init-project"
+            denied_project.mkdir(mode=0o700)
+            denied_scratch = temporary / "denied-init-scratch"
+            denied_scratch.mkdir(mode=0o700)
+            denied = Sandbox(denied_project, denied_scratch)
+            result = denied.run(["/bin/sh","-c",'cd "$1" && shift && exec "$@"',"fixture",str(denied_project),*cli,"init","--profile","explicit"],check=False,timeout=20)
+            assert result.returncode == 1 and not result.stdout
+            assert json.loads(result.stderr)["error"]["code"] == "io_error"
+            assert not any(denied_project.iterdir()), "failed init left a configuration or staging file"
+            records.append({"case":"init readonly project","exit":1})
             assert inventory(root / "data") == before, "passive matrix changed managed data"
             assert setup(["vault", "status"]) == idle, "passive matrix changed key session state or idle"
             nested = Sandbox(root / "data" / "profiles", scratch, readonly=[root / "data" / "tasks"],

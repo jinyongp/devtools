@@ -106,6 +106,7 @@ Design background is separate from public command availability.
 - [Task sandbox query improvement plan](task-sandbox-query-plan.md) (Korean): GitHub #9 scope, query locks, explicit private caches, recovery, and native verification.
 - [Init profile contract](init-profile-plan.md) (Korean): directory defaults, shared-name collisions, terminal interaction, and machine output.
 - [Storage upgrade](storage-upgrade-plan.md): explicit doctor conversion, update integration, recovery, and format boundaries.
+- [Storage/query review](storage-query-review.md) (Korean): reviewed areas, corrections, preserved boundaries, and validation records.
 - [Diagnostic contract follow-up review](cli-diagnostic-contract-review.md) (Korean): protocol 17 scope, review coverage, and native validation requirements.
 - [Performance](../perf/README.md) (English): Linux/WSL measurements and baselines.
 - [Agent Skill source](../skills/devtools/SKILL.md): operational guidance read by agents.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -35,6 +36,45 @@ func TestInitCommand(t *testing.T) {
 		if response.Data.Changed != expected || response.Data.Item.Profile != "myapp" {
 			t.Fatalf("response: %+v", response)
 		}
+	}
+}
+
+type failedInitOutput struct{}
+
+func (failedInitOutput) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestInitLostOutputConvergesOnExistingConfiguration(t *testing.T) {
+	t.Chdir(privateTempDir(t))
+	app := New("test", "test")
+	var diagnostic bytes.Buffer
+	code := app.Run(context.Background(), []string{"--format", "json", "init", "--profile", "shared"}, IO{Out: failedInitOutput{}, Err: &diagnostic})
+	var failure struct {
+		Error struct {
+			Details struct{ Effects, Retry string }
+		}
+	}
+	if code != 1 || json.Unmarshal(diagnostic.Bytes(), &failure) != nil || failure.Error.Details.Effects != "unknown" || failure.Error.Details.Retry != "inspect_first" {
+		t.Fatalf("%d %s", code, &diagnostic)
+	}
+	before, err := os.ReadFile("devtools.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	diagnostic.Reset()
+	code = app.Run(context.Background(), []string{"--format", "json", "init"}, IO{In: forbiddenInitInput{}, Out: &out, Err: &diagnostic})
+	var response struct {
+		Data struct {
+			Changed bool
+			Item    struct {
+				Profile string
+				Source  string `json:"profile_source"`
+			}
+		}
+	}
+	after, err := os.ReadFile("devtools.toml")
+	if code != 0 || err != nil || json.Unmarshal(out.Bytes(), &response) != nil || response.Data.Changed || response.Data.Item.Profile != "shared" || response.Data.Item.Source != "config" || !bytes.Equal(before, after) {
+		t.Fatalf("retry: %d %s %s", code, &out, &diagnostic)
 	}
 }
 

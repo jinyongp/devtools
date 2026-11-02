@@ -103,6 +103,36 @@ func TestCatalogListDoesNotMigrateLegacyState(t *testing.T) {
 	}
 }
 
+func TestPassivePresenceHoldsGateThroughPublication(t *testing.T) {
+	data := privateTempDir(t)
+	release, err := maintenance.AcquireExclusive(context.Background(), data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
+	called := false
+	failure := (Catalog{Data: data}).WithPresence(context.Background(), "new-profile", func(present bool) *protocol.Error {
+		called = true
+		if present {
+			t.Fatal("empty namespace reported a collision")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		release, err := maintenance.AcquireExclusive(ctx, data)
+		if err == nil {
+			release()
+			t.Fatal("namespace writer bypassed publication gate")
+		}
+		if err != context.DeadlineExceeded {
+			t.Fatalf("writer: %v", err)
+		}
+		return nil
+	})
+	if failure != nil || !called {
+		t.Fatal(failure)
+	}
+}
+
 func TestInspectRuntimeMetadataForPartialProfile(t *testing.T) {
 	data := privateTempDir(t)
 	portStore := ports.Store{Directory: filepath.Join(data, "ports")}

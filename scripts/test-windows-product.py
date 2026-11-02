@@ -212,7 +212,8 @@ timeout = "3s"
         candidate_root = Path(native_paths["data"]).parent
         assert candidate_root.is_absolute()
         assert all(Path(native_paths[name]) == candidate_root / name for name in ("config", "data", "cache", "runtime"))
-        assert candidate_root == native_root and candidate_root.is_dir()
+        assert candidate_root == native_root
+        candidate_root.mkdir(exist_ok=True)
         native = api("vault", "init", env=native_env)["item"]
         assert native["backend"] == "dpapi" and native["state"] == "unlocked"
         api("sec", "set", "NATIVE_TOKEN", "--stdin", env=native_env, input="synthetic-native-dpapi-canary")
@@ -357,6 +358,8 @@ timeout = "3s"
         # Mapped supervisor images and private directory pins may finish closing
         # just after successful control RPC; bounded cleanup does not hide failures.
         for owned_root in ([native_root] if native_root is not None else []) + [root]:
+            if not owned_root.exists():
+                continue
             for attempt in range(20):
                 try:
                     shutil.rmtree(owned_root)

@@ -131,7 +131,10 @@ def run(binary, directory, environment, terminal=None):
             ("json", "web", ["--interactive"], {}, [], 2, None),
         ):
             path = project("terminal-" + label, name)
-            code, output = terminal([*cli, "--format", "json" if label == "json" else "text", "init", *options], dict(environment, **extra), path, input_steps=steps)
+            try:
+                code, output = terminal([*cli, "--format", "json" if label == "json" else "text", "init", *options], dict(environment, **extra), path, input_steps=steps)
+            except RuntimeError as error:
+                raise RuntimeError("init terminal case: "+label+" / "+str(error)) from error
             assert code == expected, (label, code, output)
             config = path / "devtools.toml"
             if selected:

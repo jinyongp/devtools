@@ -225,7 +225,9 @@ public static class DevtoolsInstallerNativeArchitecture {
     $result = $output | ConvertFrom-Json
     if (-not $result.ok -or $result.data.action -notin @('install', 'update') -or $result.data.version -cne $Version) { throw 'Installation result mismatch.' }
     $installationCommitted = $true
-    if (-not $result.data.storage.ready) {
+    # Older explicitly selected releases retain their own installation response
+    # contract. Only coordinator-capable candidates can provide storage readiness.
+    if ($reported.data.protocol_version -ge 22 -and -not $result.data.storage.ready) {
         $storageEffects = 'unknown'
         if ($result.data.storage.report.effects -in @('none','committed','partial','unknown')) { $storageEffects = $result.data.storage.report.effects }
         if ($result.data.binary_changed -and $storageEffects -eq 'none') { $storageEffects = 'committed' }

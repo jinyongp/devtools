@@ -73,7 +73,9 @@ def windows_terminal(argv, env, cwd, interrupt_after=None, input_steps=()):
             deadline=time.monotonic()+15
             while output.find(prompt.encode(),search_from)<0:
                 if kernel.WaitForSingleObject(process.hProcess,0)!=258 or time.monotonic()>deadline:
-                    raise RuntimeError('ConPTY exited or timed out before input prompt: '+prompt)
+                    # input_steps is used only for public init profile entry.
+                    # Keep diagnostics bounded and escape terminal controls.
+                    raise RuntimeError('ConPTY exited or timed out before input prompt: '+prompt+' / captured init output: '+repr(bytes(output[-4000:])))
                 time.sleep(.01)
             search_from=len(output)
             body=value.replace('\n','\r').encode()

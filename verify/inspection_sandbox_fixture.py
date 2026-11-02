@@ -193,6 +193,22 @@ def run(binary, probe=None):
             idle = setup(["vault", "status"])
             for name, arguments in cases:
                 parity(name, arguments, sandbox)
+            # A writable new project can infer a name against read-only data.
+            # Existing metadata must still block accidental namespace sharing.
+            for profile, expected in (("app", 3), ("new-init", 0)):
+                init_directory = scratch / profile
+                init_directory.mkdir(mode=0o700)
+                init_sandbox = Sandbox(root, init_directory)
+                response = init_sandbox.run([*cli, "init", "--no-interactive"], check=False, timeout=20)
+                assert response.returncode == expected and not (response.stdout and response.stderr)
+                body = json.loads(response.stdout or response.stderr)
+                if expected:
+                    assert body["error"]["code"] == "profile_name_in_use"
+                    assert not (init_directory / "devtools.toml").exists()
+                else:
+                    assert body["data"]["item"]["profile_presence"] == "absent"
+                    assert body["data"]["item"]["profile_source"] == "directory"
+                records.append({"case":"init readonly namespace: "+profile,"exit":expected})
             assert inventory(root / "data") == before, "passive matrix changed managed data"
             assert setup(["vault", "status"]) == idle, "passive matrix changed key session state or idle"
             nested = Sandbox(root / "data" / "profiles", scratch, readonly=[root / "data" / "tasks"],

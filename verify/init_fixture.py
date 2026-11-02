@@ -87,6 +87,19 @@ def run(binary, directory, environment, terminal=None):
     assert not retry["changed"] and retry["item"]["profile_source"] == "config"
     assert (fresh / "devtools.toml").read_bytes() == before
     call(fresh, ["init", "--profile", "other"], 3)
+    # No parent configuration is inherited. Case and legal punctuation survive.
+    nested = fresh / "nested-App_1"
+    nested.mkdir()
+    assert call(nested,["init"])["item"]["profile"] == "nested-App_1"
+    moved = fresh.with_name("renamed-project")
+    fresh.rename(moved)
+    fresh = moved
+    assert call(fresh,["init"])["item"]["profile"] == "demo-web"
+    if os.name != "nt":
+        target = project("symlink-target","physical-name")
+        alias = directory / "alias-name"
+        alias.symlink_to(target,target_is_directory=True)
+        assert call(alias,["init"])["item"]["profile"] == "physical-name"
     invalid = project("invalid", "invalid name")
     call(invalid, ["init"], 2)
     call(invalid, ["init", "--profile="], 2)

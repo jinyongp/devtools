@@ -97,6 +97,18 @@ def main():
 
     running = False
     try:
+        # Claim a nonexistent native user root before the installer runs its
+        # storage coordinator. Never infer ownership merely from its contents.
+        candidate = Path(os.environ["DEVTOOLS_TEST_CLI_BINARY"])
+        observed = subprocess.run(json_argv(candidate,["project","inspect","--profile","native-product"],environment=native_env,cwd=project),
+                                  cwd=project,env=native_env,capture_output=True,text=True,timeout=20)
+        assert observed.returncode == 0
+        initial_paths = json.loads(observed.stdout)["data"]["paths"]
+        native_root = Path(initial_paths["data"]).parent
+        assert native_root.is_absolute()
+        if os.path.lexists(native_root):
+            native_root = None
+            raise RuntimeError("Refusing to touch an existing native user root")
         install = subprocess.run([
             shutil.which("powershell.exe"), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
             "-File", str(repository / "scripts" / "install.ps1"), "-Version", args.version,
@@ -200,10 +212,7 @@ timeout = "3s"
         candidate_root = Path(native_paths["data"]).parent
         assert candidate_root.is_absolute()
         assert all(Path(native_paths[name]) == candidate_root / name for name in ("config", "data", "cache", "runtime"))
-        if os.path.lexists(candidate_root):
-            raise RuntimeError("Refusing to touch an existing native user root")
-        candidate_root.mkdir()
-        native_root = candidate_root
+        assert candidate_root == native_root and candidate_root.is_dir()
         native = api("vault", "init", env=native_env)["item"]
         assert native["backend"] == "dpapi" and native["state"] == "unlocked"
         api("sec", "set", "NATIVE_TOKEN", "--stdin", env=native_env, input="synthetic-native-dpapi-canary")

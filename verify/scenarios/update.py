@@ -10,8 +10,8 @@ home = Path.home()
 binary = home / '.local/bin/devtools'
 alias = home / '.local/bin/dvt'
 
-def execute(*args, expected=0):
-    result = subprocess.run(args, text=True, capture_output=True, timeout=30)
+def execute(*args, expected=0, input=None):
+    result = subprocess.run(args, input=input, text=True, capture_output=True, timeout=40)
     assert result.returncode == expected, (result.stdout, result.stderr)
     return json.loads(result.stdout if expected == 0 else result.stderr)
 
@@ -58,4 +58,29 @@ assert report['binary_changed'] is False and report['storage']['ready'] is False
 assert future.read_text() == future_body and hashlib.sha256(binary.read_bytes()).digest() == before
 future.unlink()
 assert execute(str(binary), 'doctor', '--storage', '--fix')['data']['ready'] is True
+
+# A locked session cannot silently authorize even an address-only conversion.
+passphrase = 'synthetic-update-vault-passphrase'
+execute(str(binary), 'vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input=passphrase+'\n')
+execute(str(binary), 'secret', 'set', 'TOKEN', '--profile', 'update', '--stdin', input='synthetic-update-secret')
+key = 'p1-' + hashlib.sha256(b'update').hexdigest() + '.json'
+canonical = profiles / key
+protected = canonical.read_bytes()
+old_address = profiles / (b'update'.hex()+'.json')
+old_address.write_bytes(protected)
+canonical.unlink()
+(profiles / '.identity' / key).unlink()
+execute(str(binary), 'vault', 'lock')
+session_before = execute(str(binary), 'vault', 'status')['data']
+pending = execute(str(binary), 'update', '--version', '0.0.0-test.2', '--source', os.environ['DEVTOOLS_TEST_RELEASES'], expected=3)['error']['details']['report']
+assert pending['binary_changed'] is False and pending['storage']['status'] == 'pending'
+assert old_address.read_bytes() == protected and not canonical.exists()
+assert execute(str(binary), 'vault', 'status')['data'] == session_before
+execute(str(binary), 'vault', 'unlock', '--passphrase-stdin', input=passphrase+'\n')
+idle = execute(str(binary), 'vault', 'status')['data']['item']['idle_expires_at']
+resumed = execute(str(binary), 'update', '--version', '0.0.0-test.2', '--source', os.environ['DEVTOOLS_TEST_RELEASES'])['data']
+assert resumed['binary_changed'] is False and resumed['storage']['ready'] is True
+assert canonical.read_bytes() == protected
+assert execute(str(binary), 'vault', 'status')['data']['item']['idle_expires_at'] == idle
+assert hashlib.sha256(binary.read_bytes()).digest() == before
 print('Installed self-update and failure preservation passed')

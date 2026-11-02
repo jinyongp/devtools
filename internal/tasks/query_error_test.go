@@ -26,8 +26,8 @@ func TestTaskQueryPreparationError(t *testing.T) {
 			t.Fatal("failed fallback claimed no effects")
 		}
 		r := public.Details["remedies"].([]protocol.Remedy)
-		if len(r) != 1 || r[0].Effect != "value_write" || !reflect.DeepEqual(r[0].Argv, []string{"devtools", "task", "next", "--profile", "app"}) {
-			t.Fatal("preparation requires non-paged task remedy", r)
+		if len(r) != 1 || r[0].Effect != "value_write" || !reflect.DeepEqual(r[0].Argv, []string{"devtools", "doctor", "--storage", "--fix"}) {
+			t.Fatal("preparation requires explicit storage remedy", r)
 		}
 		body, _ := json.Marshal(public)
 		if strings.Contains(string(body), "private-synthetic-path") {

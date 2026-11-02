@@ -54,7 +54,7 @@ func TestDoctorKeepsBundleAndDistinguishesCommandFailureTargets(t *testing.T) {
 }
 
 func TestScopeAndVersionOrderAndEquivalentActionsFollowContract(t *testing.T) {
-	out, _ := cliui.Render(publicDocument(t, "version", map[string]any{"version": "v-test", "commit": "commit-id", "protocol_version": 21}), cliui.Options{})
+	out, _ := cliui.Render(publicDocument(t, "version", map[string]any{"version": "v-test", "commit": "commit-id", "protocol_version": 22}), cliui.Options{})
 	if strings.Index(string(out), "Commit") > strings.Index(string(out), "Protocol") {
 		t.Fatal("version fields reordered", string(out))
 	}

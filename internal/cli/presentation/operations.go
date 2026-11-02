@@ -93,6 +93,12 @@ func updateView(definition Definition, data map[string]any) (cliui.Document, boo
 		message = "Devtools " + version + " is already installed."
 	}
 	blocks := []cliui.Block{cliui.Paragraph(cliui.Literal(message))}
+	if storage, ok := data["storage"].(map[string]any); ok {
+		blocks = append(blocks, cliui.Fields(
+			cliui.Field{Label: cliui.Literal("Executable changed"), Value: display(data["binary_changed"])},
+			cliui.Field{Label: cliui.Literal("Storage"), Value: display(storage["status"])},
+		))
+	}
 	alias := data["alias"].(map[string]any)
 	name := alias["name"].(string)
 	switch status := alias["status"].(string); status {
@@ -107,7 +113,7 @@ func updateView(definition Definition, data map[string]any) (cliui.Document, boo
 		blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Shortcut '" + name + "'"), Value: cliui.Literal(status)}))
 	}
 	blocks = append(blocks, remaining(alias, map[string]bool{"name": true, "status": true}, "alias", definition)...)
-	blocks = append(blocks, remaining(data, map[string]bool{"version": true, "action": true, "changed": true, "alias": true}, "", definition)...)
+	blocks = append(blocks, remaining(data, map[string]bool{"version": true, "action": true, "changed": true, "alias": true, "binary_changed": true, "storage": true}, "", definition)...)
 	return cliui.NewDocument(blocks...), true
 }
 

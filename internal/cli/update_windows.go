@@ -17,5 +17,5 @@ func updatePlatform(ctx context.Context, executable string, options map[string]s
 		failure.Code = "update_failed"
 		return nil, failure
 	}
-	return result, nil
+	return finishExecutableUpdate(result, result.Storage, result.BinaryChanged)
 }

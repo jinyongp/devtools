@@ -1,6 +1,6 @@
 package presentation
 
-// Fixed public field membership reviewed against protocol 21 command schemas.
+// Fixed public field membership reviewed against protocol 22 command schemas.
 // Ordering is applied by detailFieldOrder; unknown fields remain in JSON.
 var detailFieldMembership = map[string]map[string]string{
 	"backup inspect": {

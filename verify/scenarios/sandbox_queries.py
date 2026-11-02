@@ -14,6 +14,7 @@ repository = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repository / "verify"))
 from sandbox_query_fixture import Sandbox, held, inventory, native_probe
 from task_sandbox_fixture import BASELINE_COMMIT, run as task_queries
+from inspection_sandbox_fixture import run as inspection_queries
 
 home = Path.home()
 subprocess.run(["sh", os.environ["DEVTOOLS_TEST_INSTALLER"], "install", "--version",
@@ -54,7 +55,7 @@ def invoke(root, profile, args, sandbox=None, state=None, error=None, input=None
             assert details["remedies"][0]["effect"] == "value_write", details
             remedy = details["remedies"][0]["argv"]
             assert remedy[remedy.index("--isolated-root") + 1] == str(root), details
-            if "--env" in args:
+            if "--env" in args and "doctor" not in remedy:
                 assert remedy[remedy.index("--env") + 1] == args[args.index("--env") + 1], details
         return failure
     assert result.returncode == 0, (args, result.returncode, result.stderr)
@@ -109,13 +110,17 @@ for protected in (False, True):
 
     if protected:
         continue
-    # Legacy input is read without migration, under the same existing gate.
+    # Ordinary reads classify old input without decoding or migrating it.
     legacy = data / "profiles" / ("LegacySandbox".encode().hex() + ".json")
     legacy.write_text(json.dumps({"version": 1, "profile": "LegacySandbox", "envs": {}, "keys": {}}))
     legacy.chmod(0o600)
     before = inventory(data)
-    invoke(root, "LegacySandbox", ("var", "list"), sandbox=sandbox)
+    invoke(root, "LegacySandbox", ("var", "list"), sandbox=sandbox, error="migration_required")
     assert inventory(data) == before
+
+    repaired=subprocess.run([str(binary),"doctor","--storage","--fix","--isolated-root",str(root)],cwd=home,text=True,capture_output=True,check=True,timeout=20)
+    assert json.loads(repaired.stdout)["data"]["ready"] is True and not repaired.stderr
+    invoke(root,"LegacySandbox",("var","list"),sandbox=sandbox)
 
     # A query must wait behind the original writer gate, without opening it writable.
     with held([str(probe), "hold-write", str(data / ".maintenance/lock")]):
@@ -188,7 +193,9 @@ if not baseline.is_file():
     subprocess.run(["go", "build", "-buildvcs=false", "-ldflags", "-X main.version=issue9-baseline -X main.commit=" + BASELINE_COMMIT,
                     "-o", str(baseline), "./cmd/devtools"], cwd=baseline_source, check=True, timeout=90)
 task_checks = task_queries(binary, baseline, probe, Path(shutil.which("strace")) if sys.platform == "linux" and shutil.which("strace") else None)
+inspection_checks = inspection_queries(binary, probe)
 print(json.dumps({"binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
                   "version": invoke(home / "public", "sandbox-fixture", ("version",)),
                   "native_controls": controls, "fixtures": checks,
-                  "recovery_round_trips": True, "writer_exclusion": True, "task_queries":task_checks}))
+                  "recovery_round_trips": True, "writer_exclusion": True, "task_queries":task_checks,
+                  "inspection_queries": inspection_checks}))

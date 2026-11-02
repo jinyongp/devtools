@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/jinyongp/devtools/internal/installstorage"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/scripts"
@@ -42,6 +43,10 @@ func updatePlatform(ctx context.Context, executable string, options map[string]s
 		var failed struct {
 			Error protocol.Error `json:"error"`
 		}
+		if !diagnostic.truncated && json.Unmarshal(diagnostic.Bytes(), &failed) == nil && strings.HasPrefix(failed.Error.Code, "storage_upgrade_") {
+			failed.Error.ExitCode = 3
+			return nil, protocol.Public(&failed.Error, "update")
+		}
 		if !diagnostic.truncated && json.Unmarshal(diagnostic.Bytes(), &failed) == nil && failed.Error.Code == "install_failed" {
 			failure := protocol.Public(&failed.Error, "update")
 			failure.Code = "update_failed"
@@ -54,9 +59,12 @@ func updatePlatform(ctx context.Context, executable string, options map[string]s
 	var response struct {
 		OK   bool `json:"ok"`
 		Data struct {
-			Action  string `json:"action"`
-			Version string `json:"version"`
-			Alias   struct {
+			Changed       bool                  `json:"changed"`
+			BinaryChanged bool                  `json:"binary_changed"`
+			Storage       installstorage.Result `json:"storage"`
+			Action        string                `json:"action"`
+			Version       string                `json:"version"`
+			Alias         struct {
 				Name   string `json:"name"`
 				Status string `json:"status"`
 			} `json:"alias"`
@@ -65,7 +73,7 @@ func updatePlatform(ctx context.Context, executable string, options map[string]s
 	if output.truncated || json.Unmarshal(output.Bytes(), &response) != nil || !response.OK || response.Data.Action != "update" || response.Data.Version == "" || response.Data.Alias.Name != "dvt" || response.Data.Alias.Status == "" {
 		return nil, protocol.NewError("update_failed", "Cannot confirm update result. Run devtools version to check the installed version.", 1, map[string]any{"reason": "result_unconfirmed", "effects": "unknown", "retry": "inspect_first", "facts": map[string]any{"stage": "verify_result"}})
 	}
-	return map[string]any{"action": response.Data.Action, "version": response.Data.Version, "alias": response.Data.Alias, "changed": true}, nil
+	return finishExecutableUpdate(map[string]any{"action": response.Data.Action, "version": response.Data.Version, "alias": response.Data.Alias, "changed": response.Data.Changed, "binary_changed": response.Data.BinaryChanged, "storage": response.Data.Storage}, response.Data.Storage, response.Data.BinaryChanged)
 }
 
 type updateOutput struct {

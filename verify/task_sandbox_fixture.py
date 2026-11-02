@@ -61,7 +61,7 @@ def run(binary, baseline, probe, trace=None):
         assert baseline_identity["version"]["commit"] == BASELINE_COMMIT
         assert baseline_identity["version"]["protocol_version"] == 19
         candidate_identity = identity(binary, environment, scratch)
-        assert candidate_identity["version"]["protocol_version"] == 21
+        assert candidate_identity["version"]["protocol_version"] == 22
         trace_reports = []
 
         def argv(arguments, selected=binary):
@@ -233,14 +233,14 @@ def run(binary, baseline, probe, trace=None):
         details = failure["details"]
         assert details["facts"]["state"] == "initialization_required" and details["effects"] == "unknown"
         remedy = details["remedies"][0]
-        assert remedy["argv"][:3] == ["devtools", "task", "next"] and remedy["effect"] == "value_write"
-        assert remedy["argv"][remedy["argv"].index("--profile") + 1] == profile
+        assert remedy["argv"][:4] == ["devtools", "doctor", "--storage", "--fix"] and remedy["effect"] == "value_write"
         assert remedy["argv"][remedy["argv"].index("--isolated-root") + 1] == str(root)
         assert inventory(data) == before
         # Darwin is allow-default outside explicit deny paths. Deny both the
         # selected and default cache when checking the preparation remedy.
         preparation = Sandbox(cache, scratch, readonly=[root / "cache"], writable=[data])
-        api("next", sandbox=preparation)
+        repaired=preparation.run([str(binary),"doctor","--storage","--fix","--isolated-root",str(root)])
+        assert json.loads(repaired.stdout)["data"]["ready"] is True and not repaired.stderr
         assert profile_path.exists()
         # With >50 tasks, next remains a valid preparation action even when the
         # default cache cannot be written. List would require a snapshot.

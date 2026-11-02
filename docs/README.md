@@ -104,7 +104,8 @@ Design background is separate from public command availability.
 - [Network coverage](../verify/network-coverage.md): checks and unverified environments.
 - [Plan-editing regression verification](task-edit-verification.md): coverage and isolated test commands.
 - [Task sandbox query improvement plan](task-sandbox-query-plan.md) (Korean): GitHub #9 scope, query locks, explicit private caches, recovery, and native verification.
-- [Init profile plan](init-profile-plan.md) (Korean, not implemented): directory defaults, shared-name collisions, terminal interaction, and machine output.
+- [Init profile contract](init-profile-plan.md) (Korean): directory defaults, shared-name collisions, terminal interaction, and machine output.
+- [Storage upgrade](storage-upgrade-plan.md): explicit doctor conversion, update integration, recovery, and format boundaries.
 - [Diagnostic contract follow-up review](cli-diagnostic-contract-review.md) (Korean): protocol 17 scope, review coverage, and native validation requirements.
 - [Performance](../perf/README.md) (English): Linux/WSL measurements and baselines.
 - [Agent Skill source](../skills/devtools/SKILL.md): operational guidance read by agents.
@@ -116,7 +117,7 @@ Design background is separate from public command availability.
 
 ## Implementation contracts
 
-These contracts describe source behavior through protocol 21. Check the installed binary's
+These contracts describe source behavior through protocol 22. Check the installed binary's
 `version` and `schema` before using a new interface. Platform acceptance requires
 native execution; cross compilation alone does not establish publication or ACL behavior.
 

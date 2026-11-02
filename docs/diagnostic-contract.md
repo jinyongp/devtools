@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설정 모델](cli-config-redesign.md) · [설정 편집](config-edit-contract.md)
 
-이 문서는 protocol 21 소스의 진단 계약이다. 사용 순서는 [개발환경 진단](doctor.md)을 따른다.
+이 문서는 protocol 22 소스의 진단 계약이다. 사용 순서는 [개발환경 진단](doctor.md)을 따른다.
 JSON/text는 같은 public 진단 정본을 사용하며 표시 계층에서 message·action·효과를 재작성하지 않는다.
 공통 diagnostic과 Check·DoctorReport·ErrorDetails의 구조는
 [계약 schema](../internal/configcontract/schema.json)의 같은 이름의 정의를 따른다.
@@ -13,7 +13,7 @@ JSON/text는 같은 public 진단 정본을 사용하며 표시 계층에서 mes
 task query의 쓰기 가능한 준비 경로 실패는 기존 storage 오류 reason/stage/resource를
 보존하고 `facts.state`에 `initialization_required` 또는 `recovery_required`를 추가한다.
 준비 중 일부 쓰기가 가능하므로 `effects: unknown`, `retry: after_dependency_change`다.
-remedy는 같은 profile/isolated-root에서 `task next`를 쓰기 가능한 실행으로 수행한 뒤
+remedy는 같은 isolated-root에서 `doctor --storage --fix`를 쓰기 가능한 실행으로 수행한 뒤
 원래 query 옵션으로 재시도하도록 안내한다. 취소(130)·deadline(3)은 준비 오류로 덮지 않는다.
 캐시 publication 실패는 `resource: query_cache`이며 쓰기 가능한 절대 private
 `--query-cache-dir`를 선택하는 remedy를 제공한다. 불완전한 페이지를 성공으로 반환하지 않는다.
@@ -87,8 +87,9 @@ Linux/macOS 메타데이터 조회의 writable fallback이 실패하면 기존 `
 OS 기반 `reason`, `facts.os_code`, 실패 stage를 보존하고 `facts.state`에
 `initialization_required` 또는 `recovery_required`를 추가한다.
 fallback이 일부 작업을 했을 수 있어 `effects:unknown`, `retry:after_dependency_change`다.
-`value_write` remedy는 선택 profile/env/isolated root로 같은 조회를 쓰기 가능한 실행
-환경에서 수행하라는 안내다. 자동 권한 승격이나 자동 실행을 뜻하지 않는다.
+`value_write` remedy는 같은 isolated root에서 `doctor --storage --fix`로 준비한 뒤 재시도하라는 안내다.
+runtime lease는 해당 `proxy status` 또는 execution status remedy를 따른다.
+자동 권한 승격이나 자동 실행을 뜻하지 않는다.
 정상 저장소 자체의 읽기 거부·잘못된 pending 포인터는 이 상태로 바꾸지 않는다.
 
 source.path는 문자열 배열이다. JSON 배열 index는 문자열, literal 이름은 한 원소다.

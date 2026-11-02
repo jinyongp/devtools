@@ -38,21 +38,5 @@ func QueryError(ctx context.Context, cause error) *protocol.Error {
 	if !errors.As(cause, &preparation) {
 		return failure
 	}
-	if failure.Details == nil {
-		failure.Details = map[string]any{}
-	}
-	failure.Message = "Storage initialization or recovery is required before this query can proceed."
-	failure.Details["state"] = preparation.State
-	failure.Details["effects"] = "unknown"
-	if preparation.Passive {
-		failure.Details["effects"] = "none"
-	}
-	failure.Details["retry"] = "after_dependency_change"
-	failure.Details["remedies"] = []protocol.Remedy{{
-		Relation: protocol.SameStoreAction,
-		Argv:     []string{"devtools", "doctor", "--storage", "--fix"},
-		Effect:   "value_write", RequiredInputs: []string{},
-		Message: "Prepare or recover the existing storage in a context with write access, then retry the query.",
-	}}
-	return failure
+	return protocol.WithStoragePreparation(failure, preparation.State, preparation.Passive)
 }

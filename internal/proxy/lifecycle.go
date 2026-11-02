@@ -1152,6 +1152,7 @@ func (m Manager) queryLeaseFree(ctx context.Context) (bool, *protocol.Error) {
 			failure.Details["state"] = preparation.State
 			failure.Details["effects"] = "unknown"
 			failure.Details["retry"] = "after_dependency_change"
+			failure.Details["remedies"] = []protocol.Remedy{{Relation: protocol.SameStoreAction, Argv: []string{"devtools", "proxy", "status"}, Effect: "value_write", RequiredInputs: []string{}, Message: "Run proxy status in a context with write access to prepare its existing lease, then retry."}}
 		}
 		return false, failure
 	}

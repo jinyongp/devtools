@@ -13,6 +13,22 @@
 - Profile diff reports key/scope/task/instance differences, not values or secret equality. Equal metadata does not prove equal values.
 - Local protection: [protection.md](protection.md). Archive passphrases and local vault passphrases are independent.
 
+## Storage formats and updates
+
+On protocol 22, `doctor --storage` inspects the selected data root without writes;
+`doctor --storage --fix` prepares, recovers, converts known formats and rechecks them.
+Ordinary reads and writes report `migration_required` instead of converting old
+profiles, physical task journals or receipts. Current logical task history remains readable.
+Protected conversion borrows only an existing unlocked key, preserving its original
+idle deadline. A locked/missing vault requires an explicit protection action; doctor
+never chooses a backend or prompts for an unlock. Follow the reported prerequisites.
+
+Owned installer/update paths invoke this coordinator in the new executable, also
+on a same-image retry. Check both `binary_changed` and `storage.ready/status`.
+An incomplete storage outcome exits 3 and retains the installed binary and recovery
+state; resolve the cause and run `doctor --storage --fix`. Homebrew updates retain
+package ownership and provide that next step. Do not downgrade a binary as data rollback.
+
 ## Transfer source first
 
 1. Export on the source; no destination preparation is needed for passphrase export.

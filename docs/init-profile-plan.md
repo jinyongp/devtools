@@ -1,8 +1,8 @@
 # Init profile 기본값과 입력·출력 계획
 
-상태: **구현 전 계획**. 2026-11-02 사용자 결정에 따라 작성했다. 설치 CLI
-0.39.0/protocol 21은 아직 `init --profile NAME`을 요구한다. 아래 기본값,
-대화형 옵션, 응답 필드와 오류는 목표 계약이며 현재 사용법이 아니다.
+상태: **protocol 22 소스에 구현, 최종 native 검증 진행 중**. 2026-11-02 사용자 결정에 따른 계약이다.
+기존 설치 CLI 0.39.0/protocol 21은 `init --profile NAME`을 요구하므로 설치 빌드의 `version`과 `schema init`을 확인한다.
+아래 기본값·대화형 옵션·응답 필드는 protocol 22에 적용된다.
 연결 workstream은 `76536172-4285-4efa-9ad6-528d3fa1de5f`, 추가 작업은 T13이다.
 
 ## 1. Profile 선택

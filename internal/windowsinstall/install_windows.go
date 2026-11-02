@@ -2,12 +2,15 @@ package windowsinstall
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/jinyongp/devtools/internal/installstorage"
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"golang.org/x/sys/windows"
@@ -168,9 +171,22 @@ func apply(ctx context.Context, options Options, invoked string, load func(conte
 		return nil, err
 	}
 	stage, effects = "publish", "unknown"
-	result, err := e.transact(ctx, options, body, want, previous)
-	if err != nil {
-		return nil, err
+	sum := sha256.Sum256(body)
+	result := &Result{Action: options.Action, Version: version, Alias: AliasResult{"dvt", "unchanged"}}
+	if previous == nil || previous.Main.SHA256 != hex.EncodeToString(sum[:]) {
+		result, err = e.transact(ctx, options, body, want, previous)
+		if err != nil {
+			return nil, err
+		}
+		result.BinaryChanged = true
+	} else if previous.Alias == nil {
+		result.Alias.Status = "skipped_conflict"
+	}
+	// No binary rollback is possible after this point: doctor may have committed
+	// a newer storage format. Failure remains a separate observable outcome.
+	result.Storage = installstorage.Run(ctx, filepath.Join(directory, "devtools.exe"))
+	if result.Storage.Report != nil && result.Storage.Report.Changed {
+		result.Changed = true
 	}
 	return result, nil
 }

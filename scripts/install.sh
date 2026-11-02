@@ -131,7 +131,9 @@ elif [ "$platform" = darwin ]; then
   setup_intent="$HOME/Library/Application Support/devtools/data/netsetup/intent.json"
 fi
 restore_setup=false
-if [ "$action" = update ] && [ -f "$setup_intent" ] && grep -F '"enabled":true' "$setup_intent" >/dev/null; then
+binary_changed=true
+if [ "$action" = update ] && cmp -s "$scratch/devtools" "$destination"; then binary_changed=false; fi
+if [ "$binary_changed" = true ] && [ "$action" = update ] && [ -f "$setup_intent" ] && grep -F '"enabled":true' "$setup_intent" >/dev/null; then
   installer_stage=prepare_setup
   [ -z "${DEVTOOLS_ISOLATED_ROOT:-}" ] || fail 'Executable permission changes are unavailable in isolated mode.'
   ln "$destination" "$scratch/previous" 2>/dev/null || fail 'Cannot preserve the original executable for recovery.'
@@ -140,7 +142,9 @@ if [ "$action" = update ] && [ -f "$setup_intent" ] && grep -F '"enabled":true' 
 fi
 installer_stage=publish
 installer_effects=unknown
-mv -f "$scratch/devtools" "$destination" 2>/dev/null || fail 'Cannot publish installed executable.'
+if [ "$binary_changed" = true ]; then
+  mv -f "$scratch/devtools" "$destination" 2>/dev/null || fail 'Cannot publish installed executable.'
+fi
 installer_effects=committed
 installer_stage=commit_setup
 if [ "$restore_setup" = true ] && ! "$destination" __install-commit "$destination" > "$scratch/setup.result" 2> "$scratch/setup.error"; then
@@ -163,5 +167,28 @@ elif ! ln -s devtools "$alias_destination" 2>/dev/null; then
   alias_status=failed
   printf '%s\n' 'Warning: cannot create dvt alias; devtools installation completed.' >&2
 fi
-printf '{"schema_version":1,"ok":true,"data":{"action":"%s","version":"%s","alias":{"name":"dvt","status":"%s"}}}\n' "$action" "$version" "$alias_status"
+# Storage conversion belongs to the published executable, after every step that
+# may roll back executable ownership/setup. A repeated same-image update resumes it.
+installer_stage=storage_upgrade
+storage='{"status":"failed","ready":false,"diagnostic":{"code":"storage_upgrade_result_unavailable","details":{}}}'
+if "$destination" __install-storage > "$scratch/storage.json" 2> "$scratch/storage.error" && [ ! -s "$scratch/storage.error" ] && grep -F '"status":' "$scratch/storage.json" >/dev/null && grep -F '"ready":' "$scratch/storage.json" >/dev/null; then
+  storage=$(cat "$scratch/storage.json")
+fi
+changed=$binary_changed
+if grep -F '"changed":true' "$scratch/storage.json" >/dev/null 2>&1; then changed=true; fi
+case "$storage" in
+  *'"effects":"unknown"'*) storage_effects=unknown ;;
+  *'"effects":"partial"'*) storage_effects=partial ;;
+  *'"effects":"committed"'*) storage_effects=committed ;;
+  *'"effects":"none"'*) storage_effects=none ;;
+  *) storage_effects=unknown ;;
+esac
+if [ "$storage_effects" = none ] && [ "$binary_changed" = true ]; then storage_effects=committed; fi
+result=$(printf '{"action":"%s","version":"%s","alias":{"name":"dvt","status":"%s"},"changed":%s,"binary_changed":%s,"storage":%s}' "$action" "$version" "$alias_status" "$changed" "$binary_changed" "$storage")
+case "$storage" in
+  *'"status":"ready","ready":true'*) printf '{"schema_version":1,"ok":true,"data":%s}\n' "$result" ;;
+  *)
+    printf '{"schema_version":1,"ok":false,"error":{"code":"storage_upgrade_incomplete","message":"The executable is installed; storage requires attention. Resolve prerequisites and run devtools doctor --storage --fix.","details":{"operation":"%s","phase":"observe","reason":"storage_upgrade_incomplete","effects":"%s","retry":"after_dependency_change","report":%s,"remedies":[{"argv":["devtools","doctor","--storage","--fix"],"required_inputs":[],"message":"Resolve storage prerequisites and resume with the installed executable.","effect":"value_write"}]}}}\n' "$action" "$storage_effects" "$result" >&2
+    exit 3 ;;
+esac
 }

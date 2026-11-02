@@ -167,13 +167,18 @@ non-interactive에서는 preview/apply 모두 같은 `--passphrase-file` 또는
 
 ## 저장 형식 업그레이드와 구버전 실행
 
-profile values와 task 저장소는 읽기만 할 때 기존 형식을 그대로 사용할 수 있지만, 새 버전에서
-처음 변경하면 현재 저장 형식으로 자동 전환될 수 있습니다. 전환은 중간 상태가 노출되지 않도록
-복구 가능한 transaction으로 게시되며, 같은 profile의 이전 파일 경로에는 구버전이 별도 상태를
-새로 만들지 못하도록 차단 정보가 남습니다.
+protocol 22의 일반 조회·변경은 현재 저장 형식만 사용합니다. 이전 values 형식·profile 주소·
+물리적 task journal·재시도 receipt가 있으면 `migration_required`를 반환합니다.
+`devtools doctor --storage`로 확인하고 `devtools doctor --storage --fix`로 한 번에 전환하세요.
+설치 업데이트도 새 실행파일에서 같은 전환을 실행합니다. 중단되면 같은 doctor 명령으로 재개합니다.
 
-secret 암호화 전환은 별도입니다. 실행 파일 업데이트나 단순 조회만으로 이전 평문 자료를
-전환하지 않으며, `vault init`이 모든 기존 profile의 secret 계층을 전환합니다.
+전환은 복구 가능한 transaction으로 게시하며 이전 경로에는 구버전의 별도 쓰기를 막는 정보만 남습니다.
+일반 실행 경로에 이전 본문 decoder를 유지하지 않습니다. 현재 task container 안의 논리적 이력과
+휴대용 archive의 import codec은 데이터 보존을 위해 유지합니다.
+
+secret 전환은 이미 열린 vault 키가 있어야 합니다. 보호 방법을 선택하지 않았거나 vault가 잠겼으면
+업데이트는 실행파일 설치와 미완료 storage 결과를 나눠 보고합니다. 명시적으로 `vault init` 또는
+unlock한 뒤 doctor를 재실행하세요. Doctor는 보호 방법을 선택하거나 인증창을 띄우지 않습니다.
 전환 전에 같은 저장소의 CLI·dashboard 등 writer를 함께 업데이트하고,
 기존 자료와 복구 가능한 암호화 백업을 보존하세요. 자세한 순서는 [전환 안내](secret-protection.md#기존-저장소를-전환하기)를 따릅니다.
 

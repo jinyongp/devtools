@@ -165,7 +165,7 @@ truncated. Continue with the same cursor to keep the original revision for up to
 On Linux/macOS (including WSL), an initialized, clean store supports all public
 task/workstream/validation queries with read-only task data and lock files. Missing
 locks or pending global recovery still require write access; the error distinguishes
-`initialization_required` from `recovery_required`. Run the suggested `task next`
+`initialization_required` from `recovery_required`. Run the suggested `doctor --storage --fix`
 with write access to the same store, then retry the original query. `task next`
 does not need a paginated snapshot, even with more than 50 tasks.
 

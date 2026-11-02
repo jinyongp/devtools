@@ -98,7 +98,7 @@ def run(binary, receiver, directory, base_env=None):
         return json.loads(result.stdout)
 
     try:
-        assert api("version")["protocol_version"] == 21
+        assert api("version")["protocol_version"] == 22
         api("init", "--profile", "handoff")
         api("vault", "init", "--backend", "passphrase", "--passphrase-stdin", text=passphrase + "\n")
         api("secret", "set", "TOKEN", "--stdin", text=canary)
@@ -181,7 +181,10 @@ def run(binary, receiver, directory, base_env=None):
         execution("deliver", pending["execution_id"], {"revision": pending["revision"]}, locked_send, error="vault_locked")
         execution("cancel", pending["execution_id"], {"revision": pending["revision"]})
         api("vault", "lock")
-        assert api("diagnostics")["external_executions"] == {"verification": "verification_pending"}
+        locked_summary = api("diagnostics")["external_executions"]
+        assert locked_summary["verification"] == "verification_pending"
+        assert locked_summary["diagnostic"]["code"] == "vault_locked"
+        assert not any(key in locked_summary for key in ("total", "pending_inputs", "attempted_inputs"))
         api("values", "execution", "status", prepared["execution_id"], "--profile", "handoff", error="vault_locked")
         assert effects.read_text() == "effect\n"
         # Only persisted fixture data/logs are scanned. OS coordination leases

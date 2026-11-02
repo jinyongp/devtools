@@ -23,6 +23,7 @@ from cli_json import json_argv, json_environment
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'verify'))
 from cli_reliability_fixture import check_cli_reliability
 from windows_console import windows_terminal
+from init_fixture import run as check_init
 
 
 class CLIError(RuntimeError):
@@ -103,7 +104,7 @@ def main():
         ], cwd=repository, env=base_env, text=True, encoding="utf-8", capture_output=True, timeout=180)
         assert install.returncode == 0, "Candidate installer did not complete (raw output withheld)"
         identity = api("version")
-        assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 21
+        assert identity["version"] == args.version and identity["commit"] == args.commit and identity["protocol_version"] == 22
         # Real native Windows pipe/explicit modes. Console VT and ConPTY visual
         # acceptance are separate gates; a captured pipe cannot establish them.
         clean = {key: value for key, value in base_env.items() if key not in (
@@ -117,6 +118,8 @@ def main():
                                   text=True, encoding="utf-8", timeout=15)
         assert captured.returncode == 0 and args.version in captured.stdout and "\x1b[" not in captured.stdout
         steps.append("native_pipe_and_explicit_presentation")
+        assert check_init(binary, root / "init-contract", base_env, windows_terminal)["result"] == "pass"
+        steps.append("init_profile_selection_and_console_interaction")
         reliability=check_cli_reliability(binary,reliability_root,base_env,expected_commit=args.commit,terminal=windows_terminal)
         assert reliability['result']=='pass'
         steps.append("cli_reliability_recovery_inputs_inventory_cursor_backup")

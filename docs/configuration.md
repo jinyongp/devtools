@@ -4,7 +4,9 @@
 
 protocol 11 빌드는 `devtools.toml`을 검증하면서 편집하는 명령을 제공한다.
 `devtools version`과 `devtools schema config edit`로 설치본의 지원 여부를 확인한다.
-기존 파일이 없다면 `devtools init --profile sample`로 만든다. 기존 파일은 덮어쓰지 않는다.
+기존 파일이 없다면 `devtools init`으로 만든다. 새 설정의 profile 기본값은 실제 디렉터리 이름이다.
+다른 이름을 지정하거나 기존 profile을 공유하려면 `--profile sample`을 사용한다.
+기존 파일은 덮어쓰지 않는다. 이름 중복과 대화형·비대화형 처리는 [init 계약](init-profile-plan.md)을 따른다.
 아래 이름·프로그램은 가상의 프로젝트 예시다.
 
 ## 읽고 검증하기

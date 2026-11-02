@@ -16,21 +16,20 @@
 - Ports and URLs: [ports.md](ports.md). Values/injection: [values.md](values.md).
 - Proxy routes: [network.md](network.md). Protection errors: [protection.md](protection.md).
 
-On Linux/macOS, `env list`, `variable list/get` (`var`) and `secret list` (`sec`)
-can query a clean, initialized store under read-only sandbox access. They still
-take the ordinary maintenance locks. Missing locks or pending recovery can require
-writes: inspect `facts.state` (`initialization_required` / `recovery_required`) and
-the `value_write` remedy, run the scoped query in an authorized writable context,
-then retry. Do not change permissions, remove locks, or elevate automatically.
-Read denial is a separate storage failure. Protocol 20 extends read-only support
-to public task/workstream/validation queries; new paginated snapshots need a
-writable query cache (see [tasks.md](tasks.md)). Windows and remaining query
-commands retain their existing access requirements; metadata queries do not unlock or renew a vault.
+On Linux/macOS, initialized value/task/profile queries, doctor input inspection,
+process status/claims and captured-log reads work with read-only data access while
+honoring the original writer locks. Missing locks or pending recovery can require
+writes: inspect `facts.state` and the scoped remedy. Protocol 22 uses
+`doctor --storage --fix` for root preparation/conversion; runtime lease remedies
+name their specific observer. Do not change permissions, remove locks, or elevate
+automatically. Read denial remains a separate failure. Paginated task snapshots
+need a writable private cache (see [tasks.md](tasks.md)). Windows retains its
+native handle/lease protocol. Inspection does not unlock or renew a vault.
 
 ## Project configuration
 
 - Profile resolution: explicit `--profile`, then nearest `devtools.toml`; lookup stops at the Git root. Remote URLs do not imply a profile.
-- `init --profile NAME` connects a new project without overwriting existing configuration.
+- Protocol 22 `init` reuses local configuration or defaults a new profile to the physical directory name. Known collisions require terminal confirmation or explicit `--profile NAME`; names are not slugged or suffixed. Agent/CI/JSON/pipe and `--no-interactive` never read stdin. Explicit `--interactive` still requires all three real terminals and text output. `profile_source`/`profile_presence` describe the result. Explicit names intentionally share that profile without a namespace lookup.
 - Discover `schema config edit` before using typed editing on a supporting build.
 - Prefer `command add/update/remove/rename`, `config tool/preset`, or atomic `config edit` over reconstructing TOML.
 - `config inspect` returns the revision. Updates/removals/renames/batches require it; adds are create-only.
@@ -82,7 +81,7 @@ commands retain their existing access requirements; metadata queries do not unlo
 - Recovery argv for the same store retains the selected isolation root. Inspect
   `retry`, `effects`, and `required_inputs` before acting; passphrase unlock needs
   private stdin/file, while native unlock may need explicit OS authentication.
-- Task query preparation uses non-paged `task next` with write access to the same store. Afterwards retry the original query and preserve its target, filters, directory and `--query-cache-dir`. The cache option is query-only, requires protocol 20, and must be repeated for continuations.
+- Protocol 22 task query preparation uses `doctor --storage --fix` with write access to the same store. Afterwards retry the original query and preserve its target, filters, directory and `--query-cache-dir`. The cache option is query-only, requires protocol 20, and must be repeated for continuations.
 
 ## Restart and retry
 

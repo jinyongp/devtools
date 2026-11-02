@@ -225,6 +225,20 @@ public static class DevtoolsInstallerNativeArchitecture {
     $result = $output | ConvertFrom-Json
     if (-not $result.ok -or $result.data.action -notin @('install', 'update') -or $result.data.version -cne $Version) { throw 'Installation result mismatch.' }
     $installationCommitted = $true
+    if (-not $result.data.storage.ready) {
+        $storageEffects = 'unknown'
+        if ($result.data.storage.report.effects -in @('none','committed','partial','unknown')) { $storageEffects = $result.data.storage.report.effects }
+        if ($result.data.binary_changed -and $storageEffects -eq 'none') { $storageEffects = 'committed' }
+        $details = @{ operation = $result.data.action; phase = 'observe'; reason = 'storage_upgrade_incomplete'; effects = $storageEffects; retry = 'after_dependency_change'; report = $result.data; remedies = @(@{ argv = @('devtools','doctor','--storage','--fix'); required_inputs = @(); message = 'Resolve storage prerequisites and resume with the installed executable.'; effect = 'value_write' }) }
+        if ($Json) {
+            Write-Utf8Json (@{ schema_version = 1; ok = $false; error = @{ code = 'storage_upgrade_incomplete'; message = 'The executable is installed; storage requires attention. Resolve prerequisites and run devtools doctor --storage --fix.'; details = $details } } | ConvertTo-Json -Depth 64 -Compress) $true
+        } else {
+            [Console]::Error.WriteLine('The executable is installed; storage requires attention.')
+            [Console]::Error.WriteLine(('Storage: ' + $result.data.storage.status))
+            [Console]::Error.WriteLine('Resolve prerequisites, then run: devtools doctor --storage --fix')
+        }
+        exit 3
+    }
     if (-not $BinDir) { $BinDir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\devtools\bin' }
     $BinDir = [IO.Path]::GetFullPath($BinDir)
     $phase = 'user_path'

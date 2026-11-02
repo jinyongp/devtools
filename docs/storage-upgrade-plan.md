@@ -82,9 +82,8 @@ deadline and validates the key-slot/manual-lock identity under writer leases.
 Reports distinguish no writes, committed writes, and uncertain effects; failures
 retain the non-ready report and safe typed diagnostics without raw private errors.
 
-The public changes in this workstream require the next CLI protocol revision
-(22 from the current 21). The final contract/documentation step updates that
-revision together with init/update and strict consumers. Envelope and existing
+The source now uses CLI protocol 22 for init/update, storage doctor and nested
+diagnostics. Strict consumers and the configuration schema use the same revision. Envelope and existing
 vault/task storage versions are separate from the CLI protocol version.
 
 Owned Unix/Windows updates invoke the installed new executable's coordinator,

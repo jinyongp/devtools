@@ -30,18 +30,20 @@ func catalogError(code string, causes ...error) *protocol.Error {
 	if len(causes) != 0 {
 		cause = causes[0]
 	}
-	return protocol.WithStorageDetails(protocol.NewError(code, "Cannot enumerate profile storage.", exit, nil), "profiles", "enumerate_profiles", "profile_store", cause)
+	failure := protocol.WithStorageDetails(protocol.NewError(code, "Cannot enumerate profile storage.", exit, nil), "profiles", "enumerate_profiles", "profile_store", cause)
+	var preparation *maintenance.QueryPreparationError
+	if errors.As(cause, &preparation) {
+		return protocol.WithStoragePreparation(failure, preparation.State, preparation.Passive)
+	}
+	return failure
 }
 
 func (c Catalog) acquire(ctx context.Context) (func(), *protocol.Error) {
 	if !filepath.IsAbs(c.Data) {
 		return nil, catalogError("storage_error")
 	}
-	release, err := maintenance.AcquireShared(ctx, c.Data)
+	release, err := maintenance.AcquireQuery(ctx, c.Data)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, protocol.NewError("canceled", "Request canceled.", 130, nil)
-		}
 		return nil, catalogError("storage_error", err)
 	}
 	return release, nil
@@ -77,6 +79,64 @@ func (c Catalog) Names(ctx context.Context) ([]string, *protocol.Error) {
 	}
 	defer release()
 	return c.namesHeld(ctx)
+}
+
+// WithPresence uses metadata only and holds the existing query gate while the
+// caller publishes its local configuration. It never bootstraps a data root.
+func (c Catalog) WithPresence(ctx context.Context, name string, use func(bool) *protocol.Error) *protocol.Error {
+	if failure := protocol.ContextError(ctx.Err()); failure != nil {
+		return failure
+	}
+	if !filepath.IsAbs(c.Data) {
+		return catalogError("storage_error")
+	}
+	if _, err := os.Lstat(c.Data); errors.Is(err, os.ErrNotExist) {
+		return use(false)
+	} else if err != nil {
+		return catalogError("storage_error", err)
+	}
+	if err := platformfs.CheckDirectory(c.Data); err != nil {
+		return catalogError("storage_error", err)
+	}
+	entries, err := os.ReadDir(c.Data)
+	if err != nil {
+		return catalogError("storage_error", err)
+	}
+	if len(entries) == 0 {
+		return use(false)
+	}
+	release, err := maintenance.AcquirePassiveQuery(ctx, c.Data)
+	if err != nil {
+		return catalogError("storage_error", err)
+	}
+	defer release()
+	names, failure := c.namesHeld(ctx)
+	if failure != nil {
+		return failure
+	}
+	present := false
+	for _, profile := range names {
+		for _, domain := range []string{"values", "tasks"} {
+			directory := "profiles"
+			if domain == "tasks" {
+				directory = "tasks"
+			}
+			if _, err := os.Lstat(filepath.Join(c.Data, directory)); errors.Is(err, os.ErrNotExist) {
+				continue
+			} else if err != nil {
+				return catalogError("storage_error", err)
+			}
+			resolution, err := profilekey.Resolve(filepath.Join(c.Data, directory), profile, domain)
+			if err != nil {
+				return catalogError("invalid_storage", err)
+			}
+			if resolution.Mode == profilekey.ModeLegacy {
+				return protocol.WithStoragePreparation(protocol.NewError("migration_required", "Storage conversion is required.", 3, nil), "migration_required", true)
+			}
+		}
+		present = present || profile == name
+	}
+	return use(present)
 }
 
 func (c Catalog) namesHeld(ctx context.Context) ([]string, *protocol.Error) {

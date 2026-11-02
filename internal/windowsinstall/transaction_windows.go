@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/installstorage"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/process"
 	"golang.org/x/sys/windows"
@@ -36,10 +37,12 @@ type AliasResult struct {
 	Status string `json:"status"`
 }
 type Result struct {
-	Action  string      `json:"action"`
-	Version string      `json:"version"`
-	Alias   AliasResult `json:"alias"`
-	Changed bool        `json:"changed"`
+	Action        string                `json:"action"`
+	Version       string                `json:"version"`
+	Alias         AliasResult           `json:"alias"`
+	Changed       bool                  `json:"changed"`
+	BinaryChanged bool                  `json:"binary_changed"`
+	Storage       installstorage.Result `json:"storage"`
 }
 type proof struct {
 	Volume    uint32 `json:"volume"`

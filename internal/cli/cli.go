@@ -86,6 +86,8 @@ type Argument struct {
 	Pattern    string           `json:"pattern,omitempty"`
 }
 type Request struct {
+	OutputFormat  presentation.Format
+	Agent         bool
 	Invocation    protocol.InvocationContext
 	OptionOffsets map[string]int
 	Options       map[string]string
@@ -122,11 +124,10 @@ func New(version, commit string) *App {
 			return nil, nil
 		}},
 		{Name: "init", Description: "Create project configuration in the current directory without overwriting existing files.", Options: []Option{
-			{Name: "profile", Description: "Project profile identifier.", Required: true, Pattern: project.ProfilePattern, Completion: completeProfile, MinLength: 1, MaxLength: 128},
-		}, Output: changedItemOutput(object(map[string]any{"config_path": stringSchema(), "profile": stringSchema()}, "config_path", "profile")), Run: func(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
-			result, err := project.Init(".", request.Options["profile"])
-			return map[string]any{"item": map[string]string{"config_path": result.ConfigPath, "profile": result.Profile}, "changed": result.Created}, err
-		}},
+			{Name: "profile", Description: "Project profile identifier; defaults to the physical directory name for a new configuration.", Pattern: project.ProfilePattern, Completion: completeProfile, MinLength: 1, MaxLength: 128},
+			{Name: "interactive", Boolean: true, Description: "Allow profile questions on real terminals with text output."},
+			{Name: "no-interactive", Boolean: true, Description: "Never read input or ask profile questions."},
+		}, Output: changedItemOutput(object(map[string]any{"config_path": stringSchema(), "profile": stringSchema(), "profile_source": map[string]any{"enum": []string{"flag", "config", "directory", "prompt"}}, "profile_presence": map[string]any{"enum": []string{"existing", "absent", "unchecked"}}}, "config_path", "profile", "profile_source", "profile_presence")), Run: a.initProject},
 		{Name: "help", Description: "Describe commands and their options.", Options: []Option{}, Output: map[string]any{"$ref": "#/$defs/catalog"}, Run: func(context.Context, IO, Request) (any, *protocol.Error) { return a.catalog(), nil }},
 		{Name: "version", Description: "Report build and protocol versions.", Options: []Option{}, Output: object(map[string]any{
 			"version":          stringSchema(),
@@ -415,6 +416,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	output.invocation = request.Invocation
 	output.requestID = request.Options["request-id"]
 	output.displayContext = commandDisplayContext(selected.Name, request)
+	request.OutputFormat, request.Agent = output.decision.Format, len(environment.Signals) > 0
 	data, err := selected.Run(ctx, streams, request)
 	if err != nil {
 		if err.Details == nil {

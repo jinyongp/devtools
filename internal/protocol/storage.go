@@ -33,3 +33,25 @@ func WithStorageDetails(e *Error, domain, operation, resource string, cause erro
 	}
 	return &copy
 }
+
+// WithStoragePreparation keeps query preparation separate from schema reads.
+// Passive inspection observes the requirement without attempting any writes.
+func WithStoragePreparation(e *Error, state string, passive bool) *Error {
+	if e.Code == "canceled" || e.Code == "deadline_exceeded" {
+		return e
+	}
+	copy := *e
+	copy.Details = map[string]any{}
+	for key, value := range e.Details {
+		copy.Details[key] = value
+	}
+	copy.Message = "Storage initialization or recovery is required before this query can proceed."
+	copy.Details["state"] = state
+	copy.Details["effects"] = "unknown"
+	if passive {
+		copy.Details["effects"] = "none"
+	}
+	copy.Details["retry"] = "after_dependency_change"
+	copy.Details["remedies"] = []Remedy{{Relation: SameStoreAction, Argv: []string{"devtools", "doctor", "--storage", "--fix"}, Effect: "value_write", RequiredInputs: []string{}, Message: "Prepare or recover the existing storage in a context with write access, then retry the query."}}
+	return &copy
+}

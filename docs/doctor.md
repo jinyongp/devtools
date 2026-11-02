@@ -6,6 +6,29 @@ protocol 11의 `devtools doctor`는 기본적으로 프로젝트의 **모든 명
 실행 파일이 없거나 필수 조건을 만족하지 못하면 해당 이름과 이유, 선언 위치와 다음 조치를 제공한다.
 도구 설치나 설정 변경은 수행하지 않는다. 설치본의 지원 여부는 `version`과 `schema doctor`로 확인한다.
 
+## 저장소 준비와 전환
+
+protocol 22는 프로젝트 설정 없이 전체 선택 data root를 검사·전환하는 공통 경로를 제공한다.
+
+```sh
+devtools doctor --storage
+devtools doctor --storage --check
+devtools doctor --storage --fix
+```
+
+`--storage`는 파일을 만들거나 복구하지 않는다. `--fix`는 필요한 잠금 준비·중단된 transaction 복구와
+알려진 values/task/receipt 형식 전환 뒤 다시 검사한다. 현재 상태면 변경 없이 성공한다.
+`--check`와 `--fix`는 함께 사용하지 않으며, storage 모드는 profile/env/bundle/명령/dir 옵션과 섞지 않는다.
+`--isolated-root`를 주면 해당 root만 처리한다. `migration_required`가 난 일반 조회·변경은 이 경로로 전환한 뒤 재시도한다.
+
+보호된 전환은 이미 열린 vault의 키를 빌리며 idle 만료 시각을 연장하지 않는다. 키·보호 방법·쓰기 권한·
+이전 writer 등의 prerequisite가 없으면 미완료 상태와 이유를 반환한다. Doctor가 새 보호 방법을 선택하거나
+자동으로 unlock하지 않는다. 실패에 첨부된 `error.details.report`와 `effects`를 먼저 확인한다.
+
+설치 업데이트는 새 실행파일에서 같은 coordinator를 호출한다. `binary_changed`와 `storage.ready/status`는
+별도 결과이며, 같은 실행파일의 업데이트를 반복해도 미완료 전환을 재개한다. Storage가 미완료면 exit 3이다.
+실행파일을 구버전으로 되돌리는 것은 데이터 복구가 아니다. Homebrew는 `brew upgrade` 뒤 위 doctor 명령을 실행한다.
+
 ## 검사 범위 선택
 
 ```sh

@@ -161,9 +161,9 @@ func (s Store) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
 }
 
 func (s Store) ReadCurrent(ctx context.Context) (*State, *protocol.Error) {
-	release, e := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))
+	release, e := maintenance.AcquireQuery(ctx, maintenance.Root(s.Directory))
 	if e != nil {
-		return nil, gateError(ctx, e)
+		return nil, s.queryGateError(ctx, e)
 	}
 	defer release()
 	return s.ReadCurrentHeld(ctx)
@@ -176,9 +176,9 @@ func (s Store) ReadCurrentHeld(ctx context.Context) (*State, *protocol.Error) {
 	if ctx.Err() != nil {
 		return nil, protocol.ContextError(ctx.Err())
 	}
-	release, e := LockShared(ctx, s.path()+".lock")
+	release, e := maintenance.LockQueryShared(ctx, s.path()+".lock")
 	if e != nil {
-		return nil, gateError(ctx, e)
+		return nil, s.queryGateError(ctx, e)
 	}
 	defer release()
 	return s.loadCurrent()

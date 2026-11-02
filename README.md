@@ -56,7 +56,7 @@ values. Choose an unused profile name for this example: an existing name shares
 its stored values. These first commands work on macOS, Linux, WSL, and Windows.
 
 ```sh
-devtools init --profile myapp
+devtools init
 devtools var set LOG_LEVEL --value info
 devtools env create local
 devtools var set LOG_LEVEL --env local --value debug

@@ -10,6 +10,10 @@ import struct
 import subprocess
 import termios
 import time
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from init_fixture import run as check_init, unix_terminal
 
 
 binary = str(Path.home() / '.local/bin/devtools')
@@ -23,6 +27,7 @@ agents = ('AI_AGENT', 'CODEX_THREAD_ID', 'CODEX_CI', 'CLAUDECODE', 'CLAUDE_CODE'
 environment = {k: v for k, v in os.environ.items() if k not in agents
                and k not in ('DEVTOOLS_FORMAT', 'NO_COLOR')}
 environment.update(TERM='xterm-256color', PATH=str(Path(binary).parent) + os.pathsep + environment['PATH'])
+assert check_init(binary, Path.home() / 'init-contract', environment, unix_terminal)['result'] == 'pass'
 project = Path.home() / '프로젝트 공백'
 project.mkdir()
 (project / 'devtools.toml').write_text('profile="presentation-fixture"\n[commands.echo]\nexec=["sh","-c","printf child-native"]\ninject=false\n', encoding='utf-8')
@@ -83,7 +88,7 @@ def call(*args, extra=None, tty_out=False, tty_err=False, width=80):
 
 
 code, plain, error = call('version')
-assert code == 0 and error == '' and json.loads(plain)['data']['protocol_version'] == 21
+assert code == 0 and error == '' and json.loads(plain)['data']['protocol_version'] == 22
 code, terminal, error = call('version', tty_out=True)
 assert code == 0 and error == '' and not ansi.sub('', terminal).lstrip().startswith('{')
 assert '0.0.0-test.1' in terminal and '\x1b[1m' in terminal

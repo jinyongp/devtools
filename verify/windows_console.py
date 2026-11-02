@@ -7,7 +7,7 @@ import threading
 import time
 
 
-def windows_terminal(argv, env, cwd, interrupt_after=None):
+def windows_terminal(argv, env, cwd, interrupt_after=None, input_steps=()):
     if os.name != 'nt': raise RuntimeError('ConPTY requires native Windows')
     import msvcrt
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
@@ -68,6 +68,17 @@ def windows_terminal(argv, env, cwd, interrupt_after=None):
                     output.extend(part)
             except OSError: pass
         read_thread=threading.Thread(target=collect,daemon=True);read_thread.start()
+        search_from=0
+        for prompt,value in input_steps:
+            deadline=time.monotonic()+15
+            while output.find(prompt.encode(),search_from)<0:
+                if kernel.WaitForSingleObject(process.hProcess,0)!=258 or time.monotonic()>deadline:
+                    raise RuntimeError('ConPTY exited or timed out before input prompt: '+prompt)
+                time.sleep(.01)
+            search_from=len(output)
+            body=value.replace('\n','\r').encode()
+            written=w.DWORD();checked(kernel.WriteFile(writer,body,len(body),ctypes.byref(written),None))
+            assert written.value==len(body)
         if interrupt_after is not None:
             time.sleep(interrupt_after)
             assert kernel.WaitForSingleObject(process.hProcess,0)==258,'Console input ended before interrupt'

@@ -68,7 +68,7 @@ devtools version
 
 | 명령 | 동작 |
 | --- | --- |
-| `init --profile NAME` | 현재 디렉터리에 `devtools.toml`을 생성한다. |
+| `init [--profile NAME]` | 현재 디렉터리에 `devtools.toml`을 생성한다. 새 설정은 실제 디렉터리 이름을 기본 profile로 사용한다. |
 | `project inspect` | 선택된 profile, 설정 출처와 경로, 사용자 전역 경로를 반환한다. |
 | `schema` | 짧은 명령 그룹 목록을 JSON으로 반환한다. |
 | `schema var get` | 지정한 명령의 입력·출력 스키마를 반환한다. |
@@ -76,7 +76,9 @@ devtools version
 | `version` | 빌드 버전과 CLI `protocol_version`을 반환한다. 응답 envelope 버전은 최상위 `schema_version`에 있다. |
 | `help`, `--help` | 사람이 읽을 수 있는 짧은 텍스트 도움말을 출력한다. |
 
-`init`은 profile을 명시적으로 받는다. 같은 profile의 유효한 설정이 있으면 내용을 바꾸지 않고 성공한다. 다른 profile이거나 잘못된 설정이면 기존 파일을 보존하고 오류를 반환한다. 생성 결과는 `data.item`에 `config_path`와 `profile`, `data.changed`에 생성 여부를 반환한다. Git 스테이징은 수행하지 않는다.
+`init`은 기존 로컬 설정을 먼저 사용한다. 새 설정에서 `--profile`을 생략하면 실제 디렉터리 이름을 사용하며, 알려진 기존 profile과 겹치면 실제 terminal의 text 출력에서만 공유·다른 이름·취소를 묻는다. JSON, agent, CI, pipe 또는 `--no-interactive`에서는 입력을 읽지 않고 `profile_name_in_use`를 반환한다. `--profile NAME`은 명시적인 선택이므로 추가 조회나 질문 없이 공유할 수 있다. 이름은 자동 변환하거나 숫자를 붙이지 않는다.
+
+기존 설정의 profile과 명시한 이름이 다르거나 설정이 잘못됐으면 파일을 보존하고 오류를 반환한다. 생성 결과는 `data.item`의 `config_path`, `profile`, `profile_source`(`flag/config/directory/prompt`), `profile_presence`(`existing/absent/unchecked`)와 `data.changed`를 반환한다. 세부 분기와 예시는 [init 계약](init-profile-plan.md)을 따른다. Git 스테이징은 수행하지 않는다.
 
 `schema`와 `project inspect`는 조회 명령이다. 전자는 호출 방법을 확인하고, 후자는 현재 프로젝트 연결을 확인하는 데 사용한다.
 

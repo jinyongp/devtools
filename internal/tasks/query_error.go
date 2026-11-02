@@ -20,15 +20,5 @@ func (s Store) queryGateError(ctx context.Context, cause error) *protocol.Error 
 	if !errors.As(cause, &preparation) {
 		return failure
 	}
-	failure.Message = "Storage initialization or recovery is required before this query can proceed."
-	failure.Details["state"] = preparation.State
-	failure.Details["effects"] = "unknown"
-	failure.Details["retry"] = "after_dependency_change"
-	failure.Details["remedies"] = []protocol.Remedy{{
-		Relation: protocol.SameStoreAction,
-		Argv:     []string{"devtools", "task", "next", "--profile", s.Profile},
-		Effect:   "value_write", RequiredInputs: []string{},
-		Message: "Run task next with write access to the existing store to initialize or recover storage, then retry the original query with the same options.",
-	}}
-	return failure
+	return protocol.WithStoragePreparation(failure, preparation.State, preparation.Passive)
 }

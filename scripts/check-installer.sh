@@ -36,6 +36,13 @@ if [ "${1:-}" = version ]; then
   exit 0
 fi
 case "${1:-}" in
+  __install-storage)
+    if [ "${DEVTOOLS_INSTALL_TEST_STORAGE_PENDING:-}" = true ]; then
+      printf '%s\n' '{"status":"pending","ready":false,"diagnostic":{"code":"vault_locked","details":{}}}'
+    else
+      printf '%s\n' '{"status":"ready","ready":true,"report":{"scope":"storage","directory":"/fixture","state":"current","ready":true,"changed":false,"effects":"none","items":[]}}'
+    fi
+    exit 0 ;;
   __install-prepare) [ "${DEVTOOLS_INSTALL_TEST_FAIL_PREPARE:-}" != true ]; exit $? ;;
   __install-commit) [ "${DEVTOOLS_INSTALL_TEST_FAIL_COMMIT:-}" != true ]; exit $? ;;
   __install-rollback) exit 0 ;;
@@ -99,4 +106,15 @@ if HOME="$home" DEVTOOLS_INSTALL_TEST_FAIL_COMMIT=true sh "$installer" update --
 fi
 cmp "$scratch/original" "$bin_dir/devtools"
 HOME="$home" sh "$installer" update --version "$version" --source "$release" --bin-dir "$bin_dir" > "$scratch/updated.json"
+grep -F '# release candidate marker' "$bin_dir/devtools" >/dev/null
+
+# A same-image update still runs the coordinator. Pending storage must retain the
+# committed candidate and explicitly report that executable publication succeeded.
+if HOME="$home" DEVTOOLS_INSTALL_TEST_STORAGE_PENDING=true sh "$installer" update --version "$version" --source "$release" --bin-dir "$bin_dir" > "$scratch/storage-pending.json" 2> "$scratch/storage-pending.error"; then
+  echo 'Update silently accepted pending storage.' >&2; exit 1
+else
+  [ "$?" -eq 3 ]
+fi
+grep -F '"binary_changed":false' "$scratch/storage-pending.error" >/dev/null
+grep -F '"status":"pending"' "$scratch/storage-pending.error" >/dev/null
 grep -F '# release candidate marker' "$bin_dir/devtools" >/dev/null

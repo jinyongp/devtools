@@ -16,6 +16,24 @@ func purposeView(d Definition, data map[string]any) (cliui.Document, bool) {
 		return document, true
 	}
 	switch d.Command {
+	case "init":
+		item, _ := data["item"].(map[string]any)
+		message := "Using existing project configuration."
+		if data["changed"] == true {
+			message = "Created project configuration."
+			if item["profile_presence"] == "existing" {
+				message = fmt.Sprintf("Created project configuration using existing profile %q.", text(item["profile"]))
+			}
+		}
+		source := map[string]string{"directory": "directory name", "flag": "flag", "config": "configuration", "prompt": "input"}[text(item["profile_source"])]
+		blocks := []cliui.Block{outcomeHeading(message), cliui.Fields(
+			cliui.Field{Label: cliui.Literal("Profile"), Value: cliui.Literal(text(item["profile"]) + " (" + source + ")")},
+			cliui.Field{Label: cliui.Literal("Config"), Value: display(item["config_path"])},
+		)}
+		if data["changed"] == true {
+			blocks = append(blocks, cliui.Paragraph(cliui.Literal("Projects using this profile name share values, secrets, and tasks.")))
+		}
+		return cliui.NewDocument(blocks...), true
 	case "config fmt":
 		if data["dry_run"] == true {
 			return cliui.NewDocument(append([]cliui.Block{outcomeHeading("Preview: Format configuration.")}, formattingReviewBlocks(data)...)...), true

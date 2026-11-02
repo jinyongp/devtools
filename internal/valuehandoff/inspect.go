@@ -85,7 +85,7 @@ func (s Store) Status(ctx context.Context, id, requestID string) (View, *protoco
 	}
 	item, err := s.observed(ctx, r)
 	if err != nil {
-		return View{}, values.QueryError(ctx, err)
+		return View{}, s.observationError(ctx, err, r.Item.ID)
 	}
 	return View{s.Profile, item}, nil
 }
@@ -185,7 +185,7 @@ func (s Store) List(ctx context.Context, limit int, cursor string) (ListResult, 
 	for _, r := range records[offset:end] {
 		item, err := s.observed(ctx, r)
 		if err != nil {
-			return out, values.QueryError(ctx, err)
+			return out, s.observationError(ctx, err, r.Item.ID)
 		}
 		out.Items = append(out.Items, item)
 	}
@@ -195,4 +195,13 @@ func (s Store) List(ctx context.Context, limit int, cursor string) (ListResult, 
 		out.NextCursor = &next
 	}
 	return out, nil
+}
+
+func (s Store) observationError(ctx context.Context, cause error, id string) *protocol.Error {
+	failure := values.QueryError(ctx, cause)
+	var preparation *maintenance.QueryPreparationError
+	if errors.As(cause, &preparation) && failure.Code != "canceled" && failure.Code != "deadline_exceeded" {
+		failure.Details["remedies"] = []protocol.Remedy{{Relation: protocol.SameStoreAction, Argv: []string{"devtools", "values", "execution", "status", id, "--profile", s.Profile}, Effect: "value_write", RequiredInputs: []string{}, Message: "Run this status query with write access to prepare its existing delivery lock, then retry."}}
+	}
+	return failure
 }

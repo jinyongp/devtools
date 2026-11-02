@@ -188,7 +188,7 @@ func TestRootOffsetsAndInvocationOnlyFormat(t *testing.T) {
 	if exit != 0 || diagnostic != "" || calls != 1 || !strings.Contains(out, "18446744073709551615") || !strings.Contains(out, "visible") || strings.Contains(out, "hidden-fixture") || strings.Contains(out, "empty") {
 		t.Fatalf("exit=%d calls=%d stdout=%s stderr=%s", exit, calls, out, diagnostic)
 	}
-	args := []string{"--isolated-root", t.TempDir(), "--format", "json", "init"}
+	args := []string{"--isolated-root", t.TempDir(), "--format", "json", "process", "status"}
 	exit, _, diagnostic = invoke(t, a, "", args...)
 	var result struct {
 		Error struct {

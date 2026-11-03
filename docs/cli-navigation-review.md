@@ -66,7 +66,8 @@ Confirmed regressions corrected during implementation:
   an unprepared read-only log lock fixture, and a native rewrap assertion using the
   previous recovery contract. The process fixture now serves real status RPCs,
   log locking prepares its pair explicitly, and native rewrap executes the ready
-  interactive action with no missing argv inputs.
+  interactive action with no missing argv inputs. The existing Windows workflow
+  now requires protocol 23 for the installed candidate's diagnostic evidence.
 - Profile discovery still opened full historical process bodies. It now uses the
   same metadata reader as navigation; absent historical bodies cannot break a
   profile-name listing. A dedicated fixture verifies deduplication and ordering.

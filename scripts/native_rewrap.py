@@ -87,7 +87,8 @@ def check_native_rewrap(binary, env, cwd, profile, directory, *, lock_backend=No
         error=json.loads(p.stderr)['error'];assert error['code']=='vault_locked'
         assert error['details']['retry']=='after_dependency_change'
         recovery=error['details']['remedies'][0]
-        assert '--interactive' in recovery['argv'] and recovery['required_inputs']==['os-authentication']
+        assert recovery['state']=='ready' and '--interactive' in recovery['argv']
+        assert recovery['required_inputs']==[]
     assert api('vault','status')==locked
     api(*recovery['argv'][1:])
     consume()

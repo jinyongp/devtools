@@ -9,7 +9,12 @@ import (
 )
 
 func TestWindowsLogLocksPreserveSharedExclusiveAndCancel(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "private", "output.log")
+	path := filepath.Join(privateTempDir(t), "output.log")
+	prepared, err := acquireLogLock(context.Background(), path, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared()
 	first, err := acquireLogLock(context.Background(), path, false)
 	if err != nil {
 		t.Fatal(err)

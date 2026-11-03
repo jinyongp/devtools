@@ -681,11 +681,10 @@ func (s Store) StoredRecords() ([]Record, *protocol.Error) {
 	return s.storedRecords()
 }
 
-// ProfileNames enumerates profiles from stored process records without
-// contacting live supervisors. Catalog-style discovery must stay passive and
-// must not turn a profile listing into readiness or control RPC traffic.
+// ProfileNames enumerates profiles from process metadata without opening retained
+// bodies or contacting live supervisors. Catalog-style discovery stays passive.
 func (s Store) ProfileNames() ([]string, *protocol.Error) {
-	records, err := s.StoredRecords()
+	records, err := s.StoredMetadata()
 	if err != nil {
 		return nil, err
 	}

@@ -62,6 +62,14 @@ Confirmed regressions corrected during implementation:
 - Native macOS CI rejected temporary `/var` aliases used by new storage fixtures.
   Cleanup, retained-body and native-unlock fixtures now use the existing physical
   testfs root before deriving paths; production no-follow validation is preserved.
+- Windows follow-up CI exposed a 313-record fixture that outlived startup grace,
+  an unprepared read-only log lock fixture, and a native rewrap assertion using the
+  previous recovery contract. The process fixture now serves real status RPCs,
+  log locking prepares its pair explicitly, and native rewrap executes the ready
+  interactive action with no missing argv inputs.
+- Profile discovery still opened full historical process bodies. It now uses the
+  same metadata reader as navigation; absent historical bodies cannot break a
+  profile-name listing. A dedicated fixture verifies deduplication and ordering.
 
 Current local checks include focused protocol/ports/CLI/dashboard compilation,
 preview round trips, collection/snapshot/query suites, service replay fixtures,

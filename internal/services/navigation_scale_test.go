@@ -66,3 +66,25 @@ func TestNavigationScaleReadsMetadataAndOnlySelectedLiveSupervisors(t *testing.T
 		})
 	}
 }
+
+func TestProfileNamesDoesNotOpenHistoricalProcessBodies(t *testing.T) {
+	s := Store{Data: privateTempDir(t)}
+	now := time.Now().UTC()
+	ref := retainedbody.Reference{Version: 1, Kind: "process_record", Digest: strings.Repeat("a", 64), Bytes: 1}
+	for i, profile := range []string{"selected", "zeta", "selected"} {
+		r := Record{ID: tasks.ID(), Profile: profile, Directory: privateTempDir(t), Command: "web", State: "stopped", CreatedAt: now.Add(-time.Hour), EndedAt: &now}
+		disk := diskRecord{Version: 2, Metadata: r, Body: ref}
+		if i == 1 {
+			disk.RetiredAt = &now
+		}
+		if err := writePrivate(s.path(r.ID, "record.json"), disk); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The referenced bodies deliberately do not exist. Profile discovery depends
+	// only on valid metadata, including records whose detail has been retired.
+	names, condition := s.ProfileNames()
+	if condition != nil || strings.Join(names, ",") != "selected,zeta" {
+		t.Fatal(names, condition)
+	}
+}

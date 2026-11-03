@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,12 +26,14 @@ func TestProcessCurrentSummarizes313RecordsAndHistoryReachesEveryExecution(t *te
 		t.Fatal(e)
 	}
 	now := time.Now().UTC()
+	var active services.Record
 	for i := 0; i < 313; i++ {
 		r := services.Record{ID: tasks.ID(), Profile: "app-a", Directory: dir, Command: "web", State: "exited", CreatedAt: now.Add(time.Duration(i-400) * time.Hour)}
 		ended := r.CreatedAt.Add(time.Minute)
 		r.EndedAt = &ended
 		if i == 312 {
 			r.State, r.CreatedAt, r.EndedAt = "starting", now, nil
+			active = r
 		}
 		if e := tasks.PrivateDir(filepath.Join(s.Data, "processes", r.ID)); e != nil {
 			t.Fatal(e)
@@ -42,6 +47,15 @@ func TestProcessCurrentSummarizes313RecordsAndHistoryReachesEveryExecution(t *te
 		t.Fatal(e)
 	}
 	if e := s.RestoreRecord(r); e != nil {
+		t.Fatal(e)
+	}
+	// A live supervisor keeps this fixture independent of the time spent writing
+	// historical records, which can exceed the legacy startup grace on Windows.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(active)
+	}))
+	t.Cleanup(server.Close)
+	if e := tasks.WritePrivate(filepath.Join(s.Data, "processes", active.ID, "control.json"), map[string]string{"id": active.ID, "address": server.URL, "token": strings.Repeat("f", 64)}); e != nil {
 		t.Fatal(e)
 	}
 	current := outputData(t, a, []string{"process", "list"})["items"].([]any)

@@ -287,6 +287,8 @@ test("automatic value replacement reports delivery and pauses after preparation 
     const dashboard=JSON.parse(runCLI(["dashboard"],project,env));
     await page.goto(dashboard.data.item.url,{waitUntil:"domcontentloaded"});
     await page.locator("#processes-nav").click();
+    // Replacement completion belongs to the original execution's history.
+    await page.getByRole("combobox",{name:"Process view"}).selectOption("history");
     await page.locator(".process-details summary").click();
     runCLI(["sec","set","TOKEN","--stdin"],project,env,"synthetic-auto-browser-after");
     await expect(page.locator("#values-panel")).toContainText("Automatic value update: applied",{timeout:15000});

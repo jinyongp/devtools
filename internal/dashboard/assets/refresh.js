@@ -8,7 +8,7 @@ function refreshFingerprint(path, data) {
 function rememberRefreshRead(path, data) {
   const params = new URLSearchParams(path.split("?")[1]);
   const queryRead = path.startsWith("/api/query?") && !params.has("cursor") && ["list", "workstream list", "context", "workstream context"].includes(params.get("command"));
-  if (path === "/api/vault" || path === "/api/profiles" || path.startsWith("/api/values?") || path.startsWith("/api/processes?") || path.startsWith("/api/network?") || path.startsWith("/api/archives?") || queryRead) {
+  if (path === "/api/vault" || path === "/api/profiles" || path.startsWith("/api/values?") || path.startsWith("/api/processes?") || path.startsWith("/api/process?") || path.startsWith("/api/network?") || path.startsWith("/api/archives?") || queryRead) {
     refreshReads.set(path, refreshFingerprint(path, data));
   }
 }
@@ -31,8 +31,10 @@ async function refreshVisibleView() {
   try {
     let changed = false;
     for (const [path, previous] of [...refreshReads]) {
+      if (!refreshReads.has(path)) continue;
       const current = await api(path, undefined, controller.signal, false);
       if (!canRefresh() || generation !== version || detailGeneration !== detailVersion) return;
+      if (!refreshReads.has(path)) continue;
       changed ||= refreshFingerprint(path, current) !== previous;
       if (changed) break;
     }

@@ -18,7 +18,7 @@ completion requires those results to pass.
 | T07 remaining collections | reviewed | native task filters and stale completion preserved; task suite passes; port/instance intersections and all-profile selection; values-use observations reuse current metadata |
 | T08 retention and maintenance | reviewed | TTL/reference/replay and focused race fixtures pass; corrected shared body budget, bounded cache prune, old preparation history and authenticated delivery resolution evidence; final native in T12 |
 | T09 explicit storage preparation | reviewed | explicit process/archive/delivery/log adapters, crash/resume and old active writer checks; missing body guard handled by doctor; native write denial remains T12 |
-| T10 consumers and documentation | reviewed | protocol 23 schema/help/completion/examples/guides; CLI/dashboard/value/vault suites; 40 dashboard JS tests including lazy detail and actual execution IDs |
+| T10 consumers and documentation | reviewed | protocol 23 schema/help/completion/examples/guides; CLI/dashboard/value/vault suites; 44 dashboard JS tests including lazy detail, visible refresh and actual execution IDs; four real Chromium journeys pass locally |
 | T11 scale and concurrency | reviewed | 313/1000/10000 metadata fixtures; live RPC 1/2 and unrelated0; current1.6/2.2KB; 10000-row independent cursor and focused maintenance/cache/publication race pass |
 | T12 integrated review | source reviewed; platform validation tracked separately | all areas rechecked; aggregate static/vet/race pass and installed Linux write-denial parity pass; final main SHA and native Actions results belong to the workstream validation records |
 
@@ -71,6 +71,12 @@ Confirmed regressions corrected during implementation:
 - Profile discovery still opened full historical process bodies. It now uses the
   same metadata reader as navigation; absent historical bodies cannot break a
   profile-name listing. A dedicated fixture verifies deduplication and ordering.
+- Real Windows Chromium exposed stale expanded process details: metadata-only
+  navigation did not change when input verification changed. Visible execution
+  details now join refresh polling and stop polling when closed, including late
+  response exclusion. Lazy details preserve background-watch, paused-update,
+  replacement and diagnostic explanations. The browser replacement journey
+  selects execution history to inspect the original completed execution.
 
 Current local checks include focused protocol/ports/CLI/dashboard compilation,
 preview round trips, collection/snapshot/query suites, service replay fixtures,

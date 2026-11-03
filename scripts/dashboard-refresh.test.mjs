@@ -79,3 +79,21 @@ test("vault cache deadlines do not repaint the page; lock state changes do",asyn
   b.context.api=async path=>{b.calls.push(path);return {state:"locked_manual",backend:"passphrase",vault_id:"one"};};
   await b.run("refreshVisibleView()");assert.deepEqual(b.calls,["/api/vault","load"]);
 });
+
+test("visible execution verification refreshes even when the process list is unchanged",async()=>{
+  const b=browser();
+  b.run('rememberRefreshRead("/api/processes?profile=demo",{revision:2}); rememberRefreshRead("/api/process?profile=demo&id=one",{values:{state:"current"}})');
+  b.context.api=async path=>{b.calls.push(path);return path.startsWith("/api/process?")?{values:{state:"pending"}}:{revision:2};};
+  await b.run("refreshVisibleView()");
+  assert.deepEqual(b.calls,["/api/processes?profile=demo","/api/process?profile=demo&id=one","load"]);
+});
+
+test("closing execution details during a poll excludes its late refresh result",async()=>{
+  const b=browser();let resolve;
+  b.run('rememberRefreshRead("/api/process?profile=demo&id=one",{values:{state:"current"}})');
+  b.context.api=()=>new Promise(done=>resolve=done);
+  const pending=b.run("refreshVisibleView()");
+  b.run('refreshReads.delete("/api/process?profile=demo&id=one")');
+  resolve({values:{state:"pending"}});await pending;
+  assert.deepEqual(b.calls,[]);
+});

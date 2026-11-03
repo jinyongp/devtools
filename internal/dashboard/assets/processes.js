@@ -11,20 +11,34 @@ function startProcess(panel,current,directory="",name="") {
     return()=>({action:"start",directory:dir.value,command:command.value,capture_logs:capture.checked,...(env.value?{env:env.value}:{})});
   },body=>processRequest(current,body)));
 }
-async function processDetails(section,current,id,version) {
+function processDetailPath(current,id) { return "/api/process?"+new URLSearchParams({profile:current,id}); }
+async function processDetails(section,current,id,version,visible) {
   try {
-    const result=await api("/api/process?"+new URLSearchParams({profile:current,id}));
-    if(generation!==version)return;
+    const path=processDetailPath(current,id);
+    const result=await api(path,undefined,undefined,false);
+    if(generation!==version||!visible())return;
+    rememberRefreshRead(path,result);
     const item=result.item,input=result.values;
     text("p","Execution "+id,section);
     text("p","Value selection: "+(item.selection||"all"),section);
     if(input){
       const labels={current:"Current values",pending:"Value changes pending",failed:"Cannot apply current values",unknown:"Value delivery unknown",verification_pending:"Value verification pending"};
       text("p",(labels[input.state]||"Value delivery unknown")+" · "+(input.reason||"").replaceAll("_"," "),section);
+      const cause=input.diagnostic?.details;
+      if(cause){
+        const parts=[cause.reason,cause.state,cause.retry].filter(Boolean).map(value=>value.replaceAll("_"," "));
+        if(parts.length)text("p","Storage: "+parts.join(" · "),section);
+      }
       if(input.delivered)text("p","Recorded delivery: "+input.delivered.slots.length+" values. Delivery records do not show which values the application read.",section);
     }
-    if(item.value_apply)text("p","Automatic value update: "+item.value_apply.state+" · "+item.value_apply.reason.replaceAll("_"," "),section);
+    if(item.value_apply){
+      text("p","Automatic value update: "+item.value_apply.state+" · "+(item.value_apply.reason||"").replaceAll("_"," "),section);
+      if(item.value_apply.state==="failed"||item.value_apply.state==="paused")text("p","Automatic updates paused. Fix the cause and use Restart to retry explicitly.",section);
+      if(item.value_apply.next_id)text("p","Replacement execution: "+item.value_apply.next_id,section);
+    }
+    if(item.value_watch)text("p","Background value check: "+item.value_watch.state.replaceAll("_"," ")+" · "+(item.value_watch.reason||"").replaceAll("_"," "),section);
     if(item.output)text("p","Output: stdout "+item.output.stdout+", stderr "+item.output.stderr,section);
+    if(item.reason)text("p",item.reason.replaceAll("_"," ")+(item.exit_code==null?"":" · exit "+item.exit_code),section);
     if(item.ready_configured&&!item.ended_at){
       button(section,"Check readiness",async()=>{
         try{const data=(await api("/api/actions",processRequest(current,{action:"check",id}))).data;if(generation===version)text("p",(data.readiness.ready?"Ready":"Not ready")+" · "+data.readiness.reason,section);}
@@ -37,7 +51,7 @@ async function processDetails(section,current,id,version) {
       try{const data=await api("/api/process-logs?"+new URLSearchParams({profile:current,id}));if(generation===version){const pre=text("pre",data.content,section);pre.className="raw-output";}}
       catch(e){if(generation===version)notice(e.message);}
     }));
-  }catch(e){if(generation===version)text("p","Details unavailable: "+e.message,section);}
+  }catch(e){if(generation===version&&visible())text("p","Details unavailable: "+e.message,section);}
 }
 async function loadProcesses(version) {
   const panel=$("values-panel"),current=profile;panel.replaceChildren();
@@ -107,12 +121,21 @@ async function loadProcesses(version) {
       text("p",item.directory,details);
       if(item.created_at)text("p","Created "+item.created_at,details);
       if(item.ended_at)text("p","Ended "+item.ended_at,details);
-      let fetched=false;
+      const content=text("div","",details);
+      let fetched=false,detailVersion=0;
       details.open=expandedProcesses.has(item.id);
       const open=()=>{
         if(generation!==version)return;
-        if(details.open){expandedProcesses.add(item.id);if(!fetched){fetched=true;for(const id of ids)processDetails(details,current,id,version);}}
-        else expandedProcesses.delete(item.id);
+        if(details.open){
+          expandedProcesses.add(item.id);
+          if(!fetched){
+            fetched=true;const request=++detailVersion;content.replaceChildren();
+            for(const id of ids)processDetails(content,current,id,version,()=>details.open&&detailVersion===request);
+          }
+        }else{
+          expandedProcesses.delete(item.id);fetched=false;detailVersion++;
+          for(const id of ids)refreshReads.delete(processDetailPath(current,id));
+        }
         saveNavigation();
       };
       details.ontoggle=open;if(details.open)open();

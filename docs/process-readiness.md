@@ -62,17 +62,16 @@ HTTP는 curl, DB는 해당 클라이언트, 복합 조건은 프로젝트 검사
 검사 명령은 종료 코드 0으로 준비 완료를 나타낸다.
 
 ```sh
-request_id=$(python3 -c 'import uuid; print(uuid.uuid4())')
-devtools process start web --request-id "$request_id"
+devtools process start web
 ```
 
 start 성공 응답의 `data.item.id`를 아래 `EXECUTION_ID`에 넣는다.
-`request_id`는 start 요청 재시도에 사용하고, 실행 ID는 검사·대기·종료 대상을 가리킨다.
+응답의 `data.request_id`는 start 요청 재시도에 사용하고, 실행 ID는 검사·대기·종료 대상을 가리킨다.
 
 ```sh
 devtools process check EXECUTION_ID
 devtools process wait EXECUTION_ID --timeout 30s
-devtools process stop EXECUTION_ID --request-id "$(python3 -c 'import uuid; print(uuid.uuid4())')"
+devtools process stop EXECUTION_ID
 ```
 
 `check`는 한 번 검사하고 결과를 반환한다. 검사 완료 시 준비 여부와 관계없이

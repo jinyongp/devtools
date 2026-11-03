@@ -146,7 +146,6 @@ func TestStatefulGenerateExampleUsesInspectedRevisionAndSameRequest(t *testing.T
 	}
 	revision := outputData(t, a, []string{"values", "revision"})["revision"].(string)
 	argv := strings.Fields(entry["examples"].([]any)[0].(string))[1:]
-	requestID := tasks.ID()
 	for i := range argv {
 		if argv[i] == "--profile" {
 			argv[i+1] = "audit"
@@ -154,11 +153,9 @@ func TestStatefulGenerateExampleUsesInspectedRevisionAndSameRequest(t *testing.T
 		if argv[i] == "--revision" {
 			argv[i+1] = revision
 		}
-		if argv[i] == "--request-id" {
-			argv[i+1] = requestID
-		}
 	}
 	first := outputData(t, a, argv)
+	argv = append(argv, "--request-id", first["request_id"].(string))
 	replay := outputData(t, a, argv)
 	if first["changed"] != true || replay["replayed"] != true || first["revision"] != replay["revision"] {
 		t.Fatal(first, replay)

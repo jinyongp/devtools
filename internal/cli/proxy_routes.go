@@ -34,7 +34,7 @@ func (a *App) registerProxyRoutes() {
 	a.registerGlobalRun()
 	a.registerExpose()
 	for _, action := range []string{"add", "rm", "clear", "up", "down"} {
-		c := Command{Name: "proxy " + action, Description: "Manage global declarations or activate/deactivate selected routes without starting backend processes.", Options: []Option{{Name: "global", Boolean: true, Description: "Select projectless global routes."}, {Name: "all", Boolean: true, Description: "Explicitly select all routes in the selected scope."}, {Name: "request-id", Required: true, Pattern: uuidPattern, Description: "Retry-safe request UUID."}}, Output: map[string]any{"type": "object"}}
+		c := Command{Name: "proxy " + action, Description: "Manage global declarations or activate/deactivate selected routes without starting backend processes.", Options: []Option{{Name: "global", Boolean: true, Description: "Select projectless global routes."}, {Name: "all", Boolean: true, Description: "Explicitly select all routes in the selected scope."}, requestIDOption(uuidPattern)}, Output: map[string]any{"type": "object"}}
 		if action != "clear" {
 			c.Arguments = []Argument{{Name: "name", Required: action == "add" || action == "rm", Pattern: project.ProfilePattern}}
 			if action != "add" {

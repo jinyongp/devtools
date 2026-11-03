@@ -198,7 +198,7 @@ not change firewall rules, HTTP.sys, or portproxy. Custom hosts edits use a rest
 UAC helper for the same SID. Elevation as another user is unsupported; noninteractive
 hosts edits require an already elevated token.
 
-CA trust is explicit: `devtools proxy trust --request-id UUID` registers the CA in
+CA trust is explicit: `devtools proxy trust` registers the CA in
 CurrentUser Root. Trust and untrust require an interactive terminal and OS certificate
 confirmation; noninteractive calls return `permission_required`. Devtools does not
 auto-approve OS prompts or adopt external certificates. Removal requires its own

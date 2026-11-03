@@ -27,7 +27,7 @@ func TestGuardedInputsRejectBeforeReading(t *testing.T) {
 	app := testApp(t)
 	revision, id := strings.Repeat("a", 64), tasks.ID()
 	for _, flags := range [][]string{
-		{"--revision", revision}, {"--request-id", id}, {"--create-only"},
+		{"--revision", revision, "--request-id", "not-a-uuid"}, {"--request-id", id}, {"--create-only"},
 		{"--create-only=false"}, {"--revision", revision, "--request-id", id, "--file", "unused"},
 	} {
 		input := &observedSecretReader{}
@@ -57,9 +57,14 @@ func TestGuardedValuesAndEnvironmentReplay(t *testing.T) {
 	if !reflect.DeepEqual(legacy, map[string]any{"profile": "app", "changed": true}) {
 		t.Fatal("legacy output changed")
 	}
-	revision, id := editToken(t, app), tasks.ID()
-	args := []string{"var", "set", "URL", "--value", "after", "--profile", "app", "--revision", revision, "--request-id", id}
+	revision := editToken(t, app)
+	args := []string{"var", "set", "URL", "--value", "after", "--profile", "app", "--revision", revision}
 	first := outputData(t, app, args)
+	id, _ := first["request_id"].(string)
+	if id == "" {
+		t.Fatal("guarded mutation did not return its generated request ID")
+	}
+	args = append(args, "--request-id", id)
 	if first["changed"] != true || first["replayed"] != false {
 		t.Fatal("guarded fields missing")
 	}
@@ -85,10 +90,12 @@ func TestGuardedValuesAndEnvironmentReplay(t *testing.T) {
 	if item["state"] != "completed" || item["result"].(map[string]any)["replayed"] != false {
 		t.Fatal("lookup returned live state instead of original outcome")
 	}
-	create := []string{"env", "create", "local", "--profile", "app", "--revision", editToken(t, app), "--request-id", tasks.ID()}
-	outputData(t, app, create)
-	remove := []string{"env", "remove", "local", "--profile", "app", "--revision", editToken(t, app), "--request-id", tasks.ID()}
+	create := []string{"env", "create", "local", "--profile", "app", "--revision", editToken(t, app)}
+	created := outputData(t, app, create)
+	create = append(create, "--request-id", created["request_id"].(string))
+	remove := []string{"env", "remove", "local", "--profile", "app", "--revision", editToken(t, app)}
 	removed := outputData(t, app, remove)
+	remove = append(remove, "--request-id", removed["request_id"].(string))
 	if got := outputData(t, app, create); got["replayed"] != true {
 		t.Fatal("removed environment blocked create replay")
 	}
@@ -147,12 +154,13 @@ func TestGuardedImportPreservesLayerPreviewAndRequestIdentity(t *testing.T) {
 			if err := os.WriteFile(file, []byte("URL=override\n"), 0600); err != nil {
 				t.Fatal(err)
 			}
-			id := tasks.ID()
-			args := []string{"import", "--file", file, "--profile", "app", "--env", "local", "--var", "URL", "--revision", editToken(t, app), "--request-id", id}
+			args := []string{"import", "--file", file, "--profile", "app", "--env", "local", "--var", "URL", "--revision", editToken(t, app)}
 			if bundle != "" {
 				args = append(args, "--bundle", bundle)
 			}
 			preview := outputData(t, app, append(append([]string{}, args...), "--dry-run"))
+			id := preview["request_id"].(string)
+			args = append(args, "--request-id", id)
 			if preview["changed"] != false || preview["applicable"] != true {
 				t.Fatal("preview changed or suppressed layer add")
 			}
@@ -172,12 +180,12 @@ func TestGuardedImportPreservesLayerPreviewAndRequestIdentity(t *testing.T) {
 	}
 }
 
-func TestGuardedSchemaComposesSecretInputAndPair(t *testing.T) {
+func TestGuardedSchemaComposesSecretInputAndRevision(t *testing.T) {
 	app := testApp(t)
 	for _, name := range []string{"secret set", "variable set", "secret unset", "env create", "env remove", "import"} {
 		data := outputData(t, app, append([]string{"schema"}, strings.Fields(name)...))
 		input := data["input_schema"].(map[string]any)
-		if len(input["allOf"].([]any)) != 1 {
+		if len(input["allOf"].([]any)) == 0 {
 			t.Fatal("missing guard constraint", name)
 		}
 		if name == "secret set" && len(input["oneOf"].([]any)) != 2 {

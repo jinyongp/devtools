@@ -69,8 +69,8 @@ func TestStaticRuleDiagnosticsAndHelpShareActionableConditions(t *testing.T) {
 		message string
 	}{
 		{"vault rewrap", []string{"--from-backend", "passphrase", "--backend", "passphrase", "--current-passphrase-stdin", "--new-passphrase-stdin", "--request-id", "00000000-0000-4000-8000-000000000001"}, "--current-passphrase-stdin and --new-passphrase-stdin cannot both be true."},
-		{"proxy teardown", []string{"--apply", strings.Repeat("a", 64)}, "--apply and --request-id must be provided together."},
-		{"proxy setup", nil, "Setup changes require --request-id; use --check for inspection."},
+		{"proxy teardown", []string{"--request-id", "00000000-0000-4000-8000-000000000001"}, "--request-id requires --apply."},
+		{"proxy setup", []string{"--check", "--request-id", "00000000-0000-4000-8000-000000000001"}, "--check does not accept --request-id."},
 		{"vault init", []string{"--backend", "native", "--passphrase-file", "missing"}, "Passphrase input requires --backend=passphrase."},
 	} {
 		args := append(strings.Fields(tc.command), tc.flags...)
@@ -94,8 +94,8 @@ func TestStaticRuleDiagnosticsAndHelpShareActionableConditions(t *testing.T) {
 		switch tc.command {
 		case "vault rewrap":
 			helpMessage = "Do not combine --current-passphrase-stdin and --new-passphrase-stdin."
-		case "proxy teardown":
-			helpMessage = "Provide --apply and --request-id together."
+		case "proxy setup":
+			helpMessage = "Do not combine --check and --request-id."
 		}
 		if err != "" || !strings.Contains(help, helpMessage) {
 			t.Fatal(fmt.Sprint(help, err))

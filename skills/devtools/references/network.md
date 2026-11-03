@@ -37,7 +37,7 @@
 - Stopping retains the listener port reservation; change it by starting the stopped daemon with an explicit new port. Active exposure pins protect route/listener/port identity.
 - Project routes select host, service port, optional listener and DNS policy. `.localhost` needs no hosts change; `dns = "external"` uses user-prepared DNS.
 - Auto custom-host preparation is performed by the initiating CLI, with preview and OS authentication. Noninteractive operation uses preauthorized `sudo -n`; missing permission returns `permission_required`.
-- Queries and daemon watches never edit system files. Hosts repair: `proxy hosts preview ROUTE`, then apply the unchanged digest with `proxy hosts apply ROUTE --apply DIGEST --request-id UUID`.
+- Queries and daemon watches never edit system files. Hosts repair: `proxy hosts preview ROUTE`, then apply the unchanged digest with `proxy hosts apply ROUTE --apply DIGEST`. Protocol 23 generates an omitted request ID; older schemas may require it explicitly.
 - Preserve unrelated hosts entries. DNS, known URL, backend readiness and client trust are separate outcomes.
 - Root `env_files` resolve relative to the project. Precedence: process env → earlier file → later file. `${NAME}` is required; `${NAME:-fallback}` covers unset/empty. Expansion is single-pass, with no shell.
 - Environment-backed routes use activation snapshots: file edits require reactivation; shell edits apply on next up.
@@ -50,7 +50,7 @@
 - Verify real RPC and HMR. Nuxt DevTools checks authority including port; no-Origin/scheme handling is consumer-specific. WebSocket upgrade alone is insufficient.
 - Global policy change: stop exposures, down/rm, then add/up with intended policy. Recreating a name creates a new UUID.
 - Project policy change: edit declarations, reactivate env-backed routes, restart affected bindings/allowlists. Policy changes revoke exposure pins.
-- Network control v2 rejects old daemons. If an upgrade requires restart, stop exposures and use explicitly authorized `proxy restart --all --request-id UUID`.
+- Network control v2 rejects old daemons. If an upgrade requires restart, stop exposures and use explicitly authorized `proxy restart --all`.
 - Downgrade: remove preserve declarations/recreate preserve globals as rewrite, stop affected exposures and verify pins gone using the new CLI first. Older-than-registry-v4 readers need the pre-upgrade backup; never edit private registry/journal files.
 
 ## HTTPS and host setup
@@ -63,7 +63,7 @@
 
 ## Share and stop
 
-- External sharing needs explicit provider (`lan`, `cloudflared`, `tailscale`) and request UUID. Save the exposure ID; inspect `expose list/status`, stop only that exposure with `expose stop ID --request-id UUID`.
+- External sharing needs an explicit provider (`lan`, `cloudflared`, `tailscale`). Protocol 23 generates the operation UUID; keep it for retries. Save the exposure ID; inspect `expose list/status`, stop only that exposure with `expose stop ID`.
 - Supply auth through stdin/private file or explicit `--no-auth`; never credentials in argv/TOML/logs/evidence.
 - LAN needs a reachable configured listener and client DNS/trust; `.local` is not automatically advertised.
 - External providers must already exist. Tailscale needs login and HTTPS; Quick Tunnel does not support SSE.

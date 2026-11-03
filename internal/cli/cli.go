@@ -32,17 +32,18 @@ type IO struct {
 }
 
 type Option struct {
-	Unique      bool             `json:"unique,omitempty"`
-	Completion  completionSource `json:"-"`
-	Repeatable  bool             `json:"repeatable,omitempty"`
-	Boolean     bool             `json:"boolean,omitempty"`
-	Required    bool             `json:"required"`
-	Name        string           `json:"name"`
-	Description string           `json:"description"`
-	Default     string           `json:"default"`
-	Pattern     string           `json:"pattern,omitempty"`
-	MinLength   int              `json:"minLength,omitempty"`
-	MaxLength   int              `json:"maxLength,omitempty"`
+	OperationID *operationIDPolicy `json:"-"`
+	Unique      bool               `json:"unique,omitempty"`
+	Completion  completionSource   `json:"-"`
+	Repeatable  bool               `json:"repeatable,omitempty"`
+	Boolean     bool               `json:"boolean,omitempty"`
+	Required    bool               `json:"required"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Default     string             `json:"default"`
+	Pattern     string             `json:"pattern,omitempty"`
+	MinLength   int                `json:"minLength,omitempty"`
+	MaxLength   int                `json:"maxLength,omitempty"`
 }
 
 type Command struct {
@@ -213,6 +214,7 @@ func New(version, commit string) *App {
 	}
 	for i := range a.commands {
 		a.collectionContract(&a.commands[i])
+		operationIDResultContract(&a.commands[i])
 		staticContract(&a.commands[i])
 		previewResultContract(&a.commands[i])
 		if a.commands[i].OutputMode == "" {
@@ -420,6 +422,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	} else if request.Invocation.IsolatedRoot != "" {
 		request.Invocation.RootSource = "env"
 	}
+	operationID := prepareOperationID(*selected, &request)
 	output.invocation = request.Invocation
 	output.requestID = request.Options["request-id"]
 	if selected.Collection != nil && len(request.ListOptions["columns"]) > 0 && output.decision.Format != presentation.FormatText {
@@ -467,12 +470,26 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 			}
 			err.Details["target"] = target
 		}
-		if id := request.Options["request-id"]; id != "" {
+		if id := request.Options["request-id"]; id != "" && err.Details["request_id"] == nil {
 			err.Details["request_id"] = id
 		}
 		return fail(err)
 	}
 	output.handlerReturned = true
+	if operationID != "" {
+		result := publicResultObject(data)
+		if result == nil {
+			return fail(output.outputError("internal_error", "Operation output must be an object."))
+		}
+		// Preserve a domain's existing canonical identity, such as vault rewrap's
+		// lowercase UUID. Other commands receive the invocation ID as metadata.
+		if id, ok := result["request_id"].(string); ok && id != "" {
+			output.requestID = id
+		} else {
+			result["request_id"] = operationID
+		}
+		data = result
+	}
 	a.maintainAfterWrite(ctx, selected.Name, request)
 	if selected.OutputMode == OutputPassthrough {
 		if result, ok := data.(processResult); ok {

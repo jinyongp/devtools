@@ -153,13 +153,13 @@ Linux/macOS의 준비된 저장소에서 `env list`, `variable list/get`과 `sec
 Keychain·Secret Service·DPAPI를 선택한다. 실패 시 다른 방식으로 전환하지 않는다.
 isolated root에서는 양쪽 모두 passphrase여야 한다.
 
-새 변경에는 UUID를 한 번 생성한다. 아래 `UUID`를 그 값으로 바꾼다. 실제 터미널에서는
+새 변경의 UUID는 CLI가 생성해 반환한다. 재시도에는 원래 ID를 `--request-id ID`로 지정한다. 실제 터미널에서는
 기존 암호 한 번과 새 암호 두 번을 숨김 입력한다. 따뜻한 키 세션도 기존 보호의 인증을
 대신하지 않는다.
 
 ```sh
 devtools vault status
-devtools vault rewrap --from-backend passphrase --backend passphrase --request-id UUID
+devtools vault rewrap --from-backend passphrase --backend passphrase
 ```
 
 비대화형 입력은 소유자만 읽을 수 있는 기존 일반 파일이나 명시적인 stdin을 사용한다.
@@ -168,7 +168,7 @@ devtools vault rewrap --from-backend passphrase --backend passphrase --request-i
 OS 인증 창이 필요할 때만 `--interactive`를 명시한다.
 
 ```sh
-devtools vault rewrap --from-backend passphrase --backend passphrase --request-id UUID \
+devtools vault rewrap --from-backend passphrase --backend passphrase \
   --current-passphrase-file /private/current-vault-passphrase \
   --new-passphrase-file /private/new-vault-passphrase
 ```

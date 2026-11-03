@@ -41,7 +41,7 @@ package ownership and provide that next step. Do not downgrade a binary as data 
 - Export defaults to current profile and `./<profile>.age`. An output directory gets that filename. Existing final output fails before snapshot creation; no overwrite.
 - Recipient mode is an advanced alternative: destination `profile transfer prepare`, source export with `--recipient` / `--recipient-file`, import with prepared identity or `--identity-file`. Recipient/passphrase inputs are mutually exclusive.
 - Preview returns `digest`, `target_exists` and metadata-only `diff`. Single source is inferred; name stays unless `--as` is supplied.
-- Apply needs `--apply DIGEST --request-id UUID`; existing target needs `--replace`.
+- Apply needs `--apply DIGEST`; existing target needs `--replace`. Protocol 23 generates an omitted request ID; older schemas may require it explicitly.
 - Replacement creates a private safety archive using the import's passphrase or recipient. No backup configuration is needed for profile import.
 - Stale target: new preview/new UUID. Response loss: identical input/original UUID. Active claims, execution credentials, port assignments and live processes do not transfer as active state.
 
@@ -51,7 +51,7 @@ package ownership and provide that next step. Do not downgrade a binary as data 
 - `backup configure`: output directory and public recipient. `backup create` without `--profile` includes all stored profiles; use explicit profile for scoped backup. Existing outputs are never overwritten.
 - `backup inspect` decrypts using an identity file and returns metadata, not values.
 - Restore selects source with `--profile`; `--as` chooses target, otherwise `<source>-restored`.
-- Preview, then apply identical file/source/target with `--apply DIGEST --request-id UUID`.
+- Preview, then apply identical file/source/target with `--apply DIGEST`. Keep the generated request ID; use it explicitly for an identical retry.
 - Existing-target restore needs `--replace` and configured safety backup recipient/directory. Safety backup failure prevents replacement. Unlike profile import, this configuration is required.
 - Refresh stale previews; retry uncertain apply with identical input/UUID.
 - Restored tasks retain IDs but release claims; obtain a new claim and refresh cursors. Reconnect project config and prepare instance/ports/processes separately; dashboard sessions are not restored.
@@ -60,7 +60,7 @@ package ownership and provide that next step. Do not downgrade a binary as data 
 
 ## Archive and recover history
 
-- `cleanup preview`: `data.id` is plan ID; `data.items` holds candidate IDs. Apply only selected items with `cleanup apply PLAN_ID --item ID --request-id UUID`.
+- `cleanup preview`: `data.id` is plan ID; `data.items` holds candidate IDs. Apply only selected items with `cleanup apply PLAN_ID --item ID`; keep the returned request ID for recovery.
 - Preview expires after ten minutes before first apply. Once apply starts, identical retries resume its frozen selection even after TTL; successful siblings may already be archived.
 - Partial failure: inspect error details and archives; do not assume rollback.
 - Cleanup archives, not purges. Inspect `cleanup archives`; recover with `cleanup restore ARCHIVE_ID`. Changed original location causes conflict.

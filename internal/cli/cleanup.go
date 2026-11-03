@@ -59,7 +59,7 @@ func (a *App) registerCleanup() {
 		}
 		if action == "apply" {
 			c.Arguments = []Argument{{Name: "plan-id", Required: true, Pattern: uuidPattern}}
-			c.Options = []Option{{Name: "item", Repeatable: true, Required: true, Pattern: uuidPattern, Description: "Candidate UUID; repeat for selected candidates."}, {Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe application."}}
+			c.Options = []Option{{Name: "item", Repeatable: true, Required: true, Pattern: uuidPattern, Description: "Candidate UUID; repeat for selected candidates."}, requestIDOption(uuidPattern)}
 		}
 		if action == "restore" || action == "purge" {
 			c.Arguments = []Argument{{Name: "archive-id", Required: true, Pattern: uuidPattern}}

@@ -55,10 +55,12 @@ subprocess.run(["git", "add", "devtools.toml"], cwd=project, check=True, env=env
 subprocess.run(["git", "-c", "user.name=Tester", "-c", "user.email=test@example.invalid", "commit", "-qm", "Initialize"], cwd=project, check=True, env=env)
 worktree = home / "worktree"
 subprocess.run(["git", "worktree", "add", "-qb", "parallel", str(worktree)], cwd=project, check=True, env=env)
-ambient_request = str(uuid.uuid4())
-ambient_args = ["task", "add", "--title", "Context-free retry", "--request-id", ambient_request]
+ambient_args = ["task", "add", "--title", "Context-free retry"]
 env["DEVTOOLS_TASK_CONTEXT"] = "ambient-old"
 ambient_task = api(*ambient_args)
+ambient_request = ambient_task["request_id"]
+assert str(uuid.UUID(ambient_request)) == ambient_request
+ambient_args += ["--request-id", ambient_request]
 env["DEVTOOLS_TASK_CONTEXT"] = "ambient-new"
 ambient_replay = api(*ambient_args)
 assert ambient_replay["replayed"] and ambient_replay["revision"] == ambient_task["revision"]

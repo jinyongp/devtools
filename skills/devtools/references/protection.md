@@ -14,7 +14,7 @@
 ## Change existing protection
 
 - Discover `schema vault rewrap` before use; vault support alone does not establish rewrap support. Read `vault status` and explicitly select both `--from-backend native|passphrase` and `--backend native|passphrase`.
-- Rewrap protects the same root key; profile bytes and values stay the same. Use a new UUID once for a new change. A warm session does not replace original-protector authentication.
+- Rewrap protects the same root key; profile bytes and values stay the same. Protocol 23 generates an omitted request ID; keep it and pass it explicitly for an identical retry. Older schemas may require a caller-generated ID. A warm session does not replace original-protector authentication.
 - Passphrases use hidden terminal input or `--current-passphrase-file/stdin` and `--new-passphrase-file/stdin`. Only one side can read stdin. Never use argv/env. Native sides accept no passphrase; OS UI requires `--interactive`. Isolated roots allow passphrase on both sides only.
 - After interruption preserve the original UUID, backend selections and target credentials. Inspect `item.rewrap`: before slot publication original credentials are also needed; afterward target authentication suffices even if the old file/OS item is gone. Routing metadata with `integrity_verified:false` is not authenticated intent.
 - Same-native protection may authenticate and return `changed:false`. Replay preserves original `changed` and returns `replayed:true`.

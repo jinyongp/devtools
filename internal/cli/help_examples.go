@@ -45,11 +45,8 @@ func reviewedExampleWorkflow(c Command) []string {
 	if strings.Contains(joined, "PREVIOUS_REQUEST_UUID") {
 		steps = append(steps, "PREVIOUS_REQUEST_UUID is the original operation UUID; do not generate a replacement for recovery.")
 	}
-	for _, token := range strings.Fields(joined) {
-		if token == "REQUEST_UUID" {
-			steps = append(steps, "Generate one fresh REQUEST_UUID for a new operation. After response loss, retain that UUID and identical input for recovery.")
-			break
-		}
+	if operationIDPolicyFor(c) != nil {
+		steps = append(steps, operationIDWorkflow)
 	}
 	for _, option := range c.Options {
 		if option.Name == "context" {

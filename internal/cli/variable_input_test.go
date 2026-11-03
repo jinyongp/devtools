@@ -186,7 +186,7 @@ func TestVariableInputFailuresPreserveStoredValue(t *testing.T) {
 func TestVariableInputGuardsAndMissingEnvDoNotRead(t *testing.T) {
 	app := testApp(t)
 	for _, flags := range [][]string{
-		{"--request-id", tasks.ID()}, {"--revision", strings.Repeat("a", 64)},
+		{"--request-id", tasks.ID()}, {"--revision", strings.Repeat("a", 64), "--request-id", "not-a-uuid"},
 		{"--create-only"}, {"--env", "missing"},
 	} {
 		reader := &observedSecretReader{}

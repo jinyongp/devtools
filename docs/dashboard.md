@@ -42,7 +42,7 @@ stopped separately; coordinate with the agent before assigning the work again.
 The equivalent CLI command is:
 
 ```sh
-devtools task unclaim TASK_ID --expected-run RUN_ID --if-revision REVISION --reason "Agent session ended" --request-id UUID
+devtools task unclaim TASK_ID --expected-run RUN_ID --if-revision REVISION --reason "Agent session ended"
 ```
 
 Use `task show TASK_ID` to obtain the current run and profile revision. After

@@ -85,9 +85,11 @@ while True:time.sleep(.05)
     try:
         for group, action in (('process', 'start'), ('project', 'up')):
             directory = project(group)
-            request = uid()
-            args = [group, action, 'web', '--dir', directory, '--request-id', request]
+            args = [group, action, 'web', '--dir', directory]
             first = api(*args)
+            request = first['request_id']
+            assert str(uuid.UUID(request)) == request
+            args += ['--request-id', request]
             execution = first['item']['id'] if group == 'process' else first['items'][0]['item']['id']
             owned.add(execution)
             before = receipt_hashes()
@@ -100,7 +102,9 @@ while True:time.sleep(.05)
                 assert replay['replayed'] and replay['changed'] == first['changed']
                 assert api('process', 'status', execution)['item']['state'] == 'running'
             saved = api(group, 'request', 'show', request)['item']
-            assert saved['state'] == 'completed' and saved['result'] == first
+            # request_id is public CLI invocation metadata; the persisted result
+            # keeps its original domain format and the receipt owns the ID.
+            assert saved['state'] == 'completed' and {**saved['result'], 'request_id': saved['request_id']} == first
             assert receipt_hashes() == before, 'Completed recovery rewrote receipts'
             assert api(*args, '--capture-logs=true', expected=3)['code'] == 'request_conflict'
             wait_starts(directory, 1)

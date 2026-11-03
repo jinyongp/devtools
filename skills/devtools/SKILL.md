@@ -50,6 +50,9 @@ Use this skill alongside the source-work workflow. Do not create task records me
 - Protocol 23 collection queries use bounded pages and current views by default.
   Follow [navigation.md](references/navigation.md) for scope, history, filters,
   cursor/cache conditions, and ready versus missing-input recovery actions.
+- Protocol 23 operation request IDs are optional in the CLI: omission generates
+  one at execution and returns it. Query selectors still need an existing ID.
+  Discover the installed writer schema; older builds may require explicit IDs.
 - Ordinary operation needs the installed CLI and these bundled references, not a separate devtools source checkout.
 
 ## Keep scope and state explicit
@@ -57,7 +60,10 @@ Use this skill alongside the source-work workflow. Do not create task records me
 - Confirm the selected project/profile before project changes. Explicit `--profile` overrides tracked configuration.
 - Same-profile worktrees share values and task history; processes and port assignments belong to execution locations.
 - Keep `devtools.toml` versionless. Never add top-level `version` or `schema_version`.
-- Use a new UUID where `--request-id` is required. After response loss, retry identical input with the original UUID; inspect current state separately.
+- New CLI operations may omit `--request-id` when their schema permits it. Keep
+  `data.request_id` or `error.details.target.request_id`; retry identical input with
+  that ID explicitly. If the entire response could be lost, save an explicit UUID
+  before execution. Inspect current state separately and retain bound recovery IDs.
 - Refresh stale revisions/previews before a new decision. Stop blind retries on missing permissions, conflicting ownership or unknown execution outcomes.
 - Keep secrets in stdin/private files. Omit task contexts, dashboard links, credentials and unfiltered historical logs from shared evidence.
 - Remedies suggest actions; they do not authorize unrelated installation, host changes, external exposure or data replacement.

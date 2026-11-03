@@ -72,7 +72,7 @@ func (a *App) registerProcesses() {
 		}
 		if action == "start" || action == "stop" || action == "restart" {
 			c.Output = object(map[string]any{"item": map[string]any{"type": "object"}, "changed": map[string]any{"type": "boolean"}, "replayed": map[string]any{"type": "boolean"}}, "item", "changed", "replayed")
-			c.Options = append(c.Options, Option{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe mutation."})
+			c.Options = append(c.Options, requestIDOption(uuidPattern))
 		}
 		if action == "list" {
 			c.Output = object(map[string]any{"items": arraySchema(map[string]any{"type": "object"}), "values": map[string]any{"type": "object", "additionalProperties": inputObservationSchema()}}, "items", "values")

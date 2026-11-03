@@ -26,7 +26,7 @@ task·workstream의 공개 계약이다. 계획 상시 편집·sync·논리 이�
 
 | 옵션 | 적용 |
 | --- | --- |
-| `--request-id UUID` | task 도메인의 모든 변경에 필수. dashboard 서버 관리와 조회에는 적용하지 않음. |
+| `--request-id UUID` | CLI에서는 생략하면 생성하고 결과에 반환. 재시도는 원래 ID·입력으로 지정. 도메인·dashboard HTTP 변경 API는 명시적 ID 필수. 조회에는 적용하지 않음. |
 | `--if-revision N` | 문서·관계·정의 수정, 연결 변경, hold/unhold, 취소·재개·활성화·마감, 면제·면제 철회에 필수. |
 | `--context REF` | resume·sync·checkpoint·release·done 및 task 검증 basis/결과/재사용/면제에 필수. task update에서는 선택적인 현재 run guard다. `DEVTOOLS_TASK_CONTEXT`를 기본값으로 사용. |
 | `--expected-run UUID` | takeover·unclaim에 필수. 현재 점유의 run과 일치해야 함. |

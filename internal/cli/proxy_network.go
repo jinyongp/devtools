@@ -10,7 +10,7 @@ import (
 func (a *App) registerNetworkProxy() {
 	a.registerNetsetup()
 	a.registerNetworkTeardown()
-	c := Command{Name: "proxy configure", Description: "Configure a stopped named HTTP/HTTPS listener. HTTPS is opt-in.", Options: []Option{{Name: "listener", Pattern: project.ProfilePattern, Description: "Listener name; omission selects default."}, {Name: "http-address", MinLength: 1, Description: "HTTP IP:port."}, {Name: "https-address", MinLength: 1, Description: "Enable HTTPS at this IP:port."}, {Name: "disable-https", Boolean: true, Description: "Disable HTTPS on a stopped listener."}, {Name: "request-id", Required: true, Pattern: uuidPattern, Description: "Retry-safe request UUID."}}, Output: map[string]any{"type": "object"}}
+	c := Command{Name: "proxy configure", Description: "Configure a stopped named HTTP/HTTPS listener. HTTPS is opt-in.", Options: []Option{{Name: "listener", Pattern: project.ProfilePattern, Description: "Listener name; omission selects default."}, {Name: "http-address", MinLength: 1, Description: "HTTP IP:port."}, {Name: "https-address", MinLength: 1, Description: "Enable HTTPS at this IP:port."}, {Name: "disable-https", Boolean: true, Description: "Disable HTTPS on a stopped listener."}, requestIDOption(uuidPattern)}, Output: map[string]any{"type": "object"}}
 	c.Options[0].Completion = completeListener
 	c.Run = func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 		m, e := a.proxyStore()
@@ -24,7 +24,7 @@ func (a *App) registerNetworkProxy() {
 	for _, action := range []string{"restart", "logs"} {
 		c := Command{Name: "proxy " + action, Description: "Operate the selected listener; omission selects default.", Options: []Option{{Name: "listener", Pattern: project.ProfilePattern, Description: "Registered listener name."}, {Name: "all", Boolean: true, Description: "Select all configured listeners."}}, Output: map[string]any{"type": "object"}}
 		if action == "restart" {
-			c.Options = append(c.Options, Option{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "Retry-safe request UUID."})
+			c.Options = append(c.Options, requestIDOption(uuidPattern))
 			c.Output = listenerOutput(true)
 		} else {
 			f := map[string]any{}

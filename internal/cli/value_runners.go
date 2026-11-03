@@ -27,7 +27,7 @@ func (a *App) registerValueRunners() {
 	id := Argument{Name: "runner-id", Required: true, Pattern: valuehandoff.UUIDPattern}
 	// Registrations and their request namespace belong to the root, not a
 	// selected profile. Do not accept a profile flag that would be ignored.
-	rootInputOptions := []Option{{Name: "request-id", Required: true, Pattern: valuehandoff.UUIDPattern, Description: "Canonical lowercase root-wide retry UUID."}, {Name: "file", Description: "Strict JSON registration body file."}, {Name: "stdin", Boolean: true, Description: "Read a strict JSON registration body from a pipe."}}
+	rootInputOptions := []Option{requestIDOption(valuehandoff.UUIDPattern), {Name: "file", Description: "Strict JSON registration body file."}, {Name: "stdin", Boolean: true, Description: "Read a strict JSON registration body from a pipe."}}
 	a.commands = append(a.commands, Command{Name: "values runner address", Description: "Compute the same-user runner endpoint; this metadata grants no execution permission.", Arguments: []Argument{id}, Options: []Option{{Name: "instance", Required: true, Pattern: valuehandoff.UUIDPattern, Description: "Canonical lowercase instance UUID."}}, Output: object(map[string]any{"root_id": stringSchema(), "vault_id": stringSchema(), "runner_id": stringSchema(), "instance_id": stringSchema(), "endpoint": stringSchema(), "protocol": map[string]any{"const": 1}, "redaction_protocol": map[string]any{"const": 1}}, "root_id", "vault_id", "runner_id", "instance_id", "endpoint", "protocol", "redaction_protocol"), Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 		s, e := a.runnerStore()
 		if e != nil {
@@ -52,7 +52,7 @@ func (a *App) registerValueRunners() {
 		result, e := s.Register(ctx, input, r.Options["request-id"])
 		return result, executionRecovery(s, r, e)
 	}})
-	a.commands = append(a.commands, Command{Name: "values runner unregister", Description: "Disable only the observed instance; delivered inputs and external jobs cannot be revoked here.", Arguments: []Argument{id}, Options: []Option{{Name: "instance", Required: true, Pattern: valuehandoff.UUIDPattern, Description: "The observed instance to disable."}, {Name: "request-id", Required: true, Pattern: valuehandoff.UUIDPattern, Description: "Canonical lowercase retry UUID."}}, Output: output, Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
+	a.commands = append(a.commands, Command{Name: "values runner unregister", Description: "Disable only the observed instance; delivered inputs and external jobs cannot be revoked here.", Arguments: []Argument{id}, Options: []Option{{Name: "instance", Required: true, Pattern: valuehandoff.UUIDPattern, Description: "The observed instance to disable."}, requestIDOption(valuehandoff.UUIDPattern)}, Output: output, Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 		s, e := a.runnerStore()
 		if e != nil {
 			return nil, e

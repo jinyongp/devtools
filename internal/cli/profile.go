@@ -163,21 +163,7 @@ func exclusiveInputAlternatives(names ...string) []map[string]any {
 }
 
 func profileImportInputOneOf() []map[string]any {
-	encryption := exclusiveInputAlternatives("identity-file", "passphrase-file", "passphrase-stdin")
-	out := []map[string]any{}
-	for _, mode := range encryption {
-		out = append(out,
-			map[string]any{"allOf": []map[string]any{
-				mode,
-				{"not": map[string]any{"anyOf": []map[string]any{{"required": []string{"apply"}}, {"required": []string{"request-id"}}}}},
-			}},
-			map[string]any{"allOf": []map[string]any{
-				mode,
-				{"required": []string{"apply", "request-id"}},
-			}},
-		)
-	}
-	return out
+	return exclusiveInputAlternatives("identity-file", "passphrase-file", "passphrase-stdin")
 }
 
 func (a *App) registerProfiles() {
@@ -241,7 +227,7 @@ func (a *App) registerProfiles() {
 				profileIdentifierOption("as", false),
 				{Name: "replace", Boolean: true, Description: "Permit replacement of an existing target profile after creating a safety backup."},
 				{Name: "apply", MinLength: 64, MaxLength: 64, Pattern: `^[0-9a-f]+$`, Description: "Apply the exact digest returned by preview."},
-				{Name: "request-id", Pattern: uuidPattern, Description: "UUID required when applying; reuse it for retries."},
+				requestIDOption(uuidPattern, supplied("apply")),
 			},
 			InputOneOf: profileImportInputOneOf(),
 			Output: object(map[string]any{
@@ -314,7 +300,7 @@ func transferArchiveError(err *protocol.Error) *protocol.Error {
 		message = "The target profile already exists; replacement requires explicit authorization."
 		remedy.Argv = []string{"devtools", "profile", "import"}
 		remedy.RequiredInputs = []string{"file", "as"}
-		remedy.Message = "Choose an unused target with --as, or review a fresh preview and supply --replace with its digest and a request ID to replace the existing profile."
+		remedy.Message = "Choose an unused target with --as, or review a fresh preview and supply --replace with its digest to replace the existing profile."
 	case "backup_error":
 		message = "The profile archive operation could not be completed."
 		remedy.Message = "Check archive paths and private storage permissions. Replacement requires a writable private recovery directory and a durable safety archive."
@@ -470,9 +456,6 @@ func (a *App) exportProfile(ctx context.Context, streams IO, request Request) (a
 }
 
 func (a *App) importProfile(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
-	if (request.Options["apply"] != "") != (request.Options["request-id"] != "") {
-		return nil, argumentError("Apply and request-id must be supplied together.", "")
-	}
 	if err := passphraseOptionConflict(request.Options, "identity-file"); err != nil {
 		return nil, err
 	}

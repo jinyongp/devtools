@@ -67,7 +67,7 @@ func (a *App) registerProxy() {
 			command.Description = "Start or reuse the user-local reverse proxy daemon."
 			command.Options = []Option{
 				{Name: "port", Pattern: positiveIntegerPattern, Description: "Listener port; defaults to the persistent reservation or 20200."},
-				{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe mutation."},
+				requestIDOption(uuidPattern),
 			}
 		case "status":
 			command.Description = "Show reverse proxy daemon and listener reservation status."
@@ -78,7 +78,7 @@ func (a *App) registerProxy() {
 			command.Output = object(map[string]any{"items": map[string]any{"type": "array", "items": proxyItemSchema()}}, "items")
 		case "stop":
 			command.Description = "Stop the user-local reverse proxy daemon while retaining its port."
-			command.Options = []Option{{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe mutation."}}
+			command.Options = []Option{requestIDOption(uuidPattern)}
 		}
 		command.Run = func(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
 			manager, err := a.proxyStore()

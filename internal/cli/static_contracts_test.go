@@ -17,11 +17,11 @@ func TestStaticContractsRejectBeforeDependencies(t *testing.T) {
 		input   map[string]any
 	}{
 		{"vault rewrap", map[string]any{"from-backend": "passphrase", "backend": "passphrase", "current-passphrase-stdin": true, "new-passphrase-stdin": true, "request-id": id}},
-		{"backup restore", map[string]any{"file": "absent", "identity-file": "absent-key", "profile": "app", "apply": strings.Repeat("a", 64)}},
+		{"backup restore", map[string]any{"file": "absent", "identity-file": "absent-key", "profile": "app", "request-id": id}},
 		{"proxy configure", map[string]any{"https-address": "127.0.0.1:9443", "disable-https": true, "request-id": id}},
 		{"proxy setup", map[string]any{"check": true, "remove": true}},
-		{"proxy setup", map[string]any{}},
-		{"proxy teardown", map[string]any{"apply": strings.Repeat("a", 64)}},
+		{"proxy setup", map[string]any{"check": true, "request-id": id}},
+		{"proxy teardown", map[string]any{"apply": strings.Repeat("a", 64), "request-id": "not-a-uuid"}},
 		{"proxy teardown", map[string]any{"request-id": id}},
 		{"proxy list", map[string]any{"global": true, "profile": "app"}},
 		{"proxy status", map[string]any{"all": true, "listener": "default"}},

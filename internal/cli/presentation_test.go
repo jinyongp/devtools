@@ -228,17 +228,19 @@ func (w *presentationFailWriter) Write([]byte) (int, error) { w.calls++; return 
 func TestOutputFailureStageAndNoTransportRetry(t *testing.T) {
 	a := presentationApp(presentation.Environment{})
 	renders, calls := 0, 0
+	var effectiveID string
 	a.renderDocument = func(cliui.Document, cliui.Options) ([]byte, error) {
 		renders++
 		return nil, errors.New("render failure")
 	}
-	a.commands = append(a.commands, Command{Name: "fixture", OutputMode: OutputJSON, Options: []Option{{Name: "request-id"}}, Run: func(context.Context, IO, Request) (any, *protocol.Error) {
+	a.commands = append(a.commands, Command{Name: "fixture", OutputMode: OutputJSON, Options: []Option{requestIDOption(uuidPattern)}, Run: func(_ context.Context, _ IO, r Request) (any, *protocol.Error) {
 		calls++
+		effectiveID = r.Options["request-id"]
 		return map[string]any{"changed": false}, nil
 	}})
 	const id = "01234567-89ab-4cde-8fab-0123456789ab"
 	exit, _, diagnostic := invoke(t, a, "", "--format", "text", "fixture", "--request-id", id)
-	if exit != 1 || calls != 1 || renders != 2 || !strings.Contains(diagnostic, "internal_error") || !strings.Contains(diagnostic, "unknown") || !strings.Contains(diagnostic, "inspect_first") || !strings.Contains(diagnostic, id) {
+	if exit != 1 || calls != 1 || renders != 2 || effectiveID != id || !strings.Contains(diagnostic, "internal_error") || !strings.Contains(diagnostic, "unknown") || !strings.Contains(diagnostic, "inspect_first") || !strings.Contains(diagnostic, id) {
 		t.Fatal(exit, renders, diagnostic)
 	}
 	w := &presentationFailWriter{}
@@ -249,15 +251,47 @@ func TestOutputFailureStageAndNoTransportRetry(t *testing.T) {
 	}
 	var diagnosticJSON bytes.Buffer
 	failingOut := &presentationFailWriter{}
-	exit = a.Run(context.Background(), []string{"--format", "json", "fixture", "--request-id", id}, IO{In: strings.NewReader(""), Out: failingOut, Err: &diagnosticJSON})
+	exit = a.Run(context.Background(), []string{"--format", "json", "fixture"}, IO{In: strings.NewReader(""), Out: failingOut, Err: &diagnosticJSON})
 	var failure struct {
 		Error struct{ Details map[string]any }
 	}
 	if json.Unmarshal(diagnosticJSON.Bytes(), &failure) != nil || exit != 1 {
 		t.Fatal(exit, diagnosticJSON.String())
 	}
+	if calls != 2 || failingOut.calls != 1 || effectiveID == "" || effectiveID == id || failure.Error.Details["target"].(map[string]any)["request_id"] != effectiveID || failure.Error.Details["effects"] != "unknown" || failure.Error.Details["retry"] != "inspect_first" {
+		t.Fatal("output failure lost generated request identity or retried the handler", diagnosticJSON.String())
+	}
 	if issues := configcontract.Validate("ErrorDetails", failure.Error.Details); len(issues) != 0 {
 		t.Fatal("new output error drifted from the shared diagnostic schema", issues, diagnosticJSON.String())
+	}
+}
+
+func TestGeneratedTaskRequestRecoversAfterOutputLoss(t *testing.T) {
+	app := testApp(t)
+	args := []string{"--format", "json", "task", "add", "--profile", "app", "--title", "Saved before output loss"}
+	var diagnostic bytes.Buffer
+	failingOut := &presentationFailWriter{}
+	code := app.Run(context.Background(), args, IO{In: strings.NewReader(""), Out: failingOut, Err: &diagnostic})
+	var failure struct {
+		Error struct {
+			Details struct {
+				Target struct {
+					RequestID string `json:"request_id"`
+				}
+				Effects, Retry string
+			}
+		}
+	}
+	if err := json.Unmarshal(diagnostic.Bytes(), &failure); err != nil || code != 1 || failingOut.calls != 1 || failure.Error.Details.Target.RequestID == "" || failure.Error.Details.Effects != "unknown" || failure.Error.Details.Retry != "inspect_first" {
+		t.Fatal("lost output did not preserve recoverable committed request", code, diagnostic.String(), err)
+	}
+	requestID := failure.Error.Details.Target.RequestID
+	replayed := outputData(t, app, append(args, "--request-id", requestID))
+	if replayed["replayed"] != true || replayed["request_id"] != requestID {
+		t.Fatal("output loss repeated the mutation instead of replaying its receipt")
+	}
+	if rows := outputData(t, app, []string{"task", "list", "--profile", "app"})["items"].([]any); len(rows) != 1 {
+		t.Fatal("output loss created duplicate tasks", len(rows))
 	}
 }
 

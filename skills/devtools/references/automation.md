@@ -5,7 +5,9 @@ Use only for requested automation. Ordinary app execution uses [execution.md](ex
 ## Guard value mutations
 
 - Discover `schema values revision` and the specific writer schema.
-- Supporting set/unset, env create/remove and import accept `--revision` and `--request-id` only as a pair.
+- On protocol 23, supporting set/unset, env create/remove and import use
+  `--revision` to select guarded writes and generate an omitted request ID. An
+  explicit ID still requires the revision; older schemas may require both options.
 - Read the opaque profile-wide token with `values revision`. Keep the token, UUID and exact input for response-loss retries.
 - Identical committed input replays; same ID/different input conflicts. Successful no-ops bind IDs; previews do not.
 - Guarded `--create-only` treats empty/expired exact slots as existing; inherited common values are not env slots.
@@ -16,7 +18,7 @@ Use only for requested automation. Ordinary app execution uses [execution.md](ex
 
 ### Generate a secret
 
-- `secret generate KEY --revision REVISION --request-id UUID` stores 32 random bytes as 43 unpadded base64url characters; output is metadata only.
+- `secret generate KEY --revision REVISION` stores 32 random bytes as 43 unpadded base64url characters; output is metadata only. Preserve the returned request ID for retries.
 - Protection must already be initialized/unlocked. Default is exact-slot create; `--replace` permits upsert, preserves live expiry and rejects expired slots.
 - No kind changes, custom length/encoding/seed or plaintext output. Retry the original request instead of generating again.
 

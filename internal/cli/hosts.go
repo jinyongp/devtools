@@ -15,7 +15,7 @@ func (a *App) registerHosts() {
 	for _, action := range []string{"preview", "apply", "remove"} {
 		c := Command{Name: "proxy hosts " + action, Description: "Inspect or repair only devtools-owned hosts mappings; normal route starts prepare these automatically.", Arguments: []Argument{{Name: "name", Required: true, Pattern: project.ProfilePattern}}, Options: []Option{{Name: "global", Boolean: true, Description: "Select a global route."}, {Name: "dir", MinLength: 1, Description: "Project directory."}}, Output: map[string]any{"type": "object"}}
 		if action != "preview" {
-			c.Options = append(c.Options, Option{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "Retry-safe request UUID."})
+			c.Options = append(c.Options, requestIDOption(uuidPattern))
 		}
 		c.Arguments[0].Completion = completeRoute
 		if action == "apply" {

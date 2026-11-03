@@ -42,11 +42,14 @@ devtools schema command run
 - **Files:** prepare secret, passphrase, or identity files before using them.
   PowerShell 5.1 text pipelines can change encoding and newlines; use `--file` when
   exact secret bytes matter.
-- **Request IDs:** replace `UUID` with a new UUID for each mutation. Use `uuidgen`
-  in a POSIX shell or `[guid]::NewGuid().ToString()` in PowerShell. After an uncertain
-  response, retry with the original ID and identical input. Take `TASK_ID`, `RUN_ID`,
+- **Request IDs:** protocol 23 CLI mutations generate an ID when omitted and return
+  it as `data.request_id` (errors: `error.details.target.request_id`). After an uncertain
+  response, retry with `--request-id ID` and identical input. Save an explicit UUID
+  before execution if the entire response could be lost; older schemas may require it.
+  Take `TASK_ID`, `RUN_ID`,
   `EXECUTION_ID`, and `DIGEST` from earlier responses.
-- **Output:** data commands return JSON. `ok: true` does not imply a diagnostic's
+- **Output:** select `--format json` for structured parsing; auto uses text on an
+  ordinary terminal and JSON for agents/pipes. `ok: true` does not imply a diagnostic's
   `ready: true`. `run` keeps child streams outside JSON and preserves the exit code, with [output protection](output-protection.md) for new executions.
 
 Some linked topic guides are currently in Korean.

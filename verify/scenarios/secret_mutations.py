@@ -76,10 +76,12 @@ api("secret", "unset", "INPUT", "--env", "local", *guard())
 api("env", "remove", "local", *guard())
 assert api(*set_args, input=secret)["revision"] == first["revision"]
 
-generate_request = str(uuid.uuid4())
-generate = ["secret", "generate", "TOKEN", *guard(request=generate_request)]
+generate = ["secret", "generate", "TOKEN", "--revision", revision()]
 generated = api(*generate)
-assert generated["changed"] is True and set(generated) == {"profile", "changed", "revision", "replayed"}
+generate_request = generated["request_id"]
+assert str(uuid.UUID(generate_request)) == generate_request
+generate += ["--request-id", generate_request]
+assert generated["changed"] is True and set(generated) == {"profile", "changed", "revision", "replayed", "request_id"}
 assert api(*generate)["replayed"] is True
 consumer = "import os,base64,re; v=os.environ['TOKEN']; assert re.fullmatch(r'[A-Za-z0-9_-]{43}',v); assert len(base64.urlsafe_b64decode(v+'='))==32; print('generated-ok',end='')"
 result = subprocess.run([binary, "run", "--", sys.executable, "-c", consumer],

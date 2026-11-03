@@ -16,7 +16,7 @@
 ## Edit and claim
 
 - `task workstream edit` atomically inserts, updates, removes/restores scope and changes ordering in any lifecycle state.
-- Preview with `--dry-run --if-revision`; apply the same body with observed revision and a request UUID. Preview does not consume an ID.
+- Preview with `--dry-run --if-revision`; apply the same body with observed revision. Protocol 23 generates an omitted operation ID; preview does not consume an ID.
 - Incomplete coverage may be saved; resolve issues before execution/closure. Removed tasks keep claims/history; restoration needs explicit dependency/acceptance links. Legacy plan-set arrays assert complete included membership.
 - Before source work on a managed task, claim and check `claimed` plus `context_valid`.
 - Keep the returned context private; pass explicitly or via `DEVTOOLS_TASK_CONTEXT`. Public task/run IDs grant no authority. Claims coordinate records, not overlapping files.
@@ -31,7 +31,10 @@
 
 ## Validate and finish
 
-- Each task mutation needs a request UUID. Response loss: retry identical input/UUID. New decision: refresh revision and use a new UUID.
+- Protocol 23 CLI task mutations generate an omitted request UUID and return it.
+  Response loss: explicitly retry identical input with the original UUID. Save an
+  explicit UUID first if the entire response could be lost. New decisions refresh
+  the revision and use a new ID; older schemas may require caller-generated IDs.
 - Create a code basis for the observed definition, perform configured checks, then record evidence. Task basis needs current execution context; workstream basis needs observed profile revision.
 - Late evidence stays on its run-owned basis and may return `applicable: false`. After takeover, explicitly accept reusable validation results.
 - The CLI stores evidence; it does not execute checks or verify claims made in evidence.

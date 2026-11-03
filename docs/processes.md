@@ -8,15 +8,15 @@ Windows에서는 상위 host Job이 종료되면 함께 종료될 수 있다. �
 
 먼저 `web` 이름 명령과 필요한 `local` env를 준비한다.
 서버 설정은 [준비 확인 예제](process-readiness.md#설정과-사용)를 참고한다.
-아래 명령은 작업별 예시이며 매 변경 요청의 `UUID`는 새로 생성한다.
+아래 명령은 작업별 예시다. Protocol 23 CLI는 생략한 요청 ID를 생성해 `data.request_id`로 반환한다.
 
 ```sh
-devtools process start web --request-id UUID
-devtools process start web --dir /projects/app --env local --request-id UUID
+devtools process start web
+devtools process start web --dir /projects/app --env local
 devtools process list --profile app
 devtools process status EXECUTION_ID
-devtools process stop EXECUTION_ID --request-id UUID
-devtools process restart EXECUTION_ID --request-id UUID
+devtools process stop EXECUTION_ID
+devtools process restart EXECUTION_ID
 ```
 
 start는 `item`에 실행 ID, profile, instance ID, 디렉터리, 명령, env, 시간과 상태를 반환한다. `changed`는 실행 변경 여부, `replayed`는 같은 요청의 재전송 여부다. `running`은 OS 프로세스의 시작을 뜻한다. 선언한 서비스 준비 검사는 `process check EXECUTION_ID`로 확인하고 `process wait EXECUTION_ID --timeout 30s`로 대기한다. 설정·결과·종료 조건은 [프로세스 준비 확인](process-readiness.md)을 따른다.
@@ -25,7 +25,7 @@ list는 `data.items`에 현재 서비스 요약을 반환한다. 실행별 이�
 
 같은 `profile + instance + 명령`이 실행 중이면 같은 실행을 반환한다. env, 값 주입 여부, 로그 설정이 다르면 `process_conflict`다. 실행 정보의 `inject`는 해당 실행을 시작할 때 적용한 값 주입 여부이며, 이전 버전에서 시작한 실행에는 없을 수 있다. 주입 여부를 확인할 수 없는 이전 실행은 env의 명시 선택 여부가 바뀌면 restart가 필요하다. restart는 이전 실행을 종료하고 최신 프로젝트 설정과 값을 적용한 새 실행 ID를 반환하며 `previous_id`로 이전 실행을 연결한다. env를 지정했던 실행은 그 선택을 유지하고, 명령의 기본 env를 따랐던 실행은 현재 기본값을 적용한다. 이전 실행 ID에 대한 stop은 새 실행에 영향을 주지 않는다.
 
-모든 변경은 UUID `--request-id`를 받는다. 같은 UUID와 입력은 기존 결과를 반환하며 다른 입력은 `request_conflict`다. 응답이 불확실하면 같은 요청을 재전송하고 실행 ID로 현재 상태를 확인한다. 작업 준비가 10초를 넘으면 `process_pending`과 함께 같은 요청으로 확인하도록 한다. 시작 기록은 남았지만 supervisor가 실제로 사라진 실행은 같은 start 요청의 재시도에서 `interrupted` / `supervisor_lost`로 종결된다. 이 경우 같은 요청 ID로 새 프로세스를 자동 재실행하지 않으며, 새 실행이 필요하면 새 request ID로 start 또는 restart를 실행한다.
+변경 요청 ID는 생략할 수 있고, 재시도에는 `--request-id ID`로 원래 ID를 지정한다. 같은 UUID와 입력은 기존 결과를 반환하며 다른 입력은 `request_conflict`다. 응답이 불확실하면 같은 요청을 재전송하고 실행 ID로 현재 상태를 확인한다. 작업 준비가 10초를 넘으면 `process_pending`과 함께 같은 요청으로 확인하도록 한다. 시작 기록은 남았지만 supervisor가 실제로 사라진 실행은 같은 start 요청의 재시도에서 `interrupted` / `supervisor_lost`로 종결된다. 이 경우 같은 요청 ID로 새 프로세스를 자동 재실행하지 않으며, 새 실행이 필요하면 새 request ID로 start 또는 restart를 실행한다.
 
 일반 종료는 `exited`, 명시적 종료는 `stopped`, 시작 준비 실패는 `failed`다. 종료 코드와 원인 코드를 메타데이터에 기록한다. 재부팅이나 supervisor 손실은 `interrupted`, 살아 있는 supervisor에 접근할 수 없는 상황은 `unknown`으로 조회한다. 다시 시작하려면 명시적으로 start 또는 restart를 실행한다.
 
@@ -69,8 +69,9 @@ UUID에서 재실행하지 않는다. 상태 검토 후 새 시도에 새 UUID�
 
 ## 대상과 요청 ID 선택
 
-`UUID`에는 `uuidgen` 등으로 생성한 새 요청 ID를 넣고, `EXECUTION_ID`에는
-start 응답의 `data.item.id`를 넣는다. 응답이 불확실한 재시도에는 원래 요청 ID를 유지한다.
+`EXECUTION_ID`에는 start 응답의 `data.item.id`를 넣는다. 응답이 불확실한 재시도에는
+반환된 원래 요청 ID를 `--request-id ID`로 지정한다. 응답 전체 유실에 대비하는 자동화는
+실행 전에 명시적 UUID를 생성·보존한다. 오래된 설치본은 schema의 필수 ID 조건을 따른다.
 
 start는 `--dir` 또는 현재 디렉터리의 프로젝트 설정에서 profile을 선택한다.
 `process list`의 기본 범위는 현재 프로젝트 디렉터리다. `--profile NAME`은 해당 profile의
@@ -84,7 +85,7 @@ status·check·wait·logs·stop·restart는 실행 ID로 대상을 선택하므�
 
 ## 프로젝트 서버를 함께 관리하기
 
-protocol 12부터 `project up web api --request-id UUID`는 `serve`와 matching proxy 선언이
+protocol 12부터 `project up web api`는 `serve`와 matching proxy 선언이
 있는 서버의 도메인·설정된 HTTPS를 자동 준비한다. `--proxy`는 비활성 route까지 다시
 준비하며 `--no-proxy` 또는 `--proxy=false`는 준비를 생략한다. 기존 listener를 끄지 않는다.
 선택 서버의 포트와 binding을 함께 확정하고 DNS·listener를 준비한 뒤 모든 child를 launch하고
@@ -96,15 +97,15 @@ readiness를 기다린다. proxy 모드 restart는 전체 후보를 준비한 �
 시작하지 않으므로 build/test 같은 일회성 명령이 의도치 않게 실행되지 않는다.
 
 ```sh
-devtools project up web api --request-id UUID
-devtools project up web api --dir /projects/app --env local --timeout 30s --request-id UUID
+devtools project up web api
+devtools project up web api --dir /projects/app --env local --timeout 30s
 devtools project status
 devtools project status api
 devtools project logs web
-devtools project restart web api --request-id UUID
-devtools project restart web --env local --capture-logs --request-id UUID
-devtools project down api --request-id UUID
-devtools project down --request-id UUID
+devtools project restart web api
+devtools project restart web --env local --capture-logs
+devtools project down api
+devtools project down
 ```
 
 이 project 명령들은 현재 디렉터리 또는 `--dir`에서 찾은 프로젝트의 profile과 실제 루트 경로로
@@ -166,7 +167,7 @@ Profile 데이터를 다른 환경으로 가져오는 절차는 [Profile 관리]
 기본 출력은 버리고 상태와 종료 원인을 보관한다. 출력 보관이 필요한 실행에는 `--capture-logs`를 명시한다.
 
 ```sh
-devtools process start web --capture-logs --request-id UUID
+devtools process start web --capture-logs
 devtools process logs EXECUTION_ID
 ```
 

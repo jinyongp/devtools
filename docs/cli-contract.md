@@ -123,7 +123,8 @@ local의 덮어쓰기 값을 제거하면 공통 값이 다시 적용된다. `un
 ### 조건부 변경과 응답 유실 복구
 
 `variable/secret set/unset`, `env create/remove`, `import`는 선택적으로
-`--revision REVISION --request-id UUID`를 함께 받는다. 먼저 `values revision`
+`--revision REVISION`으로 조건부 변경을 선택한다. 요청 ID는 생략하면 CLI가 생성하며,
+원래 요청의 재시도에는 `--request-id ID`를 지정한다. 먼저 `values revision`
 으로 profile 전체의 불투명한 편집 revision을 조회한다. 이 토큰은 값 사용 권한이 아니다.
 guard 없는 기존 호출은 기존 입력·출력과 변경 동작을 유지하지만, 호출자가 관측한
 과거 상태를 기준으로 한 편집 의도까지 검사하지는 않는다. CLI와 dashboard의
@@ -131,11 +132,12 @@ writer는 같은 저장소 revision과 commit 경합 검사를 사용한다.
 
 ```sh
 devtools values revision --profile app
-devtools secret set TOKEN --stdin --profile app --revision REVISION --request-id UUID --create-only
-devtools values request show UUID --profile app
+devtools secret set TOKEN --stdin --profile app --revision REVISION --create-only
+devtools values request show RETURNED_REQUEST_ID --profile app
 ```
 
-예시의 REVISION과 UUID는 조회한 revision과 호출자가 보존할 새 요청 UUID로 바꾼다.
+REVISION은 조회한 revision으로, RETURNED_REQUEST_ID는 변경 응답의 `data.request_id`로 바꾼다.
+응답 전체 유실에 대비하려면 실행 전에 명시적 UUID를 보존한다.
 성공한 변경과 성공한 no-op은 결과와 요청 식별값을 한 transaction으로 저장한다.
 응답이 유실되면 같은 UUID·revision·입력 바이트로 재시도한다. file/stdin의 출처는
 identity에 포함하지 않지만 읽은 값과 action·env·모든 변경 옵션은 포함한다.
@@ -192,7 +194,7 @@ JSON chunk를 저장한다. 후속 페이지는 필요한 chunk만 읽고 원래
 
 ### secret 자동 생성
 
-`secret generate KEY --revision REVISION --request-id UUID`는 명시적으로 초기화·해제한
+`secret generate KEY --revision REVISION`은 명시적으로 초기화·해제한
 보호 저장소에 crypto/rand의 32바이트를 padding 없는 base64url 43자로 저장한다.
 profile/env 선택은 set과 같고 원문 대신 변경 메타데이터만 반환한다.
 기본은 선택 계층의 생성 전용이며, 기존 빈 값·만료 값에도 `value_exists`로 거절한다.
@@ -360,12 +362,12 @@ profile/env 전체 선택이 기본이다. frontend·backend·deploy처럼 일�
 사용할 때 bundle에 var/sec 키를 한 번 등록하고 실행마다 그 이름을 선택한다.
 같은 ValueID를 공유하므로 값을 복사하거나 명령마다 키 목록을 입력하지 않는다.
 먼저 `bundle list`에서 현재 `revision`을 조회한다. 기존 `API_URL`과 `TOKEN`,
-이미 만든 `local` env와 설치된 명령을 사용하는 예시다. `REVISION`과 `UUID`는
-조회한 revision과 새 요청 ID로, `my-installed-command`는 사용할 프로그램으로 바꾼다.
+이미 만든 `local` env와 설치된 명령을 사용하는 예시다. `REVISION`은
+조회한 revision으로, `my-installed-command`는 사용할 프로그램으로 바꾼다.
 
 ```sh
 devtools bundle list
-devtools bundle set backend --key API_URL --key TOKEN --revision REVISION --request-id UUID
+devtools bundle set backend --key API_URL --key TOKEN --revision REVISION
 devtools values inspect --bundle backend --env local
 devtools run --bundle backend --env local -- my-installed-command
 ```

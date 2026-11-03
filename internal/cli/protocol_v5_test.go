@@ -84,7 +84,7 @@ func TestGeneratedConfigRemainsVersionless(t *testing.T) {
 	}
 }
 
-func TestProfileImportSchemaPreviewApplyPair(t *testing.T) {
+func TestProfileImportSchemaPreviewAndOptionalOperationID(t *testing.T) {
 	app := testApp(t)
 	var command Command
 	for _, c := range app.commands {
@@ -92,8 +92,8 @@ func TestProfileImportSchemaPreviewApplyPair(t *testing.T) {
 			command = c
 		}
 	}
-	if command.Name == "" || len(command.InputOneOf) != 8 {
-		t.Fatal("missing preview/apply and encryption variants")
+	if command.Name == "" || len(command.InputOneOf) != 4 {
+		t.Fatal("missing exclusive encryption variants")
 	}
 	for _, option := range command.Options {
 		if slices.Contains([]string{"apply", "request-id"}, option.Name) && option.Required {
@@ -127,8 +127,8 @@ func TestProtocolV5ProfileTransferContracts(t *testing.T) {
 	importSchema := outputData(t, app, []string{"schema", "profile", "import"})
 	importInput := importSchema["input_schema"].(map[string]any)
 	importOneOf, ok := importInput["oneOf"].([]any)
-	if !ok || len(importOneOf) != 8 {
-		t.Fatalf("profile import encryption/apply contract: %#v", importInput["oneOf"])
+	if !ok || len(importOneOf) != 4 {
+		t.Fatalf("profile import encryption contract: %#v", importInput["oneOf"])
 	}
 	importProperties := importInput["properties"].(map[string]any)
 	for _, option := range []string{"identity-file", "passphrase-file", "passphrase-stdin"} {

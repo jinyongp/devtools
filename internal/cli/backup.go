@@ -107,11 +107,8 @@ func (a *App) registerBackup() {
 	add("inspect", "Authenticate and inspect backup metadata without returning values.", inputs, func(_ context.Context, _ backup.Engine, r Request) (any, *protocol.Error) {
 		return backup.Inspect(r.Options["file"], r.Options["identity-file"])
 	})
-	opts := append(append([]Option{}, inputs...), profileIdentifierOption("profile", true), profileIdentifierOption("as", false), Option{Name: "replace", Boolean: true, Description: "Permit whole-profile replacement after a safety backup."}, Option{Name: "apply", MinLength: 64, MaxLength: 64, Pattern: `^[0-9a-f]+$`, Description: "Apply the exact digest returned by preview."}, Option{Name: "request-id", Pattern: `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, Description: "UUID required when applying; reuse it for retries."})
-	add("restore", "Preview a profile restore; apply requires the preview digest and request ID.", opts, func(ctx context.Context, e backup.Engine, r Request) (any, *protocol.Error) {
-		if (r.Options["apply"] != "") != (r.Options["request-id"] != "") {
-			return nil, argumentError("Apply and request-id must be supplied together.", "")
-		}
+	opts := append(append([]Option{}, inputs...), profileIdentifierOption("profile", true), profileIdentifierOption("as", false), Option{Name: "replace", Boolean: true, Description: "Permit whole-profile replacement after a safety backup."}, Option{Name: "apply", MinLength: 64, MaxLength: 64, Pattern: `^[0-9a-f]+$`, Description: "Apply the exact digest returned by preview."}, requestIDOption(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, supplied("apply")))
+	add("restore", "Preview a profile restore; apply requires the preview digest.", opts, func(ctx context.Context, e backup.Engine, r Request) (any, *protocol.Error) {
 		plan, err := e.Restore(ctx, r.Options["file"], r.Options["identity-file"], r.Options["profile"], r.Options["as"], r.Options["apply"], r.Options["request-id"], r.Options["replace"] == "true")
 		return struct {
 			backup.Plan

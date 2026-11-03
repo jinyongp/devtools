@@ -40,7 +40,7 @@ func (a *App) registerCA() {
 			c.Output = mutationSchema(map[string]any{"item": object(map[string]any{"fingerprint": stringSchema(), "trust_action": stringSchema(), "client_restart_may_be_required": boolSchema()}, "fingerprint", "trust_action", "client_restart_may_be_required")}, "item")
 		}
 		if action == "init" || action == "trust" || action == "untrust" {
-			c.Options = []Option{{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "UUID for retry-safe mutation."}}
+			c.Options = []Option{requestIDOption(uuidPattern)}
 		}
 		if action == "export" {
 			c.Options = []Option{{Name: "output", MinLength: 1, Description: "New public CA certificate file; omission returns PEM in JSON."}}

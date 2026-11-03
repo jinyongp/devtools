@@ -21,7 +21,7 @@ func (a *App) registerVaultRewrap() {
 	options := []Option{
 		{Name: "from-backend", Required: true, Pattern: "^(native|passphrase)$", Description: "Original protection; retain this selection when resuming after slot publication."},
 		{Name: "backend", Required: true, Pattern: "^(native|passphrase)$", Description: "Explicit target protection for the same root key; never changes provider credentials."},
-		{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "New UUID for a new change; reuse it and the same target credentials after interruption."},
+		requestIDOption(uuidPattern),
 		{Name: "interactive", Boolean: true, Description: "Allow native OS authentication UI for this explicit protection change."},
 	}
 	for _, prefix := range []string{"current", "new"} {

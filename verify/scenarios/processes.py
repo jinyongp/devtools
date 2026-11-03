@@ -18,7 +18,7 @@ def execute(*args,input=None,expected=0):
     return json.loads(p.stdout if expected==0 else p.stderr)
 execute("sh",os.environ["DEVTOOLS_TEST_INSTALLER"],"install","--version","0.0.0-test.1","--source",os.environ["DEVTOOLS_TEST_RELEASES"])
 def api(*args,**kwargs): return execute("devtools",*args,**kwargs)["data" if kwargs.get("expected",0)==0 else "error"]
-def mutate(action,*args,**kwargs): return api("process",action,*args,"--request-id",str(uuid.uuid4()),**kwargs)
+def mutate(action,*args,**kwargs): return api("process",action,*args,**kwargs)
 config='''profile="services"
 [ports.web]
 port=24100
@@ -65,8 +65,9 @@ if len(sys.argv)>1:
 ''')
 api("var","set","MESSAGE","--value","first")
 api("env","create","local")
-first_id=str(uuid.uuid4())
-first=api("process","start","web","--request-id",first_id)
+first=api("process","start","web")
+first_id=first["request_id"]
+assert str(uuid.UUID(first_id))==first_id
 id=first["item"]["id"]
 assert first["item"]["state"]=="running",first
 assert first["item"]["inject"] is True,first
@@ -107,7 +108,10 @@ assert second["previous_id"]==id and second["id"]!=id
 read("second")
 assert not mutate("stop",id)["changed"]
 read("second")
-assert mutate("stop",second["id"])["item"]["state"]=="stopped"
+stopped=mutate("stop",second["id"])
+assert stopped["item"]["state"]=="stopped"
+assert stopped["request_id"]!=first_id
+assert api("process","stop",second["id"],"--request-id",stopped["request_id"])["replayed"]
 with socket.socket() as s:
     s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
     s.bind(("127.0.0.1",port))

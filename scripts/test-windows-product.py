@@ -168,24 +168,28 @@ timeout = "3s"
         api("vault", "init", "--backend", "passphrase", "--passphrase-stdin", input="synthetic-source-vault-unlock\n")
         api("sec", "set", "TOKEN", "--stdin", input="synthetic-secret-canary\n")
         assert api("var", "get", "MESSAGE")["value"] == "portable-public-canary"
-        task = mutate("task", "add", "--title", "Installed native task")["item"]["id"]
+        added = api("task", "add", "--title", "Installed native task")
+        task = added["item"]["id"]
+        task_request = added["request_id"]
+        assert str(uuid.UUID(task_request)) == task_request
+        assert mutate("task", "add", "--title", "Installed native task", request=task_request)["replayed"] is True
         assert api("task", "show", task)["item"]["id"] == task
         steps.append("values_secret_and_task_journal")
 
         # Guarded mutations share the legacy writer's revision and replay the
         # original outcome after another installed CLI invocation changes it.
         edit = api("values", "revision")["revision"]
-        guarded_id = str(uuid.uuid4())
         guarded = ["var", "set", "GUARDED", "--value", "committed", "--revision", edit]
-        mutate(*guarded, request=guarded_id)
+        guarded_id = api(*guarded)["request_id"]
         api("var", "set", "GUARDED", "--value", "later")
         assert mutate(*guarded, request=guarded_id)["replayed"] is True
         assert api("var", "get", "GUARDED")["value"] == "later"
         assert api("values", "request", "show", guarded_id)["item"]["state"] == "completed"
-        generate_id = str(uuid.uuid4())
         generate = ["secret", "generate", "GENERATED", "--revision", api("values", "revision")["revision"]]
-        generated = mutate(*generate, request=generate_id)
-        assert generated["changed"] is True and set(generated) == {"profile", "changed", "revision", "replayed"}
+        generated = api(*generate)
+        generate_id = generated["request_id"]
+        assert str(uuid.UUID(generate_id)) == generate_id
+        assert generated["changed"] is True and set(generated) == {"profile", "changed", "revision", "replayed", "request_id"}
         assert mutate(*generate, request=generate_id)["replayed"] is True
         consumer = "const v=process.env.GENERATED;if(!/^[A-Za-z0-9_-]{43}$/.test(v)||Buffer.from(v,'base64url').length!==32)process.exit(1);process.stdout.write('generated-ok')"
         assert raw(["run", "--", node, "-e", consumer]) == "generated-ok"

@@ -198,7 +198,7 @@ Default rewrite metadata is omitted to preserve existing storage/digest projecti
 only preserve adds optional fields. Successfully stopped exposure records clear the
 inactive pin's policy field so old strict readers can read the history after recovery.
 Protocol 11 uses network control version 2; envelope 1 and registry v4 remain unchanged.
-An older live daemon is rejected until an explicit `proxy restart --all --request-id UUID`.
+An older live daemon is rejected until an explicit `proxy restart --all`.
 Restart affects all selected listeners and in-memory sharing auth; stop exposures first.
 See [policy recovery and downgrade](proxy-compatibility.md#복구와-버전-전환).
 

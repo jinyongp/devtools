@@ -33,7 +33,7 @@ func TestSecretGenerateCLIReplaysAndRunsWithoutValueOutput(t *testing.T) {
 	initializeTestVault(t, app)
 	args[6] = editToken(t, app)
 	first := outputData(t, app, args)
-	if len(first) != 4 || first["changed"] != true || first["replayed"] != false {
+	if len(first) != 5 || first["request_id"] != args[8] || first["changed"] != true || first["replayed"] != false {
 		t.Fatal("generation output changed or contains input")
 	}
 	if got := outputData(t, app, args); got["replayed"] != true || got["revision"] != first["revision"] {
@@ -63,7 +63,7 @@ func TestSecretGenerateCLIReplaysAndRunsWithoutValueOutput(t *testing.T) {
 func TestSecretGenerateCLIRequiresGuardsAndNoInputOptions(t *testing.T) {
 	app := testApp(t)
 	for _, flags := range [][]string{
-		{}, {"--revision", strings.Repeat("a", 64)}, {"--request-id", tasks.ID()},
+		{}, {"--revision", strings.Repeat("a", 64), "--request-id", "not-a-uuid"}, {"--request-id", tasks.ID()},
 		{"--revision", strings.Repeat("a", 64), "--request-id", tasks.ID(), "--stdin"},
 		{"--revision", strings.Repeat("a", 64), "--request-id", tasks.ID(), "--length", "16"},
 		{"--revision", strings.Repeat("a", 64), "--request-id", tasks.ID(), "--value", "synthetic-denied-input"},

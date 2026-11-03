@@ -47,7 +47,7 @@ func executionRecovery(s valuehandoff.Store, r Request, e *protocol.Error) *prot
 	return e
 }
 func executionOptions() []Option {
-	return append(profileOptions(false), Option{Name: "request-id", Required: true, Pattern: valuehandoff.UUIDPattern, Description: "Canonical lowercase operation UUID; retry identical input."}, Option{Name: "file", Description: "Strict JSON control body file; contains no secret values."}, Option{Name: "stdin", Boolean: true, Description: "Read strict JSON control body from a pipe."})
+	return append(profileOptions(false), requestIDOption(valuehandoff.UUIDPattern), Option{Name: "file", Description: "Strict JSON control body file; contains no secret values."}, Option{Name: "stdin", Boolean: true, Description: "Read strict JSON control body from a pipe."})
 }
 func executionInput(ctx context.Context, streams IO, r Request, out any) *protocol.Error {
 	if e := jsonSourceRule("values execution").failure(r); e != nil {

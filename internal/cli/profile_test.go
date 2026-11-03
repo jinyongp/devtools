@@ -72,9 +72,10 @@ func TestProfileExportImportAcrossStores(t *testing.T) {
 		t.Fatalf("preview mutated destination: %#v", listed)
 	}
 
-	requestID := tasks.ID()
-	args := append(append([]string{}, previewArgs...), "--apply", digest, "--request-id", requestID)
+	args := append(append([]string{}, previewArgs...), "--apply", digest)
 	imported := outputData(t, destination, args)
+	requestID := imported["request_id"].(string)
+	args = append(args, "--request-id", requestID)
 	if imported["changed"] != true || imported["replayed"] != false || imported["target_exists"] != false || imported["safety_backup"] != "" || imported["digest"] != digest {
 		t.Fatalf("unexpected import metadata: %#v", imported)
 	}
@@ -116,8 +117,8 @@ func TestProfileExportImportAcrossStores(t *testing.T) {
 	if code != 3 || out != "" || !strings.Contains(diagnostic, `"code":"profile_exists"`) {
 		t.Fatalf("existing profile should require --replace: code=%d out=%s err=%s", code, out, diagnostic)
 	}
-	if code, out, diagnostic = invoke(t, destination, "", "profile", "import", "--file", archive, "--identity-file", identity, "--apply", existingDigest); code != 2 || out != "" || !strings.Contains(diagnostic, `"code":"invalid_argument"`) {
-		t.Fatalf("apply without request-id should fail: code=%d out=%s err=%s", code, out, diagnostic)
+	if code, out, diagnostic = invoke(t, destination, "", "profile", "import", "--file", archive, "--identity-file", identity, "--apply", existingDigest); code != 3 || out != "" || !strings.Contains(diagnostic, `"code":"profile_exists"`) {
+		t.Fatalf("generated ID bypassed replacement authorization: code=%d out=%s err=%s", code, out, diagnostic)
 	}
 	if code, out, diagnostic = invoke(t, destination, "", "profile", "import", "--file", archive, "--identity-file", identity, "--request-id", tasks.ID()); code != 2 || out != "" || !strings.Contains(diagnostic, `"code":"invalid_argument"`) {
 		t.Fatalf("request-id without apply should fail: code=%d out=%s err=%s", code, out, diagnostic)

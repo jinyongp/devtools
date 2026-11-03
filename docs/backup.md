@@ -61,10 +61,10 @@ CLI의 keygen·configure·create는 `data.item`에 결과 메타데이터를, `d
 devtools backup restore --file /backups/myapp.age --identity-file /secure/devtools-identity.txt --profile myapp --as recovered
 ```
 
-기본 동작은 미리 보기다. 결과의 `digest`와 새 UUID를 다음 요청에 전달한다.
+기본 동작은 미리 보기다. 결과의 `digest`를 다음 요청에 전달한다. 요청 UUID는 CLI가 생성해 반환한다.
 
 ```sh
-devtools backup restore --file /backups/myapp.age --identity-file /secure/devtools-identity.txt --profile myapp --as recovered --apply DIGEST --request-id UUID
+devtools backup restore --file /backups/myapp.age --identity-file /secure/devtools-identity.txt --profile myapp --as recovered --apply DIGEST
 ```
 
 적용 요청은 미리 보기와 같은 파일·profile·대상을 사용한다. 대상 데이터가 변경되면 `revision_conflict`로 새 미리 보기를 요청한다. 같은 UUID와 동일한 적용 입력을 재전송하면 저장된 적용 결과를 반환한다. digest나 교체 옵션을 포함해 다른 입력으로 재사용하면 `request_conflict`다.

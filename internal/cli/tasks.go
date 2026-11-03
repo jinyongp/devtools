@@ -209,7 +209,11 @@ func (a *App) registerTasks() {
 	for _, d := range tasks.Definitions {
 		def := d
 		opts := taskOptions()
-		opts = append(opts, Option{Name: "request-id", Required: def.Action != "workstream.edited", Pattern: uuidPattern, Description: "UUID for idempotent retries; required for writes."}, Option{Name: "file", Description: "JSON request file."}, Option{Name: "stdin", Boolean: true, Description: "Read JSON from a pipe."})
+		idOption := requestIDOption(uuidPattern)
+		if def.Action == "workstream.edited" {
+			idOption = requestIDOption(uuidPattern, without(activated("dry-run")))
+		}
+		opts = append(opts, idOption, Option{Name: "file", Description: "JSON request file."}, Option{Name: "stdin", Boolean: true, Description: "Read JSON from a pipe."})
 		if def.Action == "workstream.edited" {
 			opts = append(opts, Option{Name: "dry-run", Boolean: true, Description: "Preview the edit without saving or consuming a request ID."})
 		}
@@ -297,12 +301,6 @@ func (a *App) registerTasks() {
 			}
 			return store.Execute(ctx, tasks.Request{Action: def.Action, Target: target, Body: b, Options: r.Options})
 		}})
-		if def.Action == "workstream.edited" {
-			a.commands[len(a.commands)-1].InputOneOf = []map[string]any{
-				{"required": []string{"dry-run"}, "properties": map[string]any{"dry-run": map[string]any{"const": true}}},
-				{"required": []string{"request-id"}, "not": map[string]any{"required": []string{"dry-run"}, "properties": map[string]any{"dry-run": map[string]any{"const": true}}}},
-			}
-		}
 	}
 	for _, name := range []string{"list", "show", "next", "current", "context", "history", "impact", "tree", "export", "checkpoint list", "workstream list", "workstream show", "workstream context", "workstream history", "workstream impact", "workstream tree", "workstream export", "workstream check", "workstream spec show", "workstream plan show", "validation list", "validation show"} {
 		name := name

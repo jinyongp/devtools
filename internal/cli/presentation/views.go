@@ -163,6 +163,11 @@ func buildView(definition Definition, value any) (cliui.Document, bool) {
 		}
 	}
 	if document, handled := purposeView(definition, data); handled {
+		// Callers may now omit operation IDs. Return the identity needed for a
+		// later retry; recoveryNotes already shows it for uncertain outcomes.
+		if data["request_id"] != nil && data["effects"] != "partial" && data["effects"] != "unknown" && data["retry"] != "same_request" {
+			return cliui.NewDocument(append(document.Blocks(), selectedFields(data, "request_id"))...), true
+		}
 		return document, true
 	}
 	if definition.Family == "list" {

@@ -11,6 +11,28 @@ Protocol 23의 목록 범위·필터·페이지와 실행 가능한 복구 안�
 [탐색과 복구 계약](cli-navigation.md)을 따릅니다. `process list`의 기본 목록은
 현재 서비스이며 실행 이력은 `--view history`로 선택합니다.
 
+## 변경 요청 ID
+
+Protocol 23 CLI의 변경 요청용 `--request-id`는 선택입니다. 생략하면 실행할 때
+새 UUID를 한 번 생성하고 성공의 `data.request_id`, 실행 오류의
+`error.details.target.request_id`로 반환합니다. JSON·text·대화형 여부와 관계없이
+동일하며 stdin이나 별도 확인을 요구하지 않습니다. 출력 실패 뒤에도 오류를 전달할
+수 있으면 같은 ID를 보존하고, 변경 결과가 불확실하면 `inspect_first`를 유지합니다.
+명시적 ID는 기존 명령의 정규화 계약을 유지합니다. 예를 들어 vault rewrap은 소문자로 반환합니다.
+
+응답 유실 뒤에는 원래 ID와 동일한 입력으로 `--request-id ID`를 지정해 재시도합니다.
+응답 전체를 잃어도 복구해야 하는 자동화는 실행 전에 명시적 UUID를 생성·보존합니다.
+새 요청은 옵션을 생략하면 새 ID를 받습니다. CLI는 실패한 변경을 자동 재실행하지 않습니다.
+오래된 설치본은 ID를 요구할 수 있으므로 해당 명령 schema의 `required`를 확인합니다.
+
+조회용 `values execution status --request-id ID`와 `process/project/values request
+show ID`의 ID는 기존 요청을 선택하므로 자동 생성하지 않습니다. Revision, apply digest,
+expected-run과 인증 조건은 계속 필요합니다. Guarded 값 변경은 `--revision`을 지정할 때
+ID를 생성하며, guard 없는 기존 값 변경의 출력은 유지합니다. Preview·check는 저장된
+요청을 만들지 않습니다. Bundle/import preview의 API 검증에 사용한 ID도 소비하지 않습니다.
+준비된 복구·적용 안내는 동일 요청을 보존하도록 실제 ID를 포함할 수 있습니다.
+Dashboard HTTP API와 도메인 API의 명시적 요청 ID 계약은 바뀌지 않습니다.
+
 ## 출력 종류 확인
 
 `devtools schema COMMAND`의 `data.output_mode`와 `data.presentation`을 함께 확인합니다.

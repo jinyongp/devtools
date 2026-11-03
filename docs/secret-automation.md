@@ -23,8 +23,11 @@ checkout; it is not an installed Docker or remote CI integration.
 
 ## Retry a mutation safely
 
-Read `values revision --profile app`, then pass its opaque revision together with
-a fresh `--request-id UUID` to a supporting writer. The two options are paired.
+Read `values revision --profile app`, then pass its opaque token with `--revision`
+to a supporting writer. Protocol 23 CLI generates an omitted request ID and returns
+`data.request_id`; an explicit ID still requires the caller's revision. Older
+installed schemas may require both options. For recovery after losing the entire
+response, save an explicit UUID before executing.
 All writers share the storage commit conflict rules, including Dashboard and
 legacy CLI paths; an unguarded legacy call cannot express the caller's earlier
 editing intent. A guarded stale request fails with `revision_conflict`.
@@ -37,7 +40,7 @@ under the same ID fails with `request_conflict`. The mutation and its successful
 receipt publish in one transaction. Failed validation does not consume the ID.
 
 `--create-only` rejects an existing exact slot, including an empty or expired
-slot. `secret generate KEY --revision REVISION --request-id UUID` generates
+slot. `secret generate KEY --revision REVISION` generates
 32 random bytes encoded as 43 unpadded base64url characters. It returns metadata,
 never the new value. Its retry returns the original result without generating a
 replacement. `--replace` permits secret upsert: it also creates a missing slot,
@@ -80,13 +83,13 @@ directory itself, not the project directory or its `vault` subdirectory.
    using `values runner address RUNNER_ID --instance INSTANCE_ID`. On Unix, prepare
    only the returned endpoint's private parent and socket, then start accepting
    connections. Address lookup neither prepares nor reserves the transport.
-   Register the live instance with `values runner register --request-id UUID
+   Register the live instance with `values runner register
    --stdin` and body
    `{"runner_id":"RUNNER_ID","instance_id":"INSTANCE_ID","protocol":1,"redaction_protocol":1}`.
    Registrations are data-root wide and have no profile option. Disable an observed
-   old instance using `values runner unregister RUNNER_ID --instance INSTANCE_ID
-   --request-id UUID` before registering a successor.
-2. Call `values execution prepare --profile app --request-id UUID --stdin` with
+   old instance using `values runner unregister RUNNER_ID --instance INSTANCE_ID`
+   before registering a successor.
+2. Call `values execution prepare --profile app --stdin` with
    `{"external_execution_id":"job-42","selection":{"keys":["TOKEN"]},"env":"local"}`.
    `selection.keys` is always required, even for an empty input. To select a bundle,
    add `"bundle":"api"` inside selection and supply the complete allowed key
@@ -97,10 +100,10 @@ directory itself, not the project directory or its `vault` subdirectory.
    edits do not change them. The deadline is at most 30 seconds from preparation,
    shortened by a selected value's TTL or the original key-session deadline.
 4. After the caller approves that exact job/input, call `values execution approve
-   EXECUTION_ID --profile app --request-id UUID --stdin` with
+   EXECUTION_ID --profile app --stdin` with
    `{"revision":1,"runner_id":"RUNNER_ID","runner_instance_id":"INSTANCE_ID","external_execution_id":"job-42","input_id":"INPUT_ID"}`.
    Substitute returned IDs and revision; uppercase placeholder text is illustrative.
-5. Call `values execution deliver EXECUTION_ID --profile app --request-id UUID
+5. Call `values execution deliver EXECUTION_ID --profile app
    --stdin` with `{"revision":2}`, using the approval's actual returned revision.
    Delivery verifies the original session, lock/protector identity, storage
    generation, expiry, approval and registered instance immediately before the
@@ -124,7 +127,7 @@ separate data roots and identity boundaries.
 | --- | --- |
 | Mutation `--revision` | Opaque string for the whole profile, returned by `values revision`; use only for value, env and bundle edits. |
 | Execution body `revision` | Positive integer for one execution record, returned in `data.item.revision`; use the latest value for a new approve, cancel, deliver or report operation. |
-| `--request-id` | Caller-owned UUID for one operation and its exact input; preserve it for retries. Execution operations share a profile's request namespace; runner operations use a separate root-wide namespace. |
+| `--request-id` | Optional operation UUID, generated and returned when omitted. Preserve it and pass it explicitly for identical retries. Execution operations share a profile's request namespace; runner operations use a separate root-wide namespace. |
 | `execution_id`, `input_id` | Two distinct 32-character lowercase hexadecimal IDs returned by prepare. They are not request UUIDs or local process IDs. |
 | `runner_id`, `instance_id` | Canonical lowercase UUIDs for a logical caller and one receiver instance. A successor keeps the runner ID and gets a new instance ID. |
 | `external_execution_id`, `external_ref` | Caller job identity and stable engine reference. Keep them free of secrets; reports and status expose them as metadata. |
@@ -172,7 +175,7 @@ whether the engine ran. Do not infer completion from a PID or timeout.
 
 The caller must query its engine using the original `external_execution_id` or
 stable engine reference. Report verified facts with `values execution report
-EXECUTION_ID --profile app --request-id UUID --stdin` and fields `revision`,
+EXECUTION_ID --profile app --stdin` and fields `revision`,
 `runner_id`, `external_execution_id`, `input_id`, `state`. `started` requires a
 stable `external_ref`; `finished` also requires `exit_code`. `failed` and `unknown`
 must repeat an already recorded `external_ref` when one exists; omitting or

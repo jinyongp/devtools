@@ -28,8 +28,16 @@ func TestTaskCLIAndSchema(t *testing.T) {
 		}
 		return envelope["data"].(map[string]any)
 	}
-	o := run("", "task", "add", "--profile", "test", "--title", "CLI task", "--request-id", tasks.ID())
+	o := run("", "task", "add", "--profile", "test", "--title", "CLI task")
 	id := o["item"].(map[string]any)["id"].(string)
+	requestID := o["request_id"].(string)
+	replayed := run("", "task", "add", "--profile", "test", "--title", "CLI task", "--request-id", requestID)
+	if replayed["replayed"] != true || replayed["request_id"] != requestID || replayed["item"].(map[string]any)["id"] != id {
+		t.Fatal("generated task request ID did not replay the original task")
+	}
+	if code, _, diagnostic := invoke(t, a, "", "task", "add", "--profile", "test", "--title", "Different task", "--request-id", requestID); code != 3 || !strings.Contains(diagnostic, "request_conflict") {
+		t.Fatal("generated task request ID accepted changed input", code, diagnostic)
+	}
 	claim := run("", "task", "claim", id, "--profile", "test", "--request-id", tasks.ID())
 	runID := claim["run"].(map[string]any)["id"].(string)
 	var mismatchOut, mismatchErr bytes.Buffer

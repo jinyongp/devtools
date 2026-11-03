@@ -130,14 +130,15 @@ import 기본 동작은 미리보기입니다. `data.digest`, `data.target_exist
 
 ```sh
 devtools profile import --file ./myapp.age \
-  --apply DIGEST --request-id UUID
+  --apply DIGEST
 ```
 
 interactive passphrase archive라면 apply 호출에서도 같은 passphrase를 다시 입력합니다.
 non-interactive에서는 preview/apply 모두 같은 `--passphrase-file` 또는
 `--passphrase-stdin`을 사용합니다.
 
-`--apply`와 `--request-id`는 반드시 함께 사용합니다. 기존 대상도 미리보기는 가능하지만
+적용에는 `--apply DIGEST`가 필요하며 요청 ID는 생략하면 생성해 반환합니다.
+재시도에는 원래 ID를 `--request-id ID`로 지정합니다. 기존 대상도 미리보기는 가능하지만
 실제 교체에는 `--replace`가 필요합니다. 교체 전 safety archive는 현재 import와 같은
 암호화 방식으로 생성됩니다. passphrase import라면 같은 passphrase, recipient import라면
 같은 identity의 public recipient를 사용합니다. `backup configure`는 필요하지 않습니다.
@@ -194,7 +195,7 @@ unlock한 뒤 doctor를 재실행하세요. Doctor는 보호 방법을 선택하
 
 ```sh
 devtools doctor
-devtools project up web api --request-id UUID
+devtools project up web api
 devtools project status
 ```
 

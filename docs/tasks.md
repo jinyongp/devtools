@@ -10,19 +10,20 @@ returns the resulting profile revision. States are projected from those actions.
 ## Start with one task
 
 Run these commands in a project with `devtools.toml`, or add `--profile NAME`
-to each command. To prepare a new directory, use `devtools init --profile myapp`.
+to each command. To prepare a new directory, use `devtools init`.
 
 ```sh
-devtools task add --title 'Review installer failure handling' --request-id UUID
+devtools task add --title 'Review installer failure handling'
 devtools task next
-devtools task claim TASK_ID --request-id UUID
+devtools task claim TASK_ID
 devtools task checkpoint RUN_ID --summary 'Checked rollback; update tests next' \
-  --context CONTEXT --request-id UUID
+  --context CONTEXT
 devtools task done TASK_ID --summary 'Rollback verified' \
-  --context CONTEXT --request-id UUID
+  --context CONTEXT
 ```
 
-Replace each new `UUID` with a generated UUID, for example the output of `uuidgen`.
+The CLI generates each operation's request ID and returns `data.request_id`.
+Older installed schemas may require an explicit `--request-id`.
 Use `data.item.id` from add as `TASK_ID`. A successful claim returns
 `data.claimed: true`, `data.run.id` as `RUN_ID`, and `data.context` as `CONTEXT`.
 Check `data.context_valid` before continuing; an unsuccessful claim explains its
@@ -34,8 +35,9 @@ A definition or state update that changes nothing fails with `no_change` and exi
 code 3; it creates no action, receipt, or revision. Appending a checkpoint or result
 is itself a change. Empty automatic claims and dry-runs remain
 intentional non-changing successes.
-For an uncertain response, retry with
-the original request ID and unchanged inputs. A revised request gets a new UUID.
+For an uncertain response, retry with `--request-id ID` using
+the original request ID and unchanged inputs. Save an explicit UUID before execution
+if recovery must survive losing the entire response. A revised request gets a new UUID.
 `DEVTOOLS_TASK_CONTEXT` supplies the default execution context.
 Only commands that consume execution context or optionally use it as a guard
 expose `--context`. Context-free mutations ignore ambient context and do not
@@ -58,25 +60,25 @@ the saved payload with `task checkpoint list RUN_ID` or task history.
 
 ## Plan a workstream
 
-Create with `task workstream create --title TEXT --request-id UUID`. Document and
-definition edits take `--if-revision N` from the latest query and a request ID.
+Create with `task workstream create --title TEXT`. Document and
+definition edits take `--if-revision N` from the latest query.
 JSON bodies use a regular file with `--file PATH` or redirected input with `--stdin`.
 Command help lists options. Use `devtools schema task workstream spec set` to
 retrieve the input and JSON body schema for that command.
 
 Update existing workstream metadata with `task workstream update WS_ID`. Metadata
 is the public concept; `title` and `description` are supported fields.
-Provide at least one field with the latest revision and a request ID. An empty
+Provide at least one field with the latest revision. An empty
 description clears it. Use the `workstream.update` operation of `task workstream
 edit` when metadata must change atomically with other plan content.
 
-The command names below describe individual steps. Every mutation takes a new
-`--request-id UUID`; document and definition edits also take `--if-revision N`.
+The command names below describe individual steps. New mutations generate their
+request IDs; document and definition edits still take `--if-revision N`.
 For example, save the following specification as `spec.json`, read `data.revision`
 from `task workstream show WS_ID`, and run:
 
 ```sh
-devtools task workstream spec set WS_ID --file spec.json --if-revision N --request-id UUID
+devtools task workstream spec set WS_ID --file spec.json --if-revision N
 ```
 
 `task workstream spec set WS_ID` accepts:
@@ -107,7 +109,7 @@ in the same profile. Every prerequisite must have current completion before exec
 ## Edit plans at any lifecycle state
 
 Use `task workstream edit WS_ID --file edit.json --if-revision N --dry-run` to preview
-an atomic batch, then use the same body and revision with `--request-id UUID` to save.
+an atomic batch, then remove `--dry-run` and use the same body and revision to save.
 The body contains `reason` and 1–200 `operations`. Insert, update, remove, restore,
 change dependencies and reorder tasks without reopening completed work first.
 See [the edit API](task-edit-api.md) for operations and examples.
@@ -118,7 +120,7 @@ or closure. Legacy plan-set arrays assert the complete included membership.
 
 Read `completion_status` and `execution_status` alongside lifecycle `state`.
 A ready done+stale task can be claimed atomically. A stale running task uses
-`task sync TASK_ID --reason TEXT --if-revision N --request-id UUID` with its current
+`task sync TASK_ID --reason TEXT --if-revision N` with its current
 context after reviewing the changed definition. Sync creates no passing evidence.
 `task list --scope removed` finds excluded history; `--completion stale` finds work
 whose prior completion no longer covers its definition. `workstream plan show`
@@ -127,13 +129,13 @@ accepts `--at-revision N` for a complete historical request boundary.
 ## Recover and verify
 
 Use `task current --dir PATH` and `task context TASK_ID` to inspect saved work.
-`task takeover TASK_ID --expected-run RUN_ID --request-id UUID` creates a new run
+`task takeover TASK_ID --expected-run RUN_ID` creates a new run
 and context. The previous context becomes inactive.
-`task release RUN_ID --context CONTEXT --request-id UUID` ends a claim explicitly,
-and `task resume --context CONTEXT --request-id UUID` continues an existing context.
+`task release RUN_ID --context CONTEXT` ends a claim explicitly,
+and `task resume --context CONTEXT` continues an existing context.
 
 Validation definitions describe the method and required evidence. Create a basis
-with `task validation basis VAL_ID --file FILE --request-id UUID` and the current
+with `task validation basis VAL_ID --file FILE` and the current
 task execution context. For a workstream validation, supply `--if-revision N` instead:
 
 ```json

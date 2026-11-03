@@ -22,7 +22,7 @@ host_policy = "preserve"
 서버의 allowlist나 URL binding을 바꿨으면 해당 서버도 재시작한다.
 
 ```sh
-devtools proxy up web --request-id UUID
+devtools proxy up web
 devtools proxy list
 ```
 
@@ -33,11 +33,12 @@ devtools proxy list
 전역 route를 새로 만들 때는 다음처럼 지정한다. `4400`의 서버는 이미 실행되어 있어야 한다.
 
 ```sh
-devtools proxy add app 4400 --global --host app.dev.example --dns external --host-policy preserve --request-id UUID
-devtools proxy up app --global --request-id UUID
+devtools proxy add app 4400 --global --host app.dev.example --dns external --host-policy preserve
+devtools proxy up app --global
 ```
 
-각 `UUID`는 별도의 새 요청 UUID로 바꾼다. 응답 유실 뒤에는 같은 입력과 UUID를 사용한다.
+새 요청 UUID는 CLI가 생성해 반환한다. 응답 유실 뒤에는 원래 ID와 같은 입력으로
+`--request-id ID`를 지정한다.
 기존 전역 route의 정책을 바꾸는 순서는 아래 복구 절차와 같다.
 
 ## 소비자 설정과 확인할 기능
@@ -86,18 +87,18 @@ Quick Tunnel은 SSE를 지원하지 않는다. Cloudflared의 WS/RPC 성공을 S
 다음은 기존 `app`을 `rewrite`로 복원하는 순서다.
 
 ```sh
-devtools expose stop EXPOSURE_ID --request-id UUID
-devtools proxy down app --global --request-id UUID
-devtools proxy rm app --global --request-id UUID
-devtools proxy add app 4400 --global --host app.dev.example --dns external --host-policy rewrite --request-id UUID
-devtools proxy up app --global --request-id UUID
+devtools expose stop EXPOSURE_ID
+devtools proxy down app --global
+devtools proxy rm app --global
+devtools proxy add app 4400 --global --host app.dev.example --dns external --host-policy rewrite
+devtools proxy up app --global
 ```
 
 공유가 없으면 첫 줄은 생략한다. 같은 이름을 다시 만들어도 새 route UUID이며,
 이전 exposure 시작 UUID를 재사용하지 않는다. 현재 주소의 HTTP·WS 기능을 다시 확인한다.
 
 새 CLI가 실행 중인 구 daemon을 만났을 때는 `old_daemon_version`으로 거절한다.
-관련 공유를 중지한 뒤 `devtools proxy restart --all --request-id UUID`를 명시적으로 실행한다.
+관련 공유를 중지한 뒤 `devtools proxy restart --all`를 명시적으로 실행한다.
 전체 listener에 영향을 주므로 작업 범위를 확인한다. 자동으로 daemon을 교체하지 않는다.
 
 구 CLI로 돌아가려면 새 CLI로 모든 preserve 공유를 중지하고 pin을 해제한 뒤, 프로젝트의

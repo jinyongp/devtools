@@ -94,9 +94,9 @@ func TestProxyCLIContractAndFailures(t *testing.T) {
 		exit int
 		want string
 	}{
-		{args: []string{"proxy", "start"}, exit: 2, want: "invalid_argument"},
+		{args: []string{"proxy", "start", "--request-id", "not-a-uuid"}, exit: 2, want: "invalid_argument"},
 		{args: []string{"proxy", "start", "--port", "70000", "--request-id", "30303030-3030-4030-8030-303030303030"}, exit: 2, want: `"field":"port"`},
-		{args: []string{"proxy", "stop"}, exit: 2, want: "invalid_argument"},
+		{args: []string{"proxy", "stop", "--request-id", "not-a-uuid"}, exit: 2, want: "invalid_argument"},
 		{args: []string{"proxy", "list", "--profile", "../bad"}, exit: 2, want: "invalid_argument"},
 	} {
 		code, output, diagnostic := invoke(t, app, "", test.args...)

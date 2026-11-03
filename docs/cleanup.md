@@ -15,10 +15,10 @@ devtools cleanup preview --profile app
 
 전체 미리보기와 profile별 미리보기 중 필요한 범위를 선택한다.
 응답의 `data.id`를 `PLAN_ID`로, `data.items`에서 고른 항목의 `id`를 `ITEM_ID`로 사용한다.
-미리보기는 10분 동안 유효하다. 적용할 항목과 새 요청 UUID를 지정한다.
+미리보기는 10분 동안 유효하다. 적용할 항목을 지정하면 CLI가 새 요청 UUID를 생성해 반환한다.
 
 ```sh
-devtools cleanup apply PLAN_ID --item ITEM_ID --item ANOTHER_ID --request-id UUID
+devtools cleanup apply PLAN_ID --item ITEM_ID --item ANOTHER_ID
 ```
 
 | 후보 | 기준과 보존 동작 |

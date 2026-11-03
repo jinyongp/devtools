@@ -49,11 +49,27 @@ func TestReviewedExamplesCoverEveryCanonicalCommand(t *testing.T) {
 			if e.Purpose == "" || e.Command != c.Examples[i] {
 				t.Fatal(c.Name, e)
 			}
+			if operationIDPolicyFor(c) != nil && strings.Contains(e.Command, "--request-id REQUEST_UUID") {
+				t.Fatal("ordinary example asks callers to generate an optional ID", c.Name, e)
+			}
 			count++
 		}
 	}
 	if count != 337 {
 		t.Fatal("reviewed example inventory changed without a contract update", count)
+	}
+}
+
+func TestOperationHelpExplainsGeneratedIDsAndIdenticalRetries(t *testing.T) {
+	app := testApp(t)
+	_, help, _ := app.discovery("process stop", false)
+	for _, want := range []string{"devtools process stop EXECUTION_ID", "Omit --request-id", "original ID and identical input", "entire response"} {
+		if !strings.Contains(help, want) {
+			t.Fatal("missing operation recovery guidance", want, help)
+		}
+	}
+	if strings.Contains(help, "--request-id REQUEST_UUID") || strings.Contains(help, "Generate one fresh") {
+		t.Fatal("help still requires UUID generation for a new stop", help)
 	}
 }
 

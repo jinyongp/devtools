@@ -107,14 +107,16 @@ func commandWorkflow(c Command) []string {
 	case "vault rewrap":
 		return []string{
 			"Discover schema vault rewrap and inspect vault status. Select the actual original and target backend explicitly; this changes protection of the same root key, not stored values or provider credentials.",
-			"Replace the syntax example's UUID once for a new change. Provide original and target passphrases through hidden terminal input or private files; only one side may read piped stdin. Native authentication UI requires --interactive.",
+			operationIDWorkflow,
+			"Provide original and target passphrases through hidden terminal input or private files; only one side may read piped stdin. Native authentication UI requires --interactive.",
 			"After interruption retain the original UUID, backend selections and target credentials. Inspect vault status; after slot publication the retired original credentials are no longer required. Follow pending-operation remedies rather than reinitializing.",
 			"Rewrap preserves manual lock. Explicitly unlock the target protection before using a locked passphrase session. Existing app environments, provider credentials and old copies are not revoked.",
 		}
 	case "secret generate":
 		return []string{
 			"Read devtools values revision --profile sample for the current edit revision; inspect existing key metadata before selecting --replace.",
-			"Replace the syntax example's sample profile/key and zero revision with those actual selections. Generate one fresh UUID for this new operation.",
+			"Replace the syntax example's sample profile/key and zero revision with those actual selections.",
+			operationIDWorkflow,
 			"Run the edited command. If its response is lost, keep the original UUID and identical input; inspect devtools values request show REQUEST_UUID --profile sample before retrying.",
 			"Inspect devtools secret list --profile sample for metadata; secret plaintext is never returned.",
 		}
@@ -125,10 +127,8 @@ func commandWorkflow(c Command) []string {
 			"An unknown delivery requires receiver/execution inspection; do not prepare or deliver new work merely to recover a response.",
 		}
 	}
-	for _, o := range c.Options {
-		if o.Name == "request-id" && o.Required {
-			return []string{"The example is syntax only. Obtain required resource IDs, revisions and preview digests from the operation's inspection workflow.", "Generate a new UUID once for a new operation. After an uncertain response, retain that UUID and identical input and inspect saved state before retrying."}
-		}
+	if operationIDPolicyFor(c) != nil {
+		return []string{"Obtain resource IDs, revisions and preview digests from the operation's inspection workflow.", operationIDWorkflow}
 	}
 	return nil
 }

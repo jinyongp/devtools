@@ -8,7 +8,7 @@
 
 ```sh
 devtools task workstream edit WORKSTREAM_ID --file edit.json --if-revision N --dry-run
-devtools task workstream edit WORKSTREAM_ID --file edit.json --if-revision N --request-id UUID
+devtools task workstream edit WORKSTREAM_ID --file edit.json --if-revision N
 ```
 
 본문은 `{reason,operations}`이며 1–200개 operation을 받는다. preview의 요청 ID는 선택이며 영수증·업무 상태·저장 버전을 바꾸지 않는다. 실제 저장은 같은 평가기를 사용한다. 그사이 리비전이 바뀌면 최신 계획으로 재평가한다. 전체 결과가 2 MiB를 넘으면 저장 전에 거절한다.

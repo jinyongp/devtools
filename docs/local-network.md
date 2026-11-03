@@ -6,7 +6,8 @@ devtools는 서버 실행, 포트, 로컬 도메인, HTTPS와 공유를 함께 �
 macOS·Linux와 Windows 네이티브에서 실행하며 WSL은 Linux 환경으로 동작한다.
 Windows의 지원/검증 범위는 [Windows 안내](windows.md), 별도 client trust는 [WSL 안내](wsl.md)를 따른다.
 사용자 계정의 daemon 하나가 여러 named listener를 관리한다.
-아래 `UUID`는 새 요청 UUID로 바꾼다. 응답을 잃었으면 같은 입력과 UUID로 재시도한다.
+새 변경의 요청 UUID는 CLI가 생성해 반환한다. 응답을 잃었으면 원래 ID와 같은 입력으로
+`--request-id ID`를 지정해 재시도한다. 전체 응답 유실에 대비하려면 명시적 UUID를 미리 보존한다.
 
 ## 프로젝트 설정과 일상 실행
 
@@ -52,7 +53,7 @@ PORT = { port = "api" }
 
 ```sh
 devtools instance name main
-devtools project up web api --request-id UUID
+devtools project up web api
 devtools command env web
 devtools proxy env api
 devtools project status
@@ -67,20 +68,20 @@ protocol 12부터 `run`, `process start`, `project up`은 선택 명령의 `serv
 재시작은 실행 기록의 proxy 모드를 유지한다. 준비 실패 시 기존 서버를 보존하며,
 일부 시작 실패 시 성공한 다른 서버는 유지한다.
 foreground는 `devtools run web`, 단일 managed 서버는
-`devtools process start web --request-id UUID`를 사용한다.
+`devtools process start web`를 사용한다.
 `run`의 devtools 옵션은 command 이름 앞에 둔다. 이름 뒤 옵션은 child 인자다.
 다른 worktree는 `instance name feature`처럼 별도 alias를 지정한다.
 프로젝트 lifecycle은 현재 실제 프로젝트 디렉터리의 서버만 선택한다.
-설정·값을 바꿨으면 `devtools project restart web api --request-id UUID`로 교체한다.
-`devtools project down --request-id UUID`는 backend를 종료한다. route 비활성화는 `proxy down NAME --request-id UUID`다.
+설정·값을 바꿨으면 `devtools project restart web api`로 교체한다.
+`devtools project down`는 backend를 종료한다. route 비활성화는 `proxy down NAME`다.
 
 `proxy down`으로 비활성화한 route는 자동 시작에서 그대로 둔다. `--proxy`는 matching
 route가 하나 이상 있어야 하며 비활성 route도 다시 준비한다. batch에는 route 없는 DB나
 worker를 함께 선택할 수 있다. 여러 route가 같은 served port를 참조하면 모두 대상이다.
 누락된 network env·alias·DNS 권한이나 listener 준비 오류는 실행을 중단한다.
 
-`devtools run --no-proxy web`, `process start web --no-proxy --request-id UUID`,
-`project up web api --no-proxy --request-id UUID`는 준비를 생략한다. `--proxy=false`도 같다.
+`devtools run --no-proxy web`, `process start web --no-proxy`,
+`project up web api --no-proxy`는 준비를 생략한다. `--proxy=false`도 같다.
 직접 포트로만 실행하거나 DNS를 별도로 관리할 때 사용한다. 기존 route·listener·hosts·공유를
 끄지는 않는다. port·binding·값·실행 파일 검사는 계속하며 proxy URL을 직접 URL로 바꾸지 않는다.
 `--no-proxy=false`는 기본 자동 모드이며, 두 flag를 함께 지정하면 값과 무관하게 오류다.
@@ -105,27 +106,27 @@ listener는 HTTP/HTTPS 주소 묶음의 이름이다. 프로젝트 `listener` �
 재시작하지는 않으므로, 이어서 프로젝트 서버를 restart해 새 URL binding을 적용한다.
 
 ```sh
-devtools proxy stop --listener default --request-id UUID
-devtools proxy configure --http-address 127.0.0.1:18080 --https-address 127.0.0.1:18443 --request-id UUID
-devtools proxy configure --listener preview --http-address 127.0.0.1:18081 --https-address 127.0.0.1:18444 --request-id UUID
-devtools proxy start --listener default --request-id UUID
-devtools project restart web api --request-id UUID
+devtools proxy stop --listener default
+devtools proxy configure --http-address 127.0.0.1:18080 --https-address 127.0.0.1:18443
+devtools proxy configure --listener preview --http-address 127.0.0.1:18081 --https-address 127.0.0.1:18444
+devtools proxy start --listener default
+devtools project restart web api
 devtools proxy status --all
 devtools proxy ca export --output ./devtools-ca.pem
 curl --noproxy '*' --cacert ./devtools-ca.pem --resolve main.shop.localhost:18443:127.0.0.1 https://main.shop.localhost:18443/
-devtools proxy start --listener preview --request-id UUID
+devtools proxy start --listener preview
 ```
 
 각 변경 명령의 `UUID`는 서로 다른 새 값으로 바꾼다.
 CA 출력 파일이 이미 있으면 다른 `--output` 경로를 사용한다.
 configure는 선택 listener가 중지된 상태에서 실행한다. 프로젝트 route에서
 `listener = "preview"`로 묶음을 선택한다. HTTPS 시작 시 사용자 전용 CA를 생성한다.
-OS 신뢰 등록은 명시 `devtools proxy trust --request-id UUID`로 수행한다.
+OS 신뢰 등록은 명시 `devtools proxy trust`로 수행한다.
 신뢰 등록 전에도 public CA를 지정한 client는 HTTPS를 사용할 수 있다.
 HTTP는 선택 HTTPS 주소로 경로와 query를 유지해 redirect한다.
 HTTPS는 활성 route의 SNI hostname만 허용한다.
 
-Linux/WSL에서 80/443이 필요하면 최초에 `devtools proxy setup --request-id UUID`를 실행하고
+Linux/WSL에서 80/443이 필요하면 최초에 `devtools proxy setup`를 실행하고
 listener 주소를 `127.0.0.1:80`, `127.0.0.1:443`으로 설정한다.
 Linux setup은 설치 실행 파일에 최소 bind capability를 적용한다.
 macOS에서 권한 없이 80/443을 사용하려면 `--http-address 0.0.0.0:80
@@ -173,8 +174,8 @@ known URL, listener 실행 여부, upstream readiness, client trust는 별도 �
 41000에서 이미 실행 중인 서버를 연결하는 예다. devtools는 그 서버를 소유하거나 종료하지 않는다.
 
 ```sh
-devtools proxy add docs 41000 --global --host docs.localhost --request-id UUID
-devtools proxy up docs --global --request-id UUID
+devtools proxy add docs 41000 --global --host docs.localhost
+devtools proxy up docs --global
 devtools proxy env docs --global
 devtools proxy list --global
 ```
@@ -188,8 +189,8 @@ add는 고정 backend 포트를 참조하는 비활성 전역 route를 만든다
 devtools proxy run docs --global -- python3 server.py
 ```
 
-연결을 정리할 때는 `proxy down docs --global --request-id UUID`,
-전역 선언까지 제거할 때는 `proxy rm docs --global --request-id UUID`를 사용한다.
+연결을 정리할 때는 `proxy down docs --global`,
+전역 선언까지 제거할 때는 `proxy rm docs --global`를 사용한다.
 foreground run은 포트가 비었을 때
 정확한 포트를 claim하고 `PORT`, `URL`, `ROUTE_URL`과 모든 global peer의
 `DEVTOOLS_<NAME>_PORT/URL/ROUTE_URL`을 주입한다. 정규화된 이름 충돌은 거절한다.
@@ -205,12 +206,12 @@ project/global 동명이름은 별도 scope다. global 선택에는 `--global`�
 Framework별 allowlist와 기존 전역 route 전환·복구는 [호환성 가이드](proxy-compatibility.md)를 따른다.
 
 ```sh
-devtools expose start web --provider lan --alias shop.local --auth-file /private/path/basic-auth --request-id UUID
-devtools expose start web --provider cloudflared --auth-file /private/path/basic-auth --request-id UUID
-devtools expose start web --provider tailscale --serve-port 8443 --no-auth --request-id UUID
+devtools expose start web --provider lan --alias shop.local --auth-file /private/path/basic-auth
+devtools expose start web --provider cloudflared --auth-file /private/path/basic-auth
+devtools expose start web --provider tailscale --serve-port 8443 --no-auth
 devtools expose list
 devtools expose status EXPOSURE_ID
-devtools expose stop EXPOSURE_ID --request-id UUID
+devtools expose stop EXPOSURE_ID
 ```
 
 auth 파일은 사용자 전용 regular file에 `user:password`를 담는다. `--auth-stdin`도 지원한다.
@@ -247,9 +248,9 @@ loopback bridge는 provider가 앞단에서 TLS를 종료하므로 이 LAN 리�
 ```sh
 devtools diagnostics
 devtools proxy teardown --listener preview
-devtools proxy teardown --listener preview --apply DIGEST --request-id UUID
+devtools proxy teardown --listener preview --apply DIGEST
 devtools proxy teardown --all --remove-ca
-devtools proxy teardown --all --remove-ca --apply DIGEST --request-id UUID
+devtools proxy teardown --all --remove-ca --apply DIGEST
 ```
 
 teardown은 preview와 같은 선택·digest로 apply한다. 선택 exposure·origin·listener·hosts 참조를

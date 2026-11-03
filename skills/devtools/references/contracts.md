@@ -39,7 +39,11 @@
   historical. A failed operation can be successfully queried. Inspect each saved
   execution ID separately for current status; a reused start UUID is not its execution ID.
 
-- New operation: new UUID. Uncertain response: preserve UUID and exact input.
+- Protocol 23 CLI operation IDs are optional and generated only during execution.
+  Keep `data.request_id` or `error.details.target.request_id`; an uncertain retry
+  must pass the original ID and exact input explicitly. Save an explicit UUID
+  before execution if losing the whole response must remain recoverable. Older
+  schemas may require it. Query selectors and HTTP/domain API IDs stay explicit.
 - Read `error.details` before retrying. Stale revision/preview: refresh and reassess before a new decision.
 - A saved operation result and live state answer different questions. Inspect both when execution outcome is uncertain.
 - Remedies contain suggested argv/required inputs; missing inputs or permissions must be resolved, not bypassed.

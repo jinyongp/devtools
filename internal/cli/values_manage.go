@@ -9,17 +9,12 @@ import (
 
 func guardMutation(command *Command, createOnly bool) {
 	command.Options = append(command.Options,
-		Option{Name: "revision", Pattern: "^[0-9a-f]{64}$", Description: "Expected profile edit revision from values revision; requires --request-id."},
-		Option{Name: "request-id", Pattern: uuidPattern, Description: "Retry UUID paired with --revision; identical input replays the original result."})
-	absent := []map[string]any{{"required": []string{"revision"}}, {"required": []string{"request-id"}}}
+		Option{Name: "revision", Pattern: "^[0-9a-f]{64}$", Description: "Expected profile edit revision from values revision."},
+		requestIDOption(uuidPattern, supplied("revision")))
 	if createOnly {
-		command.Options = append(command.Options, Option{Name: "create-only", Boolean: true, Description: "Reject an existing exact-layer slot, including expired values; requires both guards."})
-		absent = append(absent, map[string]any{"required": []string{"create-only"}})
+		command.Options = append(command.Options, Option{Name: "create-only", Boolean: true, Description: "Reject an existing exact-layer slot, including expired values; requires --revision."})
+		command.InputAllOf = append(command.InputAllOf, map[string]any{"if": presentInput("create-only"), "then": presentInput("revision")})
 	}
-	command.InputAllOf = append(command.InputAllOf, map[string]any{"oneOf": []map[string]any{
-		{"required": []string{"revision", "request-id"}},
-		{"not": map[string]any{"anyOf": absent}},
-	}})
 	properties := command.Output["properties"].(map[string]any)
 	properties["revision"] = stringSchema()
 	properties["replayed"] = map[string]any{"type": "boolean"}
@@ -31,7 +26,7 @@ func mutationGuard(options map[string]string) (bool, *protocol.Error) {
 	_, requestID := options["request-id"]
 	_, createOnly := options["create-only"]
 	if revision != requestID || createOnly && !revision {
-		return false, argumentError("Provide --revision and --request-id together; --create-only requires both.", "")
+		return false, argumentError("A guarded mutation requires --revision; its operation request ID is supplied by the CLI.", "revision")
 	}
 	return revision, nil
 }
@@ -49,7 +44,7 @@ func managedChangeResultSchema() map[string]any {
 func (a *App) registerValueManagement() {
 	options := append(profileOptions(true),
 		Option{Name: "revision", Required: true, Pattern: "^[0-9a-f]{64}$", Description: "Expected profile edit revision from values revision."},
-		Option{Name: "request-id", Required: true, Pattern: uuidPattern, Description: "Replay UUID bound to this generation recipe; no value is printed."},
+		requestIDOption(uuidPattern),
 		Option{Name: "replace", Boolean: true, Description: "Permit replacing a nonexpired secret slot; preserve its expiry."})
 	a.commands = append(a.commands, Command{Name: "secret generate", Aliases: []string{"sec generate"}, Description: "Store 32 cryptographically random bytes as unpadded base64url; return metadata only. Exact-layer creation is the default.", Options: options, Arguments: []Argument{{Name: "key", Required: true, Pattern: values.KeyPattern}}, Output: managedChangeResultSchema(), Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 		store, e := a.store(r.Options)

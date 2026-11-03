@@ -167,7 +167,7 @@ func (rule staticOptionRule) failure(r Request) *protocol.Error {
 }
 
 func optionRules(c *Command) []staticOptionRule {
-	rules := []staticOptionRule{}
+	rules := operationIDRules(*c)
 	add := func(kind, id, message string, tests ...optionTest) {
 		rules = append(rules, staticOptionRule{id: strings.ReplaceAll(c.Name, " ", ".") + "." + id, kind: kind, message: message, tests: tests})
 	}
@@ -186,9 +186,6 @@ func optionRules(c *Command) []staticOptionRule {
 				add("forbid", sources[i].name+"-"+sources[j].name, "Do not combine --"+sources[i].name+" with --"+sources[j].name+".", sources[i], sources[j])
 			}
 		}
-		if c.Name == "profile import" {
-			add("together", "apply-request", "--apply and --request-id must be provided together.", supplied("apply"), supplied("request-id"))
-		}
 	case "command run", "process start", "project up":
 		add("forbid", "proxy-selection", "Specify only one of --proxy and --no-proxy, including explicit false values.", supplied("proxy"), supplied("no-proxy"))
 	case "vault init", "vault unlock":
@@ -206,14 +203,11 @@ func optionRules(c *Command) []staticOptionRule {
 				add("forbid", source.name+"-backend", "--"+side[1]+"=native does not accept "+side[0]+" passphrase input.", valueIs(side[1], "", "native"), source)
 			}
 		}
-	case "backup restore", "proxy teardown":
-		add("together", "apply-request", "--apply and --request-id must be provided together.", supplied("apply"), supplied("request-id"))
 	case "proxy configure":
 		add("forbid", "https-selection", "Choose --https-address or --disable-https; they cannot be used together.", supplied("https-address"), activated("disable-https"))
 	case "proxy setup":
 		add("forbid", "check-remove", "--check and --remove cannot both be true.", activated("check"), activated("remove"))
 		add("forbid", "check-request", "--check does not accept --request-id.", activated("check"), supplied("request-id"))
-		add("when", "mutation-request", "Setup changes require --request-id; use --check for inspection.", without(activated("check")), supplied("request-id"))
 	case "proxy list":
 		add("forbid", "scope", "Choose --global or --profile.", activated("global"), supplied("profile"))
 	case "proxy start", "proxy stop", "proxy status", "proxy restart", "proxy logs":
@@ -249,11 +243,10 @@ func optionRules(c *Command) []staticOptionRule {
 			}
 		}
 		local := valueIs("provider", "local", "local")
-		external := valueIs("provider", "local", "lan", "cloudflared", "tailscale")
+		external := externalExposureProvider
 		for _, test := range append(append([]optionTest{}, auth...), supplied("alias"), supplied("serve-port")) {
 			add("forbid", "local-"+test.name, "Authentication and provider options require an external provider.", local, test)
 		}
-		add("when", "external-request", "External sharing requires --request-id UUID.", external, supplied("request-id"))
 		add("when_any", "external-auth", "External sharing requires --auth-file, --auth-stdin, or --no-auth.", append([]optionTest{external}, auth...)...)
 		rules[len(rules)-1].code = "authentication_required"
 		add("when", "alias-provider", "--alias requires --provider=lan.", supplied("alias"), valueIs("provider", "local", "lan"))

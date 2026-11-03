@@ -59,6 +59,9 @@ Confirmed regressions corrected during implementation:
 - Windows fixtures now prepare ACLs through platformfs, keep default cache beside
   data, and accept checkout CRLF in the inventory. Cache pruning recognizes a
   wrapped missing-position error with errors.Is on every platform.
+- Native macOS CI rejected temporary `/var` aliases used by new storage fixtures.
+  Cleanup, retained-body and native-unlock fixtures now use the existing physical
+  testfs root before deriving paths; production no-follow validation is preserved.
 
 Current local checks include focused protocol/ports/CLI/dashboard compilation,
 preview round trips, collection/snapshot/query suites, service replay fixtures,

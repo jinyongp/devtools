@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/testfs"
 )
 
 func TestReclaimPreservesSharedOwnerAndResumesBoundedOrphans(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "data")
+	root := filepath.Join(testfs.TempDir(t), "data")
 	prepared, err := platformfs.OpenRoot(root, true)
 	if err != nil {
 		t.Fatal(err)
@@ -58,7 +59,7 @@ func TestReclaimPreservesSharedOwnerAndResumesBoundedOrphans(t *testing.T) {
 }
 
 func TestReclaimIgnoresUnrelatedControlFilesAndKeepsReceiptOnlyBody(t *testing.T) {
-	s := Store{Root: filepath.Join(t.TempDir(), "data")}
+	s := Store{Root: filepath.Join(testfs.TempDir(t), "data")}
 	ctx := context.Background()
 	owner := filepath.Join(s.Root, "processes", "receipts", "receipt.json")
 	if err := s.WriteReference(ctx, owner, "process_record", []byte("frozen replay")); err != nil {
@@ -86,7 +87,7 @@ func TestReclaimIgnoresUnrelatedControlFilesAndKeepsReceiptOnlyBody(t *testing.T
 }
 
 func TestReclaimCannotPassAnInFlightPublication(t *testing.T) {
-	s := Store{Root: filepath.Join(t.TempDir(), "data")}
+	s := Store{Root: filepath.Join(testfs.TempDir(t), "data")}
 	release, err := s.Publication(context.Background())
 	if err != nil {
 		t.Fatal(err)

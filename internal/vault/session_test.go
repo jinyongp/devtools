@@ -15,6 +15,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/testfs"
 )
 
 var nativePeerFixture func(string, string) int
@@ -89,7 +90,7 @@ func sameMaterial(a, b *Material) bool {
 }
 
 func TestNativeUnlockRequiresExplicitPermissionForAuthenticationUI(t *testing.T) {
-	base := filepath.Join(t.TempDir(), "private")
+	base := filepath.Join(testfs.TempDir(t), "private")
 	prepared, err := platformfs.OpenRoot(base, true)
 	if err != nil {
 		t.Fatal(err)

@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/jinyongp/devtools/internal/storageupgrade"
+	"github.com/jinyongp/devtools/internal/testfs"
 )
 
 func TestDoctorPreparesMissingPublicationGuardForCurrentBodies(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "data")
+	root := filepath.Join(testfs.TempDir(t), "data")
 	s := Store{Root: root}
 	if _, err := s.Put(context.Background(), "archive_payload", []byte("synthetic orphan")); err != nil {
 		t.Fatal(err)

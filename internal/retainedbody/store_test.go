@@ -6,10 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/jinyongp/devtools/internal/testfs"
 )
 
 func TestRetainedBodySharesExactBytesAndRejectsChangedReference(t *testing.T) {
-	s := Store{Root: filepath.Join(t.TempDir(), "private")}
+	s := Store{Root: filepath.Join(testfs.TempDir(t), "private")}
 	body := bytes.Repeat([]byte("immutable original result\n"), 5000)
 	a, e := s.Put(context.Background(), "process_record", body)
 	if e != nil {

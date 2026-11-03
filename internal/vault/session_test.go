@@ -89,7 +89,15 @@ func sameMaterial(a, b *Material) bool {
 }
 
 func TestNativeUnlockRequiresExplicitPermissionForAuthenticationUI(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "vault")
+	base := filepath.Join(t.TempDir(), "private")
+	prepared, err := platformfs.OpenRoot(base, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prepared.Close(); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(base, "vault")
 	id, _ := NewID()
 	wrapping := NewMaterial(bytes.Repeat([]byte{0x31}, 32))
 	defer wrapping.Destroy()

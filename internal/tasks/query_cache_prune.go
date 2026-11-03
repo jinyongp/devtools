@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -97,7 +98,7 @@ func (s Store) pruneQueryCaches(ctx context.Context) {
 	var position struct {
 		After string `json:"after"`
 	}
-	if err := ReadPrivate(positionPath, &position); err != nil && !os.IsNotExist(err) {
+	if err := ReadPrivate(positionPath, &position); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return
 	}
 	start := sort.Search(len(entries), func(i int) bool { return entries[i].Name() > position.After })

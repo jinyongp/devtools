@@ -7,11 +7,17 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/jinyongp/devtools/internal/platformfs"
 )
 
 func TestReclaimPreservesSharedOwnerAndResumesBoundedOrphans(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "data")
-	if err := os.Mkdir(root, 0700); err != nil {
+	prepared, err := platformfs.OpenRoot(root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prepared.Close(); err != nil {
 		t.Fatal(err)
 	}
 	s := Store{Root: root}

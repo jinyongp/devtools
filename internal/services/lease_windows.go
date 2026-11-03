@@ -12,6 +12,7 @@ import (
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/retainedbody"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"golang.org/x/sys/windows"
 )
@@ -164,7 +165,12 @@ func (s Store) prepareLaunchUnlocked(record Record, snapshots ...*network.Execut
 		}
 		return root.WriteFile(context.Background(), filepath.Join(staging, name), body, false)
 	}
-	if err = write("record.json", record); err != nil {
+	publication, err := (retainedbody.Store{Root: s.Data}).Publication(context.Background())
+	if err != nil {
+		return nil, storageErrorAt("guard_launch_publication", err)
+	}
+	defer publication()
+	if err = writeRecordHeld(filepath.Join(s.Data, staging, "record.json"), record); err != nil {
 		return nil, storageErrorAt("stage_launch_record", err)
 	}
 	if record.ProxyMode {

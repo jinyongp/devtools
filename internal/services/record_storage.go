@@ -69,6 +69,13 @@ func writeRecordFormat(path string, r Record) error {
 		return err
 	}
 	defer unlock()
+	return writeRecordHeld(path, r)
+}
+
+// The caller holds Publication until the record's owning namespace is visible.
+// Windows uses this while staging a new execution directory atomically.
+func writeRecordHeld(path string, r Record) error {
+	root := filepath.Dir(filepath.Dir(filepath.Dir(path)))
 	body, err := json.Marshal(r)
 	if err != nil {
 		return err

@@ -14,6 +14,7 @@ func TestNavigationInventoryCoversRegistry(t *testing.T) {
 	seen := map[string]string{}
 	kind := ""
 	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSuffix(line, "\r")
 		if strings.HasPrefix(line, "```navigation-") {
 			kind = strings.TrimPrefix(line, "```navigation-")
 			continue

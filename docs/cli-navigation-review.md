@@ -49,6 +49,16 @@ Confirmed regressions corrected during implementation:
   accepted work. Retiring a successor cannot resurrect a resolved old failure.
 - Static vet detected copying a sync.Map inside a scoped App copy. The compiled
   action contract cache is shared by pointer across those copies.
+- Native Windows CI found an initial launch publication path that bypassed the
+  current record writer. Initial staging now uses the same compact format while
+  retaining the body publication guard through the directory's atomic publish.
+- Windows delivery lock observation previously reached the other-platform writer
+  fallback. A native read-handle probe now requires an existing pair and retains
+  the same exclusive lifetime without preparing storage. Native regression tests
+  cover missing preparation and writer exclusion.
+- Windows fixtures now prepare ACLs through platformfs, keep default cache beside
+  data, and accept checkout CRLF in the inventory. Cache pruning recognizes a
+  wrapped missing-position error with errors.Is on every platform.
 
 Current local checks include focused protocol/ports/CLI/dashboard compilation,
 preview round trips, collection/snapshot/query suites, service replay fixtures,

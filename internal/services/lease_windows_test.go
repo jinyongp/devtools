@@ -71,8 +71,13 @@ func TestWindowsLaunchUsesStableExternalLeaseAndV2Marker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var stored diskRecord
+	if err = json.Unmarshal(data, &stored); err != nil || stored.Version != 2 || stored.Metadata.ID != record.ID {
+		t.Fatal("initial Windows publication did not use current storage")
+	}
+	logical, err := store.RecordBytes(record.ID)
 	var got Record
-	if err = json.Unmarshal(data, &got); err != nil || got.ID != record.ID {
+	if err != nil || json.Unmarshal(logical, &got) != nil || got.ID != record.ID {
 		t.Fatal("record publication lost identity")
 	}
 }

@@ -9,6 +9,7 @@ import (
 // owned directories without changing the production resolver or OS trust mode.
 func platformTestPaths(app *App, root string) {
 	app.userPaths = func() (paths.Directories, error) {
-		return paths.Directories{Data: root, Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache"), Runtime: filepath.Join(root, "runtime")}, nil
+		base := filepath.Dir(root)
+		return paths.Directories{Data: root, Config: filepath.Join(base, "config"), Cache: filepath.Join(base, "cache"), Runtime: filepath.Join(base, "runtime")}, nil
 	}
 }

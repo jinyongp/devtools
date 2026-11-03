@@ -3,12 +3,13 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
@@ -32,7 +33,11 @@ func TestNativeRunAuthenticationRecoveryPublishesExecutableUnlock(t *testing.T) 
 	app := testApp(t)
 	root := privateTempDir(t)
 	dir := filepath.Join(root, "vault")
-	if err := os.Mkdir(dir, 0700); err != nil {
+	prepared, err := platformfs.OpenRoot(dir, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prepared.Close(); err != nil {
 		t.Fatal(err)
 	}
 	// Routing metadata is sufficient to choose native recovery. No OS key store
@@ -42,7 +47,7 @@ func TestNativeRunAuthenticationRecoveryPublishesExecutableUnlock(t *testing.T) 
 		t.Fatal(err)
 	}
 	raw, _ := json.Marshal(vault.KeyFile{Format: vault.StorageVersion, VaultID: id, Backend: "keychain", Wrapped: []byte{1}})
-	if err := os.WriteFile(filepath.Join(dir, "key-slot.json"), raw, 0600); err != nil {
+	if err := maintenance.Write(filepath.Join(dir, "key-slot.json"), raw); err != nil {
 		t.Fatal(err)
 	}
 	for _, cause := range []error{vault.ErrLocked, vault.ErrInteractionRequired, vault.ErrBackendLocked} {

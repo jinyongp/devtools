@@ -37,8 +37,9 @@ func (o *outputController) prepareError(e *protocol.Error) *protocol.Error {
 	if e.Details == nil {
 		e.Details = map[string]any{}
 	}
-	e.Details = protocol.BindGuidance(e.Details, o.invocation).(map[string]any)
-	return protocol.Public(e, o.operation)
+	e = protocol.Public(e, o.operation)
+	e.Details = protocol.BindGuidance(e.Details, o.invocation, o.app.ResolveAction).(map[string]any)
+	return e
 }
 
 func (o *outputController) failure(e *protocol.Error) int {
@@ -56,7 +57,7 @@ func (o *outputController) failure(e *protocol.Error) int {
 
 func (o *outputController) success(data any) int {
 	var public bytes.Buffer
-	if protocol.Success(&public, protocol.BindGuidance(data, o.invocation)) != nil {
+	if protocol.Success(&public, protocol.BindGuidance(data, o.invocation, o.app.ResolveAction)) != nil {
 		return o.failure(o.outputError("io_error", "Cannot write output."))
 	}
 	return o.publish(public.Bytes(), 0, false)

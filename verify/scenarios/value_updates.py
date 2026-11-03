@@ -152,7 +152,7 @@ try:
     assert read_proxy()['revision'] == 'two'
     api('vault', 'unlock', '--passphrase-stdin', input=password+'\n')
     wait(lambda: api('process', 'status', current['id'])['values']['state'] == 'current')
-    records = api('process', 'list')['items']
+    records = api('process', 'list', '--view', 'history')['items']
     assert len(records) == 2 and sum(r['ended_at'] is None for r in records) == 1
     print('Installed automatic proxy restart, frozen selected input, readiness and passive lock verified')
 finally:

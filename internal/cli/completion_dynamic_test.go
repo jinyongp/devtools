@@ -73,7 +73,7 @@ func TestDynamicCompletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	record := services.Record{ID: processID, Profile: "other", Command: "worker", Directory: projectDir, State: "running", CreatedAt: time.Now().UTC()}
-	if err := tasks.WritePrivate(filepath.Join(processDir, "record.json"), record); err != nil {
+	if err := (services.Store{Data: filepath.Dir(managerData)}).RestoreRecord(record); err != nil {
 		t.Fatal(err)
 	}
 	store, issue := a.serviceStore()

@@ -57,8 +57,21 @@ func TestLogQueryMissingUnsafeAndCanceledLocks(t *testing.T) {
 			}
 			release, err := acquireLogLock(context.Background(), path, false)
 			if kind == "missing" {
+				if err == nil {
+					release()
+					t.Fatal("query initialized a missing lock")
+				}
+				if _, err := os.Stat(lock); !os.IsNotExist(err) {
+					t.Fatal("query created lock", err)
+				}
+				release, err = acquireLogLock(context.Background(), path, true)
 				if err != nil {
-					t.Fatal("writable log preparation failed", err)
+					t.Fatal(err)
+				}
+				release()
+				release, err = acquireLogLock(context.Background(), path, false)
+				if err != nil {
+					t.Fatal(err)
 				}
 				release()
 				return

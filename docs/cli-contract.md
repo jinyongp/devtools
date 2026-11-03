@@ -414,8 +414,10 @@ profile ID·저장 세대·keyset을 새로 만든다. bundle은 동일 사용�
 
 `command list/inspect`의 `item.selection` 또는 `items[].selection`은 command →
 project → all 순서로 정한 선택이다. `command inspect`는 최상위 `values`에 현재
-입력을 덧붙인다. `process status`도 최상위 `values`를 반환하고, `process list`와
-대시보드의 `/api/processes`는 실행 ID별 `values` 맵을 반환한다. record의
+입력을 덧붙인다. `process status`도 최상위 `values`를 반환한다. `process list`와
+대시보드의 `/api/processes`는 선택한 페이지의 안전한 요약만 반환하며 과거 실행의
+값 payload를 열지 않는다. 대시보드에서 펼친 단일 실행의 `/api/process`와
+`process status`에서 값 상태를 확인한다. record의
 `input_version`은 실제 준비한 payload의 안전한 메타데이터이며 이전 실행에는
 없을 수 있다. 과거 실행의 `selection`과 현재 `values.current.spec.selection`은
 다를 수 있다. 현재 선택에는 실행 때 명시한 bundle/env override를 계속 적용한다.

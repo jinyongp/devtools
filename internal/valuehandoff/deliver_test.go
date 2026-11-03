@@ -105,7 +105,7 @@ func TestPrivateDeliveryOnceWithProtectedFirstOutput(t *testing.T) {
 		t.Fatal("intent checkpoint not reached")
 	}
 	replay, e := s.Deliver(ctx, approved.Item.ID, requestID(610), RevisionInput{2})
-	if e != nil || !replay.Replayed || replay.Item != r.Item {
+	if e != nil || !replay.Replayed || !sameExecution(replay.Item, r.Item) {
 		t.Fatal("delivery retry changed saved outcome", e)
 	}
 	if _, e = s.Deliver(ctx, approved.Item.ID, requestID(611), RevisionInput{4}); e == nil || e.Code != "delivery_already_started" {

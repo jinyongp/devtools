@@ -157,6 +157,15 @@ func parseRequest(command Command, tokens []string) (Request, *protocol.Error) {
 		values := []string{value}
 		if option.Repeatable {
 			values = request.ListOptions[option.Name]
+			if option.Unique {
+				seen := map[string]bool{}
+				for _, v := range values {
+					if seen[v] {
+						return request, invalid("duplicate_field", "Choose each --"+option.Name+" once.", option.Name, request.OptionOffsets[option.Name], nil)
+					}
+					seen[v] = true
+				}
+			}
 		}
 		for _, value := range values {
 			length := utf8.RuneCountInString(value)

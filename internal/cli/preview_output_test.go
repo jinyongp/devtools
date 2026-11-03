@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -53,8 +54,11 @@ func TestPreviewApplyDoesNotEchoPrivateInputsOrChildArguments(t *testing.T) {
 	r := Request{Args: []string{"web"}, Child: []string{"PROGRAM-PRIVATE-CANARY"}, Options: map[string]string{"identity-file": "PRIVATE-FILE-CANARY", "stdin": "true", "profile": "app"}, Invocation: protocol.InvocationContext{IsolatedRoot: "/chosen"}}
 	action := previewApplyAction(c, r, map[string]any{})
 	joined := strings.Join(action.Argv, " ")
-	if strings.Contains(joined, "CANARY") || !strings.Contains(joined, "--profile app") || !strings.Contains(joined, "--isolated-root /chosen") || len(action.RequiredInputs) < 3 {
+	if strings.Contains(joined, "CANARY") || len(action.Argv) != 0 || action.State != "needs_input" || len(action.RequiredInputs) < 2 {
 		t.Fatal(action)
+	}
+	if action.Bindings["profile"] != "app" || action.Bindings["isolated-root"] != "/chosen" || !regexp.MustCompile(uuidPattern).MatchString(action.Bindings["request-id"]) {
+		t.Fatal("private-input acquisition lost its original public intent", action)
 	}
 }
 

@@ -60,11 +60,11 @@ secs=["TOKEN"]
 		byID[check.ID] = check.Remedies
 	}
 	variable := byID["var:PORT"]
-	if len(variable) != 1 || !reflect.DeepEqual(variable[0].Argv, []string{"devtools", "var", "set", "PORT", "--profile", "app", "--env", "dev"}) || !reflect.DeepEqual(variable[0].RequiredInputs, []string{"value"}) {
+	if len(variable) != 1 || variable[0].State != "needs_input" || len(variable[0].Argv) != 0 || variable[0].Bindings["profile"] != "app" || variable[0].Bindings["env"] != "dev" || len(variable[0].InputSteps) != 1 || !reflect.DeepEqual(variable[0].RequiredInputs, []string{"value"}) {
 		t.Fatalf("unexpected variable remedy: %#v", variable)
 	}
 	secret := byID["sec:TOKEN"]
-	if len(secret) != 1 || !reflect.DeepEqual(secret[0].Argv, []string{"devtools", "sec", "set", "TOKEN", "--profile", "app", "--env", "dev", "--stdin"}) || !reflect.DeepEqual(secret[0].RequiredInputs, []string{"stdin"}) {
+	if len(secret) != 1 || secret[0].State != "needs_input" || len(secret[0].Argv) != 0 || secret[0].Bindings["profile"] != "app" || secret[0].Bindings["env"] != "dev" || len(secret[0].InputSteps) != 1 || !reflect.DeepEqual(secret[0].RequiredInputs, []string{"stdin"}) {
 		t.Fatalf("unexpected secret remedy: %#v", secret)
 	}
 

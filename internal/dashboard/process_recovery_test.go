@@ -31,6 +31,7 @@ func TestDashboardCompletedStartRecoversAfterConfigLoss(t *testing.T) {
 	if e := tasks.WritePrivate(path, value); e != nil {
 		t.Fatal(e)
 	}
+	prepareProcessFixture(t, data)
 	invoke := func(profile, session, origin string) *httptest.ResponseRecorder {
 		body, _ := json.Marshal(actionRequest{Domain: "process", Profile: profile, Process: &q})
 		r := httptest.NewRequest("POST", s.registry.Address+"/api/actions", strings.NewReader(string(body)))

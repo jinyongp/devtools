@@ -39,6 +39,7 @@ func assignmentFields() map[string]any {
 	f := instanceFields()
 	f["name"] = stringSchema()
 	f["port"] = map[string]any{"type": "integer", "minimum": 1, "maximum": 65535}
+	f["protocol"] = map[string]any{"const": "tcp"}
 	return f
 }
 func fieldsSchema(f map[string]any) map[string]any {
@@ -164,6 +165,7 @@ func portTarget(r Request) (profile, selector, dir string, e *protocol.Error) {
 func assignmentResult(a ports.Assignment) map[string]any {
 	row := instanceResult(a.Instance)
 	row["name"], row["port"] = a.Name, a.Port
+	row["protocol"] = "tcp"
 	return row
 }
 func instanceResult(i ports.Instance) map[string]any {
@@ -198,6 +200,9 @@ func checkRelease(ctx context.Context, s ports.Store, st *ports.State, id string
 	return nil
 }
 func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *protocol.Error) {
+	if action == "list" && r.Scope != nil {
+		return a.listPortScope(r, false)
+	}
 	if action == "prune" {
 		manager, e := a.serviceStore()
 		if e != nil {
@@ -391,6 +396,9 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 }
 
 func (a *App) instanceCommand(ctx context.Context, action string, r Request) (any, *protocol.Error) {
+	if action == "list" && r.Scope != nil {
+		return a.listPortScope(r, true)
+	}
 	if action == "move" || action == "remove" {
 		manager, e := a.serviceStore()
 		if e != nil {

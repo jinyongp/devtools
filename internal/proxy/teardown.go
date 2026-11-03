@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/ca"
 	"github.com/jinyongp/devtools/internal/expose"
@@ -190,6 +191,8 @@ func (m Manager) Teardown(ctx context.Context, selection TeardownSelection, dige
 						}
 					}
 					record.State = "stopped"
+					now := time.Now().UTC()
+					record.EndedAt = &now
 					record.Reason = "teardown"
 					if e := (expose.Store{Data: m.Data}).Write(record); e != nil {
 						return nil, e

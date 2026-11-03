@@ -25,7 +25,8 @@ async function loadNetwork(panel, current, version) {
     }
     const guide=text("details","",section);text("summary","Start routes and prepare this machine",guide);
     text("p","Run from the project terminal. Starting with --proxy prepares host mappings and selected listeners before launching servers. OS authentication stays in that terminal.",guide);
-    text("pre","devtools project up web api --proxy --request-id UUID\ndevtools proxy up ROUTE --request-id UUID\ndevtools proxy setup --check\ndevtools proxy trust --request-id UUID",guide);
+    text("p","Command templates: choose command/route names and supply a new request UUID.",guide);
+    text("pre","devtools help project up\ndevtools help proxy up\ndevtools proxy setup --check\ndevtools help proxy trust",guide);
     text("p","For WSL, Windows browser DNS, reachability and trust are separate from Linux. LAN clients configure their own name resolution and trust.",guide);
   } catch(e){if(generation===version)text("p",`Network status unavailable: ${e.message}`,section);}
 }

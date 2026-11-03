@@ -15,8 +15,11 @@ import (
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/retainedbody"
+	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/storageupgrade"
 	"github.com/jinyongp/devtools/internal/tasks"
+	"github.com/jinyongp/devtools/internal/valuehandoff"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
 )
@@ -161,7 +164,7 @@ func (a *App) diagnose(parent context.Context, _ IO, r Request) (any, *protocol.
 }
 
 func (a *App) storageEngine(root string) storageupgrade.Engine {
-	return storageupgrade.Engine{Root: root, Adapters: []storageupgrade.Adapter{values.StorageUpgradeAdapter(root), tasks.StorageUpgradeAdapter()}}
+	return storageupgrade.Engine{Root: root, Adapters: []storageupgrade.Adapter{values.StorageUpgradeAdapter(root), tasks.StorageUpgradeAdapter(), services.StorageUpgradeAdapter(), services.LogStorageUpgradeAdapter(), retainedbody.StorageUpgradeAdapter(), valuehandoff.StorageUpgradeAdapter()}}
 }
 
 func (a *App) diagnoseStorage(ctx context.Context, r Request) (any, *protocol.Error) {

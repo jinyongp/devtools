@@ -87,6 +87,33 @@ func sameMaterial(a, b *Material) bool {
 	defer clear(y)
 	return bytes.Equal(x, y)
 }
+
+func TestNativeUnlockRequiresExplicitPermissionForAuthenticationUI(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "vault")
+	id, _ := NewID()
+	wrapping := NewMaterial(bytes.Repeat([]byte{0x31}, 32))
+	defer wrapping.Destroy()
+	p := sessionTestProtector{id: id, key: wrapping}
+	key, err := (KeyFileStore{Directory: dir}).Initialize(context.Background(), id, "dpapi", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer key.Destroy()
+	s := NewKeySession(dir)
+	defer s.Close()
+	s.protector = func(_ KeyFile, _ *Material, interactive bool) (Protector, error) {
+		if !interactive {
+			return nil, ErrInteractionRequired
+		}
+		return p, nil
+	}
+	if err := s.Unlock(context.Background(), nil, false); !errors.Is(err, ErrInteractionRequired) || s.Status().State != Locked {
+		t.Fatal("non-interactive unlock did not preserve authentication requirement", err)
+	}
+	if err := s.Unlock(context.Background(), nil, true); err != nil || s.Status().State != Unlocked {
+		t.Fatal("explicit authentication permission was lost", err)
+	}
+}
 func TestSessionIdleManualLockAndRestart(t *testing.T) {
 	directory, p, want := sessionFixture(t)
 	s := NewKeySession(directory)

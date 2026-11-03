@@ -54,6 +54,36 @@ func inventoryLayoutFor(d Definition) inventoryLayout {
 func inventoryView(d Definition, data map[string]any) cliui.Document {
 	layout := inventoryLayoutFor(d)
 	items, _ := data["items"].([]any)
+	if d.Command == "process list" {
+		selection, _ := data["selection"].(map[string]any)
+		if text(selection["view"]) == "current" {
+			layout.columns = []ViewColumn{{"command", "Command", ""}, {"current_state", "Current", "state"}, {"last_attempt", "Last attempt", "attempt"}, {"last_changed", "Last changed", ""}}
+		} else if text(selection["view"]) == "history" {
+			layout.columns = []ViewColumn{{"command", "Command", ""}, {"state", "State", "state"}, {"created_at", "Created", ""}, {"ended_at", "Ended", "ended"}, {"reason", "Reason", "reason"}, {"execution_id", "Execution ID", ""}}
+		}
+	}
+	if selection, ok := data["selection"].(map[string]any); ok {
+		// Collection order already reflects the selected query. Regrouping here
+		// would put text rows in a different order from JSON and its cursor.
+		layout.group = ""
+		add := func(key, label string) {
+			for _, c := range layout.columns {
+				if c.Path == key {
+					return
+				}
+			}
+			layout.columns = append(layout.columns, ViewColumn{key, label, ""})
+		}
+		for _, value := range items {
+			row, _ := value.(map[string]any)
+			if text(selection["profile"]) == "" && text(row["profile"]) != "" {
+				add("profile", "Profile")
+			}
+			if text(selection["directory"]) == "" && text(row["directory"]) != "" {
+				add("directory", "Directory")
+			}
+		}
+	}
 	title := listTitle(d.Title, data)
 	if d.Command == "port list" {
 		title = listTitle("Port assignments", data)
@@ -226,7 +256,15 @@ func inventoryCell(item any, column ViewColumn) cliui.Text {
 	row, _ := item.(map[string]any)
 	value := item
 	if column.Path != "" {
-		value = row[column.Path]
+		value = item
+		for _, part := range strings.Split(column.Path, ".") {
+			object, ok := value.(map[string]any)
+			if !ok {
+				value = nil
+				break
+			}
+			value = object[part]
+		}
 	}
 	s := text(value)
 	if column.Display == "" && (column.Path == "state" || column.Path == "completion_status" || column.Path == "execution_status" || column.Path == "execution_state" || column.Path == "delivery_state") {
@@ -248,6 +286,27 @@ func inventoryCell(item any, column ViewColumn) cliui.Text {
 		return cliui.Literal("Absent")
 	}
 	switch column.Display {
+	case "attempt":
+		if attempt, ok := value.(map[string]any); ok {
+			state, _ := inventoryState(text(attempt["state"]))
+			label := state
+			if action := text(attempt["action"]); action != "" {
+				label = action + ": " + state
+			}
+			if reason := text(attempt["reason"]); reason != "" {
+				label += " (" + reason + ")"
+			}
+			return cliui.Literal(label)
+		}
+		return cliui.Literal("Not attempted")
+	case "ended":
+		if value == nil {
+			if row["state"] == "running" || row["state"] == "starting" {
+				return cliui.Literal("Not ended")
+			}
+			return cliui.Literal("Not recorded")
+		}
+		return display(value)
 	case "yesno":
 		if value == true {
 			return cliui.Literal("Yes")
@@ -341,6 +400,10 @@ func inventoryCell(item any, column ViewColumn) cliui.Text {
 
 func domainState(value any) cliui.Text {
 	state := text(value)
+	if state == "preparing" || state == "auth_required" {
+		label, role := inventoryState(state)
+		return cliui.Styled(label, role)
+	}
 	protection := map[string]string{"uninitialized": "Uninitialized", "locked": "Locked", "unlocked": "Unlocked", "locking": "Locking", "locked_manual": "Manually locked", "recovery_required": "Recovery required", "released": "Released", "revoked": "Revoked", "taken_over": "Taken over", "interrupted": "Interrupted"}
 	if label, ok := protection[state]; ok {
 		role := cliui.Primary
@@ -373,7 +436,17 @@ func domainState(value any) cliui.Text {
 }
 
 func inventoryState(state string) (string, cliui.Role) {
-	labels := map[string]string{"ready": "Ready", "pass": "Ready", "fail": "Not ready", "not_ready": "Not ready", "running": "Running", "starting": "Starting", "stopped": "Stopped", "failed": "Failed", "interrupted": "Interrupted", "unknown": "Unknown", "activation_required": "Needs activation", "alias_missing": "Alias missing", "location_missing": "Location missing", "assignment_missing": "No assignment", "host_conflict": "Host conflict", "config_unavailable": "Configuration unavailable", "instance_conflict": "Instance conflict", "host_invalid": "Invalid host", "disabled": "Disabled", "pending": "Pending", "expired": "Expired", "canceled": "Canceled"}
+	switch state {
+	case "preparing":
+		return "Preparing", cliui.Info
+	case "active":
+		return "Active", cliui.Info
+	case "auth_required":
+		return "Authentication required", cliui.Warning
+	case "recovery_required":
+		return "Recovery required", cliui.Warning
+	}
+	labels := map[string]string{"exited": "Exited", "not_started": "Not started", "conflict": "Conflicting runs", "ready": "Ready", "pass": "Ready", "fail": "Not ready", "not_ready": "Not ready", "running": "Running", "starting": "Starting", "stopped": "Stopped", "failed": "Failed", "interrupted": "Interrupted", "unknown": "Unknown", "activation_required": "Needs activation", "alias_missing": "Alias missing", "location_missing": "Location missing", "assignment_missing": "No assignment", "host_conflict": "Host conflict", "config_unavailable": "Configuration unavailable", "instance_conflict": "Instance conflict", "host_invalid": "Invalid host", "disabled": "Disabled", "pending": "Pending", "expired": "Expired", "canceled": "Canceled"}
 	label, ok := labels[state]
 	if !ok {
 		return "Unrecognized: " + state, cliui.Warning
@@ -394,6 +467,48 @@ func inventoryState(state string) (string, cliui.Role) {
 
 func inventoryNotes(data map[string]any) []cliui.Block {
 	var blocks []cliui.Block
+	if selection, ok := data["selection"].(map[string]any); ok {
+		fields := []cliui.Field{}
+		if view := text(selection["view"]); view != "" {
+			fields = append(fields, cliui.Field{Label: cliui.Literal("View"), Value: cliui.Literal(view)})
+		}
+		if chosen, ok := selection["scope"].(map[string]any); ok {
+			for _, key := range []string{"kind", "profile", "directory", "instance_id"} {
+				if value := text(chosen[key]); value != "" {
+					fields = append(fields, cliui.Field{Label: cliui.Literal(title(key)), Value: cliui.Literal(value)})
+				}
+			}
+		}
+		if filters, ok := selection["filters"].(map[string]any); ok {
+			for _, key := range []string{"query", "sort", "order", "time_field", "since", "until"} {
+				if value := text(filters[key]); value != "" {
+					fields = append(fields, cliui.Field{Label: cliui.Literal(title(key)), Value: cliui.Literal(value)})
+				}
+			}
+			if values, ok := filters["filters"].(map[string]any); ok {
+				names := []string{}
+				for key := range values {
+					names = append(names, key)
+				}
+				sort.Strings(names)
+				for _, key := range names {
+					if v, ok := stringArray(values[key]); ok {
+						fields = append(fields, cliui.Field{Label: cliui.Literal(title(key)), Value: cliui.Literal(strings.Join(v, ", "))})
+					}
+				}
+			}
+		}
+		if len(fields) > 0 {
+			blocks = append(blocks, cliui.Fields(fields...))
+		}
+	}
+	if page, ok := data["page"].(map[string]any); ok {
+		message := fmt.Sprintf("Showing %v results on this page.", page["count"])
+		if page["has_more"] == true {
+			message += " More results are available."
+		}
+		blocks = append(blocks, cliui.Paragraph(cliui.Styled(message, cliui.Muted)))
+	}
 	for _, key := range []string{"issues", "warnings", "unresolved", "pending"} {
 		if rows, ok := data[key].([]any); ok {
 			blocks = append(blocks, conciseDiagnostics(rows, false)...)

@@ -14,7 +14,9 @@ import (
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
+	"github.com/jinyongp/devtools/internal/retainedbody"
 	"github.com/jinyongp/devtools/internal/services"
+	"github.com/jinyongp/devtools/internal/storageupgrade"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
@@ -224,11 +226,7 @@ func TestCompletedProcessCleanupPreservesProfileEnumeration(t *testing.T) {
 		State:     "stopped",
 		Capture:   true,
 	}
-	body, err := json.Marshal(record)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := maintenance.Write(filepath.Join(engine.Data, "processes", id, "record.json"), body); err != nil {
+	if err := (services.Store{Data: engine.Data}).RestoreRecord(record); err != nil {
 		t.Fatal(err)
 	}
 	logPath := filepath.Join(engine.Data, "processes", id, "output.log")
@@ -312,13 +310,9 @@ func TestApplyResumesDurableWorksetAfterProcessRetirement(t *testing.T) {
 		State:     "stopped",
 		Capture:   true,
 	}
-	body, err := json.Marshal(record)
-	if err != nil {
-		t.Fatal(err)
-	}
 	recordPath := filepath.Join(engine.Data, "processes", executionID, "record.json")
 	logPath := filepath.Join(engine.Data, "processes", executionID, "output.log")
-	if err := maintenance.Write(recordPath, body); err != nil {
+	if err := (services.Store{Data: engine.Data}).RestoreRecord(record); err != nil {
 		t.Fatal(err)
 	}
 	if err := maintenance.Write(logPath, []byte("resume-log")); err != nil {
@@ -466,6 +460,9 @@ func TestLegacyArchivedProcessResidualLogIsCleanupCandidate(t *testing.T) {
 	if err := write(engine.archivePath(archiveID, "entry.json"), legacy); err != nil {
 		t.Fatal(err)
 	}
+	if report, condition := (storageupgrade.Engine{Root: engine.Data, Adapters: []storageupgrade.Adapter{services.LogStorageUpgradeAdapter()}}).Fix(context.Background()); condition != nil || !report.Ready {
+		t.Fatal(report, condition)
+	}
 
 	plan, failure := engine.Preview(context.Background(), "legacy")
 	if failure != nil {
@@ -537,13 +534,8 @@ func TestExpiredLogCleanupUsesLogicalTailAcrossCompactionAndRestore(t *testing.T
 		State:     "stopped",
 		Capture:   true,
 	}
-	recordBody, err := json.Marshal(record)
-	if err != nil {
-		t.Fatal(err)
-	}
-	recordPath := filepath.Join(engine.Data, "processes", executionID, "record.json")
 	logPath := filepath.Join(engine.Data, "processes", executionID, "output.log")
-	if err := maintenance.Write(recordPath, recordBody); err != nil {
+	if err := (services.Store{Data: engine.Data}).RestoreRecord(record); err != nil {
 		t.Fatal(err)
 	}
 	logical := bytes.Repeat([]byte("l"), 1<<20)
@@ -581,7 +573,7 @@ func TestExpiredLogCleanupUsesLogicalTailAcrossCompactionAndRestore(t *testing.T
 	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
 		t.Fatalf("retired log survived apply: %v", err)
 	}
-	payload, err := maintenance.Read(engine.archivePath(logItem.ID, "payload"), 2<<20)
+	payload, err := (retainedbody.Store{Root: engine.Data}).ReadReference(engine.archivePath(logItem.ID, "payload"))
 	if err != nil || !bytes.Equal(payload, logical) {
 		t.Fatalf("archive payload drifted: len=%d err=%v", len(payload), err)
 	}
@@ -646,6 +638,9 @@ func TestLegacyCompletedTaskArchiveRestoresIntoV3Storage(t *testing.T) {
 	}
 	if err := write(engine.archivePath(archiveID, "entry.json"), archive); err != nil {
 		t.Fatal(err)
+	}
+	if report, condition := (storageupgrade.Engine{Root: engine.Data, Adapters: []storageupgrade.Adapter{retainedbody.StorageUpgradeAdapter()}}).Fix(context.Background()); condition != nil || !report.Ready {
+		t.Fatal(report, condition)
 	}
 
 	restored, changed, restoreErr := engine.Restore(context.Background(), archiveID)

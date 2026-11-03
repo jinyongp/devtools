@@ -79,7 +79,7 @@ with socket.create_connection(('127.0.0.1', int(os.environ['PORT'])), timeout=.5
 ''')
 
 try:
-    assert api('version')['protocol_version'] == 22
+    assert api('version')['protocol_version'] == 23
     assert api('project', 'status')['items'] == []
 
     # serve-only commands do not require an env that is never injected or bound.
@@ -145,7 +145,7 @@ try:
     print('Installed project multi-start, readiness, singleton reuse, worktree isolation, partial retry and down replay passed')
 finally:
     # All processes here belong to this scenario's isolated HOME/data root.
-    records = api('process', 'list', '--profile', 'project-fixture')['items']
+    records = api('process', 'list', '--profile', 'project-fixture', '--view', 'history')['items']
     for record in records:
         if record['ended_at'] is None and record['state'] != 'interrupted':
             api('process', 'stop', record['id'], '--request-id', str(uuid.uuid4()))

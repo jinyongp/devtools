@@ -38,6 +38,9 @@ func TestSavedRequestCommandsIgnoreCurrentConfiguration(t *testing.T) {
 		if e := tasks.WritePrivate(path, receipt); e != nil {
 			t.Fatal(e)
 		}
+		if group == "process" {
+			prepareProcessFixture(t, data)
+		}
 		got := outputData(t, app, []string{group, "request", "show", id})
 		item := got["item"].(map[string]any)
 		if item["request_id"] != id {

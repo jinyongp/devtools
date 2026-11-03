@@ -401,7 +401,7 @@ func TestProjectLogsSelectsCurrentCanonicalProjectExecution(t *testing.T) {
 		if err := tasks.PrivateDir(filepath.Join(dataRoot, "processes", record.ID)); err != nil {
 			t.Fatal(err)
 		}
-		if err := tasks.WritePrivate(filepath.Join(dataRoot, "processes", record.ID, "record.json"), record); err != nil {
+		if err := (services.Store{Data: dataRoot}).RestoreRecord(record); err != nil {
 			t.Fatal(err)
 		}
 		content := []byte("CURRENT")
@@ -447,7 +447,7 @@ func TestProjectLogsRequiresOneActiveCapturedExecution(t *testing.T) {
 	if err := tasks.PrivateDir(filepath.Join(dataRoot, "processes", uncaptured.ID)); err != nil {
 		t.Fatal(err)
 	}
-	if err := tasks.WritePrivate(filepath.Join(dataRoot, "processes", uncaptured.ID, "record.json"), uncaptured); err != nil {
+	if err := (services.Store{Data: dataRoot}).RestoreRecord(uncaptured); err != nil {
 		t.Fatal(err)
 	}
 	code, out, diagnostic = invoke(t, newApp([]services.Record{uncaptured}), "", "project", "logs", "web", "--dir", root)

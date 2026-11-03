@@ -1,6 +1,8 @@
 package protocol
 
 import (
+	"crypto/rand"
+	"fmt"
 	"reflect"
 	"strings"
 )
@@ -30,41 +32,96 @@ type Action struct {
 	RequiredInputs  []string
 	Message, Effect string
 	Relation        ActionRelation
+	// Intent is an optional typed command construction. The consuming CLI
+	// registry, not this package, owns its accepted options and static rules.
+	Intent *CommandIntent
+}
+
+type ActionOption struct{ Name, Value string }
+type CommandIntent struct {
+	Command    string
+	Arguments  []string
+	Options    []ActionOption
+	Child      []string
+	NewRequest bool
+}
+
+// NewRequestID is fixed in action data before either renderer sees it.
+func NewRequestID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic(err)
+	}
+	b[6], b[8] = b[6]&15|64, b[8]&63|128
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
 func (a Action) Remedy(c InvocationContext) Remedy {
 	r := Remedy{Argv: append([]string{}, a.Argv...), RequiredInputs: append([]string{}, a.RequiredInputs...), Message: a.Message, Effect: a.Effect, Relation: a.Relation}
+	if intent := a.Intent; intent != nil {
+		r.Argv = append([]string{"devtools"}, strings.Fields(intent.Command)...)
+		r.Argv = append(r.Argv, intent.Arguments...)
+		for _, option := range intent.Options {
+			r.Argv = append(r.Argv, "--"+option.Name+"="+option.Value)
+		}
+		if intent.NewRequest {
+			r.Argv = append(r.Argv, "--request-id", NewRequestID())
+		}
+		if len(intent.Child) > 0 {
+			r.Argv = append(append(r.Argv, "--"), intent.Child...)
+		}
+	}
 	if a.Relation == SameStoreAction && c.ProfileKnown {
 		for i, input := range r.RequiredInputs {
 			if input == "profile" {
-				r.Argv = append(r.Argv, "--profile", c.Profile)
+				r.Argv = beforeChild(r.Argv, "--profile", c.Profile)
 				r.RequiredInputs = append(r.RequiredInputs[:i], r.RequiredInputs[i+1:]...)
 				break
 			}
 		}
 	}
-	if a.Relation == SameStoreAction && len(r.Argv) > 1 && c.IsolatedRoot != "" {
+	if a.Relation == SameStoreAction && len(r.Argv) > 1 && r.Argv[0] == "devtools" && c.IsolatedRoot != "" {
 		found := false
 		for _, word := range r.Argv {
+			if word == "--" {
+				break
+			}
 			if word == "--isolated-root" || strings.HasPrefix(word, "--isolated-root=") {
 				found = true
 			}
 		}
 		if !found {
-			r.Argv = append(r.Argv, "--isolated-root", c.IsolatedRoot)
+			r.Argv = append([]string{"devtools", "--isolated-root", c.IsolatedRoot}, r.Argv[1:]...)
 		}
 	}
 	return r
 }
 
+func beforeChild(argv []string, option ...string) []string {
+	for i, word := range argv {
+		if word == "--" {
+			return append(append(append([]string{}, argv[:i]...), option...), argv[i:]...)
+		}
+	}
+	return append(argv, option...)
+}
+
+// ActionResolver validates inputs only. It must not invoke handlers, read input,
+// unlock a vault, query a provider, or initialize storage.
+type ActionResolver func([]string) *Error
+
 // BindGuidance renders declared actions before serialization, including actions
 // nested in typed doctor reports and successful workflow results. Unmarked,
 // discovery, destination, and external actions never inherit the caller store.
-func BindGuidance(value any, c InvocationContext) any {
+func BindGuidance(value any, c InvocationContext, resolvers ...ActionResolver) any {
 	if value == nil {
 		return nil
 	}
 	remedyType := reflect.TypeOf(Remedy{})
+	var resolver ActionResolver
+	if len(resolvers) > 0 {
+		resolver = resolvers[0]
+	}
 	var bind func(reflect.Value, InvocationContext) reflect.Value
 	bind = func(v reflect.Value, scope InvocationContext) reflect.Value {
 		if !v.IsValid() {
@@ -72,7 +129,7 @@ func BindGuidance(value any, c InvocationContext) any {
 		}
 		if v.Type() == remedyType {
 			r := v.Interface().(Remedy)
-			return reflect.ValueOf((Action{Argv: r.Argv, RequiredInputs: r.RequiredInputs, Message: r.Message, Effect: r.Effect, Relation: r.Relation}).Remedy(scope))
+			return reflect.ValueOf(prepareAction(r, scope, resolver))
 		}
 		switch v.Kind() {
 		case reflect.Interface:
@@ -85,6 +142,22 @@ func BindGuidance(value any, c InvocationContext) any {
 		case reflect.Map:
 			if v.IsNil() || v.Type().Key().Kind() != reflect.String {
 				return v
+			}
+			// Public/replayed action maps have lost their Go type. Rebind them
+			// too; otherwise old saved templates could silently become ready.
+			if m, ok := v.Interface().(map[string]any); ok && m["argv"] != nil && m["required_inputs"] != nil && m["effect"] != nil && m["message"] != nil {
+				var r Remedy
+				if decodeActionMap(m, &r) {
+					out := make(map[string]any, len(m)+2)
+					for key, value := range m {
+						out[key] = value
+					}
+					prepared := prepareAction(r, scope, resolver)
+					for key, value := range diagnosticObject(prepared) {
+						out[key] = value
+					}
+					return reflect.ValueOf(out)
+				}
 			}
 			if p := v.MapIndex(reflect.ValueOf("profile").Convert(v.Type().Key())); p.IsValid() {
 				if p.Kind() == reflect.Interface {
@@ -112,14 +185,19 @@ func BindGuidance(value any, c InvocationContext) any {
 		case reflect.Struct:
 			out := reflect.New(v.Type()).Elem()
 			out.Set(v)
-			// Only diagnostic containers have action fields. Do not traverse
-			// arbitrary resource state, credentials, clocks, or custom marshalers.
-			for _, name := range []string{"Remedies", "Checks", "Commands", "Report", "Details"} {
-				f := out.FieldByName(name)
-				if f.IsValid() && f.CanSet() {
+			for i := 0; i < v.NumField(); i++ {
+				f := out.Field(i)
+				if f.CanSet() && v.Type().Field(i).Tag.Get("json") != "-" {
 					f.Set(bind(f, scope))
 				}
 			}
+			return out
+		case reflect.Pointer:
+			if v.IsNil() {
+				return v
+			}
+			out := reflect.New(v.Type().Elem())
+			out.Elem().Set(bind(v.Elem(), scope))
 			return out
 		default:
 			return v

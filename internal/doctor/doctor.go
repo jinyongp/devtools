@@ -406,6 +406,7 @@ func CheckRequirements(ctx context.Context, in Input) []Check {
 				}
 				checks[i].Remedies = []protocol.Remedy{Remedy("Register the required key in the selected profile and env.", argv, required...)}
 				checks[i].Remedies[0].Effect = "value_write"
+				checks[i].Remedies[0].Bindings = map[string]string{"key": key}
 			}
 		}
 	}

@@ -138,6 +138,7 @@ func TestDashboardProcessRestartPreStopValidationPreservesRunningExecution(t *te
 	if err := maintenance.Write(recordPath, body); err != nil {
 		t.Fatal(err)
 	}
+	prepareProcessFixture(t, data)
 	changed := "profile='app'\n[commands.web]\nexec=['/definitely-not-an-installed-review-executable']\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(changed), 0600); err != nil {
 		t.Fatal(err)
@@ -165,7 +166,7 @@ func TestDashboardProcessRestartPreStopValidationPreservesRunningExecution(t *te
 	if response.Code != 400 || !strings.Contains(response.Body.String(), "\"code\":\"executable_not_found\"") {
 		t.Fatalf("restart response: %d %s", response.Code, response.Body.String())
 	}
-	storedBytes, err := os.ReadFile(recordPath)
+	storedBytes, err := (services.Store{Data: data}).RecordBytes(id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +178,7 @@ func TestDashboardProcessRestartPreStopValidationPreservesRunningExecution(t *te
 		t.Fatalf("dashboard pre-stop validation stopped the old process: %#v", stored)
 	}
 	stored.ProxyMode = true
-	if err := tasks.WritePrivate(recordPath, stored); err != nil {
+	if err := (services.Store{Data: data}).RestoreRecord(stored); err != nil {
 		t.Fatal(err)
 	}
 	request = httptest.NewRequest("POST", server.registry.Address+"/api/actions", strings.NewReader(string(requestBody)))
@@ -189,7 +190,8 @@ func TestDashboardProcessRestartPreStopValidationPreservesRunningExecution(t *te
 	if response.Code != 400 || !strings.Contains(response.Body.String(), "network_preparation_required") || !strings.Contains(response.Body.String(), "devtools process restart") {
 		t.Fatal("proxy restart must direct the user to the CLI", response.Code, response.Body)
 	}
-	if e := tasks.ReadPrivate(recordPath, &stored); e != nil || stored.EndedAt != nil {
+	body, e := (services.Store{Data: data}).RecordBytes(id)
+	if e != nil || json.Unmarshal(body, &stored) != nil || stored.EndedAt != nil {
 		t.Fatal("proxy restart stopped the original", e)
 	}
 }

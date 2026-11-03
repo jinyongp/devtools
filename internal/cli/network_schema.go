@@ -63,6 +63,6 @@ func routeMutationSchema(action string) map[string]any {
 }
 
 func networkDiagnosticsSchema() map[string]any {
-	remedy := object(map[string]any{"argv": arraySchema(stringSchema()), "required_inputs": arraySchema(stringSchema()), "message": stringSchema()}, "argv", "required_inputs", "message")
+	remedy := remedySchema()
 	return diagnosticsSectionSchema(map[string]any{"listeners": arraySchema(proxyStatusSchema()), "routes": arraySchema(proxyItemSchema()), "exposures": arraySchema(exposureSchema()), "ca": caStatusSchema(), "trusted": boolSchema(), "setup": map[string]any{"type": "object"}, "hosts": map[string]any{"type": "object"}, "isolated": boolSchema(), "boundaries": arraySchema(stringSchema()), "remedies": arraySchema(remedy), "pending_operations": map[string]any{"type": []string{"array", "null"}, "items": stringSchema()}}, "listeners", "routes", "exposures", "ca", "trusted", "setup", "hosts", "isolated", "boundaries", "remedies", "pending_operations")
 }

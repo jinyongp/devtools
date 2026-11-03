@@ -29,13 +29,6 @@ func (s Store) observed(ctx context.Context, r record) (Execution, error) {
 	if item.DeliveryState == "delivering" {
 		path := filepath.Join(s.Root, "value-execution-locks", profilekey.Key(s.Profile), item.ID+".lock")
 		release, free, err := maintenance.TryQueryExclusive(ctx, path)
-		var preparation *maintenance.QueryPreparationError
-		if errors.As(err, &preparation) {
-			release, free, err = maintenance.TryLockExclusive(ctx, path)
-			if err != nil {
-				err = &maintenance.QueryPreparationError{State: preparation.State, Cause: err}
-			}
-		}
 		if err != nil {
 			return item, err
 		}
@@ -57,7 +50,7 @@ func (s Store) Status(ctx context.Context, id, requestID string) (View, *protoco
 		return View{}, values.VaultError(ctx, err)
 	}
 	defer a.master.Destroy()
-	release, err := maintenance.AcquireQuery(ctx, s.Root)
+	release, err := maintenance.AcquirePassiveQuery(ctx, s.Root)
 	if err != nil {
 		return View{}, values.QueryError(ctx, err)
 	}
@@ -110,65 +103,10 @@ func (s Store) List(ctx context.Context, limit int, cursor string) (ListResult, 
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	a, err := s.access(ctx, false)
-	if err != nil {
-		return out, values.VaultError(ctx, err)
+	records, revision, condition := s.listRecords(ctx)
+	if condition != nil {
+		return out, condition
 	}
-	defer a.master.Destroy()
-	release, err := maintenance.AcquireQuery(ctx, s.Root)
-	if err != nil {
-		return out, values.QueryError(ctx, err)
-	}
-	dir := filepath.Join(s.Root, "value-executions", profilekey.Key(s.Profile))
-	guard, err := platformfs.OpenRoot(dir, false)
-	if errors.Is(err, os.ErrNotExist) {
-		release()
-		if cursor != "" {
-			return out, failure("cursor_invalid")
-		}
-		return out, nil
-	}
-	if err != nil {
-		release()
-		return out, values.VaultError(ctx, err)
-	}
-	defer guard.Close()
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		release()
-		return out, values.VaultError(ctx, err)
-	}
-	h := sha256.New()
-	h.Write([]byte(s.Root + "\x00" + s.Profile))
-	records := []record{}
-	for _, entry := range entries {
-		id := strings.TrimSuffix(entry.Name(), ".json")
-		if !strings.HasSuffix(entry.Name(), ".json") || !idRE.MatchString(id) {
-			err = vault.ErrIntegrity
-			break
-		}
-		var r record
-		r, err = s.readRecord(ctx, a, id)
-		if err != nil {
-			break
-		}
-		b, _ := json.Marshal(r)
-		h.Write(b)
-		clear(b)
-		records = append(records, r)
-	}
-	release()
-	if err != nil {
-		return out, values.VaultError(ctx, err)
-	}
-	sort.Slice(records, func(i, j int) bool {
-		a, b := records[i].Item, records[j].Item
-		if a.CreatedAt.Equal(b.CreatedAt) {
-			return a.ID < b.ID
-		}
-		return a.CreatedAt.Before(b.CreatedAt)
-	})
-	revision := hex.EncodeToString(h.Sum(nil))
 	offset := 0
 	if cursor != "" {
 		if len(cursor) > 512 {
@@ -197,11 +135,69 @@ func (s Store) List(ctx context.Context, limit int, cursor string) (ListResult, 
 	return out, nil
 }
 
+func (s Store) listRecords(ctx context.Context) ([]record, string, *protocol.Error) {
+	a, err := s.access(ctx, false)
+	if err != nil {
+		return nil, "", values.VaultError(ctx, err)
+	}
+	defer a.master.Destroy()
+	release, err := maintenance.AcquirePassiveQuery(ctx, s.Root)
+	if err != nil {
+		return nil, "", values.QueryError(ctx, err)
+	}
+	dir := filepath.Join(s.Root, "value-executions", profilekey.Key(s.Profile))
+	guard, err := platformfs.OpenRoot(dir, false)
+	if errors.Is(err, os.ErrNotExist) {
+		release()
+		return []record{}, "", nil
+	}
+	if err != nil {
+		release()
+		return nil, "", values.VaultError(ctx, err)
+	}
+	defer guard.Close()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		release()
+		return nil, "", values.VaultError(ctx, err)
+	}
+	h := sha256.New()
+	h.Write([]byte(s.Root + "\x00" + s.Profile))
+	records := []record{}
+	for _, entry := range entries {
+		id := strings.TrimSuffix(entry.Name(), ".json")
+		if !strings.HasSuffix(entry.Name(), ".json") || !idRE.MatchString(id) {
+			err = vault.ErrIntegrity
+			break
+		}
+		var r record
+		r, err = s.readRecord(ctx, a, id)
+		if err != nil {
+			break
+		}
+		b, _ := json.Marshal(r)
+		h.Write(b)
+		clear(b)
+		records = append(records, r)
+	}
+	release()
+	if err != nil {
+		return nil, "", values.VaultError(ctx, err)
+	}
+	sort.Slice(records, func(i, j int) bool {
+		a, b := records[i].Item, records[j].Item
+		if a.CreatedAt.Equal(b.CreatedAt) {
+			return a.ID < b.ID
+		}
+		return a.CreatedAt.Before(b.CreatedAt)
+	})
+	return records, hex.EncodeToString(h.Sum(nil)), nil
+}
 func (s Store) observationError(ctx context.Context, cause error, id string) *protocol.Error {
 	failure := values.QueryError(ctx, cause)
 	var preparation *maintenance.QueryPreparationError
 	if errors.As(cause, &preparation) && failure.Code != "canceled" && failure.Code != "deadline_exceeded" {
-		failure.Details["remedies"] = []protocol.Remedy{{Relation: protocol.SameStoreAction, Argv: []string{"devtools", "values", "execution", "status", id, "--profile", s.Profile}, Effect: "value_write", RequiredInputs: []string{}, Message: "Run this status query with write access to prepare its existing delivery lock, then retry."}}
+		failure.Details["remedies"] = []protocol.Remedy{{Relation: protocol.SameStoreAction, Argv: []string{"devtools", "doctor", "--storage", "--fix"}, Effect: "value_write", RequiredInputs: []string{}, Message: "Prepare missing delivery locks in the selected storage, then retry this read."}}
 	}
 	return failure
 }

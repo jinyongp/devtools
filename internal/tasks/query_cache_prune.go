@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -89,7 +91,21 @@ func (s Store) pruneQueryCaches(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	for _, entry := range entries {
+	// Publication owns a bounded maintenance page. A live first entry cannot
+	// starve expired snapshots later in the directory on subsequent writes.
+	positionPath := filepath.Join(s.cacheDirectory(), "prune-position.json")
+	var position struct {
+		After string `json:"after"`
+	}
+	if err := ReadPrivate(positionPath, &position); err != nil && !os.IsNotExist(err) {
+		return
+	}
+	start := sort.Search(len(entries), func(i int) bool { return entries[i].Name() > position.After })
+	if start == len(entries) {
+		start = 0
+	}
+	end := min(start+32, len(entries))
+	for _, entry := range entries[start:end] {
 		if ctx.Err() != nil {
 			return
 		}
@@ -108,4 +124,9 @@ func (s Store) pruneQueryCaches(ctx context.Context) {
 			_ = r.RemoveFile(ctx, name)
 		}
 	}
+	position.After = ""
+	if end < len(entries) && end > start {
+		position.After = entries[end-1].Name()
+	}
+	_ = WritePrivate(positionPath, position)
 }

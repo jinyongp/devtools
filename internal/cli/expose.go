@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jinyongp/devtools/internal/expose"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
@@ -21,6 +22,8 @@ func exposureSchema() map[string]any {
 		fields[key] = stringSchema()
 	}
 	fields["route_ref"] = routeRefSchema()
+	fields["directory"] = stringSchema()
+	fields["ended_at"] = stringSchema()
 	fields["auth"] = map[string]any{"type": "boolean"}
 	fields["origin_port"] = map[string]any{"type": "integer"}
 	fields["serve_port"] = map[string]any{"type": "integer"}
@@ -104,7 +107,15 @@ func (a *App) registerExpose() {
 			}
 			switch action {
 			case "list":
-				items, e := m.ExposureList(ctx)
+				items, e := m.ExposureNavigation(ctx, r.Options["view"] == "history", func(item expose.Public) bool {
+					if r.Scope != nil && !r.Scope.matches(publicResultObject(item)) {
+						return false
+					}
+					if provider := r.Options["provider"]; provider != "" && provider != item.Provider {
+						return false
+					}
+					return strings.Contains(strings.ToLower(item.Host), strings.ToLower(strings.Join(strings.Fields(r.Options["query"]), " ")))
+				})
 				return map[string]any{"items": items}, e
 			case "status":
 				item, e := m.ExposureStatus(ctx, r.Args[0])

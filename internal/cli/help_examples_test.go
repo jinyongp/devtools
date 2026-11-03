@@ -52,7 +52,7 @@ func TestReviewedExamplesCoverEveryCanonicalCommand(t *testing.T) {
 			count++
 		}
 	}
-	if count != 331 {
+	if count != 337 {
 		t.Fatal("reviewed example inventory changed without a contract update", count)
 	}
 }
@@ -68,7 +68,7 @@ func TestProxyListHelpExplainsScopesWithoutMutationNoise(t *testing.T) {
 			t.Fatal(want, help)
 		}
 	}
-	for _, bad := range []string{"Input rules:", "Workflow:", "UUID", "JSON input example:", "Root options"} {
+	for _, bad := range []string{"Workflow:", "UUID", "JSON input example:", "Root options"} {
 		if strings.Contains(help, bad) {
 			t.Fatal("irrelevant help", bad, help)
 		}

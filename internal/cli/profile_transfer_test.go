@@ -197,7 +197,7 @@ func TestProfileExportRequiresPassphraseInputWithoutTTY(t *testing.T) {
 	if code != 3 || out != "" || !strings.Contains(diagnostic, "\"code\":\"passphrase_required\"") {
 		t.Fatalf("missing passphrase input error: code=%d out=%s err=%s", code, out, diagnostic)
 	}
-	if !strings.Contains(diagnostic, "--passphrase-file") || !strings.Contains(diagnostic, "--passphrase-stdin") || strings.Contains(diagnostic, "transfer prepare") {
+	if !strings.Contains(diagnostic, `"required_inputs":["passphrase-file"]`) || !strings.Contains(diagnostic, `"required_inputs":["stdin"]`) || !strings.Contains(diagnostic, `"state":"needs_input"`) || strings.Contains(diagnostic, "transfer prepare") {
 		t.Fatalf("unexpected source-first remedy: %s", diagnostic)
 	}
 	if _, err := os.Lstat(filepath.Join(root, "app.age")); !os.IsNotExist(err) {

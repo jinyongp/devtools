@@ -8,18 +8,23 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/retainedbody"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
 type Public struct {
+	Directory   string           `json:"directory,omitempty"`
+	EndedAt     *time.Time       `json:"ended_at,omitempty"`
 	ID          string           `json:"id"`
 	Route       network.RouteRef `json:"route_ref"`
 	Provider    string           `json:"provider"`
@@ -60,7 +65,10 @@ func (s Store) Read(id string) (Record, *protocol.Error) {
 		if errors.Is(e, os.ErrNotExist) {
 			return r, Failure("exposure_not_found")
 		}
-		return r, Failure("invalid_storage")
+		body, err := (retainedbody.Store{Root: s.Data}).ReadReference(s.Path(id))
+		if err != nil || json.Unmarshal(body, &r) != nil {
+			return r, Failure("invalid_storage")
+		}
 	}
 	if r.ID != id || !r.Pin.Valid() || r.Route != r.Pin.Route || !validID(r.Generation) {
 		return Record{}, Failure("invalid_storage")
@@ -96,6 +104,16 @@ func (s Store) List() ([]Record, *protocol.Error) {
 		}
 		id := strings.TrimSuffix(entry.Name(), ".json")
 		if !validID(id) {
+			continue
+		}
+		raw, err := maintenance.Read(s.Path(id), 1<<20)
+		var header struct {
+			Version int `json:"storage_version"`
+		}
+		if err != nil || json.Unmarshal(raw, &header) != nil {
+			return nil, Failure("invalid_storage")
+		}
+		if header.Version == 2 {
 			continue
 		}
 		r, e := s.Read(id)

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 
 	"github.com/jinyongp/devtools/internal/execution"
@@ -41,23 +42,27 @@ func (s Store) InspectRecordValues(ctx context.Context, r Record) values.InputOb
 	if r.InputVersion == nil {
 		return values.InputObservation{State: "unknown", Reason: "delivery_unknown"}
 	}
+	current, e := s.currentRecordValues(ctx, r)
+	return values.ObserveInput(r.InputVersion, current, e)
+}
+
+func (s Store) currentRecordValues(ctx context.Context, r Record) (*values.InputVersion, *protocol.Error) {
 	p, e := project.Resolve(r.Directory, "")
 	if e != nil {
-		return values.ObserveInput(r.InputVersion, nil, e)
+		return nil, e
 	}
 	if p.Profile != r.Profile || p.Root != r.Directory {
-		return values.ObserveInput(r.InputVersion, nil, protocol.NewError("instance_conflict", "Project identity changed.", 3, nil))
+		return nil, protocol.NewError("instance_conflict", "Project identity changed.", 3, nil)
 	}
 	command, e := execution.ResolveConfigured(p, r.Command, r.EnvOverride, nil)
 	if e != nil {
-		return values.ObserveInput(r.InputVersion, nil, e)
+		return nil, e
 	}
 	if r.BundleOverride != nil {
 		command.Selection = *r.BundleOverride
 	}
 	s.IsolatedRoot = r.IsolatedRoot
-	current, e := s.InspectCommandValues(ctx, command)
-	return values.ObserveInput(r.InputVersion, current, e)
+	return s.InspectCommandValues(ctx, command)
 }
 
 // ValueUses separates configuration declarations from retained delivery records.
@@ -82,13 +87,25 @@ func (s Store) ValueUses(ctx context.Context, p project.Context) ([]ValueUse, *p
 		}
 		items = append(items, ValueUse{Kind: "declared", Command: name, Directory: p.Root, Env: command.Env, Selection: command.Selection, Policy: &policy, Values: observation})
 	}
-	records, e := s.List(ctx, p.Profile)
+	records, e := s.StoredRecords()
 	if e != nil {
 		return nil, e
 	}
+	type currentValues struct {
+		version   *values.InputVersion
+		condition *protocol.Error
+	}
+	memo := map[string]currentValues{}
 	for _, r := range records {
-		if r.Directory != p.Root {
+		if r.Profile != p.Profile || r.Directory != p.Root {
 			continue
+		}
+		if r.EndedAt == nil {
+			live, e := s.statusRecord(ctx, r)
+			if e != nil {
+				return nil, e
+			}
+			r = live
 		}
 		selection := r.Selection
 		if selection == "" {
@@ -98,7 +115,20 @@ func (s Store) ValueUses(ctx context.Context, p project.Context) ([]ValueUse, *p
 		if r.StartedAt == nil {
 			kind = "prepared"
 		}
-		items = append(items, ValueUse{Kind: kind, Command: r.Command, Directory: r.Directory, Env: r.Env, Selection: selection, ExecutionID: r.ID, ExecutionState: r.State, Output: r.Output, Values: s.InspectRecordValues(ctx, r)})
+		observation := values.InputObservation{State: "unknown", Reason: "delivery_unknown"}
+		if r.StartedAt == nil || r.State == "unknown" {
+			observation.Reason = "delivery_not_confirmed"
+		} else if r.InputVersion != nil {
+			body, _ := json.Marshal([]any{r.Profile, r.Directory, r.Command, r.EnvOverride, r.BundleOverride, r.IsolatedRoot})
+			key := string(body)
+			current, ok := memo[key]
+			if !ok {
+				current.version, current.condition = s.currentRecordValues(ctx, r)
+				memo[key] = current
+			}
+			observation = values.ObserveInput(r.InputVersion, current.version, current.condition)
+		}
+		items = append(items, ValueUse{Kind: kind, Command: r.Command, Directory: r.Directory, Env: r.Env, Selection: selection, ExecutionID: r.ID, ExecutionState: r.State, Output: r.Output, Values: observation})
 	}
 	return items, nil
 }

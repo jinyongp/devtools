@@ -24,6 +24,8 @@ import urllib.request
 import uuid
 from dataclasses import asdict, dataclass
 
+from process_history import execution_records
+
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
@@ -120,7 +122,8 @@ class Fixture:
 
     def cleanup(self):
         # Keep the registry until detached daemons have acknowledged shutdown.
-        items = self.cli("process", "list").get("items", [])
+        protocol = self.cli("version").get("protocol_version", 0)
+        items = execution_records(self.cli, protocol)
         for item in items:
             if item["state"] in ("running", "starting", "unknown"):
                 self.cli("process", "stop", item["id"], "--request-id", str(uuid.uuid4()))
@@ -128,7 +131,7 @@ class Fixture:
         self.cli("dashboard", "stop")
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
-            active = [item for item in self.cli("process", "list").get("items", [])
+            active = [item for item in execution_records(self.cli, protocol)
                       if item["state"] in ("running", "starting", "unknown")]
             if not active and not self.cli("proxy", "status")["item"]["running"] and not self.cli("dashboard", "status")["item"]["running"]:
                 if self.info.get("vault_control"):

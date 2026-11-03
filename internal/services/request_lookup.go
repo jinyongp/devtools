@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/protocol"
-	"github.com/jinyongp/devtools/internal/tasks"
 )
 
 // RequestStatus is historical operation data, not a supervisor observation.
@@ -23,7 +22,7 @@ func (s Store) InspectRequest(id string) (RequestStatus, *protocol.Error) {
 		return out, failure("invalid_argument")
 	}
 	var value receipt
-	e := tasks.ReadPrivate(filepath.Join(s.root(), "receipts", id+".json"), &value)
+	e := s.readReceipt(filepath.Join(s.root(), "receipts", id+".json"), &value)
 	if errors.Is(e, os.ErrNotExist) {
 		return out, protocol.NewError("request_not_found", "No saved process request exists in this store.", 3, nil)
 	}
@@ -50,7 +49,7 @@ func (s Store) HasRequest(id string) (bool, *protocol.Error) {
 		return false, failure("invalid_argument")
 	}
 	var value receipt
-	e := tasks.ReadPrivate(filepath.Join(s.root(), "receipts", id+".json"), &value)
+	e := s.readReceipt(filepath.Join(s.root(), "receipts", id+".json"), &value)
 	if errors.Is(e, os.ErrNotExist) {
 		return false, nil
 	}

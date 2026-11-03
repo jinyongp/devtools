@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -67,7 +68,7 @@ func TestManagedOwnerStopActionDeclaresItsSystemEffect(t *testing.T) {
 	id := "11111111-1111-4111-8111-111111111111"
 	e := describeRunFailure(protocol.NewError("port_run_active", "Original.", 3, map[string]any{"facts": map[string]any{"owner": map[string]any{"status": "verified", "kind": "managed", "execution_id": id}}}), "app", "/work/app", "instance", "web", 3000)
 	action := e.Details["remedies"].([]protocol.Remedy)[0]
-	if action.Effect != "system_write" || len(action.RequiredInputs) != 1 || len(action.Argv) < 4 || action.Argv[3] != id {
+	if action.Effect != "system_write" || len(action.RequiredInputs) != 0 || len(action.Argv) != 6 || action.Argv[3] != id || !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(action.Argv[5]) {
 		t.Fatal(action)
 	}
 }

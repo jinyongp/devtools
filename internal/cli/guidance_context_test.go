@@ -235,11 +235,11 @@ func TestWrongKindAndLockedRunKeepActionableConditions(t *testing.T) {
 		t.Fatal(e)
 	}
 	code, _, e = invoke(t, a, "", "run", "need")
-	if code != 3 || !strings.Contains(e, `"--passphrase-stdin"`) || !strings.Contains(e, `"required_inputs":["stdin"]`) || !strings.Contains(e, `"retry":"after_dependency_change"`) {
+	if code != 3 || !strings.Contains(e, `"state":"needs_input"`) || !strings.Contains(e, `"argv":["devtools","help","vault","unlock"]`) || !strings.Contains(e, `"required_inputs":["stdin"]`) || !strings.Contains(e, `"retry":"after_dependency_change"`) {
 		t.Fatal(code, e)
 	}
 	code, _, e = invoke(t, a, "", "values", "execution", "status", strings.Repeat("0", 32))
-	if code != 3 || !strings.Contains(e, `"--passphrase-stdin"`) || !strings.Contains(e, `"required_inputs":["stdin"]`) || !strings.Contains(e, `"retry":"after_dependency_change"`) {
+	if code != 3 || !strings.Contains(e, `"state":"needs_input"`) || !strings.Contains(e, `"argv":["devtools","help","vault","unlock"]`) || !strings.Contains(e, `"required_inputs":["stdin"]`) || !strings.Contains(e, `"retry":"after_dependency_change"`) {
 		t.Fatal("external execution inspection lost the vault prerequisite", code, e)
 	}
 }

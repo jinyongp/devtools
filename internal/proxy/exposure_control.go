@@ -140,6 +140,7 @@ func (m Manager) ExposeStart(ctx context.Context, q ExposureRequest, p project.C
 				return nil, proxyFailure("activation_required")
 			}
 			record = expose.Record{Public: expose.Public{ID: tasks.ID(), Route: q.Route, Provider: q.Provider, State: "preparing", Generation: tasks.ID(), Listener: listener.Name, Host: *item.Host, Auth: !q.NoAuth, ServePort: q.ServePort, CreatedAt: time.Now().UTC()}, Identity: digest}
+			record.Directory = p.Root
 			service := ""
 			if item.Service != nil {
 				service = *item.Service

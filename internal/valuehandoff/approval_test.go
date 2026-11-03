@@ -48,7 +48,7 @@ func TestExplicitApprovalCancellationAndSavedResults(t *testing.T) {
 		t.Fatal("approval failed", e)
 	}
 	replay, e := s.Approve(ctx, prepared.Item.ID, requestID(511), input)
-	if e != nil || !replay.Replayed || replay.Item != r.Item {
+	if e != nil || !replay.Replayed || !sameExecution(replay.Item, r.Item) {
 		t.Fatal("approval replay changed result", e)
 	}
 	input.Revision = r.Item.Revision

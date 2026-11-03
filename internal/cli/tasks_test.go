@@ -189,9 +189,9 @@ func TestCLIIdentifierAndDescriptionContracts(t *testing.T) {
 				t.Errorf("task tree root filter description = %q", description)
 			}
 			if option["name"] == "state" {
-				wantStates := "open, done, canceled, or all"
+				wantStates := "repeat for OR"
 				if name == "task workstream list" {
-					wantStates = "draft, active, done, canceled, or all"
+					wantStates = "repeat for OR"
 				}
 				if !strings.Contains(description, wantStates) {
 					t.Errorf("%s state description = %q, want %q", name, description, wantStates)
@@ -217,6 +217,19 @@ func TestCLIIdentifierAndDescriptionContracts(t *testing.T) {
 			}
 		}
 		if expected, exists := wantQueryOptions[name]; exists {
+			if collection := map[string]bool{"task current": true, "task list": true, "task workstream list": true, "task validation list": true, "task history": true, "task checkpoint list": true}[name]; collection {
+				expected = append(append([]string{}, expected...), "query", "sort", "order", "since", "until", "time-field", "columns")
+				switch name {
+				case "task current":
+					expected = append(expected, "task", "workstream")
+				case "task history":
+					expected = append(expected, "action")
+				case "task checkpoint list":
+					expected = append(expected, "action", "kind")
+				case "task validation list":
+					expected = append(expected, "recorded-result")
+				}
+			}
 			expected = append(append([]string{}, expected...), "isolated-root", "query-cache-dir")
 			actual := map[string]bool{}
 			for _, raw := range command["options"].([]any) {

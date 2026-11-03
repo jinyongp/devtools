@@ -157,7 +157,7 @@ func TestIncompleteStartReceiptStaysPendingUntilExecutionStarts(t *testing.T) {
 		t.Fatalf("starting execution was prematurely completed: %#v %v", pending, err)
 	}
 	var stored receipt
-	if err := tasks.ReadPrivate(receiptPath, &stored); err != nil || stored.Done {
+	if err := s.readReceipt(receiptPath, &stored); err != nil || stored.Done {
 		t.Fatalf("pending receipt was marked done: %#v %v", stored, err)
 	}
 
@@ -209,7 +209,7 @@ func TestTerminalLaunchFailureReceiptReplay(t *testing.T) {
 						t.Fatal("public outcome lost", public)
 					}
 					var saved receipt
-					if e := tasks.ReadPrivate(path, &saved); e != nil || !saved.Done {
+					if e := s.readReceipt(path, &saved); e != nil || !saved.Done {
 						t.Fatal("terminal receipt stayed pending", e)
 					}
 				}
@@ -266,10 +266,10 @@ func TestLaunchFailureGuidanceTargetsNewExecutionAndCapture(t *testing.T) {
 			if capture {
 				want = 2
 			}
-			if len(remedies) != want || remedies[0].Argv[2] != "status" || remedies[0].Argv[3] != r.ID {
+			if len(remedies) != want || !strings.Contains(strings.Join(remedies[0].Argv, " "), "process status "+r.ID) {
 				t.Fatal(remedies)
 			}
-			if capture && (remedies[1].Argv[2] != "logs" || remedies[1].Argv[3] != r.ID) {
+			if capture && !strings.Contains(strings.Join(remedies[1].Argv, " "), "process logs "+r.ID) {
 				t.Fatal(remedies)
 			}
 			if state == "unknown" && strings.Contains(e.Message, "complete") {
@@ -299,7 +299,7 @@ func TestStoppedAndUnknownLaunchReceiptCompletion(t *testing.T) {
 					t.Fatal("unspawned receipt became success", out, e)
 				}
 				var saved receipt
-				if e := tasks.ReadPrivate(filepath.Join(s.root(), "receipts", r.ID+".json"), &saved); e != nil || saved.Done != (state == "stopped") {
+				if e := s.readReceipt(filepath.Join(s.root(), "receipts", r.ID+".json"), &saved); e != nil || saved.Done != (state == "stopped") {
 					t.Fatal("incorrect terminal/pending receipt", e, saved.Done)
 				}
 			}

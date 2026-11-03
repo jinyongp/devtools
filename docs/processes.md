@@ -21,7 +21,7 @@ devtools process restart EXECUTION_ID --request-id UUID
 
 start는 `item`에 실행 ID, profile, instance ID, 디렉터리, 명령, env, 시간과 상태를 반환한다. `changed`는 실행 변경 여부, `replayed`는 같은 요청의 재전송 여부다. `running`은 OS 프로세스의 시작을 뜻한다. 선언한 서비스 준비 검사는 `process check EXECUTION_ID`로 확인하고 `process wait EXECUTION_ID --timeout 30s`로 대기한다. 설정·결과·종료 조건은 [프로세스 준비 확인](process-readiness.md)을 따른다.
 
-list는 `data.items`, status는 `data.item`에 실행 정보를 반환한다. start·stop·restart는 `data.item`과 최상위 `data.changed`·`data.replayed`를 반환하며 false도 생략하지 않는다. check·wait의 readiness 보고서와 logs의 `data.content`는 별도 보고서로 유지한다. 공통 형식과 이전 버전의 경로 변경은 [CLI 출력 계약](cli-output.md)을 따른다.
+list는 `data.items`에 현재 서비스 요약을 반환한다. 실행별 이력은 `--view history`로 선택하고, status는 `data.item`에 단일 실행 정보를 반환한다. start·stop·restart는 `data.item`과 최상위 `data.changed`·`data.replayed`를 반환하며 false도 생략하지 않는다. check·wait의 readiness 보고서와 logs의 `data.content`는 별도 보고서로 유지한다. 공통 형식과 이전 버전의 경로 변경은 [CLI 출력 계약](cli-output.md)을 따른다.
 
 같은 `profile + instance + 명령`이 실행 중이면 같은 실행을 반환한다. env, 값 주입 여부, 로그 설정이 다르면 `process_conflict`다. 실행 정보의 `inject`는 해당 실행을 시작할 때 적용한 값 주입 여부이며, 이전 버전에서 시작한 실행에는 없을 수 있다. 주입 여부를 확인할 수 없는 이전 실행은 env의 명시 선택 여부가 바뀌면 restart가 필요하다. restart는 이전 실행을 종료하고 최신 프로젝트 설정과 값을 적용한 새 실행 ID를 반환하며 `previous_id`로 이전 실행을 연결한다. env를 지정했던 실행은 그 선택을 유지하고, 명령의 기본 env를 따랐던 실행은 현재 기본값을 적용한다. 이전 실행 ID에 대한 stop은 새 실행에 영향을 주지 않는다.
 
@@ -73,7 +73,13 @@ UUID에서 재실행하지 않는다. 상태 검토 후 새 시도에 새 UUID�
 start 응답의 `data.item.id`를 넣는다. 응답이 불확실한 재시도에는 원래 요청 ID를 유지한다.
 
 start는 `--dir` 또는 현재 디렉터리의 프로젝트 설정에서 profile을 선택한다.
-`process list`는 모든 profile의 실행을 조회하고 `--profile NAME`으로 범위를 좁힌다.
+`process list`의 기본 범위는 현재 프로젝트 디렉터리다. `--profile NAME`은 해당 profile의
+모든 위치를 선택하고 `--all-profiles`는 명시적으로 전체 profile을 선택한다.
+현재 서비스와 마지막 시도를 구분하며 `--view history`는 실행별 이력을 반환한다.
+`--state`, `--command`, `--env`, `--query`, 정렬·시각 조건과 `--limit`/`--cursor`로
+탐색한다. 서비스 key는 stop/status의 execution ID로 사용하지 않는다. 실제 ID는
+`execution_id` 또는 `active_execution_ids`에서 확인한다. 자세한 예시는
+[탐색과 복구 계약](cli-navigation.md)을 따른다.
 status·check·wait·logs·stop·restart는 실행 ID로 대상을 선택하므로 프로젝트 밖에서도 사용할 수 있다.
 
 ## 프로젝트 서버를 함께 관리하기

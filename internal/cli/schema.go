@@ -38,6 +38,9 @@ func (a *App) catalog() map[string]any {
 			}
 			if option.Repeatable {
 				s = map[string]any{"type": "array", "items": s, "minItems": 1, "description": option.Description}
+				if option.Unique {
+					s["uniqueItems"] = true
+				}
 			}
 			properties[option.Name] = s
 		}
@@ -99,6 +102,9 @@ func (a *App) catalog() map[string]any {
 			}
 		}
 		entry := map[string]any{"name": command.Name, "aliases": command.Aliases, "description": command.Description, "options": command.Options, "arguments": command.Arguments, "accepts_child_args": command.ChildArgs, "output_mode": command.OutputMode, "input_schema": input, "output_schema": command.Output}
+		if collection := command.Collection; collection != nil {
+			entry["collection"] = map[string]any{"scope": collection.Scope, "default_limit": 50, "maximum_limit": 200, "default_sort": collection.Query.DefaultSort, "default_order": collection.Query.DefaultOrder, "time_fields": mapKeys(collection.Query.Times), "columns": collection.Columns, "default_columns": collection.DefaultColumns, "views": collection.View, "snapshot_ttl_seconds": 1800}
+		}
 		entry["presentation"] = commandPresentation(command)
 		entry["examples"] = command.Examples
 		if len(command.Workflow) > 0 {

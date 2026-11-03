@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/ports"
 	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
 	"github.com/jinyongp/devtools/internal/project"
@@ -196,15 +197,18 @@ func ManageWithRoot(ctx context.Context, action, cache, data, profile, isolatedR
 }
 
 type Server struct {
-	mu        sync.Mutex
-	registry  Registry
-	data      string
-	cache     string
-	boot      map[string]time.Time
-	sessions  map[string]time.Time
-	stop      func()
-	results   map[string]cachedQuery
-	assetRoot *os.Root
+	cacheRoot     string
+	collection    func(context.Context, string, string, string, map[string][]string) (map[string]any, *protocol.Error)
+	resolveAction protocol.ActionResolver
+	mu            sync.Mutex
+	registry      Registry
+	data          string
+	cache         string
+	boot          map[string]time.Time
+	sessions      map[string]time.Time
+	stop          func()
+	results       map[string]cachedQuery
+	assetRoot     *os.Root
 }
 type cachedQuery struct {
 	Stamp   string
@@ -212,11 +216,11 @@ type cachedQuery struct {
 	Body    []byte
 }
 
-func Serve(ctx context.Context, dir, data string) error {
-	return serve(ctx, dir, data, nil, nil)
+func Serve(ctx context.Context, dir, data string, contracts ...Contracts) error {
+	return serve(ctx, dir, data, nil, nil, contracts...)
 }
 
-func serve(ctx context.Context, dir, data string, assetRoot *os.Root, ready func(*Server) error) error {
+func serve(ctx context.Context, dir, data string, assetRoot *os.Root, ready func(*Server) error, contracts ...Contracts) error {
 	lockCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	unlock, e := tasks.Lock(lockCtx, filepath.Join(dir, "serve.lock"))
@@ -232,6 +236,13 @@ func serve(ctx context.Context, dir, data string, assetRoot *os.Root, ready func
 	r := Registry{ID: tasks.ID(), Address: "http://" + listener.Addr().String(), Token: token()}
 	server := &http.Server{ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: time.Minute}
 	s := &Server{registry: r, data: data, cache: filepath.Join(dir, "queries"), boot: map[string]time.Time{}, sessions: map[string]time.Time{}, assetRoot: assetRoot}
+	if dirs, err := paths.Current(); err == nil && filepath.Clean(dirs.Data) == filepath.Clean(filepath.Dir(data)) {
+		s.cacheRoot = dirs.Cache
+	}
+	if len(contracts) > 0 {
+		s.resolveAction = contracts[0].ResolveAction
+		s.collection = contracts[0].Collection
+	}
 	s.stop = func() {
 		go func() {
 			ctx, c := context.WithTimeout(context.Background(), 2*time.Second)
@@ -364,12 +375,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if r.URL.Path == "/api/vault" {
 			if r.URL.RawQuery != "" {
-				apiError(w, protocol.NewError("invalid_argument", "Vault status has no query inputs.", 2, nil))
+				s.apiError(w, protocol.NewError("invalid_argument", "Vault status has no query inputs.", 2, nil))
 				return
 			}
 			status, e := vault.InspectSession(r.Context(), filepath.Join(filepath.Dir(s.data), "vault"))
 			if e != nil {
-				apiError(w, values.VaultError(r.Context(), e))
+				s.apiError(w, values.VaultError(r.Context(), e))
 				return
 			}
 			reply(status)
@@ -378,7 +389,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/values" {
 			result, e := s.valueStore(r.URL.Query().Get("profile")).Inspect(r.Context(), r.URL.Query().Get("env"))
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			reply(result)
@@ -387,14 +398,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/processes" {
 			profile := r.URL.Query().Get("profile")
 			manager := services.Store{Data: filepath.Dir(s.data)}
-			items, e := manager.List(r.Context(), profile)
+			var collection map[string]any
+			var e *protocol.Error
+			if s.collection != nil {
+				collection, e = s.collection(r.Context(), "process list", filepath.Dir(s.data), s.cache, r.URL.Query())
+			} else {
+				rows, condition := manager.Navigation(r.Context(), services.NavigationSelection{Profile: profile}, nil)
+				collection = map[string]any{"items": rows}
+				e = condition
+			}
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			st, e := (ports.Store{Directory: filepath.Join(filepath.Dir(s.data), "ports")}).Read()
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			instances := []ports.Instance{}
@@ -403,17 +422,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					instances = append(instances, i)
 				}
 			}
-			observations := map[string]values.InputObservation{}
-			for _, item := range items {
-				observations[item.ID] = manager.InspectRecordValues(r.Context(), item)
+			collection["instances"] = instances
+			reply(collection)
+			return
+		}
+		if r.URL.Path == "/api/process" {
+			manager := services.Store{Data: filepath.Dir(s.data)}
+			item, condition := manager.Status(r.Context(), r.URL.Query().Get("id"))
+			if condition != nil {
+				s.apiError(w, condition)
+				return
 			}
-			reply(map[string]any{"items": items, "instances": instances, "values": observations})
+			if item.Profile != r.URL.Query().Get("profile") {
+				s.invalidAction(w)
+				return
+			}
+			reply(map[string]any{"item": item, "values": manager.InspectRecordValues(r.Context(), item)})
 			return
 		}
 		if r.URL.Path == "/api/network" {
 			result, e := s.networkView(r.Context(), r.URL.Query().Get("profile"))
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			reply(result)
@@ -422,21 +452,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/project" {
 			st, e := (ports.Store{Directory: filepath.Join(filepath.Dir(s.data), "ports")}).Read()
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			i := st.Find(r.URL.Query().Get("profile"), "id:"+r.URL.Query().Get("instance"), "")
 			if i == nil {
-				invalidAction(w)
+				s.invalidAction(w)
 				return
 			}
 			p, e := project.Resolve(i.Directory, "")
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			if p.Root != i.Directory || p.Profile != i.Profile {
-				invalidAction(w)
+				s.invalidAction(w)
 				return
 			}
 			commands := []map[string]any{}
@@ -461,7 +491,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/cleanup-preview" {
 			result, e := s.cleanupEngine().Preview(r.Context(), r.URL.Query().Get("profile"))
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			reply(result)
@@ -470,7 +500,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/archives" {
 			items, e := s.cleanupEngine().Archives()
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			profile := r.URL.Query().Get("profile")
@@ -488,16 +518,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			id := r.URL.Query().Get("id")
 			record, e := manager.Status(r.Context(), id)
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			if record.Profile != r.URL.Query().Get("profile") {
-				invalidAction(w)
+				s.invalidAction(w)
 				return
 			}
 			content, e := manager.Logs(r.Context(), id)
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			reply(map[string]string{"content": content})
@@ -507,7 +537,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/profiles" {
 			profiles, e := (profilecatalog.Catalog{Data: filepath.Dir(s.data)}).Names(r.Context())
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			reply(tasks.Object{"profiles": profiles})
@@ -524,13 +554,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		opts := map[string]string{}
-		for _, k := range []string{"workstream", "cursor", "limit", "depth", "direction", "state", "scope", "completion", "at-revision"} {
-			opts[k] = r.URL.Query().Get(k)
+		for _, k := range []string{"workstream", "cursor", "limit", "depth", "direction", "state", "scope", "completion", "at-revision", "query", "kind", "owner", "run", "since", "until", "time-field", "sort"} {
+			if value := r.URL.Query().Get(k); value != "" {
+				opts[k] = value
+			}
 		}
 		key := r.URL.Query().Encode()
 		signature, stampErr := store.CacheStamp(r.Context())
 		if stampErr != nil {
-			apiError(w, stampErr)
+			s.apiError(w, stampErr)
 			return
 		}
 		s.mu.Lock()
@@ -542,7 +574,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.mu.Unlock()
-		result, err := store.Query(r.Context(), tasks.Query{Command: command, Target: r.URL.Query().Get("id"), Options: opts})
+		result, err := store.Query(r.Context(), tasks.Query{Command: command, Target: r.URL.Query().Get("id"), Options: opts, ListOptions: map[string][]string{"state": r.URL.Query()["state"]}})
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(400)

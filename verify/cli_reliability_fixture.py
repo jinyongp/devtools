@@ -70,7 +70,7 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
         return json.loads(p.stdout)['data']
 
     identity = call('version')
-    assert identity['protocol_version'] == 22
+    assert identity['protocol_version'] == 23
     if expected_commit:
         assert identity['commit'] == expected_commit, 'Candidate SHA mismatch'
     call('vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input=password+'\n')
@@ -92,15 +92,19 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
                 details = error['details']
                 assert details['retry'] == 'after_dependency_change' and details['effects'] == 'none'
                 remedy = details['remedies'][0]
-                assert '--passphrase-stdin' in remedy['argv'] and remedy['required_inputs'] == ['stdin']
-                assert remedy['argv'][remedy['argv'].index('--isolated-root')+1] == str(source)
+                assert remedy['state'] == 'needs_input' and remedy['argv'] == [] and remedy['required_inputs'] == ['stdin']
+                assert remedy['bindings']['isolated-root'] == str(source)
+                assert remedy['inputs'] and remedy['input_steps']
     for args in (['import', '--profile', 'reliable', '--file', str(dotenv), '--dry-run'],
                  ['values', 'request', 'show', str(uuid.uuid4()), '--profile', 'reliable']):
         assert call(*args, error='vault_locked')['details']['retry'] == 'after_dependency_change'
     assert call('vault', 'status') == status, 'Locked lookup changed session'
-    unlock = subprocess.run([binary, '--format', 'json', *remedy['argv'][1:]], cwd=project,
+    help_step = subprocess.run([binary, *remedy['input_steps'][0]['argv'][1:]], cwd=project,
+                               env=env, text=True, encoding='utf-8', capture_output=True, timeout=30)
+    assert help_step.returncode == 0 and not help_step.stderr
+    unlock = subprocess.run([binary, '--format', 'json', '--isolated-root', remedy['bindings']['isolated-root'], 'vault', 'unlock', '--passphrase-stdin'], cwd=project,
                             env=env, input=password+'\n', text=True, encoding='utf-8', capture_output=True, timeout=30)
-    assert unlock.returncode == 0 and not unlock.stderr, 'Published remedy did not execute'
+    assert unlock.returncode == 0 and not unlock.stderr, 'Explicit private authentication failed'
     request = str(uuid.uuid4())
     args = ['sec', 'set', 'TOKEN', '--profile', 'reliable', '--env', 'local', '--stdin',
             '--revision', revision, '--request-id', request]
@@ -192,7 +196,10 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
             result = subprocess.run([binary,'--format','json',*remedy['argv'][1:]],cwd=project,env=env,
                                     capture_output=True,text=True,encoding='utf-8',timeout=30)
             assert result.returncode == 0 and not result.stderr, ('Diagnostic remedy failed', remedy['argv'], result.returncode)
-            if remedy['argv'][1:5] == ['task','workstream','plan','show']:
+            command = remedy['argv'][1:]
+            if command[:1] == ['--isolated-root']:
+                command = command[2:]
+            if command[:4] == ['task','workstream','plan','show']:
                 assert wid in remedy['argv'] and str(source) in remedy['argv']
                 scoped = True
         assert kind != 'reference' or scoped, 'Reference recovery lost original workstream'
@@ -239,7 +246,10 @@ def check_cli_reliability(binary, root, environment=None, expected_commit=None, 
             result = subprocess.run([binary,'--format','json',*remedy['argv'][1:]],cwd=project,env=env,
                                     capture_output=True,text=True,encoding='utf-8',timeout=30)
             assert result.returncode == 0 and not result.stderr
-            if remedy['argv'][1:5] == ['task','workstream','plan','show']:
+            command = remedy['argv'][1:]
+            if command[:1] == ['--isolated-root']:
+                command = command[2:]
+            if command[:4] == ['task','workstream','plan','show']:
                 assert wid in remedy['argv'] and str(source) in remedy['argv']
                 scoped = True
         assert scoped and call('task','workstream','plan','show',wid,'--profile','diagnostic') == before

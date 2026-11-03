@@ -35,7 +35,7 @@ func Recover(e *protocol.Error, root, profile, env, requestID string, scope prot
 		} else if slot.Backend == "passphrase" {
 			action = protocol.LocalAction([]string{"devtools", "vault", "unlock", "--passphrase-stdin"}, []string{"stdin"}, "Provide the vault passphrase through private stdin (or a private passphrase file), unlock this vault, then retry. Never put it in argv or chat.", "value_write")
 		} else {
-			action = protocol.LocalAction([]string{"devtools", "vault", "unlock", "--interactive"}, []string{"os-authentication"}, "Explicitly authenticate with this vault's OS protection, then retry.", "value_write")
+			action = protocol.LocalAction([]string{"devtools", "vault", "unlock", "--interactive"}, nil, "Allow the OS authentication prompt to unlock this vault, then retry. Complete any prompt in your desktop session.", "value_write")
 		}
 	case "integrity_failed":
 		e.Message = "Cannot authenticate protected data. The passphrase may be incorrect or protected data may be damaged. Preserve the original keys and storage; do not delete or reinitialize them."

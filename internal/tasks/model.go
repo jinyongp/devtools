@@ -468,6 +468,7 @@ func (s *State) View(i *Item) Object {
 	}
 	if i.Kind == "validation" {
 		v["latest_result"] = nil
+		v["recorded_result"] = "none"
 		if records := objects(i.Props, "records"); len(records) > 0 {
 			record := records[len(records)-1]
 			latest := Object{"record_id": record["record_id"], "result": record["result"]}
@@ -475,6 +476,7 @@ func (s *State) View(i *Item) Object {
 				latest["applicable_when_recorded"] = applicable
 			}
 			v["latest_result"] = latest
+			v["recorded_result"] = str(record, "result")
 		}
 	}
 	if i.Kind == "task" {

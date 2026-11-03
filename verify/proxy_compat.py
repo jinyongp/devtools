@@ -434,7 +434,7 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
                             raise AssertionError("sibling ingress was already unhealthy before stop")
                         stopped = api("expose", "stop", shared["id"], mutate=True)["item"]
                         exposures.remove(shared["id"])
-                        result["selective_stop_states"] = {item["id"]: item["state"] for item in api("expose", "list")["items"]}
+                        result["selective_stop_states"] = {item["id"]: item["state"] for item in api("expose", "list", "--all-profiles", "--view", "history")["items"]}
                         result["sibling_after_stop"] = public_status(sibling["url"], ca, auth, connect_host)
                         if stopped["state"] != "stopped" or result["sibling_after_stop"] != 200:
                             raise AssertionError("stop did not preserve the sibling ingress")
@@ -477,7 +477,7 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
                 try:
                     # A failed start can leave recoverable metadata/pins before
                     # returning an ID. This root contains only this run's records.
-                    exposures = [item["id"] for item in api("expose", "list")["items"] if item["state"] != "stopped"]
+                    exposures = [item["id"] for item in api("expose", "list", "--all-profiles")["items"] if item["state"] != "stopped"]
                 except Exception as error:
                     result.update(status="fail", exposure_cleanup_error=redact(error))
             for exposure in reversed(exposures):

@@ -143,7 +143,7 @@ else:
         with lock:
             fault = "response-loss"
         start(11443, error="tailscale_command_failed")
-        lost = [item for item in fixture.api("expose", "list")["items"] if item["serve_port"] == 11443][0]
+        lost = [item for item in fixture.api("expose", "list", "--all-profiles")["items"] if item["serve_port"] == 11443][0]
         assert lost["state"] == "recovery_required"
         with lock:
             assert "/" in config["Web"][f"{DOMAIN}:11443"]["Handlers"], "fault did not commit provider state"
@@ -165,7 +165,7 @@ else:
         assert TOKEN not in json.dumps(error), "LocalAPI diagnostic leaked credentials"
         with lock:
             fault = None
-        failed = [item for item in fixture.api("expose", "list")["items"] if item["serve_port"] == 10443]
+        failed = [item for item in fixture.api("expose", "list", "--all-profiles", "--view", "history")["items"] if item["serve_port"] == 10443]
         assert len(failed) == 1 and failed[0]["state"] == "recovery_required"
         fixture.mutate("expose", "stop", failed[0]["id"])
         operation = str(uuid.uuid4())

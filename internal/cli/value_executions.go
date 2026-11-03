@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"path/filepath"
-	"strconv"
 
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -17,6 +16,7 @@ func executionSchema() map[string]any {
 		p[k] = stringSchema()
 	}
 	p["revision"] = map[string]any{"type": "integer", "minimum": 1}
+	p["updated_at"], p["ended_at"] = stringSchema(), stringSchema()
 	p["exit_code"] = map[string]any{"type": "integer"}
 	return object(p, "execution_id", "input_id", "external_execution_id", "revision", "created_at", "expires_at", "delivery_state", "execution_state")
 }
@@ -105,15 +105,7 @@ func (a *App) registerValueExecutions() {
 		if e != nil {
 			return nil, e
 		}
-		limit := 0
-		if r.Options["limit"] != "" {
-			var err error
-			limit, err = strconv.Atoi(r.Options["limit"])
-			if err != nil || limit == 0 {
-				return nil, argumentError("Use a page size from 1 through 200.", "limit")
-			}
-		}
-		result, e := s.List(ctx, limit, r.Options["cursor"])
+		result, e := s.Navigation(ctx, r.Options["view"] == "history")
 		return result, executionRecovery(s, r, e)
 	}})
 }

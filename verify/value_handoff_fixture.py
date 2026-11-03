@@ -98,7 +98,7 @@ def run(binary, receiver, directory, base_env=None):
         return json.loads(result.stdout)
 
     try:
-        assert api("version")["protocol_version"] == 22
+        assert api("version")["protocol_version"] == 23
         api("init", "--profile", "handoff")
         api("vault", "init", "--backend", "passphrase", "--passphrase-stdin", text=passphrase + "\n")
         api("secret", "set", "TOKEN", "--stdin", text=canary)
@@ -162,9 +162,9 @@ def run(binary, receiver, directory, base_env=None):
         execution("deliver", prepared["execution_id"], {"revision": reported["revision"]}, error="delivery_already_started")
         empty = execution("prepare", body={"external_execution_id": "empty-job", "selection": {"keys": []}})["item"]
         assert execution("cancel", empty["execution_id"], {"revision": empty["revision"]})["item"]["delivery_state"] == "canceled"
-        page = api("values", "execution", "list", "--profile", "handoff", "--limit", "1")
+        page = api("values", "execution", "list", "--profile", "handoff", "--view", "history", "--limit", "1")
         assert len(page["items"]) == 1 and page["next_cursor"]
-        api("values", "execution", "list", "--profile", "handoff", "--limit", "1", "--cursor", page["next_cursor"])
+        api("values", "execution", "list", "--profile", "handoff", "--view", "history", "--limit", "1", "--cursor", page["next_cursor"])
         idle = api("vault", "status")["item"]["idle_expires_at"]
         summary = api("diagnostics")["external_executions"]
         assert summary["verification"] == "verified" and summary["attempted_inputs"] == 1

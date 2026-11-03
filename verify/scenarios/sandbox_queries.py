@@ -33,7 +33,7 @@ checks = []
 
 def invoke(root, profile, args, sandbox=None, state=None, error=None, input=None):
     command = [str(binary), *args, "--isolated-root", str(root)]
-    if args[0] not in ("vault", "version", "process", "project"):
+    if args[0] not in ("vault", "version", "process", "project", "doctor"):
         command += ["--profile", profile]
     result = sandbox.run(command, check=False) if sandbox else subprocess.run(
         command, cwd=home, text=True, capture_output=True, input=input, timeout=20)
@@ -84,10 +84,14 @@ for protected in (False, True):
         "project-operations": (project_request, {"fingerprint": "b" * 64, "action": "up", "profile": profile, "directory": str(root), "items": [{"command": "web", "request_id": str(uuid.uuid4()), "done": True, "result": {"command": "web", "status": "failed", "changed": True}}]}),
     }
     for group, (request, receipt) in saved.items():
+        (data / group).mkdir(mode=0o700, exist_ok=True)
         path = data / group / "receipts" / (request + ".json")
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         path.write_text(json.dumps(receipt), encoding="utf-8")
         path.chmod(0o600)
+    # Saved v1 process receipts are prepared explicitly before testing passive
+    # reads. Current query paths cannot create their compact body or lock pair.
+    api("doctor", "--storage", "--fix")
     sandbox = Sandbox(data, scratch)
     queries = [(name, "list") for name in ("variable", "var", "secret", "sec", "env")]
     queries += [(name, "get", key, *scope) for name in ("variable", "var")

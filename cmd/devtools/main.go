@@ -187,7 +187,7 @@ func main() {
 	if len(os.Args) == 4 && os.Args[1] == "__dashboard-serve" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		if dashboard.Serve(ctx, os.Args[2], os.Args[3]) != nil {
+		if dashboard.Serve(ctx, os.Args[2], os.Args[3], cli.New(version, commit).DashboardContracts()) != nil {
 			os.Exit(1)
 		}
 		return

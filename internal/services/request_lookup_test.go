@@ -63,7 +63,7 @@ func TestLegacyRequestProjectionAndReadOnlyLookup(t *testing.T) {
 	if string(encoded) != legacy {
 		t.Fatalf("legacy fingerprint projection changed: %s", encoded)
 	}
-	s := Store{Data: t.TempDir()}
+	s := Store{Data: privateTempDir(t)}
 	if found, e := s.HasRequest(id); e != nil || found {
 		t.Fatal(found, e)
 	}
@@ -76,7 +76,7 @@ func TestLegacyRequestProjectionAndReadOnlyLookup(t *testing.T) {
 			t.Fatal(found, e)
 		}
 		var read receipt
-		if e := tasks.ReadPrivate(path, &read); e != nil || read.Done != done {
+		if e := s.readReceipt(path, &read); e != nil || read.Done != done {
 			t.Fatal(read, e)
 		}
 	}

@@ -103,6 +103,7 @@ func TestProcessRestartPreStopValidationPreservesRunningExecution(t *testing.T) 
 	if err := maintenance.Write(recordPath, body); err != nil {
 		t.Fatal(err)
 	}
+	prepareProcessFixture(t, data)
 	changed := "profile='app'\n[commands.web]\nexec=['/definitely-not-an-installed-review-executable']\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(changed), 0600); err != nil {
 		t.Fatal(err)
@@ -112,7 +113,7 @@ func TestProcessRestartPreStopValidationPreservesRunningExecution(t *testing.T) 
 	if code != 127 || out != "" || !strings.Contains(diagnostic, "\"code\":\"executable_not_found\"") {
 		t.Fatalf("restart: code=%d out=%q err=%q", code, out, diagnostic)
 	}
-	storedBytes, err := os.ReadFile(recordPath)
+	storedBytes, err := (services.Store{Data: data}).RecordBytes(id)
 	if err != nil {
 		t.Fatal(err)
 	}

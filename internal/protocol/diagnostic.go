@@ -252,7 +252,7 @@ func Public(e *Error, operation string) *Error {
 		if operation != "devtools" {
 			argv = append(argv, strings.Fields(operation)...)
 		}
-		remedies = []Remedy{{Argv: argv, RequiredInputs: []string{}, Message: "Inspect the accepted inputs and next actions for this operation.", Effect: "read"}}
+		remedies = []Remedy{{State: "ready", Argv: argv, RequiredInputs: []string{}, Message: "Inspect the accepted inputs and next actions for this operation.", Effect: "read"}}
 	}
 	retry := "after_input_change"
 	if copy.ExitCode == 1 {

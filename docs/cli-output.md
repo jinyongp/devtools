@@ -2,10 +2,14 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v22 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v23 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
+
+Protocol 23의 목록 범위·필터·페이지와 실행 가능한 복구 안내는
+[탐색과 복구 계약](cli-navigation.md)을 따릅니다. `process list`의 기본 목록은
+현재 서비스이며 실행 이력은 `--view history`로 선택합니다.
 
 ## 출력 종류 확인
 
@@ -79,7 +83,11 @@ stdout 선택이 JSON이면 stderr만 TTY여도 JSON 오류입니다. 기존 pro
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 22`입니다.
+`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 23`입니다.
+
+v23은 현재 서비스·실행 이력 분리, 명시적 목록 범위·필터·정렬·페이지·text 열 선택,
+`ready`/`needs_input`/`manual` 복구 행동과 공유 압축 이력 저장을 추가합니다.
+[탐색과 복구 계약](cli-navigation.md)을 함께 확인하세요.
 
 v22는 `init`의 선택적 profile과 `profile_source`/`profile_presence`, `doctor --storage [--fix]`,
 업데이트의 `binary_changed`/`storage` 결과, 실패한 중첩 조회의 안전한 `diagnostic`을 추가합니다.

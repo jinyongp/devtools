@@ -22,14 +22,14 @@
 - JSON envelopes use top-level `schema_version: 1`. Schema responses also report CLI protocol version. Neither belongs in project TOML.
 - Lists: `data.items`. Single resources: `data.item`. Scalars/reports keep named fields.
 - Mutations expose `data.changed`; retry-safe ones also expose `data.replayed`, including false.
-- Protocol 16 adds `cleanup preview.retention`; rediscover its schema. `verification_pending` omits partial buckets. A verified bucket distinguishes physical files/bytes from logical requests and states why cleanup is eligible or unavailable. Inventory does not authorize deletion.
+- `cleanup preview.retention` distinguishes physical files/bytes from logical requests and explains eligibility. Protocol 23 may show public buckets while protected verification remains pending; inspect each bucket's verification level. Inventory does not authorize deletion.
 - Protocol 17 preserves typed input-correction facts and JSON field paths in diagnostics. Operation indexes include zero; `observed_exact: false` marks a bounded-read observation rather than the full input size. `rule_id` and `options` identify a static option rule without returning input values. Rediscover the schema after an upgrade; request fingerprints and storage formats are unchanged.
 - Protocol 18 returns a nonzero `execution_failed` for a confirmed pre-spawn failure of `process start/restart`. Completed failure receipts replay the same execution without relaunch; inspect `facts.outage`, `previous_id`, `changed` and `replayed`. Terminal project failures use `inspect_first`; the same UUID resumes only unfinished children. Task forward moves reserve order membership once. Receipt and journal formats remain unchanged.
 - Replays preserve the original changed result; do not count another mutation or infer current health.
 - On supporting builds `vault rewrap` returns `item`, `request_id`, `changed`, `replayed`. Optional vault status `item.rewrap` is unverified routing metadata; pending recovery uses `details.target.request_id`, `retry:same_request` and scoped remedies.
 - Devtools errors use the selected format; schema and malformed format inputs use JSON. Existing prompts/child streams can precede the diagnostic. Completion/help/artifact/child/private stdout retains its own wire even with --format json.
 - Dashboard startup is structured output; explicitly request JSON to read the credential-bearing URL at `data.item.url`. Return it only to its user.
-- Text is a task-focused summary, not a complete diagnostic dump or stable parser interface. Typos show correction candidates; routine parser/effect/retry metadata stays in JSON. Partial/uncertain effects and same-request recovery remain explicit in readable language. Complete Next actions retain public argv as whole copyable shell lines; required inputs remain templates. Do not re-run a mutation to obtain another presentation.
+- Text summarizes the same selected rows as JSON. Typos show correction candidates; routine parser/effect/retry metadata stays in JSON. Partial/uncertain effects and same-request recovery remain explicit. Protocol 23 ready actions contain complete argv; needs_input actions provide inputs, public bindings and real acquisition steps without a fake mutation command. Do not re-run a mutation to obtain another presentation.
 
 ## Recover the same operation
 

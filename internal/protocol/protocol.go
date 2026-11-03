@@ -10,16 +10,28 @@ const (
 	// EnvelopeVersion versions the common success/error response wrapper.
 	EnvelopeVersion = 1
 	// ProtocolVersion versions the public CLI machine contract, including command data shapes.
-	ProtocolVersion = 22
+	ProtocolVersion = 23
 )
 
 // Error contains a stable code suitable for programmatic branching.
 type Remedy struct {
-	Relation       ActionRelation `json:"-"`
-	Effect         string         `json:"effect"`
-	Argv           []string       `json:"argv"`
-	RequiredInputs []string       `json:"required_inputs"`
-	Message        string         `json:"message"`
+	Bindings       map[string]string `json:"bindings,omitempty"`
+	Relation       ActionRelation    `json:"-"`
+	State          string            `json:"state"`
+	Effect         string            `json:"effect"`
+	Argv           []string          `json:"argv"`
+	RequiredInputs []string          `json:"required_inputs"`
+	Inputs         []ActionInput     `json:"inputs,omitempty"`
+	InputSteps     []Remedy          `json:"input_steps,omitempty"`
+	Message        string            `json:"message"`
+}
+
+// ActionInput describes acquisition, never the missing private value itself.
+type ActionInput struct {
+	Name        string   `json:"name"`
+	Source      string   `json:"source"`
+	Methods     []string `json:"methods"`
+	Description string   `json:"description"`
 }
 
 type Error struct {

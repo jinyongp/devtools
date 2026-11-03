@@ -10,7 +10,7 @@ func TestActionPreservesOnlyItsDeclaredStore(t *testing.T) {
 	c := InvocationContext{IsolatedRoot: "/chosen", Profile: "p", Env: "", ProfileKnown: true, EnvKnown: true}
 	a := LocalAction([]string{"devtools", "vault", "status"}, nil, "Inspect protection.", "read")
 	r := a.Remedy(c)
-	if strings.Join(r.Argv, " ") != "devtools vault status --isolated-root /chosen" {
+	if strings.Join(r.Argv, " ") != "devtools --isolated-root /chosen vault status" {
 		t.Fatal(r)
 	}
 	a.Relation = DestinationAction

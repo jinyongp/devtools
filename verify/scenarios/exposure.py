@@ -193,7 +193,7 @@ try:
  assert len(markers)==5 and all(json.loads(p.read_text())['state']=='stopped' for p in markers)
  print('Packaged provider supervision, auth loss/replay/redaction, route scope, one-second TOML/env-file source watcher, selected SSE/WebSocket revocation and HTTPS authority verified; live provider acceptance remains separate')
 finally:
- for item in api('expose','list')['items']:
+ for item in api('expose','list','--all-profiles')['items']:
   if item['state']!='stopped':mutate('expose','stop',item['id'])
  mutate('project','down','--dir',str(project))
  plan=api('proxy','teardown','--all')['item'];mutate('proxy','teardown','--all','--apply',plan['digest'])

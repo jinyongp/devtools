@@ -31,10 +31,7 @@ func (e Engine) retireCompletedTasks(c candidate, archive Archive, already bool)
 		return archive, fail("revision_conflict")
 	}
 	if !already {
-		if err := maintenance.Write(e.archivePath(c.ID, "payload"), snapshot.Data); err != nil {
-			return archive, fail("storage_error", err)
-		}
-		if err := write(e.archivePath(c.ID, "entry.json"), archive); err != nil {
+		if err := e.writeArchive(c.ID, snapshot.Data, archive); err != nil {
 			return archive, fail("storage_error", err)
 		}
 	}

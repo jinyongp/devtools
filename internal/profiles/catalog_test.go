@@ -3,7 +3,6 @@ package profiles
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -41,11 +40,7 @@ func writeProcessRecord(t *testing.T, data, profile string) {
 		t.Fatal(err)
 	}
 	record := services.Record{ID: id, Profile: profile, Directory: filepath.Join(data, "project"), Command: "web", Env: "local", State: "running"}
-	body, err := json.Marshal(record)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := writeProfileFixture(filepath.Join(directory, "record.json"), body); err != nil {
+	if err := (services.Store{Data: data}).RestoreRecord(record); err != nil {
 		t.Fatal(err)
 	}
 }

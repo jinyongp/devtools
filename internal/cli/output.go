@@ -20,31 +20,6 @@ var previewCommands = map[string]bool{
 // Invocation presentation metadata belongs at the public boundary, never in
 // value receipts, journals, replay fingerprints or persisted cursor identities.
 func previewResultContract(c *Command) {
-	if c.Name == "values execution list" {
-		c.Output["properties"].(map[string]any)["next_actions"] = arraySchema(remedySchema())
-		run := c.Run
-		c.Run = func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
-			value, failure := run(ctx, streams, r)
-			if failure != nil {
-				return value, failure
-			}
-			out := publicResultObject(value)
-			if out == nil {
-				return value, nil
-			}
-			if cursor, ok := out["next_cursor"].(string); ok && cursor != "" {
-				argv := []string{"devtools", "values", "execution", "list", "--profile", out["profile"].(string)}
-				for _, key := range []string{"limit", "query-cache-dir"} {
-					if v := r.Options[key]; v != "" {
-						argv = append(argv, "--"+key, v)
-					}
-				}
-				argv = append(argv, "--cursor", cursor)
-				out["next_actions"] = []protocol.Remedy{protocol.LocalAction(argv, nil, "Read the next page.", "read").Remedy(r.Invocation)}
-			}
-			return out, nil
-		}
-	}
 	if !previewCommands[c.Name] {
 		return
 	}
@@ -119,9 +94,13 @@ func changedItemOutput(item map[string]any) map[string]any {
 
 func remedySchema() map[string]any {
 	return object(map[string]any{
+		"state":           map[string]any{"enum": []string{"ready", "needs_input", "manual"}},
+		"bindings":        map[string]any{"type": "object", "additionalProperties": stringSchema()},
 		"effect":          map[string]any{"enum": []string{"read", "config_write", "value_write", "system_write"}},
 		"argv":            map[string]any{"type": "array", "items": stringSchema()},
 		"required_inputs": map[string]any{"type": "array", "items": stringSchema()},
 		"message":         stringSchema(),
-	}, "argv", "required_inputs", "message", "effect")
+		"inputs":          arraySchema(object(map[string]any{"name": stringSchema(), "source": stringSchema(), "methods": arraySchema(stringSchema()), "description": stringSchema()}, "name", "source", "methods", "description")),
+		"input_steps":     arraySchema(map[string]any{"type": "object"}),
+	}, "state", "argv", "required_inputs", "message", "effect")
 }

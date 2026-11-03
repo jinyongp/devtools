@@ -94,13 +94,13 @@ func (a *App) registerHosts() {
 				if e != nil {
 					return nil, e
 				}
-				argv := []string{"devtools", "proxy", "hosts", "apply", name, "--apply", result["digest"].(string), "--request-id", "REQUEST_UUID"}
+				argv := []string{"devtools", "proxy", "hosts", "apply", name, "--apply", result["digest"].(string), "--request-id", protocol.NewRequestID()}
 				if r.Options["global"] == "true" {
 					argv = append(argv, "--global")
 				} else {
 					argv = append(argv, "--dir", directory)
 				}
-				result["next_actions"] = []protocol.Remedy{protocol.LocalAction(argv, []string{"a new request UUID"}, "Apply the reviewed hosts mappings.", "system_write").Remedy(r.Invocation)}
+				result["next_actions"] = []protocol.Remedy{protocol.LocalAction(argv, nil, "Apply the reviewed hosts mappings.", "system_write").Remedy(r.Invocation)}
 				return result, nil
 			}
 			return (netops.Store{Data: m.Data}).Apply(ctx, r.Options["request-id"], struct {

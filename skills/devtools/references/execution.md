@@ -19,9 +19,8 @@
 On Linux/macOS, initialized value/task/profile queries, doctor input inspection,
 process status/claims and captured-log reads work with read-only data access while
 honoring the original writer locks. Missing locks or pending recovery can require
-writes: inspect `facts.state` and the scoped remedy. Protocol 22 uses
-`doctor --storage --fix` for root preparation/conversion; runtime lease remedies
-name their specific observer. Do not change permissions, remove locks, or elevate
+writes: inspect `facts.state` and the scoped remedy. Protocol 23 uses
+`doctor --storage --fix` for root/format/query-lock preparation. Do not change permissions, remove locks, or elevate
 automatically. Read denial remains a separate failure. Paginated task snapshots
 need a writable private cache (see [tasks.md](tasks.md)). Windows retains its
 native handle/lease protocol. Inspection does not unlock or renew a vault.
@@ -81,7 +80,7 @@ native handle/lease protocol. Inspection does not unlock or renew a vault.
 - Recovery argv for the same store retains the selected isolation root. Inspect
   `retry`, `effects`, and `required_inputs` before acting; passphrase unlock needs
   private stdin/file, while native unlock may need explicit OS authentication.
-- Protocol 22 task query preparation uses `doctor --storage --fix` with write access to the same store. Afterwards retry the original query and preserve its target, filters, directory and `--query-cache-dir`. The cache option is query-only, requires protocol 20, and must be repeated for continuations.
+- Protocol 23 query preparation uses `doctor --storage --fix` with write access to the same store. Afterwards retry the original target/filters/directory/cache. See [navigation.md](navigation.md) for current services, history, bounded pages and ready/missing-input actions.
 
 ## Restart and retry
 

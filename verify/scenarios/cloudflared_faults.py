@@ -60,7 +60,7 @@ def gone(pid):
 with fixture.network():
     mode.write_text("fail")
     start(error="cloudflared_exited_without_url")
-    failed = fixture.api("expose", "list")["items"][0]
+    failed = fixture.api("expose", "list", "--all-profiles", "--view", "history")["items"][0]
     assert failed["state"] == "recovery_required"
     with socket.socket() as probe:
         probe.settimeout(.5)

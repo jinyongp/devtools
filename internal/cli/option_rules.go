@@ -262,8 +262,14 @@ func optionRules(c *Command) []staticOptionRule {
 	if c.BodySchema != nil && (strings.HasPrefix(c.Name, "values execution ") || c.Name == "values runner register") {
 		rules = append(rules, jsonSourceRule(c.Name))
 	}
-	if strings.HasPrefix(c.Name, "port ") || c.Name == "instance list" || c.Name == "instance show" {
+	if strings.HasPrefix(c.Name, "port ") && c.Name != "port list" || c.Name == "instance show" {
 		add("forbid", "location", "Choose --instance or --dir.", supplied("instance"), supplied("dir"))
+	}
+	if c.Collection != nil && c.Collection.Scope == "project" {
+		add("forbid", "all-profile-selection", "Choose --all-profiles or --profile.", activated("all-profiles"), supplied("profile"))
+		for _, name := range []string{"profile", "dir", "instance", "all-profiles"} {
+			add("forbid", "global-"+name, "--global excludes --"+name+".", activated("global"), supplied(name))
+		}
 	}
 	if strings.HasPrefix(c.Name, "task ") && c.BodySchema != nil {
 		add("forbid", "body-source", "Choose JSON file or stdin.", supplied("file"), activated("stdin"))

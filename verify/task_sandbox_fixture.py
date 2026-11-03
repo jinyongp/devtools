@@ -61,7 +61,7 @@ def run(binary, baseline, probe, trace=None):
         assert baseline_identity["version"]["commit"] == BASELINE_COMMIT
         assert baseline_identity["version"]["protocol_version"] == 19
         candidate_identity = identity(binary, environment, scratch)
-        assert candidate_identity["version"]["protocol_version"] == 22
+        assert candidate_identity["version"]["protocol_version"] == 23
         trace_reports = []
 
         def argv(arguments, selected=binary):
@@ -175,7 +175,8 @@ def run(binary, baseline, probe, trace=None):
                     failure = api(*query, "--query-cache-dir", cache, sandbox=sandbox, error="storage_error")
                     assert failure["details"]["facts"]["resource"] == "query_cache"
                     remedy = failure["details"]["remedies"][0]
-                    assert "--query-cache-dir" in remedy["argv"] and remedy["effect"] == "value_write"
+                    assert remedy["state"] == "needs_input" and remedy["argv"] == [] and remedy["effect"] == "value_write"
+                    assert remedy["inputs"] and remedy["input_steps"]
             else:
                 api("list", "--limit", "1", "--query-cache-dir", cache, sandbox=sandbox, traced=bool(sandbox))
                 api("tree", "--limit", "1", "--query-cache-dir", cache, sandbox=sandbox, traced=bool(sandbox))
@@ -224,7 +225,11 @@ def run(binary, baseline, probe, trace=None):
         mutate("add", "--title", "Old writer after candidate", selected=baseline)
         current = api("list", "--limit", "200", sandbox=sandbox)
         assert current["revision"] == previous + 1 and len(current["items"]) == 52
-        assert api("list", "--limit", "200", selected=baseline) == current
+        old = api("list", "--limit", "200", selected=baseline)
+        # Protocol 23 adds selection/page metadata. The original writer's
+        # journal revision and every ordered item must remain interoperable.
+        assert old["revision"] == current["revision"] and old["items"] == current["items"]
+        assert old["next_cursor"] is None and current["next_cursor"] is None
 
         # Failed writable preparation is explicit and leaves the RO store alone.
         profile_path.unlink()
@@ -233,7 +238,7 @@ def run(binary, baseline, probe, trace=None):
         details = failure["details"]
         assert details["facts"]["state"] == "initialization_required" and details["effects"] == "unknown"
         remedy = details["remedies"][0]
-        assert remedy["argv"][:4] == ["devtools", "doctor", "--storage", "--fix"] and remedy["effect"] == "value_write"
+        assert remedy["argv"] == ["devtools", "--isolated-root", str(root), "doctor", "--storage", "--fix"] and remedy["effect"] == "value_write"
         assert remedy["argv"][remedy["argv"].index("--isolated-root") + 1] == str(root)
         assert inventory(data) == before
         # Darwin is allow-default outside explicit deny paths. Deny both the

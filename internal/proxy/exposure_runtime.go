@@ -104,6 +104,8 @@ func (r *networkRuntime) exposure(q exposureRPCRequest) (expose.Public, *protoco
 			}
 		}
 		record.State = "stopped"
+		now := time.Now().UTC()
+		record.EndedAt = &now
 		record.Reason = "stop_requested"
 		if e := store.Write(record); e != nil {
 			return record.Public, e
@@ -364,7 +366,10 @@ func (x *exposureRuntime) stop(reason string) (expose.Public, *protocol.Error) {
 	x.mu.Lock()
 	x.auth = ""
 	x.record.State = "stopped"
+	now := time.Now().UTC()
+	x.record.EndedAt = &now
 	if reason != "stop_requested" {
+		x.record.EndedAt = nil
 		x.record.State = "recovery_required"
 		if reason == "daemon_stopped" && x.record.Auth {
 			x.record.State = "auth_required"

@@ -25,7 +25,7 @@ func TestReportsPreserveCompletedDeliveryAndTerminalResults(t *testing.T) {
 		t.Fatal("start report", e)
 	}
 	replay, e := s.Report(ctx, approved.Item.ID, requestID(700), input)
-	if e != nil || !replay.Replayed || replay.Item != started.Item {
+	if e != nil || !replay.Replayed || !sameExecution(replay.Item, started.Item) {
 		t.Fatal("report replay", e)
 	}
 	input.Revision = started.Item.Revision
@@ -49,7 +49,7 @@ func TestReportsPreserveCompletedDeliveryAndTerminalResults(t *testing.T) {
 		t.Fatal("terminal conflict accepted", e)
 	}
 	replay, e = s.Deliver(ctx, approved.Item.ID, requestID(701), RevisionInput{2})
-	if e != nil || !replay.Replayed || replay.Item != delivered.Item {
+	if e != nil || !replay.Replayed || !sameExecution(replay.Item, delivered.Item) {
 		t.Fatal("report rewrote completed delivery", e)
 	}
 	waitCount(t, &effects, 1)

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/jinyongp/devtools/internal/cli/presentation"
 	"github.com/jinyongp/devtools/internal/cliui"
@@ -31,6 +32,7 @@ type IO struct {
 }
 
 type Option struct {
+	Unique      bool             `json:"unique,omitempty"`
 	Completion  completionSource `json:"-"`
 	Repeatable  bool             `json:"repeatable,omitempty"`
 	Boolean     bool             `json:"boolean,omitempty"`
@@ -44,6 +46,7 @@ type Option struct {
 }
 
 type Command struct {
+	Collection  *collectionContract                                       `json:"-"`
 	Workflow    []string                                                  `json:"workflow,omitempty"`
 	Examples    []string                                                  `json:"examples"`
 	BodyExample any                                                       `json:"body_example,omitempty"`
@@ -64,6 +67,7 @@ type Command struct {
 }
 
 type App struct {
+	actionContracts  *sync.Map
 	observeOutput    func(IO) presentation.Environment
 	buildDocument    func(string, []byte) (cliui.Document, error)
 	renderDocument   func(cliui.Document, cliui.Options) ([]byte, error)
@@ -86,6 +90,7 @@ type Argument struct {
 	Pattern    string           `json:"pattern,omitempty"`
 }
 type Request struct {
+	Scope         *collectionScope
 	OutputFormat  presentation.Format
 	Agent         bool
 	Invocation    protocol.InvocationContext
@@ -109,6 +114,7 @@ func stringSchema() map[string]any { return map[string]any{"type": "string"} }
 
 func New(version, commit string) *App {
 	a := &App{
+		actionContracts:  &sync.Map{},
 		passphrasePrompt: readTerminalPassphrase,
 		dataDirectory:    userDataDirectory,
 		proxyManager:     func(data string) proxy.Manager { return proxy.Manager{Data: data} },
@@ -171,7 +177,7 @@ func New(version, commit string) *App {
 	a.registerCompletion()
 	for i := range a.commands {
 		if a.commands[i].Name == "proxy list" {
-			a.commands[i].Description = "List routes and instance problems across all profiles and global scope."
+			a.commands[i].Description = "List current project routes and instance problems; select --all-profiles for every profile and global scope."
 			for j := range a.commands[i].Options {
 				o := &a.commands[i].Options[j]
 				if o.Name == "profile" {
@@ -206,6 +212,7 @@ func New(version, commit string) *App {
 		}
 	}
 	for i := range a.commands {
+		a.collectionContract(&a.commands[i])
 		staticContract(&a.commands[i])
 		previewResultContract(&a.commands[i])
 		if a.commands[i].OutputMode == "" {
@@ -415,7 +422,29 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	}
 	output.invocation = request.Invocation
 	output.requestID = request.Options["request-id"]
+	if selected.Collection != nil && len(request.ListOptions["columns"]) > 0 && output.decision.Format != presentation.FormatText {
+		argv := collectionArgv(*selected, request, request.Options["cursor"])
+		return fail(protocol.NewError("invalid_argument", "--columns requires text output. Select --format text explicitly, including in agents and pipes.", 2, map[string]any{"phase": "parse", "field": "columns", "remedies": []protocol.Remedy{protocol.LocalAction(argv, nil, "Read the same selection as a text table.", "read").Remedy(request.Invocation)}}))
+	}
 	output.displayContext = commandDisplayContext(selected.Name, request)
+	if selected.Collection != nil && len(request.ListOptions["columns"]) > 0 {
+		for _, name := range request.ListOptions["columns"] {
+			display := ""
+			if name == "state" || name == "current_state" {
+				display = "state"
+			}
+			if name == "exec" {
+				display = "argv"
+			}
+			if name == "last_attempt" {
+				display = "attempt"
+			}
+			if name == "ended_at" {
+				display = "ended"
+			}
+			output.displayContext.Columns = append(output.displayContext.Columns, presentation.ViewColumn{Path: selected.Collection.Columns[name], Label: strings.ReplaceAll(name, "_", " "), Display: display})
+		}
+	}
 	request.OutputFormat, request.Agent = output.decision.Format, len(environment.Signals) > 0
 	data, err := selected.Run(ctx, streams, request)
 	if err != nil {
@@ -444,6 +473,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		return fail(err)
 	}
 	output.handlerReturned = true
+	a.maintainAfterWrite(ctx, selected.Name, request)
 	if selected.OutputMode == OutputPassthrough {
 		if result, ok := data.(processResult); ok {
 			return result.ExitCode

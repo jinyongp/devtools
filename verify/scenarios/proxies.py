@@ -85,7 +85,7 @@ try:
     conflict = config(24301).replace('host="${instance.alias}.${profile}.localhost"', 'host="main.shop.localhost"')
     (feature / "devtools.toml").write_text(conflict)
     assert status(24400, "main.shop.localhost") == 503
-    routes = [route for route in api("proxy", "list")["items"] if route["host"] == "main.shop.localhost"]
+    routes = [route for route in api("proxy", "list", "--profile", "shop")["items"] if route["host"] == "main.shop.localhost"]
     assert len(routes) == 2 and all(route["status"] == "host_conflict" for route in routes), routes
     (feature / "devtools.toml").write_text(config(24301))
     assert read(24400, "feature.shop.localhost") == "feature"
@@ -146,7 +146,7 @@ try:
     }
     registry.write_text(json.dumps(legacy))
     legacy_bytes = registry.read_bytes()
-    assert all(r["status"] == "ready" for r in api("proxy", "list")["items"])
+    assert all(r["status"] == "ready" for r in api("proxy", "list", "--profile", "shop")["items"])
     assert registry.read_bytes() == legacy_bytes, "Read migrated the legacy registry"
     with socket.socket() as candidate:
         candidate.bind(("127.0.0.1", 0))
@@ -176,7 +176,7 @@ try:
     (feature / "devtools.toml").write_text(saved)
     mutate("stop");running = False
     mutate("start");running = True
-    items = api("proxy", "list")["items"]
+    items = api("proxy", "list", "--profile", "shop")["items"]
     assert next(r for r in items if r["host"] == "feature.shop.localhost")["status"] == "inactive"
     assert b"replacement" in https_read("main.shop.localhost")
     api("proxy", "up", "app", "--dir", str(feature), "--request-id", str(uuid.uuid4()))

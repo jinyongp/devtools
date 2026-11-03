@@ -6,7 +6,7 @@
 - `vault status` is passive. Public-only roots need no vault; protected-root value writes/execution require authentication even for a public profile. No-injection commands keep their behavior.
 - Before the first secret, use one-time `vault init` with existing native protection, or explicitly choose `--backend passphrase` on a keyringless host. Isolated roots require passphrase protection.
 - Do not install/start a keyring or silently switch backends.
-- Native authentication UI requires `--interactive`. Use hidden terminal input or explicit private-file/piped input; never put a passphrase in argv/env.
+- Native authentication UI requires `vault unlock --interactive`. Bare `vault unlock` forbids OS prompts and may fail with `key_interaction_required`; run the explicit interactive command in the user's desktop session. Passphrase vaults instead use hidden terminal input or explicit private-file/piped input; never put a passphrase in argv/env.
 - Reuse a warm key session across commands/profiles. Do not initialize/unlock for every command.
 - Manual lock survives daemon restart; passphrase sessions need explicit unlock after idle expiry. Metadata/diagnostics do not unlock or extend idle.
 - Lock cannot revoke values already delivered to apps.

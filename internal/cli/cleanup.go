@@ -3,12 +3,35 @@ package cli
 import (
 	"context"
 	"path/filepath"
+	"strconv"
 
 	"github.com/jinyongp/devtools/internal/cleanup"
+	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 func (a *App) registerCleanup() {
+	maintenanceItem := object(map[string]any{"id": stringSchema(), "kind": stringSchema(), "reason": stringSchema(), "eligible": boolSchema(), "changed": boolSchema()}, "id", "kind", "reason", "eligible", "changed")
+	count := map[string]any{"type": "integer", "minimum": 0}
+	maintenanceOutput := object(map[string]any{"items": arraySchema(maintenanceItem), "examined": count, "changed": count, "reclaimed_bodies": count, "has_more": boolSchema(), "dry_run": boolSchema(), "verification_pending": boolSchema()}, "items", "examined", "changed", "reclaimed_bodies", "has_more", "dry_run", "verification_pending")
+	a.commands = append(a.commands, Command{Name: "cleanup maintain", Description: "Inspect or run a bounded pass of automatic artifact retention; does not purge manual archives or user tasks.", Options: []Option{{Name: "profile", Pattern: project.ProfilePattern, Description: "Restrict maintenance to one profile."}, {Name: "limit", Default: "32", Pattern: positiveIntegerPattern, Description: "Maximum owned artifacts examined, from 1 to 200."}, {Name: "dry-run", Boolean: true, Description: "Report eligibility without changing artifacts or the saved position."}}, Output: maintenanceOutput, Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
+		dirs, err := a.currentPaths()
+		if err != nil {
+			return nil, argumentError("Cannot resolve directories.", "")
+		}
+		dir, condition := a.dataDirectory()
+		if condition != nil {
+			return nil, condition
+		}
+		if filepath.Clean(dirs.Data) != filepath.Clean(filepath.Dir(dir)) {
+			dirs.Cache = ""
+		}
+		limit, err := strconv.Atoi(r.Options["limit"])
+		if err != nil || limit < 1 || limit > 200 {
+			return nil, argumentError("--limit must be between 1 and 200.", "cleanup maintain")
+		}
+		return (cleanup.Engine{Data: filepath.Dir(dir), Cache: dirs.Cache, Config: dirs.Config}).Maintain(ctx, r.Options["profile"], limit, r.Options["dry-run"] == "true")
+	}})
 	descriptions := map[string]string{
 		"preview":  "Preview recoverable storage cleanup.",
 		"apply":    "Archive selected items from a cleanup preview.",

@@ -15,7 +15,7 @@
 
 ## Storage formats and updates
 
-On protocol 22, `doctor --storage` inspects the selected data root without writes;
+On protocol 23, `doctor --storage` inspects the selected data root without writes;
 `doctor --storage --fix` prepares, recovers, converts known formats and rechecks them.
 Ordinary reads and writes report `migration_required` instead of converting old
 profiles, physical task journals or receipts. Current logical task history remains readable.
@@ -65,5 +65,6 @@ package ownership and provide that next step. Do not downgrade a binary as data 
 - Partial failure: inspect error details and archives; do not assume rollback.
 - Cleanup archives, not purges. Inspect `cleanup archives`; recover with `cleanup restore ARCHIVE_ID`. Changed original location causes conflict.
 - `cleanup purge ARCHIVE_ID` permanently removes eligible payload after retention; requires explicit deletion scope.
-- Protocol 16 `cleanup preview` adds `retention.verification` and, only after a complete check, buckets with kind/lifecycle/scope, files/logical_items/bytes, verification and cleanup eligibility/reason. Root query caches remain separate from profile filters. A pending check has no partial totals. Protected metadata is authenticated; public/legacy metadata retains existing verification semantics. Payload `record_verified` measures private ciphertext bytes through its authenticated record without decrypting the payload. No inventory starts/unlocks a session, extends idle time, deletes receipts or sweeps expired payloads.
+- `cleanup preview` reports retention buckets with verification and eligibility/reason. Protocol 23 can include public buckets while protected verification is pending; do not treat them as authenticated protected totals. Payload bytes are measured without decrypting them. Inventory never unlocks/renews a session or deletes data.
+- `cleanup maintain --dry-run` inspects the next bounded owned pass; omit dry-run only for authorized maintenance. Resolved details expire at 30 days, captures at 7 days, query snapshots at 30 minutes. Related writes resume automatic maintenance. Live/unknown/recovery references, exact replay/restore bodies and user tasks retain their own lifetime. See [navigation.md](navigation.md).
 - Restore/purge use archive IDs, no request UUID, and are repeatable. Port release/prune and proxy teardown remain separate operations.

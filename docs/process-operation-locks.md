@@ -73,7 +73,9 @@ the existing RW lock stops new readers from starving queued maintenance.
 
 Singleton discovery filters stored records by profile/root/command **before**
 contacting supervisors. Unrelated instances must not add RPC waits to a start.
-Public process list remains a full observation operation.
+Public process list reads historical metadata once and contacts only selected
+executions whose result is still live or unresolved. Closed historical bodies
+and value payloads are reserved for explicit detail reads.
 
 ## Failure and recovery
 

@@ -35,6 +35,9 @@ func (s Store) cleanupReplay(ctx context.Context, a *access, id string) error {
 	if err != nil {
 		return err
 	}
+	if r.Item.DeliveryState == "delivering" || r.Item.DeliveryState == "unknown" {
+		return nil
+	}
 	pending := r.Item.DeliveryState == "prepared" || r.Item.DeliveryState == "approved"
 	expired := pending && !time.Now().Before(r.Item.ExpiresAt)
 	if pending && !expired {
@@ -51,6 +54,7 @@ func (s Store) cleanupReplay(ctx context.Context, a *access, id string) error {
 	if expired && r.Item.Revision < math.MaxUint64 {
 		r.Item.Revision++
 		r.Item.DeliveryState = "expired"
+		r.Item.UpdatedAt, r.Item.EndedAt = &r.Item.ExpiresAt, &r.Item.ExpiresAt
 		rp := s.path("value-executions", id)
 		files[rp], err = s.encode(ctx, a, rp, id, vault.MaterialExecutionRecord, r)
 		if err != nil {

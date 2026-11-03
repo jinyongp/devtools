@@ -77,7 +77,7 @@ func TestProfilesEndpointIncludesPassiveProcessProfiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	record := services.Record{ID: id, Profile: "process-only", Directory: filepath.Join(root, "project")}
-	if err := tasks.WritePrivate(filepath.Join(processDirectory, "record.json"), record); err != nil {
+	if err := (services.Store{Data: root}).RestoreRecord(record); err != nil {
 		t.Fatal(err)
 	}
 

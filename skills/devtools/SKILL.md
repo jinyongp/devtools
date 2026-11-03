@@ -47,6 +47,9 @@ Use this skill alongside the source-work workflow. Do not create task records me
 - On protocol 13 and later, syntax examples may contain placeholders. Follow `workflow` for
   real revisions/IDs and new UUID versus identical-input retry. `values execution
   status` accepts one execution ID or `--request-id`, never both.
+- Protocol 23 collection queries use bounded pages and current views by default.
+  Follow [navigation.md](references/navigation.md) for scope, history, filters,
+  cursor/cache conditions, and ready versus missing-input recovery actions.
 - Ordinary operation needs the installed CLI and these bundled references, not a separate devtools source checkout.
 
 ## Keep scope and state explicit

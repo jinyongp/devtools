@@ -84,6 +84,7 @@ func BuildWithInputs(command string, public []byte, inputs []InputHint) (cliui.D
 // DisplayContext is supplied only by explicit CLI allowlists. It contains public
 // target names and scope, never raw options, child arguments or secret values.
 type DisplayContext struct {
+	Columns                          []ViewColumn
 	Target, Destination, Environment string
 	EnvironmentKnown                 bool
 	MembersKnown                     bool
@@ -104,6 +105,16 @@ func BuildWithContext(command string, public []byte, inputs []InputHint, context
 		return conciseError(e.value.(map[string]any), inputs), nil
 	}
 	definition := DefinitionFor(command)
+	if len(context.Columns) > 0 && e.ok {
+		if data, ok := e.value.(map[string]any); ok {
+			if items, ok := data["items"].([]any); ok {
+				blocks := []cliui.Block{cliui.Heading(cliui.Literal(definition.Title), 1)}
+				blocks = append(blocks, inventoryTable(inventoryLayout{columns: context.Columns}, items))
+				blocks = append(blocks, inventoryNotes(data)...)
+				return cliui.NewDocument(blocks...), nil
+			}
+		}
+	}
 	definition.Target, definition.Destination = context.Target, context.Destination
 	definition.MembersKnown, definition.MemberNames = context.MembersKnown, append([]string(nil), context.MemberNames...)
 	if data, ok := e.value.(map[string]any); ok && context.EnvironmentKnown {
@@ -268,6 +279,7 @@ func actionBlocks(value any) ([]cliui.Block, bool) {
 			return nil, false
 		}
 		message, ok := action["message"].(string)
+		state, _ := action["state"].(string)
 		argv, argvOK := stringArray(action["argv"])
 		inputs, inputsOK := stringArray(action["required_inputs"])
 		if !ok || !argvOK || !inputsOK {
@@ -295,8 +307,26 @@ func actionBlocks(value any) ([]cliui.Block, bool) {
 		if len(inputs) > 0 {
 			result = append(result, cliui.Paragraph(cliui.Words("Requires: "+strings.Join(inputs, ", ")+".")))
 		}
-		if len(argv) == 0 {
+		if bindings, ok := action["bindings"].(map[string]any); ok && len(bindings) > 0 {
+			keys := make([]string, 0, len(bindings))
+			for key := range bindings {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			fields := []cliui.Field{}
+			for _, key := range keys {
+				fields = append(fields, cliui.Field{Label: cliui.Literal("Keep " + key), Value: display(bindings[key])})
+			}
+			result = append(result, cliui.Fields(fields...))
+		}
+		if steps, ok := actionBlocks(action["input_steps"]); ok {
+			result = append(result, steps...)
+		}
+		if len(argv) == 0 || state == "needs_input" {
 			continue
+		}
+		if state == "manual" {
+			result = append(result, cliui.Paragraph(cliui.Literal("Manual step:")))
 		}
 		if len(inputs) > 0 {
 			result = append(result, cliui.Paragraph(cliui.Literal("Command template:")))

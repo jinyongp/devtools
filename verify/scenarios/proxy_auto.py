@@ -135,7 +135,7 @@ def request(host, tls=False):
 
 
 try:
-    assert api("version")["protocol_version"] == 22
+    assert api("version")["protocol_version"] == 23
     mutate("proxy", "configure", "--http-address", f"127.0.0.1:{http_port}", "--https-address", f"127.0.0.1:{tls_port}")
     api("instance", "name", "main")
     for flag in ("--no-proxy", "--proxy=false"):
@@ -217,6 +217,9 @@ try:
     receipt.write_text(json.dumps({"fingerprint": digest, "done": True,
                                   "result": {"item": {"id": legacy_id}, "changed": False, "replayed": False}}))
     receipt.chmod(0o600)
+    # Convert the old receipt explicitly; replay itself must remain passive
+    # and independent of current project declarations.
+    api("doctor", "--storage", "--fix")
     (root / "devtools.toml").write_text(missing)
     replay = api("process", "start", "probe", "--request-id", legacy_id)
     assert replay["replayed"] and not replay["item"].get("proxy_mode", False)

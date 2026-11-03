@@ -36,19 +36,7 @@ func TestReadGuidanceMatchesPublishedRegistry(t *testing.T) {
 		if len(remedy.RequiredInputs) != 0 {
 			t.Fatal("read action unexpectedly needs unresolved input", remedy)
 		}
-		matched := false
-		for _, command := range a.commands {
-			for _, name := range append([]string{command.Name}, command.Aliases...) {
-				words := strings.Fields(name)
-				if len(remedy.Argv) < len(words)+1 || strings.Join(remedy.Argv[1:1+len(words)], " ") != name {
-					continue
-				}
-				if _, e := parseRequest(command, remedy.Argv[1+len(words):]); e == nil {
-					matched = true
-				}
-			}
-		}
-		if !matched {
+		if e := a.ResolveAction(remedy.Argv); e != nil {
 			t.Fatal("read action does not satisfy the published registry", remedy)
 		}
 	}

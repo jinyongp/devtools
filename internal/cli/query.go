@@ -9,8 +9,11 @@ func (a *App) scopeQueryRemedy(failure *protocol.Error, env string) {
 	}
 	remedies, _ := failure.Details["remedies"].([]protocol.Remedy)
 	for i := range remedies {
-		if env != "" && len(remedies[i].Argv) > 1 && remedies[i].Argv[1] != "doctor" {
-			remedies[i].Argv = append(remedies[i].Argv, "--env", env)
+		if env != "" {
+			candidate := append(append([]string{}, remedies[i].Argv...), "--env", env)
+			if a.ResolveAction(candidate) == nil {
+				remedies[i].Argv = candidate
+			}
 		}
 		r := remedies[i]
 		remedies[i] = protocol.LocalAction(r.Argv, r.RequiredInputs, r.Message, r.Effect).Remedy(protocol.InvocationContext{IsolatedRoot: a.isolatedRoot})

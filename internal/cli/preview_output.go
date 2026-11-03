@@ -72,11 +72,10 @@ func previewApplyAction(c Command, r Request, out map[string]any) protocol.Remed
 	for _, option := range c.Options {
 		name := option.Name
 		if name == "request-id" {
-			appendValue(name, "REQUEST_UUID")
-			required = append(required, "a new request UUID")
+			appendValue(name, protocol.NewRequestID())
 			continue
 		}
-		if name == "dry-run" || name == "apply" || name == "check" || name == "isolated-root" {
+		if name == "dry-run" || name == "apply" || name == "check" || name == "isolated-root" || name == "preview-digest" {
 			continue
 		}
 		_, supplied := r.OptionOffsets[name]
@@ -87,7 +86,6 @@ func previewApplyAction(c Command, r Request, out map[string]any) protocol.Remed
 			continue
 		}
 		if name == "identity-file" || name == "passphrase-file" {
-			appendValue(name, "PRIVATE_FILE")
 			required = append(required, "the same private --"+name+" input")
 			continue
 		}
@@ -102,7 +100,6 @@ func previewApplyAction(c Command, r Request, out map[string]any) protocol.Remed
 		}
 		if !public[name] {
 			required = append(required, "the same --"+name+" selection")
-			appendValue(name, "VALUE")
 			continue
 		}
 		if option.Boolean {
@@ -147,6 +144,11 @@ func previewApplyAction(c Command, r Request, out map[string]any) protocol.Remed
 				}
 			}
 		}
+		if option.Name == "preview-digest" {
+			if digest, ok := out["candidate_digest"].(string); ok && digest != "" {
+				appendValue("preview-digest", digest)
+			}
+		}
 	}
 	if c.Name == "config migrate" || c.Name == "backup restore" || c.Name == "profile import" || c.Name == "proxy teardown" {
 		digest, _ := out["apply_digest"].(string)
@@ -159,14 +161,13 @@ func previewApplyAction(c Command, r Request, out map[string]any) protocol.Remed
 			}
 		}
 		if digest == "" {
-			digest = "DIGEST"
 			required = append(required, "the matching preview digest")
+		} else {
+			appendValue("apply", digest)
 		}
-		appendValue("apply", digest)
 	}
 	if c.Name == "command add" && len(r.Child) > 0 {
-		argv = append(argv, "--", "PROGRAM", "ARGUMENTS...")
-		required = append(required, "the reviewed executable and arguments")
+		argv = append(append(argv, "--"), r.Child...)
 	}
 	effect := "config_write"
 	if strings.HasPrefix(c.Name, "bundle ") || c.Name == "backup restore" || c.Name == "profile import" {
@@ -179,5 +180,21 @@ func previewApplyAction(c Command, r Request, out map[string]any) protocol.Remed
 	if c.Name == "config fmt" {
 		message = "Apply the reviewed formatting."
 	}
-	return protocol.LocalAction(argv, required, message, effect).Remedy(r.Invocation)
+	action := protocol.LocalAction(argv, required, message, effect).Remedy(r.Invocation)
+	if len(required) > 0 {
+		// Preserve acquisition metadata without publishing private paths, body
+		// values or child arguments beside an unfinished executable template.
+		action.Bindings = protocol.ActionBindings(action.Argv)
+		for i, arg := range c.Arguments {
+			if i < len(r.Args) && (arg.Name == "name" || arg.Name == "key" || arg.Name == "command") {
+				if action.Bindings == nil {
+					action.Bindings = map[string]string{}
+				}
+				action.Bindings[arg.Name] = r.Args[i]
+			}
+		}
+		action.State, action.Argv = "needs_input", []string{}
+		action.InputSteps = []protocol.Remedy{{Argv: append([]string{"devtools", "help"}, strings.Fields(c.Name)...), RequiredInputs: []string{}, Message: "Inspect how to re-supply the reviewed inputs, then preview again.", Effect: "read"}}
+	}
+	return action
 }

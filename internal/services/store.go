@@ -46,10 +46,17 @@ func writePrivate(path string, v any) error {
 	if e := tasks.PrivateDir(filepath.Dir(path)); e != nil {
 		return e
 	}
+	if r, ok := v.(Record); ok && filepath.Base(path) == "record.json" {
+		return writeRecord(path, r)
+	}
+	if r, ok := v.(receipt); ok {
+		return writeReceipt(path, r)
+	}
 	return tasks.WritePrivate(path, v)
 }
 
 type Record struct {
+	DetailRetired     bool                 `json:"-"`
 	ValueApply        *ValueApplyStatus    `json:"value_apply,omitempty"`
 	AutoOrigin        string               `json:"auto_origin,omitempty"`
 	AutoRestarts      []time.Time          `json:"auto_restarts,omitempty"`
@@ -194,19 +201,26 @@ func storageError(causes ...error) *protocol.Error {
 	if len(causes) != 0 {
 		cause = causes[0]
 	}
-	return protocol.WithStorageDetails(protocol.NewError("io_error", "Cannot access private process storage.", 1, nil), "services", "access_storage", "process_store", cause)
+	return storageErrorAt("access_storage", cause)
 }
 
 // Safe failure metadata retains the operation and numeric OS error without
 // exposing a path, record, argv, or control credential.
 func storageErrorAt(operation string, cause error) *protocol.Error {
+	var required *protocol.Error
+	if errors.As(cause, &required) && required.Code == "migration_required" {
+		return required
+	}
 	condition := protocol.WithStorageDetails(protocol.NewError("io_error", "Cannot access private process storage.", 1, nil), "services", operation, "process_store", cause)
 	var preparation *maintenance.QueryPreparationError
 	if errors.As(cause, &preparation) {
 		condition.Details["state"] = preparation.State
 		condition.Details["effects"] = "unknown"
+		if preparation.Passive {
+			condition.Details["effects"] = "none"
+		}
 		condition.Details["retry"] = "after_dependency_change"
-		condition.Details["remedies"] = []protocol.Remedy{{Relation: protocol.SameStoreAction, Argv: []string{"devtools", "process", "logs"}, RequiredInputs: []string{"execution_id"}, Effect: "value_write", Message: "Repeat this log query with its execution ID in a context with write access to initialize the missing log lock, then retry."}}
+		condition.Details["remedies"] = []protocol.Remedy{{Relation: protocol.SameStoreAction, Argv: []string{"devtools", "doctor", "--storage", "--fix"}, RequiredInputs: []string{}, Effect: "value_write", Message: "Explicitly prepare missing process query locks, then retry this read."}}
 	}
 	return condition
 }
@@ -266,8 +280,7 @@ func (s Store) inspectLocal(id string) (storedExecution, *protocol.Error) {
 		return stored, storageErrorAt("inspect_execution_directory", err)
 	}
 
-	var record Record
-	recordErr := tasks.ReadPrivate(s.path(id, "record.json"), &record)
+	record, recordErr := s.recordAt(s.path(id, "record.json"))
 	if recordErr != nil && !errors.Is(recordErr, os.ErrNotExist) {
 		return stored, storageErrorAt("read_execution_record", recordErr)
 	}
@@ -490,8 +503,7 @@ func (s Store) RemoveArchiveMarker(id, archiveID string) *protocol.Error {
 	if marker.ArchiveID != archiveID {
 		return failure("revision_conflict")
 	}
-	var record Record
-	recordErr := tasks.ReadPrivate(s.path(id, "record.json"), &record)
+	record, recordErr := s.recordAt(s.path(id, "record.json"))
 	if recordErr == nil {
 		if !validRecord(id, record) || !markerMatchesRecord(marker, record) {
 			return failure("revision_conflict")
@@ -689,12 +701,22 @@ func (s Store) ProfileNames() ([]string, *protocol.Error) {
 	return items, nil
 }
 func (s Store) Active(ctx context.Context, instance string) *protocol.Error {
-	items, e := s.List(ctx, "")
+	items, e := s.StoredRecords()
 	if e != nil {
 		return e
 	}
 	for _, r := range items {
-		if r.Instance == instance && ((r.EndedAt == nil && r.State != "interrupted") || !s.leaseFree(ctx, r.ID)) {
+		if r.Instance != instance {
+			continue
+		}
+		if r.EndedAt == nil {
+			live, err := s.statusRecord(ctx, r)
+			if err != nil {
+				return err
+			}
+			r = live
+		}
+		if (r.EndedAt == nil && r.State != "interrupted") || !s.leaseFree(ctx, r.ID) {
 			return failure("process_active")
 		}
 	}
@@ -734,7 +756,7 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	receiptPath := filepath.Join(s.root(), "receipts", q.RequestID+".json")
 	var old receipt
 	receiptExists := false
-	if e = tasks.ReadPrivate(receiptPath, &old); e == nil {
+	if e = s.readReceipt(receiptPath, &old); e == nil {
 		receiptExists = true
 		if old.Fingerprint != fingerprint {
 			return out, failure("request_conflict")
@@ -766,6 +788,14 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 		if err := writePrivate(receiptPath, receipt{Fingerprint: fingerprint}); err != nil {
 			return out, storageErrorAt("prepare_operation_receipt", err)
 		}
+	}
+	attempt, attemptErr := s.prepareAttempt(q)
+	if attemptErr != nil {
+		return out, attemptErr
+	}
+	attempt.State, attempt.Reason, attempt.EndedAt = "starting", "", nil
+	if attemptErr := s.saveAttempt(attempt, Result{}, nil); attemptErr != nil {
+		return out, attemptErr
 	}
 	var err *protocol.Error
 	switch q.Action {
@@ -905,6 +935,9 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	launchErr := launchResultFailure(q.Action, out)
 	if err == nil {
 		err = launchErr
+	}
+	if attemptErr := s.saveAttempt(attempt, out, err); attemptErr != nil {
+		return out, protocol.WithEffects(attemptErr, "unknown")
 	}
 	terminal := launchErr != nil && launchErr.Code != "launch_outcome_unknown" && err == launchErr
 	if err != nil && !terminal {

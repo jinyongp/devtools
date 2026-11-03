@@ -70,6 +70,7 @@ func TestAutomaticCoordinatorRecoversHistoryBeforeConfiguration(t *testing.T) {
 			}
 			write(filepath.Join(data, "processes", next, "record.json"), r)
 			write(filepath.Join(data, "processes", old, "value-apply.json"), request)
+			prepareProcessFixture(t, data)
 			if e := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte("[broken\n"), 0600); e != nil {
 				t.Fatal(e)
 			}

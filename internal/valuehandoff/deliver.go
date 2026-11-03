@@ -233,6 +233,8 @@ func (s Store) Deliver(ctx context.Context, id, requestID string, input Revision
 	}
 	r.Item.DeliveryID = delivery
 	r.Item.DeliveryState = "delivering"
+	updated := time.Now().UTC()
+	r.Item.UpdatedAt = &updated
 	r.Item.ExecutionState = "unknown"
 	r.Item.Revision++
 	r.DeliveryRequestID = requestID
@@ -292,6 +294,8 @@ func (s Store) finishDelivery(ctx context.Context, a *access, r record, accepted
 	}
 	current.Item.Revision++
 	current.Item.DeliveryState = "unknown"
+	updatedAt := time.Now().UTC()
+	current.Item.UpdatedAt = &updatedAt
 	rr.ErrorCode = "delivery_outcome_unknown"
 	if accepted {
 		current.Item.DeliveryState = "delivered"

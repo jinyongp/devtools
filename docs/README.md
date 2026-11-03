@@ -118,13 +118,14 @@ Design background is separate from public command availability.
 
 ## Implementation contracts
 
-These contracts describe source behavior through protocol 22. Check the installed binary's
+These contracts describe source behavior through protocol 23. Check the installed binary's
 `version` and `schema` before using a new interface. Platform acceptance requires
 native execution; cross compilation alone does not establish publication or ACL behavior.
 
 - [Project configuration and CLI diagnostics](cli-config-redesign.md) (Korean): tool definitions and presets, compatibility, migration, and design rationale.
 - [Configuration editing](config-edit-contract.md) (Korean): command inputs, revision guards, responses, publication, and recovery.
 - [Diagnostics and doctor](diagnostic-contract.md) (Korean): public errors, scoped preflight checks, passive authentication, and acceptance criteria.
+- [Collection navigation and recovery](cli-navigation.md) (Korean): current services, execution history, filters, pages, executable next actions and retention.
 - [Contract schema](../internal/configcontract/schema.json): machine-readable configuration, mutation, response, and diagnostic definitions.
 - [Conformance cases](../internal/configcontract/cases.json): synthetic valid/invalid schema and strict JSON transport examples.
 - [Diagnostic requirements](cli-guidance-audit.md) (Korean): error context, recovery guidance, and acceptance criteria across CLI domains.

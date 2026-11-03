@@ -2,20 +2,29 @@ package services
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
 )
 
 func acquireLogLock(ctx context.Context, logPath string, exclusive bool) (func(), error) {
-	root, err := platformfs.OpenRoot(filepath.Dir(logPath), true)
+	root, err := platformfs.OpenRoot(filepath.Dir(logPath), exclusive)
 	if err != nil {
 		return nil, err
 	}
 	defer root.Close()
-	file, err := root.OpenFile(filepath.Base(logPath)+".lock", os.O_CREATE|os.O_RDWR)
+	flags := os.O_RDONLY
+	if exclusive {
+		flags = os.O_CREATE | os.O_RDWR
+	}
+	file, err := root.OpenFile(filepath.Base(logPath)+".lock", flags)
+	if !exclusive && errors.Is(err, os.ErrNotExist) {
+		return nil, &maintenance.QueryPreparationError{State: "initialization_required", Cause: err, Passive: true}
+	}
 	if err != nil {
 		return nil, err
 	}

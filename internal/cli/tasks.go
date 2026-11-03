@@ -171,7 +171,7 @@ func taskQueryOptionPattern(command, option string) string {
 	return ""
 }
 func taskWorkstreamFiltersResults(command string) bool {
-	return command == "list" || command == "next" || command == "tree" || command == "validation list"
+	return command == "list" || command == "next" || command == "tree" || command == "validation list" || command == "history" || command == "current"
 }
 func taskQueryOptions(command string) []string {
 	switch command {
@@ -381,7 +381,7 @@ func (a *App) registerTasks() {
 					return nil, e
 				}
 			}
-			return store.Query(ctx, tasks.Query{Command: name, Target: target, Options: r.Options, Body: body})
+			return store.Query(ctx, tasks.Query{Command: name, Target: target, Options: r.Options, ListOptions: r.ListOptions, Body: body})
 		}})
 	}
 }

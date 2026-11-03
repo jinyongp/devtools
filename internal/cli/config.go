@@ -18,7 +18,7 @@ func configOptions() []Option {
 	return []Option{{Name: "dir", Default: ".", MinLength: 1, Description: "Search for devtools.toml within this project boundary."}}
 }
 func configWriteOptions(required bool, body bool) []Option {
-	opts := append(configOptions(), Option{Name: "revision", Required: required, Pattern: `^[0-9a-f]{64}$`, Description: "Opaque revision returned by config inspect; detects changes before publication."}, Option{Name: "dry-run", Boolean: true, Description: "Validate and preview the same candidate without publishing it."})
+	opts := append(configOptions(), Option{Name: "revision", Required: required, Pattern: `^[0-9a-f]{64}$`, Description: "Opaque revision returned by config inspect; detects changes before publication."}, Option{Name: "preview-digest", Pattern: `^[0-9a-f]{64}$`, Description: "Require the exact candidate digest from the reviewed preview; changed input requires a new preview."}, Option{Name: "dry-run", Boolean: true, Description: "Validate and preview the same candidate without publishing it."})
 	if body {
 		opts = append(opts, Option{Name: "file", MinLength: 1, Description: "Read a strict JSON body from this regular file, relative to process cwd."}, Option{Name: "stdin", Boolean: true, Description: "Read a strict JSON body from redirected stdin."})
 	}
@@ -133,7 +133,7 @@ func (a *App) configInput(r Request) (configedit.Input, *protocol.Error) {
 	if err != nil {
 		return configedit.Input{}, directoryError(err)
 	}
-	return configedit.Input{Revision: r.Options["revision"], DryRun: r.Options["dry-run"] == "true", Runtime: dirs.Runtime}, nil
+	return configedit.Input{Revision: r.Options["revision"], PreviewDigest: r.Options["preview-digest"], DryRun: r.Options["dry-run"] == "true", Runtime: dirs.Runtime}, nil
 }
 func (a *App) configAction(action string) func(context.Context, IO, Request) (any, *protocol.Error) {
 	return func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {

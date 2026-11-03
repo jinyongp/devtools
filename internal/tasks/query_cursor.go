@@ -1,6 +1,9 @@
 package tasks
 
 import (
+	"github.com/jinyongp/devtools/internal/collectionquery"
+	"github.com/jinyongp/devtools/internal/maintenance"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -31,14 +34,23 @@ func pagedQueryCommand(cmd string) bool {
 	}
 }
 
-func queryFingerprint(profile string, q Query) string {
+func queryFingerprint(profile string, q Query, directories ...string) string {
 	opts := Object{}
+	definition := NavigationDefinition(q.Command)
 	for key, value := range q.Options {
-		if key != "cursor" && key != "limit" && key != "query-cache-dir" {
+		if key != "profile" && key != "cursor" && key != "limit" && key != "query-cache-dir" && key != "columns" && key != "query" && key != "sort" && key != "order" && key != "since" && key != "until" && key != "time-field" {
+			if _, filter := definition.Filters[key]; filter {
+				continue
+			}
 			opts[key] = value
 		}
 	}
-	return hash(Object{"command": q.Command, "target": q.Target, "options": opts, "profile": profile})
+	query, _ := collectionquery.Parse(definition, q.Options, q.ListOptions)
+	root := ""
+	if len(directories) > 0 {
+		root = filepath.Clean(maintenance.Root(directories[0]))
+	}
+	return hash(Object{"command": q.Command, "target": q.Target, "options": opts, "profile": profile, "query": query, "root": root})
 }
 
 func pageSnapshotResult(profile string, snapshot Snapshot, token string, offset, limit int) (Object, *protocol.Error) {
@@ -70,7 +82,6 @@ func (s Store) pageCursorFast(q Query, limit int) (Object, *protocol.Error) {
 	if err != nil || offset < 0 {
 		return nil, failure("cursor_invalid", "Start a new query.")
 	}
-	var snapshot Snapshot
 	f, err := s.openQueryCache(parts[0] + ".json")
 	if err != nil {
 		return nil, failure("cursor_invalid", "Start a new query.")
@@ -78,24 +89,15 @@ func (s Store) pageCursorFast(q Query, limit int) (Object, *protocol.Error) {
 	var magic [8]byte
 	_, readErr := f.ReadAt(magic[:], 0)
 	if readErr == nil && string(magic[:]) == queryCacheMagic {
-		out, err := readQueryPage(f, s.Profile, queryFingerprint(s.Profile, q), parts[0], offset, limit)
+		out, err := readQueryPage(f, s.Profile, queryFingerprint(s.Profile, q, s.Directory), parts[0], offset, limit)
 		f.Close()
 		if err != nil {
 			return nil, failure("cursor_invalid", "Start a new query.")
 		}
 		return out, nil
 	}
-	defer f.Close()
-	if _, err := f.Seek(0, 0); err != nil {
-		return nil, failure("cursor_invalid", "Start a new query.")
-	}
-	if err := decodeQuerySnapshot(f, &snapshot); err != nil ||
-		snapshot.Projection != ProjectionVersion ||
-		snapshot.Fingerprint != queryFingerprint(s.Profile, q) ||
-		time.Now().After(snapshot.Expires) {
-		return nil, failure("cursor_invalid", "Start a new query.")
-	}
-	return pageSnapshotResult(s.Profile, snapshot, parts[0], offset, limit)
+	f.Close()
+	return nil, failure("cursor_invalid", "Start a new query; this snapshot format is no longer supported.")
 }
 
 func (s Store) graphCursorFast(q Query, kind string, limit int) (Object, *protocol.Error) {

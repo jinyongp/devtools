@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:devtools:config-contract:protocol-22",
-  "title": "Project configuration, editing and diagnostic contract (protocol 22)",
+  "$id": "urn:devtools:config-contract:protocol-23",
+  "title": "Project configuration, editing and diagnostic contract (protocol 23)",
   "description": "Protocol-13 configuration, editing and diagnostic structures. Transport requires strict Unicode and signed-64-bit decimal integer tokens. x-maxUtf8Bytes asserts a UTF-8 byte constraint; x-npmRange asserts bounded nonempty npm SemVer range syntax. Linked normative contracts define references, state and filesystem checks.",
   "$ref": "#/$defs/Project",
   "$defs": {
@@ -1682,6 +1682,10 @@
     "Remedy": {
       "type": "object",
       "properties": {
+        "state": {"enum":["ready","needs_input","manual"]},
+        "bindings": {"type":"object","additionalProperties":{"type":"string"}},
+        "inputs": {"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"source":{"type":"string"},"methods":{"type":"array","items":{"type":"string"}},"description":{"type":"string"}},"required":["name","source","methods","description"],"additionalProperties":false}},
+        "input_steps": {"type":"array","items":{"$ref":"#/$defs/Remedy"}},
         "argv": {
           "type": "array",
           "items": {
@@ -1708,6 +1712,7 @@
         }
       },
       "required": [
+        "state",
         "argv",
         "required_inputs",
         "message",
@@ -3035,7 +3040,7 @@
       "type": "object",
       "properties": {
         "protocol_version": {
-          "const": 22
+          "const": 23
         },
         "schema": {
           "type": "object"

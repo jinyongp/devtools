@@ -129,7 +129,7 @@ timeout='10s'
             try:
                 mutate("project","up","web",error="permission_required")
                 assert sudo.with_name("sudo.first-arg").read_text()=="-n"
-                assert not api("process","list","--profile","platform-network")["items"]
+                assert not api("process","list","--profile","platform-network","--view","history")["items"]
             finally:env["PATH"]=previous_path
             mutate("project","up","web")
             assert "127.0.0.1" in socket.gethostbyname_ex(hostname)[2]

@@ -148,8 +148,10 @@ var reviewedExamples = map[string][]helpExample{
 		{Purpose: "Retain redacted logs", Command: "devtools process start dev:web --capture-logs --request-id REQUEST_UUID"},
 	},
 	"process list": {
-		{Purpose: "All managed executions", Command: "devtools process list"},
+		{Purpose: "Current project services", Command: "devtools process list"},
 		{Purpose: "One profile", Command: "devtools process list --profile my-app"},
+		{Purpose: "Execution history with a bounded page", Command: "devtools process list --profile my-app --view history --limit 50"},
+		{Purpose: "Current services across all profiles", Command: "devtools process list --all-profiles"},
 	},
 	"process status": {
 		{Purpose: "Current execution state", Command: "devtools process status EXECUTION_ID"},
@@ -197,7 +199,8 @@ var reviewedExamples = map[string][]helpExample{
 		{Purpose: "Switch to native protection", Command: "devtools vault rewrap --from-backend passphrase --backend native --current-passphrase-file ./old-passphrase --interactive --request-id REQUEST_UUID"},
 	},
 	"vault unlock": {
-		{Purpose: "Hidden terminal input", Command: "devtools vault unlock"},
+		{Purpose: "Native OS authentication prompt", Command: "devtools vault unlock --interactive"},
+		{Purpose: "Passphrase terminal input", Command: "devtools vault unlock"},
 		{Purpose: "Private file input", Command: "devtools vault unlock --passphrase-file ./vault-passphrase"},
 	},
 	"vault lock": {
@@ -372,7 +375,8 @@ var reviewedExamples = map[string][]helpExample{
 		{Purpose: "All configured listeners", Command: "devtools proxy status --all"},
 	},
 	"proxy list": {
-		{Purpose: "All profiles and global routes", Command: "devtools proxy list"},
+		{Purpose: "Current project routes", Command: "devtools proxy list"},
+		{Purpose: "All profiles and global routes", Command: "devtools proxy list --all-profiles"},
 		{Purpose: "One profile across its worktrees", Command: "devtools proxy list --profile my-app"},
 		{Purpose: "Global routes only", Command: "devtools proxy list --global"},
 	},
@@ -496,6 +500,10 @@ var reviewedExamples = map[string][]helpExample{
 	},
 	"cleanup archives": {
 		{Purpose: "Recoverable archives", Command: "devtools cleanup archives"},
+	},
+	"cleanup maintain": {
+		{Purpose: "Inspect the next bounded retention pass", Command: "devtools cleanup maintain --dry-run --limit 32"},
+		{Purpose: "Run one bounded retention pass", Command: "devtools cleanup maintain --limit 32"},
 	},
 	"cleanup restore": {
 		{Purpose: "Restore inspected archive", Command: "devtools cleanup restore ARCHIVE_ID"},

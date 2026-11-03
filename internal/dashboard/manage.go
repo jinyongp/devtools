@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"time"
 
 	"crypto/sha256"
 	"errors"
@@ -73,10 +74,10 @@ func managementTaskAction(action string) bool {
 
 func (s *Server) cleanupEngine() cleanup.Engine {
 	d, _ := paths.Current()
-	return cleanup.Engine{Data: filepath.Dir(s.data), Cache: filepath.Dir(filepath.Dir(s.cache)), Config: d.Config}
+	return cleanup.Engine{Data: filepath.Dir(s.data), Cache: s.cacheRoot, Config: d.Config}
 }
 
-func apiError(w http.ResponseWriter, e *protocol.Error) {
+func (s *Server) apiError(w http.ResponseWriter, e *protocol.Error) {
 	status := 400
 	if e.Code == "revision_conflict" || e.Code == "request_conflict" || e.Code == "no_change" || e.Code == "claim_conflict" {
 		status = 409
@@ -94,13 +95,12 @@ func apiError(w http.ResponseWriter, e *protocol.Error) {
 	if dirs, err := paths.Current(); err == nil {
 		invocation.IsolatedRoot = dirs.IsolatedRoot
 	}
-	if e.Details != nil {
-		e.Details = protocol.BindGuidance(e.Details, invocation).(map[string]any)
-	}
-	_ = protocol.Failure(w, protocol.Public(e, operation))
+	e = protocol.Public(e, operation)
+	e.Details = protocol.BindGuidance(e.Details, invocation, s.resolveAction).(map[string]any)
+	_ = protocol.Failure(w, e)
 }
-func invalidAction(w http.ResponseWriter) {
-	apiError(w, protocol.NewError("invalid_argument", "Provide a valid structured action request.", 2, nil))
+func (s *Server) invalidAction(w http.ResponseWriter) {
+	s.apiError(w, protocol.NewError("invalid_argument", "Provide a valid structured action request.", 2, nil))
 }
 func (s *Server) valueStore(profile string) values.ModernStore {
 	return values.CurrentStore(filepath.Join(filepath.Dir(s.data), "profiles"), profile)
@@ -148,29 +148,29 @@ func (s *Server) checkSelectedProjectCommand(ctx context.Context, p project.Cont
 func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	kind, _, e := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if e != nil || kind != "application/json" {
-		invalidAction(w)
+		s.invalidAction(w)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	raw, readErr := io.ReadAll(r.Body)
 	defer clear(raw)
 	if readErr != nil {
-		invalidAction(w)
+		s.invalidAction(w)
 		return
 	}
 	if _, decodeErr := tasks.Decode(string(raw)); decodeErr != nil {
-		invalidAction(w)
+		s.invalidAction(w)
 		return
 	}
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
 	var req actionRequest
 	if d.Decode(&req) != nil || d.Decode(new(any)) != io.EOF || (!project.ValidProfile(req.Profile) && !((req.Domain == "cleanup" || req.Domain == "vault") && req.Profile == "")) {
-		invalidAction(w)
+		s.invalidAction(w)
 		return
 	}
 	if req.Vault != nil && req.Domain != "vault" || req.Cleanup != nil && req.Domain != "cleanup" || req.Backup != nil && req.Domain != "backup" || req.Network != nil && req.Domain != "network" {
-		invalidAction(w)
+		s.invalidAction(w)
 		return
 	}
 	var result any
@@ -178,24 +178,24 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	switch req.Domain {
 	case "vault":
 		if req.Vault == nil || req.Process != nil || req.Change != nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
-			invalidAction(w)
+			s.invalidAction(w)
 			return
 		}
 		result, err = s.vaultAction(r.Context(), req.Vault)
 	case "network":
 		if req.Network == nil || req.Process != nil || req.Change != nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
-			invalidAction(w)
+			s.invalidAction(w)
 			return
 		}
 		result, err = s.networkAction(r.Context(), *req.Network)
 	case "cleanup", "backup":
 		if req.Process != nil || req.Change != nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
-			invalidAction(w)
+			s.invalidAction(w)
 			return
 		}
 		if req.Domain == "cleanup" {
 			if req.Cleanup == nil {
-				invalidAction(w)
+				s.invalidAction(w)
 				return
 			}
 			q := req.Cleanup
@@ -208,19 +208,19 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 			case "purge":
 				result, _, err = engine.Purge(r.Context(), q.ID)
 			default:
-				invalidAction(w)
+				s.invalidAction(w)
 				return
 			}
 		} else {
 			if req.Backup == nil {
-				invalidAction(w)
+				s.invalidAction(w)
 				return
 			}
 			result, err = s.backupAction(r.Context(), req.Profile, *req.Backup)
 		}
 	case "process":
 		if req.Process == nil || req.Change != nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
-			invalidAction(w)
+			s.invalidAction(w)
 			return
 		}
 		manager := services.Store{Data: filepath.Dir(s.data), PrepareInput: s.prepareManagedInput}
@@ -230,13 +230,13 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		if req.Process.Action == "start" || req.Process.Action == "restart" || req.Process.Action == "stop" {
 			saved, e := manager.InspectRequest(req.Process.RequestID)
 			if e != nil && e.Code != "request_not_found" {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			// The saved operation's scope remains authoritative after config edits.
 			// Legacy receipts without scope use the existing guarded path below.
 			if saved.Result != nil && saved.Result.Item.Profile != "" && saved.Result.Item.Profile != req.Profile {
-				invalidAction(w)
+				s.invalidAction(w)
 				return
 			}
 			if out, recovered, e := manager.RecoverCompleted(r.Context(), *req.Process, req.Process.Directory, network.PrepareAuto); recovered || e != nil {
@@ -247,11 +247,11 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		if req.Process.Action == "start" {
 			p, e := project.Resolve(req.Process.Directory, "")
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			if p.Profile != req.Profile {
-				invalidAction(w)
+				s.invalidAction(w)
 				return
 			}
 			req.Process.Directory = p.Root
@@ -262,16 +262,16 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		} else {
 			record, e := manager.Status(r.Context(), req.Process.ID)
 			if e != nil {
-				apiError(w, e)
+				s.apiError(w, e)
 				return
 			}
 			if record.Profile != req.Profile {
-				invalidAction(w)
+				s.invalidAction(w)
 				return
 			}
 			if req.Process.Action == "restart" {
 				if record.ProxyMode {
-					apiError(w, protocol.NewError("network_preparation_required", "Restart this proxy-enabled execution with devtools process restart so the initiating CLI can prepare DNS and the complete binding snapshot before stopping it.", 3, nil))
+					s.apiError(w, protocol.NewError("network_preparation_required", "Restart this proxy-enabled execution with devtools process restart so the initiating CLI can prepare DNS and the complete binding snapshot before stopping it.", 3, nil))
 					return
 				}
 				envOverride := req.Process.Env
@@ -299,7 +299,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Process.Action == "check" {
 			if req.Process.Directory != "" || req.Process.Command != "" || req.Process.Env != nil || req.Process.Capture != nil || req.Process.Bundle != nil {
-				invalidAction(w)
+				s.invalidAction(w)
 				return
 			}
 			result, err = manager.Check(r.Context(), req.Process.ID)
@@ -308,14 +308,14 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		}
 	case "values":
 		if req.Process != nil || req.Change == nil || req.Action != "" || req.Target != "" || len(req.Body) > 0 || len(req.Options) > 0 {
-			invalidAction(w)
+			s.invalidAction(w)
 			return
 		}
 		result, err = s.valueStore(req.Profile).Apply(r.Context(), *req.Change)
 	case "task":
 		preview := req.Action == "workstream.edited" && req.Options["dry-run"] == "true"
 		if req.Process != nil || req.Change != nil || !managementTaskAction(req.Action) || (!preview && req.Options["request-id"] == "") || req.Options["if-revision"] == "" {
-			invalidAction(w)
+			s.invalidAction(w)
 			return
 		}
 		for k := range req.Options {
@@ -323,22 +323,27 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 			case "request-id", "if-revision", "expected-run":
 			case "dry-run":
 				if req.Action != "workstream.edited" || (req.Options[k] != "true" && req.Options[k] != "false") {
-					invalidAction(w)
+					s.invalidAction(w)
 					return
 				}
 			default:
-				invalidAction(w)
+				s.invalidAction(w)
 				return
 			}
 		}
 		result, err = (tasks.Store{Directory: s.data, Profile: req.Profile, Cache: s.cache}).Execute(r.Context(), tasks.Request{Action: req.Action, Target: req.Target, Body: req.Body, Options: req.Options})
 	default:
-		invalidAction(w)
+		s.invalidAction(w)
 		return
 	}
 	if err != nil {
-		apiError(w, err)
+		s.apiError(w, err)
 		return
+	}
+	if req.Domain == "network" || req.Domain == "process" && req.Process != nil && req.Process.Action != "check" {
+		bounded, cancel := context.WithTimeout(r.Context(), 500*time.Millisecond)
+		_, _ = s.cleanupEngine().Maintain(bounded, req.Profile, 32, false)
+		cancel()
 	}
 	s.mu.Lock()
 	s.results = nil
@@ -348,7 +353,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	if dirs, err := paths.Current(); err == nil {
 		invocation.IsolatedRoot = dirs.IsolatedRoot
 	}
-	_ = protocol.Success(w, protocol.BindGuidance(result, invocation))
+	_ = protocol.Success(w, protocol.BindGuidance(result, invocation, s.resolveAction))
 }
 
 // Create uses a request-specific output and durable intent so uncertain HTTP

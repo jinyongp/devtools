@@ -144,7 +144,7 @@ while True:time.sleep(.05)
             details = first['details']
             new = details['target']['id']
             assert new != old and details['target']['name'] == new and details['facts']['previous_id'] == old and details['facts']['outage']
-            assert details['remedies'][0]['argv'][1:4] == ['process', 'status', new]
+            assert details['remedies'][0]['argv'][:6] == ['devtools', '--isolated-root', str(state), 'process', 'status', new]
             assert len(details['remedies']) == (2 if capture else 1)
             for remedy in details['remedies']:
                 argv = remedy['argv']

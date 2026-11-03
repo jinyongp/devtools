@@ -41,7 +41,7 @@ func (s *Server) networkView(ctx context.Context, profile string) (any, *protoco
 	if e != nil {
 		return nil, e
 	}
-	state.Exposures, e = m.ExposureList(ctx)
+	state.Exposures, e = m.ExposureNavigation(ctx, false, func(r expose.Public) bool { return r.Route.Scope == "global" || r.Route.Profile == profile })
 	if e != nil {
 		return nil, e
 	}

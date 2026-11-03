@@ -87,6 +87,9 @@ func (s Store) controlFiles(ctx context.Context, id, requestID, action string, i
 	if err != nil {
 		return Result{}, values.VaultError(ctx, err)
 	}
+	if r.RetiredAt != nil {
+		return Result{}, failure("execution_state_conflict")
+	}
 	if r.Item.Revision != revision {
 		return Result{}, failure("revision_conflict")
 	}
@@ -99,6 +102,11 @@ func (s Store) controlFiles(ctx context.Context, id, requestID, action string, i
 	}
 	if changed {
 		r.Item.Revision++
+		now := time.Now().UTC()
+		r.Item.UpdatedAt = &now
+		if r.Item.DeliveryState == "canceled" || r.Item.ExecutionState == "reported_finished" || r.Item.ExecutionState == "reported_failed" {
+			r.Item.EndedAt = &now
+		}
 	}
 	result := Result{Profile: s.Profile, Item: r.Item, Changed: changed}
 	files, err := s.recordFiles(ctx, a, r, requestID, fp, action, result, false)
@@ -120,6 +128,7 @@ func (s Store) pendingHeld(ctx context.Context, a *access, r record) *protocol.E
 	if !time.Now().Before(r.Item.ExpiresAt) {
 		if (r.Item.DeliveryState == "prepared" || r.Item.DeliveryState == "approved") && r.Item.Revision < math.MaxUint64 {
 			r.Item.DeliveryState = "expired"
+			r.Item.UpdatedAt, r.Item.EndedAt = &r.Item.ExpiresAt, &r.Item.ExpiresAt
 			r.Item.Revision++
 			path := s.path("value-executions", r.Item.ID)
 			b, err := s.encode(ctx, a, path, r.Item.ID, vault.MaterialExecutionRecord, r)

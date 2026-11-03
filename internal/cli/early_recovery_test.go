@@ -62,7 +62,7 @@ func TestLockedEarlyFailuresKeepBackendRecovery(t *testing.T) {
 			t.Fatalf("%v: %+v", args, details)
 		}
 		remedy := details.Remedies[0]
-		if !strings.Contains(strings.Join(remedy.Argv, " "), "vault unlock --passphrase-stdin") || !reflect.DeepEqual(remedy.RequiredInputs, []string{"stdin"}) || (args[0] == "sec" && reader.read) {
+		if remedy.State != "needs_input" || len(remedy.Argv) != 0 || len(remedy.InputSteps) != 1 || !strings.Contains(strings.Join(remedy.InputSteps[0].Argv, " "), "help vault unlock") || !reflect.DeepEqual(remedy.RequiredInputs, []string{"stdin"}) || (args[0] == "sec" && reader.read) {
 			t.Fatalf("%v: %+v read=%v", args, remedy, reader.read)
 		}
 	}

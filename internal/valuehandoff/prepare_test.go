@@ -93,6 +93,11 @@ func fixture(t testing.TB) (Store, *vault.SessionClient) {
 	return Store{Root: root, Profile: "app"}, client
 }
 func requestID(n int) string { return fmt.Sprintf("00000000-0000-4000-8000-%012x", n) }
+func sameExecution(a, b Execution) bool {
+	left, _ := json.Marshal(a)
+	right, _ := json.Marshal(b)
+	return bytes.Equal(left, right)
+}
 func TestPrepareImmutableReplayPassiveLookupAndPrivacy(t *testing.T) {
 	s, c := fixture(t)
 	ctx := context.Background()
@@ -114,7 +119,7 @@ func TestPrepareImmutableReplayPassiveLookupAndPrivacy(t *testing.T) {
 		t.Fatal(e)
 	}
 	r2, e := s.Prepare(ctx, input, requestID(1))
-	if e != nil || !r2.Replayed || r2.Item != r.Item {
+	if e != nil || !r2.Replayed || !sameExecution(r2.Item, r.Item) {
 		t.Fatal("lost-response replay changed original input", e)
 	}
 	input.Selection.Keys = append(input.Selection.Keys, "OTHER")

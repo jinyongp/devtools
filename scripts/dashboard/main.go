@@ -36,7 +36,7 @@ func run(ctx context.Context) error {
 	if failure != nil {
 		return failure
 	}
-	return dashboard.ServeDevelopment(ctx, filepath.Join(dirs.Data, "tasks"), p.Profile, "internal/dashboard/assets", os.Stdout)
+	return dashboard.ServeDevelopment(ctx, filepath.Join(dirs.Data, "tasks"), p.Profile, "internal/dashboard/assets", os.Stdout, cli.New("development", "").DashboardContracts())
 }
 
 func main() {

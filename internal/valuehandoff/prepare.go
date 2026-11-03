@@ -89,6 +89,7 @@ func (s Store) Prepare(ctx context.Context, input PrepareInput, requestID string
 	ticket.StorageGeneration = p.Generation
 	ticket.KeyEpoch = p.KeyEpoch
 	r := record{Item: Execution{ID: id, InputID: inputID, ExternalExecutionID: input.ExternalExecutionID, Revision: 1, CreatedAt: started, ExpiresAt: deadline, DeliveryState: "prepared", ExecutionState: "not_started"}, Ticket: ticket, Protection: a.identity, Env: input.Env, BundleID: bundleID, Slots: slots}
+	r.Item.UpdatedAt = &started
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	op, err := s.operationLease(ctx, id)

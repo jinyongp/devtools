@@ -34,7 +34,7 @@ func (a *App) serviceStore() (services.Store, *protocol.Error) {
 func (a *App) registerProcesses() {
 	descriptions := map[string]string{
 		"start":   "Start a configured command as a managed execution.",
-		"list":    "List managed executions.",
+		"list":    "List current project services or explicit execution history.",
 		"status":  "Show one managed execution.",
 		"stop":    "Stop one managed execution.",
 		"restart": "Replace one managed execution using current configuration.",
@@ -87,15 +87,19 @@ func (a *App) registerProcesses() {
 				return nil, e
 			}
 			if action == "list" {
-				items, e := s.List(ctx, r.Options["profile"])
+				selection := services.NavigationSelection{Profile: r.Options["profile"], Command: r.Options["command"], Search: r.Options["query"], History: r.Options["view"] == "history"}
+				if r.Scope != nil {
+					selection.Profile, selection.Directory, selection.Instance = r.Scope.Profile, r.Scope.Directory, r.Scope.Instance
+				}
+				if _, explicit := r.OptionOffsets["env"]; explicit {
+					value := r.Options["env"]
+					selection.Env = &value
+				}
+				items, e := s.Navigation(ctx, selection, nil)
 				if e != nil {
 					return nil, e
 				}
-				observations := map[string]values.InputObservation{}
-				for _, item := range items {
-					observations[item.ID] = s.InspectRecordValues(ctx, item)
-				}
-				return map[string]any{"items": items, "values": observations}, nil
+				return map[string]any{"items": items, "values": map[string]values.InputObservation{}}, nil
 			}
 			if action == "status" {
 				item, err := s.Status(ctx, r.Args[0])
@@ -217,6 +221,27 @@ func (a *App) registerProcesses() {
 				}
 			}
 			return s.Apply(ctx, q)
+		}
+		if action == "start" || action == "restart" {
+			run := c.Run
+			c.Run = func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+				value, condition := run(ctx, streams, r)
+				if condition != nil && len(r.Args) > 0 {
+					if store, e := a.serviceStore(); e == nil {
+						q := services.Request{Action: action, RequestID: r.Options["request-id"]}
+						if action == "start" {
+							q.Directory, q.Command = r.Options["dir"], r.Args[0]
+						} else {
+							q.ID = r.Args[0]
+						}
+						if env, ok := r.Options["env"]; ok {
+							q.Env = &env
+						}
+						_ = store.RecordPreparationFailure(ctx, q, condition)
+					}
+				}
+				return value, condition
+			}
 		}
 		a.commands = append(a.commands, c)
 	}

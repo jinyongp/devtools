@@ -58,10 +58,14 @@ assert not missing["ready"]
 for check in missing["checks"] + missing['commands'][0]['checks']:
     assert 'remedy' not in check and isinstance(check['remedies'], list)
     for remedy in check['remedies']:
-        assert set(remedy) == {'argv', 'required_inputs', 'message', 'effect'}
+        required_fields = {'state', 'argv', 'required_inputs', 'message', 'effect'}
+        assert required_fields <= set(remedy) <= required_fields | {'bindings', 'inputs', 'input_steps'}
+        assert remedy['state'] in ('ready', 'needs_input', 'manual')
 secret_check = next(check for check in missing['commands'][0]['checks'] if check['id'] == 'sec:TOKEN')
 remedy = secret_check['remedies'][0]
-assert remedy['argv'] == ['devtools', 'sec', 'set', 'TOKEN', '--profile', 'fixture', '--env', 'dev', '--stdin']
+assert remedy['state'] == 'needs_input' and remedy['argv'] == []
+assert remedy['bindings'] == {'key': 'TOKEN', 'profile': 'fixture', 'env': 'dev'}
+execute(remedy['input_steps'][0]['argv'])
 assert remedy['required_inputs'] == ['stdin']
 failure = api("run", "check", expected=3)
 assert failure["error"]["code"] == "requirements_failed"

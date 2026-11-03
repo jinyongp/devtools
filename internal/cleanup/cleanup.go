@@ -19,6 +19,7 @@ import (
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/retainedbody"
 	"github.com/jinyongp/devtools/internal/retention"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -51,6 +52,7 @@ type snapshot struct {
 	Items   []candidate `json:"items"`
 }
 type Archive struct {
+	SourceDigest string `json:"source_digest,omitempty"`
 	Item
 	ArchivedAt time.Time  `json:"archived_at"`
 	RestoredAt *time.Time `json:"restored_at"`
@@ -129,7 +131,11 @@ func write(path string, v any) error {
 func digest(b []byte) string { return fmt.Sprintf("%x", sha256.Sum256(b)) }
 
 func (e Engine) writeArchive(id string, payload []byte, archive Archive) error {
-	if err := maintenance.Write(e.archivePath(id, "payload"), payload); err != nil {
+	kind := "archive_payload"
+	if archive.Kind == "completed_process" {
+		kind = "process_record"
+	}
+	if err := (retainedbody.Store{Root: e.Data}).WriteReference(context.Background(), e.archivePath(id, "payload"), kind, payload); err != nil {
 		return err
 	}
 	return write(e.archivePath(id, "entry.json"), archive)
@@ -216,7 +222,7 @@ func (e Engine) validItem(i Item) bool {
 		return filepath.Base(i.Source) == name && validID(filepath.Base(dir)) && filepath.Dir(dir) == filepath.Join(e.Data, "processes")
 	case "expired_query":
 		dir := filepath.Dir(i.Source)
-		return (dir == filepath.Join(e.Cache, "task-queries") || dir == filepath.Join(e.Cache, "dashboard", "queries")) && validID(strings.TrimSuffix(filepath.Base(i.Source), ".json")) && strings.HasSuffix(i.Source, ".json")
+		return (dir == filepath.Join(e.Cache, "task-queries") || dir == filepath.Join(e.Cache, "collections") || dir == filepath.Join(e.Cache, "dashboard", "queries")) && validID(strings.TrimSuffix(filepath.Base(i.Source), ".json")) && strings.HasSuffix(i.Source, ".json")
 	case "old_backup":
 		var c struct {
 			Directory string `json:"directory"`
@@ -249,7 +255,7 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 		addWithStamp(kind, p, path, b, digest(b))
 	}
 	// Query snapshots are disposable and have explicit expiry timestamps.
-	for _, dir := range []string{filepath.Join(e.Cache, "task-queries"), filepath.Join(e.Cache, "dashboard", "queries")} {
+	for _, dir := range e.ownedCacheDirectories() {
 		entries, err := os.ReadDir(dir)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, fail("storage_error", err)
@@ -288,15 +294,19 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 		}
 	}
 	manager := services.Store{Data: e.Data}
-	records, pe := manager.List(ctx, profile)
+	records, pe := manager.StoredRecords()
 	if pe != nil {
 		return nil, pe
 	}
+	blocked := manager.RetirementBlocks(ctx, records)
 	for _, r := range records {
+		if profile != "" && r.Profile != profile {
+			continue
+		}
 		if r.EndedAt == nil {
 			continue
 		}
-		if manager.Active(ctx, r.Instance) != nil {
+		if blocked[r.ID] != "" {
 			continue
 		}
 		base := filepath.Join(e.Data, "processes", r.ID)
@@ -562,7 +572,7 @@ func (e Engine) archivedCandidate(c candidate) (Archive, []byte, bool, *protocol
 	if archive.Item != c.Item || archive.RestoredAt != nil || archive.PurgedAt != nil {
 		return archive, nil, false, fail("revision_conflict")
 	}
-	payload, err := maintenance.Read(e.archivePath(c.ID, "payload"), 128<<20)
+	payload, err := (retainedbody.Store{Root: e.Data}).ReadReference(e.archivePath(c.ID, "payload"))
 	if err != nil {
 		return archive, nil, false, fail("storage_error", err)
 	}
@@ -577,6 +587,10 @@ func (e Engine) archivedCandidate(c candidate) (Archive, []byte, bool, *protocol
 		}
 		stamp, ok := logOwnerStamp(owner, payload)
 		if !ok || stamp != c.Stamp {
+			return archive, nil, false, fail("revision_conflict")
+		}
+	} else if c.Kind == "completed_process" && archive.SourceDigest != "" {
+		if archive.SourceDigest != c.Stamp {
 			return archive, nil, false, fail("revision_conflict")
 		}
 	} else if digest(payload) != c.Stamp {
@@ -753,12 +767,13 @@ func (e Engine) retireCompletedProcess(c candidate, archive Archive, already boo
 	if err != nil || digest(body) != c.Stamp {
 		return archive, fail("revision_conflict")
 	}
+	logical, readErr := manager.RecordBytes(executionID)
 	var record services.Record
-	if json.Unmarshal(body, &record) != nil || record.ID != executionID || record.Profile != c.Profile || record.EndedAt == nil {
+	if readErr != nil || json.Unmarshal(logical, &record) != nil || record.ID != executionID || record.Profile != c.Profile || record.EndedAt == nil {
 		return archive, fail("storage_error")
 	}
 	if !already {
-		if err := e.writeArchive(c.ID, body, archive); err != nil {
+		if err := e.writeArchive(c.ID, logical, archive); err != nil {
 			return archive, fail("storage_error", err)
 		}
 	}
@@ -808,7 +823,7 @@ func (e Engine) retire(ctx context.Context, c candidate) (Archive, *protocol.Err
 		return archive, archiveErr
 	}
 	if !already {
-		archive = Archive{Item: c.Item, ArchivedAt: time.Now().UTC()}
+		archive = Archive{Item: c.Item, ArchivedAt: time.Now().UTC(), SourceDigest: c.Stamp}
 	}
 
 	switch c.Kind {
@@ -925,14 +940,15 @@ func (e Engine) restoreCompletedProcess(archive Archive, payload []byte) *protoc
 	if json.Unmarshal(payload, &record) != nil || record.ID != executionID || record.Profile != archive.Profile || record.EndedAt == nil {
 		return fail("storage_error")
 	}
-	existing, err := maintenance.Read(archive.Source, 1<<20)
+	manager := services.Store{Data: e.Data}
+	existing, err := manager.RecordBytes(executionID)
 	if err == nil {
 		if digest(existing) != digest(payload) {
 			return fail("revision_conflict")
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fail("storage_error", err)
-	} else if err := maintenance.Write(archive.Source, payload); err != nil {
+	} else if err := manager.RestoreRecord(record); err != nil {
 		return fail("storage_error", err)
 	}
 	if markerErr := (services.Store{Data: e.Data}).RemoveArchiveMarker(executionID, archive.ID); markerErr != nil {
@@ -972,7 +988,7 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 	if a.RestoredAt != nil {
 		return a, false, nil
 	}
-	b, er := maintenance.Read(e.archivePath(id, "payload"), 128<<20)
+	b, er := (retainedbody.Store{Root: e.Data}).ReadReference(e.archivePath(id, "payload"))
 	if er != nil {
 		return a, false, fail("storage_error", er)
 	}

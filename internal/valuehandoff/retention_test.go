@@ -68,7 +68,7 @@ func TestExpiredPrepareReplayRetiresSnapshotButPreservesResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	replay, e := s.Prepare(ctx, input, requestID(800))
-	if e != nil || !replay.Replayed || replay.Item != prepared.Item {
+	if e != nil || !replay.Replayed || !sameExecution(replay.Item, prepared.Item) {
 		t.Fatal("cleanup rewrote prepare outcome", e)
 	}
 	if _, err := os.Stat(payload); !errors.Is(err, os.ErrNotExist) {

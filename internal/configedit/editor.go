@@ -56,13 +56,14 @@ type MigrationResult struct {
 	ApplyDigest string `json:"apply_digest"`
 }
 type Input struct {
-	Revision    string
-	DryRun      bool
-	Format      bool
-	Migrate     bool
-	ApplyDigest string
-	Operations  []Operation
-	Runtime     string
+	Revision      string
+	PreviewDigest string
+	DryRun        bool
+	Format        bool
+	Migrate       bool
+	ApplyDigest   string
+	Operations    []Operation
+	Runtime       string
 }
 
 func failure(code, reason string, path []string) *protocol.Error {
@@ -354,6 +355,9 @@ func Evaluate(ctx context.Context, path string, in Input) (out any, editErr *pro
 	}
 	digest := sha256.Sum256(candidate)
 	result := Result{DryRun: in.DryRun, ConfigPath: path, PreviousRevision: snapshot.Revision, Revision: snapshot.Revision, WouldChange: !bytes.Equal(candidate, doc.Bytes), CandidateDigest: hex.EncodeToString(digest[:]), Changes: changes, Impact: impact(doc.Context, next.Context), Format: doc.Format, CandidateFormat: next.Format}
+	if in.PreviewDigest != "" && in.PreviewDigest != result.CandidateDigest {
+		return nil, protocol.NewError("preview_changed", "The supplied input produces a different candidate. Run a new preview before applying it.", 3, map[string]any{"reason": "preview_digest_mismatch", "effects": "none"})
+	}
 	applyDigest := sha256.Sum256(append([]byte("config-migrate-v1\x00"+snapshot.Revision+"\x0010\x00registry-v1\x00"), candidate...))
 	if in.Migrate && in.ApplyDigest != "" && in.ApplyDigest != hex.EncodeToString(applyDigest[:]) {
 		return nil, failure("config_migration_conflict", "digest_mismatch", nil)

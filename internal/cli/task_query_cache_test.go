@@ -49,7 +49,7 @@ func TestQueryCacheOptionOnlyOnQueries(t *testing.T) {
 			}
 		}
 	}
-	if count != 22 {
+	if count != 36 {
 		t.Fatal("query-only option coverage", count)
 	}
 	out.Reset()

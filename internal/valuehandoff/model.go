@@ -47,22 +47,24 @@ type PrepareInput struct {
 // Execution is the public observation surface. Session tickets, ciphertext,
 // endpoint addresses and masking material are deliberately absent.
 type Execution struct {
-	ID                  string    `json:"execution_id"`
-	InputID             string    `json:"input_id"`
-	ExternalExecutionID string    `json:"external_execution_id"`
-	Revision            uint64    `json:"revision"`
-	CreatedAt           time.Time `json:"created_at"`
-	ExpiresAt           time.Time `json:"expires_at"`
-	DeliveryState       string    `json:"delivery_state"`
-	ExecutionState      string    `json:"execution_state"`
-	RunnerID            string    `json:"runner_id,omitempty"`
-	RunnerInstanceID    string    `json:"runner_instance_id,omitempty"`
-	ReporterInstanceID  string    `json:"reporter_instance_id,omitempty"`
-	DeliveryID          string    `json:"delivery_id,omitempty"`
-	ExternalRef         string    `json:"external_ref,omitempty"`
-	ExitCode            *int      `json:"exit_code,omitempty"`
-	Reason              string    `json:"reason,omitempty"`
-	FactSource          string    `json:"fact_source,omitempty"`
+	ID                  string     `json:"execution_id"`
+	InputID             string     `json:"input_id"`
+	ExternalExecutionID string     `json:"external_execution_id"`
+	Revision            uint64     `json:"revision"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           *time.Time `json:"updated_at,omitempty"`
+	EndedAt             *time.Time `json:"ended_at,omitempty"`
+	ExpiresAt           time.Time  `json:"expires_at"`
+	DeliveryState       string     `json:"delivery_state"`
+	ExecutionState      string     `json:"execution_state"`
+	RunnerID            string     `json:"runner_id,omitempty"`
+	RunnerInstanceID    string     `json:"runner_instance_id,omitempty"`
+	ReporterInstanceID  string     `json:"reporter_instance_id,omitempty"`
+	DeliveryID          string     `json:"delivery_id,omitempty"`
+	ExternalRef         string     `json:"external_ref,omitempty"`
+	ExitCode            *int       `json:"exit_code,omitempty"`
+	Reason              string     `json:"reason,omitempty"`
+	FactSource          string     `json:"fact_source,omitempty"`
 }
 type Result struct {
 	Profile  string    `json:"profile"`
@@ -75,6 +77,7 @@ type View struct {
 	Item    Execution `json:"item"`
 }
 type record struct {
+	RetiredAt         *time.Time            `json:"retired_at,omitempty"`
 	Item              Execution             `json:"item"`
 	Ticket            vault.LaunchTicket    `json:"ticket"`
 	Protection        [32]byte              `json:"protection"`

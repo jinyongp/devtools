@@ -119,7 +119,7 @@ func TestInspectUsesLiveProcessStateForProfileActiveCounts(t *testing.T) {
 	if err := tasks.PrivateDir(recordDirectory); err != nil {
 		t.Fatal(err)
 	}
-	if err := tasks.WritePrivate(filepath.Join(recordDirectory, "record.json"), record); err != nil {
+	if err := (services.Store{Data: input.Data}).RestoreRecord(record); err != nil {
 		t.Fatal(err)
 	}
 

@@ -190,7 +190,7 @@ class NetworkFixture:
                 yield self
             finally:
                 self.mutate("proxy", "start")
-                for item in self.api("expose", "list")["items"]:
+                for item in self.api("expose", "list", "--all-profiles")["items"]:
                     if item["state"] != "stopped":
                         self.mutate("expose", "stop", item["id"])
                 for project in self.projects:

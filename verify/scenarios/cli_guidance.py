@@ -1,4 +1,4 @@
-"""Installed protocol-22 guidance follows the observed target and failure phase."""
+"""Installed protocol-23 guidance follows the observed target and failure phase."""
 import json
 import os
 from pathlib import Path
@@ -38,7 +38,7 @@ def checks(failure):
     return {c["id"]: c for c in failure["details"]["checks"]}
 
 
-assert api("version")["protocol_version"] == 22
+assert api("version")["protocol_version"] == 23
 config = project / "devtools.toml"
 config.write_text("profile='guidance'\n[commands.missing]\nexec=['__missing_guidance__']\n")
 root_a, root_b = home / "A", home / "B"
@@ -140,11 +140,13 @@ api("vault", "lock")
 failure = api("run", "need", expected=3)
 assert failure["details"]["retry"] == "after_dependency_change"
 unlock = failure["details"]["remedies"][0]
-assert "--passphrase-stdin" in unlock["argv"] and unlock["required_inputs"] == ["stdin"]
+assert unlock["state"] == "needs_input" and unlock["argv"] == [] and unlock["required_inputs"] == ["stdin"]
+assert unlock["inputs"] and unlock["input_steps"]
+execute(unlock["input_steps"][0]["argv"][1:])
 inspection = api("values", "execution", "status", "0" * 32, expected=3)
 assert inspection["details"]["retry"] == "after_dependency_change"
 assert inspection["details"]["remedies"][0]["required_inputs"] == ["stdin"]
-api(*unlock["argv"][1:], body=passphrase + "\n")
+api("vault", "unlock", "--passphrase-stdin", body=passphrase + "\n")
 api("vault", "lock")
 api("vault", "lock", "--isolated-root", str(root_a))
 print("Installed guidance: roots, direct sources, effects, prerequisite kinds, recovery, help, imports, config and launcher limits passed")

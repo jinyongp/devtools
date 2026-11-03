@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -20,13 +21,23 @@ func TestQueryCacheSelectionAndIndependentContinuation(t *testing.T) {
 		t.Fatal(e)
 	}
 	q.Options["cursor"] = str(first, "next_cursor")
-	// A cursor is entirely independent of the data root and its locks/WAL.
+	// The same root remains bound, while continuation does not open its data.
 	old := s.Directory
-	s.Directory = filepath.Join(privateTempDir(t), "missing", "tasks")
+	if err := os.Rename(old, old+".unavailable"); err != nil {
+		t.Fatal(err)
+	}
 	continued, e := s.Query(context.Background(), q)
 	if e != nil || continued["revision"] != first["revision"] {
 		t.Fatal("cursor touched missing data", e)
 	}
+	if err := os.Rename(old+".unavailable", old); err != nil {
+		t.Fatal(err)
+	}
+	s.Directory = filepath.Join(privateTempDir(t), "missing", "tasks")
+	if _, e := s.Query(context.Background(), q); e == nil || e.Code != "cursor_invalid" {
+		t.Fatal("cursor crossed data roots", e)
+	}
+	s.Directory = old
 	q.Options["query-cache-dir"] = filepath.Join(privateTempDir(t), "other")
 	if _, e := s.Query(context.Background(), q); e == nil || e.Code != "cursor_invalid" {
 		t.Fatal(e)
@@ -115,6 +126,45 @@ func TestQueryCachePruneRecognizesOnlyExpiredSnapshots(t *testing.T) {
 		if os.IsNotExist(err) != removed {
 			t.Fatal(name, "wrong prune decision", err)
 		}
+	}
+}
+
+func TestCachePublicationPruneHasBoundedResumableWork(t *testing.T) {
+	s := fixture(t)
+	s.Cache = filepath.Join(privateTempDir(t), "cache")
+	if err := PrivateDir(s.Cache); err != nil {
+		t.Fatal(err)
+	}
+	expired := time.Now().Add(-time.Hour)
+	for range 70 {
+		name := ID() + ".json"
+		if err := writeQueryCache(filepath.Join(s.Cache, name), s.Profile, Snapshot{Projection: ProjectionVersion, Fingerprint: "known", Expires: expired, Revision: 1, Items: []any{Object{}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count := func() int {
+		entries, err := os.ReadDir(s.Cache)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := 0
+		for _, entry := range entries {
+			if validID(strings.TrimSuffix(entry.Name(), ".json")) {
+				n++
+			}
+		}
+		return n
+	}
+	before := count()
+	s.pruneQueryCaches(context.Background())
+	if removed := before - count(); removed < 1 || removed > 32 {
+		t.Fatal("unbounded prune", removed)
+	}
+	for range 4 {
+		s.pruneQueryCaches(context.Background())
+	}
+	if remaining := count(); remaining != 0 {
+		t.Fatal("prune did not resume", remaining)
 	}
 }
 

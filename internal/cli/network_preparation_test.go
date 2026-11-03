@@ -299,6 +299,7 @@ func TestManagedPreparationFreezesModeAndReplaysLegacyWithoutPreparation(t *test
 	if e := tasks.WritePrivate(path, map[string]any{"fingerprint": hex.EncodeToString(digest[:]), "done": true, "result": services.Result{Item: services.Record{ID: legacy.RequestID}}}); e != nil {
 		t.Fatal(e)
 	}
+	prepareProcessFixture(t, s.Data)
 	if e := app.prepareManagedNetwork(context.Background(), p, &legacy, nil, network.PrepareAuto, IO{}); e != nil || legacy.ProxyMode {
 		t.Fatal(e)
 	}

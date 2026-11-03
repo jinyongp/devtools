@@ -125,7 +125,7 @@ while True:time.sleep(.05)
         words = ['project', 'restart', 'web', '--dir', str(directory), '--request-id', str(uuid.uuid4())]
         failed = api(*words, expected=3)
         assert failed['details']['retry'] == 'inspect_first'
-        assert any(r['argv'][1:3] == ['project', 'status'] for r in failed['details']['remedies'])
+        assert any(r['argv'][:5] == ['devtools', '--isolated-root', str(source), 'project', 'status'] for r in failed['details']['remedies'])
         project('batch')
         assert api(*words, expected=3)['details']['retry'] == 'inspect_first'
         text = subprocess.run([str(binary), '--format', 'text', '--isolated-root', str(source), *words], cwd=root, env=env, capture_output=True, text=True, encoding='utf-8', timeout=30)

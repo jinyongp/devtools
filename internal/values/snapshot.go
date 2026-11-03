@@ -310,7 +310,22 @@ func VaultError(ctx context.Context, err error) *protocol.Error {
 	case vault.ErrKeyMissing.Error(), vault.ErrRecovery.Error(), vault.ErrIntegrity.Error(), vault.ErrUnavailable.Error(), vault.ErrDenied.Error():
 		details = map[string]any{"remedies": []protocol.Remedy{{Relation: protocol.SameStoreAction, Argv: []string{"devtools", "vault", "status"}, RequiredInputs: []string{}, Message: "Inspect existing protection. Initialize only an uninitialized vault; recover existing keys and storage when recovery is required."}}}
 	}
-	failure := protocol.NewError(code, "Cannot prepare verified profile values.", 3, details)
+	message := "Cannot prepare verified profile values."
+	switch code {
+	case vault.ErrLocked.Error():
+		message = "The vault is locked. Unlock its existing protection before retrying."
+	case vault.ErrInteractionRequired.Error():
+		message = "The OS key store requires authentication UI. Run vault unlock --interactive in your desktop session, complete the prompt, then retry."
+	case vault.ErrBackendLocked.Error():
+		message = "The OS key store is locked. Unlock it in your desktop session, then unlock this vault."
+	case vault.ErrDenied.Error():
+		message = "The OS key store denied or canceled access to this vault's key. Review its access permission and any authentication prompt before retrying."
+	case vault.ErrUnavailable.Error():
+		message = "The OS key store is unavailable in this session. Restore access to the existing key store before retrying."
+	case vault.ErrKeyMissing.Error():
+		message = "The vault key is missing. Inspect the existing protection and recover its original key."
+	}
+	failure := protocol.NewError(code, message, 3, details)
 	if code == "storage_error" {
 		return protocol.WithStorageDetails(failure, "values", "prepare_values", "profile_store", err)
 	}

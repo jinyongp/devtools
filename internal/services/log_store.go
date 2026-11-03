@@ -241,6 +241,11 @@ func (s boundedLogStore) write(p []byte) (int, error) {
 }
 
 func (s boundedLogStore) snapshot(ctx context.Context) ([]byte, bool, error) {
+	if _, err := platformfs.StatPrivate(s.path); errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	} else if err != nil {
+		return nil, false, err
+	}
 	release, err := acquireLogLock(ctx, s.path, false)
 	if err != nil {
 		return nil, false, err

@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func TestIndexedQueryPagesAndLegacyCompatibility(t *testing.T) {
+func TestIndexedQueryPagesRejectLegacySnapshots(t *testing.T) {
 	s := fixture(t)
 	q := Query{Command: "list", Options: map[string]string{}}
 	items := make([]any, 97)
@@ -43,13 +43,13 @@ func TestIndexedQueryPagesAndLegacyCompatibility(t *testing.T) {
 		}
 	}
 	path := filepath.Join(s.cacheDirectory(), token+".json")
-	legacy := Snapshot{Projection: ProjectionVersion, Fingerprint: queryFingerprint(s.Profile, q), Revision: 7, Expires: time.Now().Add(time.Minute), Items: items}
+	legacy := Snapshot{Projection: ProjectionVersion, Fingerprint: queryFingerprint(s.Profile, q, s.Directory), Revision: 7, Expires: time.Now().Add(time.Minute), Items: items}
 	if err := WritePrivate(path, legacy); err != nil {
 		t.Fatal(err)
 	}
 	q.Options["cursor"] = token + ":32"
-	if _, e := s.Query(context.Background(), q); e != nil {
-		t.Fatal("legacy TTL cursor", e)
+	if _, e := s.Query(context.Background(), q); e == nil || e.Code != "cursor_invalid" {
+		t.Fatal("legacy cursor accepted by current reader", e)
 	}
 	legacy.Expires = time.Now().Add(-time.Second)
 	if err := WritePrivate(path, legacy); err != nil {

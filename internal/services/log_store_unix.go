@@ -31,12 +31,7 @@ func acquireLogLock(ctx context.Context, logPath string, exclusive bool) (func()
 	}
 	file, err := platformfs.OpenNoFollow(lockPath, flags, 0600)
 	if !exclusive && errors.Is(err, os.ErrNotExist) {
-		// Only first-use preparation needs write access. A missing lock never
-		// admits an unlocked snapshot, even when log bytes are already present.
-		file, err = platformfs.OpenNoFollow(lockPath, os.O_CREATE|os.O_RDWR, 0600)
-		if err != nil {
-			return nil, &maintenance.QueryPreparationError{State: "initialization_required", Cause: err}
-		}
+		return nil, &maintenance.QueryPreparationError{State: "initialization_required", Cause: err, Passive: true}
 	}
 	if err != nil {
 		return nil, err

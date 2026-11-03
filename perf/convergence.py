@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 import uuid
+from process_history import execution_records
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / 'scripts'))
@@ -45,6 +46,11 @@ def measure(binary, size, policy, deadline, storm, row):
         if not envelope.get('ok') or envelope.get('schema_version') != 1:
             raise RuntimeError('Invalid CLI response')
         return envelope['data']
+
+    protocol = api('version').get('protocol_version', 0)
+
+    def records():
+        return execution_records(api, protocol)
 
     def wait(check):
         until = min(deadline, time.monotonic() + 20)
@@ -135,7 +141,7 @@ raise SystemExit(0 if ready else 1)
             manual_ns = None
             if policy == 'notify':
                 assert observation(str(number-1))
-                assert len(api('process', 'list')['items']) == number
+                assert len(records()) == number
                 before_manual = time.perf_counter_ns()
                 current = api('process', 'restart', previous, '--request-id', str(uuid.uuid4()))['item']
                 api('process', 'wait', current['id'], '--timeout', '10s')
@@ -150,7 +156,7 @@ raise SystemExit(0 if ready else 1)
                          'explicit_manual_apply_ns': manual_ns})
         storm_result = None
         if storm:
-            before = len(api('process', 'list')['items'])
+            before = len(records())
             api('var', 'set', 'REV', '--value', 'storm-four')
             def paused():
                 update = status(current['id'])['item'].get('value_apply', {})
@@ -164,7 +170,7 @@ raise SystemExit(0 if ready else 1)
             if deadline - time.monotonic() < 4.5:
                 raise RuntimeError('Insufficient run budget for storm observation')
             time.sleep(4.5)
-            after = api('process', 'list')['items']
+            after = records()
             assert before == len(after) == 4 and sum(r['ended_at'] is None for r in after) == 1
             assert paused() and observation('3')
             latest = status(current['id'])
@@ -179,7 +185,7 @@ raise SystemExit(0 if ready else 1)
         cleaning = True
         try:
             api('project', 'down', '--request-id', str(uuid.uuid4()))
-            assert not any(r['ended_at'] is None for r in api('process', 'list')['items'])
+            assert not any(r['ended_at'] is None for r in records())
             retire_vaults(root / 'state' / 'data' / 'vault')
         except BaseException:
             row['retained_root'] = str(root)

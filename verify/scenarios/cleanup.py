@@ -83,6 +83,7 @@ old="2000-01-01T00:00:00Z"
 record={"ready_configured":False,"id":process_id,"profile":"cleanup-fixture","instance_id":"","directory":str(root),"command":"legacy","env":"","capture_logs":True,"created_at":old,"started_at":old,"ended_at":old,"exit_code":0,"reason":"exit","state":"stopped"}
 record_path=process_dir/"record.json";record_path.write_text(json.dumps(record));record_path.chmod(0o600)
 log_path=process_dir/"output.log";log_path.write_text("partial-resume-log");log_path.chmod(0o600)
+assert api("doctor","--storage","--fix")["ready"]
 plan=api("cleanup","preview","--profile","cleanup-fixture")
 process_item=next(i for i in plan["items"] if i["kind"]=="completed_process" and i["source"]==str(record_path))
 log_item=next(i for i in plan["items"] if i["kind"]=="expired_log" and i["source"]==str(log_path))
@@ -95,7 +96,7 @@ assert not record_path.exists() and log_path.exists() and (process_dir/"record.a
 shutil.rmtree(blocked/"payload")
 resumed=api("cleanup","apply",plan["id"],"--item",process_item["id"],"--item",log_item["id"],"--request-id",request_id)
 assert resumed["replayed"] and len(resumed["items"])==2 and not log_path.exists()
-assert all(i["id"]!=process_id for i in api("process","list","--profile","cleanup-fixture")["items"])
+assert all(i["id"]!=process_id for i in api("process","list","--profile","cleanup-fixture","--view","history")["items"])
 
 ghost=root/"gone";ghost.mkdir()
 (ghost/"devtools.toml").write_text('profile="gone"\n[ports.web]\nport=25100\nrange=[25100,25199]\n')

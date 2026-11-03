@@ -3,6 +3,8 @@ package tasks
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"github.com/jinyongp/devtools/internal/collectionquery"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -17,10 +19,11 @@ import (
 )
 
 type Query struct {
-	Command string
-	Target  string
-	Options map[string]string
-	Body    Object
+	Command     string
+	Target      string
+	Options     map[string]string
+	ListOptions map[string][]string
+	Body        Object
 }
 
 const contextResponseMax = 2 << 20
@@ -209,6 +212,27 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		}
 	}
 	kind, cmd := queryKindCommand(q.Command)
+	if cmd == "current" {
+		dir := q.Options["dir"]
+		if dir == "" {
+			dir = "."
+		}
+		canonical, err := location.Canonical(dir)
+		if err != nil {
+			return nil, failure("invalid_argument", "Cannot resolve directory.")
+		}
+		options := map[string]string{}
+		for k, v := range q.Options {
+			options[k] = v
+		}
+		options["dir"] = canonical
+		q.Options = options
+	}
+	if pagedQueryCommand(cmd) {
+		if _, err := collectionquery.Parse(NavigationDefinition(q.Command), q.Options, q.ListOptions); err != nil {
+			return nil, failure("invalid_argument", err.Error()+".")
+		}
+	}
 	limit, limitErr := positive(q.Options, "limit", 50, 200)
 	if limitErr != nil {
 		return nil, limitErr
@@ -501,11 +525,23 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 			return nil, failure("invalid_argument", "Cannot resolve directory.")
 		}
 		for _, r := range s.Runs {
-			if currentRunInDirectory(r, dir) {
-				items = append(items, r)
+			if currentRunInDirectory(r, dir) && (q.Options["task"] == "" || q.Options["task"] == r.TaskID) {
+				item := s.Items[r.TaskID]
+				if ws := q.Options["workstream"]; ws != "" && (item == nil || item.Workstream != ws) {
+					continue
+				}
+				view := Object{}
+				body, _ := r.MarshalJSON()
+				_ = json.Unmarshal(body, &view)
+				if item != nil {
+					view["workstream_id"] = item.Workstream
+				}
+				items = append(items, view)
 			}
 		}
-		sort.Slice(items, func(i, j int) bool { return items[i].(*Run).Started < items[j].(*Run).Started })
+		sort.Slice(items, func(i, j int) bool {
+			return str(items[i].(Object), "started_at") < str(items[j].(Object), "started_at")
+		})
 	case "checkpoint list":
 		if s.Runs[q.Target] == nil {
 			return nil, failure("not_found", "Run does not exist.")
@@ -517,6 +553,24 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		}
 	case "history":
 		ids := map[string]bool{q.Target: true}
+		workstreamIDs := map[string]bool{}
+		if ws := q.Options["workstream"]; ws != "" {
+			w := s.Items[ws]
+			if w == nil || w.Kind != "workstream" {
+				return nil, failure("not_found", "Workstream does not exist.")
+			}
+			workstreamIDs[ws] = true
+			for _, t := range s.List("task") {
+				if t.Workstream == ws {
+					workstreamIDs[t.ID] = true
+				}
+			}
+			for _, v := range s.List("validation") {
+				if owner := s.owner(v); owner != nil && workstreamIDs[owner.ID] {
+					workstreamIDs[v.ID] = true
+				}
+			}
+		}
 		if item != nil {
 			for _, t := range s.List("task") {
 				if item.Kind == "workstream" && t.Workstream == item.ID {
@@ -530,12 +584,12 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 			}
 		}
 		for _, ev := range s.Events {
-			if q.Target == "" || eventTouches(ev, ids) {
+			if (q.Target == "" || eventTouches(ev, ids)) && (len(workstreamIDs) == 0 || eventTouches(ev, workstreamIDs)) {
 				items = append(items, ev)
 			}
 		}
 	case "list":
-		state := q.Options["state"]
+		states := queryStates(q)
 		scope, completion := q.Options["scope"], q.Options["completion"]
 		if scope != "" && (!contains([]string{"included", "removed", "all"}, scope) || kind == "workstream") {
 			return nil, failure("invalid_argument", "Use included, removed, or all scope for tasks and validations.")
@@ -547,13 +601,15 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		if kind == "workstream" {
 			allowed = []string{"draft", "active", "done", "canceled", "all"}
 		}
-		if state != "" && !contains(allowed, state) {
-			return nil, failure("invalid_argument", "Invalid state filter.")
+		for _, state := range states {
+			if !contains(allowed, state) {
+				return nil, failure("invalid_argument", "Invalid state filter.")
+			}
 		}
-		if kind == "workstream" && state != "" && state != "all" {
+		if kind == "workstream" && len(states) > 0 && !contains(states, "all") {
 			targets := []string{}
 			for _, i := range s.Items {
-				if i.Kind == kind && i.State == state {
+				if i.Kind == kind && contains(states, i.State) {
 					targets = append(targets, i.ID)
 				}
 			}
@@ -564,7 +620,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 			if kind != "workstream" && ((scope == "" || scope == "included") && !included || scope == "removed" && included) {
 				continue
 			}
-			if state != "" && state != "all" && i.State != state {
+			if len(states) > 0 && !contains(states, "all") && !contains(states, i.State) {
 				continue
 			}
 			if ws := q.Options["workstream"]; ws != "" {
@@ -580,13 +636,17 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 			if completion != "" && completion != "all" && status != completion {
 				continue
 			}
-			if state == "" && completion == "" && scope == "" && (i.State == "done" && status != "stale" || i.State == "canceled") {
+			if len(states) == 0 && completion == "" && scope == "" && (i.State == "done" && status != "stale" || i.State == "canceled") {
 				continue
 			}
 			items = append(items, s.View(i))
 		}
 	default:
 		return nil, failure("invalid_argument", "Unknown task query.")
+	}
+	items, e = filterNavigation(q, items)
+	if e != nil {
+		return nil, e
 	}
 	return store.pageWithContext(ctx, q, out, items, limit)
 }
@@ -599,7 +659,7 @@ func (s Store) pageWithContext(ctx context.Context, q Query, out Object, items [
 	if q.Options["cursor"] != "" {
 		return nil, failure("cursor_invalid", "Start a new query.")
 	}
-	fp := queryFingerprint(s.Profile, q)
+	fp := queryFingerprint(s.Profile, q, s.Directory)
 	dir := s.Cache
 	if dir == "" {
 		dir = filepath.Join(s.Directory, "cache")

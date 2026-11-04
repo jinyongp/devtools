@@ -56,7 +56,9 @@ func causalErrorView(e map[string]any) (cliui.Document, bool) {
 		first = append(first, cliui.Paragraph(cliui.Words(text(roots[0]["message"]))))
 	}
 	blocks := []cliui.Block{cliui.Stack(first...)}
-	blocks = append(blocks, errorScope(target)...)
+	if report["scope"] != "storage" {
+		blocks = append(blocks, errorScope(target)...)
+	}
 	if len(roots) == 1 {
 		root := roots[0]
 		rootFacts, _ := root["facts"].(map[string]any)

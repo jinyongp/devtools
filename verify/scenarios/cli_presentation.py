@@ -232,7 +232,8 @@ try:
         ('a-checked', 'current'), ('b-broken', 'blocked')], values
     code, output, error = call('--format', 'text', *progress_args, tty_out=True, tty_err=True)
     assert code == 3 and not output and 'b-broken' in error and 'Storage could not be verified' in error, error
-    assert 'private-value-sentinel' not in error and 'c-unchecked' not in error, error
+    assert all(value not in error for value in ('private-value-sentinel', 'c-unchecked', 'a-checked')), error
+    assert error.count('Directory') == 1 and '2 storage items are current.' in error, error
     assert broken.read_bytes() == corrupt, 'diagnosis rewrote unreadable fixture data'
 finally:
     broken.write_bytes(original)

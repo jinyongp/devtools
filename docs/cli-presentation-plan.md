@@ -597,11 +597,18 @@ cliui 경계의 닫힌 값 타입이고 domain DTO·사용자 확장 plugin API�
 명시한다. 진단은 대상·판정 → 실패 항목 → 원인 → effects/retry → Next 순서다.
 전체 `ok:true`만으로 진단 제목을 OK로 만들지 않는다.
 
+저장소 진단의 `ready:false`에서는 blocked와 unsupported 항목을 전환 필요 항목보다 먼저
+보여준다. `items[*].state=current`이며 reason과 diagnostic이 없는 정상 항목은 개수로
+요약한다. 이유나 진단이 있는 항목, 실패와 전환 대상, 복구 행동은 그대로 보존한다.
+`ready:true`의 명시적 저장소 inventory와 JSON 전체 항목은 유지한다. 전역 저장소 오류에는
+report의 실제 저장소 directory만 표시하고 관련 없는 project scope를 중복 표시하지 않는다.
+
 기존 초안의 '알려진 모든 public field를 무조건 출력'은 기본값·빈 배열·중복 metadata로
 사람용 출력을 다시 복잡하게 만들 수 있어 수정한다. 전용 view는 **필수 의미를 보존하는 요약**이다.
 생략 가능한 알려진 기본값·빈 보조 구조는 adapter가 field path별로 명시한다. 전역적으로
-false/0/null/빈 문자열을 지우지 않는다. scope·상태·효과·replay/preview·오류·필수 입력·ID·
-revision·cursor는 생략 목록에 넣지 않는다. 인식하지 못한 새 public field는 Details tree로
+false/0/null/빈 문자열을 지우지 않는다. 위 저장소 정상 항목 요약 외에는
+scope·상태·효과·replay/preview·오류·필수 입력·ID·revision·cursor는 생략 목록에 넣지 않는다.
+인식하지 못한 새 public field는 Details tree로
 보여 주며 generic fallback은 전체 공개 node를 유지한다. 상세가 더 필요하면 이미 있는 안전한
 read-only inspect/show 행동이 public 결과에 이미 있으면 연결하고, 없으면 presenter가
 임의 행동을 만들지 않는다. mutation을 JSON으로 다시 실행하라고 안내하지 않는다.

@@ -200,6 +200,7 @@ spinner 정리 검사는 그대로 유지하며, 실패 설명과 후속 행동�
 | 설치본 후속 안내 | JSON 복구 argv 실행에 더해 실제 PTY에 출력한 text 명령을 그대로 실행하고 같은 isolation root가 Ready인지 확인한다. | 기존 `cli_presentation`을 확장한다. 손상된 값 profile의 JSON/text와 fixture 원본 복구 뒤 재검증도 같은 설치본으로 확인한다. |
 | CI 실행 조건 | Windows race 명령에서 문서의 runner 내부 `-p 1` 정책이 빠졌다. 동일 정책을 적용하며 패키지·race·기한을 유지한다. | Workflow 문법과 실제 native 결과를 구분한다. 이 차이가 아래 두 CI 실패의 원인이라고 확정하지 않는다. |
 | 텍스트 성공 검사의 전제 | 진행 표시가 허용되는 text 성공에서도 stderr 공백을 요구한 검사가 남아 있었다. 생성 request ID, columns, command alias, rendering과 publication 검사를 대조해 정상 진행과 오류를 구분한다. | 성공 코드·출력·동일 request 재생·오류 표시 금지를 유지한다. JSON·artifact·completion wire의 공백 조건과 공통 progress·foreground 스트림 검사는 유지한다. |
+| 실패 화면의 정보 순서 | 정상 inventory가 막힌 대상을 밀어내고 전역 저장소 오류에도 project directory가 중복됐다. blocked와 unsupported를 먼저 보여주며 별도 진단이 없는 정상 항목은 개수로 요약한다. 실제 저장소 scope만 표시한다. | 정상 200개, 주의 항목, 전환 대상과 blocked를 섞은 결과 및 중복 scope 검사가 수정 전 둘 다 실패했다. 정상 완료 inventory, 의미 있는 진단과 JSON 전체 항목은 유지한다. |
 
 2026-11-04 17:05 UTC 기준, `811966e`의
 [main Windows 검증](https://github.com/jinyongp/devtools/actions/runs/41863909764)은 23개 job이
@@ -225,3 +226,13 @@ v0.42.0이다. 두 Windows 실패의 간헐성 원인과 후속 소스의 native
 후속 `7499859195591f1e43d1b73e59337fd50988797b`는 위 text 성공 검사 전제 여섯 곳만
 수정한다. 제품 코드·JSON 계약은 `d6fda86`과 같으며, 해당 출력·progress·foreground의
 targeted race 검사를 9.219초에 통과했다. 최종 native와 배포 완료는 후속 실행으로 확인한다.
+
+`fc210b928732bb83ed611801ae3305975c88b6ad`의 전체 정적 검사, Go race와 설치본 40개도
+통과했다. CLI race는 245.487초였다. 해당 소스의
+[Windows 실행](https://github.com/jinyongp/devtools/actions/runs/41877210211)은 runner가
+배정되지 않은 22개 job 대기 상태였으므로 native 완료로 기록하지 않았다.
+
+실패 화면의 정보 순서를 보완한 후 관련 CLI와 presentation race는 10.352초와
+1.045초, 설치본 PTY 흐름은 정리 포함 12.667초에 통과했다. 이 보완은 B6.4의 저장소
+실패 view 규칙과 첫 화면을 확인하는 리뷰 기준에도 반영한다. 전체 검증의 최종 소스와
+native 결과는 후속 기록으로 구분한다.

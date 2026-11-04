@@ -120,7 +120,7 @@ func TestStorageDoctorProfileFailureRetainsVerifiedPrefixWithoutWriting(t *testi
 						t.Fatal(operation, format, code, out, diagnostic)
 					}
 					if format == "text" {
-						if !strings.Contains(diagnostic, "b-broken") || !strings.Contains(diagnostic, "Storage could not be verified") || strings.Contains(diagnostic, "Storage upgrade required") || strings.Contains(diagnostic, "c-unchecked") {
+						if !strings.Contains(diagnostic, "b-broken") || !strings.Contains(diagnostic, "Storage could not be verified") || strings.Contains(diagnostic, "Storage upgrade required") || strings.Contains(diagnostic, "c-unchecked") || strings.Contains(diagnostic, "a-checked") || strings.Count(diagnostic, "Directory") != 1 {
 							t.Fatal("failed profile must be identified without inventing an upgrade or a verified remainder", diagnostic)
 						}
 						continue

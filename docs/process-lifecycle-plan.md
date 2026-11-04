@@ -115,3 +115,15 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
   보존한다. 시작을 관측하지 못한 실행에 가상의 앱 종료 코드 0을 기록하지 않는다.
 - 실제 자식 계층을 시작한 뒤 관측 실패를 주입하는 Unix race 검사 통과.
   같은 native Windows Job 회귀 사례를 기존 suite-runtime 검증에 추가했다.
+
+### 통합 리뷰 수정 3 — 명시적 표시 열과 실제 프레임워크
+
+- 공통 목록 renderer가 많은 표시 열을 요청한 경우에도 선택한 행·열을 그대로
+  표시하도록 보완했다. 표의 열 수 한계를 넘으면 행별 필드로 표시하며, 빈 선택도
+  `No items.`로 처리한다. 전체 JSON 형태의 fallback으로 되돌리지 않는다.
+- 실제 CLI에서 9개 열 선택, 선택하지 않은 필드 비노출, 빈 결과를 검증했다.
+- 수정한 Linux 바이너리로 실제 프레임워크 7개 사례를 재실행했다: Node watch
+  foreground/managed reload, Uvicorn foreground reload/managed workers 2개,
+  Nuxt 4.6.4 기본 foreground/managed 및 no-fork foreground.
+  foreground도 process API로 종료하고, reload 후 같은 실행 ID와 active count 1을 확인했다.
+  7개 모두 소유 프로세스·포트가 정리됐고 별도 연구용 강제 정리는 필요 없었다.

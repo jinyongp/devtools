@@ -102,4 +102,16 @@ func TestProcessCurrentSummarizes313RecordsAndHistoryReachesEveryExecution(t *te
 	if code != 0 || diagnostic != "" || !strings.Contains(text, "Exited") || strings.Contains(text, "Unrecognized") {
 		t.Fatal(code, text, diagnostic)
 	}
+	wide := []string{"--format", "text", "process", "list", "--view", "history", "--state", "exited", "--limit", "1", "--query-cache-dir", cache}
+	for _, column := range []string{"command", "mode", "state", "execution_id", "env", "profile", "directory", "reason", "active_count"} {
+		wide = append(wide, "--columns", column)
+	}
+	code, text, diagnostic = invoke(t, a, "", wide...)
+	if code != 0 || diagnostic != "" || !strings.Contains(text, "managed") || !strings.Contains(text, "Exited") || strings.Contains(text, "Result\n") || strings.Contains(text, "legacy_unverified") {
+		t.Fatalf("wide explicit columns fell back or exposed unselected fields: %d %s %s", code, text, diagnostic)
+	}
+	code, text, diagnostic = invoke(t, a, "", "--format", "text", "process", "list", "--view", "history", "--command", "missing", "--columns", "mode")
+	if code != 0 || diagnostic != "" || !strings.Contains(text, "No items.") || strings.Contains(text, "Result\n") {
+		t.Fatalf("empty explicit columns lost the text contract: %d %s %s", code, text, diagnostic)
+	}
 }

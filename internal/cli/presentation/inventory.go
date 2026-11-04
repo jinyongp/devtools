@@ -238,6 +238,22 @@ func plainCell(value cliui.Text) string {
 }
 
 func inventoryTable(layout inventoryLayout, items []any) cliui.Block {
+	if len(items) == 0 {
+		return cliui.Paragraph(cliui.Literal("No items."))
+	}
+	if len(layout.columns) > 8 {
+		// Explicit column selections can exceed the table's width contract.
+		// Keep the same selected rows and fields in a stacked representation.
+		blocks := make([]cliui.Block, 0, len(items))
+		for index, item := range items {
+			fields := make([]cliui.Field, 0, len(layout.columns))
+			for _, column := range layout.columns {
+				fields = append(fields, cliui.Field{Label: cliui.Literal(column.Label), Value: inventoryCell(item, column)})
+			}
+			blocks = append(blocks, cliui.Section(cliui.Literal(fmt.Sprintf("Item %d", index+1)), cliui.Fields(fields...)))
+		}
+		return cliui.Section(cliui.Literal("Items"), blocks...)
+	}
 	columns := make([]cliui.Column, len(layout.columns))
 	for i, c := range layout.columns {
 		columns[i] = cliui.Column{Label: cliui.Literal(c.Label)}

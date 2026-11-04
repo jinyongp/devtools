@@ -63,29 +63,37 @@ func writeRecord(path string, r Record) error {
 }
 
 func writeRecordFormat(path string, r Record) error {
+	return writeRecordFormatContext(context.Background(), path, r)
+}
+
+func writeRecordFormatContext(ctx context.Context, path string, r Record) error {
 	root := filepath.Dir(filepath.Dir(filepath.Dir(path)))
-	unlock, err := (retainedbody.Store{Root: root}).Publication(context.Background())
+	unlock, err := (retainedbody.Store{Root: root}).Publication(ctx)
 	if err != nil {
 		return err
 	}
 	defer unlock()
-	return writeRecordHeld(path, r)
+	return writeRecordHeldContext(ctx, path, r)
 }
 
 // The caller holds Publication until the record's owning namespace is visible.
 // Windows uses this while staging a new execution directory atomically.
 func writeRecordHeld(path string, r Record) error {
+	return writeRecordHeldContext(context.Background(), path, r)
+}
+
+func writeRecordHeldContext(ctx context.Context, path string, r Record) error {
 	root := filepath.Dir(filepath.Dir(filepath.Dir(path)))
 	body, err := json.Marshal(r)
 	if err != nil {
 		return err
 	}
-	ref, err := (retainedbody.Store{Root: root}).Put(context.Background(), "process_record", body)
+	ref, err := (retainedbody.Store{Root: root}).Put(ctx, "process_record", body)
 	if err != nil {
 		return err
 	}
 	if r.Capture {
-		release, err := acquireLogLock(context.Background(), filepath.Join(filepath.Dir(path), "output.log"), true)
+		release, err := acquireLogLock(ctx, filepath.Join(filepath.Dir(path), "output.log"), true)
 		if err != nil {
 			return err
 		}
@@ -111,10 +119,14 @@ func readDiskRecord(path string) (diskRecord, error) {
 }
 
 func (s Store) recordAt(path string) (Record, error) {
+	return s.recordAtContext(context.Background(), path)
+}
+
+func (s Store) recordAtContext(ctx context.Context, path string) (Record, error) {
 	if _, err := readDiskRecord(path); err != nil {
 		return Record{}, err
 	}
-	unlock, err := (retainedbody.Store{Root: s.Data}).Query(context.Background())
+	unlock, err := (retainedbody.Store{Root: s.Data}).Query(ctx)
 	if err != nil {
 		return Record{}, err
 	}
@@ -141,10 +153,14 @@ func (s Store) recordAt(path string) (Record, error) {
 // RecordBytes exposes the logical body to cleanup without copying the storage
 // wrapper into an archive that must later restore the original record.
 func (s Store) RecordBytes(id string) ([]byte, error) {
+	return s.recordBytes(context.Background(), id)
+}
+
+func (s Store) recordBytes(ctx context.Context, id string) ([]byte, error) {
 	if _, err := readDiskRecord(s.path(id, "record.json")); err != nil {
 		return nil, err
 	}
-	unlock, err := (retainedbody.Store{Root: s.Data}).Query(context.Background())
+	unlock, err := (retainedbody.Store{Root: s.Data}).Query(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -184,8 +200,12 @@ func writeReceipt(path string, r receipt) error {
 }
 
 func writeReceiptFormat(path string, r receipt) error {
+	return writeReceiptFormatContext(context.Background(), path, r)
+}
+
+func writeReceiptFormatContext(ctx context.Context, path string, r receipt) error {
 	data := filepath.Dir(filepath.Dir(filepath.Dir(path)))
-	unlock, err := (retainedbody.Store{Root: data}).Publication(context.Background())
+	unlock, err := (retainedbody.Store{Root: data}).Publication(ctx)
 	if err != nil {
 		return err
 	}
@@ -197,7 +217,7 @@ func writeReceiptFormat(path string, r receipt) error {
 			return err
 		}
 		root := filepath.Dir(filepath.Dir(filepath.Dir(path)))
-		ref, err := (retainedbody.Store{Root: root}).Put(context.Background(), "process_record", body)
+		ref, err := (retainedbody.Store{Root: root}).Put(ctx, "process_record", body)
 		if err != nil {
 			return err
 		}
@@ -207,6 +227,10 @@ func writeReceiptFormat(path string, r receipt) error {
 }
 
 func (s Store) readReceipt(path string, r *receipt) error {
+	return s.readReceiptContext(context.Background(), path, r)
+}
+
+func (s Store) readReceiptContext(ctx context.Context, path string, r *receipt) error {
 	if _, err := os.Lstat(path); err != nil {
 		return err
 	}
@@ -217,7 +241,7 @@ func (s Store) readReceipt(path string, r *receipt) error {
 		}
 		return err
 	}
-	unlock, err := (retainedbody.Store{Root: s.Data}).Query(context.Background())
+	unlock, err := (retainedbody.Store{Root: s.Data}).Query(ctx)
 	if err != nil {
 		return err
 	}

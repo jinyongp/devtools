@@ -8,12 +8,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
+	operationprogress "github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -178,6 +180,8 @@ func (r *Report) finalize() {
 }
 
 func (e Engine) Inspect(ctx context.Context) (r Report, condition *protocol.Error) {
+	finish := operationprogress.Begin(ctx, "Inspecting managed storage")
+	defer finish()
 	r = e.result()
 	defer func() {
 		if condition != nil {
@@ -211,7 +215,9 @@ func (e Engine) Inspect(ctx context.Context) (r Report, condition *protocol.Erro
 		if err := ctx.Err(); err != nil {
 			return r, failure("inspect_storage", err)
 		}
+		finishDomain := operationprogress.Begin(ctx, "Checking "+adapter.Name+" storage")
 		steps, err := adapter.InspectHeld(ctx, e.Root)
+		finishDomain()
 		if err != nil {
 			r.Items = append(r.Items, Step{Domain: adapter.Name, Source: "unknown", Target: "current", State: "blocked", Reason: reason(err), Diagnostic: diagnostic(adapter.Name, "inspect_storage", err)})
 			continue
@@ -241,6 +247,8 @@ func (e Engine) writeProgress(p progress) error {
 // Fix resumes from the actual domain state, never from unverified journal claims.
 // Existing domain transactions own data backup, atomic publication and recovery.
 func (e Engine) Fix(ctx context.Context) (report Report, condition *protocol.Error) {
+	finish := operationprogress.Begin(ctx, "Upgrading managed storage")
+	defer finish()
 	wrote := false
 	defer func() {
 		if wrote {
@@ -335,7 +343,9 @@ func (e Engine) Fix(ctx context.Context) (report Report, condition *protocol.Err
 		if len(steps) == 0 || adapter.Authorize == nil {
 			continue
 		}
+		finishAccess := operationprogress.Begin(ctx, "Checking access to "+adapter.Name+" storage")
 		release, err := adapter.Authorize(ctx, steps)
+		finishAccess()
 		if err != nil {
 			if release != nil {
 				release()
@@ -376,10 +386,17 @@ func (e Engine) Fix(ctx context.Context) (report Report, condition *protocol.Err
 	wrote = true
 	changed := prepared
 	failed := map[string]error{}
+	upgradeIndex, upgradeTotal := 0, 0
+	for _, step := range plan.Items {
+		if step.State == "migration_required" && step.Domain != "coordinator" {
+			upgradeTotal++
+		}
+	}
 	for _, step := range plan.Items {
 		if step.State != "migration_required" || step.Domain == "coordinator" {
 			continue
 		}
+		upgradeIndex++
 		if why := blocked[step.Domain]; why != nil {
 			failed[stepKey(step)] = why
 			continue
@@ -392,7 +409,9 @@ func (e Engine) Fix(ctx context.Context) (report Report, condition *protocol.Err
 				failed[stepKey(step)] = Required(step.Domain)
 				break
 			}
+			finishStep := operationprogress.Begin(ctx, fmt.Sprintf("Upgrading %s storage (%d/%d)", step.Domain, upgradeIndex, upgradeTotal))
 			didChange, err := adapter.Apply(ctx, e.Root, step)
+			finishStep()
 			changed = changed || didChange
 			if err != nil {
 				failed[stepKey(step)] = err

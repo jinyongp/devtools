@@ -6,13 +6,62 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/storageupgrade"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
+
+func TestStorageInspectionDeadlineBoundsRetainedBodyLockWait(t *testing.T) {
+	root := privateTempDir(t)
+	s := Store{Data: root}
+	now := time.Now().UTC()
+	if err := s.RestoreRecord(Record{ID: tasks.ID(), Profile: "app", Directory: root, Command: "web", CreatedAt: now, EndedAt: &now, State: "stopped"}); err != nil {
+		t.Fatal(err)
+	}
+	prepare, err := maintenance.AcquireExclusive(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepare()
+	release, err := maintenance.LockExclusive(context.Background(), filepath.Join(root, ".retained-bodies.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	release = sync.OnceFunc(release)
+	defer release()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	events := make(chan progress.Event, 64)
+	ctx = progress.WithObserver(ctx, func(event progress.Event) { events <- event })
+	done := make(chan bool, 1)
+	go func() {
+		_, condition := (storageupgrade.Engine{Root: root, Adapters: []storageupgrade.Adapter{StorageUpgradeAdapter()}}).Inspect(ctx)
+		done <- condition != nil
+	}()
+	select {
+	case failed := <-done:
+		if !failed {
+			t.Fatal("storage inspection ignored its deadline")
+		}
+	case <-time.After(2 * time.Second):
+		release()
+		<-done
+		t.Fatal("retained-body inspection waited beyond the caller's deadline")
+	}
+	close(events)
+	found := false
+	for event := range events {
+		found = found || event.Message == "Waiting for retained data access; another operation holds the lock"
+	}
+	if !found {
+		t.Fatal("the real blocked lock did not report its wait")
+	}
+}
 
 func TestProcessFormatUpgradeIsExplicitResumableAndRejectsOldReader(t *testing.T) {
 	root := privateTempDir(t)

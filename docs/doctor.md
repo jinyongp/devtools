@@ -29,6 +29,23 @@ devtools doctor --storage --fix
 별도 결과이며, 같은 실행파일의 업데이트를 반복해도 미완료 전환을 재개한다. Storage가 미완료면 exit 3이다.
 실행파일을 구버전으로 되돌리는 것은 데이터 복구가 아니다. Homebrew는 `brew upgrade` 뒤 위 doctor 명령을 실행한다.
 
+## 진행 표시와 대기
+
+Protocol 25의 텍스트 출력은 오래 걸리는 저장소 검사와 전환에서 현재 단계와 경과 시간을
+stderr에 표시한다. 예를 들어 `Checking processes storage`, `Upgrading processes storage (2/4)`처럼
+실제 단계를 표시하고, 다른 작업의 잠금을 기다리면 `Waiting for retained data access; another
+operation holds the lock`으로 바뀐다. 분모를 알 수 없는 작업에는 백분율을 표시하지 않는다.
+
+빠른 작업은 표시하지 않는다. ANSI를 지원하는 터미널은 한 줄을 갱신하고 결과를 출력하기 전에
+지운다. 명시적인 텍스트 파이프와 단순 터미널은 제어 문자 없이 진행 단계를 출력하며, 같은
+대기가 계속되면 10초 간격으로 경과 시간을 갱신한다. JSON과 알려진 agent 실행은 진행 표시를
+출력하지 않는다. 기존 최종 보고서와 exit code를 그대로 사용한다.
+
+잠금 대기도 전체 `--timeout`과 취소를 따른다. 저장소 전환의 기본 제한은 30초이며, 예를 들어
+`devtools doctor --storage --fix --timeout 2m`으로 늘릴 수 있다. 제한 시간이나 취소로 끝났으면
+보고서의 `effects`와 각 단계를 확인한 뒤 같은 명령으로 재개한다. 공통 전환 엔진을 쓰는
+`update`도 같은 진행 표시를 사용한다.
+
 ## 검사 범위 선택
 
 ```sh

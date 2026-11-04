@@ -18,6 +18,12 @@ func ensurePrivateLockDirectory(path string) error {
 	return root.Close()
 }
 func acquireFileLock(ctx context.Context, path string, mode lockMode) (*lockedFile, error) {
+	var finishWait func()
+	defer func() {
+		if finishWait != nil {
+			finishWait()
+		}
+	}()
 	root, err := platformfs.OpenRoot(filepath.Dir(path), false)
 	if err != nil {
 		return nil, err
@@ -39,6 +45,9 @@ func acquireFileLock(ctx context.Context, path string, mode lockMode) (*lockedFi
 		}
 		if acquired {
 			return &lockedFile{File: file.File, closeGuard: file.Close}, nil
+		}
+		if finishWait == nil {
+			finishWait = reportLockWait(ctx, path)
 		}
 		timer := time.NewTimer(10 * time.Millisecond)
 		select {

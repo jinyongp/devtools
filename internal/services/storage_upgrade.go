@@ -15,7 +15,7 @@ import (
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
-func processStorageStep(root, relative string) (storageupgrade.Step, error) {
+func processStorageStep(ctx context.Context, root, relative string) (storageupgrade.Step, error) {
 	step := storageupgrade.Step{Domain: "processes", Resource: relative, Source: "process-v2", Target: "process-v2", State: "current"}
 	raw, err := maintenance.Read(filepath.Join(root, "processes", relative), 128<<20)
 	if err != nil {
@@ -37,12 +37,12 @@ func processStorageStep(root, relative string) (storageupgrade.Step, error) {
 			if !validRecord(filepath.Base(filepath.Dir(relative)), d.Metadata) {
 				return step, errors.New("invalid process index")
 			}
-			if _, err := (Store{Data: root}).RecordBytes(d.Metadata.ID); err != nil {
+			if _, err := (Store{Data: root}).recordBytes(ctx, d.Metadata.ID); err != nil {
 				return step, err
 			}
 		} else {
 			var r receipt
-			if err := (Store{Data: root}).readReceipt(filepath.Join(root, "processes", relative), &r); err != nil {
+			if err := (Store{Data: root}).readReceiptContext(ctx, filepath.Join(root, "processes", relative), &r); err != nil {
 				return step, err
 			}
 		}
@@ -58,7 +58,7 @@ func processStorageStep(root, relative string) (storageupgrade.Step, error) {
 			return step, errors.New("invalid legacy process record")
 		}
 		step.Profile = r.Profile
-		if !(Store{Data: root}).leaseFree(context.Background(), r.ID) {
+		if !(Store{Data: root}).leaseFree(ctx, r.ID) {
 			step.State, step.Reason = "blocked", "active_writer"
 			return step, nil
 		}
@@ -90,7 +90,7 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 				continue
 			}
 			rel := filepath.Join(entry.Name(), "record.json")
-			step, err := processStorageStep(root, rel)
+			step, err := processStorageStep(ctx, root, rel)
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
@@ -110,7 +110,7 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 			if !strings.HasSuffix(entry.Name(), ".json") || !validID(strings.TrimSuffix(entry.Name(), ".json")) {
 				continue
 			}
-			step, err := processStorageStep(root, filepath.Join("receipts", entry.Name()))
+			step, err := processStorageStep(ctx, root, filepath.Join("receipts", entry.Name()))
 			if err != nil {
 				return nil, err
 			}
@@ -129,7 +129,7 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 			return false, err
 		}
 		defer release()
-		current, err := processStorageStep(root, step.Resource)
+		current, err := processStorageStep(ctx, root, step.Resource)
 		if err != nil {
 			return false, err
 		}
@@ -145,13 +145,13 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 			if err := tasks.ReadPrivate(path, &r); err != nil {
 				return false, err
 			}
-			err = writeRecordFormat(path, r)
+			err = writeRecordFormatContext(ctx, path, r)
 		} else {
 			var r receipt
 			if err := tasks.ReadPrivate(path, &r); err != nil {
 				return false, err
 			}
-			err = writeReceiptFormat(path, r)
+			err = writeReceiptFormatContext(ctx, path, r)
 		}
 		return err == nil, err
 	}}

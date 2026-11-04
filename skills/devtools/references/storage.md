@@ -23,6 +23,13 @@ Protected conversion borrows only an existing unlocked key, preserving its origi
 idle deadline. A locked/missing vault requires an explicit protection action; doctor
 never chooses a backend or prompts for an unlock. Follow the reported prerequisites.
 
+Protocol 25 long storage operations report their current stage, lock wait and
+elapsed time on text stderr. ANSI terminals update one line; plain text streams
+use bounded line updates. JSON and detected agents receive no progress output.
+The complete diagnosis, including lock waits, obeys `--timeout` (default 30s) and
+cancellation. Retain the partial report/effects and resume after resolving the
+reported prerequisite; progress is not a commit or cleanup guarantee.
+
 Owned installer/update paths invoke this coordinator in the new executable, also
 on a same-image retry. Check both `binary_changed` and `storage.ready/status`.
 An incomplete storage outcome exits 3 and retains the installed binary and recovery

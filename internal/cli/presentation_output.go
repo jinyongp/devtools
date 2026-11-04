@@ -2,10 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"io"
 
 	"github.com/jinyongp/devtools/internal/cli/presentation"
 	"github.com/jinyongp/devtools/internal/cliui"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -19,6 +21,15 @@ type outputController struct {
 	requestID       string
 	displayContext  presentation.DisplayContext
 	handlerReturned bool
+}
+
+func (o *outputController) progressContext(ctx context.Context) (context.Context, func()) {
+	if o.decision.Format != presentation.FormatText || len(o.environment.Signals) > 0 {
+		return ctx, func() {}
+	}
+	options := textOptions(o.environment, true)
+	feedback := cliui.NewProgress(o.streams.Err, cliui.ProgressOptions{Animate: options.SGR, Width: options.Width})
+	return progress.WithObserver(ctx, feedback.Observe), feedback.Close
 }
 
 func (o *outputController) outputError(code, message string) *protocol.Error {

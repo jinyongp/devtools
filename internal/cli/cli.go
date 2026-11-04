@@ -453,7 +453,10 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		}
 	}
 	request.OutputFormat, request.Agent = output.decision.Format, len(environment.Signals) > 0
-	data, err := selected.Run(ctx, streams, request)
+	runContext, finishProgress := output.progressContext(ctx)
+	defer finishProgress()
+	data, err := selected.Run(runContext, streams, request)
+	finishProgress()
 	if err != nil {
 		if err.Details == nil {
 			err.Details = map[string]any{}

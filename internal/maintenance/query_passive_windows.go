@@ -20,6 +20,12 @@ func acquirePassiveFilePair(ctx context.Context, path string) (func(), error) {
 	}
 	defer directory.Close()
 	acquire := func(name string) (*platformfs.File, error) {
+		var finishWait func()
+		defer func() {
+			if finishWait != nil {
+				finishWait()
+			}
+		}()
 		file, err := directory.OpenFile(name, os.O_RDONLY)
 		if err != nil {
 			return nil, err
@@ -36,6 +42,9 @@ func acquirePassiveFilePair(ctx context.Context, path string) (func(), error) {
 			}
 			if locked {
 				return file, nil
+			}
+			if finishWait == nil {
+				finishWait = reportLockWait(ctx, path)
 			}
 			timer := time.NewTimer(10 * time.Millisecond)
 			select {

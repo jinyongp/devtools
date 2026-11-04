@@ -79,4 +79,50 @@ Unix `update`는 별도 installer의 JSON stdout과 stderr를 제한된 private 
 | 업데이트 대기 | 실제 storage lock으로 child installer를 지연해 부모 진행 표시와 같은 실행파일 바이트 유지 확인 |
 | 전체 회귀 | Go race, 기존 정적 검사, 설치본 시나리오, 기존 Unix와 Windows workflow |
 
-최종 실행 결과와 검토에서 발견한 수정 사항은 이 문서에 기록한다.
+### 통합 리뷰에서 반영한 사항
+
+공통 dispatcher와 전체 명령군, output mode별 조기 반환, 입력과 native 출력의 모든 쓰기
+지점, updater의 프로세스 경계, 종료와 취소 및 부가 maintenance 경로를 검토했다.
+
+- post-write maintenance가 끝나기까지 같은 observer를 유지한다. 이미 확정된 작업 결과와
+  실패 효과를 진행 UI가 바꾸지 않으며, 최종 출력 전에는 반드시 닫는다.
+- 실행 전 값 검증과 launch admission에는 진행 표시를 유지한다. 실제 실행 직전에 멈추고,
+  보호된 출력의 마지막 flush가 끝난 뒤 재개하도록 수명을 조정했다.
+- 중첩된 입력이 서로의 표시를 재개하지 않도록 독립적인 suspend ID를 쓴다. 입력 종료와
+  native 출력 직후 짧은 작업에 불필요하게 표시가 나타나지 않도록 지연을 다시 적용한다.
+- stderr를 제공하지 않은 API 호출은 진행 UI를 생략하도록 보호하고 회귀 검사에 포함했다.
+- 현재 문서와 bundled skill의 doctor 한정 설명을 갱신했다. 초기 UI 계획의 spinner 제외도
+  후속 공통 진행 표시의 좁은 예외와 연결해 현재 계약이 충돌하지 않도록 했다.
+
+### 로컬 검증 결과
+
+- 최종 Go 소스의 `go test -race ./...` 통과. CLI package는 229.601초에 완료했다.
+- 기존 `scripts/project check-static` 통과. skill 수정 후 같은 검사를 다시 통과했다.
+- 설치본 40개 시나리오 통과. 마지막 공통 보호와 installer 대기 검증을 추가한 뒤
+  `cli_presentation`, `update`를 새 설치본으로 다시 실행해 통과했다.
+- 실제 PTY에서 collection 잠금과 SIGINT, 두 비밀번호 prompt를 각각 700ms 유지한 입력,
+  700ms 동안 조용한 foreground의 원문 출력과 exit 17을 확인했다. 같은 실행파일 update에서
+  실제 저장소 잠금을 지연시켜 부모의 진행 표시와 실행파일 바이트 보존도 확인했다.
+
+사용자 저장소 정리와 릴리스 발행은 수행하지 않았다.
+
+### Native 검증 결과와 남은 대기
+
+검증 대상은 `71e3d96be972c65237f385586f807d0b0c00bf08`이다. 구현은 `d88dddf`, 설치본
+검증과 계약 문서는 `71e3d96`으로 나눠 커밋했다. 아래 결과 기록 이후에는 문서만 변경한다.
+
+| 기존 workflow | 확인한 결과 |
+| --- | --- |
+| [Windows platform boundaries](https://github.com/jinyongp/devtools/actions/runs/41849308567) | 최종 gate 포함 23개 job 성공. ARM64와 x64 CLI, amd64 race, 제품과 설치기 검사 통과 |
+| [Unix validation](https://github.com/jinyongp/devtools/actions/runs/41849352992) | 22개 job 성공, 선택 검사 3개 제외. 마지막 `macos-15 / rest`는 runner 배정 대기 |
+
+2026-11-04 14:58 UTC 확인 시 마지막 macOS job은 `status: queued`, `runner_name: ""`,
+`steps: []`였다. 약 21분 동안 실행을 시작하지 못했으며 제품 테스트 실패는 관측되지 않았다.
+Unix 최종 gate도 이 job을 기다리므로 **Unix 전체 검증 완료로 판정하지 않는다**. Workflow는
+취소하거나 다시 시작하지 않았고 기존 실행이 계속 대기한다. 코드와 검증 조건을 바꿔 이
+대기를 우회하지 않는다.
+
+이미 통과한 Unix 범위는 macOS와 Linux CLI race, 읽기 전용 잠금, ARM64와 Intel Mac 및
+Linux 설치본, vault와 values, Windows/WSL2와 실제 브라우저 호환성을 포함한다. 제외한
+선택 검사는 명시적 real Cloudflared, 두 기기 Tailscale, 성능 측정이며 각각
+`live_provider=none`, `measure_automation=false`로 요청한 기존 workflow 조건이다.

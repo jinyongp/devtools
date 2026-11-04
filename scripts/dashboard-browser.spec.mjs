@@ -76,6 +76,12 @@ test("dashboard login, value mutation and navigation survive reload", async ({ p
     await edit.click();
     const input = page.getByRole("textbox", { name: "New value for MESSAGE" });
     await input.fill("after");
+    // A committed action can outlive the DOM assertion's five-second budget.
+    await page.route("**/api/actions", async route => {
+      const response = await route.fetch();
+      await new Promise(resolve => setTimeout(resolve, 6000));
+      await route.fulfill({ response });
+    }, { times: 1 });
     await submitAction(page, () => page.getByRole("button", { name: "Save", exact: true }).click());
     await expect(page.getByRole("button", { name: "Edit MESSAGE" })).toHaveText("after");
 

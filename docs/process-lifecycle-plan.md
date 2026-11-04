@@ -95,7 +95,7 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
 | 제어·요청 재시도 | 검토 및 로컬 검증 완료 | 인증, 실행 ID 고정, 응답 유실, 결과 replay, 제어기 손실 |
 | 목록·필터·text·schema | 검토 및 로컬 검증 완료 | mode 선선택, bounded history, 실행 schema 재사용, 이력 표 재검증 |
 | dashboard·Skill·문서 | 검토 및 로컬 검증 완료 | capability 기반 작업, cleanup 표시, protocol 24 발견과 경계 |
-| Windows Job·macOS backend | 교차 컴파일 완료 / native 검증 대기 | 기존 Unix/Windows workflow로 같은 최종 소스 검증 |
+| Windows Job·macOS backend | Windows runtime 통과 / macOS native 실패 조사 중 | 기존 Unix/Windows workflow로 같은 최종 소스 검증 |
 
 현재: 작업 1–3 완료. 작업 4의 최종 리뷰 및 native CI 결과 확인이 남아 있다.
 
@@ -136,6 +136,16 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
 - complete/unknown 기록을 공개한 뒤 응답을 비워 실제 RPC decode 실패를 일으키고,
   같은 요청을 두 번 실행해 검증한 성공과 효과 불명 실패가 각각 유지되는지 확인했다.
   제어기 손실·대기 중 stop·과거 기록 호환성을 포함한 관련 race 검사 통과.
-- `e4bf03c`의 전체 Go race 49개 package, 기존 정적 검사, 설치본 9개 시나리오
+- `e4bf03c`의 전체 Go race 50개 package, 기존 정적 검사, 설치본 9개 시나리오
   (기존 8개 + proxy_auto)가 통과했다. 추가 stop 수정 소스의 실제 Chromium
   dashboard 4개 시나리오도 통과했다. 최종 플랫폼 검증은 기존 native CI에서 확인한다.
+
+### Native 검증 — macOS 관측 경계 재확인
+
+- `d20fc5f`의 Linux 전체 Go race 50개 package, 정적 검사, 설치본 9개 시나리오 통과.
+  Windows amd64/arm64 suite-runtime도 기존 native workflow에서 통과했다.
+- [Unix native run](https://github.com/jinyongp/devtools/actions/runs/41779003648)에서
+  macOS의 process 관측 오류가 doctor/execution/설치본 검사에도 전파됨을 확인했다.
+  실패를 무시하거나 정리 완료로 바꾸지 않고 native API 관측을 재확인한다.
+- 살아 있는 그룹, 정지한 자식, reap 전 종료 자식과 그룹을 직접 검사하는 macOS
+  회귀 사례를 추가했다. 교차 컴파일 통과; native 실패 원인 확인과 수정은 진행 중이다.

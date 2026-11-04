@@ -176,7 +176,7 @@ def http(path, body=None, expected=200, headers=None):
     return response.read()
 try:
     assert b"canvas" in http("/")
-    assert b"v7.9.0" in http("/d3.min.js")
+    assert b"v7.9.2" in http("/d3.min.js")
     http("/api/profiles", expected=401)
     session_token = json.loads(http("/session", {"token": bootstrap}, headers={"Origin": origin, "Content-Type": "application/json"}))["token"]
     assert len(cookie_jar) == 0

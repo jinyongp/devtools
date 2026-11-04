@@ -43,8 +43,8 @@ operation holds the lock`으로 바뀐다. 분모를 알 수 없는 작업에는
 
 잠금 대기도 전체 `--timeout`과 취소를 따른다. 저장소 전환의 기본 제한은 30초이며, 예를 들어
 `devtools doctor --storage --fix --timeout 2m`으로 늘릴 수 있다. 제한 시간이나 취소로 끝났으면
-보고서의 `effects`와 각 단계를 확인한 뒤 같은 명령으로 재개한다. 공통 전환 엔진을 쓰는
-`update`도 같은 진행 표시를 사용한다.
+보고서의 `effects`와 각 단계를 확인한 뒤 같은 명령으로 재개한다. 공통 UI는
+`project status`의 리스너 조회와 실행 제어 확인에서도 재사용한다.
 
 ## 검사 범위 선택
 

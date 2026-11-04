@@ -24,8 +24,11 @@ managed launcher, dashboard 준비와 doctor의 실행 준비가 같은 dependen
 
 진행 신호는 출력과 독립적인 `internal/progress`의 context observer다. 저장소 엔진과
 잠금 계층은 활동 시작과 끝만 알리고, `cliui.Progress`가 중첩 활동, 한 줄 갱신과 경과 시간을
-처리한다. 출력 controller는 text stderr에만 연결한다. `update`의 공통 전환 엔진 호출도
-별도 UI 없이 재사용한다. 작업별 spinner나 전역 stdout 쓰기는 추가하지 않는다.
+처리한다. 출력 controller는 text stderr에만 연결하며 현재 `doctor`와 `project status`가
+재사용한다. 작업별 spinner나 전역 stdout 쓰기는 추가하지 않는다.
+
+`update`의 installer는 별도 프로세스에서 JSON 결과를 전달한다. 그 프로세스의 단계 이벤트가
+부모 CLI에 전달되지는 않는다. installer 전체 단계 추적은 이번 연결과 검증 범위에 포함하지 않는다.
 
 ## 관측과 제어의 경계
 
@@ -76,7 +79,7 @@ OS 인터페이스 근거:
 | 제어 권한과 범위 | 검토와 로컬 검증 완료 | 인증 실패, controller 손실, ID 없음과 profile/directory/instance/command 불일치에서 stop 차단 |
 | 실제 복구 명령 | 로컬 검증 완료 | 안내한 foreground와 managed stop argv를 그대로 실행하고 owned cleanup 완료 확인 |
 | 저장소 전환 중 조회 | 로컬 검증 완료 | legacy 바이트 불변, 실제 리스너 관측, 출력한 fix argv 적용 후 재조회 |
-| native OS와 통합 회귀 | 진행 중 | Linux 실제 리스너 통과, Darwin/Windows cross compile 통과, 최종 native workflow 필요 |
+| native OS와 통합 회귀 | 검토와 검증 완료 | 최종 소스의 Windows 23개, Unix 24개 job 성공. 선택 검사 3개 제외 |
 
 검토 중 기존 process 저장소 adapter가 내부 retained-body 조회와 전환 쓰기에
 `context.Background()`를 사용해 caller deadline을 넘길 수 있음을 재현했다. 기존 구현을
@@ -84,4 +87,44 @@ OS 인터페이스 근거:
 사용자 macOS에서 보고한 장시간 대기가 이 경로 때문인지는 아직 확인하지 못했다.
 
 전체 검증 중 발견한 protocol schema의 남은 버전 상수와 대체 lifecycle backend의 조회
-경로도 보완했다. 최종 commit의 기존 Unix/Windows workflow 결과를 확인한 뒤 이 기록을 갱신한다.
+경로도 보완했다.
+
+## 최종 통합 검증
+
+검증 소스: `d2b2618000173632c32b06903738d740e80470ba` / protocol 25.
+실행 코드의 마지막 변경은 `9d10744738a33fcf980ad1e288aad8ff3b53db08`이며,
+이후 `d2b2618`은 대용량 테스트의 준비 방법만 바꾼다.
+
+- Linux 로컬 `go test -race ./...` 전체 통과.
+- 같은 소스의 `python3 -B verify/run.py` 설치 시나리오 40개 전체 통과.
+  실제 PTY의 진행 표시, 파이프, JSON과 agent 출력, SIGINT 및 timeout을 포함한다.
+- `./scripts/project check-static` 통과. Skill packaging, dashboard, installer,
+  release/project/perf 자체 검사, gofmt와 Go vet를 포함한다.
+- [Windows 전체 검증](https://github.com/jinyongp/devtools/actions/runs/41841494339)
+  23개 job 통과. amd64와 arm64 CLI, 설치, 제품 브라우저, native API와 amd64 race를 포함한다.
+- [Unix 전체 검증](https://github.com/jinyongp/devtools/actions/runs/41841575828)
+  두 번째 attempt에서 전체 성공. macOS와 Linux의 24개 job이 통과했고, 명시적으로 선택하지
+  않은 public provider와 automation 측정 3개 job은 설정대로 제외됐다.
+  실제 PTY, 읽기 전용 query lock, native handoff와 브라우저 경로를 포함한다.
+
+### CI 중 발견한 테스트 준비 비용
+
+[첫 Windows race 검사](https://github.com/jinyongp/devtools/actions/runs/41839131438/job/126605732205)는
+8분 제한에 걸렸다. 스택은 실제 탐색 전 1만 개 합성 기록을 만들며 `FlushFileBuffers`를
+호출하던 위치였다. `navigation_scale_test.go`의 과거 기록 생성에 기존 private fixture
+writer를 재사용했다. 제품의 crash-safe writer는 바꾸지 않았으며 기록 313/1000/10000개,
+없는 이력 본문, 선택된 live RPC 1/2회, 무관한 RPC 0회와 응답 크기 제한을 모두 유지한다.
+
+수정 후 Windows race에서 1만 건 subtest는 143.66초, services package 전체는 217.01초에
+통과했다. 서로 다른 runner의 관측값이므로 성능 향상 배율로 해석하지 않는다.
+
+### 미재현 프록시 검사 관측
+
+Unix 첫 실행에서 기존 `TestManagerClosesHijackedConnectionsBeforeStopReturns`의 stop
+호출이 한 번 실패했다. 같은 최종 소스의 Linux 전체 로컬 race 검사는 통과했고, 해당 검사를
+로컬에서 100회 반복한 결과도 통과했다. 제품 원인은 확정하지 않았으며 이 관측만으로
+프록시 동작이나 검증 조건을 바꾸지 않았다. 같은 커밋의 실패한 원격 job만 재실행해 통과했다.
+재현된 제품 결함으로 판정하지 않았으며 단발 실패의 원인은 미확정으로 남긴다.
+
+검토한 전체 영역에서 확인된 수정 대상은 해결했고, 최종 검증 결과는 모두 성공이다.
+별도 worktree, 사용자 저장소 정리와 릴리스 발행은 수행하지 않았다.

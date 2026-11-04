@@ -261,7 +261,7 @@ func TestManagedRequestLookupRejectsConflictingReceiptExpiry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer release()
-	steps, err := inspectReceiptUpgrades(store.root())
+	steps, err := inspectReceiptUpgrades(ctx, store.root())
 	if err != nil || len(steps) != 1 {
 		t.Fatal(steps, err)
 	}

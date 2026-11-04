@@ -198,7 +198,46 @@ with task_locks[0].open('rb') as lock:
     final_error = error.rsplit('\r\x1b[2K', 1)[1]
     assert code == 3 and not output and 'timed out' in final_error and 'progress-check' in final_error, error
     assert 'Storage upgrade required' not in error and 'private-task-sentinel' not in error, error
+    recovery_lines = [line for line in final_error.splitlines()
+                      if line.startswith('  devtools ') and 'doctor --storage --check' in line]
+    assert recovery_lines, final_error
 code, output, error = call('--format', 'json', *recovery['argv'][1:])
+assert code == 0 and not error and json.loads(output)['data']['ready'], (code, output, error)
+for line in recovery_lines:
+    result = subprocess.run(['sh', '-c', line], cwd=project,
+                            env=dict(environment, DEVTOOLS_FORMAT='json'),
+                            text=True, capture_output=True, timeout=15)
+    assert result.returncode == 0 and not result.stderr and json.loads(result.stdout)['data']['ready'], result
+
+# A later corrupt profile must not erase an earlier verified result or label
+# the uninspected remainder as current. Fix must leave this input untouched.
+for profile in ('a-checked', 'b-broken', 'c-unchecked'):
+    code, output, error = call('--format', 'json', '--isolated-root', str(progress_root),
+                               'variable', 'set', 'DEMO', '--value', 'private-value-sentinel',
+                               '--profile', profile)
+    assert code == 0, (code, output, error)
+profiles = progress_root / 'data/profiles'
+identity = next(path for path in (profiles / '.identity').glob('*.json')
+                if json.loads(path.read_bytes())['profile'] == 'b-broken')
+broken = profiles / identity.name
+original = broken.read_bytes()
+corrupt = b'{"invalid":"private-value-sentinel"'
+try:
+    broken.write_bytes(corrupt)
+    code, output, error = call('--format', 'json', *progress_args)
+    report = json.loads(error)['error']['details']['report']
+    values = [item for item in report['items'] if item['domain'] == 'values']
+    assert code == 3 and not output and report['effects'] == 'none' and not report['changed'], report
+    assert [(item['profile'], item['state']) for item in values] == [
+        ('a-checked', 'current'), ('b-broken', 'blocked')], values
+    code, output, error = call('--format', 'text', *progress_args, tty_out=True, tty_err=True)
+    assert code == 3 and not output and 'b-broken' in error and 'Storage could not be verified' in error, error
+    assert 'private-value-sentinel' not in error and 'c-unchecked' not in error, error
+    assert broken.read_bytes() == corrupt, 'diagnosis rewrote unreadable fixture data'
+finally:
+    broken.write_bytes(original)
+code, output, error = call('--format', 'json', 'doctor', '--storage', '--check',
+                           '--isolated-root', str(progress_root))
 assert code == 0 and not error and json.loads(output)['data']['ready'], (code, output, error)
 
 # A foreground program owns both streams for its whole lifetime. Its exit status

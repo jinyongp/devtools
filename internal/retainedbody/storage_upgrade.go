@@ -13,8 +13,16 @@ import (
 	"github.com/jinyongp/devtools/internal/storageupgrade"
 )
 
-func archiveStep(root, id string) (storageupgrade.Step, error) {
-	step := storageupgrade.Step{Domain: "archives", Resource: id, Source: "archive-v2", Target: "archive-v2", State: "current"}
+func archiveStep(ctx context.Context, root, id string) (step storageupgrade.Step, err error) {
+	step = storageupgrade.Step{Domain: "archives", Resource: id, Source: "unknown", Target: "archive-v2", State: "current"}
+	defer func() {
+		if err == nil {
+			err = ctx.Err()
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return step, err
+	}
 	raw, err := maintenance.Read(filepath.Join(root, "archives", id, "payload"), MaxBytes)
 	if err != nil {
 		return step, err
@@ -22,6 +30,7 @@ func archiveStep(root, id string) (storageupgrade.Step, error) {
 	step.Fingerprint = fmt.Sprintf("%x", sha256.Sum256(raw))
 	var e Envelope
 	if json.Unmarshal(raw, &e) == nil && e.Version != 0 {
+		step.Source = fmt.Sprintf("archive-v%d", e.Version)
 		if e.Version != 2 || !e.Body.Valid() {
 			return step, errors.New("unsupported archive payload")
 		}
@@ -42,7 +51,7 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 			} else {
 				var preparation *maintenance.QueryPreparationError
 				if !errors.As(err, &preparation) {
-					return nil, err
+					return append(out, (storageupgrade.Step{Domain: "archives", Resource: "@publication-lock"}).InspectionFailed(err)), err
 				}
 				out = append(out, storageupgrade.Step{Domain: "archives", Resource: "@publication-lock", Source: "unprepared", Target: "prepared", State: "migration_required", Reason: "query_lock_preparation", Fingerprint: "retained-bodies-v1"})
 			}
@@ -54,11 +63,12 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 			return out, nil
 		}
 		if err != nil {
-			return nil, err
+			return out, err
 		}
 		for _, entry := range entries {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
+			step := storageupgrade.Step{Domain: "archives", Resource: entry.Name()}
+			if err := ctx.Err(); err != nil {
+				return append(out, step.InspectionFailed(err)), err
 			}
 			// An archive entry, not an arbitrary directory, owns this payload.
 			var header struct {
@@ -70,17 +80,18 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 				continue
 			}
 			if err != nil {
-				return nil, err
+				return append(out, step.InspectionFailed(err)), err
 			}
 			if json.Unmarshal(raw, &header) != nil || header.ID != entry.Name() {
-				return nil, errors.New("invalid archive entry")
+				err := errors.New("invalid archive entry")
+				return append(out, step.InspectionFailed(err)), err
 			}
 			if header.PurgedAt != nil {
 				continue
 			}
-			step, err := archiveStep(root, entry.Name())
+			step, err = archiveStep(ctx, root, entry.Name())
 			if err != nil {
-				return nil, err
+				return append(out, step.InspectionFailed(err)), err
 			}
 			out = append(out, step)
 		}
@@ -104,7 +115,7 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 			unlock()
 			return true, nil
 		}
-		current, err := archiveStep(root, step.Resource)
+		current, err := archiveStep(ctx, root, step.Resource)
 		if err != nil {
 			return false, err
 		}

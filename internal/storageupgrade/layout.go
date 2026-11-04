@@ -12,11 +12,13 @@ import (
 
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
+	operationprogress "github.com/jinyongp/devtools/internal/progress"
 )
 
-// Layout inspects only storage headers and addresses. Domain adapters verify the
-// payload and authentication before committing any conversion.
-func Layout(domain string) Adapter {
+// Layout checks each profile's address and header, then verifies current payloads
+// through inspect before adding them to the completed prefix. Domain adapters
+// still authenticate and recheck storage before committing any conversion.
+func Layout(domain string, inspect func(context.Context, string, *Step) error) Adapter {
 	return Adapter{Name: domain, InspectHeld: func(ctx context.Context, root string) ([]Step, error) {
 		directory := filepath.Join(root, domain)
 		if domain == "values" {
@@ -33,12 +35,28 @@ func Layout(domain string) Adapter {
 		}
 		items := make([]Step, 0, len(names))
 		for _, name := range names {
-			if err := ctx.Err(); err != nil {
-				return nil, err
+			finish := operationprogress.Begin(ctx, "Checking "+domain+" storage for profile "+name)
+			step := Step{Domain: domain, Profile: name}
+			err := ctx.Err()
+			if err == nil {
+				var observed Step
+				observed, err = ProfileLayout(directory, name, domain)
+				if err == nil {
+					step = observed
+				}
 			}
-			step, err := ProfileLayout(directory, name, domain)
+			if err == nil {
+				err = ctx.Err()
+			}
+			if err == nil && step.State == "current" && inspect != nil {
+				err = inspect(ctx, root, &step)
+			}
+			if err == nil {
+				err = ctx.Err()
+			}
+			finish()
 			if err != nil {
-				return nil, err
+				return append(items, step.InspectionFailed(err)), err
 			}
 			items = append(items, step)
 		}

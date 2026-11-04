@@ -15,8 +15,16 @@ import (
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
-func processStorageStep(ctx context.Context, root, relative string) (storageupgrade.Step, error) {
-	step := storageupgrade.Step{Domain: "processes", Resource: relative, Source: "process-v2", Target: "process-v2", State: "current"}
+func processStorageStep(ctx context.Context, root, relative string) (step storageupgrade.Step, err error) {
+	step = storageupgrade.Step{Domain: "processes", Resource: relative, Source: "unknown", Target: "process-v2", State: "current"}
+	defer func() {
+		if err == nil {
+			err = ctx.Err()
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return step, err
+	}
 	raw, err := maintenance.Read(filepath.Join(root, "processes", relative), 128<<20)
 	if err != nil {
 		return step, err
@@ -29,6 +37,7 @@ func processStorageStep(ctx context.Context, root, relative string) (storageupgr
 		return step, errors.New("invalid process document")
 	}
 	if header.Version == 2 {
+		step.Source = "process-v2"
 		if filepath.Base(relative) == "record.json" {
 			d, err := readDiskRecord(filepath.Join(root, "processes", relative))
 			if err != nil {
@@ -37,6 +46,7 @@ func processStorageStep(ctx context.Context, root, relative string) (storageupgr
 			if !validRecord(filepath.Base(filepath.Dir(relative)), d.Metadata) {
 				return step, errors.New("invalid process index")
 			}
+			step.Profile = d.Metadata.Profile
 			if _, err := (Store{Data: root}).recordBytes(ctx, d.Metadata.ID); err != nil {
 				return step, err
 			}
@@ -49,6 +59,7 @@ func processStorageStep(ctx context.Context, root, relative string) (storageupgr
 		return step, nil
 	}
 	if header.Version != 0 {
+		step.Source = fmt.Sprintf("process-v%d", header.Version)
 		step.State, step.Reason = "unsupported", "unsupported_format"
 		return step, nil
 	}
@@ -83,9 +94,6 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 			return nil, err
 		}
 		for _, entry := range entries {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
 			if !validID(entry.Name()) {
 				continue
 			}
@@ -95,7 +103,7 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 				continue
 			}
 			if err != nil {
-				return nil, err
+				return append(items, step.InspectionFailed(err)), err
 			}
 			items = append(items, step)
 		}
@@ -104,7 +112,7 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 			return items, nil
 		}
 		if err != nil {
-			return nil, err
+			return append(items, (storageupgrade.Step{Domain: "processes", Resource: "receipts"}).InspectionFailed(err)), err
 		}
 		for _, entry := range entries {
 			if !strings.HasSuffix(entry.Name(), ".json") || !validID(strings.TrimSuffix(entry.Name(), ".json")) {
@@ -112,7 +120,7 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 			}
 			step, err := processStorageStep(ctx, root, filepath.Join("receipts", entry.Name()))
 			if err != nil {
-				return nil, err
+				return append(items, step.InspectionFailed(err)), err
 			}
 			items = append(items, step)
 		}

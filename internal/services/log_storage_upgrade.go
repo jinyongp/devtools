@@ -25,17 +25,24 @@ func LogStorageUpgradeAdapter() storageupgrade.Adapter {
 			if !validID(entry.Name()) {
 				continue
 			}
+			step := storageupgrade.Step{Domain: "process_logs", Resource: entry.Name(), Source: "unknown", Target: "prepared", State: "current", Fingerprint: entry.Name()}
+			if err := ctx.Err(); err != nil {
+				return append(out, step.InspectionFailed(err)), err
+			}
 			path := filepath.Join(root, "processes", entry.Name(), "output.log")
 			if _, err := platformfs.StatPrivate(path); errors.Is(err, os.ErrNotExist) {
 				continue
 			} else if err != nil {
-				return nil, err
+				return append(out, step.InspectionFailed(err)), err
 			}
-			step := storageupgrade.Step{Domain: "process_logs", Resource: entry.Name(), Source: "prepared", Target: "prepared", State: "current", Fingerprint: entry.Name()}
+			step.Source = "prepared"
 			if _, err := platformfs.StatPrivate(path + ".lock"); errors.Is(err, os.ErrNotExist) {
 				step.Source, step.State, step.Reason = "missing", "migration_required", "query_lock_preparation"
 			} else if err != nil {
-				return nil, err
+				return append(out, step.InspectionFailed(err)), err
+			}
+			if err := ctx.Err(); err != nil {
+				return append(out, step.InspectionFailed(err)), err
 			}
 			out = append(out, step)
 		}

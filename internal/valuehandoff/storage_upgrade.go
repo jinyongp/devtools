@@ -14,8 +14,16 @@ import (
 	"github.com/jinyongp/devtools/internal/storageupgrade"
 )
 
-func deliveryLockStep(root, relative string) (storageupgrade.Step, error) {
-	step := storageupgrade.Step{Domain: "delivery_locks", Resource: relative, Source: "prepared", Target: "prepared", State: "current"}
+func deliveryLockStep(ctx context.Context, root, relative string) (step storageupgrade.Step, err error) {
+	step = storageupgrade.Step{Domain: "delivery_locks", Resource: relative, Source: "unknown", Target: "prepared", State: "current"}
+	defer func() {
+		if err == nil {
+			err = ctx.Err()
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return step, err
+	}
 	body, err := maintenance.Read(filepath.Join(root, "value-executions", relative), 16<<20)
 	if err != nil {
 		return step, err
@@ -30,6 +38,7 @@ func deliveryLockStep(root, relative string) (storageupgrade.Step, error) {
 	if err != nil || !info.Mode().IsRegular() {
 		return step, errors.New("invalid delivery lock")
 	}
+	step.Source = "prepared"
 	return step, nil
 }
 
@@ -45,20 +54,23 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 			return nil, err
 		}
 		for _, profile := range profiles {
+			profileStep := storageupgrade.Step{Domain: "delivery_locks", Resource: profile.Name()}
+			if err := ctx.Err(); err != nil {
+				return append(out, profileStep.InspectionFailed(err)), err
+			}
 			entries, err := os.ReadDir(filepath.Join(dir, profile.Name()))
 			if err != nil {
-				return nil, err
+				return append(out, profileStep.InspectionFailed(err)), err
 			}
 			for _, entry := range entries {
-				if ctx.Err() != nil {
-					return nil, ctx.Err()
-				}
+				relative := filepath.Join(profile.Name(), entry.Name())
 				if !strings.HasSuffix(entry.Name(), ".json") || !idRE.MatchString(strings.TrimSuffix(entry.Name(), ".json")) {
-					return nil, errors.New("invalid delivery record address")
+					err := errors.New("invalid delivery record address")
+					return append(out, (storageupgrade.Step{Domain: "delivery_locks", Resource: relative}).InspectionFailed(err)), err
 				}
-				step, err := deliveryLockStep(root, filepath.Join(profile.Name(), entry.Name()))
+				step, err := deliveryLockStep(ctx, root, relative)
 				if err != nil {
-					return nil, err
+					return append(out, step.InspectionFailed(err)), err
 				}
 				out = append(out, step)
 			}
@@ -70,7 +82,7 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 			return false, err
 		}
 		defer release()
-		current, err := deliveryLockStep(root, step.Resource)
+		current, err := deliveryLockStep(ctx, root, step.Resource)
 		if err != nil {
 			return false, err
 		}

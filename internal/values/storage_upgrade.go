@@ -18,36 +18,35 @@ import (
 // StorageUpgradeAdapter keeps old-value decoding at the explicit migration
 // boundary. Its borrowed key never starts or refreshes a session.
 func StorageUpgradeAdapter(root string) storageupgrade.Adapter {
-	adapter := storageupgrade.Layout("values")
+	adapter := storageupgrade.Layout("values", func(ctx context.Context, root string, step *storageupgrade.Step) error {
+		raw, err := profilekey.Snapshot(filepath.Join(root, "profiles"), step.Profile, "values", vault.MaxDocumentBytes)
+		if err != nil {
+			return err
+		}
+		_, err = vault.DecodeProfile(raw)
+		clear(raw)
+		if err != nil {
+			step.State, step.Reason = "blocked", "invalid_storage"
+		}
+		return nil
+	})
 	inspect := adapter.InspectHeld
 	adapter.InspectHeld = func(ctx context.Context, root string) ([]storageupgrade.Step, error) {
 		steps, err := inspect(ctx, root)
 		if err != nil {
-			return nil, err
+			return steps, err
 		}
-		for index := range steps {
-			step := &steps[index]
-			if step.State != "current" {
-				continue
-			}
-			raw, err := profilekey.Snapshot(filepath.Join(root, "profiles"), step.Profile, "values", vault.MaxDocumentBytes)
-			if err != nil {
-				return nil, err
-			}
-			_, err = vault.DecodeProfile(raw)
-			clear(raw)
-			if err != nil {
-				step.State, step.Reason = "blocked", "invalid_storage"
-			}
-		}
-		receipts, err := inspectReceiptUpgrades(root)
-		if err != nil {
-			return nil, err
-		}
+		receipts, err := inspectReceiptUpgrades(ctx, root)
 		steps = append(steps, receipts...)
+		if err != nil {
+			if len(receipts) == 0 {
+				steps = append(steps, (storageupgrade.Step{Domain: "values", Resource: "value_receipts"}).InspectionFailed(err))
+			}
+			return steps, err
+		}
 		_, protected, err := maintenance.ProtectedRootHeld(root)
 		if err != nil {
-			return nil, err
+			return append(steps, (storageupgrade.Step{Domain: "values", Resource: "root_protection"}).InspectionFailed(err)), err
 		}
 		slot, err := (vault.KeyFileStore{Directory: filepath.Join(root, "vault")}).Read()
 		if errors.Is(err, vault.ErrKeyMissing) {
@@ -57,7 +56,7 @@ func StorageUpgradeAdapter(root string) storageupgrade.Adapter {
 			return steps, nil
 		}
 		if err != nil {
-			return nil, err
+			return append(steps, (storageupgrade.Step{Domain: "values", Resource: "vault_key"}).InspectionFailed(err)), err
 		}
 		if !protected {
 			steps = append(steps, storageupgrade.Step{Domain: "values", Source: "unprotected-root", Target: "protected-root", State: "migration_required", Reason: "root_protection", Fingerprint: slot.VaultID})
@@ -264,7 +263,11 @@ func StorageUpgradeAdapter(root string) storageupgrade.Adapter {
 	adapter.InspectHeld = func(ctx context.Context, root string) ([]storageupgrade.Step, error) {
 		steps, err := inspectDomain(ctx, root)
 		if err != nil {
-			return nil, VaultError(ctx, err)
+			condition := VaultError(ctx, err)
+			if len(steps) > 0 && steps[len(steps)-1].State == "blocked" {
+				steps[len(steps)-1] = steps[len(steps)-1].InspectionFailed(condition)
+			}
+			return steps, condition
 		}
 		return steps, nil
 	}

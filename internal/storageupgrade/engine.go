@@ -293,6 +293,13 @@ func (e Engine) Fix(ctx context.Context) (report Report, condition *protocol.Err
 	if condition != nil || before.Ready {
 		return before, condition
 	}
+	needsUpgrade := false
+	for _, step := range before.Items {
+		needsUpgrade = needsUpgrade || step.State == "migration_required"
+	}
+	if !needsUpgrade {
+		return before, nil
+	}
 	prepared := false
 	recovery := false
 	for _, step := range before.Items {

@@ -14,6 +14,7 @@ import (
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/storageupgrade"
 	"github.com/jinyongp/devtools/internal/vault"
@@ -57,7 +58,7 @@ func currentReceiptAddress(name string) bool {
 	return parts[1][65:] == id
 }
 
-func inspectReceiptUpgrades(root string) ([]storageupgrade.Step, error) {
+func inspectReceiptUpgrades(ctx context.Context, root string) ([]storageupgrade.Step, error) {
 	directory := filepath.Join(root, "backup-receipts")
 	if err := platformfs.CheckDirectory(directory); errors.Is(err, os.ErrNotExist) {
 		return []storageupgrade.Step{}, nil
@@ -68,6 +69,8 @@ func inspectReceiptUpgrades(root string) ([]storageupgrade.Step, error) {
 	if err != nil {
 		return nil, err
 	}
+	finish := progress.Begin(ctx, "Checking value operation records")
+	defer finish()
 	steps := []storageupgrade.Step{}
 	for _, entry := range entries {
 		name := entry.Name()
@@ -76,6 +79,12 @@ func inspectReceiptUpgrades(root string) ([]storageupgrade.Step, error) {
 		}
 		current := currentReceiptAddress(name)
 		step := storageupgrade.Step{Domain: "values", Resource: name, Source: "value-receipt-v1", Target: "value-receipt-s2", State: "migration_required"}
+		if current {
+			step.Source, step.State = "value-receipt-s2", "current"
+		}
+		if err := ctx.Err(); err != nil {
+			return append(steps, step.InspectionFailed(err)), err
+		}
 		_, id, old := legacyReceiptAddress(name)
 		if !current && !old {
 			step.State, step.Reason = "unsupported", "unsupported_receipt_address"
@@ -84,10 +93,11 @@ func inspectReceiptUpgrades(root string) ([]storageupgrade.Step, error) {
 		}
 		raw, err := maintenance.Read(filepath.Join(directory, name), vault.MaxDocumentBytes)
 		if err != nil {
-			return nil, err
+			return append(steps, step.InspectionFailed(err)), err
 		}
-		if current {
-			step.Source, step.State = "value-receipt-s2", "current"
+		if err := ctx.Err(); err != nil {
+			clear(raw)
+			return append(steps, step.InspectionFailed(err)), err
 		}
 		var header struct {
 			Format  *int   `json:"protected_material_format"`
@@ -115,6 +125,9 @@ func inspectReceiptUpgrades(root string) ([]storageupgrade.Step, error) {
 		}
 		sum := sha256.Sum256(raw)
 		clear(raw)
+		if err := ctx.Err(); err != nil {
+			return append(steps, step.InspectionFailed(err)), err
+		}
 		step.Fingerprint = hex.EncodeToString(sum[:])
 		if step.State != "current" {
 			steps = append(steps, step)

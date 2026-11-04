@@ -503,7 +503,7 @@ func migrateLegacy(ctx context.Context, root, vaultID string, master *vault.Mate
 }
 
 func migrateLegacyReceiptsHeld(ctx context.Context, root string, master *vault.Material, vaultID string) error {
-	steps, err := inspectReceiptUpgrades(root)
+	steps, err := inspectReceiptUpgrades(ctx, root)
 	if err != nil {
 		return err
 	}

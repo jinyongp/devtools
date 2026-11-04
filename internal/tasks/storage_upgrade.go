@@ -10,36 +10,15 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/profilekey"
-	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/storageerr"
 	"github.com/jinyongp/devtools/internal/storageupgrade"
 )
 
 func StorageUpgradeAdapter() storageupgrade.Adapter {
-	adapter := storageupgrade.Layout("tasks")
-	inspect := adapter.InspectHeld
-	adapter.InspectHeld = func(ctx context.Context, root string) ([]storageupgrade.Step, error) {
-		steps, err := inspect(ctx, root)
-		if err != nil {
-			return nil, err
-		}
-		for index := range steps {
-			step := &steps[index]
-			if err := ctx.Err(); err != nil {
-				*step = step.InspectionFailed(err)
-				return steps[:index+1], err
-			}
-			if step.State != "current" {
-				continue
-			}
-			store := Store{Directory: filepath.Join(root, "tasks"), Profile: step.Profile}
-			if err := store.inspectUpgrade(ctx, step); err != nil {
-				return steps[:index+1], err
-			}
-		}
-		return steps, nil
-	}
+	adapter := storageupgrade.Layout("tasks", func(ctx context.Context, root string, step *storageupgrade.Step) error {
+		return (Store{Directory: filepath.Join(root, "tasks"), Profile: step.Profile}).inspectUpgrade(ctx, step)
+	})
 	adapter.Apply = func(ctx context.Context, root string, step storageupgrade.Step) (bool, error) {
 		store := Store{Directory: filepath.Join(root, "tasks"), Profile: step.Profile}
 		release, err := maintenance.AcquireExclusive(ctx, root)
@@ -108,8 +87,6 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 }
 
 func (s Store) inspectUpgrade(ctx context.Context, step *storageupgrade.Step) error {
-	finish := progress.Begin(ctx, "Checking task storage for profile "+s.Profile)
-	defer finish()
 	release, err := maintenance.LockPassiveShared(ctx, s.path()+".lock")
 	if err != nil {
 		var preparation *maintenance.QueryPreparationError
@@ -117,15 +94,10 @@ func (s Store) inspectUpgrade(ctx context.Context, step *storageupgrade.Step) er
 			step.State, step.Reason = "migration_required", preparation.State
 			return nil
 		}
-		*step = step.InspectionFailed(err)
 		return err
 	}
 	defer release()
 	_, condition := s.loadCurrent()
-	if err := ctx.Err(); err != nil {
-		*step = step.InspectionFailed(err)
-		return err
-	}
 	if condition != nil {
 		*step = step.InspectionFailed(condition)
 	}

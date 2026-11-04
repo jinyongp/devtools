@@ -172,3 +172,15 @@ ARM64의 기존 collection 검사도 정상 진행 표시를 stderr 오류로 �
 위 검사 수정을 반영할 새 소스로 교체하기 위해 중단을 요청했다. 제품 코드와 JSON 계약은
 `96e3c2f` 이후 변경하지 않았으며, 후속 main SHA의 native 검사와 Release workflow는
 별도로 완료를 확인한다.
+
+최종 제품 검증 대상은 `811966e40a7d92bbe1df97c708403cf2ef35867c`이다. 위 두 검사
+보완 후 관련 CLI race 검사를 15.603초에 통과했다. 전체 Go race와 설치본 40개 결과는
+변경하지 않은 제품 코드에 대한 로컬 근거이며, 새 main SHA의 native 완료를 대신하지 않는다.
+
+2026-11-04 16:14 UTC 기준
+[최종 Windows 검사](https://github.com/jinyongp/devtools/actions/runs/41863909764)의 22개 job은
+모두 queued이고, runner와 실행 step이 없다.
+[새 v0.43.0 배포 실행](https://github.com/jinyongp/devtools/actions/runs/41864428644)은
+54개 job이 queued이고 기존 조건의 선택 검사 3개가 제외된 상태다. 첫 검증부터 runner
+배정을 기다리고 있어 native 검증 또는 배포 완료로 판정하지 않는다. 새 실행은 취소하지
+않으며, 필수 검증이 성공해야 태그 생성과 게시로 진행한다.

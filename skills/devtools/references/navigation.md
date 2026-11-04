@@ -33,8 +33,9 @@ profile/directory, view, filters, sort and query cache. Cursors expire in 30 min
   `--format text` explicitly; effective JSON rejects columns and keeps required fields.
 
 Recovery actions have state `ready`, `needs_input` or `manual`. Only ready argv is
-a complete invocation. New UUIDs are already generated once; replay preserves the
-original UUID and input. Do not replace known IDs, revisions, digests or root.
+a complete invocation. Ordinary new-operation guidance omits `--request-id`; the
+CLI generates and returns it at execution. Replay and preview-bound apply actions
+preserve their bound UUID and input. Do not replace known IDs, revisions, digests or root.
 Missing private input has no fake executable argv: read `inputs`, follow the real
 `input_steps`, and preserve public `bindings` when supplying it. Never reconstruct
 stdin, request secrets in chat, or open an implicit prompt in agent/CI/pipe mode.

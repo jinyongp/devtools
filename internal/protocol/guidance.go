@@ -38,15 +38,17 @@ type Action struct {
 }
 
 type ActionOption struct{ Name, Value string }
+
+// CommandIntent describes argv without creating operation identity. The CLI
+// supplies omitted request IDs at execution; explicitly bound options are kept.
 type CommandIntent struct {
-	Command    string
-	Arguments  []string
-	Options    []ActionOption
-	Child      []string
-	NewRequest bool
+	Command   string
+	Arguments []string
+	Options   []ActionOption
+	Child     []string
 }
 
-// NewRequestID is fixed in action data before either renderer sees it.
+// NewRequestID generates an operation UUID for execution or a prepared apply.
 func NewRequestID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -63,9 +65,6 @@ func (a Action) Remedy(c InvocationContext) Remedy {
 		r.Argv = append(r.Argv, intent.Arguments...)
 		for _, option := range intent.Options {
 			r.Argv = append(r.Argv, "--"+option.Name+"="+option.Value)
-		}
-		if intent.NewRequest {
-			r.Argv = append(r.Argv, "--request-id", NewRequestID())
 		}
 		if len(intent.Child) > 0 {
 			r.Argv = append(append(r.Argv, "--"), intent.Child...)

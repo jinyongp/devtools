@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
+	"reflect"
 	"testing"
 
 	"github.com/jinyongp/devtools/internal/project"
@@ -70,7 +70,7 @@ func TestManagedOwnerStopActionDeclaresItsSystemEffect(t *testing.T) {
 	for _, kind := range []string{"managed", "foreground"} {
 		e := describeRunFailure(protocol.NewError("port_run_active", "Original.", 3, map[string]any{"facts": map[string]any{"owner": map[string]any{"status": "verified", "kind": kind, "execution_id": id}}}), "app", "/work/app", "instance", "web", 3000)
 		action := e.Details["remedies"].([]protocol.Remedy)[0]
-		if action.Effect != "system_write" || len(action.RequiredInputs) != 0 || len(action.Argv) != 6 || action.Argv[3] != id || !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(action.Argv[5]) {
+		if action.Effect != "system_write" || len(action.RequiredInputs) != 0 || !reflect.DeepEqual(action.Argv, []string{"devtools", "process", "stop", id}) {
 			t.Fatal(kind, action)
 		}
 	}

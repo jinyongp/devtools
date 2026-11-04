@@ -53,10 +53,11 @@ for prepared actions. Neither mechanism needs another implementation or store.
 6. Make parser, static rules, published schemas, help and action validation agree
    about the optional ID. Remove obsolete paired-ID requirements at their owning
    definitions instead of adding bypasses in individual handlers.
-7. Ordinary examples omit the operation ID. Optional flags remain in examples
+7. Ordinary examples and recovery guidance for new operations omit the operation
+   ID; execution generates and returns it. Optional flags remain in examples
    whose stated purpose demonstrates them. Explicit retry/lookup examples retain
-   the original ID and necessary scope. Prepared recovery/apply actions retain
-   their bound IDs so copying the same action preserves its identity.
+   the original ID and necessary scope. Preview-bound apply actions retain their
+   bound IDs so copying the same reviewed action preserves its identity.
 8. Keep the unreleased protocol-23 source contract; envelope and persisted receipt
    formats do not change. Installed older contracts retain their own requirements.
 

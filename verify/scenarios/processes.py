@@ -3,6 +3,7 @@ import concurrent.futures
 import json
 import os
 from pathlib import Path
+import shlex
 import socket
 import subprocess
 import time
@@ -75,7 +76,10 @@ assert api("process","start","web","--request-id",first_id)["replayed"]
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
     results=list(pool.map(lambda _:mutate("start","web"),range(4)))
 assert all(r["item"]["id"]==id and not r["changed"] for r in results)
-assert mutate("start","web","--env","local",expected=3)["code"]=="process_conflict"
+conflict=mutate("start","web","--env","local",expected=3)
+assert conflict["code"]=="process_conflict"
+stops=[action for action in conflict["details"]["remedies"] if "stop" in action.get("argv",[])]
+assert len(stops)==1 and stops[0]["argv"]==["devtools","process","stop",id],conflict
 # Injection reflects the running child's selection, not an edited config file.
 (root/"devtools.toml").write_text(config.replace('inject=true', 'inject=false', 1))
 assert mutate("start","web",expected=3)["code"]=="process_conflict"
@@ -153,8 +157,12 @@ try:
     assert conflict.returncode==3 and conflict.stdout=="",conflict
     details=json.loads(conflict.stderr)["error"]["details"]
     actions=[action for action in details["remedies"] if action.get("state")=="ready" and "stop" in action.get("argv",[])]
-    assert len(actions)==1 and foreground_id in actions[0]["argv"] and "--profile" not in actions[0]["argv"],details
-    stopped=execute(*actions[0]["argv"])["data"]
+    assert len(actions)==1 and actions[0]["argv"]==["devtools","process","stop",foreground_id],details
+    text_conflict=subprocess.run(["devtools","--format","text","run","web"],cwd=root,env=env,capture_output=True,text=True,timeout=10)
+    assert text_conflict.returncode==3 and text_conflict.stdout=="" and "--request-id" not in text_conflict.stderr,text_conflict
+    commands=[shlex.split(line) for line in text_conflict.stderr.splitlines() if line.startswith("  devtools ")]
+    assert commands==[actions[0]["argv"]],text_conflict.stderr
+    stopped=execute(*commands[0])["data"]
     assert stopped["item"]["cleanup"]["state"]=="complete" and stopped["item"]["state"]=="stopped",stopped
     output,diagnostic=foreground.communicate(timeout=10)
     assert foreground.returncode!=0 and output=="" and diagnostic=="",(foreground.returncode,output,diagnostic)

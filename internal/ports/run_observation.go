@@ -48,7 +48,7 @@ func describeRunFailure(e *protocol.Error, profile, directory, instance, service
 	action := protocol.Action{Relation: protocol.ManualAction, Effect: "system_write", Message: "The existing owner has no verified devtools control target. Identify its controller and stop it through that controller before retrying."}
 	if owner["status"] == "verified" && (owner["kind"] == "managed" || owner["kind"] == "foreground") {
 		if id, ok := owner["execution_id"].(string); ok && id != "" {
-			action = protocol.Action{Relation: protocol.SameStoreAction, Effect: "system_write", Message: "Stop the existing execution, then retry this command.", Intent: &protocol.CommandIntent{Command: "process stop", Arguments: []string{id}, NewRequest: true}}
+			action = protocol.Action{Relation: protocol.SameStoreAction, Effect: "system_write", Message: "Stop the existing execution, then retry this command.", Intent: &protocol.CommandIntent{Command: "process stop", Arguments: []string{id}}}
 		}
 	}
 	e.Details["remedies"] = []protocol.Remedy{action.Remedy(protocol.InvocationContext{})}

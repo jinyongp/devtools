@@ -55,7 +55,8 @@ effective JSON과의 조합·중복 열·없는 열은 오류다. JSON의 필수
 ## 복구 행동
 
 `ready`는 실제 값이 바인딩되고 registry의 문법·정적 입력 계약을 통과한 argv다.
-새 작업 UUID는 응답을 만들 때 한 번 생성한다. 원 요청 재시도에는 원 UUID를 유지한다.
+일반적인 새 작업 안내는 `--request-id`를 생략하고, 실행할 때 UUID를 생성해 반환한다.
+원 요청 재시도에는 원 UUID를 유지하고, preview에 묶인 apply 안내도 준비된 UUID를 유지한다.
 root 옵션은 명령 앞, 명령 옵션은 child `--` 앞에 있다.
 
 `needs_input`은 비밀·파일·원 stdin처럼 다시 공급할 입력이 필요하다는 뜻이다.

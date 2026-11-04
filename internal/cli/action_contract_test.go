@@ -14,7 +14,7 @@ func TestRecoveryActionsValidateWritesAndPreserveOriginalRequest(t *testing.T) {
 	id := "11111111-1111-4111-8111-111111111111"
 	request := "22222222-2222-4222-8222-222222222222"
 	scope := protocol.InvocationContext{IsolatedRoot: privateTempDir(t)}
-	stop := protocol.Action{Relation: protocol.SameStoreAction, Effect: "system_write", Message: "Stop the observed run.", Intent: &protocol.CommandIntent{Command: "process stop", Arguments: []string{id}, NewRequest: true}}.Remedy(scope)
+	stop := protocol.Action{Relation: protocol.SameStoreAction, Effect: "system_write", Message: "Stop the observed run.", Intent: &protocol.CommandIntent{Command: "process stop", Arguments: []string{id}}}.Remedy(scope)
 	replay := protocol.LocalAction([]string{"devtools", "process", "stop", id, "--request-id", request}, nil, "Retry the original stop.", "system_write").Remedy(scope)
 	bad := protocol.LocalAction([]string{"devtools", "process", "stop", id, "--profile", "app-a", "--request-id", request}, nil, "Old invalid stop.", "system_write").Remedy(scope)
 	bound := protocol.BindGuidance([]protocol.Remedy{stop, replay, bad}, scope, a.ResolveAction).([]protocol.Remedy)
@@ -23,7 +23,7 @@ func TestRecoveryActionsValidateWritesAndPreserveOriginalRequest(t *testing.T) {
 			t.Fatal(r)
 		}
 	}
-	if !strings.Contains(strings.Join(bound[1].Argv, " "), request) || reflect.DeepEqual(stop.Argv, replay.Argv) {
+	if !reflect.DeepEqual(bound[0].Argv, []string{"devtools", "--isolated-root", scope.IsolatedRoot, "process", "stop", id}) || !reflect.DeepEqual(bound[1].Argv, replay.Argv) {
 		t.Fatal(bound)
 	}
 	if bound[2].State != "needs_input" || len(bound[2].Argv) != 0 || len(bound[2].InputSteps) == 0 {

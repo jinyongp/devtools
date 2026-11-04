@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 
 	"syscall"
-	"time"
 
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -20,6 +19,12 @@ func Execute(ctx context.Context, args []string, dir string, env []string, in io
 	if runner, ok := ctx.Value(runnerKey{}).(Runner); ok {
 		return runner(ctx, args, dir, env, in, out, diagnostic)
 	}
+	return ExecuteOwned(ctx, args, dir, env, in, out, diagnostic, nil)
+}
+
+// ExecuteOwned keeps the group leader unreaped until its owned descendants have
+// finished. Supervisors and foreground clients use this same lifetime boundary.
+func ExecuteOwned(ctx context.Context, args []string, dir string, env []string, in io.Reader, out, diagnostic io.Writer, started func() *protocol.Error) (int, *protocol.Error) {
 	if len(args) == 0 || args[0] == "" {
 		return 0, protocol.NewError("invalid_argument", "Specify a command to execute.", 2, nil)
 	}
@@ -51,7 +56,7 @@ func Execute(ctx context.Context, args []string, dir string, env []string, in io
 	} else {
 		command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	}
-	command.WaitDelay = 3 * time.Second
+	command.WaitDelay = stopGrace
 	if err := command.Start(); err != nil {
 		if interactive {
 			_ = tty.restoreAfterStartFailure()
@@ -61,50 +66,26 @@ func Execute(ctx context.Context, args []string, dir string, env []string, in io
 		}
 		return 0, protocol.NewError("execution_failed", "Cannot start the requested command.", 126, nil)
 	}
-	if e := NotifyStarted(ctx); e != nil {
+	startErr := NotifyStarted(ctx)
+	if startErr == nil && started != nil {
+		startErr = started()
+	}
+	if startErr != nil {
 		_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
 		_ = command.Wait()
 		if interactive {
 			_ = tty.restoreAfterStartFailure()
 		}
-		return 0, e
+		return 0, startErr
 	}
-	if interactive {
-		return waitInteractive(ctx.Done(), func() error { return context.Cause(ctx) }, command, tty)
-	}
-	done := make(chan struct{})
-	watcherDone := make(chan struct{})
-	go func() {
-		defer close(watcherDone)
-		select {
-		case <-done:
-			return
-		case <-ctx.Done():
-		}
-		select {
-		case <-done:
-			return
-		default:
-		}
-		signal := syscall.SIGTERM
-		var cause SignalError
-		if errors.As(context.Cause(ctx), &cause) {
-			signal = cause.Signal
-		}
-		_ = syscall.Kill(-command.Process.Pid, signal)
-		timer := time.NewTimer(3 * time.Second)
-		defer timer.Stop()
-		select {
-		case <-done:
-			// Cancellation also owns descendants that outlive the direct child.
-			_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
-		case <-timer.C:
-			_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
-		}
-	}()
+	cleanupErr := waitOwnedGroup(ctx, command.Process.Pid, tty)
 	err = command.Wait()
-	close(done)
-	<-watcherDone
+	if interactive {
+		_ = tty.restoreIfOwned(command.Process.Pid)
+	}
+	if cleanupErr != nil {
+		return 0, protocol.NewError("process_cleanup_incomplete", "Cannot verify cleanup of the owned process group.", 3, map[string]any{"effects": "unknown", "facts": map[string]any{"cleanup_state": "unknown", "ownership_scope": "process_group"}})
+	}
 	if err == nil {
 		return 0, nil
 	}

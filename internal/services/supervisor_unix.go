@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"syscall"
@@ -148,55 +147,28 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 	childExit := 0
 	ran := false
 	runner := func(ctx context.Context, args []string, dir string, env []string, in io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
-		path := process.ExecutablePath(ctx)
-		if path == "" {
-			var err *protocol.Error
-			path, err = process.LookPath(args[0], dir, env)
-			if err != nil {
-				return 0, err
+		code, runErr := process.ExecuteOwned(ctx, args, dir, env, in, out, diagnostic, func() *protocol.Error {
+			now := time.Now().UTC()
+			mu.Lock()
+			if selection, ok := ctx.Value(environmentSelectionKey{}).(environmentSelection); ok {
+				r.Env = selection.Env
+				r.Inject = &selection.Inject
 			}
-		}
-		cmd := exec.Command(path, args[1:]...)
-		cmd.Args[0] = args[0]
-		cmd.Dir = dir
-		cmd.Env = env
-		cmd.Stdin = in
-		cmd.Stdout = out
-		cmd.Stderr = diagnostic
-		// Inherit the supervisor group, including conventional child processes.
-		cmd.WaitDelay = 250 * time.Millisecond
-		if ctx.Err() != nil {
-			return 0, failure("canceled")
-		}
-		if cmd.Start() != nil {
-			return 0, failure("execution_failed")
-		}
-		notifyErr := process.NotifyStarted(ctx)
-		if notifyErr != nil {
-			cancel()
-		}
-		now := time.Now().UTC()
-		mu.Lock()
-		if selection, ok := ctx.Value(environmentSelectionKey{}).(environmentSelection); ok {
-			r.Env = selection.Env
-			r.Inject = &selection.Inject
-		}
-		if config := process.ReadyProbe(ctx); config != nil {
-			preparedEnv := append([]string{}, env...)
-			probe = func(query context.Context) Readiness { return runProbe(query, *config, dir, preparedEnv) }
-			r.ReadyConfigured = true
-		}
-		r.StartedAt = &now
-		r.State = "running"
-		if r.InputSnapshotID != "" {
-			r.LaunchPhase = "spawned"
-		}
-		writeErr := writePrivate(s.path(id, "record.json"), r)
-		mu.Unlock()
-		if writeErr != nil {
-			cancel()
-		}
-		if writeErr == nil {
+			if config := process.ReadyProbe(ctx); config != nil {
+				preparedEnv := append([]string{}, env...)
+				probe = func(query context.Context) Readiness { return runProbe(query, *config, dir, preparedEnv) }
+				r.ReadyConfigured = true
+			}
+			r.StartedAt = &now
+			r.State = "running"
+			if r.InputSnapshotID != "" {
+				r.LaunchPhase = "spawned"
+			}
+			writeErr := writePrivate(s.path(id, "record.json"), r)
+			mu.Unlock()
+			if writeErr != nil {
+				return storageErrorAt("write_execution_record", writeErr)
+			}
 			stopValueWatch = s.startValueWatch(ctx, func() Record { mu.Lock(); defer mu.Unlock(); return r }, func(status ValueWatchStatus) {
 				mu.Lock()
 				defer mu.Unlock()
@@ -204,36 +176,13 @@ func (s Store) serve(ctx context.Context, id string, inherited *os.File, execute
 					r.ValueWatch = &status
 				}
 			})
+			return nil
+		})
+		if runErr == nil {
+			ran = true
+			childExit = code
 		}
-		done := make(chan error, 1)
-		go func() { done <- cmd.Wait() }()
-		var waitErr error
-		select {
-		case waitErr = <-done:
-		case <-ctx.Done():
-			_ = syscall.Kill(-pid, syscall.SIGTERM)
-			select {
-			case waitErr = <-done:
-			case <-time.After(3 * time.Second):
-				childExit = 137
-				ran = true
-				return childExit, nil
-			}
-		}
-		ran = true
-		var exit *exec.ExitError
-		if errors.As(waitErr, &exit) {
-			childExit = exit.ExitCode()
-			if st, ok := exit.Sys().(syscall.WaitStatus); ok && st.Signaled() {
-				childExit = 128 + int(st.Signal())
-			}
-		} else if waitErr != nil && !errors.Is(waitErr, exec.ErrWaitDelay) {
-			childExit = 1
-		}
-		if notifyErr != nil {
-			return childExit, notifyErr
-		}
-		return childExit, nil
+		return code, runErr
 	}
 	err = execute(ctx, r, runner, output)
 	mu.Lock()

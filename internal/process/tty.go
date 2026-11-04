@@ -6,11 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"syscall"
-	"time"
-
-	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 type ttySession struct {
@@ -108,85 +104,4 @@ func (t *ttySession) handleStop(childPgrp int) error {
 	// foregrounded (fg), hand the terminal back to the child. If it was resumed
 	// in the background (bg), continue the child without stealing the terminal.
 	return t.continueChild(childPgrp)
-}
-
-func waitInteractive(ctxDone <-chan struct{}, cause func() error, command *exec.Cmd, tty *ttySession) (int, *protocol.Error) {
-	pid := command.Process.Pid
-	done := make(chan struct{})
-	watcherDone := make(chan struct{})
-	go func() {
-		defer close(watcherDone)
-		select {
-		case <-done:
-			return
-		case <-ctxDone:
-		}
-		signal := syscall.SIGTERM
-		var signalCause SignalError
-		if errors.As(cause(), &signalCause) {
-			signal = signalCause.Signal
-		}
-		_ = syscall.Kill(-pid, signal)
-		// A stopped child cannot act on TERM/INT/HUP until continued.
-		if signal != syscall.SIGKILL {
-			_ = syscall.Kill(-pid, syscall.SIGCONT)
-		}
-		timer := time.NewTimer(3 * time.Second)
-		defer timer.Stop()
-		select {
-		case <-done:
-			_ = syscall.Kill(-pid, syscall.SIGKILL)
-		case <-timer.C:
-			_ = syscall.Kill(-pid, syscall.SIGKILL)
-		}
-	}()
-
-	var exitCode int
-	var waitErr error
-	for {
-		var status syscall.WaitStatus
-		_, err := syscall.Wait4(pid, &status, syscall.WUNTRACED|syscall.WCONTINUED, nil)
-		if errors.Is(err, syscall.EINTR) {
-			continue
-		}
-		if err != nil {
-			waitErr = err
-			break
-		}
-		switch {
-		case status.Exited():
-			exitCode = status.ExitStatus()
-			waitErr = nil
-			goto finished
-		case status.Signaled():
-			exitCode = 128 + int(status.Signal())
-			waitErr = nil
-			goto finished
-		case ttyWaitStatusContinued(status):
-			continue
-		case status.Stopped():
-			if ctxDone != nil {
-				select {
-				case <-ctxDone:
-					_ = syscall.Kill(-pid, syscall.SIGCONT)
-					continue
-				default:
-				}
-			}
-			if err := tty.handleStop(pid); err != nil {
-				waitErr = err
-				goto finished
-			}
-		}
-	}
-
-finished:
-	_ = tty.restoreIfOwned(pid)
-	close(done)
-	<-watcherDone
-	_ = command.Process.Release()
-	if waitErr != nil {
-		return 0, protocol.NewError("io_error", "Command stream handling failed.", 1, nil)
-	}
-	return exitCode, nil
 }

@@ -165,11 +165,13 @@ func TestStorageDoctorTaskLockDeadlineRetainsInspectionAndReadOnlyRecovery(t *te
 			recovery = remedies[0].Argv
 		}
 	}
+	release()
+	release = nil
+	// Windows enforces byte-range locks on reads too. Release only the fixture
+	// lock before comparing every file; no writer runs between the snapshots.
 	if !reflect.DeepEqual(before, snapshot()) {
 		t.Fatal("timed-out storage diagnosis changed fixture files")
 	}
-	release()
-	release = nil
 	if code, out, diagnostic := invoke(t, app, "", recovery[1:]...); code != 0 || !strings.Contains(out, `"ready":true`) {
 		t.Fatal("current store should recover by releasing only the fixture lock", code, out, diagnostic)
 	}

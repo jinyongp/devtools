@@ -157,5 +157,18 @@ Intel Mac 및 Linux 설치본, vault와 values, Windows/WSL2와 실제 브라우
 
 실제 task profile 잠금, 완료한 profile 보존, 미검사 profile 제외, 파일 바이트 불변,
 복구 안내 실행 및 설치본 PTY와 isolation 범위의 회귀 검증을 통과했다. 변경 패키지의
-storage/doctor/progress race 검사와 기존 정적 검사도 통과했다. 전체 Go race 및
-후속 main SHA의 Release workflow는 별도로 완료를 확인한다.
+storage/doctor/progress race 검사와 기존 정적 검사도 통과했다.
+
+`96e3c2f3b75704e6c36aa4f1b344d6cddde669a4`의 전체 Go race와 설치본 40개 시나리오를
+로컬에서 통과했다. CLI package의 race 검사는 271.749초였다.
+[해당 소스의 Windows 검사](https://github.com/jinyongp/devtools/actions/runs/41861189515)에서는
+두 아키텍처 모두 새 회귀 검사가 보유 중인 byte-range 잠금 파일을 읽다가 실패했다.
+파일 전체 바이트 비교를 fixture 잠금 해제 직후로 옮겨 무변경 검증을 유지한다.
+ARM64의 기존 collection 검사도 정상 진행 표시를 stderr 오류로 취급했으므로,
+텍스트 결과의 선택과 렌더링 검증에서 stderr가 비어야 한다는 이전 가정을 제거한다.
+진행 표시와 오류 스트림 분리는 기존 공통 UI 및 설치본 검사가 계속 담당한다.
+
+[첫 v0.43.0 배포 실행](https://github.com/jinyongp/devtools/actions/runs/41861191236)은
+위 검사 수정을 반영할 새 소스로 교체하기 위해 중단을 요청했다. 제품 코드와 JSON 계약은
+`96e3c2f` 이후 변경하지 않았으며, 후속 main SHA의 native 검사와 Release workflow는
+별도로 완료를 확인한다.

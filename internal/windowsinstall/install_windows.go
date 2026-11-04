@@ -13,6 +13,7 @@ import (
 	"github.com/jinyongp/devtools/internal/installstorage"
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/progress"
 	"golang.org/x/sys/windows"
 )
 
@@ -161,7 +162,9 @@ func apply(ctx context.Context, options Options, invoked string, load func(conte
 		return nil, err
 	}
 	stage = "artifact_fetch"
+	finishFetch := progress.Begin(ctx, "Fetching the release artifact")
 	body, version, err := load(ctx, arch)
+	finishFetch()
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +177,9 @@ func apply(ctx context.Context, options Options, invoked string, load func(conte
 	sum := sha256.Sum256(body)
 	result := &Result{Action: options.Action, Version: version, Alias: AliasResult{"dvt", "unchanged"}}
 	if previous == nil || previous.Main.SHA256 != hex.EncodeToString(sum[:]) {
+		finishPublish := progress.Begin(ctx, "Verifying and publishing the executable")
 		result, err = e.transact(ctx, options, body, want, previous)
+		finishPublish()
 		if err != nil {
 			return nil, err
 		}

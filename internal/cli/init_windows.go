@@ -7,11 +7,13 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"golang.org/x/sys/windows"
 )
 
 func readProfileLine(ctx context.Context, streams IO, prompt string) (value string, result *protocol.Error) {
+	defer progress.Suspend(ctx)()
 	failure := func() *protocol.Error {
 		return initInputError("input_required", "Profile input is unavailable; provide --profile explicitly.", 3)
 	}

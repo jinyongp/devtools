@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/progress"
 	"io"
 	"net"
 	"net/http"
@@ -732,6 +733,7 @@ func (m Manager) stop(ctx context.Context) (Status, *protocol.Error) {
 }
 
 func (m Manager) stopAttempt(ctx context.Context, expectedAttempt string, anchor func(string, string) *protocol.Error) (Status, *protocol.Error) {
+	defer progress.Begin(ctx, "Stopping the proxy and closing its connections")()
 	if ctx.Err() != nil {
 		return Status{}, proxyFailure("canceled")
 	}

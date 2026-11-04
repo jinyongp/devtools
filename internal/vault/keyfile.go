@@ -10,6 +10,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/progress"
 )
 
 // KeyFile contains only a backend-protected root key and routing metadata.
@@ -63,6 +64,7 @@ func (s KeyFileStore) Read() (*KeyFile, error) {
 	return &k, nil
 }
 func (s KeyFileStore) Initialize(ctx context.Context, vaultID, backend string, protector Protector) (*Material, error) {
+	defer progress.Begin(ctx, "Preparing vault protection")()
 	// Check before generating a key; an existing or unsafe key slot is never reset.
 	if _, err := os.Lstat(filepath.Join(s.Directory, keyFilename)); err == nil {
 		return nil, errorsNamed("vault_already_initialized")
@@ -156,6 +158,7 @@ func (s KeyFileStore) Initialize(ctx context.Context, vaultID, backend string, p
 	return master, nil
 }
 func (k *KeyFile) Unlock(ctx context.Context, backend string, protector Protector) (*Material, error) {
+	defer progress.Begin(ctx, "Authenticating vault protection")()
 	if k == nil {
 		return nil, ErrKeyMissing
 	}

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"golang.org/x/sys/unix"
 )
@@ -14,6 +15,7 @@ import (
 // Poll the caller's terminal directly: cancellation leaves no blocked reader.
 // Unlike secret entry, profile input keeps canonical editing and visible echo.
 func readProfileLine(ctx context.Context, streams IO, prompt string) (string, *protocol.Error) {
+	defer progress.Suspend(ctx)()
 	failure := func() *protocol.Error {
 		return initInputError("input_required", "Profile input is unavailable; provide --profile explicitly.", 3)
 	}

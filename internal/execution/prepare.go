@@ -12,6 +12,7 @@ import (
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
@@ -83,6 +84,7 @@ func Prepare(ctx context.Context, command Command, dependencies Dependencies, pr
 }
 
 func prepare(ctx context.Context, command Command, dependencies Dependencies, preview bool, managedParentEnvironment *[]string) (result Prepared, failure *protocol.Error) {
+	defer progress.Begin(ctx, "Preparing command inputs and service ports")()
 	var state *values.State
 	defer func() {
 		if state.PreparationChanged() {
@@ -250,6 +252,7 @@ func ValidateNetwork(command Command, dependencies Dependencies) *protocol.Error
 // Checks applies the shared structured requirement diagnostics. argv[0] is always
 // checked; forceExecutable is retained for callers using the preparation API.
 func (p Prepared) Checks(ctx context.Context, parentEnvironment []string, forceExecutable bool) []doctor.Check {
+	defer progress.Begin(ctx, "Checking command requirements")()
 	if p.mode == "" && forceExecutable {
 		p.mode = "managed"
 	}
@@ -540,6 +543,7 @@ func (p Prepared) Execute(ctx context.Context, parentEnvironment []string, runne
 		}
 		ctx = process.WithRunner(ctx, runner)
 	}
+	defer progress.Suspend(ctx)()
 	return process.Execute(ctx, p.Args, p.Command.Directory, p.Environment(parentEnvironment), in, out, diagnostic)
 }
 

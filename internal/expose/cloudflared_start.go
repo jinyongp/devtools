@@ -11,10 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 func (p Cloudflared) Start(ctx context.Context, r Record, origin string) (ProviderSession, *protocol.Error) {
+	defer progress.Begin(ctx, "Waiting for the public tunnel to become ready")()
 	executable := p.Executable
 	var e error
 	if executable == "" {

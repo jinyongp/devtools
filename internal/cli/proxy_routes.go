@@ -10,18 +10,20 @@ import (
 	"github.com/jinyongp/devtools/internal/hosts"
 	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
-func (a *App) hostsManager(streams IO) (hosts.Manager, *protocol.Error) {
+func (a *App) hostsManager(ctx context.Context, streams IO) (hosts.Manager, *protocol.Error) {
 	d, e := a.currentPaths()
 	if e != nil {
 		return hosts.Manager{}, portFailure("io_error")
 	}
 	return hosts.Manager{Data: d.Data, Isolated: d.IsolatedRoot != "", Terminal: interactive(streams), Preview: func(mappings []hosts.Mapping) {
 		if interactive(streams) {
+			defer progress.Suspend(ctx)()
 			fmt.Fprintln(streams.Err, "Preparing devtools-owned hosts mappings:")
 			for _, m := range mappings {
 				fmt.Fprintf(streams.Err, "  %s %s\n", m.Address, m.Host)
@@ -61,7 +63,7 @@ func (a *App) registerProxyRoutes() {
 			if e != nil {
 				return nil, e
 			}
-			hm, e := a.hostsManager(streams)
+			hm, e := a.hostsManager(ctx, streams)
 			if e != nil {
 				return nil, e
 			}

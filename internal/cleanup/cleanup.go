@@ -17,6 +17,7 @@ import (
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/profilekey"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/retainedbody"
@@ -245,6 +246,7 @@ func (e Engine) lock(ctx context.Context) (func(), *protocol.Error) {
 	return func() { b(); a() }, nil
 }
 func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protocol.Error) {
+	defer progress.Begin(ctx, "Scanning cleanup candidates")()
 	items := []candidate{}
 	now := time.Now()
 	cutoff := now.Add(-retention.CleanupCandidateAge)
@@ -600,6 +602,7 @@ func (e Engine) archivedCandidate(c candidate) (Archive, []byte, bool, *protocol
 }
 
 func (e Engine) Apply(ctx context.Context, planID string, ids []string, requestID string) (Result, *protocol.Error) {
+	defer progress.Begin(ctx, "Archiving selected cleanup items")()
 	out := Result{Archives: []Archive{}}
 	if !validID(planID) || !validID(requestID) || len(ids) == 0 {
 		return out, fail("invalid_argument")
@@ -958,6 +961,7 @@ func (e Engine) restoreCompletedProcess(archive Archive, payload []byte) *protoc
 }
 
 func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protocol.Error) {
+	defer progress.Begin(ctx, "Restoring archived data")()
 	var a Archive
 	if !validID(id) {
 		return a, false, fail("invalid_argument")
@@ -1067,6 +1071,7 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 	return a, true, nil
 }
 func (e Engine) Purge(ctx context.Context, id string) (Archive, bool, *protocol.Error) {
+	defer progress.Begin(ctx, "Removing the selected archive")()
 	var a Archive
 	if !validID(id) {
 		return a, false, fail("invalid_argument")

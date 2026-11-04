@@ -12,6 +12,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/progress"
 )
 
 const rewrapPending = "rewrap-pending.json"
@@ -195,6 +196,7 @@ func (s KeyFileStore) Rewrap(ctx context.Context, id string, old, next Protector
 	return s.rewrap(ctx, id, old, next, nil)
 }
 func (s KeyFileStore) rewrap(ctx context.Context, id string, old, next Protector, checkpoint func(string)) (RewrapResult, error) {
+	defer progress.Begin(ctx, "Changing vault protection")()
 	step := func(stage string) {
 		if checkpoint != nil {
 			checkpoint(stage)

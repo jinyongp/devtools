@@ -10,6 +10,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/profilekey"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
@@ -47,6 +48,7 @@ func (s Store) attempted(ctx context.Context, r record) *protocol.Error {
 	return failure("delivery_already_started")
 }
 func (s Store) Deliver(ctx context.Context, id, requestID string, input RevisionInput) (result Result, condition *protocol.Error) {
+	defer progress.Begin(ctx, "Delivering values and waiting for the runner")()
 	defer func() {
 		if condition != nil && (condition.Code == "delivery_outcome_unknown" || condition.Code == "delivery_pending") {
 			if condition.Details == nil {

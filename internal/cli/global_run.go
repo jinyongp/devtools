@@ -6,6 +6,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -47,7 +48,7 @@ func (a *App) registerGlobalRun() {
 		if e != nil {
 			return nil, e
 		}
-		hm, e := a.hostsManager(streams)
+		hm, e := a.hostsManager(ctx, streams)
 		if e != nil {
 			return nil, e
 		}
@@ -77,7 +78,9 @@ func (a *App) registerGlobalRun() {
 		if err := process.ValidateEnvironment(env); err != nil {
 			return nil, err
 		}
+		resume := progress.Suspend(ctx)
 		exit, e := process.Execute(ctx, r.Child, dir, process.Environment(os.Environ(), env), streams.In, streams.Out, streams.Err)
+		resume()
 		return processResult{ExitCode: exit}, e
 	}
 	a.commands = append(a.commands, c)

@@ -23,13 +23,18 @@ type outputController struct {
 	handlerReturned bool
 }
 
-func (o *outputController) progressContext(ctx context.Context) (context.Context, func()) {
-	if o.decision.Format != presentation.FormatText || len(o.environment.Signals) > 0 {
+func (o *outputController) progressContext(ctx context.Context, mode OutputMode) (context.Context, func()) {
+	if o.streams.Err == nil || o.decision.Format != presentation.FormatText || len(o.environment.Signals) > 0 || mode != OutputJSON && mode != OutputPassthrough {
 		return ctx, func() {}
 	}
 	options := textOptions(o.environment, true)
 	feedback := cliui.NewProgress(o.streams.Err, cliui.ProgressOptions{Animate: options.SGR, Width: options.Width})
-	return progress.WithObserver(ctx, feedback.Observe), feedback.Close
+	ctx = progress.WithObserver(ctx, feedback.Observe)
+	finish := progress.Begin(ctx, "Running devtools "+o.operation)
+	return ctx, func() {
+		finish()
+		feedback.Close()
+	}
 }
 
 func (o *outputController) outputError(code, message string) *protocol.Error {

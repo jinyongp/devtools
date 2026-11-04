@@ -244,7 +244,7 @@ func TestNamedRunAutomaticallyPreparesAndHonorsDisabledAndOverrides(t *testing.T
 	}
 	i := st.Find(p.Profile, "", p.Root)
 	ref := network.RouteRef{Scope: "project", Profile: p.Profile, InstanceID: i.ID, Proxy: "route"}
-	hm, e := app.hostsManager(IO{})
+	hm, e := app.hostsManager(context.Background(), IO{})
 	if e != nil {
 		t.Fatal(e)
 	}

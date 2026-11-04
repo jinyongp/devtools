@@ -12,6 +12,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/progress"
 )
 
 var ErrSessionProtocol = errors.New("key_session_protocol_mismatch")
@@ -417,6 +418,7 @@ func (c *SessionClient) Status(ctx context.Context) (SessionStatus, error) {
 	return r.Status, nil
 }
 func (c *SessionClient) Unlock(ctx context.Context, passphrase *Material, interactive bool) error {
+	defer progress.Begin(ctx, "Unlocking the vault")()
 	b := passphrase.CopyBytes()
 	defer clear(b)
 	_, err := c.request(ctx, "unlock", b, interactive)

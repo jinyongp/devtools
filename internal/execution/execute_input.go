@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/redact"
 	"github.com/jinyongp/devtools/internal/values"
@@ -36,12 +37,14 @@ func (p Prepared) executeInput(ctx context.Context, runner process.Runner, in io
 		return 0, OutputProtectionFailure(outputErr, p.Command.Diagnostic(p.mode))
 	}
 	ctx = protected.Context
+	resume := func() {}
 	defer func() {
 		if protected.Close(ctx.Err() != nil || failure != nil) != nil {
 			outputFailure := protocol.NewError("output_protection_failed", "Protected output could not be delivered safely.", 1, nil)
 			protocol.PreserveRecovery(outputFailure, failure)
 			failure = outputFailure
 		}
+		resume()
 	}()
 	var admission *vault.LaunchAdmission
 	var admissionErr error
@@ -85,5 +88,6 @@ func (p Prepared) executeInput(ctx context.Context, runner process.Runner, in io
 		}
 		ctx = process.WithRunner(ctx, runner)
 	}
+	resume = progress.Suspend(ctx)
 	return process.Execute(ctx, input.Args, input.Directory, input.Environment, in, protected.Out, protected.Err)
 }

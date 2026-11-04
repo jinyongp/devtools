@@ -17,6 +17,7 @@ import (
 	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -154,6 +155,7 @@ func (m Manager) ensureNetworkDefault(ctx context.Context) *protocol.Error {
 }
 
 func (m Manager) bootNetwork(ctx context.Context, j *netops.Journal) *protocol.Error {
+	defer progress.Begin(ctx, "Starting the proxy listener")()
 	status, e := m.Status(ctx)
 	if e != nil {
 		return e
@@ -226,6 +228,7 @@ func (m Manager) bootNetwork(ctx context.Context, j *netops.Journal) *protocol.E
 }
 
 func (m Manager) NetworkApply(ctx context.Context, action, name string, all bool, id string, requested ...int) (any, *protocol.Error) {
+	defer progress.Begin(ctx, "Applying proxy listener changes")()
 	if action != "start" && action != "stop" && action != "restart" {
 		return nil, proxyFailure("invalid_argument")
 	}

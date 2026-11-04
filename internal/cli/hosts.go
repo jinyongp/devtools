@@ -36,7 +36,7 @@ func (a *App) registerHosts() {
 			if e != nil {
 				return nil, e
 			}
-			hm, e := a.hostsManager(streams)
+			hm, e := a.hostsManager(ctx, streams)
 			if e != nil {
 				return nil, e
 			}

@@ -24,6 +24,7 @@ import (
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -484,6 +485,7 @@ func (e Engine) CreateWithPassphrase(ctx context.Context, request CreateOptions)
 }
 
 func (e Engine) createArchive(ctx context.Context, profile, output string, encoder func(Snapshot) ([]byte, error)) (CreateResult, *protocol.Error) {
+	defer progress.Begin(ctx, "Creating the encrypted archive")()
 	scoped, closeScope, scopeErr := e.withVault(ctx)
 	if scopeErr != nil {
 		return CreateResult{}, scopeErr
@@ -498,7 +500,9 @@ func (e Engine) createArchive(ctx context.Context, profile, output string, encod
 	if err := e.checkVaultRootHeld(); err != nil {
 		return CreateResult{}, values.VaultError(ctx, err)
 	}
+	finishSnapshot := progress.Begin(ctx, "Collecting backup data")
 	s, err := e.snapshot(profile)
+	finishSnapshot()
 	if err != nil {
 		return CreateResult{}, failure("backup_error", err)
 	}
@@ -506,10 +510,13 @@ func (e Engine) createArchive(ctx context.Context, profile, output string, encod
 	if ctx.Err() != nil {
 		return CreateResult{}, failure("canceled")
 	}
+	finishEncryption := progress.Begin(ctx, "Encrypting backup data")
 	b, err := encoder(s)
+	finishEncryption()
 	if err != nil {
 		return CreateResult{}, failure("backup_error")
 	}
+	defer progress.Begin(ctx, "Writing the encrypted archive")()
 	if err := exclusiveContext(ctx, output, b); err != nil {
 		if ctx.Err() != nil {
 			return CreateResult{}, failure("canceled")
@@ -704,6 +711,7 @@ func selectImportSummary(snapshot Snapshot, requested string) (Summary, *protoco
 }
 
 func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult, *protocol.Error) {
+	defer progress.Begin(ctx, "Decrypting and checking the archive")()
 	result := ImportResult{Plan: Plan{Targets: []Target{}}, Diff: profilecatalog.Diff{Envs: []profilecatalog.NameChange{}, Variables: []profilecatalog.ValueChange{}, Secrets: []profilecatalog.ValueChange{}, Items: []profilecatalog.TaskChange{}, Instances: []profilecatalog.InstanceChange{}}}
 	if !filepath.IsAbs(e.Data) || !filepath.IsAbs(e.Cache) || (request.Expected == "") != (request.RequestID == "") || (request.IdentityPath == "") == (request.Passphrase == "") {
 		return result, failure("invalid_argument")
@@ -777,6 +785,7 @@ func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult
 }
 
 func (e Engine) Restore(ctx context.Context, path, identityPath, source, target, expected, requestID string, replace bool) (Plan, *protocol.Error) {
+	defer progress.Begin(ctx, "Decrypting and checking the backup")()
 	plan := Plan{Targets: []Target{}}
 	if !filepath.IsAbs(e.Data) || !filepath.IsAbs(e.Cache) {
 		return plan, failure("invalid_argument")
@@ -790,6 +799,7 @@ func (e Engine) Restore(ctx context.Context, path, identityPath, source, target,
 }
 
 func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *protocol.Error) {
+	defer progress.Begin(ctx, "Checking and restoring profile data")()
 	plan := Plan{Targets: []Target{}}
 	s, cipher := request.Snapshot, request.Cipher
 	source, target := request.Source, request.Target

@@ -15,6 +15,7 @@ import (
 	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/proxy"
@@ -42,11 +43,12 @@ func (a *App) prepareProxyNetwork(ctx context.Context, p project.Context, names 
 // prepareNetwork also supports mixed and route-free snapshots for new requests.
 // Legacy preparation retains its exact journal input and per-command guards.
 func (a *App) prepareNetwork(ctx context.Context, p project.Context, names []string, originals []services.Record, overrides map[string]*string, streams IO, id string, mode network.PreparationMode, legacy bool, selections ...map[string]string) (map[string]*network.ExecutionSnapshot, *protocol.Error) {
+	defer progress.Begin(ctx, "Preparing project routes and service connections")()
 	m, e := a.proxyStore()
 	if e != nil {
 		return nil, e
 	}
-	hm, e := a.hostsManager(streams)
+	hm, e := a.hostsManager(ctx, streams)
 	if e != nil {
 		return nil, e
 	}

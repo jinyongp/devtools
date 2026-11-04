@@ -27,7 +27,9 @@ type Progress struct {
 	writer     io.Writer
 	options    ProgressOptions
 	activities []progressActivity
+	suspended  map[uint64]bool
 	started    time.Time
+	visibleAt  time.Time
 	lastID     uint64
 	lastLine   time.Time
 	frame      int
@@ -40,7 +42,8 @@ type Progress struct {
 }
 
 func NewProgress(writer io.Writer, options ProgressOptions) *Progress {
-	p := &Progress{writer: writer, options: options, started: time.Now(), stop: make(chan struct{}), done: make(chan struct{})}
+	now := time.Now()
+	p := &Progress{writer: writer, options: options, suspended: make(map[uint64]bool), started: now, visibleAt: now, stop: make(chan struct{}), done: make(chan struct{})}
 	go p.run()
 	return p
 }
@@ -49,6 +52,20 @@ func (p *Progress) Observe(event progress.Event) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
+		return
+	}
+	if event.Suspended {
+		if event.Finished {
+			delete(p.suspended, event.ID)
+			if len(p.suspended) == 0 {
+				// Short work following a prompt or child output stays quiet too.
+				p.visibleAt = time.Now()
+				p.lastID, p.lastLine = 0, time.Time{}
+			}
+		} else {
+			p.suspended[event.ID] = true
+			p.clear()
+		}
 		return
 	}
 	if event.Finished {
@@ -84,11 +101,11 @@ func (p *Progress) clear() {
 func (p *Progress) render(now time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.closed || p.failed || len(p.activities) == 0 {
+	if p.closed || p.failed || len(p.suspended) > 0 || len(p.activities) == 0 {
 		return
 	}
 	activity := p.activities[len(p.activities)-1]
-	if now.Sub(p.started) < 250*time.Millisecond {
+	if now.Sub(p.visibleAt) < 250*time.Millisecond {
 		return
 	}
 	if !p.options.Animate {

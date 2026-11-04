@@ -6,12 +6,14 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
 )
 
 func (s Store) Prepare(ctx context.Context, input PrepareInput, requestID string) (Result, *protocol.Error) {
+	defer progress.Begin(ctx, "Preparing the frozen value delivery")()
 	started := time.Now().UTC()
 	if !uuidRE.MatchString(requestID) || !opaque(input.ExternalExecutionID) || !input.Selection.valid() || input.Env != "" && !vault.ValidSelection(input.Env) {
 		return Result{}, invalid()

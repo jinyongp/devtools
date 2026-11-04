@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -53,5 +54,6 @@ func updateExecutable(ctx context.Context, executable string, options map[string
 	if updateManager == "homebrew" {
 		return nil, protocol.NewError("package_managed", "Update this Homebrew installation with brew upgrade jinyongp/tap/devtools, then run devtools doctor --storage --fix.", 3, map[string]any{"manager": "homebrew", "command": "brew upgrade jinyongp/tap/devtools", "remedies": []protocol.Remedy{{Argv: []string{"brew", "upgrade", "jinyongp/tap/devtools"}, RequiredInputs: []string{}, Message: "Update with the package manager that owns this installation.", Effect: "system_write"}, {Argv: []string{"devtools", "doctor", "--storage", "--fix"}, RequiredInputs: []string{}, Message: "After upgrading, prepare storage with the installed executable.", Effect: "value_write"}}})
 	}
+	defer progress.Begin(ctx, "Updating the executable and preparing storage")()
 	return updatePlatform(ctx, executable, options, streams...)
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -120,6 +121,7 @@ func ownedHandler(raw json.RawMessage, origin string) bool {
 	return json.Unmarshal(fields["Proxy"], &value) == nil && strings.TrimSuffix(value, "/") == origin
 }
 func (p Tailscale) Start(ctx context.Context, r Record, origin string) (ProviderSession, *protocol.Error) {
+	defer progress.Begin(ctx, "Configuring and checking the public tunnel")()
 	if !ValidOrigin(origin) || r.ServePort < 1 || r.ServePort > 65535 {
 		return nil, Failure("invalid_argument")
 	}

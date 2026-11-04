@@ -5,12 +5,15 @@ package privilege
 import (
 	"bytes"
 	"context"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"os"
 	"os/exec"
 )
 
 func runPlatform(ctx context.Context, kind string, encoded []byte, terminal bool, executable string) *protocol.Error {
+	// sudo and the helper own stderr, including terminal authentication.
+	defer progress.Suspend(ctx)()
 	name, args := executable, []string{"__network-helper", kind}
 	if os.Geteuid() != 0 {
 		name = "sudo"

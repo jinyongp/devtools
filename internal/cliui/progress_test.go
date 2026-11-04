@@ -43,3 +43,37 @@ func TestPlainProgressThrottlesHeartbeatsWithoutTerminalControls(t *testing.T) {
 		t.Fatalf("invalid plain progress: %q", output)
 	}
 }
+
+func TestProgressSuspendsOverlappingPromptsAndResumesAfterOutput(t *testing.T) {
+	for _, animate := range []bool{false, true} {
+		var out bytes.Buffer
+		p := NewProgress(&out, ProgressOptions{Animate: animate})
+		ctx := progress.WithObserver(context.Background(), p.Observe)
+		finish := progress.Begin(ctx, "Preparing execution")
+		p.render(time.Now().Add(time.Second))
+		resume := progress.Suspend(ctx)
+		if animate && !strings.HasSuffix(out.String(), "\r\x1b[2K") {
+			t.Fatalf("prompt would overwrite feedback: %q", out.String())
+		}
+		other := progress.Suspend(ctx)
+		nested := progress.Begin(ctx, "Checking preparation")
+		before := out.Len()
+		resume()
+		p.render(time.Now().Add(3 * time.Second))
+		if out.Len() != before {
+			t.Fatalf("one prompt resumed another: %q", out.String())
+		}
+		other()
+		p.render(time.Now())
+		if out.Len() != before {
+			t.Fatal("feedback flashed immediately after native output")
+		}
+		p.render(time.Now().Add(4 * time.Second))
+		nested()
+		finish()
+		p.Close()
+		if !strings.Contains(out.String(), "Checking preparation") {
+			t.Fatalf("feedback did not resume: %q", out.String())
+		}
+	}
+}

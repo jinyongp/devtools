@@ -78,7 +78,7 @@ func (a *App) registerExpose() {
 		if e != nil {
 			return nil, e
 		}
-		hm, e := a.hostsManager(streams)
+		hm, e := a.hostsManager(ctx, streams)
 		if e != nil {
 			return nil, e
 		}

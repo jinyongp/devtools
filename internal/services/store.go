@@ -26,6 +26,7 @@ import (
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/redact"
@@ -1014,6 +1015,7 @@ func launchResultFailure(action string, result Result) *protocol.Error {
 	return e
 }
 func (s Store) start(ctx context.Context, q Request, previous string) (result Result, condition *protocol.Error) {
+	defer progress.Begin(ctx, "Starting execution and checking its controller")()
 	var out Result
 	// Request identity also names the execution, so retry after a lost receipt
 	// observes the same run instead of launching another command.
@@ -1325,6 +1327,7 @@ func (s Store) stoppedResult(ctx context.Context, r Record, changed bool) (Resul
 }
 
 func (s Store) stop(ctx context.Context, r Record) (Result, *protocol.Error) {
+	defer progress.Begin(ctx, "Stopping execution and verifying cleanup")()
 	if r.EndedAt != nil {
 		return s.stoppedResult(ctx, r, false)
 	}

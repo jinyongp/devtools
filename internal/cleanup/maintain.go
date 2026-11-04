@@ -11,6 +11,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/expose"
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/retainedbody"
 	"github.com/jinyongp/devtools/internal/retention"
@@ -45,6 +46,7 @@ type maintenancePosition struct {
 // tasks, manual archives, request identities, or an unresolved external effect.
 // Dry runs use the same eligibility checks and leave the saved position intact.
 func (e Engine) Maintain(ctx context.Context, profile string, limit int, dry bool) (MaintenanceResult, *protocol.Error) {
+	defer progress.Begin(ctx, "Maintaining retained history")()
 	if limit < 1 || limit > 200 {
 		return MaintenanceResult{}, fail("invalid_argument")
 	}

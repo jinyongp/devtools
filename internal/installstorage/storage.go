@@ -9,6 +9,7 @@ import (
 	"io"
 	"os/exec"
 
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/storageupgrade"
 )
@@ -27,6 +28,7 @@ func Failed(code string) Result {
 // Run starts only the published candidate. Stdin is closed and both output
 // streams are private, bounded buffers; no prompt or raw child error is relayed.
 func Run(ctx context.Context, executable string) Result {
+	defer progress.Begin(ctx, "Preparing storage with the installed executable")()
 	command := exec.CommandContext(ctx, executable, "__install-storage")
 	var output, diagnostic boundedOutput
 	command.Stdout, command.Stderr = &output, &diagnostic

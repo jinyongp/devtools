@@ -8,6 +8,7 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"golang.org/x/sys/windows"
 )
@@ -35,6 +36,7 @@ func consoleRecord(proc *windows.LazyProc, handle windows.Handle, event *console
 }
 
 func readTerminalPassphrase(ctx context.Context, streams IO, prompt string) (value string, result *protocol.Error) {
+	defer progress.Suspend(ctx)()
 	canceled := func() *protocol.Error { return protocol.NewError("canceled", "Execution canceled.", 130, nil) }
 	failure := func() *protocol.Error {
 		return protocol.NewError("io_error", "Cannot read passphrase from console.", 1, nil)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -76,6 +77,7 @@ func (s Store) Check(ctx context.Context, id string) (Record, *protocol.Error) {
 }
 
 func (s Store) Wait(ctx context.Context, id string, timeout time.Duration) (Record, *protocol.Error) {
+	defer progress.Begin(ctx, "Waiting for the service to become ready")()
 	if timeout <= 0 || timeout > 10*time.Minute {
 		return Record{}, failure("invalid_argument")
 	}

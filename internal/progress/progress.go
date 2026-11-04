@@ -8,9 +8,10 @@ import (
 )
 
 type Event struct {
-	ID       uint64
-	Message  string
-	Finished bool
+	ID        uint64
+	Message   string
+	Finished  bool
+	Suspended bool
 }
 
 type Observer func(Event)
@@ -25,11 +26,25 @@ func WithObserver(ctx context.Context, observer Observer) context.Context {
 // Begin reports a scoped activity. Finishing it restores the enclosing activity
 // in a consumer, including when nested lock waits finish out of order.
 func Begin(ctx context.Context, message string) func() {
+	return observe(ctx, Event{Message: message})
+}
+
+// Suspend gives an input prompt or foreground program exclusive use of the
+// terminal. The observer clears feedback synchronously and resumes only after
+// every overlapping suspension finishes. Activities may continue in the meantime.
+func Suspend(ctx context.Context) func() {
+	return observe(ctx, Event{Suspended: true})
+}
+
+func observe(ctx context.Context, event Event) func() {
 	observer, _ := ctx.Value(observerKey{}).(Observer)
 	if observer == nil {
 		return func() {}
 	}
-	id := sequence.Add(1)
-	observer(Event{ID: id, Message: message})
-	return sync.OnceFunc(func() { observer(Event{ID: id, Finished: true}) })
+	event.ID = sequence.Add(1)
+	observer(event)
+	return sync.OnceFunc(func() {
+		event.Finished = true
+		observer(event)
+	})
 }

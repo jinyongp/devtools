@@ -16,6 +16,7 @@ import (
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -284,6 +285,7 @@ func (s Store) RunForeground(ctx context.Context, prepared execution.Prepared, p
 	}
 	defer c.close()
 	code, condition := prepared.Execute(process.WithRunner(c.ctx, c.run), parent, nil, in, out, diagnostic)
+	defer progress.Begin(ctx, "Releasing service ports and saving execution status")()
 	// Release service claims before publishing terminal completion. The caller
 	// supplies a once-protected Release for preparation and startup failures too.
 	prepared.Release()

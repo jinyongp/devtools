@@ -7,12 +7,14 @@ import (
 	"io"
 	"os"
 
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
 
 func readTerminalPassphrase(ctx context.Context, streams IO, prompt string) (string, *protocol.Error) {
+	defer progress.Suspend(ctx)()
 	if err := ctx.Err(); err != nil {
 		return "", protocol.NewError("canceled", "Execution canceled.", 130, nil)
 	}

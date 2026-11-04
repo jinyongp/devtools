@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
@@ -403,6 +404,7 @@ func (m Manager) initialRestart(ctx context.Context, request Request, fp string)
 }
 
 func (m Manager) runUp(ctx context.Context, request Request, value *receipt, path string) *protocol.Error {
+	defer progress.Begin(ctx, "Starting project services")()
 	for index := range value.Items {
 		child := &value.Items[index]
 		if child.Done {
@@ -504,6 +506,7 @@ func (m Manager) runUp(ctx context.Context, request Request, value *receipt, pat
 }
 
 func (m Manager) runDown(ctx context.Context, value *receipt, path string) *protocol.Error {
+	defer progress.Begin(ctx, "Stopping project services")()
 	for index := range value.Items {
 		child := &value.Items[index]
 		if child.Done {
@@ -543,6 +546,7 @@ func (m Manager) runDown(ctx context.Context, value *receipt, path string) *prot
 }
 
 func (m Manager) runRestart(ctx context.Context, request Request, value *receipt, path string) *protocol.Error {
+	defer progress.Begin(ctx, "Restarting project services")()
 	for index := range value.Items {
 		child := &value.Items[index]
 		if child.Done {

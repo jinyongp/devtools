@@ -9,6 +9,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/cli/presentation"
 	"github.com/jinyongp/devtools/internal/profiles"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"golang.org/x/term"
@@ -84,7 +85,10 @@ func (a *App) initDirectory(ctx context.Context, streams IO, r Request, director
 				} else if invalid > 0 {
 					message = "Invalid profile name.\n" + profileRules
 				}
-				if _, err := io.WriteString(streams.Err, message); err != nil {
+				resume := progress.Suspend(ctx)
+				_, err := io.WriteString(streams.Err, message)
+				resume()
+				if err != nil {
 					return nil, initInputError("io_error", "Cannot write profile prompt.", 1)
 				}
 			}

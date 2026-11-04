@@ -453,11 +453,11 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		}
 	}
 	request.OutputFormat, request.Agent = output.decision.Format, len(environment.Signals) > 0
-	runContext, finishProgress := output.progressContext(ctx)
+	runContext, finishProgress := output.progressContext(ctx, selected.OutputMode)
 	defer finishProgress()
 	data, err := selected.Run(runContext, streams, request)
-	finishProgress()
 	if err != nil {
+		finishProgress()
 		if err.Details == nil {
 			err.Details = map[string]any{}
 		}
@@ -486,6 +486,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	if operationID != "" {
 		result := publicResultObject(data)
 		if result == nil {
+			finishProgress()
 			return fail(output.outputError("internal_error", "Operation output must be an object."))
 		}
 		// Preserve a domain's existing canonical identity, such as vault rewrap's
@@ -497,7 +498,8 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		}
 		data = result
 	}
-	a.maintainAfterWrite(ctx, selected.Name, request)
+	a.maintainAfterWrite(runContext, selected.Name, request)
+	finishProgress()
 	if selected.OutputMode == OutputPassthrough {
 		if result, ok := data.(processResult); ok {
 			return result.ExitCode

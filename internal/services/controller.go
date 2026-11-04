@@ -182,6 +182,9 @@ func (c *executionController) finish(code int, condition *protocol.Error) error 
 	} else if code != 0 {
 		r.Reason = "nonzero_exit"
 	}
+	if r.StartedAt == nil {
+		r.ExitCode = nil
+	}
 	return writePrivate(c.store.path(r.ID, "record.json"), *r)
 }
 

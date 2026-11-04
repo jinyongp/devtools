@@ -38,6 +38,16 @@ func cleanupFailure(scope string) *protocol.Error {
 	return protocol.NewError("process_cleanup_incomplete", "Cannot verify cleanup of the owned process scope.", 3, map[string]any{"effects": "unknown", "facts": map[string]any{"cleanup_state": "unknown", "ownership_scope": scope}})
 }
 
+func failedStart(condition *protocol.Error, cleanupErr error, scope string) *protocol.Error {
+	if cleanupErr == nil {
+		return condition
+	}
+	result := cleanupFailure(scope)
+	protocol.PreserveRecovery(result, condition)
+	result.Details["facts"].(map[string]any)["startup_error_code"] = condition.Code
+	return result
+}
+
 // WithExecutablePath binds a previously resolved executable to an actual input
 // snapshot. argv[0] retains the caller's original spelling.
 func WithExecutablePath(ctx context.Context, path string) context.Context {

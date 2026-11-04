@@ -219,6 +219,22 @@ func (c *nativeChild) activeProcesses() (uint32, error) {
 
 type ownedCleanupError struct{ error }
 
+func (c *nativeChild) abort() error {
+	err := windows.TerminateJobObject(c.job, 137)
+	if err == nil {
+		err = c.waitJobEmpty()
+	}
+	if err != nil {
+		_ = c.closeJob()
+	}
+	_, waitErr := c.wait(context.Background())
+	var cleanup ownedCleanupError
+	if errors.As(waitErr, &cleanup) {
+		err = errors.Join(err, waitErr)
+	}
+	return err
+}
+
 func (c *nativeChild) waitJobEmpty() error {
 	deadline := time.NewTimer(nativeStopGrace)
 	defer deadline.Stop()

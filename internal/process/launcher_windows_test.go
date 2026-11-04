@@ -92,6 +92,7 @@ type jobScenarioResult struct {
 	Nodes      int
 	StopMillis int64
 	Cleaned    int
+	StartError string
 }
 
 func readFixtureMarker(path string) ([]byte, error) {
@@ -210,10 +211,26 @@ func TestWindowsJobConsoleFixture(t *testing.T) {
 		defer cancel()
 		done := make(chan jobScenarioResult, 1)
 		go func() {
-			code, e := Execute(ctx, []string{exe, "-test.run=^TestWindowsJobNode$"}, dir, jobFixtureEnvironment(dir, mode, 2), nil, io.Discard, io.Discard)
+			var started func() *protocol.Error
+			if mode == "start-failure" {
+				started = func() *protocol.Error {
+					for ctx.Err() == nil {
+						if _, err := os.Stat(filepath.Join(dir, "release-root")); err == nil {
+							return protocol.NewError("fixture_start_failed", "Cannot publish startup observation.", 3, nil)
+						}
+						time.Sleep(10 * time.Millisecond)
+					}
+					return protocol.ContextError(ctx.Err())
+				}
+			}
+			code, e := ExecuteOwned(ctx, []string{exe, "-test.run=^TestWindowsJobNode$"}, dir, jobFixtureEnvironment(dir, mode, 2), nil, io.Discard, io.Discard, started)
 			r := jobScenarioResult{Code: code}
 			if e != nil {
-				r.Error = e.Code
+				if mode == "start-failure" && e.Code == "fixture_start_failed" {
+					r.StartError = e.Code
+				} else {
+					r.Error = e.Code
+				}
 			}
 			done <- r
 		}()
@@ -223,7 +240,7 @@ func TestWindowsJobConsoleFixture(t *testing.T) {
 		}
 		defer closeFixtureNodes(handles)
 		start := time.Now()
-		if mode == "early" || mode == "early-grace" {
+		if mode == "early" || mode == "early-grace" || mode == "start-failure" {
 			if err = os.WriteFile(filepath.Join(dir, "release-root"), nil, 0600); err != nil {
 				return jobScenarioResult{Error: err.Error()}
 			}
@@ -329,6 +346,13 @@ func TestWindowsJobParentExitPreservesDescendantCleanupGrace(t *testing.T) {
 	result := runJobConsoleScenario(t, "early-grace")
 	if result.Code != 23 || result.Cleaned != 2 || result.StopMillis >= 2800 {
 		t.Fatalf("descendant cleanup was cut short after parent exit: %#v", result)
+	}
+}
+
+func TestWindowsFailedStartObservationCleansOwnedJob(t *testing.T) {
+	result := runJobConsoleScenario(t, "start-failure")
+	if result.StartError != "fixture_start_failed" || result.StopMillis >= 2800 {
+		t.Fatalf("startup failure did not preserve its error and reap the owned Job: %#v", result)
 	}
 }
 func TestWindowsJobCrashOwnerFixture(t *testing.T) {

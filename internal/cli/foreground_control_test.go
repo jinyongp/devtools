@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -132,10 +134,16 @@ func TestForegroundExecutionChild(t *testing.T) {
 	if filepath.Base(path) != "child-ready" {
 		return
 	}
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
+	_, _ = os.Stdout.WriteString("native child output\n")
 	if os.WriteFile(path, nil, 0600) != nil {
 		os.Exit(91)
 	}
-	_, _ = os.Stdout.WriteString("native child output\n")
-	time.Sleep(30 * time.Second)
-	os.Exit(92)
+	select {
+	case <-interrupt:
+		os.Exit(42)
+	case <-time.After(30 * time.Second):
+		os.Exit(92)
+	}
 }

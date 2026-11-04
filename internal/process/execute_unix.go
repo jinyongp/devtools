@@ -71,12 +71,14 @@ func ExecuteOwned(ctx context.Context, args []string, dir string, env []string, 
 		startErr = started()
 	}
 	if startErr != nil {
-		_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		abort, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
+		cancel(SignalError{Signal: syscall.SIGKILL})
+		cleanupErr := waitOwnedGroup(abort, command.Process.Pid, tty)
 		_ = command.Wait()
 		if interactive {
 			_ = tty.restoreAfterStartFailure()
 		}
-		return 0, startErr
+		return 0, failedStart(startErr, cleanupErr, "process_group")
 	}
 	cleanupErr := waitOwnedGroup(ctx, command.Process.Pid, tty)
 	err = command.Wait()

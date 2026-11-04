@@ -107,3 +107,11 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
 - 정상 종료한 비서비스 foreground 명령은 current 서비스로 남기지 않고 history에 보존한다.
   mode 필터는 선택한 실행에 연결된 요청만 포함해 다른 모드의 실패를 섞지 않는다.
 - 관련 foreground·선택·목록·이력 회귀 검사 통과. Native CI는 최종 소스에서 확인한다.
+
+### 통합 리뷰 수정 2 — 시작 관측 실패의 소유 범위 정리
+
+- native spawn 뒤 시작 관측 콜백이 실패해도 Unix 그룹 / Windows Job이 비었는지
+  확인한 뒤 원래 오류를 반환한다. 정리를 확인하지 못하면 cleanup 불명과 원래 오류 코드를
+  보존한다. 시작을 관측하지 못한 실행에 가상의 앱 종료 코드 0을 기록하지 않는다.
+- 실제 자식 계층을 시작한 뒤 관측 실패를 주입하는 Unix race 검사 통과.
+  같은 native Windows Job 회귀 사례를 기존 suite-runtime 검증에 추가했다.

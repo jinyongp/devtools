@@ -5,13 +5,17 @@ package process
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 func TestOwnedGroupDescendantGraceAfterParentExit(t *testing.T) {
@@ -53,6 +57,38 @@ func waitOwnedFixture(ctx context.Context, path string) bool {
 	return false
 }
 
+func TestFailedStartObservationCleansOwnedDescendants(t *testing.T) {
+	dir := t.TempDir()
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	env := Environment(os.Environ(), map[string]string{"DEVTOOLS_TEST_OWNED_ROLE": "cancel", "DEVTOOLS_TEST_OWNED_DIR": dir})
+	condition := protocol.NewError("fixture_start_failed", "Cannot publish startup observation.", 3, nil)
+	_, actual := ExecuteOwned(ctx, []string{os.Args[0], "-test.run=^TestOwnedGroupHelper$"}, dir, env, nil, &bytes.Buffer{}, &bytes.Buffer{}, func() *protocol.Error {
+		if !waitOwnedFixture(ctx, filepath.Join(dir, "ready")) {
+			return protocol.ContextError(ctx.Err())
+		}
+		return condition
+	})
+	if actual != condition {
+		t.Fatalf("startup failure lost its original condition: %v", actual)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "ready"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(string(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state, err := ownedChildState(pid); err != nil {
+		if !os.IsNotExist(err) && !errors.Is(err, syscall.ESRCH) {
+			t.Fatalf("cannot verify descendant termination: %v", err)
+		}
+	} else if state != childExited {
+		t.Fatal("startup observation failure left an owned descendant alive")
+	}
+}
+
 func TestOwnedGroupHelper(t *testing.T) {
 	role := os.Getenv("DEVTOOLS_TEST_OWNED_ROLE")
 	if role == "" {
@@ -62,7 +98,7 @@ func TestOwnedGroupHelper(t *testing.T) {
 	if role == "child" {
 		interrupt := make(chan os.Signal, 1)
 		signal.Notify(interrupt, syscall.SIGTERM)
-		if os.WriteFile(filepath.Join(dir, "ready"), nil, 0600) != nil {
+		if os.WriteFile(filepath.Join(dir, "ready"), []byte(strconv.Itoa(os.Getpid())), 0600) != nil {
 			os.Exit(91)
 		}
 		<-interrupt

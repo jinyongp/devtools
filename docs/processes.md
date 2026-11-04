@@ -2,8 +2,8 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-`devtools process`는 이름 명령의 foreground 실행과 백그라운드 관리 실행을 같은 실행 ID로
-조회·제어한다. `process start`는 agent나 dashboard 세션과 별도로 supervisor가 관리하는
+`devtools process`는 이름 명령의 foreground 실행과 백그라운드 관리 실행을 각 실행 ID로
+같은 인터페이스에서 조회·제어한다. `process start`는 agent나 dashboard 세션과 별도로 supervisor가 관리하는
 새 실행을 시작한다. 프로젝트 명령의 요구 사항 검사, var/sec/env 주입과 port binding은
 `devtools command run`과 같다.
 Windows에서는 상위 host Job이 종료되면 함께 종료될 수 있다. 실제 PC의 터미널 닫기 동작은
@@ -58,6 +58,9 @@ Unix에서는 그룹 리더를 정리 완료까지 reap하지 않아 PID/그룹 
 부모가 먼저 종료해도 같은 그룹 자식에 TERM을 보내고 최대 3초의 유예를 준다.
 남은 프로세스는 KILL 후 종료 여부를 확인한다. 자식이 상속한 pipe는 정리 뒤 drain한다.
 Windows도 부모 조기 종료 시 남은 Job 구성원에게 종료 유예를 적용하고 부모 종료 코드는 보존한다.
+native spawn 뒤 시작 관측 콜백이 실패한 경로도 소유 범위를 강제 정리하고 확인한다.
+정리를 검증하지 못하면 원래 시작 오류 코드를 포함한 cleanup 불명을 반환한다.
+시작을 관측하지 못한 실행에는 가상의 앱 종료 코드를 만들지 않는다.
 
 Unix 새 세션/다른 프로세스 그룹, Docker daemon이나 원격 서비스 등 외부 제어기는
 이 소유 범위 밖이다. Unix 제어기에 SIGKILL이 가면 자식이 남을 수 있어 정리를 `unknown`으로

@@ -1,4 +1,4 @@
-// Package services manages detached, named project commands through authenticated supervisors.
+// Package services manages named executions through authenticated controllers.
 package services
 
 import (

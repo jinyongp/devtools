@@ -37,17 +37,12 @@ func ExecuteOwned(ctx context.Context, args []string, dir string, env []string, 
 		return 0, protocol.NewError("execution_failed", "Cannot start the requested command with its Windows process ownership.", 126, nil)
 	}
 	defer child.cleanup()
-	if e = NotifyStarted(ctx); e != nil {
-		_ = child.closeJob()
-		_, _ = child.wait(context.Background())
-		return 0, e
+	startErr := NotifyStarted(ctx)
+	if startErr == nil && started != nil {
+		startErr = started()
 	}
-	if started != nil {
-		if e = started(); e != nil {
-			_ = child.closeJob()
-			_, _ = child.wait(context.Background())
-			return 0, e
-		}
+	if startErr != nil {
+		return 0, failedStart(startErr, child.abort(), "windows_job")
 	}
 	code, err := child.wait(ctx)
 	if err != nil {

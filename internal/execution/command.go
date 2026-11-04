@@ -11,22 +11,24 @@ import (
 // Command is the immutable command-level input shared by foreground and managed
 // execution paths before storage, ports, or process lifetime are involved.
 type Command struct {
-	ExecutionID  string
-	Invocation   protocol.InvocationContext
-	Selection    string
-	Output       redact.Policy
-	Network      *network.ExecutionSnapshot
-	Project      project.Context
-	Name         string
-	Exec         []string
-	ExtraArgs    []string
-	Directory    string
-	Env          string
-	Inject       bool
-	Requirements project.Requirements
-	Ready        *project.ReadyProbe
-	Serve        []string
-	Bind         map[string]project.Binding
+	ExecutionID    string
+	EnvOverride    *string
+	BundleOverride *string
+	Invocation     protocol.InvocationContext
+	Selection      string
+	Output         redact.Policy
+	Network        *network.ExecutionSnapshot
+	Project        project.Context
+	Name           string
+	Exec           []string
+	ExtraArgs      []string
+	Directory      string
+	Env            string
+	Inject         bool
+	Requirements   project.Requirements
+	Ready          *project.ReadyProbe
+	Serve          []string
+	Bind           map[string]project.Binding
 }
 
 func (c Command) Diagnostic(mode string) protocol.InvocationContext {
@@ -70,6 +72,7 @@ func ResolveConfigured(p project.Context, name string, envOverride *string, extr
 		selection = "all"
 	}
 	return Command{
+		EnvOverride:  cloneSelection(envOverride),
 		Selection:    selection,
 		Output:       redact.Policy{Mode: definition.Output, Stdout: definition.Stdout, Stderr: definition.Stderr},
 		Project:      p,
@@ -84,6 +87,14 @@ func ResolveConfigured(p project.Context, name string, envOverride *string, extr
 		Serve:        append([]string{}, definition.Serve...),
 		Bind:         cloneBindings(definition.Bind),
 	}, nil
+}
+
+func cloneSelection(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }
 
 // ResolveDirect describes a caller-supplied executable. Direct commands inject

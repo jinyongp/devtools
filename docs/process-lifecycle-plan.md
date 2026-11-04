@@ -98,3 +98,12 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
 | Windows Job·macOS backend | 교차 컴파일 완료 / native 검증 대기 | 기존 Unix/Windows workflow로 같은 최종 소스 검증 |
 
 현재: 작업 1–3 완료. 작업 4의 최종 리뷰 및 native CI 결과 확인이 남아 있다.
+
+### 통합 리뷰 수정 1 — foreground 선택과 현재 목록
+
+- foreground 등록에 명시적인 env/bundle override와 proxy snapshot 정보를 보존했다.
+  실제 foreground → managed restart에서 공통 env/none bundle 선택을 유지하고,
+  이전 실행 stop이 교체 실행에 영향을 주지 않는지 race 검사로 확인했다.
+- 정상 종료한 비서비스 foreground 명령은 current 서비스로 남기지 않고 history에 보존한다.
+  mode 필터는 선택한 실행에 연결된 요청만 포함해 다른 모드의 실패를 섞지 않는다.
+- 관련 foreground·선택·목록·이력 회귀 검사 통과. Native CI는 최종 소스에서 확인한다.

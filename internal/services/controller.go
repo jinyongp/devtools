@@ -248,6 +248,11 @@ func (s Store) serveExecution(ctx context.Context, id string, inherited *os.File
 func (s Store) RunForeground(ctx context.Context, prepared execution.Prepared, parent []string, in io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
 	command := prepared.Command
 	r := Record{ID: command.ExecutionID, Mode: "foreground", Profile: command.Project.Profile, Directory: command.Project.Root, Command: command.Name, Env: command.Env, Inject: &command.Inject, Selection: command.Selection, IsolatedRoot: s.IsolatedRoot, CreatedAt: time.Now().UTC(), State: "starting"}
+	r.EnvOverride, r.BundleOverride = command.EnvOverride, command.BundleOverride
+	r.ProxyMode = command.Network != nil
+	if command.Network != nil {
+		r.NetworkSnapshotID = command.Network.ID
+	}
 	r.Cleanup = initialCleanup()
 	if len(prepared.Assignments) > 0 {
 		r.Instance = prepared.Assignments[0].Instance.ID
@@ -256,7 +261,7 @@ func (s Store) RunForeground(ctx context.Context, prepared execution.Prepared, p
 		metadata := prepared.Input.Metadata()
 		r.InputVersion = metadata.Delivery.Clone()
 	}
-	lease, condition := s.prepareLaunchContext(ctx, r)
+	lease, condition := s.prepareLaunchContext(ctx, r, command.Network)
 	if condition != nil {
 		if condition.Details == nil {
 			condition.Details = map[string]any{}

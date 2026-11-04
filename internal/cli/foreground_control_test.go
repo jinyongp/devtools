@@ -25,22 +25,23 @@ func TestForegroundExecutionUsesProcessInventoryAndStop(t *testing.T) {
 	ready := filepath.Join(dir, "child-ready")
 	args, _ := json.Marshal([]string{executable, "-test.run=^TestForegroundExecutionChild$", "--", ready})
 	probe, _ := json.Marshal([]string{executable, "-test.run=^TestForegroundExecutionChild$", "--", "probe"})
-	config := "profile='app'\n[ports.web]\n[commands.web]\nexec=" + string(args) + "\nserve=['web']\n[commands.web.ready]\nexec=" + string(probe) + "\n"
+	config := "profile='app'\n[ports.web]\n[commands.web]\nexec=" + string(args) + "\nserve=['web']\nenv='local'\nbundle='all'\n[commands.web.ready]\nexec=" + string(probe) + "\n"
 	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
+	outputData(t, app, []string{"env", "create", "local"})
 	store, condition := app.serviceStore()
 	if condition != nil {
 		t.Fatal(condition)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var stdout, stderr bytes.Buffer
 	done := make(chan struct{})
 	code := 0
 	go func() {
 		defer close(done)
-		code = app.Run(ctx, []string{"run", "web"}, IO{Out: &stdout, Err: &stderr})
+		code = app.Run(ctx, []string{"run", "--env", "", "--bundle", "none", "web"}, IO{Out: &stdout, Err: &stderr})
 	}()
 	defer func() { cancel(); <-done }()
 	for {
@@ -63,6 +64,9 @@ func TestForegroundExecutionUsesProcessInventoryAndStop(t *testing.T) {
 	status, condition := store.Status(ctx, id)
 	if condition != nil || status.Mode != "foreground" || status.ID != id || status.Control.State != "available" || !status.Control.Stop || status.Cleanup.State != "not_requested" {
 		t.Fatalf("foreground status: %#v %v", status, condition)
+	}
+	if status.Env != "" || status.EnvOverride == nil || *status.EnvOverride != "" || status.BundleOverride == nil || *status.BundleOverride != "none" {
+		t.Fatalf("foreground registration lost explicit common env/bundle selection: %#v", status)
 	}
 	entry := outputData(t, New("test", "test"), []string{"schema", "process", "status"})
 	itemSchema := entry["output_schema"].(map[string]any)["properties"].(map[string]any)["item"]
@@ -101,6 +105,19 @@ func TestForegroundExecutionUsesProcessInventoryAndStop(t *testing.T) {
 	<-done
 	if code == 0 || stdout.String() != "native child output\n" || stderr.Len() != 0 {
 		t.Fatalf("native streams and exit: %d %q %q", code, stdout.String(), stderr.String())
+	}
+	replacement, condition := store.Apply(ctx, services.Request{Action: "restart", ID: id, RequestID: tasks.ID()})
+	if replacement.Item.ID != "" {
+		defer store.Apply(context.Background(), services.Request{Action: "stop", ID: replacement.Item.ID, RequestID: tasks.ID()})
+	}
+	if condition != nil || replacement.Item.ID == id || replacement.Item.Mode != "managed" || replacement.Item.Env != "" || replacement.Item.EnvOverride == nil || *replacement.Item.EnvOverride != "" || replacement.Item.BundleOverride == nil || *replacement.Item.BundleOverride != "none" {
+		t.Fatalf("foreground restart changed the explicit selection: %#v %v", replacement, condition)
+	}
+	if _, condition := store.Apply(ctx, services.Request{Action: "stop", ID: id, RequestID: tasks.ID()}); condition != nil {
+		t.Fatal(condition)
+	}
+	if live, condition := store.Status(ctx, replacement.Item.ID); condition != nil || live.State != "running" {
+		t.Fatalf("old execution stop affected its replacement: %#v %v", live, condition)
 	}
 }
 

@@ -48,6 +48,7 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 	}
 	if selection, explicit := request.Options["bundle"]; explicit {
 		command.Selection = selection
+		command.BundleOverride = &selection
 	}
 	command.Invocation = request.Invocation
 	if mode := request.Options["output"]; mode != "" {

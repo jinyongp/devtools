@@ -107,6 +107,7 @@ func (s Store) Navigation(ctx context.Context, q NavigationSelection, declaratio
 		}
 	}
 	rows := []NavigationRow{}
+	selectedExecutions := map[string]bool{}
 	canonical := map[string]string{}
 	for _, r := range stored {
 		if q.Mode != "" && r.publicContract().Mode != q.Mode {
@@ -132,6 +133,7 @@ func (s Store) Navigation(ctx context.Context, q NavigationSelection, declaratio
 			canonical[row.Directory], row.Directory = value, value
 		}
 		rows = append(rows, row)
+		selectedExecutions[r.ID] = true
 	}
 	attempts, e := s.navigationAttempts()
 	if e != nil {
@@ -139,6 +141,9 @@ func (s Store) Navigation(ctx context.Context, q NavigationSelection, declaratio
 	}
 	selected := []Attempt{}
 	for _, a := range attempts {
+		if q.Mode != "" && !selectedExecutions[a.ExecutionID] {
+			continue
+		}
 		if selectedNavigation(q, a.Profile, a.Directory, a.Instance, a.Command, a.Env) {
 			if value := canonical[a.Directory]; value != "" {
 				a.Directory = value
@@ -149,12 +154,8 @@ func (s Store) Navigation(ctx context.Context, q NavigationSelection, declaratio
 		}
 	}
 	if q.History {
-		executions := map[string]bool{}
-		for _, r := range rows {
-			executions[r.ID] = true
-		}
 		for _, a := range selected {
-			if a.RetiredAt != nil || a.ExecutionID != "" || executions[a.ID] {
+			if a.RetiredAt != nil || a.ExecutionID != "" || selectedExecutions[a.ID] {
 				continue
 			}
 			rows = append(rows, NavigationRow{Kind: "preparation", ID: a.ID, RequestID: a.ID, Profile: a.Profile, Directory: a.Directory, Instance: a.Instance, Command: a.Command, Env: a.Env, State: a.State, Reason: a.Reason, CreatedAt: recorded(a.CreatedAt), UpdatedAt: recorded(a.UpdatedAt), EndedAt: a.EndedAt, LastChanged: recorded(a.UpdatedAt)})
@@ -235,7 +236,14 @@ func summarizeServices(records []NavigationRow, attempts []Attempt, declarations
 			continue
 		}
 		g := get(d.Profile, d.Directory, d.Command)
-		if d.Served || len(g.records) > 0 || len(g.attempts) > 0 {
+		service := d.Served
+		for _, record := range g.records {
+			service = service || record.Mode != "foreground"
+		}
+		for _, attempt := range g.attempts {
+			service = service || attempt.Action == "start" || attempt.Action == "restart"
+		}
+		if service {
 			copy := d
 			g.declaration = &copy
 		}

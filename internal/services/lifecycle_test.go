@@ -118,3 +118,23 @@ func TestModeSelectionPrecedesServiceAggregation(t *testing.T) {
 		}
 	}
 }
+
+func TestCompletedForegroundOneOffStaysOutOfCurrentServiceInventory(t *testing.T) {
+	store := Store{Data: privateTempDir(t)}
+	directory := privateTempDir(t)
+	now := time.Now().UTC()
+	record := Record{ID: tasks.ID(), Mode: "foreground", Profile: "app", Directory: directory, Command: "check", State: "exited", CreatedAt: now, EndedAt: &now, Cleanup: initialCleanup()}
+	record.Cleanup.State = "complete"
+	if err := writePrivate(store.path(record.ID, "record.json"), record); err != nil {
+		t.Fatal(err)
+	}
+	declarations := []ServiceDeclaration{{Profile: "app", Directory: directory, Command: "check", Served: false}}
+	current, condition := store.Navigation(context.Background(), NavigationSelection{Profile: "app"}, declarations)
+	if condition != nil || len(current) != 0 {
+		t.Fatalf("completed one-off became a persistent current service: %#v %v", current, condition)
+	}
+	history, condition := store.Navigation(context.Background(), NavigationSelection{Profile: "app", History: true, Mode: "foreground"}, declarations)
+	if condition != nil || len(history) != 1 || history[0].ID != record.ID {
+		t.Fatalf("one-off history became unavailable: %#v %v", history, condition)
+	}
+}

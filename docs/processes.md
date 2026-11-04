@@ -27,6 +27,9 @@ devtools schema process stop
 
 현재 서비스와 실행 이력의 페이지·범위·필터는 [탐색 계약](cli-navigation.md)을 따른다.
 모드 필터는 실행 선택에 적용한 뒤 서비스별로 요약한다. 자식 PID마다 실행 행을 만들지 않는다.
+서비스를 선언하지 않은 foreground 일회성 명령은 실행 중에만 현재 목록에 나타난다.
+정상 종료 뒤 기록은 history에서 조회한다. 관리 실행과 해결이 필요한 실패/불명 상태는
+기존 현재 서비스 규칙을 유지한다.
 TTY의 foreground/background와 devtools의 foreground/managed 모드는 별개다.
 
 실행 응답에는 다음 공통 필드가 있다. CLI JSON, dashboard HTTP, 저장된 요청 조회는

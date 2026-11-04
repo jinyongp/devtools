@@ -106,7 +106,7 @@ Unix `update`는 별도 installer의 JSON stdout과 stderr를 제한된 private 
 
 사용자 저장소 정리와 릴리스 발행은 수행하지 않았다.
 
-### Native 검증 결과와 남은 대기
+### Native 검증 결과와 runner 재요청
 
 검증 대상은 `71e3d96be972c65237f385586f807d0b0c00bf08`이다. 구현은 `d88dddf`, 설치본
 검증과 계약 문서는 `71e3d96`으로 나눠 커밋했다. 아래 결과 기록 이후에는 문서만 변경한다.
@@ -114,13 +114,19 @@ Unix `update`는 별도 installer의 JSON stdout과 stderr를 제한된 private 
 | 기존 workflow | 확인한 결과 |
 | --- | --- |
 | [Windows platform boundaries](https://github.com/jinyongp/devtools/actions/runs/41849308567) | 최종 gate 포함 23개 job 성공. ARM64와 x64 CLI, amd64 race, 제품과 설치기 검사 통과 |
-| [Unix validation](https://github.com/jinyongp/devtools/actions/runs/41849352992) | 22개 job 성공, 선택 검사 3개 제외. 마지막 `macos-15 / rest`는 runner 배정 대기 |
+| [Unix validation](https://github.com/jinyongp/devtools/actions/runs/41849352992) | 첫 실행에서 22개 job 성공, 선택 검사 3개 제외. 마지막 macOS job은 runner 배정 실패로 취소됐으며 해당 job 재실행 요청 완료 |
 
 2026-11-04 14:58 UTC 확인 시 마지막 macOS job은 `status: queued`, `runner_name: ""`,
-`steps: []`였다. 약 21분 동안 실행을 시작하지 못했으며 제품 테스트 실패는 관측되지 않았다.
-Unix 최종 gate도 이 job을 기다리므로 **Unix 전체 검증 완료로 판정하지 않는다**. Workflow는
-취소하거나 다시 시작하지 않았고 기존 실행이 계속 대기한다. 코드와 검증 조건을 바꿔 이
-대기를 우회하지 않는다.
+`steps: []`였다. 약 21분 동안 실행을 시작하지 못했으며, 14:58:35 UTC runner 배정 실패로
+취소됐다. GitHub annotation은 여러 차례 시도해도 hosted runner가 작업을 가져가지 못했고
+macOS ARM64 수용량 부족으로 대기가 길어질 수 있다고 보고했다. 실제 테스트 step은 없었다.
+이 때문에 후속 Unix gate도 실패했다. 제품 테스트 실패로 판정하지 않는다.
+
+같은 소스에서 취소된 job과 후속 gate만 재실행 요청했다. 연결 도구의 Actions 쓰기 권한이
+없어 authenticated GitHub CLI를 사용했으며, 기존에 성공한 검사는 다시 실행하지 않는다.
+[두 번째 실행의 macOS job](https://github.com/jinyongp/devtools/actions/runs/41849352992/job/126655733672)은
+runner 배정 대기 중이다. **Unix 전체 검증 완료로 판정하지 않는다**. Workflow와 제품의
+검증 조건은 유지했다.
 
 이미 통과한 Unix 범위는 macOS와 Linux CLI race, 읽기 전용 잠금, ARM64와 Intel Mac 및
 Linux 설치본, vault와 values, Windows/WSL2와 실제 브라우저 호환성을 포함한다. 제외한

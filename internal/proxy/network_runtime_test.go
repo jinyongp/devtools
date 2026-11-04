@@ -20,6 +20,7 @@ import (
 	"github.com/jinyongp/devtools/internal/expose"
 	"github.com/jinyongp/devtools/internal/hosts"
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -27,12 +28,27 @@ import (
 
 func freeNetworkPort(t *testing.T) int {
 	t.Helper()
-	l, e := net.Listen("tcp4", "127.0.0.1:0")
-	if e != nil {
-		t.Fatal(e)
+	for range 32 {
+		l, err := net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		port := l.Addr().(*net.TCPAddr).Port
+		if err := l.Close(); err != nil {
+			t.Fatal(err)
+		}
+		// Listener configuration reserves the number across all required
+		// addresses. A free IPv4 loopback socket alone is insufficient.
+		free, condition := ports.Available(port)
+		if condition != nil {
+			t.Fatal(condition)
+		}
+		if free {
+			return port
+		}
 	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port
+	t.Fatal("cannot select a globally available TCP port for the network fixture")
+	return 0
 }
 func liveNetworkManager(t *testing.T) Manager {
 	return liveNetworkManagerWithControlListener(t, nil)

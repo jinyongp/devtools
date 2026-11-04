@@ -58,9 +58,24 @@ func TestForegroundExecutionUsesProcessInventoryAndStop(t *testing.T) {
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
-	rows, condition := store.Navigation(ctx, services.NavigationSelection{Profile: "app", Directory: dir}, nil)
-	if condition != nil || len(rows) != 1 || rows[0].ActiveCount != 1 || rows[0].State != "running" || rows[0].ExecutionID == "" {
-		t.Fatalf("foreground inventory: %#v %v", rows, condition)
+	var rows []services.NavigationRow
+	for {
+		rows, condition = store.Navigation(ctx, services.NavigationSelection{Profile: "app", Directory: dir}, nil)
+		if condition != nil {
+			t.Fatal(condition)
+		}
+		if len(rows) == 1 && rows[0].ActiveCount == 1 && rows[0].State == "running" && rows[0].ExecutionID != "" {
+			break
+		}
+		// The native child can publish its own readiness before the
+		// controller finishes publishing the execution's running record.
+		select {
+		case <-done:
+			t.Fatalf("run exited before running publication: %d %s", code, stderr.String())
+		case <-ctx.Done():
+			t.Fatalf("foreground inventory did not become running: %#v", rows)
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 	id := rows[0].ExecutionID
 	status, condition := store.Status(ctx, id)

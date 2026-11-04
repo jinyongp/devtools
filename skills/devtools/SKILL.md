@@ -53,6 +53,10 @@ Use this skill alongside the source-work workflow. Do not create task records me
 - Protocol 23 operation request IDs are optional in the CLI: omission generates
   one at execution and returns it. Query selectors still need an existing ID.
   Discover the installed writer schema; older builds may require explicit IDs.
+- Protocol 24 named foreground runs share process inventory and authenticated
+  stop/status/readiness control. Inspect `mode`, `control` and `cleanup` separately
+  from readiness. `process list --mode foreground|managed` selects execution mode.
+  Follow [execution.md](references/execution.md) for ownership and cleanup limits.
 - Ordinary operation needs the installed CLI and these bundled references, not a separate devtools source checkout.
 
 ## Keep scope and state explicit

@@ -49,12 +49,13 @@ func collectionFor(name string) *collectionContract {
 		c.Query.Keys = []string{"profile", "directory", "command", "id"}
 		c.Query.DefaultSort, c.Query.Sorts["attention"] = "attention", "attention"
 		c.Query.Filters["state"], c.Query.Filters["command"], c.Query.Filters["env"] = "state", "command", "env"
+		c.Query.Filters["mode"] = "mode"
 		times("created_at")
 		c.Query.Times["updated"], c.Query.Times["ended"] = "updated_at", "ended_at"
 		c.Query.Sorts["updated"], c.Query.Sorts["ended"] = "updated_at", "ended_at"
-		c.States = []string{"running", "starting", "stopped", "exited", "failed", "interrupted", "unknown", "not_started", "conflict"}
-		columns("command", "current_state", "last_attempt", "last_changed")
-		for _, name := range []string{"state", "created_at", "ended_at", "reason", "execution_id", "active_count", "env", "profile", "directory"} {
+		c.States = []string{"running", "starting", "stopping", "stopped", "exited", "failed", "interrupted", "unknown", "not_started", "conflict"}
+		columns("command", "mode", "current_state", "last_attempt", "last_changed")
+		for _, name := range []string{"state", "mode", "created_at", "ended_at", "reason", "execution_id", "active_count", "env", "profile", "directory"} {
 			c.Columns[name] = name
 		}
 	case "expose list":
@@ -225,6 +226,9 @@ func (a *App) collectionContract(c *Command) {
 		}
 		if name == "protocol" {
 			o.Pattern = "^(tcp)$"
+		}
+		if name == "mode" {
+			o.Pattern = "^(foreground|managed)$"
 		}
 		if name == "provider" {
 			o.Pattern = "^(lan|cloudflared|tailscale)$"

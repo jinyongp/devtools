@@ -51,6 +51,10 @@ func ExecuteOwned(ctx context.Context, args []string, dir string, env []string, 
 	}
 	code, err := child.wait(ctx)
 	if err != nil {
+		var cleanup ownedCleanupError
+		if errors.As(err, &cleanup) {
+			return 0, cleanupFailure("windows_job")
+		}
 		return 0, protocol.NewError("io_error", "Command process or stream handling failed.", 1, nil)
 	}
 	return code, nil

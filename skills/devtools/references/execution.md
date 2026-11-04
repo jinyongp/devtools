@@ -51,6 +51,26 @@ native handle/lease protocol. Inspection does not unlock or renew a vault.
 
 ## Foreground execution
 
+- Protocol 24 registers named foreground runs in the existing process store.
+  Discover their execution IDs with `process list --mode foreground`; status,
+  stop, check and wait use those IDs without requiring the original terminal.
+  `mode` is separate from TTY job control. Worker reload keeps the execution ID.
+- Inspect `control.state` and stop/restart/check capabilities. Authenticated live
+  observation establishes control; persisted PID/capability metadata does not.
+  `stopping` is in-progress cleanup. `cleanup.state: complete` applies only to
+  `cleanup.scope`: Unix process_group or Windows windows_job.
+- A stop request can return process_pending. Controller loss or unverified cleanup
+  returns process_cleanup_unknown with unknown effects: inspect before replacement.
+  Unix detached sessions/groups and external daemons/remote resources are outside
+  the owned scope. Never infer cleanup from no TCP listener or a dead parent.
+- Named service execution requires registration before launch. Port-free one-off
+  named commands may run untracked after registration-only read/write denial;
+  direct programs and caller-owned runners retain their existing boundary.
+  They have no process inventory/control. Never rerun a spawned child on a tracking
+  or output error. Old foreground runs cannot gain a new controller retroactively.
+- Explicit process restart replaces a foreground execution with a new managed
+  execution using current configuration. Stopping its old ID cannot stop the replacement.
+
 - Named commands run from the configuration directory; direct `run -- PROGRAM ARG...` runs from the caller's directory.
 - `exec` is an argv array. Shell syntax needs an explicit shell; port arguments use `${bind.NAME}`, not a shell wrapper.
 - From v0.23.0/protocol 6, put devtools flags **before** the command name. Every later token is a child argument, including `--help` and `--env`.

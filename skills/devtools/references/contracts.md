@@ -21,6 +21,9 @@
 - Root `--format` overrides DEVTOOLS_FORMAT, including explicit auto. Both omitted use auto: known agent signals or non-TTY stdout select JSON, otherwise text. stdout's decision also governs devtools errors when stderr is a terminal. Child output protection `--output` is separate.
 - JSON envelopes use top-level `schema_version: 1`. Schema responses also report CLI protocol version. Neither belongs in project TOML.
 - Lists: `data.items`. Single resources: `data.item`. Scalars/reports keep named fields.
+- Protocol 24 process records share explicit `mode`, `control` and `cleanup`
+  definitions across status, mutations, readiness, project and request responses.
+  `stopping` and unknown cleanup require separate handling from app readiness.
 - Mutations expose `data.changed`; retry-safe ones also expose `data.replayed`, including false.
 - `cleanup preview.retention` distinguishes physical files/bytes from logical requests and explains eligibility. Protocol 23 may show public buckets while protected verification remains pending; inspect each bucket's verification level. Inventory does not authorize deletion.
 - Protocol 17 preserves typed input-correction facts and JSON field paths in diagnostics. Operation indexes include zero; `observed_exact: false` marks a bounded-read observation rather than the full input size. `rule_id` and `options` identify a static option rule without returning input values. Rediscover the schema after an upgrade; request fingerprints and storage formats are unchanged.

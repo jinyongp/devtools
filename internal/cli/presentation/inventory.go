@@ -18,7 +18,7 @@ func inventoryLayoutFor(d Definition) inventoryLayout {
 	l := inventoryLayout{columns: d.Columns}
 	switch d.Command {
 	case "project status", "process list":
-		l.columns = []ViewColumn{{"command", "Command", ""}, {"state", "State", "state"}, {"readiness", "Readiness", "readiness"}, {"id", "Execution ID", ""}}
+		l.columns = []ViewColumn{{"command", "Command", ""}, {"mode", "Mode", ""}, {"state", "State", "state"}, {"readiness", "Readiness", "readiness"}, {"id", "Execution ID", ""}}
 		if d.Command == "process list" {
 			l.group = "project"
 		}
@@ -57,7 +57,7 @@ func inventoryView(d Definition, data map[string]any) cliui.Document {
 	if d.Command == "process list" {
 		selection, _ := data["selection"].(map[string]any)
 		if text(selection["view"]) == "current" {
-			layout.columns = []ViewColumn{{"command", "Command", ""}, {"current_state", "Current", "state"}, {"last_attempt", "Last attempt", "attempt"}, {"last_changed", "Last changed", ""}}
+			layout.columns = []ViewColumn{{"command", "Command", ""}, {"mode", "Mode", ""}, {"current_state", "Current", "state"}, {"last_attempt", "Last attempt", "attempt"}, {"last_changed", "Last changed", ""}}
 		} else if text(selection["view"]) == "history" {
 			layout.columns = []ViewColumn{{"command", "Command", ""}, {"state", "State", "state"}, {"created_at", "Created", ""}, {"ended_at", "Ended", "ended"}, {"reason", "Reason", "reason"}, {"execution_id", "Execution ID", ""}}
 		}

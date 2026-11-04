@@ -8,6 +8,7 @@ import (
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/redact"
@@ -84,7 +85,7 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 		}
 		command.Network = snapshots[command.Name]
 	}
-	if command.Name != "" {
+	if command.Name != "" && !process.HasRunner(ctx) {
 		command.ExecutionID = tasks.ID()
 	}
 	prepared, err := a.prepareExecution(ctx, command, false, streams)

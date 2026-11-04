@@ -18,7 +18,7 @@ func (a *App) registerProcessRequests() {
 	for _, group := range []string{"process", "project"} {
 		result := lifecycleOutputSchema()
 		if group == "process" {
-			result = object(map[string]any{"item": managedProcessSchema(), "changed": map[string]any{"type": "boolean"}, "replayed": map[string]any{"type": "boolean"}}, "item", "changed", "replayed")
+			result = object(map[string]any{"item": processExecutionSchema(), "changed": map[string]any{"type": "boolean"}, "replayed": map[string]any{"type": "boolean"}}, "item", "changed", "replayed")
 		}
 		a.commands = append(a.commands, Command{
 			Name: group + " request show", Description: "Read a saved request without reading current project configuration or resuming work. Saved results describe the original operation; inspect execution status separately.",

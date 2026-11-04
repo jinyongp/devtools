@@ -57,7 +57,7 @@ func TestWindowsJobNode(t *testing.T) {
 	if err = os.Rename(temporary, filepath.Join(dir, fmt.Sprintf("node-%d", depth))); err != nil {
 		os.Exit(83)
 	}
-	if mode == "early" && depth == 2 {
+	if (mode == "early" || mode == "early-grace") && depth == 2 {
 		deadline := time.Now().Add(15 * time.Second)
 		for time.Now().Before(deadline) {
 			if _, err := os.Stat(filepath.Join(dir, "release-root")); err == nil {
@@ -70,6 +70,13 @@ func TestWindowsJobNode(t *testing.T) {
 	for {
 		select {
 		case <-signals:
+			if mode == "early-grace" {
+				time.Sleep(200 * time.Millisecond)
+				if os.WriteFile(filepath.Join(dir, fmt.Sprintf("cleaned-%d", depth)), nil, 0600) != nil {
+					os.Exit(86)
+				}
+				os.Exit(0)
+			}
 			if mode == "grace" {
 				os.Exit(0)
 			}
@@ -84,6 +91,7 @@ type jobScenarioResult struct {
 	Error      string
 	Nodes      int
 	StopMillis int64
+	Cleaned    int
 }
 
 func readFixtureMarker(path string) ([]byte, error) {
@@ -215,7 +223,7 @@ func TestWindowsJobConsoleFixture(t *testing.T) {
 		}
 		defer closeFixtureNodes(handles)
 		start := time.Now()
-		if mode == "early" {
+		if mode == "early" || mode == "early-grace" {
 			if err = os.WriteFile(filepath.Join(dir, "release-root"), nil, 0600); err != nil {
 				return jobScenarioResult{Error: err.Error()}
 			}
@@ -227,6 +235,11 @@ func TestWindowsJobConsoleFixture(t *testing.T) {
 		r.Nodes = len(handles)
 		if err = waitFixtureNodes(handles); err != nil {
 			r.Error = err.Error()
+		}
+		for depth := range 2 {
+			if _, err := os.Stat(filepath.Join(dir, fmt.Sprintf("cleaned-%d", depth))); err == nil {
+				r.Cleaned++
+			}
 		}
 		return r
 	}()
@@ -309,6 +322,13 @@ func TestWindowsJobNormalEarlyExitReapsDescendantsAndPipes(t *testing.T) {
 	result := runJobConsoleScenario(t, "early")
 	if result.Code != 23 || result.StopMillis >= 5000 {
 		t.Fatalf("normal exit/tree/EOF: %#v", result)
+	}
+}
+
+func TestWindowsJobParentExitPreservesDescendantCleanupGrace(t *testing.T) {
+	result := runJobConsoleScenario(t, "early-grace")
+	if result.Code != 23 || result.Cleaned != 2 || result.StopMillis >= 2800 {
+		t.Fatalf("descendant cleanup was cut short after parent exit: %#v", result)
 	}
 }
 func TestWindowsJobCrashOwnerFixture(t *testing.T) {

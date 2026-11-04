@@ -11,6 +11,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func TestForegroundExecutionUsesProcessInventoryAndStop(t *testing.T) {
@@ -60,8 +61,29 @@ func TestForegroundExecutionUsesProcessInventoryAndStop(t *testing.T) {
 	}
 	id := rows[0].ExecutionID
 	status, condition := store.Status(ctx, id)
-	if condition != nil || status.Mode != "foreground" || status.ID != id {
+	if condition != nil || status.Mode != "foreground" || status.ID != id || status.Control.State != "available" || !status.Control.Stop || status.Cleanup.State != "not_requested" {
 		t.Fatalf("foreground status: %#v %v", status, condition)
+	}
+	entry := outputData(t, New("test", "test"), []string{"schema", "process", "status"})
+	itemSchema := entry["output_schema"].(map[string]any)["properties"].(map[string]any)["item"]
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("urn:foreground:item", itemSchema); err != nil {
+		t.Fatal(err)
+	}
+	contract, err := compiler.Compile("urn:foreground:item")
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := json.Marshal(status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual any
+	if err := json.Unmarshal(value, &actual); err != nil {
+		t.Fatal(err)
+	}
+	if err := contract.Validate(actual); err != nil {
+		t.Fatalf("actual foreground record violates the published schema: %v", err)
 	}
 	check, condition := store.Check(ctx, id)
 	if condition != nil || check.Readiness == nil || !check.Readiness.Ready {
@@ -69,7 +91,7 @@ func TestForegroundExecutionUsesProcessInventoryAndStop(t *testing.T) {
 	}
 	request := services.Request{Action: "stop", ID: id, RequestID: tasks.ID()}
 	stopped, condition := store.Apply(ctx, request)
-	if condition != nil || stopped.Item.State != "stopped" || !stopped.Changed {
+	if condition != nil || stopped.Item.State != "stopped" || !stopped.Changed || stopped.Item.Cleanup.State != "complete" {
 		t.Fatalf("foreground stop: %#v %v", stopped, condition)
 	}
 	replay, condition := store.Apply(ctx, request)

@@ -35,6 +35,7 @@ type executionController struct {
 }
 
 func (s Store) newController(ctx context.Context, r Record) (*executionController, error) {
+	r.Cleanup = initialCleanup()
 	ctx, cancel := context.WithCancel(ctx)
 	c := &executionController{store: s, ctx: ctx, cancel: cancel, record: r, probeGate: make(chan struct{}, 1), stopValueWatch: func() {}}
 	c.probeGate <- struct{}{}
@@ -90,6 +91,7 @@ func (s Store) newController(ctx context.Context, r Record) (*executionControlle
 			snapshot.Readiness = &result
 		}
 		w.Header().Set("Content-Type", "application/json")
+		snapshot.controlObserved = true
 		_ = json.NewEncoder(w).Encode(snapshot)
 		if q.URL.Path == "/stop" {
 			c.cancel()
@@ -112,6 +114,12 @@ func (c *executionController) close() {
 }
 
 func (c *executionController) run(ctx context.Context, args []string, dir string, env []string, in io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
+	ctx = process.WithCleanupStarted(ctx, func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.record.Cleanup.State, c.record.Cleanup.Reason = "pending", "owned_processes_stopping"
+		c.record.State = "stopping"
+	})
 	return process.ExecuteOwned(ctx, args, dir, env, in, out, diagnostic, func() *protocol.Error {
 		now := time.Now().UTC()
 		c.mu.Lock()
@@ -161,6 +169,10 @@ func (c *executionController) finish(code int, condition *protocol.Error) error 
 	c.store.finishInputPhase(r)
 	now := time.Now().UTC()
 	r.EndedAt, r.State, r.ExitCode = &now, "exited", &code
+	r.Cleanup.State, r.Cleanup.Reason = "complete", "owned_scope_released"
+	if condition != nil && (condition.Code == "process_cleanup_incomplete" || condition.Code == "launch_outcome_unknown") {
+		r.Cleanup.State, r.Cleanup.Reason = "unknown", condition.Code
+	}
 	if condition != nil && (condition.Code == "launch_outcome_unknown" || condition.Code == "output_protection_failed" || condition.Code == "process_cleanup_incomplete") {
 		r.State, r.Reason, r.ExitCode = "failed", condition.Code, nil
 	} else if stopped {
@@ -236,6 +248,7 @@ func (s Store) serveExecution(ctx context.Context, id string, inherited *os.File
 func (s Store) RunForeground(ctx context.Context, prepared execution.Prepared, parent []string, in io.Reader, out, diagnostic io.Writer) (int, *protocol.Error) {
 	command := prepared.Command
 	r := Record{ID: command.ExecutionID, Mode: "foreground", Profile: command.Project.Profile, Directory: command.Project.Root, Command: command.Name, Env: command.Env, Inject: &command.Inject, Selection: command.Selection, IsolatedRoot: s.IsolatedRoot, CreatedAt: time.Now().UTC(), State: "starting"}
+	r.Cleanup = initialCleanup()
 	if len(prepared.Assignments) > 0 {
 		r.Instance = prepared.Assignments[0].Instance.ID
 	}

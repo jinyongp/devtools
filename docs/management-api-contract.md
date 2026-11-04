@@ -110,6 +110,12 @@ CLI와 비공개 채널을 사용한다. 일반 HTTP 응답으로 값이나 로�
 
 ## 프로세스·백업·정리 API
 
+프로세스 API는 [공통 실행 수명·제어 계약](processes.md)을 공유한다. 새 foreground 이름
+명령도 같은 실행 ID로 조회·stop·readiness 검사할 수 있다. 응답의 `mode`, `control`,
+`cleanup`을 각각 확인하고 화면 작업은 capability에 맞게 제공한다. `processes` query의
+`mode=foreground|managed`는 실행 선택 후 서비스별로 요약한다. 종료 요청 수락은 정리 완료와
+다르며 제어기 손실/정리 불명은 `process_cleanup_unknown`과 unknown effects를 유지한다.
+
 프로세스 목록은 `GET /api/processes?profile=app`으로 조회한다. 변경은 `POST /api/actions`에 `{domain:"process", profile:"app", process:{action:"start", directory:"/projects/app", command:"web", request_id:"UUID"}}`를 전달한다. stop·restart는 directory·command 대신 `id`에 실행 UUID를 전달한다. start·restart는 선택적으로 `env`, `bundle`, `capture_logs`를 받는다.
 실행 UUID가 변경 대상을 고정하고 요청 UUID가 재시도를 구분한다. 값·작업 편집 리비전은 프로세스 실행에 적용하지 않는다.
 

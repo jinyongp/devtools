@@ -21,8 +21,11 @@ func readinessSchema() map[string]any {
 	}, "ready", "checked_at", "reason", "exit_code")
 }
 
-func managedProcessSchema() map[string]any {
+func processExecutionSchema() map[string]any {
 	return object(map[string]any{
+		"mode":             map[string]any{"type": "string", "enum": []string{"foreground", "managed"}},
+		"control":          processControlSchema(),
+		"cleanup":          processCleanupSchema(),
 		"ready_configured": map[string]any{"type": "boolean"},
 		"readiness":        readinessSchema(),
 		"id":               stringSchema(),
@@ -46,7 +49,34 @@ func managedProcessSchema() map[string]any {
 		"input_version": inputVersionSchema(), "value_watch": valueWatchSchema(), "value_apply": valueApplySchema(), "auto_origin": stringSchema(), "auto_restarts": arraySchema(stringSchema()),
 		"input_snapshot_id": stringSchema(), "launch_phase": stringSchema(), "outage": map[string]any{"type": "boolean"},
 		"proxy_mode": map[string]any{"type": "boolean"}, "network_snapshot_id": stringSchema(), "isolated_root": stringSchema(),
-	}, "ready_configured", "id", "profile", "instance_id", "directory", "command", "env", "env_override", "capture_logs", "created_at", "started_at", "ended_at", "exit_code", "reason", "state")
+	}, "mode", "control", "cleanup", "ready_configured", "id", "profile", "instance_id", "directory", "command", "env", "env_override", "capture_logs", "created_at", "started_at", "ended_at", "exit_code", "reason", "state")
+}
+
+func processControlSchema() map[string]any {
+	return object(map[string]any{
+		"state":  map[string]any{"type": "string", "enum": []string{"available", "unavailable", "lost", "ended"}},
+		"reason": stringSchema(), "stop": boolSchema(), "restart": boolSchema(), "check": boolSchema(),
+	}, "state", "reason", "stop", "restart", "check")
+}
+
+func processCleanupSchema() map[string]any {
+	return object(map[string]any{
+		"scope":  map[string]any{"type": "string", "enum": []string{"process_group", "windows_job", "unknown"}},
+		"state":  map[string]any{"type": "string", "enum": []string{"not_requested", "pending", "complete", "unknown"}},
+		"reason": stringSchema(),
+	}, "scope", "state", "reason")
+}
+
+func processNavigationSchema() map[string]any {
+	// Services without a current execution have no mode/control/cleanup. The
+	// execution definition stays strict; navigation also contains attempt data.
+	return map[string]any{"type": "object", "required": []string{"kind", "id", "state", "active_count"}, "properties": map[string]any{
+		"kind": map[string]any{"enum": []string{"service", "execution", "preparation"}},
+		"id":   stringSchema(), "state": stringSchema(), "command": stringSchema(), "execution_id": stringSchema(),
+		"mode": map[string]any{"enum": []string{"foreground", "managed"}}, "control": processControlSchema(), "cleanup": processCleanupSchema(),
+		"active_count": map[string]any{"type": "integer", "minimum": 0},
+		"current":      arraySchema(map[string]any{"type": "object", "properties": map[string]any{"mode": map[string]any{"enum": []string{"foreground", "managed"}}, "control": processControlSchema(), "cleanup": processCleanupSchema()}}),
+	}}
 }
 
 func lifecycleItemSchema() map[string]any {
@@ -59,7 +89,7 @@ func lifecycleItemSchema() map[string]any {
 		"command":   stringSchema(),
 		"status":    map[string]any{"enum": []string{"ready", "running", "stopped", "failed", "pending", "unchanged"}},
 		"changed":   map[string]any{"type": "boolean"},
-		"item":      managedProcessSchema(),
+		"item":      processExecutionSchema(),
 		"condition": condition,
 	}, "command", "status", "changed")
 }
@@ -79,7 +109,7 @@ func projectStatusSchema() map[string]any {
 	return object(map[string]any{
 		"profile":   stringSchema(),
 		"directory": stringSchema(),
-		"items":     map[string]any{"type": "array", "items": managedProcessSchema()},
+		"items":     map[string]any{"type": "array", "items": processExecutionSchema()},
 	}, "profile", "directory", "items")
 }
 
@@ -138,7 +168,7 @@ func (a *App) registerProjectLifecycle() {
 		Command{
 			Name:        "project status",
 			UniqueArgs:  true,
-			Description: "Show active managed executions for the current project instance.",
+			Description: "Show active executions for the current project instance.",
 			Arguments:   []Argument{optionalCommands},
 			Options:     []Option{directory},
 			Output:      projectStatusSchema(),

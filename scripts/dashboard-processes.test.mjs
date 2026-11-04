@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 import vm from "node:vm";
 
 const source=readFileSync(new URL("../internal/dashboard/assets/processes.js",import.meta.url),"utf8");
-function fixture() {
+function fixture(control={state:"available",stop:true,restart:true,check:false}) {
   const nodes=[],buttons=[],reads=[],writes=[];
   const refreshReads=new Map(),detail={item:{id:"execution-id",selection:"all"}};
   const elements=new Map();
@@ -22,7 +22,7 @@ function fixture() {
       reads.push(path);
       if(path.startsWith("/api/process?"))return detail;
       return {instances:[{directory:"/project",instance_id:"instance",alias:"Project"}],next_cursor:"snapshot-page-2",
-        items:[{id:"SERVICE-KEY",kind:"service",command:"web",directory:"/project",current_state:"running",active_execution_ids:["execution-id"],last_attempt:{action:"restart",state:"failed",execution_id:"failed-execution"}}]};
+        items:[{id:"SERVICE-KEY",kind:"service",command:"web",directory:"/project",current_state:"running",control,active_execution_ids:["execution-id"],last_attempt:{action:"restart",state:"failed",execution_id:"failed-execution"}}]};
     }});
   vm.runInContext(source,context);
   context.load=()=>context.loadProcesses(1);
@@ -92,4 +92,24 @@ test("history and snapshot controls preserve selection and reset on profile chan
 
 test("stale process response cannot publish controls to another generation",async()=>{
   const f=fixture();await f.context.loadProcesses(0);assert.equal(f.buttons.length,0);
+});
+
+test("lost control hides mutations and retains cleanup uncertainty",async()=>{
+  const f=fixture({state:"lost",reason:"controller_lost",stop:false,restart:false,check:false});
+  f.detail.item.mode="foreground";
+  f.detail.item.control={state:"lost",reason:"controller_lost",stop:false,restart:false,check:false};
+  f.detail.item.cleanup={state:"unknown",scope:"process_group",reason:"controller_lost"};
+  await f.context.loadProcesses(1);
+  assert.ok(!f.buttons.some(button=>button.label==="Stop"||button.label==="Restart"));
+  const details=f.nodes.find(node=>node.className==="process-details");details.open=true;details.ontoggle();await new Promise(setImmediate);
+  const output=f.nodes.map(node=>node.value).join("\n");
+  assert.match(output,/Mode: foreground/);assert.match(output,/Control: lost/);assert.match(output,/Cleanup: unknown · scope process_group/);
+});
+
+test("execution mode selection uses the common query and resets pagination",async()=>{
+  const f=fixture();await f.context.loadProcesses(1);
+  const mode=f.nodes.find(node=>node["aria-label"]==="Filter execution mode");
+  mode.value="foreground";mode.onchange();await Promise.resolve();
+  const query=new URL(f.reads.at(-1),"http://test").searchParams;
+  assert.equal(query.get("mode"),"foreground");assert.equal(query.get("cursor"),null);
 });

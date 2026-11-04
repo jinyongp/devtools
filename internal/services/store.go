@@ -56,6 +56,9 @@ func writePrivate(path string, v any) error {
 }
 
 type Record struct {
+	controlObserved   bool
+	Control           ControlStatus        `json:"control"`
+	Cleanup           CleanupStatus        `json:"cleanup"`
 	Mode              string               `json:"mode,omitempty"`
 	DetailRetired     bool                 `json:"-"`
 	ValueApply        *ValueApplyStatus    `json:"value_apply,omitempty"`
@@ -558,9 +561,11 @@ func (s Store) rpc(ctx context.Context, id, action string) (Record, error) {
 	if out.ID != id {
 		return out, errors.New("identity mismatch")
 	}
+	out.controlObserved = e == nil
 	return out, e
 }
-func (s Store) statusRecord(ctx context.Context, r Record) (Record, *protocol.Error) {
+func (s Store) statusRecord(ctx context.Context, r Record) (result Record, condition *protocol.Error) {
+	defer func() { result = result.publicContract() }()
 	s.finishInputPhase(&r)
 	if r.EndedAt != nil {
 		return s.withValueApply(r), nil
@@ -1067,8 +1072,8 @@ func (s Store) start(ctx context.Context, q Request, previous string) (result Re
 				if r.State == "unknown" {
 					return out, failure("process_unavailable")
 				}
-				if r.ProxyMode != q.ProxyMode || !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture || !sameExecutionSelection(r, selection, q.Bundle) {
-					return out, failure("process_conflict")
+				if r.Mode == "foreground" || r.ProxyMode != q.ProxyMode || !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture || !sameExecutionSelection(r, selection, q.Bundle) {
+					return out, executionConflict(r)
 				}
 				return Result{Item: r}, nil
 			}
@@ -1105,14 +1110,15 @@ func (s Store) start(ctx context.Context, q Request, previous string) (result Re
 				if r.State == "unknown" {
 					return out, failure("process_unavailable")
 				}
-				if r.ProxyMode != q.ProxyMode || !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture || !sameExecutionSelection(r, selection, q.Bundle) {
-					return out, failure("process_conflict")
+				if r.Mode == "foreground" || r.ProxyMode != q.ProxyMode || !sameExecutionEnvironment(r, env, c.Inject || q.Env != nil, q.Env) || r.Capture != capture || !sameExecutionSelection(r, selection, q.Bundle) {
+					return out, executionConflict(r)
 				}
 				return Result{Item: r}, nil
 			}
 		}
 	}
 	r := Record{ID: q.RequestID, Mode: "managed", Profile: p.Profile, Instance: instance.ID, Directory: p.Root, Command: q.Command, Env: env, EnvOverride: q.Env, Selection: selection, BundleOverride: q.Bundle, Capture: capture, CreatedAt: time.Now().UTC(), State: "starting", Previous: previous}
+	r.Cleanup = initialCleanup()
 	if q.AutoGoal != nil {
 		parent, e := s.read(previous)
 		if e != nil {
@@ -1303,6 +1309,12 @@ func sameExecutionEnvironment(record Record, env string, inject bool, override *
 }
 func (s Store) stop(ctx context.Context, r Record) (Result, *protocol.Error) {
 	if r.EndedAt != nil {
+		if r.Cleanup.Scope != "" && r.Cleanup.Scope != "unknown" && (r.State == "interrupted" || r.Cleanup.State == "unknown") {
+			return Result{Item: r}, cleanupUnknown(r)
+		}
+		if r.Cleanup.State == "complete" && !s.leaseFree(ctx, r.ID) {
+			return Result{Item: r}, failure("process_pending")
+		}
 		return Result{Item: r}, nil
 	}
 	if _, e := s.rpc(ctx, r.ID, "stop"); e != nil {
@@ -1314,9 +1326,16 @@ func (s Store) stop(ctx context.Context, r Record) (Result, *protocol.Error) {
 			// r was active when this stop began. A terminal record observed
 			// after a lost reply is still a known transition, even when the
 			// supervisor persisted it before reconciliation read it.
+			if current.Cleanup.Scope != "" && current.Cleanup.Scope != "unknown" && current.State == "interrupted" {
+				return Result{Item: current, Changed: true}, cleanupUnknown(current)
+			}
 			return Result{Item: current, Changed: true}, nil
 		}
-		return Result{}, failure("process_unavailable")
+		// A lost RPC reply does not prove the controller rejected stop. Keep
+		// uncertainty while its lease is held; never report no effects here.
+		r.State, r.Reason = "unknown", "stop_outcome_unknown"
+		r.Cleanup.State, r.Cleanup.Reason = "unknown", "stop_outcome_unknown"
+		return Result{Item: r}, cleanupUnknown(r)
 	}
 	wait, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
@@ -1335,6 +1354,9 @@ func (s Store) stop(ctx context.Context, r Record) (Result, *protocol.Error) {
 				return Result{}, e
 			}
 			if current.EndedAt != nil && s.leaseFree(ctx, r.ID) {
+				if current.Cleanup.Scope != "unknown" && current.Cleanup.State == "unknown" {
+					return Result{Item: current, Changed: true}, cleanupUnknown(current)
+				}
 				return Result{Item: current, Changed: true}, nil
 			}
 		}

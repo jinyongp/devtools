@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v23 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v24 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
@@ -10,6 +10,13 @@
 Protocol 23의 목록 범위·필터·페이지와 실행 가능한 복구 안내는
 [탐색과 복구 계약](cli-navigation.md)을 따릅니다. `process list`의 기본 목록은
 현재 서비스이며 실행 이력은 `--view history`로 선택합니다.
+
+Protocol 24는 foreground 실행을 기존 process 조회·제어에 연결합니다. 실행의
+`mode`, `control`, `cleanup` 공통 필드와 `stopping` 상태, `process list --mode`를
+제공하며 구체적인 실행 schema를 process/project 응답에서 공유합니다.
+`process_cleanup_unknown`은 제어기 손실 등으로 정리 완료를 확인할 수 없다는 뜻이며
+실패/효과 불명을 유지합니다. [실행 수명과 제어 계약](processes.md)을 따릅니다.
+Envelope 버전은 1이며 기존 요청 UUID·revision·출력 소유권 규칙을 유지합니다.
 
 ## 변경 요청 ID
 

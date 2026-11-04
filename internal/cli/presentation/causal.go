@@ -209,8 +209,8 @@ func resourceFacts(facts map[string]any, message string) []cliui.Block {
 				name = "Controller"
 			}
 			kind := text(owner["kind"])
-			if kind == "managed" && owner["execution_id"] != nil {
-				value = name + " (managed)"
+			if (kind == "managed" || kind == "foreground") && owner["execution_id"] != nil {
+				value = name + " (" + kind + ")"
 			} else {
 				value = fmt.Sprintf("%s (%s, PID %v)", name, kind, owner["pid"])
 			}

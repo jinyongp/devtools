@@ -66,7 +66,11 @@ func (s Store) PrepareForLauncher(ctx context.Context, p project.Context, c proj
 			}
 			a, created, e := s.Allocate(ctx, st, *i, name, def, defaults)
 			if e != nil {
-				return false, e
+				port := 0
+				if def.Port != nil && def.Strict {
+					port = *def.Port
+				}
+				return false, describeRunFailure(e, p.Profile, p.Root, i.ID, name, port)
 			}
 			if !deferServing {
 				free, e := s.Available(a.Port)

@@ -138,5 +138,33 @@ free_tree()
 stubborn=mutate("start","stubborn")["item"]
 time.sleep(.2)
 assert mutate("stop",stubborn["id"])["item"]["exit_code"]==137
+
+# A foreground service is controlled from a separate installed CLI invocation.
+# No terminal ownership, child PID or hand-written request UUID is needed.
+foreground=subprocess.Popen(["devtools","run","web"],cwd=root,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+try:
+    read("second")
+    current=api("process","list","--mode","foreground","--command","web")["items"]
+    assert len(current)==1 and current[0]["active_count"]==1,current
+    foreground_id=current[0]["execution_id"]
+    status=api("process","status",foreground_id)["item"]
+    assert status["mode"]=="foreground" and status["control"]["stop"] and status["cleanup"]["state"]=="not_requested",status
+    conflict=subprocess.run(["devtools","run","web"],cwd=root,env=env,capture_output=True,text=True,timeout=10)
+    assert conflict.returncode==3 and conflict.stdout=="",conflict
+    details=json.loads(conflict.stderr)["error"]["details"]
+    actions=[action for action in details["remedies"] if action.get("state")=="ready" and "stop" in action.get("argv",[])]
+    assert len(actions)==1 and foreground_id in actions[0]["argv"] and "--profile" not in actions[0]["argv"],details
+    stopped=execute(*actions[0]["argv"])["data"]
+    assert stopped["item"]["cleanup"]["state"]=="complete" and stopped["item"]["state"]=="stopped",stopped
+    output,diagnostic=foreground.communicate(timeout=10)
+    assert foreground.returncode!=0 and output=="" and diagnostic=="",(foreground.returncode,output,diagnostic)
+    assert api("process","stop",foreground_id)["changed"] is False
+    with socket.socket() as listener:
+        listener.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+        listener.bind(("127.0.0.1",port))
+finally:
+    if foreground.poll() is None:
+        foreground.terminate()
+        foreground.communicate(timeout=10)
 free_tree()
 print("Installed process lifetime, idempotency, concurrent starts, env conflict, restart, ports and bounded logs verified")

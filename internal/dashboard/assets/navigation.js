@@ -22,7 +22,8 @@ function readNavigation(fallbackProfile = "") {
   valueFilters.kind = ["variable", "secret"].includes(p.get("kind")) ? p.get("kind") : "all";
   valueFilters.source = ["common", "inherited", "override", "local"].includes(p.get("source")) ? p.get("source") : "all";
   processFilters.search = p.get("process-search") || "";
-  processFilters.state = ["running","starting","stopped","exited","failed","interrupted","unknown","not_started","conflict"].includes(p.get("process-state")) ? p.get("process-state") : "all";
+  processFilters.state = ["running","starting","stopping","stopped","exited","failed","interrupted","unknown","not_started","conflict"].includes(p.get("process-state")) ? p.get("process-state") : "all";
+  processFilters.mode = ["foreground","managed"].includes(p.get("process-mode")) ? p.get("process-mode") : "all";
   processFilters.view = p.get("process-view") === "history" ? "history" : "current";
   expandedProcesses = new Set(p.getAll("process-detail"));
   projectsExpanded = p.get("projects") === "open";
@@ -46,6 +47,7 @@ function saveNavigation(push = false) {
   put("env", valueEnv); put("search", $("search").value);
   put("key", valueFilters.search); put("kind", valueFilters.kind, "all"); put("source", valueFilters.source, "all");
   put("process-search", processFilters.search); put("process-state", processFilters.state, "all");
+  put("process-mode", processFilters.mode, "all");
   put("process-view", processFilters.view, "current");
   for (const id of expandedProcesses) p.append("process-detail", id);
   if (projectsExpanded) p.set("projects", "open");

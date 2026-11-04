@@ -2,9 +2,75 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-`devtools process`는 `devtools.toml`의 이름 명령을 백그라운드에서 실행하고 관리한다. 프로젝트 명령의 요구 사항 검사, var/sec/env 주입과 port binding은 `devtools command run`과 같다. agent나 dashboard 세션과 별도로 supervisor가 실행을 관리한다.
+`devtools process`는 이름 명령의 foreground 실행과 백그라운드 관리 실행을 같은 실행 ID로
+조회·제어한다. `process start`는 agent나 dashboard 세션과 별도로 supervisor가 관리하는
+새 실행을 시작한다. 프로젝트 명령의 요구 사항 검사, var/sec/env 주입과 port binding은
+`devtools command run`과 같다.
 Windows에서는 상위 host Job이 종료되면 함께 종료될 수 있다. 실제 PC의 터미널 닫기 동작은
 미검증이며 [Windows 안내](windows.md#storage-and-processes)의 수명 경계를 따른다.
+
+## 공통 실행 계약 — protocol 24
+
+이름 명령을 `devtools run NAME`으로 실행하면 기존 process 저장소에 `mode: foreground`로
+등록한다. stdin/stdout/stderr와 자식 종료 코드는 그대로 유지한다. 다른 터미널이나
+에이전트에서 `process list`로 실행 ID를 찾고 `process status/stop/check/wait`를 사용할 수 있다.
+worker 재시작이나 hot reload는 같은 실행 ID를 유지한다. 명시적인 `process restart`는
+최신 설정으로 새 managed 실행을 만들며 이전 실행 ID에 대한 stop은 새 실행에 영향을 주지 않는다.
+
+```sh
+devtools process list --mode foreground
+devtools process list --mode managed --state running
+devtools process list --state stopping
+devtools schema process status
+devtools schema process stop
+```
+
+현재 서비스와 실행 이력의 페이지·범위·필터는 [탐색 계약](cli-navigation.md)을 따른다.
+모드 필터는 실행 선택에 적용한 뒤 서비스별로 요약한다. 자식 PID마다 실행 행을 만들지 않는다.
+TTY의 foreground/background와 devtools의 foreground/managed 모드는 별개다.
+
+실행 응답에는 다음 공통 필드가 있다. CLI JSON, dashboard HTTP, 저장된 요청 조회는
+같은 실행 정의를 사용한다. text는 표시 형식이며 자동화는 JSON과 command schema를 사용한다.
+
+| 필드 | 의미 |
+| --- | --- |
+| `mode` | `foreground` 또는 `managed`. |
+| `state` | 앱 수명. `stopping`은 소유 프로세스 정리 진행 중이다. |
+| `control.state` | `available`, `unavailable`, `lost`, `ended`. |
+| `control.stop/restart/check` | 관측한 상태에서 제공할 수 있는 작업. 실제 요청의 권한·설정·동시성 검사는 별도로 적용한다. |
+| `control.reason` | 제어 가능 여부의 근거. 저장된 capability만으로 live 제어를 추정하지 않는다. |
+| `cleanup.scope` | Unix `process_group`, Windows `windows_job`, 과거 기록의 `unknown`. |
+| `cleanup.state` | `not_requested`, `pending`, `complete`, `unknown`. |
+| `cleanup.reason` | 정리 관측의 근거. `complete`는 선언한 소유 범위에만 적용한다. |
+| `ready_configured/readiness` | 기존 준비 검사. 수명·제어·정리 상태와 별개다. |
+
+종료 요청 수락과 정리 완료는 구분한다. stop은 소유 프로세스·readiness probe 종료와
+서비스 claim 해제 뒤 terminal 기록 및 lease 해제를 확인한다. 아직 진행 중이면
+`process_pending`, 제어기 손실 등으로 정리를 확인할 수 없으면
+`process_cleanup_unknown`과 `effects: unknown`을 반환한다. 후자는 상태를 먼저 조회한다.
+과거 terminal 기록의 stop no-op은 소급 정리 검증을 뜻하지 않으며 `cleanup: unknown`을 보존한다.
+저장된 요청의 replay는 원래 결과다. 현재 상태는 execution ID로 따로 조회한다.
+
+Unix에서는 그룹 리더를 정리 완료까지 reap하지 않아 PID/그룹 식별자의 재사용을 막는다.
+부모가 먼저 종료해도 같은 그룹 자식에 TERM을 보내고 최대 3초의 유예를 준다.
+남은 프로세스는 KILL 후 종료 여부를 확인한다. 자식이 상속한 pipe는 정리 뒤 drain한다.
+Windows도 부모 조기 종료 시 남은 Job 구성원에게 종료 유예를 적용하고 부모 종료 코드는 보존한다.
+
+Unix 새 세션/다른 프로세스 그룹, Docker daemon이나 원격 서비스 등 외부 제어기는
+이 소유 범위 밖이다. Unix 제어기에 SIGKILL이 가면 자식이 남을 수 있어 정리를 `unknown`으로
+보고한다. Windows Job의 handle 종료 보장은 기존 native Job 경계를 따른다.
+원래 터미널에 접근할 수 있다고 가정하거나 저장 PID를 무조건 kill하지 않는다.
+
+서비스를 선언한 foreground 명령은 시작 전에 등록과 제어 채널이 준비되어야 한다.
+포트 없는 일회성 이름 명령은 등록 단계의 읽기 전용/접근 거부에 한해 추적 없이 실행한다.
+직접 `run -- PROGRAM`과 호출자가 별도 실행기를 제공한 경로도 기존 실행 경계를 유지한다.
+추적 없는 실행은 process inventory나 원격 stop을 제공하지 않는다. 이미 시작한 명령은
+등록·출력·종료 기록 오류 때문에 자동 재실행하지 않는다.
+
+업데이트 전에 시작한 foreground 실행에는 새 ID/제어 채널이 자동으로 생기지 않는다.
+해당 실행은 기존 제어기로 종료한 뒤 새 CLI로 다시 실행한다. 새로 시작한 실행의 포트 충돌
+안내는 실제 execution ID를 넣은 `process stop` 명령을 제공한다. 실행 ID를 확인할 수 없으면
+확인되지 않은 stop 명령을 만들지 않고 제어 주체 확인이 필요하다고 표시한다.
 
 먼저 `web` 이름 명령과 필요한 `local` env를 준비한다.
 서버 설정은 [준비 확인 예제](process-readiness.md#설정과-사용)를 참고한다.
@@ -30,7 +96,7 @@ list는 `data.items`에 현재 서비스 요약을 반환한다. 실행별 이�
 일반 종료는 `exited`, 명시적 종료는 `stopped`, 시작 준비 실패는 `failed`다. 종료 코드와 원인 코드를 메타데이터에 기록한다. 재부팅이나 supervisor 손실은 `interrupted`, 살아 있는 supervisor에 접근할 수 없는 상황은 `unknown`으로 조회한다. 다시 시작하려면 명시적으로 start 또는 restart를 실행한다.
 
 종료는 살아 있는 supervisor의 인증 채널을 통해 요청한다.
-Unix에서는 소유한 프로세스 그룹에 TERM을 보내고 3초 후 남은 자식을 정리한다.
+Unix에서는 소유한 프로세스 그룹에 TERM을 보내고 3초의 유예 후 남은 자식을 정리한다.
 같은 그룹의 자식은 직접 자식이 먼저 종료돼도 정리하지만 새 OS 세션으로 빠져나간 명령에는
 별도 수명 관리가 필요하다. Windows에서는 생성 시점에 Job으로 묶은 소유 프로세스에
 CTRL_BREAK를 요청하고 3초 후 남은 트리를 종료한다. Job에서의 breakaway는 허용하지 않는다.

@@ -35,12 +35,12 @@ func (a *App) registerProcesses() {
 	descriptions := map[string]string{
 		"start":   "Start a configured command as a managed execution.",
 		"list":    "List current project services or explicit execution history.",
-		"status":  "Show one managed execution.",
-		"stop":    "Stop one managed execution.",
-		"restart": "Replace one managed execution using current configuration.",
+		"status":  "Show one execution, its control capabilities and owned-scope cleanup.",
+		"stop":    "Stop one foreground or managed execution and verify owned-scope cleanup.",
+		"restart": "Replace one execution with a managed execution using current configuration.",
 		"logs":    "Read retained output for one managed execution.",
-		"check":   "Check readiness once for one managed execution.",
-		"wait":    "Wait for one managed execution to become ready.",
+		"check":   "Check readiness once for one controlled execution.",
+		"wait":    "Wait for one controlled execution to become ready.",
 	}
 	for _, action := range []string{"start", "list", "status", "stop", "restart", "logs", "check", "wait"} {
 		c := Command{Name: "process " + action, Description: descriptions[action], Options: []Option{}, Output: map[string]any{"type": "object"}}
@@ -63,21 +63,17 @@ func (a *App) registerProcesses() {
 			c.Options = append(c.Options, Option{Name: "timeout", Default: "30s", Description: "Overall readiness wait, greater than zero and at most 10m."})
 		}
 		if action == "check" || action == "wait" {
-			c.Output = map[string]any{"type": "object", "required": []string{"id", "ready_configured", "readiness"}, "properties": map[string]any{
-				"id": map[string]any{"type": "string"}, "ready_configured": map[string]any{"type": "boolean"},
-				"readiness": map[string]any{"type": "object", "required": []string{"ready", "checked_at", "reason", "exit_code"}, "properties": map[string]any{
-					"ready": map[string]any{"type": "boolean"}, "checked_at": map[string]any{"type": "string", "format": "date-time"}, "reason": map[string]any{"type": "string"}, "exit_code": map[string]any{"type": []string{"integer", "null"}},
-				}},
-			}}
+			c.Output = processExecutionSchema()
+			c.Output["required"] = append(c.Output["required"].([]string), "readiness")
 		}
 		if action == "start" || action == "stop" || action == "restart" {
-			c.Output = object(map[string]any{"item": map[string]any{"type": "object"}, "changed": map[string]any{"type": "boolean"}, "replayed": map[string]any{"type": "boolean"}}, "item", "changed", "replayed")
+			c.Output = object(map[string]any{"item": processExecutionSchema(), "changed": map[string]any{"type": "boolean"}, "replayed": map[string]any{"type": "boolean"}}, "item", "changed", "replayed")
 			c.Options = append(c.Options, requestIDOption(uuidPattern))
 		}
 		if action == "list" {
-			c.Output = object(map[string]any{"items": arraySchema(map[string]any{"type": "object"}), "values": map[string]any{"type": "object", "additionalProperties": inputObservationSchema()}}, "items", "values")
+			c.Output = object(map[string]any{"items": arraySchema(processNavigationSchema()), "values": map[string]any{"type": "object", "additionalProperties": inputObservationSchema()}}, "items", "values")
 		} else if action == "status" {
-			c.Output = object(map[string]any{"item": map[string]any{"type": "object"}, "values": inputObservationSchema()}, "item", "values")
+			c.Output = object(map[string]any{"item": processExecutionSchema(), "values": inputObservationSchema()}, "item", "values")
 		} else if action == "logs" {
 			c.Output = object(map[string]any{"id": stringSchema(), "content": stringSchema()}, "id", "content")
 		}
@@ -87,7 +83,7 @@ func (a *App) registerProcesses() {
 				return nil, e
 			}
 			if action == "list" {
-				selection := services.NavigationSelection{Profile: r.Options["profile"], Command: r.Options["command"], Search: r.Options["query"], History: r.Options["view"] == "history"}
+				selection := services.NavigationSelection{Profile: r.Options["profile"], Command: r.Options["command"], Mode: r.Options["mode"], Search: r.Options["query"], History: r.Options["view"] == "history"}
 				if r.Scope != nil {
 					selection.Profile, selection.Directory, selection.Instance = r.Scope.Profile, r.Scope.Directory, r.Scope.Instance
 				}

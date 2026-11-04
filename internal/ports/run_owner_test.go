@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -66,9 +67,27 @@ func TestRunFailureKeepsAssignmentAndUnknownOwner(t *testing.T) {
 
 func TestManagedOwnerStopActionDeclaresItsSystemEffect(t *testing.T) {
 	id := "11111111-1111-4111-8111-111111111111"
-	e := describeRunFailure(protocol.NewError("port_run_active", "Original.", 3, map[string]any{"facts": map[string]any{"owner": map[string]any{"status": "verified", "kind": "managed", "execution_id": id}}}), "app", "/work/app", "instance", "web", 3000)
-	action := e.Details["remedies"].([]protocol.Remedy)[0]
-	if action.Effect != "system_write" || len(action.RequiredInputs) != 0 || len(action.Argv) != 6 || action.Argv[3] != id || !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(action.Argv[5]) {
-		t.Fatal(action)
+	for _, kind := range []string{"managed", "foreground"} {
+		e := describeRunFailure(protocol.NewError("port_run_active", "Original.", 3, map[string]any{"facts": map[string]any{"owner": map[string]any{"status": "verified", "kind": kind, "execution_id": id}}}), "app", "/work/app", "instance", "web", 3000)
+		action := e.Details["remedies"].([]protocol.Remedy)[0]
+		if action.Effect != "system_write" || len(action.RequiredInputs) != 0 || len(action.Argv) != 6 || action.Argv[3] != id || !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(action.Argv[5]) {
+			t.Fatal(kind, action)
+		}
+	}
+}
+
+func TestStrictInitialAllocationRetainsServiceConflictContext(t *testing.T) {
+	store := testPortStore(t)
+	store.Probe = func(int) (bool, *protocol.Error) { return false, nil }
+	port := 32123
+	p := project.Context{Profile: "app", Root: privateTestRoot(t), Ports: map[string]project.Port{"web": {Port: &port, Strict: true}}}
+	_, release, condition := store.Prepare(context.Background(), p, project.Command{Exec: []string{"unused"}, Serve: []string{"web"}}, "", nil, []int{32100, 32199}, false)
+	defer release()
+	if condition == nil || condition.Code != "port_in_use" {
+		t.Fatal(condition)
+	}
+	facts := condition.Details["facts"].(map[string]any)
+	if facts["port"] != port || facts["service"] != "web" || condition.Details["target"].(map[string]any)["directory"] != p.Root {
+		t.Fatal("initial allocation dropped the recovery target", condition.Details)
 	}
 }

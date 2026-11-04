@@ -227,7 +227,18 @@ func TestNamedProfileOverrideAndNoInjection(t *testing.T) {
 	if code != 0 || out != "override" || diagnostic != "" {
 		t.Fatalf("%d %s %s", code, out, diagnostic)
 	}
-	app.dataDirectory = func() (string, *protocol.Error) { t.Error("plain command accessed value storage"); return "", nil }
+	// Tracking may resolve the common data root, but a non-injecting command
+	// must not read the value store. Make the actual value namespace unusable.
+	directory, condition := app.dataDirectory()
+	if condition != nil {
+		t.Fatal(condition)
+	}
+	if err := os.Rename(directory, directory+".unavailable"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(directory, []byte("unavailable value storage"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	code, out, diagnostic = invoke(t, app, "", "run", "plain")
 	if code != 0 || out != "plain" || diagnostic != "" {
 		t.Fatalf("%d %s %s", code, out, diagnostic)

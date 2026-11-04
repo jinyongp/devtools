@@ -16,6 +16,7 @@ import (
 
 type NavigationSelection struct {
 	Profile, Directory, Instance, Command, Search string
+	Mode                                          string
 	Env                                           *string
 	History                                       bool
 }
@@ -28,6 +29,9 @@ type ServiceDeclaration struct {
 // NavigationRow is public metadata. Value slots, launcher input, supervisor
 // credentials, output payload and original argv belong to explicit detail reads.
 type NavigationRow struct {
+	Mode          string          `json:"mode,omitempty"`
+	Control       *ControlStatus  `json:"control,omitempty"`
+	Cleanup       *CleanupStatus  `json:"cleanup,omitempty"`
 	Kind          string          `json:"kind"`
 	ID            string          `json:"id"`
 	ExecutionID   string          `json:"execution_id,omitempty"`
@@ -73,7 +77,9 @@ func latestTime(values ...*time.Time) *time.Time {
 }
 
 func navigationRecord(r Record) NavigationRow {
+	r = r.publicContract()
 	row := NavigationRow{Kind: "execution", ID: r.ID, ExecutionID: r.ID, Profile: r.Profile, Directory: r.Directory, Instance: r.Instance, Command: r.Command, Env: r.Env, Selection: r.Selection, State: r.State, Reason: r.Reason, CreatedAt: recorded(r.CreatedAt), StartedAt: r.StartedAt, EndedAt: r.EndedAt}
+	row.Mode, row.Control, row.Cleanup = r.Mode, &r.Control, &r.Cleanup
 	row.UpdatedAt = latestTime(row.CreatedAt, r.StartedAt, r.EndedAt)
 	row.LastChanged = row.UpdatedAt
 	if r.InputVersion != nil {
@@ -103,6 +109,9 @@ func (s Store) Navigation(ctx context.Context, q NavigationSelection, declaratio
 	rows := []NavigationRow{}
 	canonical := map[string]string{}
 	for _, r := range stored {
+		if q.Mode != "" && r.publicContract().Mode != q.Mode {
+			continue
+		}
 		if q.History && r.DetailRetired {
 			continue
 		}
@@ -251,10 +260,11 @@ func summarizeServices(records []NavigationRow, attempts []Attempt, declarations
 			row.Profile, row.Directory, row.Command, row.Env, row.Instance = d.Profile, d.Directory, d.Command, d.Env, d.Instance
 		}
 		for _, r := range g.records {
+			row.Mode, row.Control, row.Cleanup = r.Mode, r.Control, r.Cleanup
 			row.Profile, row.Directory, row.Command, row.Env, row.Instance = r.Profile, r.Directory, r.Command, r.Env, r.Instance
 			row.CreatedAt = earliestTime(row.CreatedAt, r.CreatedAt)
 			row.LastChanged = latestTime(row.LastChanged, r.LastChanged)
-			if r.EndedAt == nil && (r.State == "running" || r.State == "starting" || r.State == "unknown") {
+			if r.EndedAt == nil && (r.State == "running" || r.State == "starting" || r.State == "stopping" || r.State == "unknown") {
 				row.Current = append(row.Current, r)
 				row.ActiveIDs = append(row.ActiveIDs, r.ID)
 			}
@@ -284,11 +294,13 @@ func summarizeServices(records []NavigationRow, attempts []Attempt, declarations
 		}
 		row.ActiveCount = len(row.Current)
 		if row.ActiveCount == 1 {
+			row.Mode, row.Control, row.Cleanup = row.Current[0].Mode, row.Current[0].Control, row.Current[0].Cleanup
 			row.State, row.Reason, row.Env, row.Instance = row.Current[0].State, row.Current[0].Reason, row.Current[0].Env, row.Current[0].Instance
 			row.ExecutionID = row.Current[0].ID
 			row.Attention = 1
 		}
 		if row.ActiveCount > 1 {
+			row.Mode, row.Control, row.Cleanup = "", nil, nil
 			row.State, row.Reason, row.Attention = "conflict", "multiple_active_executions", 0
 		}
 		attention := row.LastAttempt != nil && (row.LastAttempt.State == "failed" || row.LastAttempt.State == "unknown" || row.LastAttempt.State == "interrupted")

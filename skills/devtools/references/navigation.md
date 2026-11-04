@@ -10,6 +10,9 @@ profile/directory, view, filters, sort and query cache. Cursors expire in 30 min
   may coexist with a running server. Conflicts expose every active execution ID.
   Use `--view history` for execution rows. Stop/status/restart/logs take actual
   execution IDs, never a current service key or an unproven request ID.
+- Protocol 24 adds foreground executions and `--mode foreground|managed` to process
+  queries. Apply mode before service aggregation. Control capability, readiness,
+  lifetime and owned-scope cleanup are distinct; lost controllers remain uncertain.
 - `expose list` and `values execution list` default to current/unresolved work;
   resolved history requires `--view history`. Unknown/in-flight effects remain.
   Existing task completion/stale/scope semantics are preserved.

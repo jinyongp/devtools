@@ -216,6 +216,29 @@ func (c *nativeChild) activeProcesses() (uint32, error) {
 	err := windows.QueryInformationJobObject(c.job, windows.JobObjectBasicAccountingInformation, uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil)
 	return info.ActiveProcesses, err
 }
+
+type ownedCleanupError struct{ error }
+
+func (c *nativeChild) waitJobEmpty() error {
+	deadline := time.NewTimer(nativeStopGrace)
+	defer deadline.Stop()
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		active, err := c.activeProcesses()
+		if err != nil {
+			return err
+		}
+		if active == 0 {
+			return nil
+		}
+		select {
+		case <-tick.C:
+		case <-deadline.C:
+			return errors.New("owned Job processes did not exit")
+		}
+	}
+}
 func (c *nativeChild) stop() (int, error) {
 	// CTRL_BREAK can target this live child group only. A pipe-only host may have
 	// no attached console; grace still expires before owned-tree termination.
@@ -244,6 +267,9 @@ func (c *nativeChild) stop() (int, error) {
 		case <-ticker.C:
 		case <-timer.C:
 			err = windows.TerminateJobObject(c.job, 137)
+			if err == nil {
+				err = c.waitJobEmpty()
+			}
 			closeErr := c.closeJob()
 			<-c.done
 			if err != nil {
@@ -259,17 +285,33 @@ func (c *nativeChild) wait(ctx context.Context) (int, error) {
 	var err error
 	select {
 	case <-ctx.Done():
+		notifyCleanupStarted(ctx)
 		code, err = c.stop()
 	case <-c.done:
+		notifyCleanupStarted(ctx)
 		if ctx.Err() != nil {
 			code, err = c.stop()
 		} else {
 			code, err = int(c.code), c.waitErr
+			active, queryErr := c.activeProcesses()
+			if queryErr != nil {
+				err = errors.Join(err, queryErr)
+			} else if active != 0 {
+				// Parent exit does not shorten descendant termination grace.
+				// Keep the parent's actual exit code after that cleanup.
+				_, stopErr := c.stop()
+				err = errors.Join(err, stopErr)
+			}
 		}
+	}
+	if err != nil {
+		err = ownedCleanupError{err}
 	}
 	// Closing the final non-inherited job handle cleans descendants even after
 	// the direct child exits normally. Drain their pipes only after that close.
-	err = errors.Join(err, c.closeJob())
+	if closeErr := c.closeJob(); closeErr != nil {
+		err = errors.Join(err, ownedCleanupError{closeErr})
+	}
 	streamErr := c.streams.finish()
 	if err == nil && code == 0 {
 		err = streamErr

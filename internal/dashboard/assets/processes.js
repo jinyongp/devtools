@@ -1,5 +1,5 @@
 "use strict";
-const processFilters = {search:"",state:"all",view:"current",cursor:"",cursorProfile:""};
+const processFilters = {search:"",state:"all",mode:"all",view:"current",cursor:"",cursorProfile:""};
 function projectName(directory) { return directory.split(/[\\/]/).filter(Boolean).pop() || directory; }
 function processRequest(current, body) {
   return {domain:"process", profile:current, process:{...body, request_id:crypto.randomUUID()}};
@@ -20,6 +20,9 @@ async function processDetails(section,current,id,version,visible) {
     rememberRefreshRead(path,result);
     const item=result.item,input=result.values;
     text("p","Execution "+id,section);
+    text("p","Mode: "+(item.mode||"unknown"),section);
+    if(item.control)text("p","Control: "+item.control.state+" · "+item.control.reason.replaceAll("_"," "),section);
+    if(item.cleanup)text("p","Cleanup: "+item.cleanup.state+" · scope "+item.cleanup.scope+" · "+item.cleanup.reason.replaceAll("_"," "),section);
     text("p","Value selection: "+(item.selection||"all"),section);
     if(input){
       const labels={current:"Current values",pending:"Value changes pending",failed:"Cannot apply current values",unknown:"Value delivery unknown",verification_pending:"Value verification pending"};
@@ -39,7 +42,7 @@ async function processDetails(section,current,id,version,visible) {
     if(item.value_watch)text("p","Background value check: "+item.value_watch.state.replaceAll("_"," ")+" · "+(item.value_watch.reason||"").replaceAll("_"," "),section);
     if(item.output)text("p","Output: stdout "+item.output.stdout+", stderr "+item.output.stderr,section);
     if(item.reason)text("p",item.reason.replaceAll("_"," ")+(item.exit_code==null?"":" · exit "+item.exit_code),section);
-    if(item.ready_configured&&!item.ended_at){
+    if(item.control?.check){
       button(section,"Check readiness",async()=>{
         try{const data=(await api("/api/actions",processRequest(current,{action:"check",id}))).data;if(generation===version)text("p",(data.readiness.ready?"Ready":"Not ready")+" · "+data.readiness.reason,section);}
         catch(e){if(generation===version)notice(e.message);}
@@ -61,6 +64,7 @@ async function loadProcesses(version) {
     const query={profile:current,view:processFilters.view||"current",limit:"50"};
     if(processFilters.search)query.query=processFilters.search;
     if(processFilters.state!=="all")query.state=processFilters.state;
+    if(processFilters.mode!=="all")query.mode=processFilters.mode;
     if(processFilters.cursor)query.cursor=processFilters.cursor;
     const data=await api("/api/processes?"+new URLSearchParams(query));
     if(generation!==version)return;
@@ -70,10 +74,13 @@ async function loadProcesses(version) {
     view.value=query.view;
     const search=text("input","",controls);search.type="search";search.placeholder="Search commands";search.setAttribute("aria-label","Search processes");search.value=processFilters.search;
     const filter=text("select","",controls);filter.setAttribute("aria-label","Filter process state");
-    for(const state of ["all","running","starting","stopped","exited","failed","interrupted","unknown","not_started","conflict"])text("option",state==="all"?"All states":state,filter).value=state;
+    for(const state of ["all","running","starting","stopping","stopped","exited","failed","interrupted","unknown","not_started","conflict"])text("option",state==="all"?"All states":state,filter).value=state;
     filter.value=processFilters.state;
-    const refresh=()=>{processFilters.view=view.value;processFilters.search=search.value;processFilters.state=filter.value;processFilters.cursor="";saveNavigation();load();};
-    view.onchange=refresh;filter.onchange=refresh;button(controls,"Search",refresh);search.onkeydown=event=>{if(event.key==="Enter")refresh();};
+    const mode=text("select","",controls);mode.setAttribute("aria-label","Filter execution mode");
+    for(const value of ["all","foreground","managed"])text("option",value==="all"?"All execution modes":value,mode).value=value;
+    mode.value=processFilters.mode;
+    const refresh=()=>{processFilters.view=view.value;processFilters.search=search.value;processFilters.state=filter.value;processFilters.mode=mode.value;processFilters.cursor="";saveNavigation();load();};
+    view.onchange=refresh;filter.onchange=refresh;mode.onchange=refresh;button(controls,"Search",refresh);search.onkeydown=event=>{if(event.key==="Enter")refresh();};
     startProcess(panel,current,data.instances[0]?.directory||"");
     const projects=text("details","",panel);projects.className="process-projects";
     text("summary",`Projects & worktrees (${data.instances.length})`,projects);
@@ -96,8 +103,9 @@ async function loadProcesses(version) {
     const body=text("tbody","",table);
     for(const item of data.items){
       const row=text("tr","",body),command=text("td","",row);text("strong",item.command,command);
+      if(item.mode)text("span",item.mode,command);
       const state=item.current_state||item.state;
-      const badge=text("span",state,text("td","",row));badge.className="process-state";badge.classList.toggle("active",["running","starting"].includes(state));
+      const badge=text("span",state,text("td","",row));badge.className="process-state";badge.classList.toggle("active",["running","starting","stopping"].includes(state));
       const last=item.last_attempt;
       text("td",last?last.action+" · "+last.state+(last.reason?" · "+last.reason.replaceAll("_"," "):""):(item.reason||"").replaceAll("_"," "),row);
       text("td",item.env||"Common",row);
@@ -108,8 +116,9 @@ async function loadProcesses(version) {
       if(state==="conflict")text("p",active.length+" active executions: "+active.join(", "),command);
       if(ids.length===0)startProcess(actions,current,item.directory,item.command);
       for(const id of ids){
+        const execution=item.kind==="execution"?item:(item.current||[]).find(execution=>execution.execution_id===id)||item;
         for(const action of ["stop","restart"]){
-          if(action==="stop" && !(active.includes(id)||item.kind==="execution"&&!item.ended_at))continue;
+          if(!execution.control?.[action])continue;
           button(actions,(action==="stop"?"Stop":"Restart")+(ids.length>1?" "+id.slice(0,8):""),()=>edit(action+" "+item.command,p=>{
             text("p","Execution "+id+" in "+item.directory+".",p);
             if(action==="restart")text("p","Starts a new execution with the current project configuration and values.",p);

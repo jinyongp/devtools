@@ -403,7 +403,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if s.collection != nil {
 				collection, e = s.collection(r.Context(), "process list", filepath.Dir(s.data), s.cache, r.URL.Query())
 			} else {
-				rows, condition := manager.Navigation(r.Context(), services.NavigationSelection{Profile: profile}, nil)
+				rows, condition := manager.Navigation(r.Context(), services.NavigationSelection{Profile: profile, Mode: r.URL.Query().Get("mode")}, nil)
 				collection = map[string]any{"items": rows}
 				e = condition
 			}

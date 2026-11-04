@@ -128,7 +128,7 @@ def cleanup_managed_processes(home: Path, env) -> bool:
             except (KeyError, TypeError, json.JSONDecodeError):
                 clean = False
 
-        processes = run("process", "list", "--profile", profile, "--view", "history", "--state", "running", "--state", "starting", "--state", "unknown", "--state", "interrupted", "--limit", "200")
+        processes = run("process", "list", "--profile", profile, "--view", "history", "--state", "running", "--state", "starting", "--state", "stopping", "--state", "unknown", "--state", "interrupted", "--limit", "200")
         if processes is None or processes.returncode != 0:
             clean = False
             continue
@@ -148,7 +148,7 @@ def cleanup_managed_processes(home: Path, env) -> bool:
                 str(uuid.uuid4()),
             )
 
-        remaining = run("process", "list", "--profile", profile, "--view", "history", "--state", "running", "--state", "starting", "--state", "unknown", "--state", "interrupted", "--limit", "200")
+        remaining = run("process", "list", "--profile", profile, "--view", "history", "--state", "running", "--state", "starting", "--state", "stopping", "--state", "unknown", "--state", "interrupted", "--limit", "200")
         if remaining is None or remaining.returncode != 0:
             clean = False
             continue

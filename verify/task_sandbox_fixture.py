@@ -61,7 +61,7 @@ def run(binary, baseline, probe, trace=None):
         assert baseline_identity["version"]["commit"] == BASELINE_COMMIT
         assert baseline_identity["version"]["protocol_version"] == 19
         candidate_identity = identity(binary, environment, scratch)
-        assert candidate_identity["version"]["protocol_version"] == 23
+        assert candidate_identity["version"]["protocol_version"] == 24
         trace_reports = []
 
         def argv(arguments, selected=binary):

@@ -19,6 +19,8 @@ func waitOwnedGroup(ctx context.Context, pid int, tty *ttySession) error {
 	defer ticker.Stop()
 	var deadline time.Time
 	forced := false
+	quiet := false
+	verifiedKill := false
 	canceled := ctx.Done()
 	for {
 		state, err := ownedChildState(pid)
@@ -27,6 +29,7 @@ func waitOwnedGroup(ctx context.Context, pid int, tty *ttySession) error {
 			return err
 		}
 		if deadline.IsZero() && (ctx.Err() != nil || state == childExited) {
+			notifyCleanupStarted(ctx)
 			signal := syscall.SIGTERM
 			var cause SignalError
 			if errors.As(context.Cause(ctx), &cause) {
@@ -49,7 +52,21 @@ func waitOwnedGroup(ctx context.Context, pid int, tty *ttySession) error {
 				return err
 			}
 			if !alive {
-				return nil
+				if verifiedKill {
+					return nil
+				}
+				if quiet {
+					// A process may fork between the membership snapshot and
+					// its own exit. Confirm a quiet sweep, close that race with
+					// a kernel group signal, then observe emptiness once more.
+					if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+						return err
+					}
+					verifiedKill = true
+				}
+				quiet = true
+			} else {
+				quiet = false
 			}
 			if time.Now().After(deadline) {
 				if forced {

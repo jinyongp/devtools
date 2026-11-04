@@ -64,4 +64,37 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
 - Windows amd64: services 테스트 바이너리 교차 컴파일 통과. native 실행은 아직 미검증.
 - services 전체 race 검사 통과. CLI 전체 검사는 통합 검증에서 최종 소스로 확인한다.
 
-현재: 작업 1–2의 개별 검증 완료. 작업 3–4와 통합 리뷰는 남아 있다.
+### 3. 공개 계약과 소비자 통합
+
+- Protocol 24: 공통 실행 schema를 process/project/요청 결과에서 재사용한다.
+  `mode`, `control`, `cleanup`, `stopping`, mode 필터를 CLI와 dashboard에 연결했다.
+  기존 설정 schema ID와 설치본·Windows 검증의 protocol gate도 함께 갱신했다.
+- control의 현재 관측과 저장된 요청의 과거 관측을 구분한다. 저장된 응답은 정확히
+  replay하고 현재 권한은 인증 RPC를 다시 관측해 판정한다. 제어기 손실과 stop 응답 유실은
+  unknown effects/cleanup을 유지한다. 기존 terminal 기록은 소급 검증하지 않는다.
+- 이름 명령의 외부 Runner 경계를 보존하고, 비주입 명령은 실제 값 저장소가 사용할 수
+  없어도 실행되도록 검증했다. 초기 strict-port 충돌도 서비스·포트·대상을 보존한다.
+- Windows는 부모 조기 종료에도 자식 cleanup 유예를 보장하고 강제 종료 뒤 Job accounting이
+  비었는지 확인한다. Unix는 그룹 식별자를 유지하면서 조용한 관측과 최종 그룹 신호 뒤
+  소유 범위가 비었는지 다시 확인한다. 외부 세션/daemon을 포함한다고 주장하지 않는다.
+- Linux 설치본: processes, project_lifecycle, readiness, tty, cli_guidance,
+  discovery, sandbox_queries, cli_presentation 8개 통과. 실제 foreground 충돌의 ready argv를
+  그대로 실행해 종료·포트 재사용을 검증했다. 저장 결과 동일성 및 TTY job control도 통과했다.
+- 기존 `check:static` 통과. sandbox의 기본 캐시 쓰기 제한은 임시 uv 캐시/도구 경로로
+  분리하고, installer 검사는 임시 XDG 경로에서 기존 host 계약으로 실행했다.
+- 전체 Go race 검사에서 확인한 schema 2건, legacy stop fixture 호환성, 이력 text 표의
+  열 수 초과를 수정했다. 관련 전체 package와 각 실패 사례의 재검증을 통과했다.
+  native Windows/macOS의 최종 소스 검증은 기존 workflow에서 진행한다.
+
+## 통합 리뷰 범위
+
+| 영역 | 상태 | 확인 내용 |
+| --- | --- | --- |
+| Unix 실행·TTY·그룹 정리 | 검토 및 로컬 검증 완료 | 부모 조기 종료, cleanup 유예, 상속 pipe, job control, PID 식별자 유지 |
+| 실행 등록·값·저장소 | 검토 및 로컬 검증 완료 | 기존 기록/lease 재사용, 값 비주입, 읽기 전용 fallback, 호출자 Runner |
+| 제어·요청 재시도 | 검토 및 로컬 검증 완료 | 인증, 실행 ID 고정, 응답 유실, 결과 replay, 제어기 손실 |
+| 목록·필터·text·schema | 검토 및 로컬 검증 완료 | mode 선선택, bounded history, 실행 schema 재사용, 이력 표 재검증 |
+| dashboard·Skill·문서 | 검토 및 로컬 검증 완료 | capability 기반 작업, cleanup 표시, protocol 24 발견과 경계 |
+| Windows Job·macOS backend | 교차 컴파일 완료 / native 검증 대기 | 기존 Unix/Windows workflow로 같은 최종 소스 검증 |
+
+현재: 작업 1–3 완료. 작업 4의 최종 리뷰 및 native CI 결과 확인이 남아 있다.

@@ -18,10 +18,10 @@ func detailLocationScope(command string) bool {
 
 func detailFieldOrder(d Definition, prefix string) []string {
 	fields := detailFieldMembership[d.Command][prefix]
-	if d.Command == "process status" && prefix == "item" {
-		fields = "command state ready_configured readiness previous_id id instance_id started_at ended_at exit_code reason capture_logs value_apply value_watch"
+	if (d.Command == "process status" || d.Command == "process start" || d.Command == "process stop" || d.Command == "process restart") && prefix == "item" {
+		fields = "command mode state control cleanup ready_configured readiness previous_id id instance_id started_at ended_at exit_code reason capture_logs value_apply value_watch"
 	}
-	priority := "command name key exec state status completion_status execution_status ready_configured readiness previous_id id instance_id profile directory env selection inject serve bind requirements ready output provenance config_path unresolved source integrity_verified runner_id execution_id input_id approval delivery_state execution_state expires_at exit_code result reason"
+	priority := "command name key exec mode state control cleanup status completion_status execution_status ready_configured readiness previous_id id instance_id profile directory env selection inject serve bind requirements ready output provenance config_path unresolved source integrity_verified runner_id execution_id input_id approval delivery_state execution_state expires_at exit_code result reason"
 	switch {
 	case strings.HasPrefix(d.Command, "vault "):
 		priority = "state backend idle_expires_at rewrap"
@@ -111,8 +111,8 @@ func detailRemainder(data map[string]any, consumed map[string]bool, prefix strin
 			continue
 		}
 		if object, ok := value.(map[string]any); ok {
-			if key == "requirements" || key == "output" || key == "readiness" {
-				allowed := strings.Fields(map[string]string{"requirements": "tools vars secs", "output": "mode", "readiness": "ready reason exit_code"}[key])
+			if key == "requirements" || key == "output" || key == "readiness" || key == "control" || key == "cleanup" {
+				allowed := strings.Fields(map[string]string{"requirements": "tools vars secs", "output": "mode", "readiness": "ready reason exit_code", "control": "state reason stop restart check", "cleanup": "scope state reason"}[key])
 				filtered := map[string]any{}
 				for _, name := range allowed {
 					if value, ok := object[name]; ok {

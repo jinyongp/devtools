@@ -84,7 +84,7 @@ func ExecuteOwned(ctx context.Context, args []string, dir string, env []string, 
 		_ = tty.restoreIfOwned(command.Process.Pid)
 	}
 	if cleanupErr != nil {
-		return 0, protocol.NewError("process_cleanup_incomplete", "Cannot verify cleanup of the owned process group.", 3, map[string]any{"effects": "unknown", "facts": map[string]any{"cleanup_state": "unknown", "ownership_scope": "process_group"}})
+		return 0, cleanupFailure("process_group")
 	}
 	if err == nil {
 		return 0, nil

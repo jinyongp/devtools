@@ -47,7 +47,7 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
   살아 있는 자식 전체에 3초의 종료 유예를 적용한다.
 - Linux: `go test -race -count=1 ./internal/process ./internal/services` 통과.
   부모 정상 조기 종료와 부모 TERM 종료 모두 자식의 cleanup marker 및 출력 보존을 검증했다.
-- macOS arm64: process 테스트 바이너리 교차 컴파일 통과. native 실행은 아직 미검증.
+- 작업 1 당시 macOS arm64 교차 컴파일 통과. 최종 native 실행 결과는 아래에 기록한다.
 
 ### 2. 공통 실행 등록과 제어
 
@@ -61,8 +61,8 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
   이미 실행한 명령의 오류를 재실행하지 않으며, 서비스 명령은 등록 없이 시작하지 않는다.
 - Linux race: 실제 foreground의 목록 → status → readiness → stop → 동일 UUID
   replay, native 출력/종료 코드 및 읽기 전용 일회성 실행 검사 통과.
-- Windows amd64: services 테스트 바이너리 교차 컴파일 통과. native 실행은 아직 미검증.
-- services 전체 race 검사 통과. CLI 전체 검사는 통합 검증에서 최종 소스로 확인한다.
+- 작업 2 당시 Windows amd64 services 교차 컴파일 및 services 전체 race 검사 통과.
+  CLI 전체 검사와 최종 native 실행 결과는 아래에 기록한다.
 
 ### 3. 공개 계약과 소비자 통합
 
@@ -84,20 +84,22 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
   분리하고, installer 검사는 임시 XDG 경로에서 기존 host 계약으로 실행했다.
 - 전체 Go race 검사에서 확인한 schema 2건, legacy stop fixture 호환성, 이력 text 표의
   열 수 초과를 수정했다. 관련 전체 package와 각 실패 사례의 재검증을 통과했다.
-  native Windows/macOS의 최종 소스 검증은 기존 workflow에서 진행한다.
+  기존 workflow로 확인한 native Windows/macOS의 최종 소스 결과는 아래에 기록한다.
 
 ## 통합 리뷰 범위
 
 | 영역 | 상태 | 확인 내용 |
 | --- | --- | --- |
-| Unix 실행·TTY·그룹 정리 | 검토 및 로컬 검증 완료 | 부모 조기 종료, cleanup 유예, 상속 pipe, job control, PID 식별자 유지 |
-| 실행 등록·값·저장소 | 검토 및 로컬 검증 완료 | 기존 기록/lease 재사용, 값 비주입, 읽기 전용 fallback, 호출자 Runner |
-| 제어·요청 재시도 | 검토 및 로컬 검증 완료 | 인증, 실행 ID 고정, 응답 유실, 결과 replay, 제어기 손실 |
-| 목록·필터·text·schema | 검토 및 로컬 검증 완료 | mode 선선택, bounded history, 실행 schema 재사용, 이력 표 재검증 |
-| dashboard·Skill·문서 | 검토 및 로컬 검증 완료 | capability 기반 작업, cleanup 표시, protocol 24 발견과 경계 |
-| Windows Job·macOS backend | Windows runtime 통과 / macOS native 실패 조사 중 | 기존 Unix/Windows workflow로 같은 최종 소스 검증 |
+| Unix 실행·TTY·그룹 정리 | 검토·검증 완료 | 부모 조기 종료, cleanup 유예, 상속 pipe, job control, PID 식별자 유지 |
+| 실행 등록·값·저장소 | 검토·검증 완료 | 기존 기록/lease 재사용, 값 비주입, 읽기 전용 fallback, 호출자 Runner |
+| 제어·요청 재시도 | 검토·검증 완료 | 인증, 실행 ID 고정, 응답 유실, 결과 replay, 제어기 손실 |
+| 목록·필터·text·schema | 검토·검증 완료 | mode 선선택, bounded history, 실행 schema 재사용, 이력 표 재검증 |
+| dashboard·Skill·문서 | 검토·검증 완료 | capability 기반 작업, cleanup 표시, protocol 24 발견과 경계 |
+| Windows Job·macOS backend | 검토·native 검증 완료 | macOS 그룹·PID·읽기 전용 doctor, Windows amd64/arm64 CLI·Job·runtime 및 전체 workflow 통과 |
 
-현재: 작업 1–3 완료. 작업 4의 최종 리뷰 및 native CI 결과 확인이 남아 있다.
+현재: 작업 1–4 완료. 아래 최종 검증 소스에서 통합 리뷰와 기존 native CI를 마쳤다.
+확인된 범위 내 추가 제품 결함은 남아 있지 않다. 소유 범위 밖의 리소스와 과거 실행의
+소급 제어 제한은 완료 조건에서 정한 경계를 유지한다.
 
 ### 통합 리뷰 수정 1 — foreground 선택과 현재 목록
 
@@ -138,17 +140,18 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
   제어기 손실·대기 중 stop·과거 기록 호환성을 포함한 관련 race 검사 통과.
 - `e4bf03c`의 전체 Go race 50개 package, 기존 정적 검사, 설치본 9개 시나리오
   (기존 8개 + proxy_auto)가 통과했다. 추가 stop 수정 소스의 실제 Chromium
-  dashboard 4개 시나리오도 통과했다. 최종 플랫폼 검증은 기존 native CI에서 확인한다.
+  dashboard 4개 시나리오도 통과했다. 최종 플랫폼 검증 결과는 아래에 기록한다.
 
 ### Native 검증 — macOS 관측 경계 재확인
 
 - `d20fc5f`의 Linux 전체 Go race 50개 package, 정적 검사, 설치본 9개 시나리오 통과.
   Windows amd64/arm64 suite-runtime도 기존 native workflow에서 통과했다.
 - [Unix native run](https://github.com/jinyongp/devtools/actions/runs/41779003648)에서
-  macOS의 process 관측 오류가 doctor/execution/설치본 검사에도 전파됨을 확인했다.
+  macOS의 종료 정리 오류가 doctor/execution/설치본 검사에도 전파됨을 확인했다.
   실패를 무시하거나 정리 완료로 바꾸지 않고 native API 관측을 재확인한다.
 - 살아 있는 그룹, 정지한 자식, reap 전 종료 자식과 그룹을 직접 검사하는 macOS
-  회귀 사례를 추가했다. 교차 컴파일 통과; native 실패 원인 확인과 수정은 진행 중이다.
+  회귀 사례를 추가했다. 진단 추가 당시 교차 컴파일만 통과한 상태였으며,
+  이후 수정 5–6에서 native 원인을 확인하고 수정했다.
 
 ### 통합 리뷰 수정 5 — macOS의 좀비 그룹 신호 결과
 
@@ -161,7 +164,7 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
 - macOS 회귀 사례에 reap 전 종료한 자식만 남은 그룹의 TERM/KILL을 추가했다.
   소유 범위를 재관측하는 검증을 유지하며 OS 오류를 일괄 무시하지 않는다.
 - Linux process/services/execution/doctor 전체 race 검사 및 macOS arm64 process
-  교차 컴파일 통과. 수정 커밋의 native 재검증은 기존 workflow에서 확인한다.
+  교차 컴파일 통과. 수정 후 native 재검증 결과는 아래에 기록한다.
 
 ### 통합 리뷰 수정 6 — 사라진 PID와 native fixture의 선행 조건
 
@@ -175,4 +178,41 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
 - 공통 network fixture가 IPv4 loopback 빈 포트만 고르던 것을 기존 전역 TCP probe로
   확인하도록 보완했다. 실제 Configure의 검사는 유지한다. host policy 노출 사례
   Linux race 3회 통과. macOS Intel setup-uv의 manifest 다운로드 시간 초과는 별도
-  외부 실행 실패로 구분하고 최종 native 실행에서 다시 확인한다.
+  외부 실행 실패로 구분했다. 최종 native 실행에서 해당 단계와 이후 설치본 검사를 통과했다.
+
+## 최종 검증 결과
+
+검증 소스: `06f4aa074cd90b9f5493baaefc018ca5c94067de` / protocol 24.
+마지막 기록 커밋은 이 문서만 변경하며 실행 코드·설정·검사는 위 소스와 같다.
+
+- Linux/WSL: 전체 `go test -race -count=1 ./...` 50개 package와 기존 `check:static` 통과.
+  설치본 9개 시나리오와 실제 Chromium dashboard 4개 시나리오도 통과했다.
+- 실제 프레임워크: Linux/WSL의 Nuxt 4.6.4 기본/no-fork, Node watch reload,
+  Uvicorn reload/workers 등 7개 사례에서 실행 ID 유지, API stop 및 종료 후 소유
+  프로세스·포트 정리를 확인했다.
+- [Unix validation](https://github.com/jinyongp/devtools/actions/runs/41782166071):
+  같은 소스에서 완료·성공. 24개 job 통과. macOS arm64/amd64 및 Linux arm64/amd64
+  설치본, native Go race, 읽기 전용 query/doctor, 실제 proxy/browser 검증을 포함한다.
+  명시적으로 선택하지 않은 live provider 2개와 성능 측정 1개는 기존 opt-in 규칙으로 제외했다.
+- [Windows platform boundaries](https://github.com/jinyongp/devtools/actions/runs/41782071113):
+  같은 소스의 full 실행 완료·성공, 최종 23개 job 통과. amd64/arm64의 실행·Job,
+  CLI·설치본·실제 Chromium, amd64 race 및 installer 검증을 포함한다.
+- Windows의 기존 .NET FileShareNone/PowerShell interop 검사는 첫 실행에서 종료 코드 1로
+  실패했고, 소스 변경 없이 해당 실패 lane을 재실행해 1.12초에 통과했다. 첫 실패의
+  상세 원인은 stderr 미수집으로 확정하지 않는다.
+
+## 작업 커밋
+
+| 커밋 | 작업 |
+| --- | --- |
+| `9823991` | Unix foreground/managed 소유 그룹 정리 공통화 |
+| `c9a4837` | foreground 실행 등록과 인증 제어 공통화 |
+| `c5c41c3` | protocol 24 공개 계약·CLI·dashboard·Skill 통합 |
+| `60de008` | foreground 선택 보존과 현재 서비스 목록 범위 수정 |
+| `fd94247` | 시작 관측 실패 뒤 소유 범위 정리 검증 |
+| `e4bf03c` | 많은 표시 열 및 빈 목록의 공통 text 표시 |
+| `d20fc5f` | stop 응답 유실과 효과 불명 판정 공통화 |
+| `653dac7` | macOS native 프로세스 관측 회귀 검사 |
+| `cae13e3` | 좀비만 남은 Unix 그룹의 신호 결과 재검증 |
+| `5d249fc` | macOS에서 사라진 PID와 조회 오류 구분 |
+| `06f4aa0` | 실제 시작 공개 대기 및 fixture 포트 범위 정렬 |

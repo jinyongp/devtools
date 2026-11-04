@@ -50,11 +50,15 @@ func (r Record) publicContract() Record {
 		r.Cleanup.State, r.Cleanup.Reason = "unknown", "controller_lost"
 	case r.EndedAt != nil:
 		r.Control.State, r.Control.Reason = "ended", "execution_ended"
-		r.Control.Restart = r.Command != ""
+		r.Control.Restart = r.Command != "" && !unverifiedOwnedCleanup(r)
 	case r.controlObserved:
 		r.Control = ControlStatus{State: "available", Reason: "authenticated_controller", Stop: true, Restart: r.Command != "", Check: r.ReadyConfigured && r.State == "running"}
 	}
 	return r
+}
+
+func unverifiedOwnedCleanup(r Record) bool {
+	return r.Cleanup.Scope != "" && r.Cleanup.Scope != "unknown" && (r.State == "interrupted" || r.Cleanup.State == "unknown")
 }
 
 // Every record transport exposes the same shape. Saved operation results retain

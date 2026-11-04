@@ -127,3 +127,15 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
   Nuxt 4.6.4 기본 foreground/managed 및 no-fork foreground.
   foreground도 process API로 종료하고, reload 후 같은 실행 ID와 active count 1을 확인했다.
   7개 모두 소유 프로세스·포트가 정리됐고 별도 연구용 강제 정리는 필요 없었다.
+
+### 통합 리뷰 수정 4 — stop 응답 유실과 정리 판정
+
+- stop 응답이 유실되고 terminal 기록에 cleanup 불명이 공개된 경로가 성공을 반환하는
+  결함을 회귀 검사로 재현했다. 일반 완료·응답 유실·재시도에 같은 종료 판정을 적용했다.
+  소유 범위의 정리가 불명인 실행에는 restart capability도 제공하지 않는다.
+- complete/unknown 기록을 공개한 뒤 응답을 비워 실제 RPC decode 실패를 일으키고,
+  같은 요청을 두 번 실행해 검증한 성공과 효과 불명 실패가 각각 유지되는지 확인했다.
+  제어기 손실·대기 중 stop·과거 기록 호환성을 포함한 관련 race 검사 통과.
+- `e4bf03c`의 전체 Go race 49개 package, 기존 정적 검사, 설치본 9개 시나리오
+  (기존 8개 + proxy_auto)가 통과했다. 추가 stop 수정 소스의 실제 Chromium
+  dashboard 4개 시나리오도 통과했다. 최종 플랫폼 검증은 기존 native CI에서 확인한다.

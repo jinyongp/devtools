@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -93,6 +94,63 @@ func TestUnacknowledgedStopKeepsUnknownEffects(t *testing.T) {
 	result, condition := store.Apply(context.Background(), Request{Action: "stop", ID: record.ID, RequestID: tasks.ID()})
 	if condition == nil || condition.Code != "process_cleanup_unknown" || condition.Details["effects"] != "unknown" || result.Item.EndedAt != nil || result.Item.Cleanup.State != "unknown" {
 		t.Fatalf("a missing stop acknowledgement became a known no-effect outcome: %#v %v", result, condition)
+	}
+}
+
+func TestLostStopReplyPreservesPublishedCleanupOutcome(t *testing.T) {
+	for _, cleanup := range []string{"complete", "unknown"} {
+		t.Run(cleanup, func(t *testing.T) {
+			store := Store{Data: privateTempDir(t)}
+			now := time.Now().UTC()
+			record := Record{ID: tasks.ID(), Mode: "foreground", Profile: "app", Directory: privateTempDir(t), Command: "web", State: "running", CreatedAt: now, StartedAt: &now, Cleanup: initialCleanup()}
+			lease, condition := store.prepareLaunch(record)
+			if condition != nil {
+				t.Fatal(condition)
+			}
+			release := sync.OnceFunc(func() {
+				if err := lease.unlockClose(); err != nil {
+					t.Error(err)
+				}
+			})
+			defer release()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				terminal := record
+				ended := time.Now().UTC()
+				terminal.EndedAt, terminal.State = &ended, "stopped"
+				terminal.Cleanup.State = cleanup
+				if cleanup == "unknown" {
+					terminal.State, terminal.Reason = "failed", "process_cleanup_incomplete"
+				}
+				if err := writePrivate(store.path(record.ID, "record.json"), terminal); err != nil {
+					t.Error(err)
+				}
+				release()
+				// The terminal record is durable, but the client cannot decode
+				// the acknowledgement from this interrupted response.
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+			if err := writePrivate(store.path(record.ID, "control.json"), control{ID: record.ID, Address: server.URL, Token: strings.Repeat("c", 64)}); err != nil {
+				t.Fatal(err)
+			}
+			request := Request{Action: "stop", ID: record.ID, RequestID: tasks.ID()}
+			for attempt := range 2 {
+				result, condition := store.Apply(context.Background(), request)
+				if result.Item.ID != record.ID || !result.Changed || result.Replayed != (attempt > 0) || result.Item.Cleanup.State != cleanup {
+					t.Fatalf("lost stop reply changed its published result: %#v %v", result, condition)
+				}
+				if result.Item.publicContract().Control.Restart != (cleanup == "complete") {
+					t.Fatalf("restart capability ignored the cleanup outcome: %#v", result.Item.Control)
+				}
+				if cleanup == "unknown" {
+					if condition == nil || condition.Code != "process_cleanup_unknown" || condition.Details["effects"] != "unknown" {
+						t.Fatalf("lost reply promoted unverified cleanup to success: %#v %v", result, condition)
+					}
+				} else if condition != nil {
+					t.Fatalf("verified cleanup became an unknown outcome: %#v %v", result, condition)
+				}
+			}
+		})
 	}
 }
 

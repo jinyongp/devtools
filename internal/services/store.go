@@ -1307,15 +1307,20 @@ func sameExecutionEnvironment(record Record, env string, inject bool, override *
 	// selection, but do not guess equivalence when explicit selection changes.
 	return (record.EnvOverride != nil) == (override != nil)
 }
+func (s Store) stoppedResult(ctx context.Context, r Record, changed bool) (Result, *protocol.Error) {
+	out := Result{Item: r, Changed: changed}
+	if unverifiedOwnedCleanup(r) {
+		return out, cleanupUnknown(r)
+	}
+	if r.Cleanup.State == "complete" && !s.leaseFree(ctx, r.ID) {
+		return out, failure("process_pending")
+	}
+	return out, nil
+}
+
 func (s Store) stop(ctx context.Context, r Record) (Result, *protocol.Error) {
 	if r.EndedAt != nil {
-		if r.Cleanup.Scope != "" && r.Cleanup.Scope != "unknown" && (r.State == "interrupted" || r.Cleanup.State == "unknown") {
-			return Result{Item: r}, cleanupUnknown(r)
-		}
-		if r.Cleanup.State == "complete" && !s.leaseFree(ctx, r.ID) {
-			return Result{Item: r}, failure("process_pending")
-		}
-		return Result{Item: r}, nil
+		return s.stoppedResult(ctx, r, false)
 	}
 	if _, e := s.rpc(ctx, r.ID, "stop"); e != nil {
 		current, changed, reconcileErr := s.terminalizeLost(ctx, r, false)
@@ -1326,10 +1331,7 @@ func (s Store) stop(ctx context.Context, r Record) (Result, *protocol.Error) {
 			// r was active when this stop began. A terminal record observed
 			// after a lost reply is still a known transition, even when the
 			// supervisor persisted it before reconciliation read it.
-			if current.Cleanup.Scope != "" && current.Cleanup.Scope != "unknown" && current.State == "interrupted" {
-				return Result{Item: current, Changed: true}, cleanupUnknown(current)
-			}
-			return Result{Item: current, Changed: true}, nil
+			return s.stoppedResult(ctx, current, true)
 		}
 		// A lost RPC reply does not prove the controller rejected stop. Keep
 		// uncertainty while its lease is held; never report no effects here.
@@ -1354,10 +1356,7 @@ func (s Store) stop(ctx context.Context, r Record) (Result, *protocol.Error) {
 				return Result{}, e
 			}
 			if current.EndedAt != nil && s.leaseFree(ctx, r.ID) {
-				if current.Cleanup.Scope != "unknown" && current.Cleanup.State == "unknown" {
-					return Result{Item: current, Changed: true}, cleanupUnknown(current)
-				}
-				return Result{Item: current, Changed: true}, nil
+				return s.stoppedResult(ctx, current, true)
 			}
 		}
 	}

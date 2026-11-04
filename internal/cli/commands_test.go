@@ -142,11 +142,18 @@ func TestLiteralProjectCommandNames(t *testing.T) {
 		if code != 0 || stderr != "" || json.Unmarshal([]byte(out), &response) != nil || response.Data.Item.Name != name {
 			t.Fatalf("inspect lost key %q: %d %q %q", name, code, out, stderr)
 		}
-		for _, prefix := range [][]string{{"run"}, {"command", "inspect"}, {"process", "start"}, {"project", "up"}, {"project", "restart"}, {"project", "logs"}} {
+		for _, prefix := range [][]string{{"run"}, {"command", "inspect"}, {"process", "start"}, {"project", "up"}} {
 			words := append(append([]string{}, prefix...), name)
 			code, out, stderr := invoke(t, app, strings.Join(words, "\x00")+"\x00", "__complete")
 			if code != 0 || out != name+"\n" || stderr != "" {
 				t.Fatalf("completion lost key %q: %d %q %q", words, code, out, stderr)
+			}
+		}
+		for _, operation := range []string{"status", "down", "restart", "logs"} {
+			words := []string{"project", operation, name}
+			code, out, stderr := invoke(t, app, strings.Join(words, "\x00")+"\x00", "__complete")
+			if code != 0 || out != "" || stderr != "" {
+				t.Fatalf("completion suggested inactive command %q: %d %q %q", words, code, out, stderr)
 			}
 		}
 	}

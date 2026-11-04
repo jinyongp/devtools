@@ -187,23 +187,15 @@ func (s Store) ReadCurrentHeld(ctx context.Context) (*State, *protocol.Error) {
 // CompletionIDs reads a stable best-effort snapshot without maintenance or
 // profile locks. V3 head changes retry once instead of exposing a torn view.
 func (s Store) CompletionIDs(kind, workstream string) ([]string, *protocol.Error) {
+	return s.CompletionIDsFor(kind, workstream, CompletionFilter{})
+}
+
+func (s Store) CompletionIDsFor(kind, workstream string, filter CompletionFilter) ([]string, *protocol.Error) {
 	state, e := s.completionState()
 	if e != nil {
 		return nil, e
 	}
-	ids := []string{}
-	if kind == "run" {
-		for id := range state.Runs {
-			ids = append(ids, id)
-		}
-		return ids, nil
-	}
-	for id, item := range state.Items {
-		if item.Kind == kind && (workstream == "" || kind != "task" || item.Workstream == workstream) {
-			ids = append(ids, id)
-		}
-	}
-	return ids, nil
+	return state.completionIDs(kind, workstream, filter), nil
 }
 func (s Store) Profiles(ctx context.Context) ([]string, *protocol.Error) {
 	release, gateErr := maintenance.AcquireShared(ctx, maintenance.Root(s.Directory))

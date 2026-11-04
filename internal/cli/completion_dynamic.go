@@ -2,27 +2,41 @@ package cli
 
 import (
 	"context"
-	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
+	"github.com/jinyongp/devtools/internal/completion"
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/paths"
+	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
 )
 
 var completionIdentifier = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]{0,255}$`)
 
+type completionCandidate struct{ Value, Description string }
+
+type completionQuery struct {
+	Context       context.Context
+	Command       *Command
+	Options       map[string]string
+	Arguments     []string
+	Field, Prefix string
+	Descriptions  map[string]string
+}
+
 // The private shell protocol accepts NUL-delimited words through stdin, including
 // the current (possibly empty) token. It never echoes input or diagnostics.
-func (a *App) completeDynamic(ctx context.Context, streams IO) int {
+func (a *App) completeDynamic(ctx context.Context, streams IO, describe bool) int {
 	if streams.In == nil || ctx.Err() != nil {
 		return 0
 	}
@@ -31,9 +45,9 @@ func (a *App) completeDynamic(ctx context.Context, streams IO) int {
 			return 0
 		}
 	}
-	ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(ctx, completion.Budget)
 	defer cancel()
-	result := make(chan []string, 1)
+	result := make(chan []completionCandidate, 1)
 	go func() {
 		data, err := io.ReadAll(io.LimitReader(streams.In, 65537))
 		if err != nil || len(data) == 0 || len(data) > 65536 || data[len(data)-1] != 0 {
@@ -45,13 +59,17 @@ func (a *App) completeDynamic(ctx context.Context, streams IO) int {
 			result <- nil
 			return
 		}
-		result <- a.dynamicCandidates(words)
+		result <- a.completionCandidates(ctx, words, describe)
 	}()
 	select {
 	case <-ctx.Done():
 	case candidates := <-result:
 		for _, candidate := range candidates {
-			if _, err := io.WriteString(streams.Out, candidate+"\n"); err != nil {
+			line := candidate.Value
+			if describe {
+				line += "\t" + strings.Join(strings.Fields(candidate.Description), " ")
+			}
+			if _, err := io.WriteString(streams.Out, line+"\n"); err != nil {
 				return 1
 			}
 		}
@@ -62,6 +80,15 @@ func (a *App) completeDynamic(ctx context.Context, streams IO) int {
 // Parse only enough of the incomplete command to identify its candidate source.
 // Execution parsers and handlers are deliberately not called by completion.
 func (a *App) dynamicCandidates(words []string) []string {
+	items := a.completionCandidates(context.Background(), words, false)
+	var out []string
+	for _, item := range items {
+		out = append(out, item.Value)
+	}
+	return out
+}
+
+func (a *App) completionCandidates(ctx context.Context, words []string, all bool) []completionCandidate {
 	if len(words) == 0 {
 		return nil
 	}
@@ -69,11 +96,11 @@ func (a *App) dynamicCandidates(words []string) []string {
 	past := words[:len(words)-1]
 	rootEnd := 0
 	rootSelection := map[string]string{}
-	formatCandidates := func(prefix, replacement string) []string {
-		out := []string{}
+	formatCandidates := func(prefix, replacement string) []completionCandidate {
+		out := []completionCandidate{}
 		for _, value := range []string{"auto", "text", "json"} {
 			if strings.HasPrefix(value, prefix) {
-				out = append(out, replacement+value)
+				out = append(out, completionCandidate{Value: replacement + value, Description: "Output format"})
 			}
 		}
 		return out
@@ -82,6 +109,9 @@ func (a *App) dynamicCandidates(words []string) []string {
 		name, value, inline := strings.Cut(past[rootEnd], "=")
 		if name != "--format" && name != "--isolated-root" {
 			break
+		}
+		if _, exists := rootSelection[strings.TrimPrefix(name, "--")]; exists {
+			return nil
 		}
 		rootEnd++
 		if !inline {
@@ -97,11 +127,12 @@ func (a *App) dynamicCandidates(words []string) []string {
 		if value == "" || name == "--format" && value != "auto" && value != "text" && value != "json" {
 			return nil
 		}
-		if name == "--isolated-root" {
-			rootSelection["isolated-root"] = value
-		}
+		rootSelection[strings.TrimPrefix(name, "--")] = value
 	}
 	if rootEnd == len(past) && strings.HasPrefix(prefix, "--format=") {
+		if _, exists := rootSelection["format"]; exists {
+			return nil
+		}
 		return formatCandidates(strings.TrimPrefix(prefix, "--format="), "--format=")
 	}
 	past = past[rootEnd:]
@@ -116,6 +147,9 @@ func (a *App) dynamicCandidates(words []string) []string {
 		}
 	}
 	if cmd == nil {
+		if all {
+			return a.completionChildren(past, prefix, rootSelection)
+		}
 		return nil
 	}
 	opts := map[string]Option{}
@@ -123,8 +157,10 @@ func (a *App) dynamicCandidates(words []string) []string {
 		opts["--"+opt.Name] = opt
 	}
 	selected := rootSelection
+	values := map[string][]string{}
 	pending := ""
 	positionals := 0
+	arguments := []string{}
 	positionalValues := map[string]bool{}
 	firstArgument := ""
 	for _, word := range past[consumed:] {
@@ -133,7 +169,11 @@ func (a *App) dynamicCandidates(words []string) []string {
 			if word == "=" {
 				continue
 			}
+			if !validOption(opts["--"+pending], word) {
+				return nil
+			}
 			selected[pending] = word
+			values[pending] = append(values[pending], word)
 			pending = ""
 			continue
 		}
@@ -141,13 +181,26 @@ func (a *App) dynamicCandidates(words []string) []string {
 			return nil
 		}
 		if strings.HasPrefix(word, "-") {
+			if word == "--help" || word == "-h" {
+				return nil
+			}
 			name, value, equal := strings.Cut(word, "=")
 			opt, exists := opts[name]
 			if !exists {
 				return nil
 			}
+			if _, exists := selected[opt.Name]; exists && !opt.Repeatable {
+				return nil
+			}
 			if equal {
+				if opt.Boolean && value != "true" && value != "false" {
+					return nil
+				}
+				if !validOption(opt, value) {
+					return nil
+				}
 				selected[opt.Name] = value
+				values[opt.Name] = append(values[opt.Name], value)
 			} else if !opt.Boolean {
 				pending = opt.Name
 			} else {
@@ -158,9 +211,19 @@ func (a *App) dynamicCandidates(words []string) []string {
 		if positionals == 0 {
 			firstArgument = word
 		}
+		if cmd.UniqueArgs && positionalValues[word] {
+			return nil
+		}
 		positionalValues[word] = true
+		arguments = append(arguments, word)
 		positionals++
 		if cmd.Name == "command run" {
+			return nil
+		}
+		if len(cmd.Arguments) == 0 || positionals > len(cmd.Arguments) && !cmd.Arguments[len(cmd.Arguments)-1].Repeatable {
+			return nil
+		}
+		if !validArgument(cmd.Arguments[min(positionals-1, len(cmd.Arguments)-1)], word) {
 			return nil
 		}
 	}
@@ -168,37 +231,82 @@ func (a *App) dynamicCandidates(words []string) []string {
 	if pending == "" && strings.HasPrefix(prefix, "--") {
 		name, value, equal := strings.Cut(prefix, "=")
 		opt, exists := opts[name]
-		if !equal || !exists || opt.Boolean {
+		if equal && !exists || !equal && !all {
 			return nil
 		}
-		pending, prefix, replacement = opt.Name, value, name+"="
+		if equal {
+			if _, used := selected[opt.Name]; used && !opt.Repeatable {
+				return nil
+			}
+			pending, prefix, replacement = opt.Name, value, name+"="
+		}
 	}
 	source := completionSource("")
 	var choices []string
+	query := completionQuery{Context: ctx, Command: cmd, Options: selected, Arguments: arguments, Field: pending, Prefix: prefix, Descriptions: map[string]string{}}
+	candidates := []completionCandidate{}
+	if all && pending == "" {
+		for _, option := range cmd.Options {
+			if _, exists := selected[option.Name]; exists && !option.Repeatable {
+				continue
+			}
+			if !completionOptionAllowed(option, selected) {
+				continue
+			}
+			input := make(map[string]string, len(selected)+1)
+			for name, value := range selected {
+				input[name] = value
+			}
+			input[option.Name] = "true"
+			unknown := ""
+			if !option.Boolean {
+				unknown = option.Name
+			}
+			if completionInputPossible(*cmd, input, arguments, unknown) {
+				candidates = append(candidates, completionCandidate{Value: "--" + option.Name, Description: option.Description})
+			}
+		}
+		candidates = append(candidates, completionCandidate{Value: "--help", Description: "Show help"}, completionCandidate{Value: "-h", Description: "Show help"})
+		if len(past) == consumed {
+			candidates = append(candidates, a.completionChildren(past, prefix, selected)...)
+		}
+	}
+	if all && pending == "" && (cmd.Name == "help" || cmd.Name == "schema") {
+		for _, child := range a.completionChildren(arguments, prefix, selected) {
+			if !strings.HasPrefix(child.Value, "-") {
+				candidates = append(candidates, child)
+			}
+		}
+		return filterCompletionCandidates(candidates, prefix)
+	}
 	if pending != "" {
 		opt := opts["--"+pending]
-		source, choices = opt.Completion, patternChoices(opt.Pattern)
-		// Restart's selected environment belongs to its recorded execution,
-		// never the caller's current project. Without that scope stay silent.
-		if cmd.Name == "process restart" && (source == completeEnv || source == completeSelection) {
+		if !completionOptionAllowed(opt, selected) {
 			return nil
 		}
+		source, choices = opt.Completion, patternChoices(opt.Pattern)
+		if opt.Boolean {
+			choices = []string{"true", "false"}
+		}
+		// Restart's selected environment belongs to its recorded execution,
+		// never the caller's current project. Without that scope stay silent.
 	} else {
 		if len(cmd.Arguments) == 0 || strings.HasPrefix(prefix, "-") {
-			return nil
+			return filterCompletionCandidates(candidates, prefix)
 		}
 		index := positionals
 		if index >= len(cmd.Arguments) {
 			index = len(cmd.Arguments) - 1
 			if !cmd.Arguments[index].Repeatable {
-				return nil
+				return filterCompletionCandidates(candidates, prefix)
 			}
 		}
 		arg := cmd.Arguments[index]
 		source = arg.Completion
+		choices = patternChoices(arg.Pattern)
 	}
 	if source == "" && len(choices) == 0 {
-		return nil
+		return filterCompletionCandidates(candidates, prefix)
 	}
 	// Task --dir selects execution/query locations; profile resolution uses cwd.
 	if strings.HasPrefix(cmd.Name, "task ") {
@@ -217,10 +325,8 @@ func (a *App) dynamicCandidates(words []string) []string {
 	}
 	names := choices
 	if source != "" {
-		names = a.completionNames(string(source), selected)
+		names = a.completionNames(string(source), query)
 	}
-	sort.Strings(names)
-	out := []string{}
 	for _, name := range names {
 		if pending == "depends-on" && name == firstArgument || cmd.UniqueArgs && pending == "" && positionalValues[name] {
 			continue
@@ -235,34 +341,96 @@ func (a *App) dynamicCandidates(words []string) []string {
 		if !valid || !strings.HasPrefix(name, prefix) {
 			continue
 		}
-		value := replacement + name
-		if len(out) == 0 || out[len(out)-1] != value {
-			out = append(out, value)
+		input, args := selected, append([]string{}, arguments...)
+		if pending != "" {
+			duplicate := false
+			for _, chosen := range values[pending] {
+				duplicate = duplicate || chosen == name
+			}
+			if duplicate {
+				continue
+			}
+			input = make(map[string]string, len(selected)+1)
+			for key, value := range selected {
+				input[key] = value
+			}
+			input[pending] = name
+		} else {
+			args = append(args, name)
 		}
-		if len(out) == 100 {
-			break
+		if completionInputPossible(*cmd, input, args, "") {
+			candidates = append(candidates, completionCandidate{Value: replacement + name, Description: query.Descriptions[name]})
+		}
+	}
+	return filterCompletionCandidates(candidates, words[len(words)-1])
+}
+
+func completionOptionAllowed(option Option, selected map[string]string) bool {
+	return option.Name != "columns" || selected["format"] != "json"
+}
+
+func filterCompletionCandidates(items []completionCandidate, prefix string) []completionCandidate {
+	sort.SliceStable(items, func(i, j int) bool { return items[i].Value < items[j].Value })
+	out := []completionCandidate{}
+	for _, item := range items {
+		if strings.HasPrefix(item.Value, prefix) && (len(out) == 0 || out[len(out)-1].Value != item.Value) {
+			out = append(out, item)
+			if len(out) == 100 {
+				break
+			}
 		}
 	}
 	return out
 }
 
-func (a *App) completionNames(source string, selected map[string]string) []string {
+func (a *App) completionChildren(past []string, prefix string, selected map[string]string) []completionCandidate {
+	items := []completionCandidate{}
+	for _, command := range a.commands {
+		for _, name := range append([]string{command.Name}, command.Aliases...) {
+			parts := strings.Fields(name)
+			if len(parts) > len(past) && strings.Join(parts[:len(past)], " ") == strings.Join(past, " ") {
+				path := strings.Join(parts[:len(past)+1], " ")
+				items = append(items, completionCandidate{Value: parts[len(past)], Description: a.commandSummary(path)})
+			}
+		}
+	}
+	if len(past) == 0 {
+		for _, option := range []completionCandidate{{"--format", "Output format"}, {"--isolated-root", "Independent user paths"}, {"--version", "Show version"}, {"--help", "Show help"}, {"-h", "Show help"}} {
+			if _, exists := selected[strings.TrimPrefix(option.Value, "--")]; !exists {
+				items = append(items, option)
+			}
+		}
+	}
+	return filterCompletionCandidates(items, prefix)
+}
+
+func (a *App) completionNames(source string, query completionQuery) []string {
+	selected := query.Options
 	if source == "process" {
 		store, e := a.serviceStore()
 		if e != nil {
 			return nil
 		}
-		items, e := store.StoredRecords()
+		items, e := store.CompletionRecords(query.Context, services.CompletionSelection{Action: strings.TrimPrefix(query.Command.Name, "process "), Prefix: query.Prefix})
 		if e != nil {
 			return nil
 		}
 		names := []string{}
 		for _, item := range items {
 			names = append(names, item.ID)
+			query.Descriptions[item.ID] = fmt.Sprintf("%s (%s, %s; %s)", item.Command, item.Mode, item.State, item.Profile)
 		}
 		return names
 	}
-	if source == "listener" || source == "route" && selected["global"] == "true" {
+	if source == "listener" {
+		manager, condition := a.proxyStore()
+		if condition != nil {
+			return nil
+		}
+		names, _ := manager.CompletionListeners(query.Context, query.Command.Name == "proxy stop", query.Prefix)
+		return names
+	}
+	if source == "route" && (selected["global"] == "true" || query.Command.Name == "proxy rm") {
 		store, e := a.portStore()
 		if e != nil {
 			return nil
@@ -273,18 +441,11 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 		}
 		names := []string{}
 		if st.Network != nil {
-			if source == "listener" {
-				for _, def := range st.Network.Listeners {
-					names = append(names, def.Name)
-				}
-			} else {
-				for _, def := range st.Network.Routes {
+			for _, def := range st.Network.Routes {
+				if completionRouteAllowed(query.Command.Name, st, def.Ref()) {
 					names = append(names, def.Name)
 				}
 			}
-		}
-		if source == "listener" && len(names) == 0 {
-			names = append(names, "default")
 		}
 		return names
 	}
@@ -293,13 +454,14 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 		if e != nil {
 			return nil
 		}
-		items, e := m.ExposureList(context.Background())
+		items, e := m.CompletionExposures(query.Context, query.Command.Name == "expose stop", query.Prefix)
 		if e != nil {
 			return nil
 		}
 		names := []string{}
 		for _, item := range items {
 			names = append(names, item.ID)
+			query.Descriptions[item.ID] = item.Host + " (" + item.State + ")"
 		}
 		return names
 	}
@@ -340,9 +502,44 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 		if e != nil {
 			return nil
 		}
+		if source == "command" && strings.HasPrefix(query.Command.Name, "project ") && query.Command.Name != "project up" {
+			store, e := a.serviceStore()
+			if e != nil {
+				return nil
+			}
+			action := strings.TrimPrefix(query.Command.Name, "project ")
+			if action == "down" {
+				action = "stop"
+			}
+			items, e := store.CompletionRecords(query.Context, services.CompletionSelection{NavigationSelection: services.NavigationSelection{Profile: p.Profile, Directory: p.Root}, Action: action, ActiveOnly: true})
+			if e != nil {
+				return nil
+			}
+			names := []string{}
+			for _, item := range items {
+				names = append(names, item.Command)
+			}
+			return names
+		}
 		names := []string{}
 		if source == "route" {
+			var state *ports.State
+			if query.Command.Name == "proxy down" {
+				store, condition := a.portStore()
+				if condition != nil {
+					return nil
+				}
+				state, condition = store.Read()
+				if condition != nil {
+					return nil
+				}
+			}
 			for name := range p.Proxies {
+				if state != nil {
+					if instance := state.Find(p.Profile, "", p.Root); instance != nil && !completionRouteAllowed(query.Command.Name, state, network.RouteRef{Scope: "project", Profile: p.Profile, InstanceID: instance.ID, Proxy: name}) {
+						continue
+					}
+				}
 				names = append(names, name)
 			}
 			return names
@@ -367,20 +564,9 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 	}
 	if source == "profile" {
 		names := []string{}
-		for _, path := range []string{data, filepath.Join(filepath.Dir(data), "tasks")} {
-			entries, err := os.ReadDir(path)
-			if err != nil {
-				continue
-			}
-			for _, entry := range entries {
-				if !entry.Type().IsRegular() || !strings.HasSuffix(entry.Name(), ".json") {
-					continue
-				}
-				decoded, err := hex.DecodeString(strings.TrimSuffix(entry.Name(), ".json"))
-				if err == nil && project.ValidProfile(string(decoded)) {
-					names = append(names, string(decoded))
-				}
-			}
+		if catalog, condition := a.profileCatalog(); condition == nil {
+			stored, _ := catalog.CompletionNames(query.Context)
+			names = append(names, stored...)
 		}
 		if p, e := project.Resolve(dir, ""); e == nil {
 			names = append(names, p.Profile)
@@ -388,6 +574,29 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 		return names
 	}
 	p, e := project.Resolve(dir, selected["profile"])
+	if query.Command.Name == "process restart" && (source == "env" || source == "selection") {
+		if len(query.Arguments) == 0 {
+			return nil
+		}
+		store, condition := a.serviceStore()
+		if condition != nil {
+			return nil
+		}
+		records, condition := store.StoredMetadata()
+		if condition != nil {
+			return nil
+		}
+		found := false
+		for _, record := range records {
+			if record.ID == query.Arguments[0] && !record.DetailRetired {
+				p.Profile, e, found = record.Profile, nil, true
+				break
+			}
+		}
+		if !found {
+			return nil
+		}
+	}
 	if e != nil {
 		return nil
 	}
@@ -409,11 +618,20 @@ func (a *App) completionNames(source string, selected map[string]string) []strin
 		if source == "env" {
 			kind = ""
 		}
-		names, _ := (values.ModernStore{Directory: data, Profile: p.Profile}).CompletionNames(kind, selected["env"])
+		names, _ := store.CompletionNames(kind, selected["env"], strings.HasSuffix(query.Command.Name, " unset"))
 		return names
 	}
-	names, _ := (tasks.Store{Directory: filepath.Join(filepath.Dir(data), "tasks"), Profile: p.Profile}).CompletionIDs(source, selected["workstream"])
+	filter := tasks.CompletionFilter{Action: query.Command.CompletionAction, Field: query.Field, Owner: selected["task"]}
+	if len(query.Arguments) > 0 {
+		filter.Target = query.Arguments[0]
+	}
+	names, _ := (tasks.Store{Directory: filepath.Join(filepath.Dir(data), "tasks"), Profile: p.Profile}).CompletionIDsFor(source, selected["workstream"], filter)
 	return names
+}
+
+func completionRouteAllowed(command string, state *ports.State, ref network.RouteRef) bool {
+	activation := state.Activation(ref)
+	return command != "proxy down" || activation == nil || activation.Mode != "disabled"
 }
 
 func (a *App) portCompletionNames(selected map[string]string, declared bool) []string {

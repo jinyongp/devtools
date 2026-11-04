@@ -39,4 +39,9 @@
 - Batch args reject NUL/newline/double-quote/percent. Run `.ps1` with an explicit PowerShell interpreter.
 - PS5.1 may lose native empty/quote argv before devtools sees it. Prefer explicit files when exact bytes matter.
 - PowerShell completion uses literal AST plus UTF-8 NUL stdin; never evaluate dynamic expressions. cmd supports execution only.
+- Shell completion filters common command/option contracts and operation-specific
+  candidates. Reload/regenerate older scripts to use the shared described protocol.
+  Process stop/check/wait candidates use bounded authenticated local status, logs
+  require retained capture, and project actions keep the exact project location.
+  Tab never runs readiness, starts/stops work, unlocks values, or writes storage.
 - Protocol 7 adds the PowerShell shell/platform diagnostics; envelope stays 1 and TOML stays versionless. Run options still precede the configured command name.

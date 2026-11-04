@@ -99,6 +99,12 @@ func TestExposureBridgeAuthPinsSourceRevocationAndSecretRedaction(t *testing.T) 
 	if item.State != "active" || item.URL != "https://public.example" || provider.starts.Load() != 1 {
 		t.Fatal(string(b))
 	}
+	if items, issue := m.CompletionExposures(ctx, true, item.ID[:12]); issue != nil || len(items) != 1 || items[0].ID != item.ID {
+		t.Fatal("controlled exposure missing from stop completion", items, issue)
+	}
+	if provider.starts.Load() != 1 || provider.stops.Load() != 0 {
+		t.Fatal("completion changed provider lifecycle")
+	}
 	call := func(path, authority, auth string) *http.Response {
 		t.Helper()
 		r, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d%s", item.OriginPort, path), nil)
@@ -171,6 +177,12 @@ func TestExposureBridgeAuthPinsSourceRevocationAndSecretRedaction(t *testing.T) 
 	tracked.waitOpen(t, 0)
 	if _, e := m.ExposeStop(ctx, item.ID, tasks.ID()); e != nil {
 		t.Fatal(e)
+	}
+	if items, issue := m.CompletionExposures(ctx, true, ""); issue != nil || len(items) != 0 {
+		t.Fatal("stopped exposure suggested for stop", items, issue)
+	}
+	if items, issue := m.CompletionExposures(ctx, false, ""); issue != nil || len(items) != 1 || items[0].ID != item.ID {
+		t.Fatal("exposure history missing from inspection completion", items, issue)
 	}
 	if provider.stops.Load() != 1 {
 		t.Fatal("provider not stopped")

@@ -48,6 +48,15 @@ func inputRule(pattern string, minimum, maximum, actual int) (string, map[string
 
 var plainPatternChoice = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
+func validOption(option Option, value string) bool {
+	length := utf8.RuneCountInString(value)
+	return length >= option.MinLength && (option.MaxLength == 0 || length <= option.MaxLength) && (option.Pattern == "" || regexp.MustCompile(option.Pattern).MatchString(value))
+}
+
+func validArgument(argument Argument, value string) bool {
+	return value != "" && (argument.Pattern == "" || regexp.MustCompile(argument.Pattern).MatchString(value))
+}
+
 // Only explicit finite literal alternatives are choices. Identifier/UUID/range
 // patterns validate input but cannot tell completion which entities exist.
 func patternChoices(pattern string) []string {
@@ -168,8 +177,8 @@ func parseRequest(command Command, tokens []string) (Request, *protocol.Error) {
 			}
 		}
 		for _, value := range values {
-			length := utf8.RuneCountInString(value)
-			if length < option.MinLength || (option.MaxLength > 0 && length > option.MaxLength) || (option.Pattern != "" && !regexp.MustCompile(option.Pattern).MatchString(value)) {
+			if !validOption(option, value) {
+				length := utf8.RuneCountInString(value)
 				rule, facts := inputRule(option.Pattern, option.MinLength, option.MaxLength, length)
 				return request, invalid("invalid_value", "Invalid option --"+option.Name+". "+rule, option.Name, request.OptionOffsets[option.Name], facts)
 			}
@@ -187,9 +196,6 @@ func parseRequest(command Command, tokens []string) (Request, *protocol.Error) {
 	}
 	if repeatable == -1 && len(request.Args) > len(command.Arguments) {
 		return request, invalid("conflicting_inputs", "Unexpected positional arguments; inspect this command's usage.", "args", len(tokens)-1, nil)
-	}
-	validArgument := func(argument Argument, value string) bool {
-		return value != "" && (argument.Pattern == "" || regexp.MustCompile(argument.Pattern).MatchString(value))
 	}
 	if command.UniqueArgs {
 		seen := map[string]bool{}

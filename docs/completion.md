@@ -76,27 +76,49 @@ PowerShell single quote 규칙으로 escape합니다. cmd에는 자동완성 eng
 
 | 입력 위치 | 동적 후보 |
 | --- | --- |
-| `--profile` | 값·task 저장소와 현재 프로젝트의 profile 이름 |
+| `--profile` | 값·task·port·process 저장소와 현재 프로젝트의 profile 이름 |
 | 값 명령·`command run`·`run`·`process start`의 `--env`, `env remove` | 선택한 profile의 env 이름 |
 | `var get/set/unset`, `sec set/unset` | 선택한 profile·env에서 사용할 수 있는 키 이름 |
-| `command inspect/explain/update/remove/rename`, `command run`, `run`, `process start`, `doctor`, `project up/status/restart/logs/down` | `devtools.toml`에 정의한 명령 이름. rename은 첫 번째 인자만 해당 |
+| `command inspect/explain/update/remove/rename`, `command run`, `run`, `process start`, `doctor`, `project up` | `devtools.toml`에 정의한 명령 이름. rename은 첫 번째 인자만 해당 |
+| `project status/down/restart/logs` | 같은 프로젝트 위치의 현재 실행. down/restart는 해당 제어 가능 여부, logs는 보존 중인 캡처를 반영 |
 | `config tool update/remove`, `config preset update/remove` | 해당 프로젝트에 선언한 tool·preset 이름 |
 | `profile inspect`, `profile diff`의 양쪽 인자 | 저장된 profile과 현재 프로젝트의 profile 이름 |
 | `port allocate` | 선택한 실행 위치에 선언한 포트 이름 |
 | `port show/check/release` | 선택한 실행 위치에 남아 있는 할당 이름 |
 | `instance move/remove`, port·instance의 `--instance` | 선택한 profile의 instance alias와 `id:ID` |
-| `process status/stop/restart/logs/check/wait` | supervisor를 호출하지 않고 읽은 저장된 execution ID |
+| `process status` | 조회 가능한 저장된 execution ID. 종료 이력도 포함 |
+| `process stop/restart` | 인증된 현재 제어 가능 여부에 맞는 ID. restart는 정리가 확인된 종료 실행도 포함 |
+| `process check/wait` | 실행 중이며 준비 검사가 설정되고 현재 제어할 수 있는 ID |
+| `process logs` | 로그 캡처를 요청했고 보존 기간이 지나지 않은 ID |
 | `bundle set/rename/remove`, `import --bundle` | 선택한 profile의 bundle 이름. rename은 첫 번째 인자만 해당 |
 | 실행·진단·값 조회의 `--bundle` | `all`, `none`, 선택한 profile의 bundle 이름 |
 | `bundle set --key` | 선택한 profile의 변수·secret 이름. env에만 존재하는 키도 포함하며 값과 내부 ID는 제외 |
 | `--output`, `--mode`, task `--state` 등 고정 선택 옵션 | 해당 옵션의 검증 정의에 있는 허용값 |
-| task·workstream·validation의 ID 인수 | 해당 종류의 ID |
-| `--workstream`, `--task`, `--task-ids`, `--validation-ids`, `--depends-on` | 해당 관계에 맞는 ID |
-| `task checkpoint`, `task release`, `task checkpoint list` | 실행 run ID |
+| task·workstream·validation의 ID 인수 | 해당 종류의 ID. 변경 명령은 claim·현재 run·lifecycle 전이 조건을 반영 |
+| `--workstream`, `--task`, `--task-ids`, `--validation-ids`, `--depends-on` | 선택한 소유 범위에 맞는 ID. 의존 관계는 자기 자신·순환·다른 workstream을 제외 |
+| `task checkpoint/release` | 진행 중인 run ID. `checkpoint list`는 종료 이력도 포함 |
+| `proxy stop --listener` | 현재 실행 중인 listener 이름. status/logs/configure는 저장된 선언도 포함 |
+| `expose stop` | 현재 로컬 제어기로 종료할 수 있는 exposure ID. status는 이력도 포함 |
 
 커서 앞에 입력한 `--profile`·`--env`를 반영하며, profile을 생략하면 현재 프로젝트를
 사용합니다. `command inspect --dir`과 `process start --dir`은 지정한 프로젝트의 명령을 제안합니다.
 `task --workstream`으로 범위를 정하면 해당 workstream의 task ID를 제안합니다.
+`var/sec unset --env local`은 local에 실제 슬롯이 있는 키만 제안합니다.
+get은 common에서 상속한 키도 제안합니다. process의 ID 명령은 현재 디렉터리에
+종속되지 않으며, 실행 설명에 공개 명령 이름·mode·state·profile을 표시합니다.
+
+```text
+dvt process stop <Tab>             # 현재 종료 가능한 실행
+dvt process check <Tab>            # 준비 검사를 실행할 수 있는 실행
+dvt process logs <Tab>             # 보존 중인 캡처가 있는 실행
+dvt project down <Tab>             # 현재 프로젝트에서 종료 가능한 명령
+dvt var unset --env local <Tab>    # local의 실제 슬롯
+```
+
+이미 입력한 단일 옵션은 다시 제안하지 않습니다. 반복 선택의 기존 값과 이미 고른
+프로젝트 명령도 제외합니다. `--stdin` 뒤의 `--file/--value`, `--proxy` 뒤의
+`--no-proxy`처럼 함께 쓸 수 없는 후보는 기존 입력 계약에 따라 제외합니다.
+명시한 `false`도 계약대로 처리합니다. 나중에 필수 입력을 보완할 수 있는 후보는 유지합니다.
 
 예를 들어 `devtools var get --env local ` 뒤에서 Tab을 누르면 `local`에서 사용할 수 있는
 변수 키를 고를 수 있습니다. `devtools task show ` 뒤에서는 task ID를 고릅니다.
@@ -106,18 +128,20 @@ devtools 옵션을 완성합니다. 이름 뒤는 자식 인자 영역이므로 
 후보를 제안하지 않습니다. 이전 v0.22.3에서는 `--` 뒤부터 후보를 생략합니다.
 bash 자동완성은 공백과 셸 문법 문자를 escape해 이름을 하나의 인수로 전달합니다.
 
-후보에는 이름과 ID만 포함합니다. 변수·secret의 값, task 본문, 실행 점유 증명은
+후보와 설명에는 공개 이름·ID·상태만 포함합니다. 변수·secret의 값, task 본문, 실행 점유 증명은
 자동완성으로 노출하지 않습니다. 값을 받는 일반 옵션 다음에는 직접 값을 입력하며,
 `--`부터는 실행할 자식 명령의 인수로 취급합니다.
 
 새 이름을 만드는 `command add`, `config tool/preset add`, `env create`, rename의 새 이름과
 새 작업의 `--request-id`에는 기존 항목을 제안하지 않습니다. `process restart --env/--bundle`은
-저장된 실행의 profile을 상속하므로 현재 디렉터리 기준 후보를 제안하지 않습니다.
+저장된 실행의 profile에서 env/bundle 후보를 제안합니다. ID를 확인할 수 없으면 생략합니다.
 값 전달 request/execution/runner와 cleanup plan/archive ID는 후보 공급자에 포함하지 않습니다.
 인증이나 복구 범위를 추측하지 않고 필요한 ID는 해당 조회 결과에서 사용하세요.
 `--expected-run`도 해당 task의 조회에서 확인한 현재 run ID를 직접 사용합니다.
 
-조회는 저장된 스냅샷을 읽고, 데이터·캐시를 변경하지 않습니다. 입력한 접두사에 맞는
+조회는 저장된 스냅샷을 읽고, 현재 제어 가능 여부가 필요한 후보에만 인증된 로컬
+status 조회를 수행합니다. 앱·준비 검사·외부 provider를 실행하거나 데이터·캐시를
+변경하지 않습니다. 입력한 접두사에 맞는
 후보를 정렬해 최대 100개 반환합니다. 조회가 200ms를 넘거나 저장소를 읽을 수 없으면
 동적 후보를 생략합니다. 수정·삭제한 이름은 다음 조회에 반영됩니다.
 
@@ -128,9 +152,11 @@ bash 자동완성은 공백과 셸 문법 문자를 escape해 이름을 하나�
 이 메타데이터는 내부용이며 공개 JSON schema에는 추가되지 않습니다.
 
 공통 `__complete` 엔진이 커서의 인자 위치·옵션·별칭과 선택된 dir/profile/env를 해석하고,
-해당 후보 공급자가 선언 또는 수동적인 저장소 snapshot에서 식별자만 조회합니다.
+해당 후보 공급자가 선언·수동적인 저장소 snapshot·제한된 로컬 status에서 공개 메타데이터를 조회합니다.
 정렬·접두사 필터·중복 제거·100개 제한·200ms 예산은 엔진이 소유합니다.
 고정 선택 옵션은 parser와 공유하는 literal alternatives 판독기로 검증 정의를 재사용합니다.
-셸 adapter는 같은 프로토콜을 호출하고 quoting과 셸 등록을 담당합니다.
+새 adapter는 `__complete --describe`의 같은 필터 결과를 사용하고 quoting·설명·셸 등록만
+담당합니다. 셸별로 옵션이나 대상을 다시 추가하지 않습니다. 이전 이름 전용 프로토콜도
+유지합니다. 기존 셸 파일/세션은 위 설치 방법으로 다시 생성하거나 불러와야 전체 필터가 적용됩니다.
 `./bin/devtools`처럼 경로로 입력했다면 PATH의 다른 설치본 대신 입력한 실행 파일에 조회합니다.
 실행 handler, readiness/네트워크 probe, vault unlock·세션 갱신·migration은 Tab 조회에서 호출하지 않습니다.

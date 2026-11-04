@@ -144,6 +144,9 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 	if _, e := settledNetworkApply(t, ctx, m, "start", "", true, id); e != nil {
 		t.Fatal(e)
 	}
+	if names, issue := m.CompletionListeners(ctx, true, "oth"); issue != nil || len(names) != 1 || names[0] != "other" {
+		t.Fatal("running listener missing from stop completion", names, issue)
+	}
 	if _, e := m.RouteUp(ctx, otherRef, otherProject, nil, hosts.Manager{Data: m.Data, Isolated: true}, tasks.ID()); e != nil {
 		t.Fatal(e)
 	}
@@ -208,6 +211,12 @@ func TestNetworkListenersTLSRedirectAndIndependentLifecycle(t *testing.T) {
 	}
 	if _, e := settledNetworkApply(t, ctx, m, "stop", "default", false, tasks.ID()); e != nil {
 		t.Fatal(e)
+	}
+	if names, issue := m.CompletionListeners(ctx, true, "def"); issue != nil || len(names) != 0 {
+		t.Fatal("stopped listener suggested for stop", names, issue)
+	}
+	if names, issue := m.CompletionListeners(ctx, false, "def"); issue != nil || len(names) != 1 || names[0] != "default" {
+		t.Fatal("stopped listener missing from inspection completion", names, issue)
 	}
 	if _, e := secure.Do(req); e == nil {
 		t.Fatal("stopped TLS socket remained reachable")

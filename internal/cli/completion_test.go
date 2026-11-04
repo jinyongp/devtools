@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,18 +13,26 @@ import (
 
 func TestCompletionScripts(t *testing.T) {
 	a := New("test", "test")
-	// Static script checks use a quiet helper, isolated from installed user data.
+	// Shells call the same real candidate engine as the CLI, isolated from user data.
 	helperDir := privateTempDir(t)
-	if err := os.WriteFile(filepath.Join(helperDir, "devtools"), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+	executable, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
+	for _, name := range []string{"devtools", "dvt"} {
+		if err := os.WriteFile(filepath.Join(helperDir, name), []byte("#!/bin/sh\nexec "+shellQuote(executable)+" -test.run=^TestCompletionScriptHelper$ -- \"$@\"\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("DEVTOOLS_COMPLETION_HELPER", "1")
+	t.Setenv("DEVTOOLS_ISOLATED_ROOT", filepath.Join(helperDir, "store"))
 	t.Setenv("PATH", helperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	// User .zshenv can replace PATH and invoke the installed binary instead.
 	t.Setenv("ZDOTDIR", helperDir)
 	for _, shell := range []string{"bash", "zsh", "fish"} {
 		t.Run(shell, func(t *testing.T) {
 			code, script, stderr := invoke(t, a, "", "completion", shell)
-			if code != 0 || stderr != "" || !strings.Contains(script, "--profile") || !strings.Contains(script, "dvt") {
+			if code != 0 || stderr != "" || !strings.Contains(script, "__complete --describe") || !strings.Contains(script, "dvt") {
 				t.Fatalf("%d %s", code, stderr)
 			}
 			binary, err := exec.LookPath(shell)
@@ -59,6 +68,12 @@ func TestCompletionScripts(t *testing.T) {
 				{[]string{"devtools", "project", "up", "web", ""}, "--no-proxy", false},
 				{[]string{"devtools", "var", "set", "KEY", "--profile", ""}, "", true},
 				{[]string{"devtools", "var", "set", "KEY", "--profile", "demo", ""}, "--value", false},
+				{[]string{"devtools", "var", "set", "KEY", "--profile", "demo", "--pro"}, "", true},
+				{[]string{"devtools", "var", "set", "KEY", "--stdin", "--val"}, "", true},
+				{[]string{"devtools", "var", "set", "KEY", "--stdin=false", "--val"}, "--value", false},
+				{[]string{"devtools", "run", "--proxy=false", "--no-pro"}, "", true},
+				{[]string{"devtools", "doctor", "--storage", "--pro"}, "", true},
+				{[]string{"devtools", "config", "fmt", "--check", "--dry"}, "", true},
 				{[]string{"devtools", "run", "--", ""}, "", true},
 				{[]string{"devtools", "run", "--env", "local", ""}, "--profile", false},
 				{[]string{"devtools", "run", "web", ""}, "", true},
@@ -83,7 +98,9 @@ func TestCompletionScripts(t *testing.T) {
 				case "fish":
 					harness = "source " + shellQuote(path) + "\ncomplete -C " + shellQuote(strings.Join(tc.words, " "))
 				}
-				out, err := exec.Command(binary, "-c", harness).CombinedOutput()
+				command := exec.Command(binary, "-c", harness)
+				command.Dir = helperDir
+				out, err := command.CombinedOutput()
 				if err != nil && !tc.empty {
 					t.Fatalf("%v: %s %v", tc.words, out, err)
 				}
@@ -108,6 +125,18 @@ func TestCompletionScripts(t *testing.T) {
 	if code != 2 {
 		t.Fatal(code)
 	}
+}
+
+func TestCompletionScriptHelper(t *testing.T) {
+	if os.Getenv("DEVTOOLS_COMPLETION_HELPER") != "1" {
+		return
+	}
+	for i, argument := range os.Args {
+		if argument == "--" {
+			os.Exit(New("test", "test").Run(context.Background(), os.Args[i+1:], IO{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}))
+		}
+	}
+	t.Fatal("missing helper arguments")
 }
 
 func TestCompletionUsesInvokedExecutable(t *testing.T) {
@@ -144,7 +173,7 @@ func TestCompletionUsesInvokedExecutable(t *testing.T) {
 			case "bash":
 				harness = "source " + shellQuote(path) + "\nCOMP_WORDS=(" + shellQuote(target) + " command explain '')\nCOMP_CWORD=3\n_devtools\nprintf '%s\\n' \"${COMPREPLY[@]}\""
 			case "zsh":
-				harness = "compdef() { :; }\ncompadd() { print -rl -- $dynamic; }\n_describe() { :; }\nsource " + shellQuote(path) + "\nwords=(" + shellQuote(target) + " command explain '')\nCURRENT=4\n_devtools"
+				harness = "compdef() { :; }\n_describe() { print -rl -- $candidates; }\nsource " + shellQuote(path) + "\nwords=(" + shellQuote(target) + " command explain '')\nCURRENT=4\n_devtools"
 			case "fish":
 				harness = "source " + shellQuote(path) + "\ncomplete -C " + shellQuote(shellQuote(target)+" command explain ")
 			}

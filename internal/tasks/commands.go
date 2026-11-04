@@ -484,21 +484,9 @@ func (s *State) prepare(r Request, contexts ContextLookup) ([]Event, Object, str
 	prefixEvents := []Event{}
 	credential := ""
 	fail := func(e *protocol.Error) ([]Event, Object, string, *protocol.Error) { return nil, nil, "", e }
-	ensureFree := func(x *Item) *protocol.Error {
-		im := s.Impact(x.ID)
-		if len(arr(im, "running_ids")) > 0 || len(arr(im, "completed_ids")) > 0 {
-			return conflict("transition_conflict", append(arr(im, "running_ids"), arr(im, "completed_ids")...))
-		}
-		return nil
-	}
+	ensureFree := s.requireFree
 	ensureOpen := func(x *Item) *protocol.Error {
-		if s.Version == JournalVersion && r.Action == "workstream.close" && x.State == "done" && s.definition(x.ID).Activated {
-			return nil
-		}
-		if x.Kind == "task" && x.State != "open" || x.Kind == "workstream" && (x.State != "draft" && x.State != "active") {
-			return conflict("transition_conflict", []string{x.ID})
-		}
-		return nil
+		return s.requireOpen(x, r.Action)
 	}
 	switch r.Action {
 	case "workstream.edited":

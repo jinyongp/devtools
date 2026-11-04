@@ -141,6 +141,7 @@ func TestDynamicCompletion(t *testing.T) {
 		{[]string{"env", "remove", ""}, []string{"local"}},
 		{[]string{"variable", "get", ""}, []string{"_LEVEL"}},
 		{[]string{"variable", "get", "--env", "local", ""}, []string{"LOCAL_ONLY", "_LEVEL"}},
+		{[]string{"variable", "unset", "--env", "local", ""}, []string{"LOCAL_ONLY"}},
 		{[]string{"sec", "unset", ""}, []string{"TOKEN"}},
 		{[]string{"command", "inspect", "--dir", projectDir, ""}, []string{"web"}},
 		{[]string{"command", "explain", ""}, []string{"web"}},
@@ -166,6 +167,7 @@ func TestDynamicCompletion(t *testing.T) {
 		{[]string{"bundle", "remove", ""}, []string{"dev-bundle"}},
 		{[]string{"bundle", "rename", "dev-bundle", ""}, nil},
 		{[]string{"bundle", "set", "new", "--key", ""}, []string{"LOCAL_ONLY", "TOKEN", "_LEVEL"}},
+		{[]string{"bundle", "set", "new", "--key", "TOKEN", "--key", ""}, []string{"LOCAL_ONLY", "_LEVEL"}},
 		{[]string{"values", "inspect", "--bundle", ""}, []string{"all", "dev-bundle", "none"}},
 		{[]string{"command", "explain", "web", "--bundle=d"}, []string{"--bundle=dev-bundle"}},
 		{[]string{"run", "--bundle", ""}, []string{"all", "dev-bundle", "none"}},
@@ -183,14 +185,19 @@ func TestDynamicCompletion(t *testing.T) {
 		{[]string{"instance", "move", "--dir", privateTempDir(t), ""}, []string{"current", "id:" + instanceID}},
 		{[]string{"port", "show", "--profile", "other", "--instance", ""}, nil},
 		{[]string{"process", "status", ""}, []string{processID}},
-		{[]string{"process", "restart", processID, "--env", ""}, nil},
-		{[]string{"process", "restart", processID, "--bundle", ""}, nil},
+		{[]string{"process", "stop", ""}, nil},
+		{[]string{"process", "check", ""}, nil},
+		{[]string{"process", "logs", ""}, nil},
+		{[]string{"process", "restart", processID, "--env", ""}, []string{"other"}},
+		{[]string{"process", "restart", processID, "--bundle", ""}, []string{"all", "none"}},
 		{[]string{"command", "env", ""}, []string{"web"}},
 		{[]string{"proxy", "env", ""}, []string{"web"}},
 		{[]string{"proxy", "env", "--global", ""}, []string{"shared"}},
 		{[]string{"proxy", "run", "--global", "sh"}, []string{"shared"}},
 		{[]string{"proxy", "start", "--listener", ""}, []string{"default", "preview"}},
-		{[]string{"proxy", "stop", "--listener=pre"}, []string{"--listener=preview"}},
+		{[]string{"proxy", "stop", "--listener=pre"}, nil},
+		{[]string{"proxy", "status", "--listener=pre"}, []string{"--listener=preview"}},
+		{[]string{"proxy", "rm", ""}, []string{"shared"}},
 		{[]string{"expose", "start", "web", "--provider", ""}, []string{"cloudflared", "lan", "local", "tailscale"}},
 		{[]string{"proxy", "add", "shared", "38083", "--global", "--dns", ""}, []string{"auto", "external", "hosts"}},
 		{[]string{"command", "run", ""}, []string{"web"}},
@@ -267,7 +274,7 @@ func TestCompletionDeadline(t *testing.T) {
 	defer writer.Close()
 	var out, diagnostic bytes.Buffer
 	start := time.Now()
-	if code := a.completeDynamic(context.Background(), IO{In: reader, Out: &out, Err: &diagnostic}); code != 0 {
+	if code := a.completeDynamic(context.Background(), IO{In: reader, Out: &out, Err: &diagnostic}, false); code != 0 {
 		t.Fatal(code)
 	}
 	if time.Since(start) > time.Second {

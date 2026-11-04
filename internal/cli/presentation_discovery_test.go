@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -95,8 +96,16 @@ func TestRootCompletionUsesPrivateWireAndSelectedScope(t *testing.T) {
 	}
 	for _, shell := range []string{"bash", "zsh", "fish", "powershell"} {
 		script := a.completionScript(shell)
-		if !strings.Contains(script, "--format") || !strings.Contains(script, "auto") || !strings.Contains(script, "text") || !strings.Contains(script, "json") {
-			t.Fatal("missing static root enum", shell)
+		if !strings.Contains(script, "__complete") || !strings.Contains(script, "--describe") {
+			t.Fatal("missing shared completion query", shell)
 		}
+	}
+	items := a.completionCandidates(context.Background(), []string{"--format", ""}, true)
+	var formats []string
+	for _, item := range items {
+		formats = append(formats, item.Value)
+	}
+	if !reflect.DeepEqual(formats, []string{"auto", "text", "json"}) {
+		t.Fatal("missing root enum from shared engine", formats)
 	}
 }

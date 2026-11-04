@@ -112,7 +112,7 @@ func (s ModernStore) PlanImport(ctx context.Context, input map[string]string, va
 
 // CompletionNames reads only names from stable atomic profile images. It never
 // creates locks, unlocks a key session or performs recovery during shell completion.
-func (s ModernStore) CompletionNames(kind Kind, env string) ([]string, *protocol.Error) {
+func (s ModernStore) CompletionNames(kind Kind, env string, ownLayer bool) ([]string, *protocol.Error) {
 	raw, e := s.completionSnapshot()
 	if e != nil {
 		return nil, e
@@ -131,6 +131,9 @@ func (s ModernStore) CompletionNames(kind Kind, env string) ([]string, *protocol
 	}
 	names := make([]string, 0, len(items))
 	for _, item := range items {
+		if ownLayer && env != "" && item.Source != "env" {
+			continue
+		}
 		names = append(names, item.Key)
 	}
 	return names, nil

@@ -254,7 +254,7 @@ func (a *App) registerTasks() {
 		if def.Target || def.OptionalTarget {
 			args = append(args, Argument{Name: taskTargetArgument(def.Kind), Required: def.Target, Pattern: uuidPattern, Completion: completionSource(def.Kind)})
 		}
-		a.commands = append(a.commands, Command{Name: "task " + def.Command, Description: taskMutationDescription(def.Action), Options: opts, Arguments: args, BodySchema: taskBody(def), Output: taskOutput(true), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+		a.commands = append(a.commands, Command{Name: "task " + def.Command, CompletionAction: def.Action, Description: taskMutationDescription(def.Action), Options: opts, Arguments: args, BodySchema: taskBody(def), Output: taskOutput(true), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			store, e := a.taskStore(r)
 			if e != nil {
 				return nil, e

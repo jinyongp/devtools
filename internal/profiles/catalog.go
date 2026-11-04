@@ -81,6 +81,17 @@ func (c Catalog) Names(ctx context.Context) ([]string, *protocol.Error) {
 	return c.namesHeld(ctx)
 }
 
+// CompletionNames reuses profile discovery across values, tasks, ports and
+// processes, without initializing missing locks or recovering storage on Tab.
+func (c Catalog) CompletionNames(ctx context.Context) ([]string, *protocol.Error) {
+	release, err := maintenance.AcquirePassiveQuery(ctx, c.Data)
+	if err != nil {
+		return nil, catalogError("storage_error", err)
+	}
+	defer release()
+	return c.namesHeld(ctx)
+}
+
 // WithPresence uses metadata only and holds the existing query gate while the
 // caller publishes its local configuration. It never bootstraps a data root.
 func (c Catalog) WithPresence(ctx context.Context, name string, use func(bool) *protocol.Error) *protocol.Error {

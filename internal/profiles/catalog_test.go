@@ -72,6 +72,21 @@ func TestCatalogListsAllProfileSourcesOnceInOrder(t *testing.T) {
 	if !reflect.DeepEqual(items, want) {
 		t.Fatalf("profiles mismatch: got %#v want %#v", items, want)
 	}
+	completed, completionErr := (Catalog{Data: data}).CompletionNames(context.Background())
+	if completionErr != nil || !reflect.DeepEqual(completed, want) {
+		t.Fatalf("completion lost a profile source: %v %v", completed, completionErr)
+	}
+}
+
+func TestCompletionDoesNotInitializeProfileStorage(t *testing.T) {
+	data := filepath.Join(privateTempDir(t), "missing")
+	_, issue := (Catalog{Data: data}).CompletionNames(context.Background())
+	if issue == nil {
+		t.Fatal("unprepared storage was admitted")
+	}
+	if _, err := os.Lstat(data); !os.IsNotExist(err) {
+		t.Fatal("completion created storage", err)
+	}
 }
 
 func TestCatalogListDoesNotMigrateLegacyState(t *testing.T) {

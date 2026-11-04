@@ -47,24 +47,25 @@ type Option struct {
 }
 
 type Command struct {
-	Collection  *collectionContract                                       `json:"-"`
-	Workflow    []string                                                  `json:"workflow,omitempty"`
-	Examples    []string                                                  `json:"examples"`
-	BodyExample any                                                       `json:"body_example,omitempty"`
-	BodySchema  map[string]any                                            `json:"body_schema,omitempty"`
-	Aliases     []string                                                  `json:"aliases"`
-	Arguments   []Argument                                                `json:"arguments"`
-	ChildArgs   bool                                                      `json:"accepts_child_args"`
-	UniqueArgs  bool                                                      `json:"-"`
-	OutputMode  OutputMode                                                `json:"output_mode"`
-	InputOneOf  []map[string]any                                          `json:"-"`
-	InputAllOf  []map[string]any                                          `json:"-"`
-	StaticRules []staticOptionRule                                        `json:"-"`
-	Name        string                                                    `json:"name"`
-	Description string                                                    `json:"description"`
-	Options     []Option                                                  `json:"options"`
-	Output      map[string]any                                            `json:"output_schema"`
-	Run         func(context.Context, IO, Request) (any, *protocol.Error) `json:"-"`
+	CompletionAction string                                                    `json:"-"`
+	Collection       *collectionContract                                       `json:"-"`
+	Workflow         []string                                                  `json:"workflow,omitempty"`
+	Examples         []string                                                  `json:"examples"`
+	BodyExample      any                                                       `json:"body_example,omitempty"`
+	BodySchema       map[string]any                                            `json:"body_schema,omitempty"`
+	Aliases          []string                                                  `json:"aliases"`
+	Arguments        []Argument                                                `json:"arguments"`
+	ChildArgs        bool                                                      `json:"accepts_child_args"`
+	UniqueArgs       bool                                                      `json:"-"`
+	OutputMode       OutputMode                                                `json:"output_mode"`
+	InputOneOf       []map[string]any                                          `json:"-"`
+	InputAllOf       []map[string]any                                          `json:"-"`
+	StaticRules      []staticOptionRule                                        `json:"-"`
+	Name             string                                                    `json:"name"`
+	Description      string                                                    `json:"description"`
+	Options          []Option                                                  `json:"options"`
+	Output           map[string]any                                            `json:"output_schema"`
+	Run              func(context.Context, IO, Request) (any, *protocol.Error) `json:"-"`
 }
 
 type App struct {
@@ -254,7 +255,10 @@ func (a *App) inspect(ctx context.Context, streams IO, request Request) (any, *p
 func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	ctx = doctor.WithCache(ctx)
 	if len(args) == 1 && args[0] == "__complete" {
-		return a.completeDynamic(ctx, streams)
+		return a.completeDynamic(ctx, streams, false)
+	}
+	if len(args) == 2 && args[0] == "__complete" && args[1] == "--describe" {
+		return a.completeDynamic(ctx, streams, true)
 	}
 	operation := "devtools"
 	observe := a.observeOutput

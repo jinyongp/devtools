@@ -179,6 +179,17 @@ Windows↔WSL 브라우저 검증은 이 로컬 실행에 포함하지 않았다
 새 버전을 요구하도록 유지했다. dashboard Go race와 Node 검사 46개, 실제 Chromium smoke
 4개를 다시 실행해 통과했으며 CDN 원본과 vendored bundle의 SHA-256 일치도 확인했다.
 
+첫 [0.42.0 Release 검증](https://github.com/jinyongp/devtools/actions/runs/41809324623)은
+Linux와 macOS의 기존 `completion` 설치 시나리오에서 중단되어 게시하지 않았다.
+이 fixture에는 실행이 없는 선언을 project restart/logs 후보로 요구하고, PATH에 바이너리가
+없어도 fish의 정적 fallback을 요구하는 이전 기대값이 남아 있었다. 공통 후보 엔진을 사용하는
+현재 계약에 맞춰 음성 대조를 수정했다. Zsh `_describe` stub이 출력하는 값의 escaping도
+기대값에서 반영했다. 제품의 필터나 후보 공급자는 변경하지 않았다.
+
+변경 전 Linux 실패를 재현했다. 수정 후 실제 설치본의 bash/zsh/fish와 Bash Readline 입력,
+`completion_context`를 실행해 통과했다. 실제 실행 중인 명령의 project restart 접두사 조회도
+추가해 유효한 후보가 유지되는지 함께 확인했다. 전체 설치 시나리오와 릴리스 검증은 다시 실행한다.
+
 ## 주요 버전 근거
 
 - [Go 1.27 수정 릴리스](https://go.dev/doc/devel/release#go1.27.minor)

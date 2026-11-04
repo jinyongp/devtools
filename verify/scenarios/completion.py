@@ -60,8 +60,9 @@ cases = [
     (['run', 'we'], 'web'),
     (['run', 'docs:'], 'docs:dev'),
     (['process', 'start', '@docs/'], '@docs/dev'),
-    (['project', 'restart', 'docs:'], 'docs:dev'),
-    (['project', 'logs', 'docs:'], 'docs:dev'),
+    # These declarations have no active, controllable project execution.
+    (['project', 'restart', 'docs:'], None),
+    (['project', 'logs', 'docs:'], None),
     (['task', 'show', task_id[:8]], task_id),
     (['task', 'add', '--workstream', ''], workstream_id),
     (['var', 'set', 'KEY', '--value', ''], None),
@@ -95,7 +96,10 @@ for shell in ('bash', 'zsh', 'fish'):
         result = subprocess.run(command, text=True, capture_output=True)
         output = result.stdout
         assert not result.stderr and 'CANARY' not in output, (shell, words, result.stderr, output)
-        assert (expected in output) if expected else not output.strip(), (shell, words, output)
+        # The _describe stub prints its escaped value:description entries,
+        # rather than the command name that Zsh would insert into the prompt.
+        described = expected.replace('\\', '\\\\').replace(':', '\\:') if shell == 'zsh' and expected else expected
+        assert (described in output) if described else not output.strip(), (shell, words, output)
     print(shell + ' installed dynamic completion passed')
     if shell == 'bash':
         split_cases = [
@@ -188,7 +192,8 @@ for shell in ('bash', 'zsh', 'fish'):
             [shutil.which(shell), '--no-config', '-c',
              'source "$argv[1]"; set -gx PATH /nonexistent; complete -C "devtools var "',
              str(script)], text=True, capture_output=True, check=True)
-        assert not result.stderr and 'get' in result.stdout, (result.stdout, result.stderr)
+        # Every adapter uses the invoked CLI; an unavailable binary stays silent.
+        assert not result.stderr and not result.stdout.strip(), (result.stdout, result.stderr)
 
 call('var', 'unset', 'LOCAL_ONLY', '--env', 'local')
 call('env', 'remove', 'local')

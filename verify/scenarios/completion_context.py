@@ -87,6 +87,7 @@ try:
     assert ended_id in complete("process", "restart", "")
     assert ended_id in complete("process", "status", "")
     eventually(["live", "ready"], "project", "down", "")
+    eventually(["ready"], "project", "restart", "rea")
     assert complete("project", "logs", "") == []
     other = Path.home() / "other-project"
     other.mkdir()

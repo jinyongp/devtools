@@ -7,9 +7,13 @@ import (
 )
 
 func storageReportBlocks(data map[string]any) []cliui.Block {
-	state := "Storage upgrade required."
+	state := "Storage could not be verified."
 	if data["ready"] == true {
 		state = "Storage is current."
+	} else if data["state"] == "migration_required" {
+		state = "Storage upgrade required."
+	} else if data["changed"] == true || data["effects"] == "committed" || data["effects"] == "unknown" {
+		state = "Storage upgrade is incomplete."
 	}
 	blocks := []cliui.Block{outcomeHeading(state), selectedFields(data, "directory", "effects")}
 	items, _ := data["items"].([]any)
@@ -29,7 +33,7 @@ func storageReportBlocks(data map[string]any) []cliui.Block {
 		blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal(label), Value: cliui.Literal(value)}))
 		blocks = append(blocks, observationDiagnosticBlocks(row["diagnostic"])...)
 	}
-	if data["ready"] != true {
+	if data["state"] == "migration_required" {
 		blocks = append(blocks, cliui.Paragraph(cliui.Literal("Run devtools doctor --storage --fix in the same storage context to apply or resume the upgrade.")))
 	}
 	return blocks

@@ -10,6 +10,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/profilekey"
+	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/storageerr"
 	"github.com/jinyongp/devtools/internal/storageupgrade"
@@ -25,23 +26,16 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 		}
 		for index := range steps {
 			step := &steps[index]
+			if err := ctx.Err(); err != nil {
+				*step = step.InspectionFailed(err)
+				return steps[:index+1], err
+			}
 			if step.State != "current" {
 				continue
 			}
 			store := Store{Directory: filepath.Join(root, "tasks"), Profile: step.Profile}
-			release, err := maintenance.LockPassiveShared(ctx, store.path()+".lock")
-			if err != nil {
-				var preparation *maintenance.QueryPreparationError
-				if errors.As(err, &preparation) {
-					step.State, step.Reason = "migration_required", preparation.State
-					continue
-				}
-				return nil, err
-			}
-			_, condition := store.loadCurrent()
-			release()
-			if condition != nil {
-				step.State, step.Reason = "blocked", condition.Code
+			if err := store.inspectUpgrade(ctx, step); err != nil {
+				return steps[:index+1], err
 			}
 		}
 		return steps, nil
@@ -111,6 +105,31 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 		return true, nil
 	}
 	return adapter
+}
+
+func (s Store) inspectUpgrade(ctx context.Context, step *storageupgrade.Step) error {
+	finish := progress.Begin(ctx, "Checking task storage for profile "+s.Profile)
+	defer finish()
+	release, err := maintenance.LockPassiveShared(ctx, s.path()+".lock")
+	if err != nil {
+		var preparation *maintenance.QueryPreparationError
+		if errors.As(err, &preparation) {
+			step.State, step.Reason = "migration_required", preparation.State
+			return nil
+		}
+		*step = step.InspectionFailed(err)
+		return err
+	}
+	defer release()
+	_, condition := s.loadCurrent()
+	if err := ctx.Err(); err != nil {
+		*step = step.InspectionFailed(err)
+		return err
+	}
+	if condition != nil {
+		*step = step.InspectionFailed(condition)
+	}
+	return nil
 }
 
 // loadMigrationResolved is the only disk-journal codec entry for old task

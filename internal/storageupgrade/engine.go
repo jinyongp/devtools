@@ -31,6 +31,20 @@ type Step struct {
 	Fingerprint string         `json:"-"`
 }
 
+// InspectionFailed retains the known target and format without claiming its
+// payload was verified. Diagnostics follow the same redaction policy as queries.
+func (s Step) InspectionFailed(cause error) Step {
+	if s.Source == "" {
+		s.Source = "unknown"
+	}
+	if s.Target == "" {
+		s.Target = "current"
+	}
+	s.State, s.Reason = "blocked", reason(cause)
+	s.Diagnostic = diagnostic(s.Domain, "inspect_storage", cause)
+	return s
+}
+
 type Report struct {
 	Scope     string `json:"scope"`
 	Directory string `json:"directory"`
@@ -41,7 +55,9 @@ type Report struct {
 	Items     []Step `json:"items"`
 }
 
-// InspectHeld runs under the existing shared maintenance gate. Apply owns its
+// InspectHeld runs under the existing shared maintenance gate. On error it may
+// return a verified prefix followed by the blocked target; uninspected targets
+// must not be returned as current. Apply owns its
 // domain's launch/maintenance/profile gates and rechecks Step.Fingerprint there.
 // Authorize runs outside all gates and may only borrow already available keys.
 type Adapter struct {
@@ -218,11 +234,13 @@ func (e Engine) Inspect(ctx context.Context) (r Report, condition *protocol.Erro
 		finishDomain := operationprogress.Begin(ctx, "Checking "+adapter.Name+" storage")
 		steps, err := adapter.InspectHeld(ctx, e.Root)
 		finishDomain()
+		r.Items = append(r.Items, steps...)
 		if err != nil {
-			r.Items = append(r.Items, Step{Domain: adapter.Name, Source: "unknown", Target: "current", State: "blocked", Reason: reason(err), Diagnostic: diagnostic(adapter.Name, "inspect_storage", err)})
+			if len(steps) == 0 || steps[len(steps)-1].State != "blocked" {
+				r.Items = append(r.Items, (Step{Domain: adapter.Name}).InspectionFailed(err))
+			}
 			continue
 		}
-		r.Items = append(r.Items, steps...)
 	}
 	if err := ctx.Err(); err != nil {
 		return r, failure("inspect_storage", err)

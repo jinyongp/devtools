@@ -31,11 +31,17 @@ JSON and detected agents receive no progress output.
 The complete storage diagnosis, including lock waits, obeys `--timeout` (default 30s) and
 cancellation. Retain the partial report/effects and resume after resolving the
 reported prerequisite; progress is not a commit or cleanup guarantee.
+An inspection timeout does not establish that an upgrade is needed: a current task
+profile may be waiting on another operation's lock. Retain verified profiles and
+the blocked profile; uninspected profiles are not current. Follow the reported
+read-only `doctor --storage --check --timeout ...` action in the same storage
+context before applying an upgrade. A longer timeout does not release locks.
 
 Owned installer/update paths invoke this coordinator in the new executable, also
 on a same-image retry. Check both `binary_changed` and `storage.ready/status`.
 An incomplete storage outcome exits 3 and retains the installed binary and recovery
-state; resolve the cause and run `doctor --storage --fix`. Homebrew updates retain
+state; resolve the reported cause, check storage, and use `doctor --storage --fix`
+when a known upgrade or recovery is required. Homebrew updates retain
 package ownership and provide that next step. Do not downgrade a binary as data rollback.
 
 ## Transfer source first

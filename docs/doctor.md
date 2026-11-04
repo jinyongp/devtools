@@ -42,8 +42,16 @@ operation holds the lock`으로 바뀐다. 분모를 알 수 없는 작업에는
 출력하지 않는다. 기존 최종 보고서와 exit code를 그대로 사용한다.
 
 잠금 대기도 전체 `--timeout`과 취소를 따른다. 저장소 전환의 기본 제한은 30초이며, 예를 들어
-`devtools doctor --storage --fix --timeout 2m`으로 늘릴 수 있다. 제한 시간이나 취소로 끝났으면
-보고서의 `effects`와 각 단계를 확인한 뒤 같은 명령으로 재개한다. 공통 UI는
+`devtools doctor --storage --check --timeout 2m`으로 검사 시간을 늘릴 수 있다. 시간 초과는
+구형 저장소라는 판정이 아니다. 현재 task 형식이어도 다른 작업의 profile 잠금을 기다리다
+제한에 도달할 수 있다. 보고서는 확인을 마친 profile과 중단된 profile을 보존하며, 아직
+검사하지 않은 profile을 current로 표시하지 않는다.
+
+시간 초과 시 먼저 읽기 전용 `--check`로 상태를 확인한다. 제한 시간을 늘리는 옵션은 잠금을
+해제하지 않는다. 실제 `migration_required`가 확인되면 같은 저장소에서 `--fix`로 전환한다.
+`effects: none`은 해당 실행에 전환 효과가 없다는 뜻이며, `committed` 또는 `unknown`이면
+부분 결과와 복구 상태를 먼저 확인한다. 검사를 마치지 못한 결과에는 업그레이드가 필요하다고
+단정하거나 `--fix`를 반복하도록 안내하지 않는다. 공통 UI는
 `project status`의 리스너 조회와 실행 제어 확인에서도 재사용한다. 같은 UI를 오래 걸리는
 일반 CLI 명령 전체에 적용하며 입력과 foreground 출력 중에는 일시 중단한다.
 [명령별 적용 범위와 출력 계약](cli-progress-coverage.md)을 참고한다.

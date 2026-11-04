@@ -184,12 +184,32 @@ func (a *App) diagnoseStorage(ctx context.Context, r Request) (any, *protocol.Er
 			condition.Details = map[string]any{}
 		}
 		condition.Details["report"] = report
+		if condition.Code == "deadline_exceeded" {
+			condition.Message = "Storage inspection timed out before it could finish."
+			if report.Changed || report.Effects != "none" {
+				condition.Message = "Storage upgrade timed out before verification completed."
+			}
+			argv := []string{}
+			message := "Review the reported storage check and use a longer --timeout before retrying."
+			timeout, _ := time.ParseDuration(r.Options["timeout"])
+			if longer := timeout * 2; longer > timeout {
+				argv = []string{"devtools", "doctor", "--storage", "--check", "--timeout", max(2*time.Minute, longer).String()}
+				message = "Check storage with a longer timeout before applying upgrades."
+			}
+			condition.Details["remedies"] = []protocol.Remedy{protocol.LocalAction(argv, []string{}, message, "read").Remedy(r.Invocation)}
+		}
 		return nil, condition
 	}
 	if !report.Ready && (r.Options["check"] == "true" || r.Options["fix"] == "true") {
-		condition = protocol.NewError("requirements_failed", "Managed storage requires preparation, upgrade or user action.", 3, map[string]any{
+		message := "Managed storage could not be verified."
+		remedy := protocol.LocalAction([]string{}, []string{}, "Resolve the reported storage problem before retrying.", "read")
+		if report.State == "migration_required" {
+			message = "Managed storage requires preparation or upgrade."
+			remedy = protocol.LocalAction([]string{"devtools", "doctor", "--storage", "--fix"}, []string{}, "Resume the storage upgrade.", "value_write")
+		}
+		condition = protocol.NewError("requirements_failed", message, 3, map[string]any{
 			"reason": report.State, "report": report, "effects": report.Effects, "retry": "after_dependency_change",
-			"remedies": []protocol.Remedy{protocol.LocalAction([]string{"devtools", "doctor", "--storage", "--fix"}, []string{}, "Resolve reported storage prerequisites and resume the upgrade.", "value_write").Remedy(r.Invocation)},
+			"remedies": []protocol.Remedy{remedy.Remedy(r.Invocation)},
 		})
 		return nil, condition
 	}

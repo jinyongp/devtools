@@ -2,9 +2,11 @@ package storageupgrade
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
@@ -46,6 +48,23 @@ func TestInspectAbsentRootAndCurrentFixHaveNoWrites(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(root, ".storage-upgrade")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("current fix wrote progress", err)
+	}
+}
+
+func TestInspectionErrorRetainsVerifiedPrefixAndCannotReportReady(t *testing.T) {
+	adapter := Adapter{Name: "test", InspectHeld: func(context.Context, string) ([]Step, error) {
+		return []Step{{Domain: "test", Profile: "checked", Source: "v1", Target: "v1", State: "current"}}, errors.New("private-error-sentinel")
+	}}
+	report, condition := (Engine{Root: preparedRoot(t), Adapters: []Adapter{adapter}}).Inspect(context.Background())
+	if condition != nil || report.Ready || report.State != "blocked" || report.Effects != "none" || len(report.Items) != 2 {
+		t.Fatal(report, condition)
+	}
+	if report.Items[0].State != "blocked" || report.Items[1].Profile != "checked" || report.Items[1].State != "current" {
+		t.Fatal("adapter error hid its verified prefix or its failure", report)
+	}
+	raw, _ := json.Marshal(report)
+	if strings.Contains(string(raw), "private-error-sentinel") {
+		t.Fatal("inspection exposed an unsafe error message")
 	}
 }
 

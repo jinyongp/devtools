@@ -109,12 +109,12 @@ Unix `update`는 별도 installer의 JSON stdout과 stderr를 제한된 private 
 ### Native 검증 결과와 runner 재요청
 
 검증 대상은 `71e3d96be972c65237f385586f807d0b0c00bf08`이다. 구현은 `d88dddf`, 설치본
-검증과 계약 문서는 `71e3d96`으로 나눠 커밋했다. 아래 결과 기록 이후에는 문서만 변경한다.
+검증과 계약 문서는 `71e3d96`으로 나눠 커밋했다. 이 절은 해당 소스에 대한 native 기록이다.
 
 | 기존 workflow | 확인한 결과 |
 | --- | --- |
 | [Windows platform boundaries](https://github.com/jinyongp/devtools/actions/runs/41849308567) | 최종 gate 포함 23개 job 성공. ARM64와 x64 CLI, amd64 race, 제품과 설치기 검사 통과 |
-| [Unix validation](https://github.com/jinyongp/devtools/actions/runs/41849352992) | 첫 실행에서 22개 job 성공, 선택 검사 3개 제외. 마지막 macOS job은 runner 배정 실패로 취소됐으며 해당 job 재실행 요청 완료 |
+| [Unix validation](https://github.com/jinyongp/devtools/actions/runs/41849352992) | 첫 실행에서 22개 job 성공, 선택 검사 3개 제외. 마지막 macOS job은 두 차례 모두 runner 배정 실패로 취소됨 |
 
 2026-11-04 14:58 UTC 확인 시 마지막 macOS job은 `status: queued`, `runner_name: ""`,
 `steps: []`였다. 약 21분 동안 실행을 시작하지 못했으며, 14:58:35 UTC runner 배정 실패로
@@ -124,11 +124,38 @@ macOS ARM64 수용량 부족으로 대기가 길어질 수 있다고 보고했�
 
 같은 소스에서 취소된 job과 후속 gate만 재실행 요청했다. 연결 도구의 Actions 쓰기 권한이
 없어 authenticated GitHub CLI를 사용했으며, 기존에 성공한 검사는 다시 실행하지 않는다.
-[두 번째 실행의 macOS job](https://github.com/jinyongp/devtools/actions/runs/41849352992/job/126655733672)은
-runner 배정 대기 중이다. **Unix 전체 검증 완료로 판정하지 않는다**. Workflow와 제품의
-검증 조건은 유지했다.
+[두 번째 실행의 macOS job](https://github.com/jinyongp/devtools/actions/runs/41849352992/job/126655733672)도
+runner 배정 없이 취소됐고 후속 gate는 15:16:50 UTC에 실패했다. 두 번째 실행에도
+`runner_name: ""`, `steps: []`였으며 제품 테스트는 시작되지 않았다.
+**Unix 전체 검증 완료로 판정하지 않는다**. Workflow와 제품의 검증 조건은 유지했다.
 
-이미 통과한 Unix 범위는 macOS와 Linux CLI race, 읽기 전용 잠금, ARM64와 Intel Mac 및
-Linux 설치본, vault와 values, Windows/WSL2와 실제 브라우저 호환성을 포함한다. 제외한
-선택 검사는 명시적 real Cloudflared, 두 기기 Tailscale, 성능 측정이며 각각
+해당 소스에서 통과한 Unix 범위는 macOS와 Linux CLI race, 읽기 전용 잠금, ARM64와
+Intel Mac 및 Linux 설치본, vault와 values, Windows/WSL2와 실제 브라우저 호환성을 포함한다.
+제외한 선택 검사는 명시적 real Cloudflared, 두 기기 Tailscale, 성능 측정이며 각각
 `live_provider=none`, `measure_automation=false`로 요청한 기존 workflow 조건이다.
+
+### 저장소 시간 초과 진단 후속 수정
+
+현재 task 저장소의 profile 잠금을 다른 프로세스가 보유한 fixture에서 기존 출력을 재현했다.
+전체 제한에 도달하면 `tasks unknown → current`만 남고, 업그레이드 필요 여부를 확인하지
+못했는데도 `Storage upgrade required`와 같은 `--fix` 반복 안내가 출력됐다. Fixture는
+잠금 해제만으로 Ready가 되었고 모든 저장소 파일의 바이트는 유지됐다. 이 재현은 실제
+사용자의 macOS 저장소에서 어떤 작업이 지연 원인인지 확인했다는 뜻은 아니다.
+
+후속 수정은 다음 범위로 제한한다. 위 native 결과는 수정 전 소스에 대한 기록이며
+후속 소스의 검증 결과로 재사용하지 않는다.
+
+- 공통 coordinator가 adapter의 검증 완료 결과와 마지막 blocked 대상을 보존한다.
+  오류만 반환하는 adapter에는 기존과 같이 domain 단위 blocked 결과를 추가한다.
+- task profile 검사와 잠금 대기 실패에 profile과 알려진 형식을 남긴다. 확인하지 않은
+  나머지 profile은 current로 반환하지 않으며, payload 검사 뒤에도 context를 확인한다.
+- 현재 상태, 실제 전환 필요, 검증 불가 및 일부 전환 이후 미완료를 구분한다. 시간 초과의
+  다음 명령은 같은 저장소를 읽기 전용으로 확인하며, 기본 30초보다 긴 제한을 제공한다.
+- JSON 필드 구조, 종료 코드, effects 및 안전한 진단 정보 정책을 유지한다. 저장소 잠금을
+  강제로 해제하거나 기존 무결성 검사를 생략하지 않는다. 개별 파일 codec 안의 동기 IO를
+  중단하는 변경은 포함하지 않는다.
+
+실제 task profile 잠금, 완료한 profile 보존, 미검사 profile 제외, 파일 바이트 불변,
+복구 안내 실행 및 설치본 PTY와 isolation 범위의 회귀 검증을 통과했다. 변경 패키지의
+storage/doctor/progress race 검사와 기존 정적 검사도 통과했다. 전체 Go race 및
+후속 main SHA의 Release workflow는 별도로 완료를 확인한다.

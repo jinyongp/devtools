@@ -172,6 +172,35 @@ with (progress_root / 'data/.maintenance/lock').open('r+b') as lock:
     assert code == 130 and not output and 'Waiting for storage access' in error, (code, error)
     assert 'Error:' in error.rsplit('\r\x1b[2K', 1)[1], error
 
+# A current task store can time out solely on a writer's profile lock. Retain
+# that profile, avoid claiming an upgrade is needed, and offer an executable
+# read-only check scoped to the same isolated store.
+code, output, error = call('--format', 'json', 'task', 'add', '--profile', 'progress-check',
+                           '--title', 'private-task-sentinel', '--isolated-root', str(progress_root))
+assert code == 0, (code, output, error)
+task_locks = list((progress_root / 'data/tasks').glob('p1-*.json.lock'))
+assert len(task_locks) == 1, task_locks
+with task_locks[0].open('rb') as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    code, output, error = call('--format', 'json', *progress_args, '--timeout', '700ms')
+    result = json.loads(error)['error']
+    report = result['details']['report']
+    assert code == 3 and not output and result['code'] == 'deadline_exceeded', result
+    assert report['effects'] == 'none' and not report['changed'] and not report['ready'], report
+    blocked = next(item for item in report['items'] if item['domain'] == 'tasks')
+    assert blocked['profile'] == 'progress-check' and blocked['reason'] == 'deadline_exceeded', blocked
+    recovery = result['details']['remedies'][0]
+    assert recovery['state'] == 'ready' and recovery['effect'] == 'read', recovery
+    assert recovery['argv'][:3] == ['devtools', '--isolated-root', str(progress_root)], recovery
+    assert '--check' in recovery['argv'] and '--fix' not in recovery['argv'], recovery
+    code, output, error = call('--format', 'text', *progress_args, '--timeout', '700ms',
+                               tty_out=True, tty_err=True)
+    final_error = error.rsplit('\r\x1b[2K', 1)[1]
+    assert code == 3 and not output and 'timed out' in final_error and 'progress-check' in final_error, error
+    assert 'Storage upgrade required' not in error and 'private-task-sentinel' not in error, error
+code, output, error = call('--format', 'json', *recovery['argv'][1:])
+assert code == 0 and not error and json.loads(output)['data']['ready'], (code, output, error)
+
 # A foreground program owns both streams for its whole lifetime. Its exit status
 # and output remain native even when it is quiet for longer than the UI delay.
 code, output, error = call('--format', 'text', 'run', '--', 'sh', '-c',

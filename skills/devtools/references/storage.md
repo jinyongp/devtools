@@ -23,10 +23,12 @@ Protected conversion borrows only an existing unlocked key, preserving its origi
 idle deadline. A locked/missing vault requires an explicit protection action; doctor
 never chooses a backend or prompts for an unlock. Follow the reported prerequisites.
 
-Protocol 25 long storage operations report their current stage, lock wait and
+Protocol 25 long CLI operations report their current stage, lock wait and
 elapsed time on text stderr. ANSI terminals update one line; plain text streams
-use bounded line updates. JSON and detected agents receive no progress output.
-The complete diagnosis, including lock waits, obeys `--timeout` (default 30s) and
+use bounded line updates. Prompts and foreground output suspend the shared UI.
+Updater waits also show elapsed time while the installer's JSON stays private.
+JSON and detected agents receive no progress output.
+The complete storage diagnosis, including lock waits, obeys `--timeout` (default 30s) and
 cancellation. Retain the partial report/effects and resume after resolving the
 reported prerequisite; progress is not a commit or cleanup guarantee.
 

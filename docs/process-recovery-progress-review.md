@@ -24,11 +24,14 @@ managed launcher, dashboard 준비와 doctor의 실행 준비가 같은 dependen
 
 진행 신호는 출력과 독립적인 `internal/progress`의 context observer다. 저장소 엔진과
 잠금 계층은 활동 시작과 끝만 알리고, `cliui.Progress`가 중첩 활동, 한 줄 갱신과 경과 시간을
-처리한다. 출력 controller는 text stderr에만 연결하며 현재 `doctor`와 `project status`가
-재사용한다. 작업별 spinner나 전역 stdout 쓰기는 추가하지 않는다.
+처리한다. 출력 controller는 text stderr에만 연결한다. 이후
+[명령 전체 확장](cli-progress-coverage.md)에서 일반 명령의 공통 실행부, 입력과 foreground
+일시 중단까지 연결했다. 작업별 spinner나 전역 stdout 쓰기는 추가하지 않는다.
 
 `update`의 installer는 별도 프로세스에서 JSON 결과를 전달한다. 그 프로세스의 단계 이벤트가
-부모 CLI에 전달되지는 않는다. installer 전체 단계 추적은 이번 연결과 검증 범위에 포함하지 않는다.
+부모 CLI에 전달되지는 않는다. 명령 전체 확장 후에는 부모가 installer 전체 대기와 경과 시간을
+표시하며, Windows의 같은 프로세스 단계는 더 자세히 표시한다. Unix shell 내부 단계를
+추측하거나 JSON diagnostic을 진행 메시지로 해석하지 않는다.
 
 ## 관측과 제어의 경계
 

@@ -9,7 +9,7 @@ import tomllib
 import uuid
 
 
-def unix_terminal(argv, env, cwd, input_steps=()):
+def unix_terminal(argv, env, cwd, input_steps=(), input_delay=0):
     import errno
     import fcntl
     import select
@@ -33,6 +33,8 @@ def unix_terminal(argv, env, cwd, input_steps=()):
             if pending and output.find(pending[0][0].encode(), search_from) >= 0:
                 _, value = pending.pop(0)
                 search_from = len(output)
+                if input_delay:
+                    time.sleep(input_delay)
                 os.write(master, value.encode())
             if select.select([master], [], [], .05)[0]:
                 try:

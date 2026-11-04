@@ -62,8 +62,9 @@ Use this skill alongside the source-work workflow. Do not create task records me
   authenticated execution control. `complete: false` preserves available
   observations when storage or control inspection is blocked. Follow emitted
   actions; an OS PID or stored execution ID alone does not authorize a stop.
-  Long storage operations show text stderr progress; JSON and detected agents
-  retain their existing output boundaries.
+  Long CLI operations show shared text stderr progress, including updater waits.
+  Prompts and foreground programs have exclusive terminal output until they finish.
+  JSON and detected agents retain their existing output boundaries.
 
 ## Keep scope and state explicit
 

@@ -10,6 +10,7 @@ import signal
 import struct
 import subprocess
 import termios
+import threading
 import time
 import sys
 
@@ -164,6 +165,53 @@ with (progress_root / 'data/.maintenance/lock').open('r+b') as lock:
     assert code == 130 and not output and 'Waiting for storage access' in error, (code, error)
     assert 'Error:' in error.rsplit('\r\x1b[2K', 1)[1], error
 
+    # Ordinary collection commands use the same progress/lock observer and
+    # cancellation path, even though they have no command-specific progress UI.
+    code, output, error = call('--format', 'text', 'profile', 'list', '--isolated-root', str(progress_root),
+                               tty_out=True, tty_err=True, interrupt_after=.7)
+    assert code == 130 and not output and 'Waiting for storage access' in error, (code, error)
+    assert 'Error:' in error.rsplit('\r\x1b[2K', 1)[1], error
+
+# A foreground program owns both streams for its whole lifetime. Its exit status
+# and output remain native even when it is quiet for longer than the UI delay.
+code, output, error = call('--format', 'text', 'run', '--', 'sh', '-c',
+                           'printf native-start; sleep .7; printf native-end; printf native-error >&2; exit 17',
+                           tty_out=True, tty_err=True)
+assert code == 17 and output == 'native-startnative-end' and error == 'native-error', (code, output, error)
+
+# Keep real password prompts open past the progress delay. No redraw or feedback
+# may appear between a prompt and its terminating newline, and input stays secret.
+vault_root = Path.home() / 'progress-vault'
+code, transcript = unix_terminal(
+    [binary, '--format', 'text', 'vault', 'init', '--backend', 'passphrase', '--isolated-root', str(vault_root)],
+    environment, project,
+    [('Vault passphrase: ', 'progress-passphrase-canary\n'),
+     ('Confirm vault passphrase: ', 'progress-passphrase-canary\n')], input_delay=.7)
+assert code == 0 and 'progress-passphrase-canary' not in transcript, (code, transcript)
+for prompt in ('Vault passphrase: ', 'Confirm vault passphrase: '):
+    after_prompt = transcript.split(prompt, 1)[1].split('\n', 1)[0]
+    assert after_prompt == '', (prompt, after_prompt)
+
+# The Unix installer captures a child JSON result. Its parent still reports an
+# honest overall update stage while the new executable waits for storage access.
+code, output, error = call('--format', 'json', 'project', 'inspect', '--profile', 'presentation-fixture')
+assert code == 0 and not error
+data_root = Path(json.loads(output)['data']['paths']['data'])
+code, output, error = call('--format', 'json', 'doctor', '--storage', '--fix')
+assert code == 0 and not error
+before_image = Path(binary).read_bytes()
+with (data_root / '.maintenance/lock').open('r+b') as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    release = threading.Timer(.9, lambda: fcntl.flock(lock, fcntl.LOCK_UN))
+    release.start()
+    try:
+        code, output, error = call('--format', 'text', 'update', '--version', '0.0.0-test.1',
+                                   '--source', os.environ['DEVTOOLS_TEST_RELEASES'], tty_out=True, tty_err=True)
+    finally:
+        release.join()
+assert code == 0 and output and 'Updating the executable and preparing storage' in error, (code, output, error)
+assert Path(binary).read_bytes() == before_image
+
 # Execute the exact standalone Next line; the path requires shell literal quoting.
 code, output, error = call('--format', 'text', 'doctor', 'not-declared', '--dir', str(project))
 assert code == 0 and not error
@@ -174,4 +222,4 @@ for line in lines:
     result = subprocess.run(['sh', '-c', line], cwd=project, env=dict(environment, DEVTOOLS_FORMAT='json'),
                             text=True, capture_output=True, timeout=15)
     assert result.returncode == 0 and json.loads(result.stdout)['data']['items'][0]['name'] == 'echo'
-print('Installed PTY/pipe progress, real lock timeout/SIGINT, JSON/agent silence, native boundaries and copyable Next passed')
+print('Installed progress: locks/cancellation, secret prompts, quiet native child, captured installer wait, JSON/agent silence and copyable Next passed')

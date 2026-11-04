@@ -22,8 +22,9 @@ Protocol 25의 `project status`는 실행 기록과 서비스 claim, TCP 리스�
 함께 반환합니다. `complete`, `observations`, `diagnostics`, `next_actions`로 부분 조회를 명시하며
 기존 `items`는 현재 실행 기록입니다. 충돌 안내는 인증된 제어가 확인된 실행의 stop 또는
 범위를 보존한 project status를 제공합니다. [프로세스 안내](processes.md)를 따릅니다.
-저장소 검사와 전환의 진행 UI는 텍스트 stderr 전용이며 JSON에는 추가 데이터를 쓰지 않습니다.
-[진행 표시와 대기](doctor.md#진행-표시와-대기)를 따릅니다.
+오래 걸리는 일반 명령의 공통 진행 UI는 텍스트 stderr 전용이며 JSON에는 추가 데이터를 쓰지 않습니다.
+입력과 foreground 프로그램 출력 중에는 일시 중단합니다.
+[진행 표시의 명령별 범위와 계약](cli-progress-coverage.md)을 따릅니다.
 
 ## 변경 요청 ID
 

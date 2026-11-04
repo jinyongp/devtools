@@ -125,6 +125,7 @@ func TestWindowsProjectRealSupervisorsRetryRestartDownAndReadiness(t *testing.T)
 	}
 	converged, failure := manager.Apply(ctx, delayed)
 	if failure != nil || !converged.Replayed || len(converged.Items) != 2 || converged.Items[0].Item == nil || converged.Items[1].Item == nil || converged.Items[0].Item.ID != peer || converged.Items[1].Item.ID != delayedID || converged.Items[1].Status != "ready" {
-		t.Fatalf("partial retry: %+v %v", converged, failure)
+		detail, _ := json.Marshal(converged)
+		t.Fatalf("partial retry: %s %v", detail, failure)
 	}
 }

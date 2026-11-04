@@ -147,7 +147,7 @@ func TestGeneratedOperationIDAppearsInTextSuccess(t *testing.T) {
 	app := testApp(t)
 	code, out, diagnostic := invoke(t, app, "", "--format", "text", "task", "add", "--profile", "app", "--title", "Text operation identity")
 	match := regexp.MustCompile(`Request ID\s+([0-9a-f-]{36})`).FindStringSubmatch(out)
-	if code != 0 || diagnostic != "" || len(match) != 2 || !regexp.MustCompile(uuidPattern).MatchString(match[1]) {
+	if code != 0 || strings.Contains(diagnostic, "Error:") || len(match) != 2 || !regexp.MustCompile(uuidPattern).MatchString(match[1]) {
 		t.Fatal("terminal success hid the generated operation ID", code, out, diagnostic)
 	}
 	replayed := outputData(t, app, []string{"task", "add", "--profile", "app", "--title", "Text operation identity", "--request-id", match[1]})

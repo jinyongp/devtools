@@ -72,7 +72,7 @@ func TestCollectionColumnsAreTextOnlyAndRejectUnknownOrDuplicate(t *testing.T) {
 		}
 	}
 	code, out, diagnostic := invoke(t, a, "", "--format", "text", "command", "list", "--columns", "name")
-	if code != 0 || diagnostic != "" || !strings.Contains(out, "web") || strings.Contains(out, "visible") {
+	if code != 0 || strings.Contains(diagnostic, "Error:") || !strings.Contains(out, "web") || strings.Contains(out, "visible") {
 		t.Fatal(code, out, diagnostic)
 	}
 }

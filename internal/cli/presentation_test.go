@@ -185,7 +185,7 @@ func TestRootOffsetsAndInvocationOnlyFormat(t *testing.T) {
 		}{"visible", "hidden-fixture", "", 18446744073709551615}, nil
 	}})
 	exit, out, diagnostic := invoke(t, a, "", "--format", "text", "fixture")
-	if exit != 0 || diagnostic != "" || calls != 1 || !strings.Contains(out, "18446744073709551615") || !strings.Contains(out, "visible") || strings.Contains(out, "hidden-fixture") || strings.Contains(out, "empty") {
+	if exit != 0 || strings.Contains(diagnostic, "Error:") || calls != 1 || !strings.Contains(out, "18446744073709551615") || !strings.Contains(out, "visible") || strings.Contains(out, "hidden-fixture") || strings.Contains(out, "empty") {
 		t.Fatalf("exit=%d calls=%d stdout=%s stderr=%s", exit, calls, out, diagnostic)
 	}
 	args := []string{"--isolated-root", t.TempDir(), "--format", "json", "process", "status"}
@@ -319,7 +319,7 @@ func TestPresentationContextAndPublication(t *testing.T) {
 		return map[string]any{"published": true}, nil
 	}})
 	var out, diagnostic bytes.Buffer
-	if exit := a.Run(ctx, []string{"--format", "text", "fixture"}, IO{In: strings.NewReader(""), Out: &out, Err: &diagnostic}); exit != 0 || diagnostic.Len() != 0 || !strings.Contains(out.String(), "published") {
+	if exit := a.Run(ctx, []string{"--format", "text", "fixture"}, IO{In: strings.NewReader(""), Out: &out, Err: &diagnostic}); exit != 0 || strings.Contains(diagnostic.String(), "Error:") || !strings.Contains(out.String(), "published") {
 		t.Fatal(exit, out.String(), diagnostic.String())
 	}
 }

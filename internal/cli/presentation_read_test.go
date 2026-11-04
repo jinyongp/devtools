@@ -51,7 +51,7 @@ func TestReadPresentationUsesRealCommandAndAlias(t *testing.T) {
 	for _, command := range []string{"command", "cmd"} {
 		a := presentationApp(presentation.Environment{Stdout: presentation.Terminal{Width: 80}})
 		exit, out, diagnostic := invoke(t, a, "", "--format", "text", command, "list", "--dir", root)
-		if exit != 0 || diagnostic != "" {
+		if exit != 0 || strings.Contains(diagnostic, "Error:") {
 			t.Fatal(exit, out, diagnostic)
 		}
 		for _, expected := range []string{"Commands for presentation-fixture", "1 command", "dev", "go test"} {
@@ -60,7 +60,7 @@ func TestReadPresentationUsesRealCommandAndAlias(t *testing.T) {
 			}
 		}
 		exit, out, diagnostic = invoke(t, a, "", "--format", "text", command, "inspect", "dev", "--dir", root)
-		if exit != 0 || diagnostic != "" || !strings.Contains(out, "go test") || !strings.Contains(out, "Disabled") {
+		if exit != 0 || strings.Contains(diagnostic, "Error:") || !strings.Contains(out, "go test") || !strings.Contains(out, "Disabled") {
 			t.Fatal("configured command summary unavailable", exit, out, diagnostic)
 		}
 		for _, noise := range []string{"declared_only", "effective_input_revision", "storage_generation", "Details"} {

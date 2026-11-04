@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -28,7 +29,18 @@ func TestNavigationScaleReadsMetadataAndOnlySelectedLiveSupervisors(t *testing.T
 			for i := range count {
 				id := fmt.Sprintf("00000000-0000-4000-8000-%012d", i)
 				r := Record{ID: id, Profile: "selected", Directory: dir, Command: "web", State: "stopped", CreatedAt: ended.Add(-time.Duration(i) * time.Second), EndedAt: &ended}
-				if err := writePrivate(s.path(id, "record.json"), diskRecord{Version: 2, Metadata: r, Body: ref}); err != nil {
+				// This fixture tests metadata-only navigation, not durable record
+				// publication. Preserve private files without flushing 10,000
+				// synthetic records through the production crash-safe writer.
+				path := s.path(id, "record.json")
+				if err := fixtureMkdirAll(filepath.Dir(path), 0700); err != nil {
+					t.Fatal(err)
+				}
+				body, err := json.Marshal(diskRecord{Version: 2, Metadata: r, Body: ref})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := fixtureWriteFile(path, body, 0600); err != nil {
 					t.Fatal(err)
 				}
 			}

@@ -565,11 +565,11 @@ def main():
     if options.provider == "cloudflared" and "2026.10.7" not in command(["cloudflared", "--version"]):
         parser.error("Prepare cloudflared 2026.10.7 before this live run")
     if options.provider == "tailscale":
-        if command(["tailscale", "version"]).splitlines()[0] != "1.104.5":
-            parser.error("Prepare Tailscale 1.104.5 before this live run")
+        if command(["tailscale", "version"]).splitlines()[0] != "1.104.4":
+            parser.error("Prepare Tailscale 1.104.4 before this live run")
         peer = options.peer_network.split(":", 1)[1]
-        if command(["docker", "exec", peer, "tailscale", "version"]).splitlines()[0] != "1.104.5":
-            parser.error("Prepare Tailscale 1.104.5 on the peer device too")
+        if command(["docker", "exec", peer, "tailscale", "version"]).splitlines()[0] != "1.104.4":
+            parser.error("Prepare Tailscale 1.104.4 on the peer device too")
         host_ip = command(["tailscale", "ip", "-4"]).strip()
         peer_ip = command(["docker", "exec", peer, "tailscale", "ip", "-4"]).strip()
         if not host_ip or not peer_ip or host_ip == peer_ip:

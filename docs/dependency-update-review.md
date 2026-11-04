@@ -28,7 +28,9 @@ Playwright 이미지와 명시 live 검증의 provider 버전도 대조했다.
 | skills | 1.6.0 | 1.7.6 |
 | proxy CI와 WSL의 Node 22 | 22.22.2 | 22.23.4 |
 | Cloudflared live 검증 | 2026.10.3 | 2026.10.7 |
-| Tailscale host와 peer 검증 | 1.104.2 | 1.104.5 |
+| Tailscale host와 peer 검증 | 1.104.2 | 1.104.4 |
+| ARM64 위 x64 PowerShell 검증 | 7.6.6 | 7.6.9 |
+| dashboard의 vendored D3 | 7.9.0 | 7.9.2 |
 
 Go release workflow의 버전 중복 8곳은 `go-version-file: go.mod`로 통일했다.
 프로젝트 개발용 Node 24.x 정책은 유지했다. Nuxt의 새 엔진 요구사항을 충족하도록
@@ -153,6 +155,30 @@ Windows↔WSL 브라우저 검증은 이 로컬 실행에 포함하지 않았다
 실행하지 않았다. 기존 workflow의 해당 검증은 commit을 원격에 반영한 뒤 필요하다.
 이 기록은 전체 플랫폼 CI 완료나 배포 완료를 뜻하지 않는다.
 
+## 배포 검증에서 확인한 추가 사항
+
+첫 원격 후보 `ae7e380`의 Homebrew native 네 플랫폼과 releaseway preview는 통과했다.
+아래 실패는 무조건 재시도하지 않고 원격 artifact와 공식 배포 경로를 확인했다.
+
+- [Windows ARM64 installer-x64](https://github.com/jinyongp/devtools/actions/runs/41805263686/job/126490581211):
+  고정된 x64 PowerShell 7.6.6이 inline bootstrap 중 `0xC0000005`로 종료됐다.
+  Application 이벤트의 실패 프로세스도 `pwsh.exe`였다. 기존에 남아 있던 이 별도 검증
+  런타임을 최초 업데이트 목록에서 놓쳤다. 공식 안정 버전 7.6.9와 ZIP SHA-256으로 갱신한다.
+  upstream crash의 내부 원인을 확인했다거나 이 변경만으로 해결됐다고 단정하지 않는다.
+- [Tailscale live 준비](https://github.com/jinyongp/devtools/actions/runs/41805366084/job/126490925917):
+  1.104.5 바이너리는 공개됐지만 Docker peer 이미지는 없어 `manifest unknown`으로 실패했다.
+  공식 Docker Hub의 최신 stable 이미지는 1.104.4였다. host와 peer를 이 버전으로 맞추고
+  peer의 manifest digest도 고정했다. 버전 문자열만 확인한 최초 조사가 불충분했다.
+
+변경 후 Windows full과 PowerShell 반복 진단, Tailscale 실제 두 장치 검증을 다시 실행한다.
+원격 통과와 실제 배포 결과는 확인 후 이 기록에 추가한다.
+
+추가 inventory에서 npm manifest 밖의 dashboard D3 7.9.0도 확인했다.
+안정 버전 7.9.2의 공식 npm tarball SHA-512를 검증하고 bundle, ISC license,
+출처와 SHA-256을 함께 갱신했다. dependency manifest 검사와 실제 정적 파일 응답 검사는
+새 버전을 요구하도록 유지했다. dashboard Go race와 Node 검사 46개, 실제 Chromium smoke
+4개를 다시 실행해 통과했으며 CDN 원본과 vendored bundle의 SHA-256 일치도 확인했다.
+
 ## 주요 버전 근거
 
 - [Go 1.27 수정 릴리스](https://go.dev/doc/devel/release#go1.27.minor)
@@ -163,3 +189,6 @@ Windows↔WSL 브라우저 검증은 이 로컬 실행에 포함하지 않았다
 - [Nuxt DevTools 3.4.4](https://github.com/nuxt/devtools/releases/tag/v3.4.4)
 - [skills 1.7.6](https://github.com/vercel-labs/skills/releases/tag/v1.7.6)
 - [releaseway/actions 0.8.0](https://github.com/releaseway/actions/releases/tag/v0.8.0)
+- [PowerShell 7.6.9와 공식 SHA-256](https://github.com/PowerShell/PowerShell/releases/tag/v7.6.9)
+- [Tailscale 공식 Docker 이미지](https://hub.docker.com/r/tailscale/tailscale/tags?name=v1.104.4)
+- [D3 7.9.2](https://github.com/d3/d3/releases/tag/v7.9.2)

@@ -135,9 +135,9 @@ try {
     $emulatedShell = $null
     if ($Arch -eq 'arm64' -and $Engine -in @('all', 'x64')) {
         # Pinned official portable test fixture; no system installation or PATH change.
-        $archive = Join-Path $root 'PowerShell-7.6.6-win-x64.zip'
-        Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/PowerShell/PowerShell/releases/download/v7.6.6/PowerShell-7.6.6-win-x64.zip' -OutFile $archive -TimeoutSec 120
-        Require ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ceq '02fe458be20493fbdf43f61ea20610b811ee6c738ab1676c61b9cfcd1a33c860') 'Official x64 PowerShell fixture checksum mismatch.'
+        $archive = Join-Path $root 'PowerShell-7.6.9-win-x64.zip'
+        Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/PowerShell/PowerShell/releases/download/v7.6.9/PowerShell-7.6.9-win-x64.zip' -OutFile $archive -TimeoutSec 120
+        Require ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ceq 'ce7484804c0f0ad4dda10c958e71acdaf7eebfb22505c1b480f89e0e9f1da94d') 'Official x64 PowerShell fixture checksum mismatch.'
         $portable = Join-Path $root 'powershell-x64'
         Expand-Archive -LiteralPath $archive -DestinationPath $portable
         $emulatedShell = Join-Path $portable 'pwsh.exe'

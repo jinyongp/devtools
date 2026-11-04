@@ -220,7 +220,7 @@ jobs:
           audience: ${{ env.TS_AUDIENCE }}
           tags: tag:ci
           hostname: dvt-origin-${{ github.run_id }}-${{ github.run_attempt }}
-          version: 1.104.5
+          version: 1.104.4
           retry: '1'
           # Keep node identity in memory; HTTPS still needs a local cert cache.
           tailscaled-args: --statedir=${{ runner.temp }}/tailscale-serve
@@ -242,13 +242,13 @@ jobs:
           corepack pnpm install --frozen-lockfile --ignore-scripts
           corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts
           docker build -t devtools-proxy-browser:1.64.1 verify/proxy-browser
-          docker pull tailscale/tailscale:v1.104.5
+          docker pull tailscale/tailscale:v1.104.4@sha256:ed6480b33c6eb67c9cbd203ed42b9fb57e361986725b6856def71b7a3d9e276c
           python3 -B scripts/package.py
           mkdir -p bin/candidate
           tar -xzf dist/devtools_0.0.0-proxy-compat_linux_amd64.tar.gz -C bin/candidate
       - name: Enroll a distinct ephemeral peer with GitHub OIDC
         run: |
-          docker run -d --name tailscale-peer --cap-add NET_ADMIN --device /dev/net/tun --entrypoint tailscaled tailscale/tailscale:v1.104.5 --state=mem:
+          docker run -d --name tailscale-peer --cap-add NET_ADMIN --device /dev/net/tun --entrypoint tailscaled tailscale/tailscale:v1.104.4@sha256:ed6480b33c6eb67c9cbd203ed42b9fb57e361986725b6856def71b7a3d9e276c --state=mem:
           timeout 30s docker exec tailscale-peer sh -c 'until [ -S /var/run/tailscale/tailscaled.sock ]; do sleep 0.1; done'
           docker exec -e ACTIONS_ID_TOKEN_REQUEST_URL -e ACTIONS_ID_TOKEN_REQUEST_TOKEN tailscale-peer tailscale up \
             --client-id="$TS_OAUTH_CLIENT_ID?preauthorized=true&ephemeral=true" \

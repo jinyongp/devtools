@@ -125,7 +125,7 @@ devtools run check:proxy-compat --binary /absolute/candidate/devtools --case nux
 제외한다. 공개 URL의 DNS·edge readiness도 실제 클라이언트의 검증된 HTTP 응답으로 확인한다.
 실패한 기능 검사를 자동 재시도하지 않는다.
 
-Tailscale은 host와 준비된 두 번째 tailnet 장치 모두 1.104.5여야 한다.
+Tailscale은 host와 준비된 두 번째 tailnet 장치 모두 1.104.4여야 한다.
 `--provider tailscale --live --peer-network container:tailscale-peer`를 사용한다.
 두 장치 IP가 같거나 로그인·HTTPS·전용 Serve 포트 8443/8444가 준비되지 않았으면 실패한다.
 Serve 설정의 전후 일치와 소유 handler 정리를 검사한다. 모의 LocalAPI 검사를 실제 tailnet
@@ -346,6 +346,7 @@ Actions에서 검증하며, Unix의 verify/run.py·HOME/XDG 격리·POSIX shell 
   새로운 push/PR은 이전 CI를 취소하지만 release 실행은 취소하지 않는다.
 
 PowerShell 크래시의 반복 재현은 수동 `focus=powershell`/`installer` 진단에서만 요청한다.
+ARM64 위 x64 portable 검증 런타임은 공식 PowerShell 7.6.9 ZIP과 SHA-256으로 고정한다.
 일반 full 실행은 기존 installer 시나리오를 엔진당 1회 실행하며 startup·stdio 반복 probe는 0회다.
 `installer_repetitions`(1–20), `powershell_startup_probes`(0–1000),
 `powershell_stdio_probes`(0–2000)를 지정해 반복하고 `installer_package_commit`으로

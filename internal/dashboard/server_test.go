@@ -118,7 +118,7 @@ func TestPinnedBundle(t *testing.T) {
 		t.Fatal(e)
 	}
 	d3 := manifest["d3"]
-	if d3.Version != "7.9.0" || len(d3.Peers) != 0 || fmt.Sprintf("%x", sha256.Sum256(bundle)) != d3.SHA {
+	if d3.Version != "7.9.2" || len(d3.Peers) != 0 || fmt.Sprintf("%x", sha256.Sum256(bundle)) != d3.SHA {
 		t.Fatal("bundle differs from exact dependency manifest")
 	}
 }
@@ -191,7 +191,7 @@ func TestSessionAndReadBoundary(t *testing.T) {
 	if r = invoke("GET", "/api/profiles", "", "", "", credential); r.Code != 401 {
 		t.Fatal("expired session")
 	}
-	if r = invoke("GET", "/d3.min.js", "", "", "", ""); r.Code != 200 || !strings.Contains(r.Body.String(), "v7.9.0") {
+	if r = invoke("GET", "/d3.min.js", "", "", "", ""); r.Code != 200 || !strings.Contains(r.Body.String(), "v7.9.2") {
 		t.Fatal("embedded D3 missing")
 	}
 }

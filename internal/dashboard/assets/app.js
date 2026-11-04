@@ -1,4 +1,4 @@
-/* D3 7.9.0 handles graph transforms; Canvas renders nodes and directed edges. */
+/* D3 7.9.2 handles graph transforms; Canvas renders nodes and directed edges. */
 "use strict";
 const $ = (id) => document.getElementById(id),
   canvas = $("graph"),

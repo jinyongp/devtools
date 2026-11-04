@@ -162,3 +162,17 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
   소유 범위를 재관측하는 검증을 유지하며 OS 오류를 일괄 무시하지 않는다.
 - Linux process/services/execution/doctor 전체 race 검사 및 macOS arm64 process
   교차 컴파일 통과. 수정 커밋의 native 재검증은 기존 workflow에서 확인한다.
+
+### 통합 리뷰 수정 6 — 사라진 PID와 native fixture의 선행 조건
+
+- 좀비 그룹 수정 후 macOS 읽기 전용 doctor 검사가 통과했다. 남은 시작 관측 실패
+  사례는 정리한 자식이 이미 reap되어 PID 조회가 빈 응답을 반환한 경우였다.
+  단일 kinfo wrapper의 EIO 대신 slice 응답으로 빈 결과를 확인해 ESRCH와 실제
+  조회 실패를 구분한다. reap 전/후의 native 회귀 사례를 추가했고 arm64 교차 컴파일을 통과했다.
+- Windows에서 자식의 준비 파일이 제어기의 running 기록보다 먼저 보이는 정상 순서를
+  확인했다. fixture는 기존 30초 한도 안에서 실제 running 공개를 기다리며, 시작 오류나
+  자식 조기 종료는 즉시 실패한다. Linux race 3회 및 Windows amd64 교차 컴파일 통과.
+- 공통 network fixture가 IPv4 loopback 빈 포트만 고르던 것을 기존 전역 TCP probe로
+  확인하도록 보완했다. 실제 Configure의 검사는 유지한다. host policy 노출 사례
+  Linux race 3회 통과. macOS Intel setup-uv의 manifest 다운로드 시간 초과는 별도
+  외부 실행 실패로 구분하고 최종 native 실행에서 다시 확인한다.

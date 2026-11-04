@@ -1,6 +1,7 @@
 package process
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"syscall"
@@ -54,5 +55,12 @@ func TestDarwinOwnedGroupObservesUnreapedChild(t *testing.T) {
 		if err := signalOwnedGroup(pid, signal); err != nil {
 			t.Fatalf("signal verified empty group after child exit: %v", err)
 		}
+	}
+	var exit *exec.ExitError
+	if err := command.Wait(); !errors.As(err, &exit) {
+		t.Fatalf("reap killed child: %v", err)
+	}
+	if _, err := ownedChildState(pid); !errors.Is(err, syscall.ESRCH) {
+		t.Fatalf("query reaped child must report absence, not an I/O failure: %v", err)
 	}
 }

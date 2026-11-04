@@ -62,8 +62,8 @@
 | 값·env·bundle | 검토·로컬 재검증 완료 | kind/env 소속·상속·삭제·반복 선택 |
 | proxy·exposure·port·instance | 검토·로컬 재검증 완료 | 실제 listener/exposure 제어 상태, 선언/할당 구분, instance 이동의 원본 범위 |
 | bash·zsh·fish | 검토·로컬 재검증 완료 | 실제 셸의 동일 필터·설명·특수문자·호출 바이너리·별칭·child 경계 |
-| PowerShell 5.1/7 | 소스 검토 완료, native 재검증 대기 | 기존 Windows full workflow의 실제 AST/UTF-8/cursor/필터 검사 |
-| 문서·번들 Skill·통합 검증 | 검토·로컬 재검증 완료, native 대기 | 정적 검사와 설치형 6개 시나리오, 기존 Unix/Windows workflows 재사용 |
+| PowerShell 5.1/7 | 검토·native 재검증 완료 | Windows x64/ARM64 full workflow의 실제 AST/UTF-8/cursor/필터 검사 |
+| 문서·번들 Skill·통합 검증 | 검토·통합 재검증 완료 | 정적 검사, 설치형 시나리오, 기존 Unix/Windows workflows 통과 |
 
 ## 공급자 전수 대조
 
@@ -108,7 +108,27 @@ cleanup plan/archive, private context와 expected-run은 안전한 기존 공급
   perf, gofmt, go vet. bash/zsh와 셸 준비 script 문법 검사 통과.
 - 설치형 `completion_context`, `discovery`, `cli_presentation`, `processes`,
   `project_lifecycle`, `cli_reliability` 전부 통과. 실제 fish 포함.
-- 원격 전체 검증 결과는 기존 Unix/Windows workflow 실행 뒤 이 문서에 추가한다.
+- 원격 전체 검증 결과는 아래에 기록한다.
 
 공통 엔진과 도메인 연결은 함께 컴파일되어야 하므로 구현·회귀 검사·사용 문서를 첫 커밋으로,
 native CI와 설치형 통합 검사를 다음 커밋으로 묶는다. 배포는 수행하지 않는다.
+
+## 통합 검증과 최종 리뷰
+
+검증 대상: `3c214b608797baa52819703e52e7734b74e76b5c`.
+구현 커밋은 `506260e`, 설치형·CI 검증 확장은 `3c214b6`이다.
+
+- [Unix validation](https://github.com/jinyongp/devtools/actions/runs/41794506521): 성공.
+  필수·기본 작업 24개 통과. macOS/Linux 전체 Go race·정적 검사,
+  macOS Intel/ARM64와 Linux x64/ARM64 설치형 시나리오,
+  실제 bash/zsh/fish, 기존 proxy·브라우저 호환 검사 포함.
+- [Windows platform boundaries](https://github.com/jinyongp/devtools/actions/runs/41794471813): 성공.
+  23개 작업 통과. x64/ARM64 전체 제품·설치·업데이트·입력 계약과
+  양쪽 플랫폼의 실제 PowerShell 5.1/7 completion 검사 포함.
+- 명시적 opt-in인 실 Cloudflared ingress, 두 장치 Tailscale Serve와
+  과거 자동화 성능 측정 3개는 설정대로 실행하지 않았다.
+
+전체 변경과 영향받은 호출자·문서·검사를 재검토했다. 위 범위에서 남은 수정 대상은 없다.
+이 결과를 기록하는 후속 커밋은 문서만 변경하며 검증한 구현·테스트·workflow는 그대로다.
+사용자 셸 설정과 설치된 버전은 변경하지 않았다. 새 버전 적용 뒤 이전 자동완성 파일을
+재생성/재로딩해야 셸별 기존 정적 fallback까지 교체된다.

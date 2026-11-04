@@ -22,6 +22,17 @@ function runCLI(args, cwd, env, input = "") {
   }).trim();
 }
 
+async function submitAction(page, trigger, { ok = true, matches = () => true } = {}) {
+  const [response] = await Promise.all([
+    page.waitForResponse(response => response.url().endsWith("/api/actions") &&
+      response.request().method() === "POST" && matches(response.request().postDataJSON())),
+    trigger(),
+  ]);
+  const result = await response.json();
+  expect(result.ok, JSON.stringify(result.error || {})).toBe(ok);
+  return result;
+}
+
 test("dashboard login, value mutation and navigation survive reload", async ({ page }) => {
   test.setTimeout(45000);
   const root = mkdtempSync(join(tmpdir(), "devtools-dashboard-browser-"));
@@ -65,7 +76,7 @@ test("dashboard login, value mutation and navigation survive reload", async ({ p
     await edit.click();
     const input = page.getByRole("textbox", { name: "New value for MESSAGE" });
     await input.fill("after");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await submitAction(page, () => page.getByRole("button", { name: "Save", exact: true }).click());
     await expect(page.getByRole("button", { name: "Edit MESSAGE" })).toHaveText("after");
 
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -77,7 +88,7 @@ test("dashboard login, value mutation and navigation survive reload", async ({ p
     await page.keyboard.press("Enter");
     await page.getByLabel("Bundle name", { exact: true }).fill("frontend");
     await page.getByLabel("Value names (one per line)", { exact: true }).fill("MESSAGE");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await submitAction(page, () => page.getByRole("button", { name: "Save", exact: true }).click());
     await expect(page.getByRole("button", { name: "Edit members: frontend", exact: true })).toBeFocused();
     const bundles = JSON.parse(runCLI(["bundle", "list"], project, env)).data;
     expect(bundles.items[0].name).toBe("frontend");
@@ -90,21 +101,18 @@ test("dashboard login, value mutation and navigation survive reload", async ({ p
     await page.getByRole("button", {name:"Import .env",exact:true}).click();
     await page.getByLabel("Or paste .env content",{exact:true}).fill("PUBLIC_URL=https://bundle.invalid\n");
     await page.getByLabel("Value bundle (optional)",{exact:true}).fill("frontend");
-    await page.getByRole("button",{name:"Preview import",exact:true}).click();
+    await submitAction(page, () => page.getByRole("button",{name:"Preview import",exact:true}).click());
     await expect(page.locator("#editor-fields")).toContainText("Bundle: frontend");
     await page.getByLabel("PUBLIC_URL — Store as public variable",{exact:true}).check();
-    const importResponse = page.waitForResponse(response => response.url().endsWith("/api/actions") &&
-      response.request().method() === "POST" && response.request().postDataJSON()?.change?.import?.preview === false);
-    await page.getByRole("button",{name:"Import values",exact:true}).click();
-    const imported = await (await importResponse).json();
-    expect(imported.ok, JSON.stringify(imported.error || {})).toBe(true);
+    await submitAction(page, () => page.getByRole("button",{name:"Import values",exact:true}).click(),
+      { matches: request => request?.change?.import?.preview === false });
     await expect(page.locator("#editor")).not.toBeVisible();
     await expect(page.getByRole("button",{name:"Edit PUBLIC_URL",exact:true})).toHaveText("https://bundle.invalid");
     expect(JSON.parse(runCLI(["bundle","list"],project,env)).data.items[0].value_ids).toHaveLength(2);
     await page.getByRole("button", { name: "Rename bundle: frontend", exact: true }).click();
     const longBundle = "b".repeat(128);
     await page.getByLabel("New bundle name", {exact:true}).fill(longBundle);
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await submitAction(page, () => page.getByRole("button", { name: "Save", exact: true }).click());
     await page.setViewportSize({width:390,height:844});
     await expect(page.getByRole("button", { name: `Rename bundle: ${longBundle}`, exact: true })).toBeFocused();
     expect(await page.getByRole("region", {name:"Value bundles",exact:true}).evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
@@ -197,16 +205,18 @@ test("vault controls keep metadata passive and clear unlock input",async({page})
     await expect(page.getByText("Vault unlocked",{exact:true})).toBeVisible();
     await expect(page.locator("#values-panel")).not.toContainText("synthetic-browser-secret-canary");
     await page.getByRole("button",{name:"Lock vault for all profiles"}).focus();
-    await page.keyboard.press("Enter");
+    await submitAction(page, () => page.keyboard.press("Enter"));
     await expect(page.getByText("Vault manually locked",{exact:true})).toBeVisible();
     await expect(page.getByRole("button",{name:"Edit MESSAGE",exact:true})).toBeDisabled();
     const status=JSON.parse(runCLI(["vault","status"],project,env)).data.item;
     expect(status.state).toBe("locked_manual");
     await page.getByRole("button",{name:"Unlock vault",exact:true}).focus();await page.keyboard.press("Enter");
     const input=page.getByLabel("Vault passphrase",{exact:true});await expect(input).toBeFocused();
-    await input.fill("synthetic-wrong-passphrase");await page.keyboard.press("Enter");
+    await input.fill("synthetic-wrong-passphrase");
+    await submitAction(page, () => page.keyboard.press("Enter"), { ok: false });
     await expect(page.locator("#editor-error")).toContainText("Passphrase cleared");await expect(input).toHaveValue("");
-    await input.fill(passphrase);await page.getByRole("button",{name:"Unlock vault",exact:true}).last().click();
+    await input.fill(passphrase);
+    await submitAction(page, () => page.getByRole("button",{name:"Unlock vault",exact:true}).last().click());
     await expect(page.locator("#editor")).not.toBeVisible();
     await expect(page.getByText("Vault unlocked",{exact:true})).toBeVisible();
     await expect(page.getByRole("button",{name:"Lock vault for all profiles"})).toBeFocused();

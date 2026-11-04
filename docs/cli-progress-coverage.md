@@ -201,6 +201,7 @@ spinner 정리 검사는 그대로 유지하며, 실패 설명과 후속 행동�
 | CI 실행 조건 | Windows race 명령에서 문서의 runner 내부 `-p 1` 정책이 빠졌다. 동일 정책을 적용하며 패키지·race·기한을 유지한다. | Workflow 문법과 실제 native 결과를 구분한다. 이 차이가 아래 두 CI 실패의 원인이라고 확정하지 않는다. |
 | 텍스트 성공 검사의 전제 | 진행 표시가 허용되는 text 성공에서도 stderr 공백을 요구한 검사가 남아 있었다. 생성 request ID, columns, command alias, rendering과 publication 검사를 대조해 정상 진행과 오류를 구분한다. | 성공 코드·출력·동일 request 재생·오류 표시 금지를 유지한다. JSON·artifact·completion wire의 공백 조건과 공통 progress·foreground 스트림 검사는 유지한다. |
 | 실패 화면의 정보 순서 | 정상 inventory가 막힌 대상을 밀어내고 전역 저장소 오류에도 project directory가 중복됐다. blocked와 unsupported를 먼저 보여주며 별도 진단이 없는 정상 항목은 개수로 요약한다. 실제 저장소 scope만 표시한다. | 정상 200개, 주의 항목, 전환 대상과 blocked를 섞은 결과 및 중복 scope 검사가 수정 전 둘 다 실패했다. 정상 완료 inventory, 의미 있는 진단과 JSON 전체 항목은 유지한다. |
+| 비동기 작업의 완료 판정 | 브라우저 검사가 mutation API 응답 전에 5초 DOM 결과 조건으로 실패할 수 있었다. 저장, 가져오기와 vault 작업에 공통 응답 확인 함수를 사용하고 실제 응답의 성공 여부를 확인한 뒤 화면을 검사한다. | 실제 서버의 정상 응답만 6초 지연한 대조에서 기존 검사는 실패하고 보완한 검사는 7.7초에 통과했다. 로컬 입력 검증은 HTTP 요청이 없으므로 별도로 유지한다. 전체 검사 기한과 이후 DOM, CLI 재조회 및 보호 경계 검사는 유지한다. |
 
 2026-11-04 17:05 UTC 기준, `811966e`의
 [main Windows 검증](https://github.com/jinyongp/devtools/actions/runs/41863909764)은 23개 job이
@@ -236,3 +237,16 @@ targeted race 검사를 9.219초에 통과했다. 최종 native와 배포 완료
 1.045초, 설치본 PTY 흐름은 정리 포함 12.667초에 통과했다. 이 보완은 B6.4의 저장소
 실패 view 규칙과 첫 화면을 확인하는 리뷰 기준에도 반영한다. 전체 검증의 최종 소스와
 native 결과는 후속 기록으로 구분한다.
+
+`87e6ef5ff593547f6a56c442e25619be5172ac39`의 전체 정적 검사, Go race와 설치본 40개는
+통과했다. CLI race는 231.879초였다.
+[해당 Windows 실행](https://github.com/jinyongp/devtools/actions/runs/41880205044)은 21개
+job 성공, x64 product와 집계 gate 실패였다. 실패한 브라우저 trace에는 값 저장 요청이
+약 5.7초 동안 응답 없이 진행 중이고 입력, Save와 Cancel이 비활성인 상태가 남아 있었다.
+확인된 서버 오류 응답은 없으며, 이 trace만으로 실제 Windows 저장 지연의 원인을 확정하지
+않는다. 위 응답 대조 검사는 검사 측의 조기 실패를 재현하고 보완하는 근거다.
+
+공통 응답 확인을 적용한 Chromium 시나리오 4개는 로컬에서 26.5초에 모두 통과했다.
+제품 코드는 `87e6ef5` 이후 바꾸지 않았으며, 후속 native 검증은 보완한 브라우저 검사와
+같은 소스로 다시 수행한다. 실제 Windows 저장 지연과 사용자의 macOS 지연 원인은
+검사 측 조기 실패를 보완한 사실과 구분한다.

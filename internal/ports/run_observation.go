@@ -45,10 +45,10 @@ func describeRunFailure(e *protocol.Error, profile, directory, instance, service
 	} else {
 		e.Message = "The TCP port for service " + service + " is already in use."
 	}
-	action := protocol.Action{Relation: protocol.ManualAction, Effect: "read", Message: "Stop the existing run with Ctrl+C in its original terminal or through its controller, then retry this command."}
-	if owner["status"] == "verified" && owner["kind"] == "managed" {
+	action := protocol.Action{Relation: protocol.ManualAction, Effect: "system_write", Message: "The existing owner has no verified devtools control target. Identify its controller and stop it through that controller before retrying."}
+	if owner["status"] == "verified" && (owner["kind"] == "managed" || owner["kind"] == "foreground") {
 		if id, ok := owner["execution_id"].(string); ok && id != "" {
-			action = protocol.Action{Relation: protocol.SameStoreAction, Effect: "system_write", Message: "Stop the existing managed execution, then retry this command.", Intent: &protocol.CommandIntent{Command: "process stop", Arguments: []string{id}, NewRequest: true}}
+			action = protocol.Action{Relation: protocol.SameStoreAction, Effect: "system_write", Message: "Stop the existing execution, then retry this command.", Intent: &protocol.CommandIntent{Command: "process stop", Arguments: []string{id}, NewRequest: true}}
 		}
 	}
 	e.Details["remedies"] = []protocol.Remedy{action.Remedy(protocol.InvocationContext{})}

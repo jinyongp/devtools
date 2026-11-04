@@ -49,4 +49,19 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
   부모 정상 조기 종료와 부모 TERM 종료 모두 자식의 cleanup marker 및 출력 보존을 검증했다.
 - macOS arm64: process 테스트 바이너리 교차 컴파일 통과. native 실행은 아직 미검증.
 
-현재: 작업 1 검증 완료. 작업 2–4 및 통합 리뷰는 진행 전이다.
+### 2. 공통 실행 등록과 제어
+
+- 이름 명령의 foreground 실행을 기존 process 기록·lease·인증 RPC에 등록한다.
+  서비스 claim은 같은 실행 ID를 가리키며 `process list/status/check/stop`으로 관리한다.
+  기존 foreground의 native stream과 종료 코드는 유지한다.
+- Unix/Windows supervisor와 foreground가 한 control server, 시작 기록,
+  readiness 직렬화 및 종료 기록 구현을 공유한다. probe 종료와 서비스 claim 해제는
+  terminal 기록을 공개하기 전에 마친다.
+- 포트 없는 이름 명령은 등록 단계의 읽기 전용/접근 거부에 한해 추적 없이 실행한다.
+  이미 실행한 명령의 오류를 재실행하지 않으며, 서비스 명령은 등록 없이 시작하지 않는다.
+- Linux race: 실제 foreground의 목록 → status → readiness → stop → 동일 UUID
+  replay, native 출력/종료 코드 및 읽기 전용 일회성 실행 검사 통과.
+- Windows amd64: services 테스트 바이너리 교차 컴파일 통과. native 실행은 아직 미검증.
+- services 전체 race 검사 통과. CLI 전체 검사는 통합 검증에서 최종 소스로 확인한다.
+
+현재: 작업 1–2의 개별 검증 완료. 작업 3–4와 통합 리뷰는 남아 있다.

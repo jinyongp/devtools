@@ -56,6 +56,7 @@ func writePrivate(path string, v any) error {
 }
 
 type Record struct {
+	Mode              string               `json:"mode,omitempty"`
 	DetailRetired     bool                 `json:"-"`
 	ValueApply        *ValueApplyStatus    `json:"value_apply,omitempty"`
 	AutoOrigin        string               `json:"auto_origin,omitempty"`
@@ -1111,7 +1112,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (result Re
 			}
 		}
 	}
-	r := Record{ID: q.RequestID, Profile: p.Profile, Instance: instance.ID, Directory: p.Root, Command: q.Command, Env: env, EnvOverride: q.Env, Selection: selection, BundleOverride: q.Bundle, Capture: capture, CreatedAt: time.Now().UTC(), State: "starting", Previous: previous}
+	r := Record{ID: q.RequestID, Mode: "managed", Profile: p.Profile, Instance: instance.ID, Directory: p.Root, Command: q.Command, Env: env, EnvOverride: q.Env, Selection: selection, BundleOverride: q.Bundle, Capture: capture, CreatedAt: time.Now().UTC(), State: "starting", Previous: previous}
 	if q.AutoGoal != nil {
 		parent, e := s.read(previous)
 		if e != nil {

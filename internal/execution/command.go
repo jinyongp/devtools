@@ -11,6 +11,7 @@ import (
 // Command is the immutable command-level input shared by foreground and managed
 // execution paths before storage, ports, or process lifetime are involved.
 type Command struct {
+	ExecutionID  string
 	Invocation   protocol.InvocationContext
 	Selection    string
 	Output       redact.Policy

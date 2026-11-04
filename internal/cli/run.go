@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"os"
+	"sync"
 
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/execution"
@@ -83,18 +84,43 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 		}
 		command.Network = snapshots[command.Name]
 	}
+	if command.Name != "" {
+		command.ExecutionID = tasks.ID()
+	}
 	prepared, err := a.prepareExecution(ctx, command, false, streams)
 	if err != nil {
 		return nil, err
 	}
+	prepared.Release = sync.OnceFunc(prepared.Release)
 	defer prepared.Release()
 	checks := prepared.Checks(ctx, os.Environ(), false)
 	if !execution.ChecksPassed(checks) {
 		return nil, doctor.FailureFor(checks, command.Diagnostic("foreground"))
 	}
-	exit, err := prepared.Execute(ctx, os.Environ(), nil, streams.In, streams.Out, streams.Err)
+	exit := 0
+	if command.ExecutionID != "" {
+		store, storeErr := a.serviceStore()
+		if storeErr != nil {
+			return nil, storeErr
+		}
+		exit, err = store.RunForeground(ctx, prepared, os.Environ(), streams.In, streams.Out, streams.Err)
+		if err != nil && len(command.Serve) == 0 && prepared.Command.ExecutionID != "" && foregroundTrackingDenied(err) {
+			// A one-off command must retain its existing read-only execution
+			// contract. Service ownership, in contrast, requires registration.
+			exit, err = prepared.Execute(ctx, os.Environ(), nil, streams.In, streams.Out, streams.Err)
+		}
+	} else {
+		exit, err = prepared.Execute(ctx, os.Environ(), nil, streams.In, streams.Out, streams.Err)
+	}
 	if err != nil {
 		return nil, err
 	}
 	return processResult{ExitCode: exit}, nil
+}
+
+func foregroundTrackingDenied(condition *protocol.Error) bool {
+	if condition == nil || condition.Code != "io_error" {
+		return false
+	}
+	return condition.Details["phase"] == "register_execution" && (condition.Details["reason"] == "access_denied" || condition.Details["reason"] == "read_only")
 }

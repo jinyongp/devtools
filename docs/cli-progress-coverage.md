@@ -188,18 +188,18 @@ ARM64의 기존 collection 검사도 정상 진행 표시를 stderr 오류로 �
 ### 사용자 결과 기준으로 다시 수행한 리뷰
 
 리뷰 기준은 [검증 구성](verification.md#사용자-결과를-기준으로-리뷰하기)에 기록하고,
-저장소의 [AGENTS.md](../AGENTS.md)에서 구현·리뷰 시 읽도록 연결했다. 공통 실행부 연결과
+저장소의 [AGENTS.md](../AGENTS.md)에서 구현과 리뷰 시 읽도록 연결했다. 공통 실행부 연결과
 spinner 정리 검사는 그대로 유지하며, 실패 설명과 후속 행동의 결과를 별도로 확인한다.
 
 | 영역 | 발견한 누락과 수정 | 실행 근거와 남은 범위 |
 | --- | --- | --- |
-| 값·task profile | 헤더 검사 실패는 여전히 정상 prefix와 실패 profile을 버렸다. profile별 헤더·payload 검사를 공통 `Layout` 순회로 합쳐 검증을 마친 대상만 보존한다. | 실제 세 profile 중 두 번째를 손상한 검사가 수정 전 두 domain에서 실패했다. 수정 후 check/fix의 JSON/text, 파일 전체 바이트 보존과 입력 복구 뒤 Ready를 확인한다. |
-| 프로세스·로그·archive·전달 잠금 | 중간 실패에서 전체 결과를 버리고 마지막 동기 검사 뒤 취소를 놓칠 수 있었다. 기존 `Step.InspectionFailed`로 완료한 대상과 실패 주소를 보존하고 context를 확인한다. | 실제 기록·로그·공유 archive·전달 파일과 잘못된 잠금 파일을 사용한다. 이전 네 adapter만 Go overlay로 연결한 음성 대조가 네 경우 모두 실패했고 수정본은 통과했다. |
+| 값과 task profile | 헤더 검사 실패는 여전히 정상 prefix와 실패 profile을 버렸다. profile별 헤더와 payload 검사를 공통 `Layout` 순회로 합쳐 검증을 마친 대상만 보존한다. | 실제 세 profile 중 두 번째를 손상한 검사가 수정 전 두 domain에서 실패했다. 수정 후 check/fix의 JSON/text, 파일 전체 바이트 보존과 입력 복구 뒤 Ready를 확인한다. |
+| 프로세스, 로그, archive, 전달 잠금 | 중간 실패에서 전체 결과를 버리고 마지막 동기 검사 뒤 취소를 놓칠 수 있었다. 기존 `Step.InspectionFailed`로 완료한 대상과 실패 주소를 보존하고 context를 확인한다. | 실제 기록, 로그, 공유 archive, 전달 파일과 잘못된 잠금 파일을 사용한다. 이전 네 adapter만 Go overlay로 연결한 음성 대조가 네 경우 모두 실패했고 수정본은 통과했다. |
 | 값 operation receipt | profile 검사 결과 뒤의 receipt 오류가 앞선 결과를 버렸고 receipt 순회에는 context가 없었다. 실패 resource와 완료한 profile을 보존하고 읽기 경계에서 취소한다. | receipt 주소의 잘못된 파일 유형과 검사 단계에서의 취소, 무변경 및 fixture 제거 뒤 재검증을 확인한다. |
-| 전환할 항목이 없는 `--fix` | blocked 결과만 있어도 coordinator 잠금·진행 기록을 만들어 불필요한 적용 상태를 남겼다. 전환할 항목이 없으면 검사 결과를 반환한다. | profile와 resource 실패 검사가 check/fix 전후 모든 fixture 파일을 비교한다. 실제 전환·부분 적용·재개 계약은 기존 engine 및 domain 검사가 계속 보호한다. |
+| 전환할 항목이 없는 `--fix` | blocked 결과만 있어도 coordinator 잠금과 진행 기록을 만들어 불필요한 적용 상태를 남겼다. 전환할 항목이 없으면 검사 결과를 반환한다. | profile과 resource의 실패 검사가 check/fix 전후 모든 fixture 파일을 비교한다. 실제 전환, 부분 적용, 재개 계약은 기존 engine 및 domain 검사가 계속 보호한다. |
 | 설치본 후속 안내 | JSON 복구 argv 실행에 더해 실제 PTY에 출력한 text 명령을 그대로 실행하고 같은 isolation root가 Ready인지 확인한다. | 기존 `cli_presentation`을 확장한다. 손상된 값 profile의 JSON/text와 fixture 원본 복구 뒤 재검증도 같은 설치본으로 확인한다. |
-| CI 실행 조건 | Windows race 명령에서 문서의 runner 내부 `-p 1` 정책이 빠졌다. 동일 정책을 적용하며 패키지·race·기한을 유지한다. | Workflow 문법과 실제 native 결과를 구분한다. 이 차이가 아래 두 CI 실패의 원인이라고 확정하지 않는다. |
-| 텍스트 성공 검사의 전제 | 진행 표시가 허용되는 text 성공에서도 stderr 공백을 요구한 검사가 남아 있었다. 생성 request ID, columns, command alias, rendering과 publication 검사를 대조해 정상 진행과 오류를 구분한다. | 성공 코드·출력·동일 request 재생·오류 표시 금지를 유지한다. JSON·artifact·completion wire의 공백 조건과 공통 progress·foreground 스트림 검사는 유지한다. |
+| CI 실행 조건 | Windows race 명령에서 문서의 runner 내부 `-p 1` 정책이 빠졌다. 동일 정책을 적용하며 패키지, race, 기한을 유지한다. | Workflow 문법과 실제 native 결과를 구분한다. 이 차이가 아래 두 CI 실패의 원인이라고 확정하지 않는다. |
+| 텍스트 성공 검사의 전제 | 진행 표시가 허용되는 text 성공에서도 stderr 공백을 요구한 검사가 남아 있었다. 생성 request ID, columns, command alias, rendering과 publication 검사를 대조해 정상 진행과 오류를 구분한다. | 성공 코드와 출력, 동일 request 재생 및 오류 표시 금지를 유지한다. JSON, artifact, completion wire의 공백 조건과 공통 progress 및 foreground 스트림 검사는 유지한다. |
 | 실패 화면의 정보 순서 | 정상 inventory가 막힌 대상을 밀어내고 전역 저장소 오류에도 project directory가 중복됐다. blocked와 unsupported를 먼저 보여주며 별도 진단이 없는 정상 항목은 개수로 요약한다. 실제 저장소 scope만 표시한다. | 정상 200개, 주의 항목, 전환 대상과 blocked를 섞은 결과 및 중복 scope 검사가 수정 전 둘 다 실패했다. 정상 완료 inventory, 의미 있는 진단과 JSON 전체 항목은 유지한다. |
 | 비동기 작업의 완료 판정 | 브라우저 검사가 mutation API 응답 전에 5초 DOM 결과 조건으로 실패할 수 있었다. 저장, 가져오기와 vault 작업에 공통 응답 확인 함수를 사용하고 실제 응답의 성공 여부를 확인한 뒤 화면을 검사한다. | 실제 서버의 정상 응답만 6초 지연한 대조에서 기존 검사는 실패하고 보완한 검사는 7.7초에 통과했다. 로컬 입력 검증은 HTTP 요청이 없으므로 별도로 유지한다. 전체 검사 기한과 이후 DOM, CLI 재조회 및 보호 경계 검사는 유지한다. |
 
@@ -215,17 +215,17 @@ publication fixture 기한, 후자는 receiver acceptance 관측에서 실패했
 v0.42.0이다. 두 Windows 실패의 간헐성 원인과 후속 소스의 native 완료는 별도 확인이
 필요하다. 사용자의 실제 macOS 저장소 지연 원인도 아직 미확인이다.
 
-`d6fda860bc215b469672ab79e6dfbddf14647f80`에서 `check:all`의 전체 정적·Go race
-검사와 설치본 40개 시나리오를 통과했다. CLI race는 253.214초, 확장한 실제 PTY
+`d6fda860bc215b469672ab79e6dfbddf14647f80`에서 `check:all`의 전체 정적 검사, Go race와
+설치본 40개 시나리오를 통과했다. CLI race는 253.214초, 확장한 실제 PTY
 `cli_presentation`은 정리 포함 12.826초였다. Workflow actionlint도 통과했다.
 [해당 main Windows 실행](https://github.com/jinyongp/devtools/actions/runs/41874807321)은
-21개 job 성공, ARM64 CLI와 집계 gate 실패였다. ARM64의 실제 task 생성·Request ID·
+21개 job 성공, ARM64 CLI와 집계 gate 실패였다. ARM64의 실제 task 생성, Request ID와
 종료 코드는 정상이었고 `TestGeneratedOperationIDAppearsInTextSuccess`가 정상 진행 표시를
 오류로 판단했다. 이 실행의 x64 race는 통과했지만 이전 실패의 간헐성 원인을 확정하는
 근거로 삼지 않는다.
 
 후속 `7499859195591f1e43d1b73e59337fd50988797b`는 위 text 성공 검사 전제 여섯 곳만
-수정한다. 제품 코드·JSON 계약은 `d6fda86`과 같으며, 해당 출력·progress·foreground의
+수정한다. 제품 코드와 JSON 계약은 `d6fda86`과 같으며, 해당 출력, progress, foreground의
 targeted race 검사를 9.219초에 통과했다. 최종 native와 배포 완료는 후속 실행으로 확인한다.
 
 `fc210b928732bb83ed611801ae3305975c88b6ad`의 전체 정적 검사, Go race와 설치본 40개도
@@ -254,3 +254,55 @@ job 성공, x64 product와 집계 gate 실패였다. 실패한 브라우저 trac
 같은 정상 응답 6초 지연은 기존 첫 브라우저 시나리오에도 상시 포함한다. 별도 시나리오나
 제품 failpoint를 추가하지 않고 실제 서버 응답을 보존한다. 이후 공통 응답 대기를 제거하면
 기존의 5초 DOM 조건이 이 지연을 다시 잡게 하며, 전체 45초 기한은 유지한다.
+
+### 후속 최종 검증
+
+제품 소스는 `87e6ef5` 이후 고정했다. 후속 변경은 브라우저의 실제 응답 대기와 상시 지연
+검사, native lifecycle 실패의 상세 결과 출력이다. 최종 검증 소스는
+`79ac7153f24f1993bbedfd9d70b3d9789fc4fb11`이다.
+
+- 전체 정적 검사와 Go race를 다시 통과했다. 제품 코드의 설치본 40개 시나리오도 통과했다.
+- 실제 정상 응답의 6초 지연을 포함한 Chromium 시나리오 4개는 로컬에서 33.6초에 통과했다.
+- [최종 Windows 전체 검증](https://github.com/jinyongp/devtools/actions/runs/41887378635)은
+  23개 job 모두 성공했다. x64 race, 두 아키텍처의 CLI, 실제 브라우저와 설치 검사를 포함한다.
+- [기존 lifecycle 집중 진단](https://github.com/jinyongp/devtools/actions/runs/41887633190)도
+  x64와 ARM64에서 각각 20회 통과했다. 이 집중 결과로 전체 gate를 대신하지 않는다.
+
+이전 `06c6bb3`의 Windows 실행에서는 ARM64의 5회 lifecycle 검사 중 한 번이 재개 후
+`pending`으로 남았다. 당시 로그가 내부 조건을 포인터 주소로만 남겨 상세 결과를 JSON으로
+출력하도록 보완했다. 후속 반복에서 재현되지 않았으므로 해당 간헐 실패의 원인이 해결됐다고
+판정하지 않는다. 앞서 기록한 실제 Windows 저장 지연과 사용자 macOS 지연 원인도
+미확인 상태다. 실제 저장소를 강제로 해제하거나 무결성 검사를 줄이지 않았다.
+
+위 최종 소스로 [v0.43.0 Release](https://github.com/jinyongp/devtools/actions/runs/41888980738)를
+수행했다. 전체 Windows source 검증의 exact-SHA 재사용을 확인했으며, 배포 버전으로 다시
+패키징한 product 검사와 Unix, vault, WSL, profile 교환 및 아래 게시 후 검증을 통과했다.
+
+Release 첫 실행에서는 macOS 정적 검사와 나머지 패키지 검사에 runner가 배정되지 않아
+취소됐다. 두 job 모두 실행 step이 없고 GitHub annotation은 hosted runner 배정 실패와
+macOS ARM64 수용량 부족을 보고했다. WSL 브라우저 job은 25분 제한을 넘겨도 실행 상태가
+끝나지 않고 로그도 제공되지 않아 종료를 요청했다. 해당 WSL 정체의 원인은 미확인이다.
+성공한 36개 결과를 유지하고 미완료 세 job만 다시 요청했다. 새 실행에서는 실제 WSL2와
+Windows HTTPS 브라우저 연결, 나머지 두 macOS 검사 및 Unix 집계 gate까지 통과했다.
+두 Mac의 실제 Keychain과 Linux Secret Service, 설치본 검사, profile 교환 12방향도 통과했다.
+
+2026-11-04 19:21 UTC에 [v0.43.0](https://github.com/jinyongp/devtools/releases/tag/v0.43.0)을
+stable latest로 게시했다. 공개 archive 7개의 checksum, 실행파일 6종의 OS, 아키텍처,
+버전과 source commit, canonical skill 및 두 installer의 바이트 일치를 확인했다.
+Linux의 임시 XDG 경로에서 공개 기본 설치, 디렉터리 이름을 쓰는 init, 값 읽기와 쓰기,
+project/storage doctor 및 같은 버전의 기본 update를 실행했다. 설치와 두 doctor는 Ready였고
+동일 버전 update는 `changed: false`였다.
+
+공개 설치 검사의 첫 시도는 fixture에 `DEVTOOLS_ISOLATED_ROOT`를 넣어 설치 전용
+entrypoint의 정책 제한에 막혔다. 해당 제한은 유지하고, Linux의 임시 XDG 경로로 정상
+설치의 전제 조건을 맞춘 뒤 위 흐름을 통과했다. 사용자 저장소는 검사 대상으로 쓰지 않았다.
+[설치 페이지 게시](https://github.com/jinyongp/devtools/actions/runs/41896191319)도 성공했고
+공개 HTTPS의 shell 및 PowerShell installer가 게시한 원본과 같은 바이트임을 확인했다.
+
+Release workflow는 두 번째 attempt에서 성공했다. 명시적 공개 provider와 system-network
+smoke는 기존 입력 조건으로 제외됐으며, 선택하지 않은 검사를 실행한 것으로 보고하지 않는다.
+Homebrew는 네 플랫폼 검증 후 게시했고, 반영된 tap commit
+`206410ba591c15a81bf8354556c0aeb55c62caa8`의
+[후속 CI](https://github.com/jinyongp/homebrew-tap/actions/runs/41896821658)도 통과했다.
+tap 유지보수 회귀, shell/Ruby 문법 및 checked-in Formula의 strict audit 결과를 확인했다.
+이 최종 기록과 표기 정리는 문서 변경이며 배포한 제품 소스와 필수 검증 대상은 위 SHA로 유지한다.

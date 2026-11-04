@@ -607,7 +607,7 @@ report의 실제 저장소 directory만 표시하고 관련 없는 project scope
 사람용 출력을 다시 복잡하게 만들 수 있어 수정한다. 전용 view는 **필수 의미를 보존하는 요약**이다.
 생략 가능한 알려진 기본값·빈 보조 구조는 adapter가 field path별로 명시한다. 전역적으로
 false/0/null/빈 문자열을 지우지 않는다. 위 저장소 정상 항목 요약 외에는
-scope·상태·효과·replay/preview·오류·필수 입력·ID·revision·cursor는 생략 목록에 넣지 않는다.
+scope, 상태, 효과, replay/preview, 오류, 필수 입력, ID, revision, cursor는 생략 목록에 넣지 않는다.
 인식하지 못한 새 public field는 Details tree로
 보여 주며 generic fallback은 전체 공개 node를 유지한다. 상세가 더 필요하면 이미 있는 안전한
 read-only inspect/show 행동이 public 결과에 이미 있으면 연결하고, 없으면 presenter가

@@ -149,3 +149,16 @@ Linux 로컬 결과와 macOS/Windows native CI 결과는 구분해서 기록한�
   실패를 무시하거나 정리 완료로 바꾸지 않고 native API 관측을 재확인한다.
 - 살아 있는 그룹, 정지한 자식, reap 전 종료 자식과 그룹을 직접 검사하는 macOS
   회귀 사례를 추가했다. 교차 컴파일 통과; native 실패 원인 확인과 수정은 진행 중이다.
+
+### 통합 리뷰 수정 5 — macOS의 좀비 그룹 신호 결과
+
+- native 직접 관측 사례는 통과해 sysctl 조회 자체의 문제를 배제했다. 실제 종료 경로와
+  [Apple XNU의 그룹 신호 구현](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_sig.c)을
+  대조했다. 좀비만 남은 그룹은 신호 대상 필터에서 제외되며 POSIX 호출이 EPERM을 반환한다.
+- 공통 그룹 신호 helper는 EPERM 뒤 살아 있는 구성원이 없는지 다시 관측한 경우에만
+  오류를 해소한다. 살아 있거나 관측이 실패한 그룹의 접근 거부는 여전히 정리 불명이다.
+  초기 TERM, 최종 KILL 및 강제 종료가 같은 판정을 사용한다.
+- macOS 회귀 사례에 reap 전 종료한 자식만 남은 그룹의 TERM/KILL을 추가했다.
+  소유 범위를 재관측하는 검증을 유지하며 OS 오류를 일괄 무시하지 않는다.
+- Linux process/services/execution/doctor 전체 race 검사 및 macOS arm64 process
+  교차 컴파일 통과. 수정 커밋의 native 재검증은 기존 workflow에서 확인한다.

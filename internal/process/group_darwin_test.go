@@ -50,4 +50,9 @@ func TestDarwinOwnedGroupObservesUnreapedChild(t *testing.T) {
 	if alive, err := ownedGroupAlive(pid); err != nil || alive {
 		t.Fatalf("query group with only its unreaped leader: alive=%v error=%v", alive, err)
 	}
+	for _, signal := range []syscall.Signal{syscall.SIGTERM, syscall.SIGKILL} {
+		if err := signalOwnedGroup(pid, signal); err != nil {
+			t.Fatalf("signal verified empty group after child exit: %v", err)
+		}
+	}
 }

@@ -41,11 +41,15 @@ CASES = {
     "ws": (None, [], None),
     "socketio": (None, [], None),
 }
-IMAGE = "devtools-proxy-browser:1.63.0"
+IMAGE = "devtools-proxy-browser:1.64.1"
 
 
-def redact(value):
-    text = re.sub(r"(?i)authorization\s*[:=]\s*(?:Basic|Bearer)\s+[^\s,\"']+", "authorization=[redacted]", str(value))
+def redact(value, secrets=()):
+    text = str(value)
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, "[redacted]")
+    text = re.sub(r"(?i)authorization\s*[:=]\s*(?:Basic|Bearer)\s+[^\s,\"']+", "authorization=[redacted]", text)
     text = re.sub(r"(?i)(authorization|cookie|password|secret)\s*[:=]\s*[^\s,]+", r"\1=[redacted]", text)
     return re.sub(r"(?i)([?&](?:token|auth|key|sid)=)[^&\s\"']+", r"\1[redacted]", text)
 
@@ -298,6 +302,16 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
         work = scratch / "fixtures"
         shutil.copytree(FIXTURES, work, ignore=shutil.ignore_patterns("node_modules", "pnpm-lock.yaml"))
         os.symlink(FIXTURES / "node_modules", work / "node_modules", target_is_directory=True)
+        nuxt_token = None
+        if case == "nuxt":
+            # Seed only this disposable server owner's normal DevTools credential.
+            # The browser still verifies it through the public authorization page.
+            nuxt_token = uuid.uuid4().hex
+            token_store = Path(environment["XDG_CONFIG_HOME"]) / ".nuxt/devtools/dev-auth-token.txt"
+            token_store.parent.mkdir(parents=True)
+            for token_file in (token_store, work / ".nuxt-devtools-authorization"):
+                token_file.write_text(nuxt_token, encoding="utf8")
+                token_file.chmod(0o600)
         backend_port, http_port, tls_port = free_port(), free_port(), free_port()
         while len({backend_port, http_port, tls_port}) != 3:
             backend_port, http_port, tls_port = free_port(), free_port(), free_port()
@@ -468,7 +482,7 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
                 result["rejected_origins"] = rejected_origins(origin, ca, case, auth, connect_host)
             result["status"] = "pass"
         except Exception as error:
-            result.update(status="fail", error=redact(error))
+            result.update(status="fail", error=redact(error, secrets=(nuxt_token,)))
             print(json.dumps({"case": case, "phase": "verification", "error": result["error"]}), flush=True)
         finally:
             if options.client_mode == "docker":
@@ -511,7 +525,7 @@ def run_case(options, binary, target, case, scheme, policy, browser, artifacts):
                 except Exception as error:
                     result.update(status="fail", trust_cleanup_error=redact(error))
             if log.exists():
-                (artifacts / "server.log").write_text(redact(log.read_text(errors="replace")), encoding="utf8")
+                (artifacts / "server.log").write_text(redact(log.read_text(errors="replace"), secrets=(nuxt_token,)), encoding="utf8")
     result["elapsed_ms"] = round((time.monotonic() - started) * 1000)
     (artifacts / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf8")
     print(json.dumps({k: v for k, v in result.items() if k not in {"browser_result"}}), flush=True)
@@ -548,14 +562,14 @@ def main():
         parser.error("Shared tests require a separate peer network")
     if options.provider == "tailscale" and (not options.peer_network or not options.peer_network.startswith("container:")):
         parser.error("Tailscale requires a prepared second tailnet device in --peer-network container:NAME")
-    if options.provider == "cloudflared" and "2026.10.3" not in command(["cloudflared", "--version"]):
-        parser.error("Prepare cloudflared 2026.10.3 before this live run")
+    if options.provider == "cloudflared" and "2026.10.7" not in command(["cloudflared", "--version"]):
+        parser.error("Prepare cloudflared 2026.10.7 before this live run")
     if options.provider == "tailscale":
-        if command(["tailscale", "version"]).splitlines()[0] != "1.104.2":
-            parser.error("Prepare Tailscale 1.104.2 before this live run")
+        if command(["tailscale", "version"]).splitlines()[0] != "1.104.5":
+            parser.error("Prepare Tailscale 1.104.5 before this live run")
         peer = options.peer_network.split(":", 1)[1]
-        if command(["docker", "exec", peer, "tailscale", "version"]).splitlines()[0] != "1.104.2":
-            parser.error("Prepare Tailscale 1.104.2 on the peer device too")
+        if command(["docker", "exec", peer, "tailscale", "version"]).splitlines()[0] != "1.104.5":
+            parser.error("Prepare Tailscale 1.104.5 on the peer device too")
         host_ip = command(["tailscale", "ip", "-4"]).strip()
         peer_ip = command(["docker", "exec", peer, "tailscale", "ip", "-4"]).strip()
         if not host_ip or not peer_ip or host_ip == peer_ip:

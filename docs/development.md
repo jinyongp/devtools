@@ -8,7 +8,7 @@ CI·로컬 검사의 역할과 수동 진단 구분은 [검증 구성](verificat
 
 ## 개발 도구와 첫 빌드
 
-Go 1.27.x(`go.mod`의 정확한 버전은 1.27.1), Node.js 24.x, Python 3, Git과
+Go 1.27.x(`go.mod`의 정확한 버전은 1.27.3), Node.js 24.x, Python 3, Git과
 `uvx`를 포함한 uv가 필요하다. macOS·Linux·WSL의 설치 시나리오는 curl·OpenSSL·tar·POSIX sh도 사용한다.
 프로젝트 명령은 `devtools.toml`에 `{목적}:{명령}` 이름으로 선언되어 있다.
 먼저 이 checkout의 CLI를 빌드해 PATH 앞에 둔다.
@@ -119,7 +119,7 @@ runner 이미지별 아키텍처는 [GitHub 공식 표](https://docs.github.com/
 x64 race 결과나 교차 컴파일로 대체하지 않는다. 각 커밋의 전체 Actions가 통과해야 통합 검증이 완료된다.
 
 Release 검증은 macOS 15, Ubuntu 24.04, Windows Server 2025 x64(테스트 호스트),
-Windows 11 ARM64와 Go 1.27.1을 사용한다. 지원 범위와 실제 PC 미검증 한계는
+Windows 11 ARM64와 `go.mod`에 고정된 Go 버전을 사용한다. 지원 범위와 실제 PC 미검증 한계는
 [Windows 안내](windows.md)를 따른다. 실행별 결과는 해당 커밋의 Actions run과
 artifact에서 확인한다.
 
@@ -131,7 +131,7 @@ artifact에서 확인한다.
 - `devtools run check:skill-release`: 공식 검증, archive 구성·checksum·소스 일치·잘못된 fixture 거절.
 - `devtools run test:installed proxies`: Unix에서 실제 배포 archive를 설치해 HTTP·WebSocket·동적 port·daemon 재시작·reservation 검증.
 
-저장소는 `skills` 1.6.0을 정확히 고정한다. `pnpm install --frozen-lockfile` 후
+저장소는 pnpm 12.16.1과 `skills` 1.7.6을 정확히 고정한다. `pnpm install --frozen-lockfile` 후
 `devtools run check:skill-discovery`로 로컬 발견을 확인한다.
 `check:skill-discovery-public`은 공개 `jinyongp/devtools`를 확인하므로 현재 checkout 검증과 구분한다.
 CI의 uv는 공식 Skill 검증에만 사용하며 Python dependency manifest가 없어 setup-uv cache는 비활성화한다.
@@ -250,7 +250,7 @@ devtools run test:dashboard-browser
 Smoke는 dashboard 로그인, Values 화면의 변수 수정, URL navigation과 session 유지 상태의 reload,
 CLI에서 확인한 최종 값을 한 흐름으로 검증한다. Release의 Linux CI에서는 Chromium의 OS 의존성도
 함께 설치하며 이 smoke가 통과한 뒤 설치된 release 시나리오를 실행한다. Playwright는
-`@playwright/test` 1.63.0으로 정확히 고정한다.
+`@playwright/test` 1.64.1으로 정확히 고정하며 proxy 검증용 Docker 이미지도 같은 버전을 사용한다.
 
 ## Agent Skill 검증
 

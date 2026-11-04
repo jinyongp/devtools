@@ -57,7 +57,7 @@ def main():
         image = temporary / "ubuntu.rootfs.tar.gz"
         download("https://cloud-images.ubuntu.com/wsl/releases/24.04/current/ubuntu-noble-wsl-amd64-24.04lts.rootfs.tar.gz", image, "2a790896740b14d637dbdc583cce1ba081ac53b9e9cdb46dc09a2f73abbd9934")
         node = temporary / "node.tar.xz"
-        download("https://nodejs.org/dist/v22.22.2/node-v22.22.2-linux-x64.tar.xz", node, "88fd1ce767091fd8d4a99fdb2356e98c819f93f3b1f8663853a2dee9b438068a")
+        download("https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz", node, "1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce")
         source = temporary / "source.tar"
         subprocess.run(["git", "archive", "--format=tar", "-o", str(source), "HEAD"], cwd=repository, check=True, timeout=30)
         attempted = True

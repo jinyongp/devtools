@@ -52,12 +52,12 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22.22.2'
+          node-version: '22.23.4'
       - name: Install frozen test dependencies
         run: |
           corepack pnpm install --frozen-lockfile --ignore-scripts
           corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts
-          docker build -t devtools-proxy-browser:1.63.0 verify/proxy-browser
+          docker build -t devtools-proxy-browser:1.64.1 verify/proxy-browser
       - name: Package and extract this exact candidate
         env:
           VERSION: 0.0.0-proxy-compat
@@ -115,7 +115,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22.22.2'
+          node-version: '22.23.4'
       - name: Frozen fixtures and real Chromium
         run: |
           corepack pnpm install --frozen-lockfile --ignore-scripts
@@ -164,7 +164,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22.22.2'
+          node-version: '22.23.4'
       - name: Prepare the explicit live test
         env:
           GH_TOKEN: ${{ github.token }}
@@ -174,8 +174,8 @@ jobs:
         run: |
           corepack pnpm install --frozen-lockfile --ignore-scripts
           corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts
-          docker build -t devtools-proxy-browser:1.63.0 verify/proxy-browser
-          gh release download 2026.10.3 --repo cloudflare/cloudflared --pattern cloudflared-linux-amd64 --dir bin/providers
+          docker build -t devtools-proxy-browser:1.64.1 verify/proxy-browser
+          gh release download 2026.10.7 --repo cloudflare/cloudflared --pattern cloudflared-linux-amd64 --dir bin/providers
           chmod +x bin/providers/cloudflared-linux-amd64
           ln -s cloudflared-linux-amd64 bin/providers/cloudflared
           echo "$PWD/bin/providers" >> "$GITHUB_PATH"
@@ -214,13 +214,13 @@ jobs:
             echo 'Required precondition missing: test-tailnet TS_OAUTH_CLIENT_ID repository variable, GitHub OIDC permission and tailnet HTTPS/Serve permissions.' >&2
             exit 2
           fi
-      - uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4
+      - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
         with:
           oauth-client-id: ${{ env.TS_OAUTH_CLIENT_ID }}
           audience: ${{ env.TS_AUDIENCE }}
           tags: tag:ci
           hostname: dvt-origin-${{ github.run_id }}-${{ github.run_attempt }}
-          version: 1.104.2
+          version: 1.104.5
           retry: '1'
           # Keep node identity in memory; HTTPS still needs a local cert cache.
           tailscaled-args: --statedir=${{ runner.temp }}/tailscale-serve
@@ -232,7 +232,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22.22.2'
+          node-version: '22.23.4'
       - name: Prepare the candidate and peer image
         env:
           VERSION: 0.0.0-proxy-compat
@@ -241,14 +241,14 @@ jobs:
         run: |
           corepack pnpm install --frozen-lockfile --ignore-scripts
           corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts
-          docker build -t devtools-proxy-browser:1.63.0 verify/proxy-browser
-          docker pull tailscale/tailscale:v1.104.2
+          docker build -t devtools-proxy-browser:1.64.1 verify/proxy-browser
+          docker pull tailscale/tailscale:v1.104.5
           python3 -B scripts/package.py
           mkdir -p bin/candidate
           tar -xzf dist/devtools_0.0.0-proxy-compat_linux_amd64.tar.gz -C bin/candidate
       - name: Enroll a distinct ephemeral peer with GitHub OIDC
         run: |
-          docker run -d --name tailscale-peer --cap-add NET_ADMIN --device /dev/net/tun --entrypoint tailscaled tailscale/tailscale:v1.104.2 --state=mem:
+          docker run -d --name tailscale-peer --cap-add NET_ADMIN --device /dev/net/tun --entrypoint tailscaled tailscale/tailscale:v1.104.5 --state=mem:
           timeout 30s docker exec tailscale-peer sh -c 'until [ -S /var/run/tailscale/tailscaled.sock ]; do sleep 0.1; done'
           docker exec -e ACTIONS_ID_TOKEN_REQUEST_URL -e ACTIONS_ID_TOKEN_REQUEST_TOKEN tailscale-peer tailscale up \
             --client-id="$TS_OAUTH_CLIENT_ID?preauthorized=true&ephemeral=true" \
@@ -303,7 +303,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22.22.2'
+          node-version: '22.23.4'
       - name: Prepare the Windows browser driver
         run: |
           corepack pnpm install --frozen-lockfile --ignore-scripts

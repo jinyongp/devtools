@@ -217,26 +217,42 @@ try {
         report.originProbes.push({ origin: supplied ?? '(absent)', result });
         assert.equal(result, allowed ? 'rpc-response' : 'no-rpc-response', `Nuxt origin guard ${supplied}: ${result}`);
       }
-      await page.waitForFunction(() => !!window.__NUXT_DEVTOOLS_HOST__);
-      await page.evaluate(() => window.__NUXT_DEVTOOLS_HOST__.devtools.navigate('/modules/pages'));
-      const devtools = page.frameLocator('#nuxt-devtools-iframe');
-      const start = devtools.getByRole('link', { name: 'Get Started' });
-      await start.waitFor();
-      await devtools.getByText('Send anonymous statistics, help us improving DevTools', { exact: true }).click();
-      assert.equal(await devtools.getByRole('checkbox').isChecked(), false);
-      await start.click();
-      await page.evaluate(() => window.__NUXT_DEVTOOLS_HOST__.devtools.navigate('/modules/pages'));
       if (config.policy === 'preserve') {
+        const token = await fs.readFile(path.join(config.fixtureWork, '.nuxt-devtools-authorization'), 'utf8');
+        const authorization = new URL('/__nuxt_devtools__/auth', origin);
+        authorization.searchParams.set('token', token);
+        const approval = await context.newPage();
+        try {
+          const [verified] = await Promise.all([
+            approval.waitForResponse(response => new URL(response.url()).pathname === '/__nuxt_devtools__/auth-verify'),
+            approval.goto(authorization.href, { waitUntil: 'domcontentloaded' }).catch(error => { if (!approval.isClosed()) throw error; }),
+          ]);
+          assert.equal(verified.status(), 200, 'DevTools owner authorization failed');
+          await page.waitForFunction(() => !!localStorage.getItem('__nuxt_dev_token__'));
+        } finally {
+          if (!approval.isClosed()) await approval.close();
+        }
+        report.authorization = 'verified-owner-token';
+        await page.waitForFunction(() => !!window.__NUXT_DEVTOOLS_HOST__);
+        await page.evaluate(() => window.__NUXT_DEVTOOLS_HOST__.devtools.navigate('/modules/pages'));
+        const devtools = page.frameLocator('#nuxt-devtools-iframe');
+        const start = devtools.getByRole('link', { name: 'Get Started' });
+        await start.waitFor();
+        await devtools.getByText('Send anonymous statistics, help us improving DevTools', { exact: true }).click();
+        assert.equal(await devtools.getByRole('checkbox').isChecked(), false);
+        await start.click();
+        await page.evaluate(() => window.__NUXT_DEVTOOLS_HOST__.devtools.navigate('/modules/pages'));
         const pages = await event('getServerPages');
         assert(pages.ok && pages.hasIndex, 'DevTools pages RPC did not return the fixture route');
         await page.evaluate(() => window.__NUXT_DEVTOOLS_HOST__.devtools.navigate('/modules/components'));
         const components = await event('getComponents');
         assert(components.ok && components.count !== null, 'DevTools components RPC failed');
       } else {
-        // The baseline HMR socket stays open but DevTools RPC is not registered.
-        const result = await event('getServerPages', 5_000).then(() => 'unexpected-response', () => 'expected-no-rpc');
-        assert.equal(result, 'expected-no-rpc');
-        report.rpcBaseline = result;
+        // An explicit public-Origin RPC above proves rejection independently
+        // of the onboarding UI, whose settings now require authorization.
+        const result = report.originProbes.find(probe => probe.origin === origin.origin);
+        assert.equal(result.result, 'no-rpc-response');
+        report.rpcBaseline = 'expected-no-rpc';
       }
     }
     if (config.case === 'sveltekit') {

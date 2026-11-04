@@ -49,18 +49,18 @@ devtools는 소비자의 검사를 끄거나 호스트를 자동 허용하지 �
 
 | 소비자 | 제한된 설정과 확인할 동작 |
 | --- | --- |
-| Nuxt 4.5.2 / DevTools 3.4.2 | `vite.server.allowedHosts`에 공개 hostname, HMR에 공개 `wss` 호스트·클라이언트 포트. DevTools Pages/Components의 실제 조회와 HMR을 확인한다. |
+| Nuxt 4.6.4 / DevTools 3.4.4 | `vite.server.allowedHosts`에 공개 hostname, HMR에 공개 `wss` 호스트·클라이언트 포트. DevTools Pages/Components의 실제 조회와 HMR을 확인한다. |
 | Vite 8.3.5 / React 19.3.1·Vue 3.5.44 | `server.allowedHosts`에 공개 hostname, HMR에 공개 WS 주소. counter 변경 후 소스 수정 시 문서 reload 없이 DOM·상태가 유지되는지 확인한다. |
-| Next.js 16.4.2 | `allowedDevOrigins: ['app.dev.example']`. App Router asset·Fast Refresh를 확인한다. 재현 fixture는 이동 가능한 의존성 링크를 위해 Next의 `--webpack` 개발 모드를 사용한다. |
-| SvelteKit 3.1.0 / Svelte 5.57.2 | v3 `sveltekit()` Vite plugin과 정확한 `allowedHosts`. SSR·탐색·form action·HMR을 확인한다. fixture의 counter는 module store를 사용한다. 편집한 컴포넌트의 로컬 상태 재생성은 Svelte 자체 동작이다. |
-| webpack 5.112.0 / dev-server 6.1.0 | `allowedHosts: ['app.dev.example']`, `client.webSocketURL`에 공개 scheme·호스트·포트. asset·HMR·상태 유지 확인. |
-| ws 8.22.0 | upgrade 전에 요청 Host와 공개 authority, Origin과 공개 origin을 비교한 뒤 echo·close 확인. |
+| Next.js 16.4.5 | `allowedDevOrigins: ['app.dev.example']`. App Router asset·Fast Refresh를 확인한다. 재현 fixture는 이동 가능한 의존성 링크를 위해 Next의 `--webpack` 개발 모드를 사용한다. |
+| SvelteKit 3.1.1 / Svelte 5.57.3 | v3 `sveltekit()` Vite plugin과 정확한 `allowedHosts`. SSR·탐색·form action·HMR을 확인한다. fixture의 counter는 module store를 사용한다. 편집한 컴포넌트의 로컬 상태 재생성은 Svelte 자체 동작이다. |
+| webpack 5.112.2 / dev-server 6.1.0 | `allowedHosts: ['app.dev.example']`, `client.webSocketURL`에 공개 scheme·호스트·포트. asset·HMR·상태 유지 확인. |
+| ws 8.22.1 | upgrade 전에 요청 Host와 공개 authority, Origin과 공개 origin을 비교한 뒤 echo·close 확인. |
 | Socket.IO 4.8.4 | `allowRequest`에서 동일한 검사를 수행하고 필요한 정확한 CORS origin만 지정. polling→upgrade, websocket-first, ack·재연결 확인. CORS만으로 WS 접근을 제한하지 않는다. |
 
 고정된 전체 설정은 [fixture](../verify/fixtures/proxy-compat)에 있다. Vite HMR 옵션은 소비자와
 Vite 버전별 API를 따른다. fixture의 구 `server.hmr` 호환 옵션은 Vite 8에서 deprecation 안내를 낼 수 있다.
 
-Nuxt DevTools 3.4.2는 Origin의 `URL.host`와 요청 Host를 비교한다. scheme까지 검사하지 않고
+Nuxt DevTools 3.4.4는 Origin의 `URL.host`와 요청 Host를 비교한다. scheme까지 검사하지 않고
 Origin이 없는 연결은 허용한다. 원본 Host의 대소문자나 명시적 `:443`과 브라우저의 URL 정규화가
 다르면 `preserve`만으로 exact-string 비교가 성공하지 않을 수 있다. Next 개발 리소스의
 allowlist는 hostname 기준이다. SvelteKit 3의 production CSRF 검사를 dev-server 결과로

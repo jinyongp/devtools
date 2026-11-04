@@ -43,8 +43,8 @@ Windows UAC·CurrentUser trust의 실제 사용자 확인 창을 아래 Unix 결
 | 설치와 recovery | `test:installed proxy_policy`, `proxy_policy_contract.py`의 공식 baseline 비교. old daemon 거절/명시 restart, 중지한 preserve pin metadata 정리, 전역 route 재생성·기본 rewrite HTTP/WS 복구. |
 | 실제 Framework/Library | `proxy_compat.py` + 고정 fixture. Chromium 전체와 Firefox/WebKit subset, Nuxt Pages/Components RPC·HMR, SSR/navigation/form·Fast Refresh·WS echo·Socket.IO upgrade/ack/reconnect. |
 | 실제 LAN ingress | Docker bridge의 별도 peer에서 TLS 검증·Host/Origin·Basic/no-auth·메시지·선택 stop/sibling. 물리 장치별 DNS·trust·firewall은 해당 장치 증거가 별도로 필요하다. |
-| 실제 Cloudflared ingress | 명시 live job의 2026.10.3 공개 URL에서 같은 대표 소비자·auth/lifecycle. Quick Tunnel SSE는 제외한다. provider seam이나 loopback origin 접근으로 대체하지 않는다. |
-| 실제 Tailscale ingress | 준비된 두 1.104.2 장치, HTTPS/Serve 권한, 서로 다른 IP, 공개 authority·RPC/WS·auth·Serve 전후 복원. 계정 전제가 없으면 필수 gate 미완료로 남긴다. |
+| 실제 Cloudflared ingress | 명시 live job의 2026.10.7 공개 URL에서 같은 대표 소비자·auth/lifecycle. Quick Tunnel SSE는 제외한다. provider seam이나 loopback origin 접근으로 대체하지 않는다. |
+| 실제 Tailscale ingress | 준비된 두 1.104.5 장치, HTTPS/Serve 권한, 서로 다른 IP, 공개 authority·RPC/WS·auth·Serve 전후 복원. 계정 전제가 없으면 필수 gate 미완료로 남긴다. |
 | 플랫폼 | 기존 native Unix/Windows workflow + proxy compatibility Windows/WSL browser job. cross compile·작업 정의만으로 native/WSL 실행을 통과로 기록하지 않는다. |
 
 실행 절차와 artifact 필드는 [검증 가이드](README.md#frameworklibraryprovider-호환성)를 따른다.

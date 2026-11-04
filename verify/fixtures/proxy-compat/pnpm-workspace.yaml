@@ -1,0 +1,18 @@
+# The reviewed 16.4.5 security release is newer than pnpm's default age window.
+# Keep exceptions limited to this exact Next.js release and its platform builds.
+# https://github.com/vercel/next.js/releases/tag/v16.4.5
+minimumReleaseAgeExclude:
+  - '@next/env@16.4.5'
+  - '@next/swc-darwin-arm64@16.4.5'
+  - '@next/swc-darwin-x64@16.4.5'
+  - '@next/swc-linux-arm64-gnu@16.4.5'
+  - '@next/swc-linux-arm64-musl@16.4.5'
+  - '@next/swc-linux-x64-gnu@16.4.5'
+  - '@next/swc-linux-x64-musl@16.4.5'
+  - '@next/swc-win32-arm64-msvc@16.4.5'
+  - '@next/swc-win32-x64-msvc@16.4.5'
+  - next@16.4.5
+
+# Fixtures use the locked platform binary; keep the install script disabled.
+allowBuilds:
+  esbuild@0.28.2: false

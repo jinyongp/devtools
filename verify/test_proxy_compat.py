@@ -41,6 +41,13 @@ class EvidenceRedaction(unittest.TestCase):
             self.assertNotIn(secret, cleaned)
         self.assertIn("transport=websocket", cleaned)
 
+    def test_owned_devtools_token_is_absent_from_authorization_logs(self):
+        token = "fixture-approval-credential"
+        transcript = f"http://127.0.0.1:3000/__nuxt_devtools__/auth?token={token}\nOr manually copy this token:\n{token}"
+        cleaned = redact(transcript, secrets=(token,))
+        self.assertNotIn(token, cleaned)
+        self.assertIn("[redacted]", cleaned)
+
     def test_cleanup_failure_retains_primary_error_and_recovery_root(self):
         result = {"status": "fail", "error": "browser verification failed"}
         with patch("proxy_compat.shutil.rmtree", side_effect=PermissionError("owned lease is locked")):

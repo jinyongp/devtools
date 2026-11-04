@@ -73,8 +73,11 @@ WSL2에서 실행한 뒤 기존 Windows browser DNS·trust 경계를 검증한�
 현재 commit의 native 실행 결과가 있어야 해당 플랫폼의 통과로 인정한다.
 
 Host 정책은 `check:proxy-compat`로 실제 개발 서버·브라우저를 연결해 검사한다.
-Node 22.22.2, pnpm 11.24.0, root의 Playwright 1.63.0과 fixture lockfile이 필요하다.
+Node 22.23.4, pnpm 12.16.1, root의 Playwright 1.64.1과 fixture lockfile이 필요하다.
 직접 의존성 버전은 [fixture manifest](fixtures/proxy-compat/package.json)에 고정되어 있다.
+pnpm 12의 fixture 설치 정책은 [pnpm-workspace.yaml](fixtures/proxy-compat/pnpm-workspace.yaml)에 있다.
+esbuild는 잠긴 플랫폼 바이너리를 사용하며 설치 스크립트를 실행하지 않는다.
+새로 공개된 Next.js 보안 패치의 설치 대기 예외는 해당 버전에만 제한한다.
 설치된 candidate archive를 풀어 `--binary`로 지정한다. baseline은 공식 v0.31.0 archive의
 checksum을 검증한 뒤 사용한다. 비교 결과에는 CLI identity·binary/lock hash를 기록한다.
 
@@ -84,13 +87,16 @@ hosts 파일은 변경하지 않는다. HTTPS 검증을 끄는 옵션은 사용�
 ```sh
 corepack pnpm install --frozen-lockfile --ignore-scripts
 corepack pnpm --dir verify/fixtures/proxy-compat install --frozen-lockfile --ignore-scripts
-docker build -t devtools-proxy-browser:1.63.0 verify/proxy-browser
+docker build -t devtools-proxy-browser:1.64.1 verify/proxy-browser
 devtools run check:proxy-compat --binary /absolute/candidate/devtools --baseline /absolute/baseline/devtools --client-mode docker --artifacts /tmp/proxy-evidence
 ```
 
 기본 실행은 8개 소비자 × HTTP/HTTPS × rewrite/preserve의 Chromium matrix다.
 baseline에는 rewrite만 적용한다. Nuxt는 실제 DevTools Pages/Components RPC 응답·HMR·동일
 Origin 경고를 검사한다. 의도적인 다른 Origin probe의 경고는 별도로 센다.
+DevTools의 초기 설정은 서버 소유자 승인을 요구한다. fixture는 일회용 HOME에만 승인 정보를
+준비하고 공개 origin의 공식 승인 페이지로 검증한다. 토큰은 보존하는 로그에서 제거한다.
+rewrite의 음성 대조군은 승인 UI와 독립된 공개 Origin RPC 거절로 확인한다.
 React/Vue/Next/webpack의 counter 상태와 문서 유지, SvelteKit의 module-store 상태·SSR·탐색·form,
 ws echo/close, Socket.IO polling→upgrade·websocket-first·ack·재연결을 확인한다.
 브라우저 WS가 backend 포트로 직접 연결하면 실패한다.
@@ -114,12 +120,12 @@ devtools run check:proxy-compat --binary /absolute/candidate/devtools --case nux
 devtools run check:proxy-compat --binary /absolute/candidate/devtools --case nuxt --case ws --case socketio --scheme https --provider lan --live --auth-mode basic --client-mode docker
 ```
 
-`--auth-mode none`은 명시 no-auth control이다. Cloudflared 2026.10.3을 미리 준비한 뒤
+`--auth-mode none`은 명시 no-auth control이다. Cloudflared 2026.10.7을 미리 준비한 뒤
 `--provider cloudflared --live`로 실제 공개 ingress를 검사한다. Quick Tunnel SSE는 미지원으로
 제외한다. 공개 URL의 DNS·edge readiness도 실제 클라이언트의 검증된 HTTP 응답으로 확인한다.
 실패한 기능 검사를 자동 재시도하지 않는다.
 
-Tailscale은 host와 준비된 두 번째 tailnet 장치 모두 1.104.2여야 한다.
+Tailscale은 host와 준비된 두 번째 tailnet 장치 모두 1.104.5여야 한다.
 `--provider tailscale --live --peer-network container:tailscale-peer`를 사용한다.
 두 장치 IP가 같거나 로그인·HTTPS·전용 Serve 포트 8443/8444가 준비되지 않았으면 실패한다.
 Serve 설정의 전후 일치와 소유 handler 정리를 검사한다. 모의 LocalAPI 검사를 실제 tailnet

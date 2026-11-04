@@ -9,6 +9,7 @@ import (
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/values"
 )
 
@@ -34,7 +35,7 @@ func (a *App) executionDependencies(command execution.Command) (dependencies exe
 		}
 		configRoot = dirs.Config
 	}
-	return execution.DependenciesFor(command, filepath.Dir(directory), configRoot)
+	return (services.Store{Data: filepath.Dir(directory)}).ExecutionDependencies(command, configRoot)
 }
 
 func (a *App) prepareExecution(ctx context.Context, command execution.Command, preview bool, streams ...IO) (execution.Prepared, *protocol.Error) {

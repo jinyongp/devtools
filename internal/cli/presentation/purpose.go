@@ -16,6 +16,10 @@ func purposeView(d Definition, data map[string]any) (cliui.Document, bool) {
 		return document, true
 	}
 	switch d.Command {
+	case "project status":
+		if _, exists := data["observations"].([]any); exists {
+			return projectInspectionView(data), true
+		}
 	case "init":
 		item, _ := data["item"].(map[string]any)
 		message := "Using existing project configuration."

@@ -93,8 +93,7 @@ func executionConflict(r Record) *protocol.Error {
 		},
 	}
 	if r.publicContract().Control.Stop {
-		action := protocol.Action{Relation: protocol.SameStoreAction, Effect: "system_write", Message: "Stop the existing execution before starting the selected mode and inputs.", Intent: &protocol.CommandIntent{Command: "process stop", Arguments: []string{r.ID}}}
-		condition.Details["remedies"] = append(condition.Details["remedies"].([]protocol.Remedy), action.Remedy(protocol.InvocationContext{}))
+		condition.Details["remedies"] = []protocol.Remedy{stopRunAction(r.ID)}
 	}
 	return condition
 }

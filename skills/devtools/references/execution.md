@@ -70,6 +70,14 @@ native handle/lease protocol. Inspection does not unlock or renew a vault.
   or output error. Old foreground runs cannot gain a new controller retroactively.
 - Explicit process restart replaces a foreground execution with a new managed
   execution using current configuration. Stopping its old ID cannot stop the replacement.
+- Protocol 25 conflicts offer one concrete `process stop ID` only after live
+  authenticated control is observed. Otherwise execute the emitted scoped
+  `project status NAME`. It reports the service claim, TCP listener PID/program
+  and stop availability, including unregistered runs. It never grants control
+  from an OS PID alone. The default inspection timeout is 10s.
+- `project status` can return `complete: false` with observations, diagnostics
+  and next_actions when execution records need storage migration. Port
+  observations remain useful; apply the emitted storage action and inspect again.
 
 - Named commands run from the configuration directory; direct `run -- PROGRAM ARG...` runs from the caller's directory.
 - `exec` is an argv array. Shell syntax needs an explicit shell; port arguments use `${bind.NAME}`, not a shell wrapper.
@@ -81,7 +89,7 @@ native handle/lease protocol. Inspection does not unlock or renew a vault.
 
 ## Managed servers and readiness
 
-1. Start the selected command with `process start` or named servers with `project up`; supply a request UUID.
+1. Start the selected command with `process start` or named servers with `project up`; retain the returned request UUID. Supply one explicitly when an identical retry must survive response loss.
 2. Save each returned execution ID (`data.item.id` for a single start).
 3. Inspect status. If readiness is declared, use `process wait EXECUTION_ID` before dependent work.
 4. Use `process` operations for an execution ID; `project` operations for selected commands in the current project's canonical directory.

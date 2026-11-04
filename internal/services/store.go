@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -229,8 +228,7 @@ func storageErrorAt(operation string, cause error) *protocol.Error {
 	return condition
 }
 func validID(s string) bool {
-	b, e := hex.DecodeString(strings.ReplaceAll(s, "-", ""))
-	return e == nil && len(b) == 16 && len(s) == 36 && s[8] == '-' && s[13] == '-' && s[18] == '-' && s[23] == '-'
+	return protocol.ValidUUID(s)
 }
 func (s Store) root() string                { return filepath.Join(s.Data, "processes") }
 func (s Store) path(id, name string) string { return filepath.Join(s.root(), id, name) }
@@ -270,6 +268,10 @@ func (s Store) readMarker(id string) (archiveMarker, bool, *protocol.Error) {
 }
 
 func (s Store) inspectLocal(id string) (storedExecution, *protocol.Error) {
+	return s.inspectLocalContext(context.Background(), id)
+}
+
+func (s Store) inspectLocalContext(ctx context.Context, id string) (storedExecution, *protocol.Error) {
 	var stored storedExecution
 	if !validID(id) {
 		return stored, failure("invalid_argument")
@@ -284,7 +286,7 @@ func (s Store) inspectLocal(id string) (storedExecution, *protocol.Error) {
 		return stored, storageErrorAt("inspect_execution_directory", err)
 	}
 
-	record, recordErr := s.recordAt(s.path(id, "record.json"))
+	record, recordErr := s.recordAtContext(ctx, s.path(id, "record.json"))
 	if recordErr != nil && !errors.Is(recordErr, os.ErrNotExist) {
 		return stored, storageErrorAt("read_execution_record", recordErr)
 	}
@@ -321,7 +323,11 @@ func (s Store) legacyProofs(ids []string) (map[string]archiveproof.Proof, *proto
 }
 
 func (s Store) read(id string) (Record, *protocol.Error) {
-	stored, err := s.inspectLocal(id)
+	return s.readContext(context.Background(), id)
+}
+
+func (s Store) readContext(ctx context.Context, id string) (Record, *protocol.Error) {
+	stored, err := s.inspectLocalContext(ctx, id)
 	if err != nil {
 		return Record{}, err
 	}
@@ -597,7 +603,7 @@ func (s Store) statusRecord(ctx context.Context, r Record) (result Record, condi
 }
 
 func (s Store) Status(ctx context.Context, id string) (Record, *protocol.Error) {
-	r, err := s.read(id)
+	r, err := s.readContext(ctx, id)
 	if err != nil {
 		return r, err
 	}

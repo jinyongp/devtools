@@ -195,6 +195,7 @@ exec=["/bin/sh","-c","true"]
 	}
 
 	status := outputData(t, app, []string{"project", "status"})
+	validateProjectInspection(t, app, status)
 	if status["profile"] != "app" || status["directory"] != canonicalRoot || len(status["items"].([]any)) != 2 {
 		t.Fatalf("unexpected project status: %#v", status)
 	}

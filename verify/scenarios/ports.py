@@ -109,6 +109,15 @@ with socket.socket() as busy:
     blocked = api("run", "server", expected=3)["error"]
     assert blocked["code"] == "requirements_failed", blocked
     assert any(cause["code"] == "port_in_use" for cause in blocked["details"]["causes"]), blocked
+    inspection = blocked["details"]["remedies"][0]
+    assert inspection["state"] == "ready" and inspection["effect"] == "read", inspection
+    assert inspection["argv"][:4] == ["devtools", "project", "status", "server"], inspection
+    inspected = api(*inspection["argv"][1:], cwd=home)["data"]
+    assert inspected["profile"] == "backend" and inspected["directory"] == str(root), inspected
+    observed = inspected["observations"][0]
+    assert observed["state"] == "unmanaged" and not observed["control"]["stop"], observed
+    assert any(owner["pid"] == os.getpid() for owner in observed["listener"]["processes"]), observed
+    assert not inspected["items"], inspected  # The unrelated listener is untracked.
     assert api("port", "show", "api")["data"]["item"]["port"] == 23000
 
 # Concurrent locations sharing one profile receive distinct persisted ports.

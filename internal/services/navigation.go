@@ -96,7 +96,7 @@ func selectedNavigation(q NavigationSelection, profile, directory, instance, com
 }
 
 func (s Store) Navigation(ctx context.Context, q NavigationSelection, declarations []ServiceDeclaration) ([]NavigationRow, *protocol.Error) {
-	stored, e := s.navigationRecords()
+	stored, e := s.navigationRecordsContext(ctx)
 	if e != nil {
 		return nil, e
 	}
@@ -168,6 +168,10 @@ func (s Store) Navigation(ctx context.Context, q NavigationSelection, declaratio
 // Kept separate from status observation so storage preparation can publish a
 // metadata index without contacting supervisors.
 func (s Store) navigationRecords() ([]Record, *protocol.Error) {
+	return s.navigationRecordsContext(context.Background())
+}
+
+func (s Store) navigationRecordsContext(ctx context.Context) ([]Record, *protocol.Error) {
 	items := []Record{}
 	entries, err := os.ReadDir(s.root())
 	if errors.Is(err, os.ErrNotExist) {
@@ -177,6 +181,9 @@ func (s Store) navigationRecords() ([]Record, *protocol.Error) {
 		return nil, storageError(err)
 	}
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, protocol.ContextError(err)
+		}
 		if !validID(entry.Name()) {
 			continue
 		}

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import select
+import signal
 import struct
 import subprocess
 import termios
@@ -34,7 +35,7 @@ project.mkdir()
 ansi = re.compile(r'\x1b\[[0-9;]*m')
 
 
-def call(*args, extra=None, tty_out=False, tty_err=False, width=80):
+def call(*args, extra=None, tty_out=False, tty_err=False, width=80, interrupt_after=None):
     env = dict(environment, **(extra or {}))
     descriptors = []
     readers = {}
@@ -60,9 +61,13 @@ def call(*args, extra=None, tty_out=False, tty_err=False, width=80):
             readers[stream.fileno()] = name
     output = {'stdout': bytearray(), 'stderr': bytearray()}
     deadline = time.monotonic() + 15
+    interrupt_at = time.monotonic() + interrupt_after if interrupt_after is not None else None
     try:
         while readers:
             assert time.monotonic() < deadline, 'presentation fixture timed out'
+            if interrupt_at is not None and time.monotonic() >= interrupt_at:
+                process.send_signal(signal.SIGINT)
+                interrupt_at = None
             for fd in select.select(list(readers), [], [], .1)[0]:
                 try:
                     part = os.read(fd, 65536)
@@ -88,7 +93,7 @@ def call(*args, extra=None, tty_out=False, tty_err=False, width=80):
 
 
 code, plain, error = call('version')
-assert code == 0 and error == '' and json.loads(plain)['data']['protocol_version'] == 24
+assert code == 0 and error == '' and json.loads(plain)['data']['protocol_version'] == 25
 code, terminal, error = call('version', tty_out=True)
 assert code == 0 and error == '' and not ansi.sub('', terminal).lstrip().startswith('{')
 assert '0.0.0-test.1' in terminal and '\x1b[1m' in terminal
@@ -130,6 +135,35 @@ for width in (40, 79, 80, 120):
 code, output, error = call('version', tty_out=True, extra={'TERM': 'dumb'})
 assert code == 0 and '\x1b[' not in output and '0.0.0-test.1' in output
 
+# Hold a real storage lock while the installed CLI runs through its normal
+# terminal observer. Progress must stop before the final diagnostic, including
+# on SIGINT; machine output must remain exactly one JSON envelope.
+progress_root = Path.home() / 'progress-contract'
+progress_root.mkdir(mode=0o700)
+(progress_root / 'data').mkdir(mode=0o700)
+progress_args = ('doctor', '--storage', '--fix', '--isolated-root', str(progress_root))
+code, output, error = call('--format', 'json', *progress_args)
+assert code == 0 and not error and json.loads(output)['data']['ready']
+with (progress_root / 'data/.maintenance/lock').open('r+b') as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    for extra, tty, expected_feedback in [({}, True, True), ({'TERM': 'dumb'}, True, True),
+                                            ({}, False, True), ({'AI_AGENT': '1'}, True, False)]:
+        code, output, error = call('--format', 'text', *progress_args, '--timeout', '700ms',
+                                   extra=extra, tty_out=tty, tty_err=tty, width=110)
+        assert code != 0 and not output, (code, output, error)
+        assert ('Waiting for storage access' in error) == expected_feedback, error
+        if tty and not extra:
+            assert '\r\x1b[2K' in error and 'Error:' in error.rsplit('\r\x1b[2K', 1)[1], error
+        elif not tty or extra.get('TERM') == 'dumb':
+            assert '\x1b' not in error and '\r' not in error, error
+    code, output, error = call('--format', 'json', *progress_args, '--timeout', '700ms',
+                               tty_out=True, tty_err=True)
+    assert code != 0 and not output and not json.loads(error)['ok'] and '\x1b' not in error, error
+    code, output, error = call('--format', 'text', *progress_args, '--timeout', '5s',
+                               tty_out=True, tty_err=True, interrupt_after=.7)
+    assert code == 130 and not output and 'Waiting for storage access' in error, (code, error)
+    assert 'Error:' in error.rsplit('\r\x1b[2K', 1)[1], error
+
 # Execute the exact standalone Next line; the path requires shell literal quoting.
 code, output, error = call('--format', 'text', 'doctor', 'not-declared', '--dir', str(project))
 assert code == 0 and not error
@@ -140,4 +174,4 @@ for line in lines:
     result = subprocess.run(['sh', '-c', line], cwd=project, env=dict(environment, DEVTOOLS_FORMAT='json'),
                             text=True, capture_output=True, timeout=15)
     assert result.returncode == 0 and json.loads(result.stdout)['data']['items'][0]['name'] == 'echo'
-print('Installed clean/agent PTY, pipe/error streams, format precedence, native boundaries, widths and copyable Next passed')
+print('Installed PTY/pipe progress, real lock timeout/SIGINT, JSON/agent silence, native boundaries and copyable Next passed')

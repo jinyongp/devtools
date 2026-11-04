@@ -24,6 +24,6 @@ func (s *Server) prepareManagedInput(ctx context.Context, r services.Record, n *
 			}
 			configRoot = directories.Config
 		}
-		return execution.DependenciesFor(command, filepath.Dir(s.data), configRoot)
+		return (services.Store{Data: filepath.Dir(s.data), IsolatedRoot: r.IsolatedRoot}).ExecutionDependencies(command, configRoot)
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/jinyongp/devtools/internal/cliui"
@@ -201,6 +202,8 @@ func resourceFacts(facts map[string]any, message string) []cliui.Block {
 		add("Port", value)
 	}
 	owner, _ := facts["owner"].(map[string]any)
+	listener, _ := facts["listener"].(map[string]any)
+	listenerText := listenerDescription(listener)
 	if owner != nil {
 		value := "Unavailable: " + ownerReason(text(owner["reason"]))
 		if owner["status"] == "verified" {
@@ -214,12 +217,27 @@ func resourceFacts(facts map[string]any, message string) []cliui.Block {
 			} else {
 				value = fmt.Sprintf("%s (%s, PID %v)", name, kind, owner["pid"])
 			}
+		} else if listenerText != "" {
+			value = listenerText
+		} else if owner["reason"] == "unsupported_owner_query" {
+			value = "Unknown"
 		}
 		add("Owner", value)
+	}
+	if profile := text(facts["owner_profile"]); profile != "" {
+		add("Owner project", profile+" "+text(facts["owner_directory"]))
 	}
 	add("Previous execution", facts["previous_id"])
 	if owner["status"] == "verified" {
 		add("Execution", owner["execution_id"])
+	}
+	if owner["status"] == "verified" && listenerText != "" {
+		add("Listener", listenerText)
+	}
+	if observed, ok := facts["observation"].(map[string]any); ok {
+		if missing, ok := stringArray(observed["missing"]); ok && slices.Contains(missing, "execution_control") {
+			add("Control", controlReason(text(observed["reason"])))
+		}
 	}
 	add("Executable", facts["executable"])
 	add("Expected", facts["expected_version"])
@@ -249,10 +267,44 @@ func resourceFacts(facts map[string]any, message string) []cliui.Block {
 }
 
 func ownerReason(reason string) string {
-	if description := map[string]string{"legacy_run": "the existing run has no ownership metadata.", "metadata_unavailable": "ownership metadata could not be read or verified.", "permission_denied": "permission to inspect the owner was denied.", "state_changed": "the run changed during observation.", "deadline_exceeded": "the owner observation deadline elapsed.", "unsupported_owner_query": "the owner cannot be verified by this observer."}[reason]; description != "" {
+	if description := map[string]string{"legacy_run": "the existing run has no ownership metadata.", "metadata_unavailable": "ownership metadata could not be read or verified.", "permission_denied": "permission to inspect the owner was denied.", "state_changed": "the run changed during observation.", "process_unavailable": "the existing run's process identity could not be inspected.", "deadline_exceeded": "the owner observation deadline elapsed.", "unsupported_owner_query": "no devtools execution was identified for this conflict."}[reason]; description != "" {
 		return description
 	}
 	return "the owner could not be verified."
+}
+
+func listenerDescription(listener map[string]any) string {
+	var result []string
+	processes, _ := listener["processes"].([]any)
+	for _, value := range processes {
+		process, _ := value.(map[string]any)
+		program := text(process["program"])
+		if program == "" {
+			program = "Process"
+		}
+		result = append(result, fmt.Sprintf("%s (PID %v)", program, process["pid"]))
+	}
+	return strings.Join(result, ", ")
+}
+
+func controlReason(reason string) string {
+	if value := map[string]string{
+		"execution_not_registered":     "Unavailable: this run is not registered for remote stop.",
+		"controller_lost":              "Unavailable: the execution controller was lost.",
+		"controller_unavailable":       "Unavailable: the execution controller could not be reached.",
+		"execution_scope_mismatch":     "Unavailable: the execution does not match this service claim.",
+		"permission_denied":            "Unavailable: permission to inspect the owner was denied.",
+		"migration_required":           "Unavailable: process records require a storage upgrade.",
+		"no_verified_execution":        "devtools stop unavailable.",
+		"not_running":                  "No active execution.",
+		"assignment_missing":           "No port assignment.",
+		"port_observation_unavailable": "TCP listener status could not be checked.",
+		"tcp_probe_failed":             "TCP listener status could not be checked.",
+		"deadline_exceeded":            "Inspection timed out.",
+	}[reason]; value != "" {
+		return value
+	}
+	return "Unavailable: " + ownerReason(reason)
 }
 
 func causalLocations(record, target map[string]any) []cliui.Block {

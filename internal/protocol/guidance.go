@@ -58,6 +58,9 @@ func NewRequestID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
+// ValidUUID checks the hexadecimal UUID syntax accepted by CLI identity inputs.
+func ValidUUID(value string) bool { return diagnosticUUID.MatchString(value) }
+
 func (a Action) Remedy(c InvocationContext) Remedy {
 	r := Remedy{Argv: append([]string{}, a.Argv...), RequiredInputs: append([]string{}, a.RequiredInputs...), Message: a.Message, Effect: a.Effect, Relation: a.Relation}
 	if intent := a.Intent; intent != nil {

@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 
+	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -67,6 +69,13 @@ func unavailableOwner(reason string) map[string]any {
 	return map[string]any{"status": "unavailable", "kind": nil, "pid": nil, "execution_id": nil, "command": nil, "reason": reason}
 }
 
+func failedOwnerObservation(reason string, cause error) map[string]any {
+	if errors.Is(cause, os.ErrPermission) {
+		reason = "permission_denied"
+	}
+	return unavailableOwner(reason)
+}
+
 // The caller has observed this exact lease as busy. A bounded double read and
 // the OS process creation identity exclude partial publication and PID reuse.
 func activeRunError(lease io.Closer) *protocol.Error {
@@ -80,6 +89,9 @@ func activeRunError(lease io.Closer) *protocol.Error {
 			return io.ReadAll(io.LimitReader(f, 4097))
 		}
 		data, err := read()
+		if err != nil {
+			owner = failedOwnerObservation("metadata_unavailable", err)
+		}
 		if err == nil && len(data) == 0 {
 			owner = unavailableOwner("legacy_run")
 		}
@@ -87,7 +99,13 @@ func activeRunError(lease io.Closer) *protocol.Error {
 		if err == nil && len(data) > 0 && len(data) <= 4096 && json.Unmarshal(data, &metadata) == nil && metadata.Version == 1 && len(metadata.Generation) == 32 && metadata.PID > 0 {
 			identity, identityErr := runProcessIdentity(metadata.PID)
 			again, readErr := read()
-			if identityErr == nil && identity == metadata.Identity && readErr == nil && bytes.Equal(data, again) && (metadata.Kind == "foreground" || metadata.Kind == "managed" || metadata.Kind == "global") {
+			if identityErr != nil {
+				owner = failedOwnerObservation("process_unavailable", identityErr)
+			} else if readErr != nil {
+				owner = failedOwnerObservation("metadata_unavailable", readErr)
+			} else if metadata.ExecutionID != "" && !protocol.ValidUUID(metadata.ExecutionID) || metadata.Command != "" && !project.ValidCommand(metadata.Command) {
+				owner = unavailableOwner("metadata_unavailable")
+			} else if identity == metadata.Identity && bytes.Equal(data, again) && (metadata.Kind == "foreground" || metadata.Kind == "managed" || metadata.Kind == "global") {
 				var executionID, command any
 				if metadata.ExecutionID != "" {
 					executionID = metadata.ExecutionID

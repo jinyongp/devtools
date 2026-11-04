@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:devtools:config-contract:protocol-24",
-  "title": "Project configuration, editing and diagnostic contract (protocol 23)",
+  "$id": "urn:devtools:config-contract:protocol-25",
+  "title": "Project configuration, editing and diagnostic contract (protocol 25)",
   "description": "Protocol-13 configuration, editing and diagnostic structures. Transport requires strict Unicode and signed-64-bit decimal integer tokens. x-maxUtf8Bytes asserts a UTF-8 byte constraint; x-npmRange asserts bounded nonempty npm SemVer range syntax. Linked normative contracts define references, state and filesystem checks.",
   "$ref": "#/$defs/Project",
   "$defs": {
@@ -1728,9 +1728,14 @@
     },
     "OwnerObservation": {
       "type":"object",
-      "properties":{"status":{"enum":["verified","unavailable"]},"kind":{"enum":["foreground","managed","global",null]},"pid":{"type":["integer","null"],"minimum":1},"execution_id":{"type":["string","null"],"format":"uuid"},"command":{"type":["string","null"]},"reason":{"enum":["legacy_run","metadata_unavailable","permission_denied","state_changed","deadline_exceeded","unsupported_owner_query",null]}},
+      "properties":{"status":{"enum":["verified","unavailable"]},"kind":{"enum":["foreground","managed","global",null]},"pid":{"type":["integer","null"],"minimum":1},"execution_id":{"type":["string","null"],"format":"uuid"},"command":{"type":["string","null"]},"reason":{"enum":["legacy_run","metadata_unavailable","permission_denied","state_changed","process_unavailable","deadline_exceeded","unsupported_owner_query",null]}},
       "required":["status","kind","pid","execution_id","command","reason"],"additionalProperties":false,
       "allOf":[{"if":{"properties":{"status":{"const":"verified"}}},"then":{"properties":{"kind":{"enum":["foreground","managed","global"]},"reason":{"type":"null"}},"anyOf":[{"properties":{"pid":{"type":"integer"}}},{"properties":{"execution_id":{"type":"string"}}}]},"else":{"properties":{"kind":{"type":"null"},"pid":{"type":"null"},"execution_id":{"type":"null"},"command":{"type":"null"},"reason":{"type":"string"}}}}]
+    },
+    "ListenerObservation": {
+      "type":"object",
+      "properties":{"status":{"enum":["observed","partial","unavailable"]},"reason":{"type":"string"},"processes":{"type":"array","maxItems":16,"items":{"type":"object","properties":{"pid":{"type":"integer","minimum":1},"program":{"type":"string"}},"required":["pid","program"],"additionalProperties":false}}},
+      "required":["status","reason","processes"],"additionalProperties":false
     },
     "Observation": {
       "type":"object","properties":{"status":{"enum":["partial","unavailable"]},"reason":{"type":"string"},"missing":{"type":"array","items":{"type":"string"}}},
@@ -1746,9 +1751,12 @@
       "properties": {
         "service": {"type":"string"},
         "instance_id": {"type":"string"},
+        "owner_profile": {"type":"string"},
+        "owner_directory": {"type":"string"},
         "port": {"type":["integer","null"],"minimum":1,"maximum":65535},
         "port_observation": {"$ref":"#/$defs/PortObservation"},
         "owner": {"$ref":"#/$defs/OwnerObservation"},
+        "listener": {"$ref":"#/$defs/ListenerObservation"},
         "observation": {"$ref":"#/$defs/Observation"},
         "related_items": {"type":"array","items":{"$ref":"#/$defs/RelatedItem"}},
         "expected_kind": {"type":"string"},
@@ -3040,7 +3048,7 @@
       "type": "object",
       "properties": {
         "protocol_version": {
-          "const": 24
+          "const": 25
         },
         "schema": {
           "type": "object"

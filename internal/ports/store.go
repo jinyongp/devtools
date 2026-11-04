@@ -54,6 +54,9 @@ type Store struct {
 	Directory string
 	Probe     AvailabilityProbe
 	Owner     RunOwner
+	// InspectFailure runs after the registry lock is released. Higher layers
+	// can authenticate execution control without coupling ports to services.
+	InspectFailure func(context.Context, *protocol.Error) *protocol.Error
 }
 
 func fail(code string) *protocol.Error {

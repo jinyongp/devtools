@@ -9,12 +9,12 @@ import (
 )
 
 func TestClaimFailureHasOneCauseStablePortOwnerAndOneAction(t *testing.T) {
-	for _, verified := range []bool{true, false} {
-		owner := map[string]any{"status": "unavailable", "kind": nil, "pid": nil, "execution_id": nil, "command": nil, "reason": "legacy_run"}
-		if verified {
+	for _, reason := range []string{"verified", "legacy_run", "permission_denied", "process_unavailable"} {
+		owner := map[string]any{"status": "unavailable", "kind": nil, "pid": nil, "execution_id": nil, "command": nil, "reason": reason}
+		if reason == "verified" {
 			owner = map[string]any{"status": "verified", "kind": "foreground", "pid": 42, "execution_id": nil, "command": "dev:web", "reason": nil}
 		}
-		action := map[string]any{"message": "Stop the existing run in its original terminal, then retry.", "argv": []any{}, "required_inputs": []any{}, "effect": "read"}
+		action := map[string]any{"message": "Inspect the service and its owner.", "argv": []any{"devtools", "project", "status", "dev:web", "--profile=app", "--dir=/work/app"}, "required_inputs": []any{}, "effect": "read"}
 		root := map[string]any{"id": "c1", "code": "port_run_active", "status": "fail", "message": "Service \"web\" is claimed by another run.", "caused_by": []any{}, "facts": map[string]any{"service": "web", "port": 3000, "port_observation": map[string]any{"status": "free", "tcp_reachable": false, "reason": nil}, "owner": owner}, "remedies": []any{action}}
 		public, _ := json.Marshal(map[string]any{"schema_version": 1, "ok": false, "error": map[string]any{"code": "requirements_failed", "message": "Cannot start \"dev:web\".", "details": map[string]any{"operation": "command run", "target": map[string]any{"kind": "command", "name": "dev:web", "profile": "app", "directory": "/work/app", "env": "", "bundle": "all"}, "facts": map[string]any{}, "primary_cause_id": "c1", "causes": []any{root}, "checks": []any{map[string]any{"id": "tool:node", "status": "pass", "message": "Node is available.", "sources": []any{map[string]any{"kind": "config", "path": []any{"tools", "node"}, "line": 292, "column": 1}}}}, "remedies": []any{action}, "effects": "none"}}})
 		doc, err := Build("command run", public)
@@ -36,6 +36,9 @@ func TestClaimFailureHasOneCauseStablePortOwnerAndOneAction(t *testing.T) {
 		}
 		if !strings.Contains(s, "3000 (no TCP listener)") || !strings.Contains(s, "Environment  common") || strings.Contains(s, "Bundle ") {
 			t.Fatal(s)
+		}
+		if reason == "process_unavailable" && !strings.Contains(s, "process identity could not be inspected") {
+			t.Fatal("text lost the owner inspection failure", s)
 		}
 	}
 }

@@ -19,6 +19,7 @@ func TestPublicRetainsCauseRelationshipsAndResourceObservations(t *testing.T) {
 			"facts": map[string]any{"service": "web", "port": 3000,
 				"port_observation": map[string]any{"status": "free", "tcp_reachable": false, "reason": nil},
 				"owner":            map[string]any{"status": "unavailable", "kind": nil, "pid": nil, "execution_id": nil, "command": nil, "reason": "legacy_run", "private_token": "PRIVATE-CANARY"},
+				"listener":         map[string]any{"status": "observed", "reason": "", "processes": []any{map[string]any{"pid": 42, "program": "node", "args": "PRIVATE-CANARY", "environment": "PRIVATE-CANARY"}}},
 			},
 		}},
 		"checks": []any{map[string]any{"id": "tool:node", "status": "unknown", "required": true, "reason": "binding_unresolved", "message": "PATH depends on this binding.", "target": map[string]any{"kind": "tool", "name": "node"}, "sources": []any{}, "facts": map[string]any{}, "remedies": []Remedy{}, "blocked_by": []string{"c1"}}},
@@ -46,7 +47,7 @@ func TestPublicRetainsCauseRelationshipsAndResourceObservations(t *testing.T) {
 		if issues := configcontract.Validate("Failure", value); len(issues) != 0 {
 			t.Fatal(issues, output.String())
 		}
-		if !strings.Contains(output.String(), `"tcp_reachable":false`) || !strings.Contains(output.String(), `"blocked_by":["c1"]`) || !strings.Contains(output.String(), "Service web is already claimed.") {
+		if !strings.Contains(output.String(), `"tcp_reachable":false`) || !strings.Contains(output.String(), `"blocked_by":["c1"]`) || !strings.Contains(output.String(), "Service web is already claimed.") || !strings.Contains(output.String(), `"program":"node"`) {
 			t.Fatal(output.String())
 		}
 	}

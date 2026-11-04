@@ -3,7 +3,7 @@ package protocol
 // Resource facts are assembled by domain observers. Copy only the declared
 // public fields; never publish a private process record or lock document.
 func projectResourceFacts(out, input map[string]any) {
-	for _, key := range []string{"service", "instance_id"} {
+	for _, key := range []string{"service", "instance_id", "owner_profile", "owner_directory"} {
 		if value, ok := input[key].(string); ok {
 			out[key] = value
 		}
@@ -23,6 +23,17 @@ func projectResourceFacts(out, input map[string]any) {
 	}
 	if value, exists := input["port"]; exists && out["port_observation"] != nil {
 		out["port"] = value
+	}
+	if source := diagnosticObject(input["listener"]); source != nil {
+		processes := []any{}
+		for _, item := range diagnosticArray(source["processes"]) {
+			process := diagnosticObject(item)
+			processes = append(processes, map[string]any{"pid": process["pid"], "program": process["program"]})
+			if len(processes) == 16 {
+				break
+			}
+		}
+		out["listener"] = map[string]any{"status": source["status"], "reason": source["reason"], "processes": processes}
 	}
 	if items := diagnosticArray(input["related_items"]); items != nil {
 		result := []any{}

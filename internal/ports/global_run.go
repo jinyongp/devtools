@@ -46,7 +46,7 @@ func (s Store) PrepareGlobalRun(ctx context.Context, name string) (map[string]st
 	})
 	if e != nil {
 		release()
-		return nil, func() {}, observeRunFailure(ctx, e)
+		return nil, func() {}, s.finishRunFailure(ctx, e)
 	}
 	return env, release, nil
 }

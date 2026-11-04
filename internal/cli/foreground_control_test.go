@@ -7,10 +7,12 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
@@ -110,11 +112,19 @@ func TestForegroundExecutionUsesProcessInventoryAndStop(t *testing.T) {
 	if condition != nil || check.Readiness == nil || !check.Readiness.Ready {
 		t.Fatalf("foreground readiness: %#v %v", check, condition)
 	}
-	request := services.Request{Action: "stop", ID: id, RequestID: tasks.ID()}
-	stopped, condition := store.Apply(ctx, request)
-	if condition != nil || stopped.Item.State != "stopped" || !stopped.Changed || stopped.Item.Cleanup.State != "complete" {
-		t.Fatalf("foreground stop: %#v %v", stopped, condition)
+	inspection := outputData(t, app, []string{"project", "status", "web"})
+	validateProjectInspection(t, app, inspection)
+	observed := inspection["observations"].([]any)[0].(map[string]any)
+	if observed["state"] != "controlled" || observed["execution_id"] != id || observed["control"].(map[string]any)["stop"] != true {
+		t.Fatal("project inspection did not authenticate the foreground controller", inspection)
 	}
+	remedy := conflictStopAction(t, app, id)
+	stopped := outputData(t, app, remedy.Argv[1:])
+	item := stopped["item"].(map[string]any)
+	if item["state"] != "stopped" || stopped["changed"] != true || item["cleanup"].(map[string]any)["state"] != "complete" {
+		t.Fatalf("copied foreground stop did not verify cleanup: %#v", stopped)
+	}
+	request := services.Request{Action: "stop", ID: id, RequestID: stopped["request_id"].(string)}
 	replay, condition := store.Apply(ctx, request)
 	if condition != nil || !replay.Replayed || replay.Item.ID != id {
 		t.Fatalf("foreground replay: %#v %v", replay, condition)
@@ -136,6 +146,29 @@ func TestForegroundExecutionUsesProcessInventoryAndStop(t *testing.T) {
 	if live, condition := store.Status(ctx, replacement.Item.ID); condition != nil || live.State != "running" {
 		t.Fatalf("old execution stop affected its replacement: %#v %v", live, condition)
 	}
+	managedRemedy := conflictStopAction(t, app, replacement.Item.ID)
+	managedStop := outputData(t, app, managedRemedy.Argv[1:])
+	if managedStop["item"].(map[string]any)["cleanup"].(map[string]any)["state"] != "complete" {
+		t.Fatal("copied managed stop did not verify cleanup", managedStop)
+	}
+}
+
+func conflictStopAction(t *testing.T, app *App, id string) protocol.Remedy {
+	t.Helper()
+	code, _, diagnostic := invoke(t, app, "", "run", "--env", "", "--bundle", "none", "web")
+	var response struct {
+		Error struct {
+			Details struct{ Remedies []protocol.Remedy }
+		}
+	}
+	if code != 3 || json.Unmarshal([]byte(diagnostic), &response) != nil || len(response.Error.Details.Remedies) != 1 {
+		t.Fatalf("conflict did not offer one concrete action: %d %s", code, diagnostic)
+	}
+	remedy := response.Error.Details.Remedies[0]
+	if remedy.State != "ready" || remedy.Effect != "system_write" || !reflect.DeepEqual(remedy.Argv, []string{"devtools", "process", "stop", id}) || app.ResolveAction(remedy.Argv) != nil {
+		t.Fatal("authenticated control did not produce the exact supported stop command", remedy)
+	}
+	return remedy
 }
 
 func TestForegroundExecutionChild(t *testing.T) {

@@ -32,6 +32,19 @@ devtools schema process stop
 기존 현재 서비스 규칙을 유지한다.
 TTY의 foreground/background와 devtools의 foreground/managed 모드는 별개다.
 
+Protocol 25의 서비스 충돌 안내는 인증된 제어 연결이 확인되면 실제 실행 ID를 넣은
+`process stop` 명령 하나를 제공한다. 저장된 ID나 PID만으로 중지 가능하다고 판단하지 않는다.
+중지 대상을 확인하지 못하면 같은 profile과 디렉터리의 `project status NAME`을 안내한다.
+이 명령은 실행 기록 외에도 서비스 claim, TCP 사용 여부와 OS에서 관측한 PID와 프로그램 이름을
+보여준다. 실행 인자나 환경변수는 조회하지 않으며 OS의 PID 정보만으로 프로세스를 중지하지 않는다.
+다른 프로젝트의 제어 가능한 실행이 해당 포트를 점유했다면 그 프로젝트도 표시한다.
+global backend는 해당 global route의 `proxy env`로 포트를 확인한다.
+
+`project status`는 기본 10초 안에 조회하며 `--timeout`으로 조정한다. 실행 기록의 저장소 전환이
+필요해도 포트 관측 결과를 반환하고 `complete: false`, `diagnostics`, `next_actions`로
+미완료 영역과 `doctor --storage --fix` 안내를 함께 제공한다. 끝난 실행은 제외하되 소유 범위
+정리 여부가 불명확한 기록은 보존한다. 이 조회는 값을 열거나 포트를 재할당하지 않는다.
+
 실행 응답에는 다음 공통 필드가 있다. CLI JSON, dashboard HTTP, 저장된 요청 조회는
 같은 실행 정의를 사용한다. text는 표시 형식이며 자동화는 JSON과 command schema를 사용한다.
 

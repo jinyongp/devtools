@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/configcontract"
 	"github.com/jinyongp/devtools/internal/lifecycle"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/project"
@@ -106,11 +107,20 @@ func lifecycleOutputSchema() map[string]any {
 }
 
 func projectStatusSchema() map[string]any {
+	observation := object(map[string]any{
+		"command": stringSchema(), "service": stringSchema(), "instance_id": stringSchema(),
+		"port":  map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 65535},
+		"claim": map[string]any{"enum": []string{"active", "inactive", "unavailable"}},
+		"owner": configcontract.Definition("OwnerObservation"), "port_observation": configcontract.Definition("PortObservation"), "listener": configcontract.Definition("ListenerObservation"),
+		"control": processControlSchema(), "state": map[string]any{"enum": []string{"available", "controlled", "untracked", "unmanaged", "unavailable"}}, "reason": stringSchema(),
+		"execution_id": map[string]any{"type": "string", "format": "uuid"}, "owner_profile": stringSchema(), "owner_directory": stringSchema(), "remedies": arraySchema(remedySchema()),
+	}, "command", "service", "instance_id", "port", "claim", "owner", "port_observation", "listener", "control", "state", "reason", "remedies")
 	return object(map[string]any{
 		"profile":   stringSchema(),
 		"directory": stringSchema(),
 		"items":     map[string]any{"type": "array", "items": processExecutionSchema()},
-	}, "profile", "directory", "items")
+		"complete":  boolSchema(), "observations": arraySchema(observation), "diagnostics": arraySchema(configcontract.Definition("ObservationDiagnostic")), "next_actions": arraySchema(remedySchema()),
+	}, "profile", "directory", "items", "complete", "observations", "diagnostics", "next_actions")
 }
 
 func (a *App) projectLifecycleManager() (lifecycle.Manager, *protocol.Error) {
@@ -168,9 +178,9 @@ func (a *App) registerProjectLifecycle() {
 		Command{
 			Name:        "project status",
 			UniqueArgs:  true,
-			Description: "Show active executions for the current project instance.",
+			Description: "Inspect project executions, service claims, TCP listeners and available controls.",
 			Arguments:   []Argument{optionalCommands},
-			Options:     []Option{directory},
+			Options:     []Option{directory, {Name: "profile", Pattern: project.ProfilePattern, Completion: completeProfile, Description: "Override the configured profile for this project inspection."}, {Name: "timeout", Default: "10s", Description: "Positive Go duration bounding the complete inspection."}},
 			Output:      projectStatusSchema(),
 			Run:         a.projectStatus,
 		},
@@ -300,19 +310,36 @@ func (a *App) projectStatus(ctx context.Context, _ IO, request Request) (any, *p
 	if err != nil {
 		return nil, err
 	}
+	if profile := request.Options["profile"]; profile != "" {
+		p.Profile = profile
+	}
+	timeout, parseErr := time.ParseDuration(request.Options["timeout"])
+	if parseErr != nil || timeout <= 0 {
+		return nil, argumentError("--timeout requires a positive Go duration.", "timeout")
+	}
+	parent := ctx
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	manager, err := a.projectLifecycleManager()
 	if err != nil {
 		return nil, err
 	}
-	items, statusErr := manager.Status(ctx, p, request.Args)
-	if statusErr != nil {
-		return nil, statusErr
+	if inspector, ok := manager.Processes.(interface {
+		InspectProject(context.Context, project.Context, []string) (services.ProjectInspection, *protocol.Error)
+	}); ok {
+		inspection, condition := inspector.InspectProject(ctx, p, request.Args)
+		if parent.Err() == context.Canceled {
+			condition = protocol.ContextError(parent.Err())
+			condition.Details = map[string]any{"report": inspection}
+			return nil, condition
+		}
+		return inspection, condition
 	}
-	return struct {
-		Profile   string            `json:"profile"`
-		Directory string            `json:"directory"`
-		Items     []services.Record `json:"items"`
-	}{Profile: p.Profile, Directory: p.Root, Items: items}, nil
+	items, err := manager.Status(ctx, p, request.Args)
+	if err != nil {
+		return nil, err
+	}
+	return services.ProjectInspection{Profile: p.Profile, Directory: p.Root, Complete: false, Items: items, Observations: []services.ServiceObservation{}, Diagnostics: []map[string]any{{"code": "unsupported_service_inspection", "details": map[string]any{}}}, NextActions: []protocol.Remedy{}}, nil
 }
 
 func (a *App) projectLogs(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {

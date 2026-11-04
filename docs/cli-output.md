@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v24 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v25 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
@@ -17,6 +17,13 @@ Protocol 24는 foreground 실행을 기존 process 조회·제어에 연결합�
 `process_cleanup_unknown`은 제어기 손실 등으로 정리 완료를 확인할 수 없다는 뜻이며
 실패/효과 불명을 유지합니다. [실행 수명과 제어 계약](processes.md)을 따릅니다.
 Envelope 버전은 1이며 기존 요청 UUID·revision·출력 소유권 규칙을 유지합니다.
+
+Protocol 25의 `project status`는 실행 기록과 서비스 claim, TCP 리스너 및 실제 제어 가능 여부를
+함께 반환합니다. `complete`, `observations`, `diagnostics`, `next_actions`로 부분 조회를 명시하며
+기존 `items`는 현재 실행 기록입니다. 충돌 안내는 인증된 제어가 확인된 실행의 stop 또는
+범위를 보존한 project status를 제공합니다. [프로세스 안내](processes.md)를 따릅니다.
+저장소 검사와 전환의 진행 UI는 텍스트 stderr 전용이며 JSON에는 추가 데이터를 쓰지 않습니다.
+[진행 표시와 대기](doctor.md#진행-표시와-대기)를 따릅니다.
 
 ## 변경 요청 ID
 
@@ -112,7 +119,7 @@ stdout 선택이 JSON이면 stderr만 TTY여도 JSON 오류입니다. 기존 pro
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 23`입니다.
+`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 25`입니다.
 
 v23은 현재 서비스·실행 이력 분리, 명시적 목록 범위·필터·정렬·페이지·text 열 선택,
 `ready`/`needs_input`/`manual` 복구 행동과 공유 압축 이력 저장을 추가합니다.
@@ -256,7 +263,7 @@ text 렌더 실패 시 기존 오류는 전체 escaped public 진단과 원 종�
 | `profile export` | `item`, `changed` |
 | `profile import` | `item`, `digest`, `target_exists`, `diff`, `changed`, `replayed`, `safety_backup`; 미리보기는 변경하지 않음 |
 | `backup status` | 공개 설정 상태를 담은 `item` |
-| `project status` | `profile`, `directory`, 활성 실행 `items` |
+| `project status` | `profile`, `directory`, 현재 실행 `items`, 서비스 `observations`, `complete`, `diagnostics`, `next_actions` |
 | `project logs` | 활성 실행 `id`, `command`, 보관된 `content` (새 실행은 저장 전 마스킹) |
 | `project up/restart/down` | `action`, `profile`, `directory`, 명령별 `items`, `changed`, `replayed` |
 | `cleanup archives`, apply, restore/purge | 각각 `items`, `items`·`changed`·`replayed`, `item`·`changed` |

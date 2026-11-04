@@ -58,6 +58,12 @@ Use this skill alongside the source-work workflow. Do not create task records me
   from readiness. `process list --mode foreground|managed` selects execution mode.
   Follow [execution.md](references/execution.md) for ownership and cleanup limits.
 - Ordinary operation needs the installed CLI and these bundled references, not a separate devtools source checkout.
+- Protocol 25 `project status NAME` combines service claims, OS TCP listeners and
+  authenticated execution control. `complete: false` preserves available
+  observations when storage or control inspection is blocked. Follow emitted
+  actions; an OS PID or stored execution ID alone does not authorize a stop.
+  Long storage operations show text stderr progress; JSON and detected agents
+  retain their existing output boundaries.
 
 ## Keep scope and state explicit
 

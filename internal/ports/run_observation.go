@@ -45,14 +45,41 @@ func describeRunFailure(e *protocol.Error, profile, directory, instance, service
 	} else {
 		e.Message = "The TCP port for service " + service + " is already in use."
 	}
-	action := protocol.Action{Relation: protocol.ManualAction, Effect: "system_write", Message: "The existing owner has no verified devtools control target. Identify its controller and stop it through that controller before retrying."}
-	if owner["status"] == "verified" && (owner["kind"] == "managed" || owner["kind"] == "foreground") {
-		if id, ok := owner["execution_id"].(string); ok && id != "" {
-			action = protocol.Action{Relation: protocol.SameStoreAction, Effect: "system_write", Message: "Stop the existing execution, then retry this command.", Intent: &protocol.CommandIntent{Command: "process stop", Arguments: []string{id}}}
-		}
-	}
+	command, _ := owner["command"].(string)
+	action := RunInspectionAction(owner, profile, directory, command, service)
 	e.Details["remedies"] = []protocol.Remedy{action.Remedy(protocol.InvocationContext{})}
 	return e
+}
+
+// RunInspectionAction never treats persisted ownership as live control authority.
+// The services layer upgrades it to stop only after an authenticated observation.
+func RunInspectionAction(owner map[string]any, profile, directory, command, service string) protocol.Action {
+	if command == "" {
+		command, _ = owner["command"].(string)
+	}
+	if command == "" && owner["status"] == "verified" && (owner["kind"] == "managed" || owner["kind"] == "foreground") {
+		if id, ok := owner["execution_id"].(string); ok && id != "" {
+			return protocol.Action{Relation: protocol.SameStoreAction, Effect: "read", Message: "Inspect the existing execution's control state.", Intent: &protocol.CommandIntent{Command: "process status", Arguments: []string{id}}}
+		}
+	}
+	intent := &protocol.CommandIntent{Command: "project status", Options: []protocol.ActionOption{{Name: "profile", Value: profile}, {Name: "dir", Value: directory}}}
+	if command != "" {
+		intent.Arguments = []string{command}
+	}
+	message := "Inspect the service and its owner."
+	if profile == "" || directory == "" {
+		intent = &protocol.CommandIntent{Command: "proxy env", Arguments: []string{service}, Options: []protocol.ActionOption{{Name: "global", Value: "true"}}}
+		message = "Inspect the global backend."
+	}
+	return protocol.Action{Relation: protocol.SameStoreAction, Effect: "read", Message: message, Intent: intent}
+}
+
+func (s Store) finishRunFailure(ctx context.Context, failure *protocol.Error) *protocol.Error {
+	failure = observeRunFailure(ctx, failure)
+	if s.InspectFailure != nil && failure != nil && (failure.Code == "port_run_active" || failure.Code == "port_in_use") {
+		return s.InspectFailure(ctx, failure)
+	}
+	return failure
 }
 
 // Observation happens after the registry lock is released, within the caller's
@@ -90,6 +117,9 @@ func observeRunFailure(ctx context.Context, e *protocol.Error) *protocol.Error {
 		status = "in_use"
 	}
 	facts["port_observation"] = map[string]any{"status": status, "tcp_reachable": reachable, "reason": reason}
+	if status == "in_use" {
+		facts["listener"] = ObserveListener(ctx, port)
+	}
 	return e
 }
 

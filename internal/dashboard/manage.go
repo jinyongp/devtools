@@ -135,7 +135,7 @@ func (s *Server) checkSelectedProjectCommand(ctx context.Context, p project.Cont
 		}
 		configRoot = dirs.Config
 	}
-	dependencies, err := execution.DependenciesFor(command, filepath.Dir(s.data), configRoot)
+	dependencies, err := (services.Store{Data: filepath.Dir(s.data)}).ExecutionDependencies(command, configRoot)
 	if err != nil {
 		return err
 	}

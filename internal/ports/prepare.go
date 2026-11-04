@@ -133,7 +133,7 @@ func (s Store) PrepareForLauncher(ctx context.Context, p project.Context, c proj
 	}
 	if e != nil {
 		release()
-		return Prepared{}, func() {}, observeRunFailure(ctx, e)
+		return Prepared{}, func() {}, s.finishRunFailure(ctx, e)
 	}
 	return result, release, nil
 }
@@ -337,7 +337,7 @@ func (s Store) ClaimPrepared(ctx context.Context, assignments []Assignment) (fun
 	})
 	if err != nil {
 		release()
-		return func() {}, observeRunFailure(ctx, err)
+		return func() {}, s.finishRunFailure(ctx, err)
 	}
 	return release, nil
 }

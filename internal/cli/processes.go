@@ -286,7 +286,7 @@ func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 			}
 			configRoot = dirs.Config
 		}
-		dependencies, err := execution.DependenciesFor(command, data, configRoot)
+		dependencies, err := (services.Store{Data: data, IsolatedRoot: r.IsolatedRoot}).ExecutionDependencies(command, configRoot)
 		if err != nil {
 			return err
 		}
@@ -333,7 +333,9 @@ func ServePreparedProcessWithLease(ctx context.Context, data, id string, lease *
 			return e
 		}
 		defer input.Destroy()
-		release, e := (ports.Store{Directory: filepath.Join(data, "ports"), Owner: ports.RunOwner{Kind: "managed", Command: r.Command, ExecutionID: r.ID}}).ClaimPrepared(ctx, input.Served)
+		portStore := store.Ports()
+		portStore.Owner = ports.RunOwner{Kind: "managed", Command: r.Command, ExecutionID: r.ID}
+		release, e := portStore.ClaimPrepared(ctx, input.Served)
 		if e != nil {
 			return e
 		}

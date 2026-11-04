@@ -173,7 +173,7 @@ ARM64의 기존 collection 검사도 정상 진행 표시를 stderr 오류로 �
 `96e3c2f` 이후 변경하지 않았으며, 후속 main SHA의 native 검사와 Release workflow는
 별도로 완료를 확인한다.
 
-최종 제품 검증 대상은 `811966e40a7d92bbe1df97c708403cf2ef35867c`이다. 위 두 검사
+이 시간 초과 수정의 검증 대상은 `811966e40a7d92bbe1df97c708403cf2ef35867c`이다. 위 두 검사
 보완 후 관련 CLI race 검사를 15.603초에 통과했다. 전체 Go race와 설치본 40개 결과는
 변경하지 않은 제품 코드에 대한 로컬 근거이며, 새 main SHA의 native 완료를 대신하지 않는다.
 
@@ -184,3 +184,44 @@ ARM64의 기존 collection 검사도 정상 진행 표시를 stderr 오류로 �
 54개 job이 queued이고 기존 조건의 선택 검사 3개가 제외된 상태다. 첫 검증부터 runner
 배정을 기다리고 있어 native 검증 또는 배포 완료로 판정하지 않는다. 새 실행은 취소하지
 않으며, 필수 검증이 성공해야 태그 생성과 게시로 진행한다.
+
+### 사용자 결과 기준으로 다시 수행한 리뷰
+
+리뷰 기준은 [검증 구성](verification.md#사용자-결과를-기준으로-리뷰하기)에 기록하고,
+저장소의 [AGENTS.md](../AGENTS.md)에서 구현·리뷰 시 읽도록 연결했다. 공통 실행부 연결과
+spinner 정리 검사는 그대로 유지하며, 실패 설명과 후속 행동의 결과를 별도로 확인한다.
+
+| 영역 | 발견한 누락과 수정 | 실행 근거와 남은 범위 |
+| --- | --- | --- |
+| 값·task profile | 헤더 검사 실패는 여전히 정상 prefix와 실패 profile을 버렸다. profile별 헤더·payload 검사를 공통 `Layout` 순회로 합쳐 검증을 마친 대상만 보존한다. | 실제 세 profile 중 두 번째를 손상한 검사가 수정 전 두 domain에서 실패했다. 수정 후 check/fix의 JSON/text, 파일 전체 바이트 보존과 입력 복구 뒤 Ready를 확인한다. |
+| 프로세스·로그·archive·전달 잠금 | 중간 실패에서 전체 결과를 버리고 마지막 동기 검사 뒤 취소를 놓칠 수 있었다. 기존 `Step.InspectionFailed`로 완료한 대상과 실패 주소를 보존하고 context를 확인한다. | 실제 기록·로그·공유 archive·전달 파일과 잘못된 잠금 파일을 사용한다. 이전 네 adapter만 Go overlay로 연결한 음성 대조가 네 경우 모두 실패했고 수정본은 통과했다. |
+| 값 operation receipt | profile 검사 결과 뒤의 receipt 오류가 앞선 결과를 버렸고 receipt 순회에는 context가 없었다. 실패 resource와 완료한 profile을 보존하고 읽기 경계에서 취소한다. | receipt 주소의 잘못된 파일 유형과 검사 단계에서의 취소, 무변경 및 fixture 제거 뒤 재검증을 확인한다. |
+| 전환할 항목이 없는 `--fix` | blocked 결과만 있어도 coordinator 잠금·진행 기록을 만들어 불필요한 적용 상태를 남겼다. 전환할 항목이 없으면 검사 결과를 반환한다. | profile와 resource 실패 검사가 check/fix 전후 모든 fixture 파일을 비교한다. 실제 전환·부분 적용·재개 계약은 기존 engine 및 domain 검사가 계속 보호한다. |
+| 설치본 후속 안내 | JSON 복구 argv 실행에 더해 실제 PTY에 출력한 text 명령을 그대로 실행하고 같은 isolation root가 Ready인지 확인한다. | 기존 `cli_presentation`을 확장한다. 손상된 값 profile의 JSON/text와 fixture 원본 복구 뒤 재검증도 같은 설치본으로 확인한다. |
+| CI 실행 조건 | Windows race 명령에서 문서의 runner 내부 `-p 1` 정책이 빠졌다. 동일 정책을 적용하며 패키지·race·기한을 유지한다. | Workflow 문법과 실제 native 결과를 구분한다. 이 차이가 아래 두 CI 실패의 원인이라고 확정하지 않는다. |
+| 텍스트 성공 검사의 전제 | 진행 표시가 허용되는 text 성공에서도 stderr 공백을 요구한 검사가 남아 있었다. 생성 request ID, columns, command alias, rendering과 publication 검사를 대조해 정상 진행과 오류를 구분한다. | 성공 코드·출력·동일 request 재생·오류 표시 금지를 유지한다. JSON·artifact·completion wire의 공백 조건과 공통 progress·foreground 스트림 검사는 유지한다. |
+
+2026-11-04 17:05 UTC 기준, `811966e`의
+[main Windows 검증](https://github.com/jinyongp/devtools/actions/runs/41863909764)은 23개 job이
+모두 성공했다. 반면 같은 소스의
+[Release 실행](https://github.com/jinyongp/devtools/actions/runs/41864428644)은 Windows의
+`TestWindowsConcurrentRecordPublication`과
+`TestReportResolvesLostACKWithoutRewritingCompletedUnknown`에서 실패했다. 전자는 30초의
+publication fixture 기한, 후자는 receiver acceptance 관측에서 실패했고 Go data race
+경고는 없었다. Unix의 일부 작업도 abandoned되어 gate가 실패했다. 이전 문단의 queued
+기록은 당시 관측이며 현재 상태가 아니다. 이 Release는 게시하지 않았고 공개 stable은
+v0.42.0이다. 두 Windows 실패의 간헐성 원인과 후속 소스의 native 완료는 별도 확인이
+필요하다. 사용자의 실제 macOS 저장소 지연 원인도 아직 미확인이다.
+
+`d6fda860bc215b469672ab79e6dfbddf14647f80`에서 `check:all`의 전체 정적·Go race
+검사와 설치본 40개 시나리오를 통과했다. CLI race는 253.214초, 확장한 실제 PTY
+`cli_presentation`은 정리 포함 12.826초였다. Workflow actionlint도 통과했다.
+[해당 main Windows 실행](https://github.com/jinyongp/devtools/actions/runs/41874807321)은
+21개 job 성공, ARM64 CLI와 집계 gate 실패였다. ARM64의 실제 task 생성·Request ID·
+종료 코드는 정상이었고 `TestGeneratedOperationIDAppearsInTextSuccess`가 정상 진행 표시를
+오류로 판단했다. 이 실행의 x64 race는 통과했지만 이전 실패의 간헐성 원인을 확정하는
+근거로 삼지 않는다.
+
+후속 `7499859195591f1e43d1b73e59337fd50988797b`는 위 text 성공 검사 전제 여섯 곳만
+수정한다. 제품 코드·JSON 계약은 `d6fda86`과 같으며, 해당 출력·progress·foreground의
+targeted race 검사를 9.219초에 통과했다. 최종 native와 배포 완료는 후속 실행으로 확인한다.

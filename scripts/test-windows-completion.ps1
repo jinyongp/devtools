@@ -85,6 +85,18 @@ exec = ['cmd.exe', '/d', '/c', 'echo CANARY_NEVER_RUN']
         $matches = @(Matches $line)
         Require (-not [bool]($matches | Where-Object { $_.ListItemText -in @('--profile','--env','completion-fixture') })) 'Child argv boundary leaked devtools candidates'
     }
+    foreach ($entry in @(
+        @{line='devtools var set KEY --profile completion-fixture --pro';omit='--profile'},
+        @{line='devtools var set KEY --stdin --val';omit='--value'},
+        @{line='devtools run --proxy=false --no-pro';omit='--no-proxy'},
+        @{line='devtools doctor --storage --pro';omit='--profile'},
+        @{line='devtools config fmt --check --dry';omit='--dry-run'},
+        @{line='devtools process list --all-profiles --pro';omit='--profile'}
+    )) {
+        $matches = @(Matches $entry.line)
+        Require (-not [bool]($matches | Where-Object { $_.ListItemText -ceq $entry.omit })) ('Incompatible completion for ' + $entry.line)
+    }
+    Require ([bool](@(Matches 'devtools var set KEY --stdin=false --val') | Where-Object { $_.ListItemText -ceq '--value' })) 'Explicit false flag hid a compatible input'
     $midLine = 'devtools run docs:dev --env child'
     $midCursor = 'devtools run docs:'.Length
     $midMatches = @([Management.Automation.CommandCompletion]::CompleteInput($midLine,$midCursor,$null).CompletionMatches)

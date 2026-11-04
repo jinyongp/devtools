@@ -1,7 +1,8 @@
 # 의존성 업데이트 검토
 
-2026-11-04 기준 조사와 로컬 검증 기록이다. 기준 소스는
-`efdf1771baad032eac06429845ba9f431bc064f5`이며, 결과는 main 작업 디렉터리의 변경사항에 적용된다.
+2026-11-04의 조사, 검증, 배포 기록이다. 시작 소스는
+`efdf1771baad032eac06429845ba9f431bc064f5`이고, 최종 소스
+`e18ed8efd08e5cf8e622f48c146673b6b6fb62f5`를 v0.42.0으로 배포했다.
 의존성 버전과 후속 조치의 당시 판단을 기록하며, 이후 최신 버전을 보장하지 않는다.
 
 ## 범위와 선택 기준
@@ -152,8 +153,7 @@ WebKit × rewrite/preserve 6개를 다시 실행해 통과했다. 루트와 fixt
 
 Windows와 macOS의 새 변경사항 native CI, Homebrew native, releaseway 실제 preview 실행,
 Windows↔WSL 브라우저 검증은 이 로컬 실행에 포함하지 않았다. 새 provider 버전의 공개 ingress도
-실행하지 않았다. 기존 workflow의 해당 검증은 commit을 원격에 반영한 뒤 필요하다.
-이 기록은 전체 플랫폼 CI 완료나 배포 완료를 뜻하지 않는다.
+실행하지 않았다. 이후 원격 검증과 배포까지 완료한 결과는 아래에 기록한다.
 
 ## 배포 검증에서 확인한 추가 사항
 
@@ -163,15 +163,15 @@ Windows↔WSL 브라우저 검증은 이 로컬 실행에 포함하지 않았다
 - [Windows ARM64 installer-x64](https://github.com/jinyongp/devtools/actions/runs/41805263686/job/126490581211):
   고정된 x64 PowerShell 7.6.6이 inline bootstrap 중 `0xC0000005`로 종료됐다.
   Application 이벤트의 실패 프로세스도 `pwsh.exe`였다. 기존에 남아 있던 이 별도 검증
-  런타임을 최초 업데이트 목록에서 놓쳤다. 공식 안정 버전 7.6.9와 ZIP SHA-256으로 갱신한다.
+  런타임을 최초 업데이트 목록에서 놓쳤다. 공식 안정 버전 7.6.9와 ZIP SHA-256으로 갱신했다.
   upstream crash의 내부 원인을 확인했다거나 이 변경만으로 해결됐다고 단정하지 않는다.
 - [Tailscale live 준비](https://github.com/jinyongp/devtools/actions/runs/41805366084/job/126490925917):
   1.104.5 바이너리는 공개됐지만 Docker peer 이미지는 없어 `manifest unknown`으로 실패했다.
   공식 Docker Hub의 최신 stable 이미지는 1.104.4였다. host와 peer를 이 버전으로 맞추고
   peer의 manifest digest도 고정했다. 버전 문자열만 확인한 최초 조사가 불충분했다.
 
-변경 후 Windows full과 PowerShell 반복 진단, Tailscale 실제 두 장치 검증을 다시 실행한다.
-원격 통과와 실제 배포 결과는 확인 후 이 기록에 추가한다.
+변경 후 Windows full과 PowerShell 반복 진단, Tailscale 실제 두 장치 검증을 다시 실행해
+통과했다. PowerShell 7.6.9의 x64-on-ARM64 fixture는 .NET 10.0.14를 사용했다.
 
 추가 inventory에서 npm manifest 밖의 dashboard D3 7.9.0도 확인했다.
 안정 버전 7.9.2의 공식 npm tarball SHA-512를 검증하고 bundle, ISC license,
@@ -188,13 +188,56 @@ Linux와 macOS의 기존 `completion` 설치 시나리오에서 중단되어 게
 
 변경 전 Linux 실패를 재현했다. 수정 후 실제 설치본의 bash/zsh/fish와 Bash Readline 입력,
 `completion_context`를 실행해 통과했다. 실제 실행 중인 명령의 project restart 접두사 조회도
-추가해 유효한 후보가 유지되는지 함께 확인했다. 전체 설치 시나리오와 릴리스 검증은 다시 실행한다.
+추가해 유효한 후보가 유지되는지 함께 확인했다. 전체 설치 시나리오와 릴리스 검증도 다시 실행했다.
 
 로컬 전체 설치 검증에서는 `tasks` 시나리오에 남은 D3 7.9.0 응답 기대값도 발견했다.
 실제 게시할 asset과 독립적으로 확인한 7.9.2를 요구하도록 갱신했다. 전체 tracked 파일을
 대조해 현재 실행 검사에 남은 구 D3 버전 기대값이 없는 것도 확인했다.
 수정 전 이미 통과한 앞 32개와 수정 후 선택 실행한 나머지 8개를 합쳐 로컬 설치 시나리오
-40개를 검증했다. 전체 Release 명령의 성공은 이 개별 실행 결과와 별도로 확인한다.
+40개를 검증했다. 이후 최종 Release의 전체 실행도 별도로 성공했다.
+
+## 최종 원격 검증과 배포
+
+배포 소스는 `e18ed8efd08e5cf8e622f48c146673b6b6fb62f5`이며 protocol은 24다.
+
+| 경계 | 실제 결과 |
+| --- | --- |
+| [Windows full](https://github.com/jinyongp/devtools/actions/runs/41811670109) | 최종 SHA에서 23개 작업 성공. x64와 ARM64, 실제 설치와 업데이트, native 경계, x64 race 포함. |
+| [Homebrew 필수 검사](https://github.com/jinyongp/devtools/actions/runs/41811873077) | 최종 SHA에서 Formula 생성, spec/audit, 필수 gate 성공. |
+| [최종 Release](https://github.com/jinyongp/devtools/actions/runs/41812754434) | 53개 작업 성공. provider opt-in 두 작업은 조건대로 생략했으며 아래 별도 실제 실행으로 확인했다. |
+| [실제 Cloudflared](https://github.com/jinyongp/devtools/actions/runs/41807460293) | basic/no-auth, 공개 RPC, HMR, 메시지, 선택 stop와 sibling 보존 성공. |
+| [실제 Tailscale](https://github.com/jinyongp/devtools/actions/runs/41807427987) | 두 장치의 실제 Serve, basic/no-auth, RPC/HMR, 메시지, 소유 설정 복원 성공. |
+| [PowerShell 반복 진단](https://github.com/jinyongp/devtools/actions/runs/41807415797) | native x64, native ARM64, ARM64 위 x64에서 startup/interop/stdio 총 300회 성공. 설치와 업데이트 흐름은 각각 1회, 1회, 3회 성공. |
+| [Installer Pages](https://github.com/jinyongp/devtools/actions/runs/41814611434) | v0.42.0 배포 성공. 공개 sh/ps1 응답이 해당 release asset과 바이트 단위로 일치. |
+| [Homebrew tap 후속 CI](https://github.com/jinyongp/homebrew-tap/actions/runs/41814954470) | 게시된 Formula의 maintenance/audit 성공. tap 커밋은 `e7723a1a6eec76732241e7139b3670c5e4aec5ec`. |
+
+최종 Release에는 macOS와 Linux의 전체 Go race와 설치 시나리오 40개, 실제 read-only
+sandbox, Secret Service/Keychain/DPAPI와 다른 사용자 경계, 실제 WSL2 재시작,
+Windows 브라우저 연결, HTTP/HTTPS와 LAN 브라우저 검증, 과거 자동화 수치 수집을 포함했다.
+`system_network_smoke=true`로 macOS와 Linux의 실제 hosts, OS trust, 80/443 검사도 통과했다.
+네 native OS producer 사이의 암호화 profile 교환 12개 방향도 모두 통과했다.
+Homebrew 게시는 macOS와 Linux의 x64/ARM64 네 native 설치 검증을 통과한 뒤 완료됐다.
+
+provider와 PowerShell 추가 실행의 소스는 `6120daf`다. 이후 최종 배포 SHA까지의 변경은
+이 기록과 설치형 Python fixture 세 파일뿐이며, 해당 검증이 소비한 제품 코드, 의존성,
+런타임 pin, workflow는 동일하다. 결과를 재사용하면서 최종 SHA의 필수 native와 Release
+검증도 별도로 완료했다.
+
+[공개 v0.42.0](https://github.com/jinyongp/devtools/releases/tag/v0.42.0)의 asset 19개를
+다시 내려받아 GitHub asset digest와 크기를 전부 대조했다. CLI 여섯 archive와 Skill archive의
+공개 checksum도 모두 일치했다. 각 OS/CPU 바이너리의 Go build metadata에서 Go 1.27.3과
+최종 소스 SHA를 확인했고, 갱신한 Go 모듈 버전도 포함되어 있었다.
+
+공개 installer의 최신 버전 선택으로 새 설치를 수행하고, 실제 공개 0.41.0 설치본의
+`dvt update`로 0.42.0 업데이트도 확인했다. 두 경로 모두 `devtools`와 `dvt`가
+version 0.42.0, protocol 24, 최종 소스 SHA를 반환했으며 storage는 ready였다.
+실제 사용자 설치 경로는 변경하지 않고 검증 소유 디렉터리를 사용했다.
+
+Go와 npm 의존성, vendored asset과 license, 설치 정책과 잠금파일, Nuxt 승인과 로그,
+자동완성 계약과 셸 adapter, native와 배포 workflow, 공개 배포 경로를 최종 재검토했다.
+검증 도중 확인한 도구 조합과 fixture 기대값을 수정하고 재검증했다. fixture 전이 의존성의
+audit 세 건은 위 후속 조치대로 남아 있으며 강제 override나 검사 제외로 숨기지 않았다.
+이 결과를 보존하는 후속 커밋은 문서만 변경한다.
 
 ## 주요 버전 근거
 

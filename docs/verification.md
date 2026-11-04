@@ -62,16 +62,17 @@ Release의 exact-SHA 재사용 판정도 같은 전체 suite step의 성공을 �
 
 ## 설치 시나리오와 플랫폼 검사
 
-다음 35개 시나리오는 `verify/run.py`가 파일 이름으로 자동 발견한다. 각 행은 실행 범위가
+다음 40개 시나리오는 `verify/run.py`가 파일 이름으로 자동 발견한다. 각 행은 실행 범위가
 겹치더라도 공개 계약·실패 경계가 달라 유지하는 그룹이다.
 
 | 영역 | 시나리오 |
 | --- | --- |
-| 설치·업데이트·패키지 | `bootstrap`, `install`, `update`, `discovery`, `completion` |
+| 설치·업데이트·패키지 | `bootstrap`, `install`, `update`, `discovery`, `completion`, `completion_context` |
+| CLI 계약과 안내 | `cli_guidance`, `cli_presentation`, `cli_reliability` |
 | 프로젝트·설정·진단 | `config_edit`, `doctor`, `project_lifecycle`, `workflow` |
 | 프로세스·포트·출력 | `ports`, `processes`, `readiness`, `cancellation`, `output_redaction`, `tty`, `cleanup` |
 | 네트워크·proxy·공유 | `network`, `network_failures`, `proxies`, `proxy_auto`, `proxy_policy`, `exposure`, `http2_exposure`, `cloudflared_faults`, `tailscale_simulated` |
-| 보호된 값·저장·전송 | `backup`, `profiles`, `storage_migration`, `secret_mutations`, `value_handoff`, `value_updates`, `vault`, `vault_session` |
+| 보호된 값·저장·전송 | `backup`, `profiles`, `sandbox_queries`, `storage_migration`, `secret_mutations`, `value_handoff`, `value_updates`, `vault`, `vault_session` |
 | 작업 관리 | `tasks`, `task_storage` |
 
 `check-linux-vault*.py`, `check-macos-vault.py`, `check-macos-installed-vault.py`는 실제

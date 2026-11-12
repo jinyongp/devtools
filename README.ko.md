@@ -138,7 +138,7 @@ protocol 12부터 이름 명령의 `serve`와 연결된 proxy를 `run`·`process
   [준비 확인](docs/process-readiness.md), [로컬 도메인·HTTPS·공유](docs/local-network.md).
 - 작업 관리: [task·workstream](docs/tasks.md), [Dashboard](docs/dashboard.md) — `devtools dashboard`가 반환한
   `data.item.url`로 브라우저에 접속합니다. 로그인 링크는 인증정보이므로 공유하지 마세요.
-- 데이터 관리: [Profile 조회·이동](docs/profiles.md), [암호화 백업·복구](docs/backup.md),
+- 데이터 관리: [Profile 조회·이름 변경·이동](docs/profiles.md), [암호화 백업·복구](docs/backup.md),
   [저장소 정리](docs/cleanup.md).
 - 셸과 자동화: [자동완성](docs/completion.md), [CLI 출력 계약](docs/cli-output.md).
 

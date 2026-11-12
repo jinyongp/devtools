@@ -5,6 +5,7 @@
 | Need | Use |
 | --- | --- |
 | Inspect profile metadata | `profile list/inspect/diff` |
+| Rename a profile on this device | `profile rename OLD NEW` |
 | Copy a profile across devices | `profile export/import` |
 | Back up or recover stored profiles | `backup` |
 | Archive eligible history | `cleanup preview/apply` |
@@ -12,6 +13,14 @@
 
 - Profile diff reports key/scope/task/instance differences, not values or secret equality. Equal metadata does not prove equal values.
 - Local protection: [protection.md](protection.md). Archive passphrases and local vault passphrases are independent.
+
+## Rename a profile on this device
+
+- `profile rename` is available from devtools 0.45.0. Check the installed `profile --help` and `schema profile rename` before making the change.
+- Run `devtools profile rename OLD NEW` once. It requires no confirmation, preview, or service restart. Verify that `profile list` shows `NEW`.
+- The profile keeps its ID and data. `OLD` remains an alias reserved for that profile, so it cannot be reused for a separate profile.
+- Existing project configuration still works. Keep using the name the older CLI already knows, including in `devtools.toml` while an older proxy reads that file.
+- `profile_exists` means the destination is assigned to another profile. `profile_storage_conflict` means a legacy client has stored separate data under a name already linked to the profile. Inspect the conflict before changing either profile.
 
 ## Storage formats and updates
 

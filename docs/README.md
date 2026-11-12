@@ -80,7 +80,7 @@ Some linked topic guides are currently in Korean.
 - [Legacy proxy guide](proxy.md): links to the current network guide.
 - [Tasks and workstreams](tasks.md) (English): plans, claims, validation, and handoffs.
 - [Dashboard](dashboard.md) (English): sign in, edit plans and values, and manage resources in a browser.
-- [Profiles](profiles.md): metadata, encrypted transfer, preview, and replacement.
+- [Profiles](profiles.md): metadata, renaming, and encrypted transfer.
 - [Backups and recovery](backup.md): keys, encryption, preview/apply, and interrupted restores.
 - [Storage cleanup](cleanup.md): selection, archive recovery, and permanent deletion.
 - [F01 follow-up evidence](f01-followup-results.md) (Korean): public protection changes, native checks, and measured CLI startup improvements.

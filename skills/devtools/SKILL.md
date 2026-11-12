@@ -1,6 +1,6 @@
 ---
 name: devtools
-description: Configure and run devtools-managed projects using existing commands, dynamic ports, environment values, servers, and local URLs. Use alongside implementation or debugging when devtools.toml exists and work involves setup, execution, port conflicts, or service connections, even when the request does not name devtools. Also use for requested devtools networking, task coordination, and profile recovery. Unrelated source edits do not require devtools operations.
+description: Configure and run devtools-managed projects using existing commands, dynamic ports, environment values, servers, and local URLs. Use alongside implementation or debugging when devtools.toml exists and work involves setup, execution, port conflicts, or service connections, even when the request does not name devtools. Also use for requested devtools networking, task coordination, profile renames, and profile recovery. Unrelated source edits do not require devtools operations.
 license: MIT
 compatibility: Requires the devtools CLI in PATH and filesystem access to the target project and the user's devtools data directory.
 ---
@@ -28,7 +28,7 @@ Use this skill alongside the source-work workflow. Do not create task records me
 | Initialize/unlock/change local protection; fix protected execution | `vault` | [protection.md](references/protection.md) |
 | Stable local domains; HTTPS; LAN/public sharing | `proxy`, `expose` | [network.md](references/network.md) |
 | Claim/resume requested tasks; edit plans; record validation | `task`, workstreams | [tasks.md](references/tasks.md) |
-| Transfer profiles; back up, restore, or clean history | `profile`, `backup`, `cleanup` | [storage.md](references/storage.md) |
+| Rename or transfer profiles; back up, restore, or clean history | `profile`, `backup`, `cleanup` | [storage.md](references/storage.md) |
 | Guard value mutations; deliver frozen values to an existing local runner | `values revision`, `values execution`, `values runner` | [automation.md](references/automation.md) |
 
 - Windows/WSL execution, installation, shell or host changes: also read [platforms.md](references/platforms.md).

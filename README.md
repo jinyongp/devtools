@@ -151,7 +151,7 @@ the [task and workstream guide](docs/tasks.md) is in English.
   [readiness](docs/process-readiness.md), [local domains, HTTPS, and sharing](docs/local-network.md).
 - Work coordination: [tasks and workstreams](docs/tasks.md), [Dashboard](docs/dashboard.md). Run
   `devtools dashboard` and open `data.item.url`. The login link is a credential; keep it private.
-- Data management: [profiles and transfer](docs/profiles.md),
+- Data management: [profile renaming and transfer](docs/profiles.md),
   [encrypted backups and recovery](docs/backup.md), [storage cleanup](docs/cleanup.md).
 - Shells and automation: [completion](docs/completion.md), [CLI output contract](docs/cli-output.md).
 

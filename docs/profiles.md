@@ -1,4 +1,4 @@
-# Profile 조회, 비교와 환경 간 이동
+# Profile 조회, 이름 변경과 환경 간 이동
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
@@ -44,17 +44,20 @@ managed process만 남아 있는 profile도 목록에 포함됩니다.
 
 ## 같은 기기에서 이름 변경
 
+devtools 0.45.0부터 지원합니다. 이름 변경에는 미리보기나 확인 입력이 필요하지 않습니다.
+
 ```sh
 devtools profile rename myapp myapp-new
 ```
 
-한 번 실행하면 `profile list`에 `myapp-new`가 표시됩니다. 기존 이름 `myapp`과
-새 이름 `myapp-new`로 같은 변수·secret·task와 실행 기록을 조회할 수 있습니다.
+한 번 실행하면 `profile list`에 `myapp-new`가 표시됩니다. profile ID와 저장된 데이터는
+유지되므로, 기존 이름 `myapp`과 새 이름 `myapp-new`로 같은 변수·secret·task와 실행 기록을
+조회할 수 있습니다.
 이전 이름은 같은 profile에 예약되므로 별도 profile에 재사용할 수 없습니다.
 
 이미 실행 중인 서비스와 프록시는 계속 동작하며 `devtools.toml`도 그대로 유지됩니다.
-구버전이 같은 데이터를 사용 중이면 해당 버전에는 기존 이름을 계속 지정하세요.
-구버전 프록시를 사용하는 프로젝트의 `devtools.toml`에도 기존 이름을 유지하세요.
+구버전이 같은 데이터를 사용 중이면 그 버전에서 이미 사용하던 이름을 계속 지정하세요.
+구버전 프록시가 읽는 `devtools.toml`에도 그 이름을 유지하세요.
 
 대상 이름이 다른 profile에 이미 연결되어 있으면 `profile_exists`가 반환됩니다.
 구버전에서 새 이름으로 별도 데이터를 만든 경우, 목록과 이름 변경에서

@@ -6,15 +6,21 @@ import http.client
 import json
 import os
 from pathlib import Path
+import shutil
 import socket
 import subprocess
 import sys
 import time
+from urllib.parse import urlsplit
 
-from fixture_paths import temporary_fixture
+from fixture_paths import create_fixture_directory
 
 
-SERVER = '''import http.server, json, os
+SERVER = '''import http.server, json, os, socketserver
+class Backend(http.server.ThreadingHTTPServer):
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         data = json.dumps({"pid": os.getpid(), "port": self.server.server_port}).encode()
@@ -24,7 +30,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(data)
     def log_message(self, *args):
         pass
-http.server.HTTPServer(("127.0.0.1", int(os.environ["PORT"])), Handler).serve_forever()
+Backend(("127.0.0.1", int(os.environ["PORT"])), Handler).serve_forever()
 '''
 
 
@@ -34,10 +40,10 @@ def free_port():
         return listener.getsockname()[1]
 
 
-def fetch(port):
+def fetch(port, host="live-rename.localhost"):
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
     try:
-        connection.request("GET", "/", headers={"Host": "live-rename.localhost"})
+        connection.request("GET", "/", headers={"Host": host, "Connection": "close"})
         response = connection.getresponse()
         body = response.read()
         if response.status == 200:
@@ -47,15 +53,34 @@ def fetch(port):
         connection.close()
 
 
-def ready(port):
+def ready(port, host="live-rename.localhost"):
     deadline = time.monotonic() + 10
     while True:
         try:
-            return fetch(port)
-        except OSError:
+            return fetch(port, host)
+        except (OSError, http.client.HTTPException):
             if time.monotonic() >= deadline:
                 raise
             time.sleep(0.1)
+
+
+def stop_controller(state):
+    proxy = state / "data" / "proxy"
+    control_file = proxy / "control.json"
+    if not control_file.is_file():
+        return
+    control = json.loads(control_file.read_text(encoding="utf-8"))
+    address, token = urlsplit(control["address"]), control["token"]
+    assert address.scheme == "http" and address.hostname == "127.0.0.1" and address.port
+    assert not any((address.username, address.path, address.query, address.fragment)) and len(token) == 64
+    connection = http.client.HTTPConnection("127.0.0.1", address.port, timeout=5)
+    try:
+        connection.request("POST", "/stop", headers={"Authorization": "Bearer " + token})
+        response = connection.getresponse()
+        response.read()
+        assert response.status == 200, "Owned proxy controller rejected shutdown"
+    finally:
+        connection.close()
 
 
 def verify(root, legacy, candidate):
@@ -75,6 +100,7 @@ host = "live-rename.localhost"
 port = "web"
 [commands.web]
 exec = {json.dumps([sys.executable, "server.py"])}
+inject = false
 serve = ["web"]
 [commands.web.bind]
 PORT = {{port = "web"}}
@@ -104,12 +130,19 @@ PORT = {{port = "web"}}
         call(legacy, "var", "set", "FIXTURE", "--value", "original")
         call(legacy, "var", "set", "FIXTURE", "--value", "other", "--profile", "occupied")
         task = call(legacy, "task", "add", "--title", "Existing task")["item"]["id"]
-        started = call(legacy, "process", "start", "web", "--proxy")
+        started = call(legacy, "process", "start", "web", "--proxy", "--capture-logs")
         execution = started["item"]["id"]
-        before = ready(frontend)
+        instance = call(legacy, "port", "show", "web")["item"]
+        try:
+            backend_before = ready(instance["port"], "127.0.0.1")
+            before = ready(frontend)
+        except (OSError, http.client.HTTPException) as failure:
+            status = call(legacy, "process", "status", execution)["item"]
+            logs = call(legacy, "process", "logs", execution)["content"]
+            raise RuntimeError(f"Previous-version fixture did not become ready: {status['state']}; {logs}") from failure
+        assert before == backend_before
         proxy_before = call(legacy, "proxy", "status")["item"]
         assert proxy_before["running"]
-        instance = call(legacy, "port", "show", "web")["item"]
         call(candidate, "profile", "rename", "old", "occupied", error="profile_exists")
         call(candidate, "profile", "rename", "missing", "new", error="profile_not_found")
 
@@ -130,7 +163,7 @@ PORT = {{port = "web"}}
         assert call(legacy, "var", "get", "FIXTURE")["value"] == "candidate-update"
         after = call(candidate, "port", "show", "web", "--profile", "new")["item"]
         assert (after["port"], after["instance_id"]) == (instance["port"], instance["instance_id"])
-        existing = call(candidate, "process", "start", "web", "--proxy")
+        existing = call(candidate, "process", "start", "web", "--proxy", "--capture-logs")
         assert not existing["changed"] and existing["item"]["id"] == execution
         assert fetch(frontend) == before
         records = call(candidate, "profile", "inspect", "new")["item"]["processes"]
@@ -140,7 +173,7 @@ PORT = {{port = "web"}}
         # immediately so its route continues to use the original address.
         try:
             config_file.write_text(config.replace('profile = "old"', 'profile = "new"', 1), encoding="utf-8")
-            existing = call(candidate, "process", "start", "web", "--proxy")
+            existing = call(candidate, "process", "start", "web", "--proxy", "--capture-logs")
             assert not existing["changed"] and existing["item"]["id"] == execution
         finally:
             config_file.write_text(config, encoding="utf-8")
@@ -182,7 +215,10 @@ PORT = {{port = "web"}}
             if execution is not None:
                 call(legacy, "process", "stop", execution)
         finally:
-            call(legacy, "proxy", "stop", "--all")
+            try:
+                call(legacy, "proxy", "stop", "--all")
+            finally:
+                stop_controller(state)
 
 
 def main():
@@ -192,8 +228,18 @@ def main():
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--candidate-commit")
     args = parser.parse_args()
-    with temporary_fixture(prefix="devtools-profile-live-") as root:
+    root = create_fixture_directory(prefix="devtools-profile-live-")
+    try:
         result = verify(root, args.legacy.resolve(strict=True), args.candidate.resolve(strict=True))
+    finally:
+        for attempt in range(20):
+            try:
+                shutil.rmtree(root)
+                break
+            except PermissionError:
+                if os.name != "nt" or attempt == 19:
+                    raise
+                time.sleep(0.1)
     for role, commit in [("legacy", args.legacy_commit), ("candidate", args.candidate_commit)]:
         if commit is not None:
             assert result[role]["commit"] == commit, (role, result[role])

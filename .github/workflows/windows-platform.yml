@@ -412,7 +412,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Profile rename compatibility baseline did not build' }
           } finally { Pop-Location }
           & python -B scripts/check-profile-live-rename.py --legacy $legacyBinary --legacy-commit $renameBaseline --candidate $env:DEVTOOLS_TEST_CLI_BINARY --candidate-commit $env:DEVTOOLS_SOURCE_COMMIT | Tee-Object -FilePath windows-profile-live-rename.json
-          if ($LASTEXITCODE -ne 0) { throw 'Profile rename interrupted an installed previous-version service or proxy' }
+          if ($LASTEXITCODE -ne 0) { throw 'Installed previous-version profile rename scenario failed' }
           & python -B scripts/test-windows-product.py --release-dir dist-product --version $env:VERSION --commit $env:DEVTOOLS_SOURCE_COMMIT
           if ($LASTEXITCODE -ne 0) { throw 'Installed candidate reliability, ConPTY and recovery journey failed' }
           $productProof = Get-Content -Raw -LiteralPath windows-installed-product-results.json | ConvertFrom-Json

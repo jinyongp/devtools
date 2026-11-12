@@ -223,6 +223,7 @@ jobs:
       - name: Installed guarded mutations, operation recovery, cooperative runner and automatic proxies
         run: python3 -B verify/run.py secret_mutations value_handoff proxy_auto cli_presentation cli_reliability processes project_lifecycle readiness tty cli_guidance discovery completion_context
       - name: Rename with an installed previous-version service and proxy
+        shell: bash
         run: |
           baseline=feaaf36882ddc214481b29f77d3bfadcefec09b6
           fixture=$(mktemp -d)

@@ -18,6 +18,16 @@ def call(args, input=None, error=None):
     return data['data']
 def api(*args, **kwargs): return call(['devtools', *args], **kwargs)
 call(['sh',os.environ['DEVTOOLS_TEST_INSTALLER'],'install','--version','0.0.0-test.1','--source',os.environ['DEVTOOLS_TEST_RELEASES']])
+password = 'synthetic-recoverable-backup-passphrase\n'
+api('var','set','MODE','--profile','fixture','--value','development')
+api('backup','create',error='passphrase_required')
+pass_archive = api('backup','create','--passphrase-stdin',input=password)['item']['path']
+assert b'\n-> scrypt ' in Path(pass_archive).read_bytes()
+assert api('backup','inspect','--file',pass_archive,'--passphrase-stdin',input=password)['item']['profiles'][0]['profile'] == 'fixture'
+pass_restore = ['--isolated-root',str(home / 'recovery-fixture'),'backup','restore','--file',pass_archive,'--profile','fixture','--passphrase-stdin']
+pass_plan = api(*pass_restore,input=password)
+assert api(*pass_restore,'--apply',pass_plan['digest'],input=password)['applied']
+assert api('--isolated-root',str(home / 'recovery-fixture'),'var','get','MODE','--profile','fixture-restored')['value'] == 'development'
 identity, recipient = str(home / 'identity'), str(home / 'recipient')
 api('backup','keygen','--identity-file',identity,'--recipient-file',recipient)
 assert Path(recipient).read_text().startswith('age1pq1')
@@ -69,4 +79,4 @@ api('backup','inspect','--file',result['safety_backup'],'--identity-file',identi
 damaged = home / 'damaged.age'
 data = bytearray(Path(archive).read_bytes()); data[-1] ^= 1; damaged.write_bytes(data); damaged.chmod(0o600)
 api('backup','inspect','--file',str(damaged),'--identity-file',identity,error='invalid_backup')
-print('Installed encrypted backup, restore, claim recovery, conflict, retry and safety backup verified')
+print('Installed setup-free passphrase backup, hybrid backup, restore, claim recovery, retry and safety backup verified')

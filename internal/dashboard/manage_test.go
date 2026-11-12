@@ -11,11 +11,40 @@ import (
 	"testing"
 	"time"
 
+	"filippo.io/age"
+	"github.com/jinyongp/devtools/internal/backup"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
+
+func TestDashboardLegacyBackupFailsBeforePublishingIntent(t *testing.T) {
+	root := privateTempDir(t)
+	t.Setenv("DEVTOOLS_ISOLATED_ROOT", root)
+	s := &Server{data: filepath.Join(root, "tasks"), cacheRoot: filepath.Join(root, "cache")}
+	engine := s.cleanupEngine()
+	legacy, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	destination := filepath.Join(root, "legacy-backups")
+	if err := tasks.PrivateDir(engine.Config); err != nil {
+		t.Fatal(err)
+	}
+	if err := tasks.WritePrivate(filepath.Join(engine.Config, "backup.json"), backup.Config{Directory: destination, Recipient: legacy.Recipient().String()}); err != nil {
+		t.Fatal(err)
+	}
+	id := tasks.ID()
+	if _, failure := s.backupAction(context.Background(), "fixture", backupRequest{Action: "create", RequestID: id}); failure == nil || failure.Code != "legacy_backup_recipient" {
+		t.Fatalf("legacy backup action: %v", failure)
+	}
+	for _, path := range []string{destination, filepath.Join(engine.Data, "backup-http", id+".json")} {
+		if _, err := os.Lstat(path); !os.IsNotExist(err) {
+			t.Fatalf("legacy backup left %s: %v", path, err)
+		}
+	}
+}
 
 func TestManagementAuthenticationAndConcurrency(t *testing.T) {
 	s := &Server{registry: Registry{Address: "http://127.0.0.1:1234"}, data: filepath.Join(privateTempDir(t), "tasks"), sessions: map[string]time.Time{"session": time.Now().Add(time.Hour)}}

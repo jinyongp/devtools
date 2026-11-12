@@ -132,7 +132,7 @@ func (a *App) catalog() map[string]any {
 			"output_modes":      []OutputMode{OutputJSON, OutputText, OutputArtifact, OutputPassthrough},
 			"output_schema":     "Describes data inside the JSON success envelope, and is present only for structured json commands. Text layout/style is not a machine parsing contract; request --format json for stable data.",
 			"interactive":       true,
-			"interactive_input": "Profile export/import can prompt for a passphrase on a terminal. Use --passphrase-file or --passphrase-stdin for non-interactive transfers.",
+			"interactive_input": "Profile export/import and backup create/inspect/restore can prompt for a passphrase on a terminal. Use --passphrase-file or --passphrase-stdin for non-interactive passphrase operations.",
 			"help_flags":        []string{"--help", "-h"},
 		},
 		"exit_codes": map[string]string{"0": "success", "1": "I/O or private storage failure", "2": "invalid input or dotenv syntax", "3": "lookup, configuration, state, conflict, or precondition failure; inspect error.code and error.details", "126": "configured command could not be executed", "127": "command run child executable not found", "130": "canceled; command run otherwise preserves child exit code or 128 + signal"},

@@ -63,11 +63,12 @@ package ownership and provide that next step. Do not downgrade a binary as data 
 ## Backup and restore
 
 - `backup status`: inspect configuration. `backup keygen`: create identity/public recipient without overwrite; keep private identity outside projects.
-- `backup configure`: output directory and public recipient. `backup create` without `--profile` includes all stored profiles; use explicit profile for scoped backup. Existing outputs are never overwritten.
-- `backup inspect` decrypts using an identity file and returns metadata, not values.
+- `backup create` uses a configured ML-KEM-768 + X25519 recipient or prompts for a passphrase. Supply `--passphrase-file` or `--passphrase-stdin` for unattended passphrase backups. Omitted output uses the configured directory or the data root's `backups/`; omitted profile includes all stored profiles. Existing outputs are never overwritten.
+- `backup configure` sets the optional output directory and hybrid recipient. Existing X25519 recipients remain usable for restoring matching archives. A legacy configuration requires a passphrase or a hybrid recipient for new backups.
+- `backup inspect` and `backup restore` detect passphrase archives and prompt or take explicit passphrase input. Recipient archives need the matching `--identity-file`. Inspect returns metadata, not values.
 - Restore selects source with `--profile`; `--as` chooses target, otherwise `<source>-restored`.
 - Preview, then apply identical file/source/target with `--apply DIGEST`. Keep the generated request ID; use it explicitly for an identical retry.
-- Existing-target restore needs `--replace` and configured safety backup recipient/directory. Safety backup failure prevents replacement. Unlike profile import, this configuration is required.
+- Existing-target restore needs `--replace`. For passphrase restore the safety backup uses the same passphrase and the data root's `backups/`; for recipient restore it uses the configured hybrid recipient and directory. Safety backup failure prevents replacement.
 - Refresh stale previews; retry uncertain apply with identical input/UUID.
 - Restored tasks retain IDs but release claims; obtain a new claim and refresh cursors. Reconnect project config and prepare instance/ports/processes separately; dashboard sessions are not restored.
 - Logical archives exclude device keys, vault sessions and launch handles. Protected import needs initialized/unlocked destination protection.

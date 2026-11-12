@@ -208,7 +208,7 @@ func TestProfileExportRequiresPassphraseInputWithoutTTY(t *testing.T) {
 	}
 }
 
-func TestProfileExportAndBackupCreatePublishDifferentRecipientSchemas(t *testing.T) {
+func TestProfileExportAndBackupCreatePublishExclusiveEncryptionInputs(t *testing.T) {
 	app := testApp(t)
 	var profileExport, backupCreate Command
 	for _, command := range app.commands {
@@ -222,8 +222,8 @@ func TestProfileExportAndBackupCreatePublishDifferentRecipientSchemas(t *testing
 	if len(profileExport.InputOneOf) != 5 {
 		t.Fatalf("profile export should expose default, recipient and passphrase modes: %#v", profileExport.InputOneOf)
 	}
-	if len(backupCreate.InputOneOf) != 3 {
-		t.Fatalf("backup create should retain configured-recipient fallback: %#v", backupCreate.InputOneOf)
+	if len(backupCreate.InputOneOf) != 5 {
+		t.Fatalf("backup create should expose default, recipient and passphrase modes: %#v", backupCreate.InputOneOf)
 	}
 }
 

@@ -438,7 +438,7 @@ func (a *App) exportProfile(ctx context.Context, streams IO, request Request) (a
 		failure *protocol.Error
 	)
 	if recipient != "" || recipientFile != "" {
-		result, failure = engine.CreateWithRecipient(ctx, backup.CreateOptions{Profile: profile, Output: output, RecipientPath: recipientFile, Recipient: recipient})
+		result, failure = engine.ExportWithRecipient(ctx, backup.CreateOptions{Profile: profile, Output: output, RecipientPath: recipientFile, Recipient: recipient})
 	} else {
 		passphrase, passphraseErr := acquireTransferPassphrase(ctx, streams, request.Options, "export", true, a.passphrasePrompt)
 		if passphraseErr != nil {

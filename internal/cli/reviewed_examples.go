@@ -481,7 +481,7 @@ var reviewedExamples = map[string][]helpExample{
 		{Purpose: "Backup destination", Command: "devtools backup status"},
 	},
 	"backup create": {
-		{Purpose: "All known profiles", Command: "devtools backup create"},
+		{Purpose: "All profiles with a backup passphrase or configured hybrid recipient", Command: "devtools backup create"},
 		{Purpose: "One profile at a new path", Command: "devtools backup create --profile my-app --output ./my-app.age --recipient-file ./backup.recipient"},
 	},
 	"backup inspect": {

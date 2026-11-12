@@ -14,6 +14,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"github.com/jinyongp/devtools/internal/archivekey"
 	"github.com/jinyongp/devtools/internal/backup"
 	"github.com/jinyongp/devtools/internal/cleanup"
 	"github.com/jinyongp/devtools/internal/execution"
@@ -379,8 +380,11 @@ func (s *Server) backupAction(ctx context.Context, profile string, q backupReque
 		return nil, protocol.NewError("storage_error", "Cannot coordinate backup.", 1, nil)
 	}
 	defer unlock()
-	var config backup.Config
-	if tasks.ReadPrivate(filepath.Join(c.Config, "backup.json"), &config) != nil || !filepath.IsAbs(config.Directory) {
+	config, configErr := engine.Status()
+	if configErr != nil {
+		return nil, configErr
+	}
+	if !config.Configured {
 		return nil, protocol.NewError("backup_not_configured", "Configure backup location and recipient with devtools backup configure.", 3, nil)
 	}
 	path := filepath.Join(config.Directory, "devtools-"+q.RequestID+".age")
@@ -416,6 +420,9 @@ func (s *Server) backupAction(ctx context.Context, profile string, q backupReque
 		if _, e = os.Lstat(path); !errors.Is(e, os.ErrNotExist) {
 			return nil, protocol.NewError("request_conflict", "Backup output already exists.", 3, nil)
 		}
+	}
+	if !archivekey.IsHybridRecipient(config.Recipient) {
+		return nil, backup.LegacyRecipientError()
 	}
 	raw, _ := json.Marshal(map[string]string{"fingerprint": fingerprint})
 	if maintenance.Write(intent, raw) != nil {

@@ -92,6 +92,20 @@ type CreateOptions struct {
 	Recipient     string
 	Passphrase    string
 }
+type ReadOptions struct {
+	Path         string
+	IdentityPath string
+	Passphrase   string
+}
+
+type RestoreOptions struct {
+	ReadOptions
+	Source    string
+	Target    string
+	Expected  string
+	RequestID string
+	Replace   bool
+}
 type Plan struct {
 	Replayed     bool     `json:"-"` // Response metadata; never stored in the restore receipt.
 	Digest       string   `json:"digest"`
@@ -187,7 +201,7 @@ func failure(code string, causes ...error) *protocol.Error {
 	message := map[string]string{
 		"backup_not_configured": "No backup destination or recipient is configured. Configure backups or supply an explicit public recipient and output path.",
 		"invalid_recipient":     "The backup recipient is not a supported public age recipient. Use the recipient file produced by backup keygen.",
-		"invalid_backup":        "The selected archive could not be authenticated or has an unsupported backup structure. Verify its identity file and preserve the original archive.",
+		"invalid_backup":        "The selected archive could not be authenticated or has an unsupported backup structure. Verify its passphrase or identity file and preserve the original archive.",
 		"not_found":             "The requested profile is not present in the selected backup or store. Inspect the archive and profile selection.",
 		"profile_exists":        "The target profile already exists. Preview the restore and explicitly permit replacement when intended.",
 		"revision_conflict":     "The restore target changed after preview. Refresh the preview before applying it.",
@@ -270,6 +284,9 @@ func (e Engine) Configure(directory, recipientPath string) (any, *protocol.Error
 	r, err := recipient(recipientPath)
 	if err != nil {
 		return nil, failure("invalid_recipient")
+	}
+	if !archivekey.IsHybridRecipient(r) {
+		return nil, LegacyRecipientError()
 	}
 	c := Config{d, r}
 	b, _ := json.Marshal(c)
@@ -426,64 +443,94 @@ func (e Engine) Create(ctx context.Context, profile, output, recipientPath strin
 	return e.CreateWithRecipient(ctx, CreateOptions{Profile: profile, Output: output, RecipientPath: recipientPath})
 }
 func (e Engine) CreateWithRecipient(ctx context.Context, request CreateOptions) (CreateResult, *protocol.Error) {
-	if request.Profile != "" && !project.ValidProfile(request.Profile) || request.RecipientPath != "" && request.Recipient != "" {
+	return e.createWithRecipient(ctx, request, false)
+}
+
+// ExportWithRecipient preserves explicit profile transfer to older installations.
+func (e Engine) ExportWithRecipient(ctx context.Context, request CreateOptions) (CreateResult, *protocol.Error) {
+	if request.Output == "" || (request.Recipient == "") == (request.RecipientPath == "") {
 		return CreateResult{}, failure("invalid_argument")
 	}
-	var c Config
-	configLoaded := false
-	loadConfig := func() *protocol.Error {
-		if configLoaded {
-			return nil
+	return e.createWithRecipient(ctx, request, true)
+}
+
+func LegacyRecipientError() *protocol.Error {
+	return protocol.NewError("legacy_backup_recipient", "X25519 alone is no longer accepted for new backups. Use a backup passphrase or an ML-KEM-768 + X25519 recipient.", 3, nil)
+}
+
+func (e Engine) createWithRecipient(ctx context.Context, request CreateOptions, allowLegacy bool) (CreateResult, *protocol.Error) {
+	if request.Profile != "" && !project.ValidProfile(request.Profile) || request.RecipientPath != "" && request.Recipient != "" || request.Passphrase != "" {
+		return CreateResult{}, failure("invalid_argument")
+	}
+	var r string
+	var err error
+	var configured Config
+	if request.Output == "" || (request.Recipient == "" && request.RecipientPath == "") {
+		configured, err = e.config()
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return CreateResult{}, failure("storage_error", err)
 		}
-		configured, err := e.config()
-		if err != nil {
-			return failure("backup_not_configured")
-		}
-		c.Directory = configured.Directory
-		if c.Recipient == "" {
-			c.Recipient = configured.Recipient
-		}
-		configLoaded = true
-		return nil
 	}
 	switch {
 	case request.RecipientPath != "":
-		r, err := recipient(request.RecipientPath)
-		if err != nil {
-			return CreateResult{}, failure("invalid_recipient")
-		}
-		c.Recipient = r
+		r, err = recipient(request.RecipientPath)
 	case request.Recipient != "":
-		r, err := canonicalRecipient(request.Recipient)
-		if err != nil {
-			return CreateResult{}, failure("invalid_recipient")
-		}
-		c.Recipient = r
+		r, err = canonicalRecipient(request.Recipient)
 	default:
-		if failure := loadConfig(); failure != nil {
-			return CreateResult{}, failure
+		if configured.Recipient == "" {
+			return CreateResult{}, failure("backup_not_configured")
 		}
+		r = configured.Recipient
 	}
-	output := request.Output
-	if output == "" {
-		if failure := loadConfig(); failure != nil {
-			return CreateResult{}, failure
-		}
-		if platformfs.EnsureExternalDirectory(c.Directory) != nil {
-			return CreateResult{}, failure("backup_error")
-		}
-		output = filepath.Join(c.Directory, "devtools-"+tasks.ID()+".age")
+	if err != nil {
+		return CreateResult{}, failure("invalid_recipient")
+	}
+	if !allowLegacy && !archivekey.IsHybridRecipient(r) {
+		return CreateResult{}, LegacyRecipientError()
+	}
+	output, outputErr := e.backupOutput(request.Output, configured.Directory)
+	if outputErr != nil {
+		return CreateResult{}, outputErr
 	}
 	return e.createArchive(ctx, request.Profile, output, func(snapshot Snapshot) ([]byte, error) {
-		return encode(snapshot, c.Recipient)
+		return encode(snapshot, r)
 	})
 }
 
+func (e Engine) defaultDirectory() string { return filepath.Join(e.Data, "backups") }
+
+func (e Engine) backupOutput(output, directory string) (string, *protocol.Error) {
+	if output != "" {
+		return output, nil
+	}
+	if directory == "" {
+		directory = e.defaultDirectory()
+		if err := ensurePrivateDirectoryChain(e.Data, directory); err != nil {
+			return "", failure("backup_error", err)
+		}
+	} else if err := platformfs.EnsureExternalDirectory(directory); err != nil {
+		return "", failure("backup_error", err)
+	}
+	return filepath.Join(directory, "devtools-"+tasks.ID()+".age"), nil
+}
+
 func (e Engine) CreateWithPassphrase(ctx context.Context, request CreateOptions) (CreateResult, *protocol.Error) {
-	if request.Profile != "" && !project.ValidProfile(request.Profile) || request.Output == "" || request.Passphrase == "" || request.Recipient != "" || request.RecipientPath != "" {
+	if request.Profile != "" && !project.ValidProfile(request.Profile) || request.Passphrase == "" || request.Recipient != "" || request.RecipientPath != "" {
 		return CreateResult{}, failure("invalid_argument")
 	}
-	return e.createArchive(ctx, request.Profile, request.Output, func(snapshot Snapshot) ([]byte, error) {
+	var configured Config
+	if request.Output == "" {
+		var err error
+		configured, err = e.config()
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return CreateResult{}, failure("storage_error", err)
+		}
+	}
+	output, outputErr := e.backupOutput(request.Output, configured.Directory)
+	if outputErr != nil {
+		return CreateResult{}, outputErr
+	}
+	return e.createArchive(ctx, request.Profile, output, func(snapshot Snapshot) ([]byte, error) {
 		return encodePassphrase(snapshot, request.Passphrase)
 	})
 }
@@ -681,7 +728,22 @@ func ArchiveEncryptionMode(path string) (archivekey.Format, error) {
 }
 
 func Inspect(path, identityPath string) (Metadata, *protocol.Error) {
-	snapshot, _, _, err := decode(path, identityPath)
+	return InspectArchive(ReadOptions{Path: path, IdentityPath: identityPath})
+}
+
+func (options ReadOptions) decode() (Snapshot, []byte, error) {
+	if options.Passphrase != "" {
+		return decodePassphrase(options.Path, options.Passphrase)
+	}
+	snapshot, cipher, _, err := decode(options.Path, options.IdentityPath)
+	return snapshot, cipher, err
+}
+
+func InspectArchive(options ReadOptions) (Metadata, *protocol.Error) {
+	if (options.IdentityPath == "") == (options.Passphrase == "") {
+		return Metadata{}, failure("invalid_argument")
+	}
+	snapshot, _, err := options.decode()
 	if err != nil {
 		return Metadata{}, archiveFailure(err)
 	}
@@ -780,17 +842,31 @@ func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult
 }
 
 func (e Engine) Restore(ctx context.Context, path, identityPath, source, target, expected, requestID string, replace bool) (Plan, *protocol.Error) {
+	return e.RestoreArchive(ctx, RestoreOptions{
+		ReadOptions: ReadOptions{Path: path, IdentityPath: identityPath},
+		Source:      source, Target: target, Expected: expected, RequestID: requestID, Replace: replace,
+	})
+}
+
+func (e Engine) RestoreArchive(ctx context.Context, options RestoreOptions) (Plan, *protocol.Error) {
 	defer progress.Begin(ctx, "Decrypting and checking the backup")()
 	plan := Plan{Targets: []Target{}}
-	if !filepath.IsAbs(e.Data) || !filepath.IsAbs(e.Cache) {
+	if !filepath.IsAbs(e.Data) || !filepath.IsAbs(e.Cache) || (options.IdentityPath == "") == (options.Passphrase == "") {
 		return plan, failure("invalid_argument")
 	}
-	snapshot, cipher, _, err := decode(path, identityPath)
+	snapshot, cipher, err := options.ReadOptions.decode()
 	if err != nil {
 		return plan, archiveFailure(err)
 	}
 	defer destroySnapshot(&snapshot)
-	return e.restore(ctx, restoreRequest{Snapshot: snapshot, Cipher: cipher, Source: source, Target: target, Expected: expected, RequestID: requestID, Replace: replace})
+	var recovery *recoveryOptions
+	if options.Passphrase != "" {
+		recovery = &recoveryOptions{Directory: e.defaultDirectory(), Passphrase: options.Passphrase}
+	}
+	return e.restore(ctx, restoreRequest{
+		Snapshot: snapshot, Cipher: cipher, Source: options.Source, Target: options.Target,
+		Expected: options.Expected, RequestID: options.RequestID, Replace: options.Replace, Recovery: recovery,
+	})
 }
 
 func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *protocol.Error) {
@@ -996,6 +1072,9 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 				return plan, failure("backup_not_configured")
 			}
 			directory, recoveryRecipient = c.Directory, c.Recipient
+			if !archivekey.IsHybridRecipient(recoveryRecipient) {
+				return plan, protocol.NewError("legacy_backup_recipient", "Replacement requires a safety backup to a configured ML-KEM-768 + X25519 recipient. Configure a hybrid recipient or restore into a new profile.", 3, nil)
+			}
 			if platformfs.EnsureExternalDirectory(directory) != nil {
 				return plan, failure("backup_error")
 			}

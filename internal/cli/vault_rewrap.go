@@ -76,7 +76,7 @@ func (a *App) rewrapPassphrase(ctx context.Context, streams IO, options map[stri
 	var text string
 	var e *protocol.Error
 	if file != "" || stdin {
-		text, e = readPassphraseSource(ctx, streams, file, stdin, "rewrap")
+		text, e = readPassphraseSource(ctx, streams, file, stdin)
 	} else if a.passphrasePrompt != nil {
 		text, e = a.passphrasePrompt(ctx, streams, prefix+" vault passphrase: ")
 		if e == nil && confirm {

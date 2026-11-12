@@ -43,7 +43,7 @@ func (a *App) vaultPassphrase(ctx context.Context, streams IO, options map[strin
 	var text string
 	var e *protocol.Error
 	if hasFile || stdin {
-		text, e = readPassphraseSource(ctx, streams, options["passphrase-file"], stdin, action)
+		text, e = readPassphraseSource(ctx, streams, options["passphrase-file"], stdin)
 	} else {
 		if a.passphrasePrompt == nil {
 			return nil, vaultPassphraseRequired(action)

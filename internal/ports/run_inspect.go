@@ -23,7 +23,7 @@ func (s Store) ObserveCommand(ctx context.Context, p project.Context, command pr
 	if err := ctx.Err(); err != nil {
 		return nil, protocol.ContextError(err)
 	}
-	state, failure := s.Read()
+	state, failure := s.ReadContext(ctx)
 	if failure != nil {
 		return nil, failure
 	}

@@ -97,7 +97,7 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 		}
 		return out, nil
 	}, Apply: func(ctx context.Context, root string, step storageupgrade.Step) (bool, error) {
-		unlock, err := maintenance.LockExclusive(ctx, filepath.Join(root, "processes", "operations.lock"))
+		unlock, err := maintenance.LockExclusive(ctx, filepath.Join(maintenance.RuntimeDirectory(root, "processes"), "operations.lock"))
 		if err != nil {
 			return false, err
 		}

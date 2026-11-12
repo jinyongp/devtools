@@ -48,7 +48,7 @@ func (s Store) RetirementBlocks(ctx context.Context, records []Record) map[strin
 	}
 	// Pending batches may have published a child before their response receipt.
 	// Preserve all identities mentioned by unresolved lifecycle/network work.
-	for _, directory := range []string{filepath.Join(s.Data, "project-operations", "receipts"), filepath.Join(s.Data, "network-operations")} {
+	for _, directory := range []string{filepath.Join(maintenance.RuntimeDirectory(s.Data, "project-operations"), "receipts"), maintenance.RuntimeDirectory(s.Data, "network-operations")} {
 		entries, err := os.ReadDir(directory)
 		if errors.Is(err, os.ErrNotExist) {
 			continue

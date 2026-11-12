@@ -521,7 +521,7 @@ func (r Resolver) dnsStatus(state *ports.State, item *Item, dns string) {
 		item.Status = "activation_required"
 		return
 	}
-	if len(desired) > 0 && !(hosts.Manager{Data: filepath.Dir(r.Ports.Directory)}).Prepared(item.Ref().Key()+"/"+listener.ID, desired[0]) {
+	if len(desired) > 0 && !(hosts.Manager{Data: r.Ports.DataRoot()}).Prepared(item.Ref().Key()+"/"+listener.ID, desired[0]) {
 		item.Status = "activation_required"
 	}
 }

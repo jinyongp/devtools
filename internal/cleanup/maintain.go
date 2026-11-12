@@ -238,7 +238,7 @@ func (e Engine) maintainPublic(ctx context.Context, profile string, limit int, d
 			default:
 				// Logs expire independently of the detail retention window.
 				if now.Sub(*r.EndedAt) >= retention.RawProcessLogAge && r.Capture {
-					if _, err := os.Lstat(filepath.Join(e.Data, "processes", r.ID, "output.log")); err == nil {
+					if _, err := os.Lstat(filepath.Join(services.Directory(e.Data), r.ID, "output.log")); err == nil {
 						item.Kind, item.Eligible, item.Reason = "process_log", true, "log_expired"
 						if !dry {
 							_, pe := manager.RetireLog(ctx, r.ID, func([]byte) *protocol.Error { return nil })

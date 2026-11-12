@@ -10,10 +10,13 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -54,9 +57,26 @@ type Store struct {
 	Directory string
 	Probe     AvailabilityProbe
 	Owner     RunOwner
+	dataRoot  string
 	// InspectFailure runs after the registry lock is released. Higher layers
 	// can authenticate execution control without coupling ports to services.
 	InspectFailure func(context.Context, *protocol.Error) *protocol.Error
+}
+
+// ForDataRoot selects the managed port registry and its maintenance gate.
+func ForDataRoot(root string) Store {
+	return Store{Directory: filepath.Dir(filepath.Join(root, filepath.FromSlash(RegistryRelative(root)))), dataRoot: root}
+}
+
+func RegistryRelative(root string) string {
+	return path.Join(maintenance.RuntimeRelative(root, "ports"), "registry.json")
+}
+
+func (s Store) DataRoot() string {
+	if s.dataRoot != "" {
+		return s.dataRoot
+	}
+	return filepath.Dir(s.Directory)
 }
 
 func fail(code string) *protocol.Error {
@@ -103,6 +123,45 @@ func private(f *os.File) bool {
 	return platformfs.CheckFile(f) == nil
 }
 func (s Store) Read() (*State, *protocol.Error) {
+	return s.ReadContext(context.Background())
+}
+
+func (s Store) ReadContext(ctx context.Context) (*State, *protocol.Error) {
+	if s.dataRoot == "" {
+		return s.ReadHeld()
+	}
+	if condition := protocol.ContextError(ctx.Err()); condition != nil {
+		return nil, condition
+	}
+	gateDirectory := filepath.Join(s.dataRoot, ".maintenance")
+	if _, err := os.Lstat(gateDirectory); errors.Is(err, os.ErrNotExist) {
+		// A registry created before it joined maintenance must remain
+		// readable without preparing a write lock. If a writer initializes
+		// the gate during this read, discard the result and use the gate.
+		state, condition := s.ReadHeld()
+		if _, err := os.Lstat(gateDirectory); errors.Is(err, os.ErrNotExist) {
+			return state, condition
+		}
+	}
+	release, err := maintenance.AcquirePassiveQuery(ctx, s.dataRoot)
+	if err != nil {
+		if condition := protocol.ContextError(ctx.Err()); condition != nil {
+			return nil, condition
+		}
+		condition := storageError(err)
+		var preparation *maintenance.QueryPreparationError
+		if errors.As(err, &preparation) {
+			condition = protocol.WithStoragePreparation(condition, preparation.State, preparation.Passive)
+		}
+		return nil, condition
+	}
+	defer release()
+	return s.ReadHeld()
+}
+
+// ReadHeld reads the registry when the caller already owns the data-root gate.
+// Standalone registries may read their atomically published file directly.
+func (s Store) ReadHeld() (*State, *protocol.Error) {
 	_, e := os.Lstat(s.Directory)
 	if errors.Is(e, os.ErrNotExist) {
 		return empty(), nil
@@ -193,12 +252,29 @@ func (state *State) validatedIndex() (*registryReadIndex, bool) {
 func sameAlias(a, b *string) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 
 func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Error)) *protocol.Error {
+	if s.dataRoot == "" {
+		return s.UpdateHeld(ctx, fn)
+	}
+	release, err := maintenance.AcquireShared(ctx, s.dataRoot)
+	if err != nil {
+		if condition := protocol.ContextError(ctx.Err()); condition != nil {
+			return condition
+		}
+		return storageError(err)
+	}
+	defer release()
+	return s.UpdateHeld(ctx, fn)
+}
+
+// UpdateHeld updates the registry while the caller holds its data-root
+// maintenance gate. A standalone registry only needs its own lock.
+func (s Store) UpdateHeld(ctx context.Context, fn func(*State) (bool, *protocol.Error)) *protocol.Error {
 	l, e := s.lock(ctx, "registry.lock", true, true)
 	if e != nil {
 		return e
 	}
 	defer l.Close()
-	st, e := s.Read()
+	st, e := s.ReadHeld()
 	if e != nil {
 		return e
 	}
@@ -207,6 +283,29 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 	changed, e := fn(st)
 	if e != nil || !changed {
 		return e
+	}
+	if s.dataRoot != "" {
+		names, err := profilekey.ReadRenameNamesHeld(s.dataRoot)
+		if err != nil {
+			return storageError(err)
+		}
+		for _, instance := range st.Instances {
+			if condition := names.RequireCurrent(instance.Profile); condition != nil {
+				return condition
+			}
+		}
+		if st.Network != nil {
+			for _, activation := range st.Network.Activations {
+				if condition := names.RequireCurrent(activation.Route.Profile); condition != nil {
+					return condition
+				}
+			}
+			for _, pin := range st.Network.Pins {
+				if condition := names.RequireCurrent(pin.Route.Profile); condition != nil {
+					return condition
+				}
+			}
+		}
 	}
 	st.joinAssignments()
 	for id, current := range st.pinnedProjections() {

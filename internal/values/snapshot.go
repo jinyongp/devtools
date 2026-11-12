@@ -183,7 +183,13 @@ func CaptureVault(ctx context.Context, root, profile, env string, inject bool, n
 	}
 	store := vault.FileStore{Root: root, VaultID: k.VaultID, CatalogKey: key}
 	created := false
-	p, profileKey, err := store.ReadAnyWithMasterHeld(ctx, profile, key)
+	readHeld := func() (*vault.Profile, *vault.Material, error) {
+		if condition := profilekey.RequireCurrentHeld(root, profile); condition != nil {
+			return nil, nil, condition
+		}
+		return store.ReadAnyWithMasterHeld(ctx, profile, key)
+	}
+	p, profileKey, err := readHeld()
 	release()
 	if err != nil && err.Error() == "profile_not_found" {
 		release, err = maintenance.AcquireExclusive(ctx, root)
@@ -191,7 +197,7 @@ func CaptureVault(ctx context.Context, root, profile, env string, inject bool, n
 			return nil, VaultError(ctx, err)
 		}
 		// Another creator may have published after the shared read.
-		p, profileKey, err = store.ReadAnyWithMasterHeld(ctx, profile, key)
+		p, profileKey, err = readHeld()
 		if err != nil && err.Error() == "profile_not_found" {
 			p, err = vault.NewProfile(profile)
 			if err == nil {
@@ -289,6 +295,9 @@ func VaultError(ctx context.Context, err error) *protocol.Error {
 	var inner *protocol.Error
 	if errors.Is(err, profilekey.ErrMigrationRequired) || errors.As(err, &inner) && inner.Code == "migration_required" {
 		return storageupgrade.Required("values")
+	}
+	if inner != nil && (inner.Code == "profile_renamed" || inner.Details["operation"] == "read_rename_names") {
+		return inner
 	}
 	code := "storage_error"
 	for _, known := range []error{vault.ErrLocked, vault.ErrKeyMissing, vault.ErrIntegrity, vault.ErrInvalid, vault.ErrTooLarge, vault.ErrUnavailable, vault.ErrRecovery, vault.ErrLockPending, vault.ErrDenied, vault.ErrInteractionRequired, vault.ErrBackendLocked, vault.ErrSessionProtocol, vault.ErrInputChanged} {

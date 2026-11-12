@@ -42,6 +42,25 @@ managed process만 남아 있는 profile도 목록에 포함됩니다.
 변경으로 표시하지 않습니다. 특히 secret 값의 동일 여부나 해시를 제공하지 않으므로,
 `different: false`는 저장된 값까지 같다는 보증이 아닙니다.
 
+## 같은 저장소에서 이름 변경
+
+미리보기로 대상 이름과 옮길 값·task·포트를 확인합니다.
+
+```sh
+devtools profile rename myapp renamed-app
+devtools profile rename myapp renamed-app --apply DIGEST --request-id REQUEST_UUID
+```
+
+`DIGEST`에는 미리보기의 값을 사용하고, 적용 전에 요청 UUID를 보관하세요.
+`storage_upgrade_required`가 true이면 첫 적용에 이 데이터 저장소의 형식 전환이
+포함됩니다. 진행 전에 실행 중인 devtools 프로세스와 proxy·공유를 종료하세요.
+전환 뒤에는 이전 버전이 이 저장소에 쓸 수 없습니다.
+
+적용 중단이나 응답 유실 뒤에는 같은 digest와 요청 UUID로 재시도하세요. 기존 값의
+암호문, task 이력, 인스턴스 ID와 포트가 새 이름에서 유지됩니다. 이전 이름은 같은
+프로필에 예약되므로, 원래 이름으로 돌아갈 때는 새 이름을 원본으로 다시 미리보기합니다.
+적용 뒤 각 프로젝트의 `devtools.toml`에서 새 프로필 이름을 선택하세요.
+
 ## 다른 기기로 내보내기
 
 기본 profile 이동은 **원본 기기에서 먼저** 시작합니다. 대상 기기를 미리 준비할 필요가

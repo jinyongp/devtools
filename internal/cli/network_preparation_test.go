@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,14 +16,112 @@ import (
 
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/lifecycle"
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	proxyapi "github.com/jinyongp/devtools/internal/proxy"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
+
+func TestRetiredProfileCannotCreateExecutionOrPreparationReceipts(t *testing.T) {
+	projectDirectory := privateTempDir(t)
+	t.Chdir(projectDirectory)
+	t.Setenv("TOKEN", "test-marker")
+	config := "profile='old'\n[commands.worker]\ninject=false\nexec=" + fixtureExec(t, "check-marker") + "\n"
+	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	app := testApp(t)
+	profiles, failure := app.dataDirectory()
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	root := filepath.Dir(profiles)
+	owner := strings.Repeat("a", 32)
+	names := profilekey.RenameNames{Version: 1, Owners: map[string]string{"old": owner, "new": owner}, Current: map[string]string{owner: "new"}}
+	body, err := names.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := maintenance.AcquireExclusive(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = maintenance.Replace(root, map[string][]byte{profilekey.RenameNamesPath: body})
+	release()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"run", "worker"},
+		{"process", "start", "worker", "--request-id", tasks.ID()},
+		{"project", "up", "worker", "--request-id", tasks.ID()},
+	} {
+		code, out, diagnostic := invoke(t, app, "", args...)
+		if code != 3 || out != "" || !strings.Contains(diagnostic, `"code":"profile_renamed"`) {
+			t.Fatalf("%v used a retired profile: %d %q %s", args, code, out, diagnostic)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(projectDirectory, "marker")); !os.IsNotExist(err) {
+		t.Fatalf("a child of a retired profile ran: %v", err)
+	}
+	for _, directory := range []string{"processes", "project-operations", "network-operations"} {
+		err := filepath.WalkDir(filepath.Join(root, directory), func(path string, entry fs.DirEntry, err error) error {
+			if err == nil && !entry.IsDir() && !strings.HasSuffix(entry.Name(), ".lock") && !strings.HasSuffix(entry.Name(), ".lock.turnstile") {
+				t.Errorf("retired name left an execution artifact: %s", path)
+			}
+			return err
+		})
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestForegroundUsesVersionedProcessDirectory(t *testing.T) {
+	projectDirectory := privateTempDir(t)
+	t.Chdir(projectDirectory)
+	config := "profile='current'\n[commands.worker]\ninject=false\nexec=" + fixtureExec(t, "plain") + "\n"
+	if err := os.WriteFile("devtools.toml", []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	app := testApp(t)
+	profiles, failure := app.dataDirectory()
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	root := filepath.Dir(profiles)
+	legacy := filepath.Join(root, "processes")
+	ctx := context.Background()
+	release, err := maintenance.AcquireExclusive(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := maintenance.FenceLegacyRecoveryHeld(root); err != nil {
+		release()
+		t.Fatal(err)
+	}
+	err = maintenance.Write(legacy, []byte(maintenance.RuntimeFenceDocument))
+	release()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, output, diagnostic := invoke(t, app, "", "run", "worker"); code != 0 || output != "plain" || diagnostic != "" {
+		t.Fatalf("foreground run did not use the versioned layout: %d %q %s", code, output, diagnostic)
+	}
+	store := services.Store{Data: root}
+	records, condition := store.StoredRecords()
+	if condition != nil || len(records) != 1 || records[0].Profile != "current" || records[0].EndedAt == nil {
+		t.Fatalf("versioned record missing or incomplete: %+v %v", records, condition)
+	}
+	if body, err := maintenance.Read(legacy, 1024); err != nil || string(body) != maintenance.RuntimeFenceDocument {
+		t.Fatal("foreground run reopened the legacy path", err)
+	}
+}
 
 func TestAutomaticPreparationSkipsDisabledBeforeEnvironmentAndRetainsPeerPorts(t *testing.T) {
 	root := privateTempDir(t)

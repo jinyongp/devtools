@@ -152,6 +152,9 @@ func (s Store) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
 	if ctx.Err() != nil {
 		return nil, protocol.ContextError(ctx.Err())
 	}
+	if condition := profilekey.RequireCurrentHeld(maintenance.Root(s.Directory), s.Profile); condition != nil {
+		return nil, condition
+	}
 	release, e := LockShared(ctx, s.path()+".lock")
 	if e != nil {
 		return nil, gateError(ctx, e)
@@ -175,6 +178,9 @@ func (s Store) ReadCurrent(ctx context.Context) (*State, *protocol.Error) {
 func (s Store) ReadCurrentHeld(ctx context.Context) (*State, *protocol.Error) {
 	if ctx.Err() != nil {
 		return nil, protocol.ContextError(ctx.Err())
+	}
+	if condition := profilekey.RequireCurrentHeld(maintenance.Root(s.Directory), s.Profile); condition != nil {
+		return nil, condition
 	}
 	release, e := maintenance.LockQueryShared(ctx, s.path()+".lock")
 	if e != nil {
@@ -237,6 +243,13 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 			releaseGate()
 		}
 	}()
+	names, namesErr := profilekey.ReadRenameNamesHeld(maintenance.Root(s.Directory))
+	if namesErr != nil {
+		return nil, storageErrorAt("read_rename_names", "profile_store", namesErr)
+	}
+	if condition := names.RequireCurrent(s.Profile); condition != nil {
+		return nil, condition
+	}
 	def := Find(r.Action)
 	if def == nil {
 		return nil, failure("invalid_argument", "Unknown task action.")
@@ -387,7 +400,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		}
 		r.Options = options
 	}
-	fingerprint := hash(Object{"action": r.Action, "target": r.Target, "body": r.Body, "options": fingerprintOptions(r.Options)})
+	fingerprint := requestFingerprint(r, fingerprintOptions(r.Options))
 	token := r.Options["context"]
 	var contextLookup ContextLookup
 	contextRunID := ""
@@ -413,7 +426,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 			return nil, storageErrorAt("read_receipt", "task_receipt", readErr)
 		}
 		if exists {
-			if old.Fingerprint != fingerprint || contextUsed && old.ContextHash != hash(token) {
+			if !matchesRenameReceipt(r, old.Result, old.Fingerprint, fingerprint, s.Profile, names) || contextUsed && old.ContextHash != hash(token) {
 				return nil, failure("request_conflict", "This request ID was used with different input.")
 			}
 			result := copyObject(old.Result)
@@ -444,7 +457,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	} else {
 		contextLookup = mapContextLookup(j.Contexts)
 		if old, ok := j.Receipts[r.Options["request-id"]]; ok {
-			if old.Fingerprint != fingerprint || contextUsed && old.ContextHash != hash(token) {
+			if !matchesRenameReceipt(r, old.Result, old.Fingerprint, fingerprint, s.Profile, names) || contextUsed && old.ContextHash != hash(token) {
 				return nil, failure("request_conflict", "This request ID was used with different input.")
 			}
 			result := copyObject(old.Result)

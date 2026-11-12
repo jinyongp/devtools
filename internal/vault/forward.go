@@ -20,7 +20,6 @@ import (
 )
 
 const forwardVersion = 3
-const forwardPending = ".maintenance/restore-pending.json"
 
 type forwardPointer struct {
 	Version int    `json:"version"`
@@ -237,7 +236,7 @@ func (s ForwardStore) apply(ctx context.Context, root *platformfs.Root, state *f
 		s.step("receipt-written")
 		pointer.Phase = "committed"
 		body, _ := json.Marshal(pointer)
-		if err := root.WriteFile(ctx, forwardPending, body, true); err != nil {
+		if err := root.WriteFile(ctx, maintenance.RecoveryPointerRelative(s.Root), body, true); err != nil {
 			return ErrRecovery
 		}
 		s.step("committed")
@@ -249,7 +248,7 @@ func (s ForwardStore) apply(ctx context.Context, root *platformfs.Root, state *f
 		}
 	}
 	ready, _ := json.Marshal(forwardPointer{Version: forwardVersion, Phase: "ready", VaultID: s.VaultID})
-	if err := root.WriteFile(ctx, forwardPending, ready, true); err != nil {
+	if err := root.WriteFile(ctx, maintenance.RecoveryPointerRelative(s.Root), ready, true); err != nil {
 		return ErrRecovery
 	}
 	s.step("cleaned")
@@ -378,7 +377,7 @@ func (s ForwardStore) ReplaceHeld(ctx context.Context, id, fingerprint string, a
 	}
 	pointer := forwardPointer{Version: forwardVersion, ID: id, Phase: "applying", VaultID: s.VaultID}
 	body, _ := json.Marshal(pointer)
-	if err = root.WriteFile(ctx, forwardPending, body, true); err != nil {
+	if err = root.WriteFile(ctx, maintenance.RecoveryPointerRelative(s.Root), body, true); err != nil {
 		return result, ErrRecovery
 	}
 	s.step("intent-published")
@@ -435,7 +434,7 @@ func (s ForwardStore) recover(ctx context.Context, identity *[32]byte) (ForwardR
 		return result, ErrRecovery
 	}
 	defer root.Close()
-	body, exists, err := readPrivateMaybe(root, forwardPending)
+	body, exists, err := readPrivateMaybe(root, maintenance.RecoveryPointerRelative(s.Root))
 	if err != nil || !exists {
 		return result, err
 	}

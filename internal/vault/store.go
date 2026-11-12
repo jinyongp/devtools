@@ -343,6 +343,9 @@ func (s FileStore) Create(ctx context.Context, p *Profile, key *Material) error 
 		return err
 	}
 	defer release()
+	if condition := profilekey.RequireCurrentHeld(s.Root, p.Name); condition != nil {
+		return condition
+	}
 	c, err := s.readCatalog()
 	if err != nil {
 		return err

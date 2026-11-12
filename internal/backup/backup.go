@@ -932,9 +932,6 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		return plan, values.VaultError(ctx, err)
 	}
 	targetTasks := tasks.Store{Directory: filepath.Join(e.Data, "tasks"), Profile: target}
-	if err := targetTasks.CollectOrphanGenerationsHeld(); err != nil {
-		return plan, failure("storage_error", err)
-	}
 	fingerprint := restoreFingerprint(restoreFingerprintInput{Cipher: cipher, Source: source, Target: target, Expected: expected, Replace: replace})
 	receiptPath := "backup-receipts/" + requestID + ".json"
 	if expected != "" {
@@ -967,6 +964,12 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		if !errors.Is(err, os.ErrNotExist) {
 			return plan, failure("storage_error", err)
 		}
+	}
+	if condition := profilekey.RequireCurrentHeld(e.Data, target); condition != nil {
+		return plan, condition
+	}
+	if err := targetTasks.CollectOrphanGenerationsHeld(); err != nil {
+		return plan, failure("storage_error", err)
 	}
 	exists := false
 	targetData := map[string][]byte{}

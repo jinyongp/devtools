@@ -231,7 +231,8 @@ func storageErrorAt(operation string, cause error) *protocol.Error {
 func validID(s string) bool {
 	return protocol.ValidUUID(s)
 }
-func (s Store) root() string                { return filepath.Join(s.Data, "processes") }
+func Directory(root string) string          { return maintenance.RuntimeDirectory(root, "processes") }
+func (s Store) root() string                { return Directory(s.Data) }
 func (s Store) path(id, name string) string { return filepath.Join(s.root(), id, name) }
 
 func validRecord(id string, r Record) bool {
@@ -748,6 +749,14 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	if q.Action == "start" && q.ID != "" || q.Action != "start" && (q.Command != "" || q.Directory != "") {
 		return out, failure("invalid_argument")
 	}
+	ctx, releaseExecution, admissionErr := maintenance.AcquireExecution(ctx, s.Data)
+	if admissionErr != nil {
+		if condition := protocol.ContextError(ctx.Err()); condition != nil {
+			return out, condition
+		}
+		return out, storageErrorAt("lock_execution_admission", admissionErr)
+	}
+	defer releaseExecution()
 	// Store.Lock remains exclusive for maintenance and old clients. Independent
 	// operations share that barrier and serialize only their request/resource.
 	unlock, e := tasks.LockShared(ctx, filepath.Join(s.root(), "operations.lock"))
@@ -783,7 +792,7 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 	if q.ReplayOnly {
 		return out, failure("process_pending")
 	}
-	identity, identityErr := s.operationIdentity(q)
+	identity, identityErr := s.operationIdentity(ctx, q)
 	if identityErr != nil {
 		return out, identityErr
 	}
@@ -1090,7 +1099,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (result Re
 			return out, err
 		}
 	}
-	ps := ports.Store{Directory: filepath.Join(s.Data, "ports")}
+	ps := ports.ForDataRoot(s.Data)
 	var instance ports.Instance
 	e = ps.Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
 		i := st.Find(p.Profile, "", p.Root)

@@ -316,7 +316,18 @@ timeout = "3s"
         assert mutate(*base, "--apply", preview["digest"], env=target_env, input=passphrase, request=request)["replayed"]
         assert api("var", "get", "MESSAGE", env=target_env)["value"] == "portable-public-canary"
         assert api("task", "show", task, env=target_env)["item"]["id"] == task
-        raw(["run", "--", node, "-e", "process.exit(process.env.TOKEN===process.env.DEVTOOLS_TEST_EXPECTED_TOKEN?0:1)"],
+        rename = api("profile", "rename", "native-product", "renamed-product", env=target_env)
+        assert rename["source_profile"] == "native-product" and rename["target_profile"] == "renamed-product"
+        assert rename["values"] and rename["tasks"] and not rename["ports"]
+        assert rename["storage_upgrade_required"] and not rename["changed"]
+        assert api("profile", "rename", "native-product", "renamed-product", env=target_env) == rename
+        assert api("task", "show", task, env=target_env)["item"]["id"] == task
+        rename_request = ["profile", "rename", "native-product", "renamed-product", "--apply", rename["digest"], "--request-id", str(uuid.uuid4())]
+        assert api(*rename_request, env=target_env)["changed"]
+        assert api(*rename_request, env=target_env)["replayed"]
+        assert api("task", "show", task, "--profile", "renamed-product", env=target_env)["item"]["id"] == task
+        steps.append("profile_rename_apply_and_replay_preserve_imported_state")
+        raw(["run", "--profile", "renamed-product", "--", node, "-e", "process.exit(process.env.TOKEN===process.env.DEVTOOLS_TEST_EXPECTED_TOKEN?0:1)"],
             env=dict(target_env, DEVTOOLS_TEST_EXPECTED_TOKEN="synthetic-secret-canary\n"))
         assert api("backup", "status", env=target_env)["item"]["configured"] is False
         assert api("diagnostics")["ready"]

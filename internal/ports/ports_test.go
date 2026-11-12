@@ -10,7 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -22,6 +24,87 @@ func testPortStore(t *testing.T) Store {
 		Probe: func(int) (bool, *protocol.Error) {
 			return true, nil
 		},
+	}
+}
+
+func TestManagedRegistryWaitsForExclusiveMaintenance(t *testing.T) {
+	root := privateTestRoot(t)
+	store := ForDataRoot(root)
+	release, err := maintenance.AcquireExclusive(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock := sync.OnceFunc(release)
+	defer unlock()
+
+	change := func(state *State) (bool, *protocol.Error) {
+		_, condition := state.Register("example", root)
+		return condition == nil, condition
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	condition := store.Update(ctx, change)
+	if condition == nil || condition.Code != "deadline_exceeded" {
+		t.Fatalf("expected cancellation while waiting for maintenance, got %v", condition)
+	}
+	if _, err := os.Stat(store.Directory); !os.IsNotExist(err) {
+		t.Fatalf("blocked update prepared registry storage: %v", err)
+	}
+	readContext, cancelRead := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancelRead()
+	if _, condition := store.ReadContext(readContext); condition == nil || condition.Code != "deadline_exceeded" {
+		t.Fatalf("expected cancellation while reading through maintenance, got %v", condition)
+	}
+
+	if condition := store.UpdateHeld(context.Background(), change); condition != nil {
+		t.Fatal(condition)
+	}
+	unlock()
+	state, condition := store.Read()
+	if condition != nil {
+		t.Fatal(condition)
+	}
+	if state.Find("example", "", root) == nil {
+		t.Fatal("caller-held update did not persist the registered instance")
+	}
+}
+
+func TestManagedRegistryReadDoesNotPrepareOrRecoverStorage(t *testing.T) {
+	ctx := context.Background()
+	root := privateTestRoot(t)
+	store := ForDataRoot(root)
+	if state, condition := store.ReadContext(ctx); condition != nil || len(state.Instances) != 0 {
+		t.Fatalf("uninitialized registry was not readable: %v", condition)
+	}
+	standalone := Store{Directory: store.Directory}
+	if condition := standalone.Update(ctx, func(state *State) (bool, *protocol.Error) {
+		_, condition := state.Register("existing", root)
+		return condition == nil, condition
+	}); condition != nil {
+		t.Fatal(condition)
+	}
+	if state, condition := store.ReadContext(ctx); condition != nil || state.Find("existing", "", root) == nil {
+		t.Fatalf("registry created before maintenance was not readable: %v", condition)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".maintenance")); !os.IsNotExist(err) {
+		t.Fatalf("read prepared storage: %v", err)
+	}
+	release, err := maintenance.AcquireExclusive(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending := filepath.Join(root, ".maintenance", "restore-pending.json")
+	err = maintenance.Write(pending, []byte(`{"version":2,"phase":"applying","transaction_id":"00000000-0000-4000-8000-000000000001"}`))
+	release()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, condition := store.ReadContext(ctx)
+	if state != nil || condition == nil || condition.Details["state"] != "recovery_required" {
+		t.Fatalf("read ignored pending transaction: %v", condition)
+	}
+	if _, err := os.Stat(pending); err != nil {
+		t.Fatalf("passive query changed the pending transaction: %v", err)
 	}
 }
 

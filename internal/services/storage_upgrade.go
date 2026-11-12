@@ -25,7 +25,8 @@ func processStorageStep(ctx context.Context, root, relative string) (step storag
 	if err := ctx.Err(); err != nil {
 		return step, err
 	}
-	raw, err := maintenance.Read(filepath.Join(root, "processes", relative), 128<<20)
+	path := filepath.Join(Directory(root), relative)
+	raw, err := maintenance.Read(path, 128<<20)
 	if err != nil {
 		return step, err
 	}
@@ -39,7 +40,7 @@ func processStorageStep(ctx context.Context, root, relative string) (step storag
 	if header.Version == 2 {
 		step.Source = "process-v2"
 		if filepath.Base(relative) == "record.json" {
-			d, err := readDiskRecord(filepath.Join(root, "processes", relative))
+			d, err := readDiskRecord(path)
 			if err != nil {
 				return step, err
 			}
@@ -52,7 +53,7 @@ func processStorageStep(ctx context.Context, root, relative string) (step storag
 			}
 		} else {
 			var r receipt
-			if err := (Store{Data: root}).readReceiptContext(ctx, filepath.Join(root, "processes", relative), &r); err != nil {
+			if err := (Store{Data: root}).readReceiptContext(ctx, path, &r); err != nil {
 				return step, err
 			}
 		}
@@ -65,7 +66,7 @@ func processStorageStep(ctx context.Context, root, relative string) (step storag
 	}
 	if filepath.Base(relative) == "record.json" {
 		var r Record
-		if err := tasks.ReadPrivate(filepath.Join(root, "processes", relative), &r); err != nil || !validRecord(filepath.Base(filepath.Dir(relative)), r) {
+		if err := tasks.ReadPrivate(path, &r); err != nil || !validRecord(filepath.Base(filepath.Dir(relative)), r) {
 			return step, errors.New("invalid legacy process record")
 		}
 		step.Profile = r.Profile
@@ -75,7 +76,7 @@ func processStorageStep(ctx context.Context, root, relative string) (step storag
 		}
 	} else {
 		var r receipt
-		if err := tasks.ReadPrivate(filepath.Join(root, "processes", relative), &r); err != nil || len(r.Fingerprint) != 64 {
+		if err := tasks.ReadPrivate(path, &r); err != nil || len(r.Fingerprint) != 64 {
 			return step, errors.New("invalid legacy process receipt")
 		}
 	}
@@ -86,7 +87,8 @@ func processStorageStep(ctx context.Context, root, relative string) (step storag
 func StorageUpgradeAdapter() storageupgrade.Adapter {
 	return storageupgrade.Adapter{Name: "processes", InspectHeld: func(ctx context.Context, root string) ([]storageupgrade.Step, error) {
 		items := []storageupgrade.Step{}
-		entries, err := os.ReadDir(filepath.Join(root, "processes"))
+		directory := Directory(root)
+		entries, err := os.ReadDir(directory)
 		if errors.Is(err, os.ErrNotExist) {
 			return items, nil
 		}
@@ -107,7 +109,7 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 			}
 			items = append(items, step)
 		}
-		entries, err = os.ReadDir(filepath.Join(root, "processes", "receipts"))
+		entries, err = os.ReadDir(filepath.Join(directory, "receipts"))
 		if errors.Is(err, os.ErrNotExist) {
 			return items, nil
 		}
@@ -147,7 +149,7 @@ func StorageUpgradeAdapter() storageupgrade.Adapter {
 		if current.Fingerprint != step.Fingerprint || current.State != "migration_required" {
 			return false, errors.New("process storage changed during upgrade")
 		}
-		path := filepath.Join(root, "processes", step.Resource)
+		path := filepath.Join(Directory(root), step.Resource)
 		if filepath.Base(path) == "record.json" {
 			var r Record
 			if err := tasks.ReadPrivate(path, &r); err != nil {

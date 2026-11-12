@@ -42,7 +42,7 @@ func (e Engine) inventoryHeld(ctx context.Context, profile string, inspection *v
 		}
 		out.Add("process_detail", state, "profile", "public_metadata", reason, r.ID, eligible, 0)
 		if r.Capture {
-			path := filepath.Join(e.Data, "processes", r.ID, "output.log")
+			path := filepath.Join(services.Directory(e.Data), r.ID, "output.log")
 			if info, err := platformfs.StatPrivate(path); err == nil {
 				expired := r.EndedAt != nil && time.Since(*r.EndedAt) >= retention.RawProcessLogAge
 				reason := "within_retention"

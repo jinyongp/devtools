@@ -411,7 +411,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				s.apiError(w, e)
 				return
 			}
-			st, e := (ports.Store{Directory: filepath.Join(filepath.Dir(s.data), "ports")}).Read()
+			st, e := ports.ForDataRoot(filepath.Dir(s.data)).ReadContext(r.Context())
 			if e != nil {
 				s.apiError(w, e)
 				return
@@ -450,7 +450,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.URL.Path == "/api/project" {
-			st, e := (ports.Store{Directory: filepath.Join(filepath.Dir(s.data), "ports")}).Read()
+			st, e := ports.ForDataRoot(filepath.Dir(s.data)).ReadContext(r.Context())
 			if e != nil {
 				s.apiError(w, e)
 				return

@@ -48,6 +48,11 @@ func (a *App) prepareNetwork(ctx context.Context, p project.Context, names []str
 	if e != nil {
 		return nil, e
 	}
+	ctx, release, condition := acquireProfilePreparation(ctx, m.Data, p.Profile)
+	if condition != nil {
+		return nil, condition
+	}
+	defer release()
 	hm, e := a.hostsManager(ctx, streams)
 	if e != nil {
 		return nil, e
@@ -375,7 +380,7 @@ func (a *App) applyNetworkSnapshot(command execution.Command, snapshot *network.
 }
 
 func networkSnapshotPath(data, id string) string {
-	return filepath.Join(data, "processes", id, "network.json")
+	return filepath.Join(services.Directory(data), id, "network.json")
 }
 
 type lifecyclePreparation struct {

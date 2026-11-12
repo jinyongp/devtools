@@ -5,8 +5,10 @@ import (
 
 	"github.com/jinyongp/devtools/internal/lifecycle"
 	"github.com/jinyongp/devtools/internal/location"
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
@@ -26,9 +28,27 @@ func preparationMode(options map[string]string) (network.PreparationMode, *proto
 	return network.PreparationOptions(proxy, noProxy)
 }
 
+func acquireProfilePreparation(ctx context.Context, root, profile string) (context.Context, func(), *protocol.Error) {
+	ctx, release, err := maintenance.AcquireExecution(ctx, root)
+	if err != nil {
+		condition := protocol.NewError("storage_error", "Cannot prepare execution in this data store.", 1, nil)
+		return ctx, nil, protocol.WithStorageDetails(condition, "processes", "lock_execution_admission", "execution_store", err)
+	}
+	if condition := profilekey.RequireCurrentForExecution(ctx, root, profile); condition != nil {
+		release()
+		return ctx, nil, condition
+	}
+	return ctx, release, nil
+}
+
 // prepareLifecycle freezes selection before the lifecycle receipt is created.
 // Its parent journal holds no process or network locks during Manager.Apply.
 func (a *App) prepareLifecycle(ctx context.Context, manager *lifecycle.Manager, request *lifecycle.Request, mode network.PreparationMode, streams IO, callerDirectory ...string) *protocol.Error {
+	ctx, release, condition := acquireProfilePreparation(ctx, manager.Data, request.Project.Profile)
+	if condition != nil {
+		return condition
+	}
+	defer release()
 	store := netops.Store{Data: manager.Data}
 	exists, intent, e := store.ExecutionKind(request.RequestID)
 	if e != nil {
@@ -161,6 +181,11 @@ func (a *App) prepareManagedNetwork(ctx context.Context, p project.Context, q *s
 	if e != nil {
 		return e
 	}
+	ctx, release, condition := acquireProfilePreparation(ctx, s.Data, p.Profile)
+	if condition != nil {
+		return condition
+	}
+	defer release()
 	store := netops.Store{Data: s.Data}
 	exists, intent, e := store.ExecutionKind(q.RequestID)
 	if e != nil {

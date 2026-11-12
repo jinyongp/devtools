@@ -1,7 +1,7 @@
 package services
 
 import (
-	"path/filepath"
+	"context"
 	"sort"
 
 	"github.com/jinyongp/devtools/internal/location"
@@ -10,7 +10,7 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
-func (s Store) navigationDeclarations(q NavigationSelection, records []Record) ([]ServiceDeclaration, *protocol.Error) {
+func (s Store) navigationDeclarations(ctx context.Context, q NavigationSelection, records []Record) ([]ServiceDeclaration, *protocol.Error) {
 	directories := map[string]string{}
 	for _, r := range records {
 		if q.Profile != "" && q.Profile != r.Profile || q.Instance != "" && q.Instance != r.Instance || q.Directory != "" && !location.Same(q.Directory, r.Directory) {
@@ -18,7 +18,7 @@ func (s Store) navigationDeclarations(q NavigationSelection, records []Record) (
 		}
 		directories[r.Directory] = r.Instance
 	}
-	state, e := (ports.Store{Directory: filepath.Join(s.Data, "ports")}).Read()
+	state, e := ports.ForDataRoot(s.Data).ReadContext(ctx)
 	if e != nil {
 		return nil, e
 	}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/retention"
 )
@@ -251,6 +252,9 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		return nil, store.queryGateError(ctx, gateErr)
 	}
 	defer release()
+	if condition := profilekey.RequireCurrentHeld(maintenance.Root(store.Directory), store.Profile); condition != nil {
+		return nil, condition
+	}
 	profileRelease, profileErr := maintenance.LockQueryShared(ctx, store.path()+".lock")
 	if profileErr != nil {
 		return nil, store.queryGateError(ctx, profileErr)

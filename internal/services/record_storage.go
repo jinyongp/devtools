@@ -66,8 +66,17 @@ func writeRecordFormat(path string, r Record) error {
 	return writeRecordFormatContext(context.Background(), path, r)
 }
 
+func processDataRoot(path string) string {
+	directory := filepath.Dir(filepath.Dir(path))
+	root := filepath.Dir(directory)
+	if filepath.Base(directory) == "processes" && filepath.Base(root) == maintenance.VersionedRuntime {
+		return filepath.Dir(root)
+	}
+	return root
+}
+
 func writeRecordFormatContext(ctx context.Context, path string, r Record) error {
-	root := filepath.Dir(filepath.Dir(filepath.Dir(path)))
+	root := processDataRoot(path)
 	unlock, err := (retainedbody.Store{Root: root}).Publication(ctx)
 	if err != nil {
 		return err
@@ -83,7 +92,7 @@ func writeRecordHeld(path string, r Record) error {
 }
 
 func writeRecordHeldContext(ctx context.Context, path string, r Record) error {
-	root := filepath.Dir(filepath.Dir(filepath.Dir(path)))
+	root := processDataRoot(path)
 	body, err := json.Marshal(r)
 	if err != nil {
 		return err
@@ -204,7 +213,7 @@ func writeReceiptFormat(path string, r receipt) error {
 }
 
 func writeReceiptFormatContext(ctx context.Context, path string, r receipt) error {
-	data := filepath.Dir(filepath.Dir(filepath.Dir(path)))
+	data := processDataRoot(path)
 	unlock, err := (retainedbody.Store{Root: data}).Publication(ctx)
 	if err != nil {
 		return err
@@ -216,8 +225,7 @@ func writeReceiptFormatContext(ctx context.Context, path string, r receipt) erro
 		if err != nil {
 			return err
 		}
-		root := filepath.Dir(filepath.Dir(filepath.Dir(path)))
-		ref, err := (retainedbody.Store{Root: root}).Put(ctx, "process_record", body)
+		ref, err := (retainedbody.Store{Root: data}).Put(ctx, "process_record", body)
 		if err != nil {
 			return err
 		}

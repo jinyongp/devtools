@@ -7,6 +7,12 @@ import (
 	"github.com/jinyongp/devtools/internal/profilekey"
 )
 
+// VerifyCatalogHeld authenticates the root key before a store-wide transition.
+func (s FileStore) VerifyCatalogHeld() error {
+	_, err := s.readCatalog()
+	return err
+}
+
 // ReadAnyWithMasterHeld authenticates classification against the sealed catalog
 // before accepting a separate unsigned public-only profile. Missing sealed data
 // never falls back to a new or public profile.
@@ -45,6 +51,9 @@ func (s FileStore) PublishManagedHeld(ctx context.Context, p *Profile, key *Mate
 	return s.PublishManagedWithFilesHeld(ctx, p, key, nil)
 }
 func (s FileStore) PublishManagedWithFilesHeld(ctx context.Context, p *Profile, key *Material, extra map[string][]byte) error {
+	if condition := profilekey.RequireCurrentHeld(s.Root, p.Name); condition != nil {
+		return condition
+	}
 	catalog, err := s.managedCatalog(p)
 	if err != nil {
 		return err

@@ -88,6 +88,9 @@ func (s ModernStore) readPublicHeld() (*vault.Profile, bool, error) {
 	return p, true, err
 }
 func (s ModernStore) readHeld(ctx context.Context, master *vault.Material, vaultID string) (*vault.Profile, *vault.Material, bool, error) {
+	if condition := profilekey.RequireCurrentHeld(s.root(), s.Profile); condition != nil {
+		return nil, nil, false, condition
+	}
 	if master == nil {
 		// Protection may have been initialized after scope() but before this
 		// disk gate. Retry with an authenticated session instead of publishing
@@ -175,6 +178,9 @@ func (s ModernStore) ReadHeld(ctx context.Context) (*State, *protocol.Error) {
 
 	if err := ctx.Err(); err != nil {
 		return nil, VaultError(ctx, err)
+	}
+	if condition := profilekey.RequireCurrentHeld(s.root(), s.Profile); condition != nil {
+		return nil, condition
 	}
 	raw, err := profilekey.Snapshot(s.Directory, s.Profile, "values", vault.MaxDocumentBytes)
 	if err != nil {

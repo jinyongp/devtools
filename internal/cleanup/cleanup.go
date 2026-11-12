@@ -191,7 +191,8 @@ func logOwnerExpired(owner services.ArchivedOwner, now time.Time) bool {
 
 func (e Engine) executionIDFromProcessSource(path string) string {
 	dir := filepath.Dir(path)
-	if filepath.Dir(dir) != filepath.Join(e.Data, "processes") {
+	base := filepath.Dir(dir)
+	if base != services.Directory(e.Data) && base != filepath.Join(e.Data, "processes") {
 		return ""
 	}
 	id := filepath.Base(dir)
@@ -219,8 +220,7 @@ func (e Engine) validItem(i Item) bool {
 		if i.Kind == "expired_log" {
 			name = "output.log"
 		}
-		dir := filepath.Dir(i.Source)
-		return filepath.Base(i.Source) == name && validID(filepath.Base(dir)) && filepath.Dir(dir) == filepath.Join(e.Data, "processes")
+		return filepath.Base(i.Source) == name && e.executionIDFromProcessSource(i.Source) != ""
 	case "expired_query":
 		dir := filepath.Dir(i.Source)
 		return (dir == filepath.Join(e.Cache, "task-queries") || dir == filepath.Join(e.Cache, "collections") || dir == filepath.Join(e.Cache, "dashboard", "queries")) && validID(strings.TrimSuffix(filepath.Base(i.Source), ".json")) && strings.HasSuffix(i.Source, ".json")
@@ -311,7 +311,7 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 		if blocked[r.ID] != "" {
 			continue
 		}
-		base := filepath.Join(e.Data, "processes", r.ID)
+		base := filepath.Join(services.Directory(e.Data), r.ID)
 		if r.EndedAt.Before(cutoff) {
 			b, err := maintenance.Read(filepath.Join(base, "record.json"), 1<<20)
 			if err == nil {
@@ -341,7 +341,7 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 		if !logOwnerExpired(archivedExecution.Owner, now) {
 			continue
 		}
-		path := filepath.Join(e.Data, "processes", archivedExecution.ID, "output.log")
+		path := filepath.Join(services.Directory(e.Data), archivedExecution.ID, "output.log")
 		b, exists, logErr := manager.LogSnapshot(ctx, archivedExecution.ID)
 		if logErr != nil {
 			return nil, logErr
@@ -390,8 +390,8 @@ func (e Engine) scan(ctx context.Context, profile string) ([]candidate, *protoco
 			}
 		}
 	}
-	ps := ports.Store{Directory: filepath.Join(e.Data, "ports")}
-	st, pe := ps.Read()
+	ps := ports.ForDataRoot(e.Data)
+	st, pe := ps.ReadHeld()
 	if pe != nil {
 		return nil, pe
 	}
@@ -837,8 +837,8 @@ func (e Engine) retire(ctx context.Context, c candidate) (Archive, *protocol.Err
 	case "expired_log":
 		return e.retireExpiredLog(ctx, c, archive, already)
 	case "missing_instance":
-		ps := ports.Store{Directory: filepath.Join(e.Data, "ports")}
-		err := ps.Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
+		ps := ports.ForDataRoot(e.Data)
+		err := ps.UpdateHeld(ctx, func(st *ports.State) (bool, *protocol.Error) {
 			i := st.ByID(c.Source)
 			if i == nil && already {
 				return false, nil
@@ -999,11 +999,30 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 	switch a.Kind {
 	case "missing_instance":
 		var value location
-		if json.Unmarshal(b, &value) != nil {
+		if json.Unmarshal(b, &value) != nil || value.Instance.Profile != a.Profile || value.Instance.ID != a.Source {
 			return a, false, fail("storage_error")
 		}
-		ps := ports.Store{Directory: filepath.Join(e.Data, "ports")}
-		err = ps.Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
+		names, readErr := profilekey.ReadRenameNamesHeld(e.Data)
+		if readErr != nil {
+			return a, false, fail("storage_error", readErr)
+		}
+		currentName := names.CurrentName(a.Profile)
+		if currentName != a.Profile {
+			value.Instance.Profile = currentName
+			for i := range value.Assignments {
+				assignment := &value.Assignments[i]
+				if assignment.Profile != a.Profile || assignment.ID != a.Source {
+					return a, false, fail("storage_error")
+				}
+				assignment.Profile = currentName
+			}
+			b, readErr = json.Marshal(value)
+			if readErr != nil {
+				return a, false, fail("storage_error", readErr)
+			}
+		}
+		ps := ports.ForDataRoot(e.Data)
+		err = ps.UpdateHeld(ctx, func(st *ports.State) (bool, *protocol.Error) {
 			if instance := st.ByID(value.Instance.ID); instance != nil {
 				present := location{Instance: *instance, Assignments: []ports.Assignment{}}
 				for _, assignment := range st.Assignments {

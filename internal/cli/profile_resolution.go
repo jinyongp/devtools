@@ -46,7 +46,7 @@ func (a *App) resolveProfileOption(command string, r Request) *protocol.Error {
 
 // Public results carry names even when older clients still use the backing key.
 // Limit the projection to result and row metadata; stored payloads remain opaque.
-func (a *App) displayProfileNames(command string, result any) any {
+func (a *App) displayProfileNames(command string, result any, alreadyPublic bool) any {
 	if command == "profile rename" || command == "profile list" || command == "profile inspect" || command == "init" || strings.HasPrefix(command, "config ") {
 		return result
 	}
@@ -58,8 +58,10 @@ func (a *App) displayProfileNames(command string, result any) any {
 	if failure != nil || len(registry.Names) == 0 {
 		return result
 	}
-	object, ok := result.(map[string]any)
-	if !ok {
+	var object map[string]any
+	if alreadyPublic {
+		object, _ = result.(map[string]any)
+	} else {
 		object = publicResultObject(result)
 	}
 	if object == nil {

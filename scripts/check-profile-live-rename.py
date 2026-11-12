@@ -163,6 +163,7 @@ PORT = {{port = "web"}}
         assert call(legacy, "var", "get", "FIXTURE")["value"] == "candidate-update"
         after = call(candidate, "port", "show", "web", "--profile", "new")["item"]
         assert (after["port"], after["instance_id"]) == (instance["port"], instance["instance_id"])
+        assert after["profile"] == "new"
         existing = call(candidate, "process", "start", "web", "--proxy", "--capture-logs")
         assert not existing["changed"] and existing["item"]["id"] == execution
         assert fetch(frontend) == before

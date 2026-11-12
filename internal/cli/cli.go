@@ -489,7 +489,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 	}
 	output.handlerReturned = true
 	if selected.OutputMode == OutputJSON && request.Options["cursor"] == "" && (selected.Collection == nil || selected.Collection.NativePage) {
-		data = a.displayProfileNames(selected.Name, data)
+		data = a.displayProfileNames(selected.Name, data, false)
 	}
 	if operationID != "" {
 		result := publicResultObject(data)

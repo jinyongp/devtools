@@ -403,7 +403,7 @@ func (a *App) collectionResult(ctx context.Context, streams IO, c Command, r Req
 	delete(out, "next_cursor")
 	out["selection"] = map[string]any{"scope": scope, "view": r.Options["view"], "filters": query}
 	out["items"] = selected
-	out = a.displayProfileNames(c.Name, out).(map[string]any)
+	out = a.displayProfileNames(c.Name, out, true).(map[string]any)
 	selected = out["items"].([]any)
 	delete(out, "items")
 	page, e := pager.First(ctx, fingerprint, tasks.Object(out), selected, query.Limit)

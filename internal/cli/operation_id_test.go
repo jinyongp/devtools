@@ -12,17 +12,22 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
-func TestOperationIDsAreOptionalAcrossPublishedCommands(t *testing.T) {
+func TestPublishedRequestIDContracts(t *testing.T) {
 	app := testApp(t)
-	operations, selectors := 0, 0
+	operations, selectors, callerSupplied := 0, 0, 0
 	for _, c := range app.commands {
 		for _, o := range c.Options {
 			if o.Name != "request-id" {
 				continue
 			}
 			if o.OperationID == nil {
-				selectors++
-				if c.Name != "values execution status" {
+				switch c.Name {
+				case "values execution status":
+					selectors++
+				case "profile rename":
+					// Preserve a caller-known ID even if the first apply is interrupted.
+					callerSupplied++
+				default:
 					t.Fatal("unclassified request ID", c.Name)
 				}
 				continue
@@ -49,11 +54,26 @@ func TestOperationIDsAreOptionalAcrossPublishedCommands(t *testing.T) {
 			}
 		}
 	}
-	if operations != 80 || selectors != 1 {
-		t.Fatal("operation/selector inventory changed", operations, selectors)
+	if operations != 80 || selectors != 1 || callerSupplied != 1 {
+		t.Fatal("request ID inventory changed", operations, selectors, callerSupplied)
 	}
 	if e := app.ResolveAction([]string{"devtools", "values", "execution", "status"}); e == nil {
 		t.Fatal("existing-execution selector became an optional operation ID")
+	}
+	rename := []string{"devtools", "profile", "rename", "old", "new"}
+	apply := []string{"--apply", strings.Repeat("a", 64)}
+	requestID := []string{"--request-id", "01234567-89ab-4cde-8fab-0123456789ab"}
+	if e := app.ResolveAction(rename); e != nil {
+		t.Fatal("rename preview requires an apply argument", e)
+	}
+	if e := app.ResolveAction(append(rename, apply...)); e == nil {
+		t.Fatal("rename accepted apply without a caller-known request ID")
+	}
+	if e := app.ResolveAction(append(rename, requestID...)); e == nil {
+		t.Fatal("rename accepted a request ID without an apply digest")
+	}
+	if e := app.ResolveAction(append(append(rename, apply...), requestID...)); e != nil {
+		t.Fatal("rename rejected the complete apply command", e)
 	}
 }
 

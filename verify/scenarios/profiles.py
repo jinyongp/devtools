@@ -224,4 +224,9 @@ assert not reverse['storage_upgrade_required']
 api(source, 'profile', 'rename', 'renamed', 'portable', '--apply', reverse['digest'], '--request-id', str(uuid.uuid4()))
 assert api(source, *rename_args)['replayed']
 assert api(source, 'task', 'show', task, '--profile', 'portable')['item']['id'] == task
+replay_text = subprocess.run(
+    [str(binary), '--format', 'text', *rename_args], env=source, cwd=source['HOME'],
+    text=True, capture_output=True, timeout=30,
+)
+assert replay_text.returncode == 0 and 'Replayed the saved profile rename result.' in replay_text.stdout
 print('Installed profile transfer, rename, restore, secret preservation, and concurrent replay passed')

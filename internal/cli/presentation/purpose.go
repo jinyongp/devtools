@@ -45,6 +45,12 @@ func purposeView(d Definition, data map[string]any) (cliui.Document, bool) {
 	case "profile diff":
 		return comparisonView(data), true
 	case "profile rename":
+		if data["replayed"] == true {
+			return cliui.NewDocument(
+				outcomeHeading("Replayed the saved profile rename result."),
+				selectedFields(data, "source_profile", "target_profile", "request_id"),
+			), true
+		}
 		if data["changed"] == true {
 			return cliui.NewDocument(
 				outcomeHeading(fmt.Sprintf("Renamed profile %q to %q.", text(data["source_profile"]), text(data["target_profile"]))),

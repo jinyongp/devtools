@@ -9,25 +9,35 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
-func (a *App) taskStore(r Request) (tasks.Store, *protocol.Error) {
-	p, e := a.resolveStoredProject(".", r.Options["profile"])
+func (a *App) taskStore(r Request) (tasks.Store, string, *protocol.Error) {
+	p, e := project.Resolve(".", r.Options["profile"])
 	if e != nil {
-		return tasks.Store{}, e
+		return tasks.Store{}, "", e
 	}
 	dir, e := a.dataDirectory()
 	if e != nil {
-		return tasks.Store{}, e
+		return tasks.Store{}, "", e
+	}
+	root := filepath.Dir(dir)
+	storage := p.Profile
+	if r.Options["cursor"] == "" {
+		profile, failure := profilekey.ResolveName(root, p.Profile)
+		if failure != nil {
+			return tasks.Store{}, "", failure
+		}
+		storage = profile.Storage
 	}
 	dirs, err := a.currentPaths()
 	if err != nil {
-		return tasks.Store{}, argumentError("Cannot resolve cache directory.", "")
+		return tasks.Store{}, "", argumentError("Cannot resolve cache directory.", "")
 	}
-	return tasks.Store{Directory: filepath.Join(filepath.Dir(dir), "tasks"), Profile: p.Profile, Cache: filepath.Join(dirs.Cache, "task-queries")}, nil
+	return tasks.Store{Directory: filepath.Join(root, "tasks"), Profile: storage, Cache: filepath.Join(dirs.Cache, "task-queries")}, p.Profile, nil
 }
 func taskOptions() []Option {
 	return []Option{{Name: "profile", Description: "Explicit project profile.", Pattern: project.ProfilePattern, Completion: completeProfile, MaxLength: 128}}
@@ -256,7 +266,7 @@ func (a *App) registerTasks() {
 			args = append(args, Argument{Name: taskTargetArgument(def.Kind), Required: def.Target, Pattern: uuidPattern, Completion: completionSource(def.Kind)})
 		}
 		a.commands = append(a.commands, Command{Name: "task " + def.Command, CompletionAction: def.Action, Description: taskMutationDescription(def.Action), Options: opts, Arguments: args, BodySchema: taskBody(def), Output: taskOutput(true), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
-			store, e := a.taskStore(r)
+			store, _, e := a.taskStore(r)
 			if e != nil {
 				return nil, e
 			}
@@ -361,7 +371,7 @@ func (a *App) registerTasks() {
 					return nil, e
 				}
 			}
-			store, e := a.taskStore(r)
+			store, profileName, e := a.taskStore(r)
 			if e != nil {
 				return nil, e
 			}
@@ -380,7 +390,7 @@ func (a *App) registerTasks() {
 					return nil, e
 				}
 			}
-			return store.Query(ctx, tasks.Query{Command: name, Target: target, Options: r.Options, ListOptions: r.ListOptions, Body: body})
+			return store.Query(ctx, tasks.Query{Command: name, Target: target, Options: r.Options, ListOptions: r.ListOptions, Body: body, CursorProfile: profileName})
 		}})
 	}
 }

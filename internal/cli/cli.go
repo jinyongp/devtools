@@ -453,8 +453,10 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		}
 	}
 	request.OutputFormat, request.Agent = output.decision.Format, len(environment.Signals) > 0
-	if failure := a.resolveProfileOption(selected.Name, request); failure != nil {
-		return fail(failure)
+	if selected.Collection == nil {
+		if failure := a.resolveProfileOption(selected.Name, request); failure != nil {
+			return fail(failure)
+		}
 	}
 	runContext, finishProgress := output.progressContext(ctx, selected.OutputMode)
 	defer finishProgress()
@@ -486,7 +488,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		return fail(err)
 	}
 	output.handlerReturned = true
-	if selected.OutputMode == OutputJSON {
+	if selected.OutputMode == OutputJSON && request.Options["cursor"] == "" && (selected.Collection == nil || selected.Collection.NativePage) {
 		data = a.displayProfileNames(selected.Name, data)
 	}
 	if operationID != "" {

@@ -58,7 +58,10 @@ func (a *App) displayProfileNames(command string, result any) any {
 	if failure != nil || len(registry.Names) == 0 {
 		return result
 	}
-	object := publicResultObject(result)
+	object, ok := result.(map[string]any)
+	if !ok {
+		object = publicResultObject(result)
+	}
 	if object == nil {
 		return result
 	}
@@ -70,6 +73,16 @@ func (a *App) displayProfileNames(command string, result any) any {
 	projectName(object)
 	if item, ok := object["item"].(map[string]any); ok {
 		projectName(item)
+	}
+	if selection, ok := object["selection"].(map[string]any); ok {
+		projectName(selection)
+		switch scope := selection["scope"].(type) {
+		case collectionScope:
+			scope.Profile = registry.Resolve(scope.Profile).Name
+			selection["scope"] = scope
+		case map[string]any:
+			projectName(scope)
+		}
 	}
 	if rows, ok := object["items"].([]any); ok {
 		for _, row := range rows {

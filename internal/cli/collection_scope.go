@@ -26,6 +26,10 @@ func scopeRequired() *protocol.Error {
 }
 
 func (a *App) resolveCollectionScope(_ context.Context, c Command, r Request) (collectionScope, *protocol.Error) {
+	r = cloneCollectionRequest(r)
+	if failure := a.resolveProfileOption(c.Name, r); failure != nil {
+		return collectionScope{}, failure
+	}
 	s := collectionScope{Kind: c.Collection.Scope, Profile: r.Options["profile"], AllProfiles: r.Options["all-profiles"] == "true", Global: r.Options["global"] == "true", RowsScoped: c.Collection.Scope == "project" || c.Name == "cleanup archives"}
 	if s.AllProfiles && s.Profile != "" {
 		return s, argumentError("Choose --all-profiles or --profile.", "profile")

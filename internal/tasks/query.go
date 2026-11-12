@@ -24,6 +24,8 @@ type Query struct {
 	Options     map[string]string
 	ListOptions map[string][]string
 	Body        Object
+	// CursorProfile binds a cached result to the caller's original name.
+	CursorProfile string
 }
 
 const contextResponseMax = 2 << 20
@@ -274,7 +276,8 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 			return nil, e
 		}
 	}
-	out := Object{"profile": store.Profile, "revision": s.Revision}
+	name := q.cursorProfile(store.Profile)
+	out := Object{"profile": name, "revision": s.Revision}
 	if value := q.Options["at-revision"]; value != "" {
 		if q.Command != "workstream plan show" {
 			return nil, failure("invalid_argument", "at-revision is available for workstream plan show.")
@@ -424,7 +427,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 					return nil, store.queryCacheError(q, "create_query_cache", e)
 				}
 				token = ID()
-				snapshot := s.graphSnapshot(store.Profile, kind)
+				snapshot := s.graphSnapshot(name, kind)
 				if e := store.writeGraphCache(ctx, token+".json", snapshot); e != nil {
 					return nil, store.queryCacheError(q, "write_query_cache", e)
 				}
@@ -659,7 +662,8 @@ func (s Store) pageWithContext(ctx context.Context, q Query, out Object, items [
 	if q.Options["cursor"] != "" {
 		return nil, failure("cursor_invalid", "Start a new query.")
 	}
-	fp := queryFingerprint(s.Profile, q, s.Directory)
+	name := q.cursorProfile(s.Profile)
+	fp := queryFingerprint(name, q, s.Directory)
 	dir := s.Cache
 	if dir == "" {
 		dir = filepath.Join(s.Directory, "cache")
@@ -676,7 +680,7 @@ func (s Store) pageWithContext(ctx context.Context, q Query, out Object, items [
 			return nil, s.queryCacheError(q, "create_query_cache", e)
 		}
 		token := ID()
-		if e := writeQueryCache(filepath.Join(dir, token+".json"), s.Profile, snapshot); e != nil {
+		if e := writeQueryCache(filepath.Join(dir, token+".json"), name, snapshot); e != nil {
 			return nil, s.queryCacheError(q, "write_query_cache", e)
 		}
 		s.pruneQueryCaches(ctx)

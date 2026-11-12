@@ -34,6 +34,13 @@ func pagedQueryCommand(cmd string) bool {
 	}
 }
 
+func (q Query) cursorProfile(storage string) string {
+	if q.CursorProfile != "" {
+		return q.CursorProfile
+	}
+	return storage
+}
+
 func queryFingerprint(profile string, q Query, directories ...string) string {
 	opts := Object{}
 	definition := NavigationDefinition(q.Command)
@@ -89,7 +96,8 @@ func (s Store) pageCursorFast(q Query, limit int) (Object, *protocol.Error) {
 	var magic [8]byte
 	_, readErr := f.ReadAt(magic[:], 0)
 	if readErr == nil && string(magic[:]) == queryCacheMagic {
-		out, err := readQueryPage(f, s.Profile, queryFingerprint(s.Profile, q, s.Directory), parts[0], offset, limit)
+		name := q.cursorProfile(s.Profile)
+		out, err := readQueryPage(f, name, queryFingerprint(name, q, s.Directory), parts[0], offset, limit)
 		f.Close()
 		if err != nil {
 			return nil, failure("cursor_invalid", "Start a new query.")
@@ -106,11 +114,12 @@ func (s Store) graphCursorFast(q Query, kind string, limit int) (Object, *protoc
 		return nil, failure("cursor_invalid", "Start a new graph query.")
 	}
 	var snapshot GraphSnapshot
+	name := q.cursorProfile(s.Profile)
 	if err := s.readQuerySnapshot(token+".json", &snapshot); err != nil ||
 		snapshot.Version != graphSnapshotVersion ||
 		snapshot.Nodes == nil || snapshot.Upstream == nil || snapshot.Downstream == nil ||
 		snapshot.Projection != ProjectionVersion ||
-		snapshot.Profile != s.Profile ||
+		snapshot.Profile != name ||
 		snapshot.Kind != kind ||
 		time.Now().After(snapshot.Expires) {
 		return nil, failure("cursor_invalid", "Start a new graph query.")
@@ -122,7 +131,7 @@ func (s Store) graphCursorFast(q Query, kind string, limit int) (Object, *protoc
 	if err != nil {
 		return nil, err
 	}
-	out := Object{"profile": s.Profile, "revision": snapshot.Revision}
+	out := Object{"profile": name, "revision": snapshot.Revision}
 	for key, value := range snapshot.tree(q.Target, q.Options["workstream"], direction, depth, limit) {
 		out[key] = value
 	}

@@ -148,6 +148,19 @@ PORT = {{port = "web"}}
         call(legacy, "process", "stop", execution)
         assert call(candidate, "process", "status", execution)["item"]["state"] == "stopped"
         execution = None
+        call(candidate, "task", "add", "--title", "Another task", "--profile", "new")
+        page = call(candidate, "task", "list", "--limit", "1", "--profile", "new")
+        tree = call(candidate, "task", "tree", "--limit", "1", "--profile", "new")
+        registry = state / "data" / "profile-names.json"
+        detached = state / "profile-names.saved"
+        registry.rename(detached)
+        try:
+            next_page = call(candidate, "task", "list", "--cursor", page["next_cursor"], "--profile", "new")
+            next_tree = call(candidate, "task", "tree", "--cursor", tree["cursor"], "--profile", "new")
+            assert next_page["revision"] == page["revision"] and next_tree["revision"] == tree["revision"]
+            call(candidate, "task", "list", "--cursor", page["next_cursor"], "--profile", "occupied", error="cursor_invalid")
+        finally:
+            detached.rename(registry)
         with ThreadPoolExecutor(max_workers=2) as executor:
             operations = [executor.submit(call, candidate, "profile", "rename", "new", "next") for _ in range(2)]
             chain = [operation.result() for operation in operations]
@@ -163,7 +176,7 @@ PORT = {{port = "web"}}
         return {"legacy": legacy_version, "candidate": candidate_version, "same_process_and_port": True,
                 "same_proxy": True,
                 "same_task_and_value_store": True, "legacy_exit_record": True,
-                "aliases_and_conflicts": True}
+                "aliases_and_conflicts": True, "cached_alias_queries": True}
     finally:
         try:
             if execution is not None:

@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const providerFixtureTimeout = 3 * time.Second
+
 func TestMain(m *testing.M) {
 	if (len(os.Args) == 4 || len(os.Args) == 5) && os.Args[1] == "__exposure-provider" {
 		os.Exit(RunCloudflaredSupervisor(context.Background(), os.Args[2], os.Args[3], os.Stdin, os.Stdout, os.Stderr, os.Args[4:]...))
@@ -34,7 +36,7 @@ while :; do sleep 1; done
 `)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s, e := (Cloudflared{Executable: executable, Timeout: time.Second}).Start(ctx, Record{Public: Public{Generation: "owned-generation"}}, "http://127.0.0.1:31000")
+	s, e := (Cloudflared{Executable: executable, Timeout: providerFixtureTimeout}).Start(ctx, Record{Public: Public{Generation: "owned-generation"}}, "http://127.0.0.1:31000")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -52,18 +54,25 @@ while :; do sleep 1; done
 	}
 }
 func TestCloudflaredRejectsMissingMalformedAndEarlyExit(t *testing.T) {
-	for _, tc := range []struct{ name, body, code string }{
-		{"exit", "echo no-url; exit 1\n", "cloudflared_exited_without_url"},
-		{"malformed", "echo https://evil.trycloudflare.com.evil.example; sleep 5\n", "cloudflared_url_timeout"},
-		{"early", "echo https://early.trycloudflare.com; exit 1\n", "cloudflared_exited"},
+	// Only the malformed case is meant to reach the short readiness deadline.
+	for _, tc := range []struct {
+		name, body, code string
+		timeout          time.Duration
+	}{
+		{"exit", "echo no-url; exit 1\n", "cloudflared_exited_without_url", providerFixtureTimeout},
+		{"malformed", "echo https://evil.trycloudflare.com.evil.example; sleep 5\n", "cloudflared_url_timeout", 250 * time.Millisecond},
+		{"early", "echo https://early.trycloudflare.com; exit 1\n", "cloudflared_exited", providerFixtureTimeout},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s, e := (Cloudflared{Executable: fakeCloudflared(t, tc.body), Timeout: 250 * time.Millisecond}).Start(context.Background(), Record{}, "http://127.0.0.1:31000")
+			s, e := (Cloudflared{Executable: fakeCloudflared(t, tc.body), Timeout: tc.timeout}).Start(context.Background(), Record{}, "http://127.0.0.1:31000")
 			if s != nil {
 				_ = s.Stop(context.Background())
 			}
 			if e == nil || e.Code != tc.code {
-				t.Fatal(e)
+				if e == nil {
+					t.Fatalf("expected %s, got a session", tc.code)
+				}
+				t.Fatalf("expected %s, got %s", tc.code, e.Code)
 			}
 		})
 	}

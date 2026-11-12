@@ -15,37 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
-
-func TestExecutionAdmissionPrecedesProcessRecordsAndReceipts(t *testing.T) {
-	root := privateTempDir(t)
-	store := Store{Data: root}
-	release, err := maintenance.AcquireExclusiveExecution(context.Background(), root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer release()
-	for _, foreground := range []bool{false, true} {
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-		var condition *protocol.Error
-		if foreground {
-			_, condition = store.prepareLaunchContext(ctx, Record{ID: tasks.ID(), Profile: "app"})
-		} else {
-			_, condition = store.Apply(ctx, Request{Action: "start", RequestID: tasks.ID()})
-		}
-		cancel()
-		if condition == nil || condition.Code != "deadline_exceeded" {
-			t.Fatalf("execution bypassed admission (foreground=%t): %v", foreground, condition)
-		}
-	}
-	if _, err := os.Stat(store.root()); !os.IsNotExist(err) {
-		t.Fatalf("blocked execution prepared process storage: %v", err)
-	}
-}
 
 func TestStaleSupervisorAndRetryConflict(t *testing.T) {
 	s := Store{Data: privateTempDir(t)}

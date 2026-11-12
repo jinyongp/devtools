@@ -67,7 +67,6 @@ func CompletedProcesses(data string, executionIDs []string) (map[string]Proof, e
 	wanted := map[string]string{}
 	for _, id := range executionIDs {
 		wanted[filepath.Join(data, "processes", id, "record.json")] = id
-		wanted[filepath.Join(maintenance.RuntimeDirectory(data, "processes"), id, "record.json")] = id
 	}
 	root := filepath.Join(data, "archives")
 	if err := privateDirectory(root); errors.Is(err, os.ErrNotExist) {

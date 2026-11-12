@@ -200,12 +200,10 @@ func proxyStorageError() *protocol.Error {
 	return protocol.NewError("io_error", "Cannot access private proxy storage.", 1, nil)
 }
 
-func (m Manager) root() string            { return maintenance.RuntimeDirectory(m.Data, "proxy") }
+func (m Manager) root() string            { return filepath.Join(m.Data, "proxy") }
 func (m Manager) path(name string) string { return filepath.Join(m.root(), name) }
 func (m Manager) portStore() ports.Store {
-	store := ports.ForDataRoot(m.Data)
-	store.Probe = m.PortProbe
-	return store
+	return ports.Store{Directory: filepath.Join(m.Data, "ports"), Probe: m.PortProbe}
 }
 
 func (m Manager) readRecord() (Record, error) {

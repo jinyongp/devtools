@@ -270,7 +270,7 @@ func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 		}
 		if r.ProxyMode {
 			var snapshot network.ExecutionSnapshot
-			if tasks.ReadPrivate(networkSnapshotPath(data, r.ID), &snapshot) != nil || snapshot.ID != r.NetworkSnapshotID {
+			if tasks.ReadPrivate(filepath.Join(data, "processes", r.ID, "network.json"), &snapshot) != nil || snapshot.ID != r.NetworkSnapshotID {
 				return protocol.NewError("network_snapshot_required", "The managed network snapshot is unavailable.", 3, nil)
 			}
 			command.Network = &snapshot

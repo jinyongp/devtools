@@ -55,7 +55,7 @@ func TestReviewedExamplesCoverEveryCanonicalCommand(t *testing.T) {
 			count++
 		}
 	}
-	if count != 339 {
+	if count != 337 {
 		t.Fatal("reviewed example inventory changed without a contract update", count)
 	}
 }

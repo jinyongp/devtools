@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/network"
-	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -22,7 +20,7 @@ func singletonIdentity(profile, directory, command string) string {
 
 // Existing executions supply immutable identity even after configuration changes.
 // A new start uses the same canonical root identity as instance registration.
-func (s Store) operationIdentity(ctx context.Context, q Request) (string, *protocol.Error) {
+func (s Store) operationIdentity(q Request) (string, *protocol.Error) {
 	id := q.ID
 	if q.Action == "start" {
 		id = q.RequestID
@@ -30,11 +28,6 @@ func (s Store) operationIdentity(ctx context.Context, q Request) (string, *proto
 		return "", failure("invalid_argument")
 	}
 	if r, e := s.read(id); e == nil {
-		if q.Action != "stop" {
-			if condition := profilekey.RequireCurrentForExecution(ctx, s.Data, r.Profile); condition != nil {
-				return "", condition
-			}
-		}
 		return singletonIdentity(r.Profile, r.Directory, r.Command), nil
 	} else if q.Action != "start" || e.Code != "process_not_found" {
 		return "", e
@@ -42,9 +35,6 @@ func (s Store) operationIdentity(ctx context.Context, q Request) (string, *proto
 	p, e := project.Resolve(q.Directory, "")
 	if e != nil {
 		return "", e
-	}
-	if condition := profilekey.RequireCurrentForExecution(ctx, s.Data, p.Profile); condition != nil {
-		return "", condition
 	}
 	return singletonIdentity(p.Profile, p.Root, q.Command), nil
 }
@@ -77,17 +67,6 @@ func (s Store) publicationLock(ctx context.Context) (func(), *protocol.Error) {
 }
 
 func (s Store) prepareLaunchContext(ctx context.Context, r Record, snapshots ...*network.ExecutionSnapshot) (*lockedLease, *protocol.Error) {
-	ctx, releaseExecution, err := maintenance.AcquireExecution(ctx, s.Data)
-	if err != nil {
-		if condition := protocol.ContextError(ctx.Err()); condition != nil {
-			return nil, condition
-		}
-		return nil, storageErrorAt("lock_execution_admission", err)
-	}
-	defer releaseExecution()
-	if condition := profilekey.RequireCurrentForExecution(ctx, s.Data, r.Profile); condition != nil {
-		return nil, condition
-	}
 	release, e := s.publicationLock(ctx)
 	if e != nil {
 		return nil, e

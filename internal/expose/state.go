@@ -55,8 +55,7 @@ func Failure(code string) *protocol.Error {
 	return protocol.NewError(code, "Exposure operation could not satisfy the requested condition.", 3, nil)
 }
 func validID(id string) bool          { return (network.RouteRef{Scope: "global", RouteID: id}).Valid() }
-func (s Store) directory() string     { return maintenance.RuntimeDirectory(s.Data, "exposures") }
-func (s Store) Path(id string) string { return filepath.Join(s.directory(), id+".json") }
+func (s Store) Path(id string) string { return filepath.Join(s.Data, "exposures", id+".json") }
 func (s Store) Read(id string) (Record, *protocol.Error) {
 	if !validID(id) {
 		return Record{}, Failure("invalid_argument")
@@ -92,7 +91,7 @@ func (s Store) Write(r Record) *protocol.Error {
 }
 func (s Store) List() ([]Record, *protocol.Error) {
 	items := []Record{}
-	entries, e := os.ReadDir(s.directory())
+	entries, e := os.ReadDir(filepath.Join(s.Data, "exposures"))
 	if errors.Is(e, os.ErrNotExist) {
 		return items, nil
 	}
@@ -148,7 +147,7 @@ func (s Store) Commitment(ctx context.Context, id, auth string, noAuth bool) (st
 		if _, e := os.Lstat(filepath.Join(root, "initialized.json")); !errors.Is(e, os.ErrNotExist) {
 			return "", Failure("auth_commitment_key_missing")
 		}
-		entries, _ := os.ReadDir(s.directory())
+		entries, _ := os.ReadDir(filepath.Join(s.Data, "exposures"))
 		if len(entries) > 0 {
 			return "", Failure("auth_commitment_key_missing")
 		}

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -50,14 +51,12 @@ func (s Store) ExecutionDependencies(command execution.Command, configRoot strin
 }
 
 func (s Store) Ports() ports.Store {
-	store := ports.ForDataRoot(s.Data)
-	store.InspectFailure = func(ctx context.Context, failure *protocol.Error) *protocol.Error {
+	return ports.Store{Directory: filepath.Join(s.Data, "ports"), InspectFailure: func(ctx context.Context, failure *protocol.Error) *protocol.Error {
 		target, _ := failure.Details["target"].(map[string]any)
 		profile, _ := target["profile"].(string)
 		directory, _ := target["directory"].(string)
 		return s.inspectRunFailure(ctx, project.Context{Profile: profile, Root: directory}, "", failure)
-	}
-	return store
+	}}
 }
 
 func stopRunAction(id string) protocol.Remedy {

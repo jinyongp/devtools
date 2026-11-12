@@ -40,41 +40,6 @@ Linux/macOS의 `env list`, `variable list/get`(`var`), `secret list`(`sec`)는
 cursor continuation은 현재 data root·잠금·WAL 없이 고정 revision을 읽는다.
 Windows와 다른 조회·변경·실행·dashboard 및 task의 일반 Read API는 기존 shared gate 계약을 유지한다.
 
-관리 포트 레지스트리의 일반 쓰기는 data-root shared gate를 먼저 잡고
-`registry.lock`으로 직렬화한다. 이미 data-root gate를 잡은 정리·복원은
-레지스트리 잠금으로 바로 진행한다. 조회는 준비된 gate를 읽기 전용으로 사용하며
-중단된 저장소 변경이 있으면 복구가 필요하다고 보고한다. 기존 포트 전용 저장소의
-최초 조회는 gate를 만들지 않는다.
-
-프로세스 등록과 managed/project 수명 주기 작업은 실행 기록이나 요청
-영수증을 쓰기 전에 `.execution/lock`의 shared lock을 얻는다. 같은 root의
-동기 하위 작업은 호출자가 이미 얻은 lock을 사용한다. 실행 변경을 막는
-exclusive lock은 data-root maintenance gate보다 먼저 얻어야 한다. 실행의
-준비 과정에서 변수 조회와 포트 할당이 data-root gate를 사용하기 때문이다.
-
-프로필 이름 변경 저장소 트랜잭션은 원본과 대상의 값 주소, task head,
-포트 레지스트리, `profile-renames/names.json`, 요청 영수증을 함께 게시한다.
-이름 예약은 각 이전 주소를 같은 소유자와 현재 이름에 연결한다.
-값 프로필은 주소를 다시 서명하며 기존 프로필·키·값 버전과 암호문을 유지한다.
-task는 같은 이력과 영수증을 가진 검증된 generation을 먼저 준비하고
-트랜잭션 안에서 head를 바꾼다. 종료된 실행의 원본 기록은 기존 이름으로 검증한다.
-이전 이름으로 일반 쓰기가 들어오면 현재 이름을 알려주고, 재시도나 보관 복원은
-저장된 원래 이름과 소유권을 확인한다.
-
-Protocol 25의 독립 실행과 이미 열린 쓰기 핸들은 새 입장 잠금에 참여하지 않는다.
-첫 이름 변경 적용은 이전 버전의 writer가 이 데이터에 접근하는 경로를 닫는다.
-
-전환은 data root와 보호된 값 전달의 경로 인증을 유지한다. 기존
-`.maintenance/restore-pending.json`에는 구버전이 거절하는 형식의 차단 포인터를
-남기고, 현재 rollback과 암호화 forward 복구는 별도 포인터를 사용한다.
-포트·프로세스·프로젝트·네트워크·proxy·공유의 기존 경로는 차단 파일로
-닫으며, 현재 버전은 해당 도메인을 `.runtime-v26`에서 읽는다.
-격리된 macOS와 Linux에서 구버전의 대표 쓰기 6종이 차단된 것을 확인했다.
-Linux에서는 발행 잠금의 파일 핸들을 이미 연 요청도 자식 실행과 기록을
-남기지 않았다. 전환은 기존 경로를 닫기 전과 게시 전에 런타임 쓰기 잠금을
-검사한다. 중단된 전환은 원래 요청 UUID와 digest로 재개한다. 옮기는 도중
-구버전이 기존 디렉터리를 다시 만들면 양쪽 데이터를 보존하고 전환을 중단한다.
-
 여러 파일을 바꾸는 작업은 복구 가능한 transaction으로 게시한다.
 저장 성공 응답 이전에 필요한 flush와 commit 경계를 확인하며,
 응답이 실패했다고 디스크 변경이 없었다고 가정하지 않는다.

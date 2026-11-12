@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -133,8 +132,7 @@ func (s Store) prepareLaunchUnlocked(record Record, snapshots ...*network.Execut
 		return nil, storageErrorAt("open_launch_data", err)
 	}
 	defer root.Close()
-	processes := filepath.FromSlash(maintenance.RuntimeRelative(s.Data, "processes"))
-	if err = root.MkdirAll(processes); err != nil {
+	if err = root.MkdirAll("processes"); err != nil {
 		return nil, storageErrorAt("create_process_root", err)
 	}
 	if err = root.MkdirAll("process-leases"); err != nil {
@@ -150,7 +148,7 @@ func (s Store) prepareLaunchUnlocked(record Record, snapshots ...*network.Execut
 			_ = lease.unlockClose()
 		}
 	}()
-	staging := filepath.Join(processes, launchStagingName(record.ID)+strings.ReplaceAll(tasks.ID(), "-", ""))
+	staging := filepath.Join("processes", launchStagingName(record.ID)+strings.ReplaceAll(tasks.ID(), "-", ""))
 	if err = root.MkdirAll(staging); err != nil {
 		return nil, storageErrorAt("create_launch_staging", err)
 	}
@@ -186,7 +184,7 @@ func (s Store) prepareLaunchUnlocked(record Record, snapshots ...*network.Execut
 	if err = write("launch.json", platformLaunchMarker()); err != nil {
 		return nil, storageErrorAt("stage_launch_marker", err)
 	}
-	if err = root.PublishDirectory(context.Background(), staging, filepath.Join(processes, record.ID)); err != nil {
+	if err = root.PublishDirectory(context.Background(), staging, filepath.Join("processes", record.ID)); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return nil, failure("request_conflict")
 		}

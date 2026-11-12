@@ -77,9 +77,6 @@ func (s ModernStore) inspectionProfile(ctx context.Context) (*vault.Profile, boo
 		return nil, false, QueryError(ctx, err)
 	}
 	defer release()
-	if condition := profilekey.RequireCurrentHeld(s.root(), s.Profile); condition != nil {
-		return nil, false, condition
-	}
 	raw, err := profilekey.Snapshot(s.Directory, s.Profile, "values", vault.MaxDocumentBytes)
 	if err != nil {
 		return nil, false, storageErrorAt("read_profile", err)
@@ -260,24 +257,6 @@ func (s ModernStore) replayHeld(ctx context.Context, c Change, p *vault.Profile,
 	previous, result, found, err := s.receiptHeld(ctx, master, vaultID, c.RequestID)
 	if err != nil {
 		return out, false, VaultError(ctx, err)
-	}
-	names, err := profilekey.ReadRenameNamesHeld(s.root())
-	if err != nil {
-		return out, false, VaultError(ctx, err)
-	}
-	for _, name := range names.PreviousNames(s.Profile) {
-		historical := s
-		historical.Profile = name
-		receipt, historicalResult, exists, err := historical.receiptHeld(ctx, master, vaultID, c.RequestID)
-		if err != nil {
-			return out, false, VaultError(ctx, err)
-		}
-		if exists {
-			if found {
-				return out, true, VaultError(ctx, vault.ErrIntegrity)
-			}
-			previous, result, found = receipt, historicalResult, true
-		}
 	}
 	if !found {
 		return out, false, nil

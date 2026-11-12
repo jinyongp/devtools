@@ -5,18 +5,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/jinyongp/devtools/internal/archivekey"
 	"github.com/jinyongp/devtools/internal/backup"
-	"github.com/jinyongp/devtools/internal/maintenance"
-	"github.com/jinyongp/devtools/internal/profilerename"
 	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
 	"github.com/jinyongp/devtools/internal/profiletransfer"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
-	"github.com/jinyongp/devtools/internal/values"
-	"github.com/jinyongp/devtools/internal/vault"
 )
 
 type profileTransferItem struct {
@@ -198,31 +193,6 @@ func (a *App) registerProfiles() {
 			Run:    a.diffProfiles,
 		},
 		Command{
-			Name:        "profile rename",
-			Description: "Preview or apply a local profile name change while preserving its stored state.",
-			Arguments: []Argument{
-				{Name: "source", Required: true, Pattern: project.ProfilePattern, Completion: completeProfile},
-				{Name: "target", Required: true, Pattern: project.ProfilePattern},
-			},
-			Options: []Option{
-				{Name: "apply", Pattern: `^[0-9a-f]{64}$`, Description: "Apply the exact digest from the preview. The first apply upgrades this local store and closes older writer paths."},
-				{Name: "request-id", Pattern: uuidPattern, Description: "Request UUID for --apply. Reuse it with the same preview after interruption."},
-			},
-			Output: object(map[string]any{
-				"source_profile":           stringSchema(),
-				"target_profile":           stringSchema(),
-				"digest":                   stringSchema(),
-				"values":                   map[string]any{"type": "boolean"},
-				"tasks":                    map[string]any{"type": "boolean"},
-				"ports":                    map[string]any{"type": "boolean"},
-				"storage_upgrade_required": map[string]any{"type": "boolean"},
-				"changed":                  map[string]any{"type": "boolean"},
-				"replayed":                 map[string]any{"type": "boolean"},
-				"request_id":               stringSchema(),
-			}, "source_profile", "target_profile", "digest", "values", "tasks", "ports", "storage_upgrade_required", "changed", "replayed"),
-			Run: a.renameProfile,
-		},
-		Command{
 			Name:        "profile transfer prepare",
 			Description: "Prepare a local age ML-KEM-768 + X25519 identity for recipient-based profile transfers.",
 			Output: changedItemOutput(object(map[string]any{
@@ -400,70 +370,6 @@ func (a *App) diffProfiles(ctx context.Context, _ IO, request Request) (any, *pr
 		return nil, err
 	}
 	return catalog.Diff(ctx, request.Args[0], request.Args[1])
-}
-
-func (a *App) renameProfile(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
-	catalog, err := a.profileCatalog()
-	if err != nil {
-		return nil, err
-	}
-	engine := profilerename.Store{Data: catalog.Data}
-	out := struct {
-		profilerename.Plan
-		StorageUpgradeRequired bool   `json:"storage_upgrade_required"`
-		Changed                bool   `json:"changed"`
-		Replayed               bool   `json:"replayed"`
-		RequestID              string `json:"request_id,omitempty"`
-	}{}
-	source, target := request.Args[0], request.Args[1]
-	if digest := request.Options["apply"]; digest != "" {
-		key, keyErr := renameProfileVault(ctx, catalog.Data)
-		if keyErr != nil {
-			return nil, values.VaultError(ctx, keyErr)
-		}
-		defer key.CatalogKey.Destroy()
-		out.RequestID = strings.ToLower(request.Options["request-id"])
-		plan, replayed, condition := engine.Apply(ctx, source, target, digest, out.RequestID, key)
-		if condition != nil {
-			if condition.Details == nil {
-				condition.Details = map[string]any{}
-			}
-			if condition.Details["request_id"] == nil {
-				condition.Details["request_id"] = out.RequestID
-			}
-			return nil, condition
-		}
-		out.Plan, out.Replayed, out.Changed = plan, replayed, true
-		return out, nil
-	}
-	plan, failure := engine.Preview(ctx, source, target)
-	if failure != nil {
-		return nil, failure
-	}
-	ready, _, stateErr := maintenance.RuntimeTransitionState(catalog.Data)
-	if stateErr != nil {
-		return nil, values.QueryError(ctx, stateErr)
-	}
-	out.Plan, out.StorageUpgradeRequired = plan, !ready
-	return out, nil
-}
-
-func renameProfileVault(ctx context.Context, root string) (vault.FileStore, error) {
-	store := vault.FileStore{Root: root}
-	directory := filepath.Join(root, "vault")
-	slot, err := (vault.KeyFileStore{Directory: directory}).Read()
-	if errors.Is(err, vault.ErrKeyMissing) {
-		return store, nil
-	}
-	if err != nil {
-		return store, err
-	}
-	store.VaultID = slot.VaultID
-	store.CatalogKey, err = values.SessionMaster(root)(ctx)
-	if errors.Is(err, vault.ErrLocked) {
-		return store, nil // A completed request can be replayed while locked.
-	}
-	return store, err
 }
 
 func profileExportOutputExists(path string) *protocol.Error {

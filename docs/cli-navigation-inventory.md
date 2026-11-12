@@ -262,7 +262,6 @@ backup create
 backup restore
 profile transfer prepare
 profile import
-profile rename
 process start
 process stop
 process restart

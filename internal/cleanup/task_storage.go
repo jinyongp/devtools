@@ -4,7 +4,6 @@ import (
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
-	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -50,19 +49,8 @@ func (e Engine) retireCompletedTasks(c candidate, archive Archive, already bool)
 }
 
 func (e Engine) restoreCompletedTasks(archive Archive, payload []byte) *protocol.Error {
-	names, err := profilekey.ReadRenameNamesHeld(e.Data)
-	if err != nil {
-		return fail("storage_error", err)
-	}
-	currentName := names.CurrentName(archive.Profile)
-	if currentName != archive.Profile {
-		payload, err = tasks.ReaddressSnapshot(payload, archive.Profile, currentName)
-		if err != nil {
-			return fail("storage_error", err)
-		}
-	}
-	store := e.taskStore(currentName)
-	canonical, archivedDigest, err := tasks.CanonicalizeExactSnapshot(payload, currentName)
+	store := e.taskStore(archive.Profile)
+	canonical, archivedDigest, err := tasks.CanonicalizeExactSnapshot(payload, archive.Profile)
 	if err != nil {
 		return fail("storage_error", err)
 	}

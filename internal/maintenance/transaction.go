@@ -69,17 +69,13 @@ func validKey(name string) bool {
 }
 
 func validReplacementPath(path string) bool {
-	if path == ValueChangeHintPath || path == "ports/registry.json" || path == VersionedRuntime+"/ports/registry.json" || path == "profile-renames/names.json" {
+	if path == ValueChangeHintPath {
 		return true
 	}
 	if path == "" || filepath.IsAbs(path) || strings.Contains(path, "\\") {
 		return false
 	}
 	parts := strings.Split(path, "/")
-	if len(parts) == 2 && parts[0] == "profile-renames" {
-		name := strings.TrimSuffix(parts[1], ".json")
-		return strings.HasSuffix(parts[1], ".json") && name == strings.ToLower(name) && validTransactionID(name)
-	}
 	if len(parts) == 3 && (parts[0] == "value-executions" || parts[0] == "value-execution-payloads" || parts[0] == "value-execution-requests") {
 		name := strings.TrimSuffix(parts[2], ".json")
 		if !validKey(parts[1]) || parts[1] != strings.ToLower(parts[1]) || name != strings.ToLower(name) || !strings.HasSuffix(parts[2], ".json") {
@@ -233,7 +229,7 @@ func transactionDir(root, id string) string {
 }
 
 func pendingPath(root string) string {
-	return filepath.Join(root, RecoveryPointerRelative(root))
+	return filepath.Join(root, ".maintenance", "restore-pending.json")
 }
 
 func readPointer(root string) (transactionPointer, bool, []byte, error) {

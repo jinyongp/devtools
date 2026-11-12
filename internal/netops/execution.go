@@ -57,7 +57,7 @@ func (s Store) ReadExecution(id string) (ExecutionRecovery, bool, *protocol.Erro
 		return out, false, e
 	}
 	var j Journal
-	if err := tasks.ReadPrivate(filepath.Join(s.directory(), strings.ToLower(id)+".json"), &j); err != nil {
+	if err := tasks.ReadPrivate(filepath.Join(s.Data, "network-operations", strings.ToLower(id)+".json"), &j); err != nil {
 		return out, true, Failure("invalid_storage", "Cannot read execution recovery metadata.")
 	}
 	found, e := j.Get("execution-plan", &out.Plan)
@@ -84,7 +84,7 @@ func (s Store) ExecutionKind(id string) (exists, intent bool, failure *protocol.
 		return false, false, Failure("invalid_argument", "A request UUID is required.")
 	}
 	var journal Journal
-	err := tasks.ReadPrivate(filepath.Join(s.directory(), strings.ToLower(id)+".json"), &journal)
+	err := tasks.ReadPrivate(filepath.Join(s.Data, "network-operations", strings.ToLower(id)+".json"), &journal)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, false, nil
 	}

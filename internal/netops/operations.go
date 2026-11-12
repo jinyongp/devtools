@@ -14,7 +14,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -22,11 +21,6 @@ import (
 var uuid = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 type Store struct{ Data string }
-
-func (s Store) directory() string {
-	return maintenance.RuntimeDirectory(s.Data, "network-operations")
-}
-
 type Journal struct {
 	TLSReferences []string                   `json:"tls_references,omitempty"`
 	Fingerprint   string                     `json:"fingerprint"`
@@ -48,8 +42,7 @@ func (j *Journal) ReferenceTLS(listenerID string) *protocol.Error {
 }
 func (s Store) PendingTLS() ([]string, *protocol.Error) {
 	out := []string{}
-	directory := s.directory()
-	entries, e := os.ReadDir(directory)
+	entries, e := os.ReadDir(filepath.Join(s.Data, "network-operations"))
 	if errors.Is(e, os.ErrNotExist) {
 		return out, nil
 	}
@@ -65,7 +58,7 @@ func (s Store) PendingTLS() ([]string, *protocol.Error) {
 			continue
 		}
 		var j Journal
-		if tasks.ReadPrivate(filepath.Join(directory, entry.Name()), &j) != nil {
+		if tasks.ReadPrivate(filepath.Join(s.Data, "network-operations", entry.Name()), &j) != nil {
 			return nil, Failure("invalid_storage", "Cannot inspect pending network references.")
 		}
 		if !j.Done && len(j.TLSReferences) > 0 {
@@ -120,7 +113,7 @@ func (s Store) Apply(ctx context.Context, id string, input any, resources []stri
 	if !uuid.MatchString(id) {
 		return nil, protocol.NewError("invalid_argument", "A request UUID is required.", 2, nil)
 	}
-	root := s.directory()
+	root := filepath.Join(s.Data, "network-operations")
 	if e := tasks.PrivateDir(root); e != nil {
 		return nil, Failure("io_error", "Cannot access private network operations.")
 	}

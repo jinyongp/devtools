@@ -99,9 +99,6 @@ func BeginPublicLaunch(ctx context.Context, directory, id string, ticket PublicL
 	return &LaunchAdmission{directory: directory, record: record, release: release}, nil
 }
 func checkPublicTicketHeld(root string, t PublicLaunchTicket) error {
-	if condition := profilekey.RequireCurrentHeld(root, t.Profile); condition != nil {
-		return condition
-	}
 	if err := CheckPublicRootHeld(root); err != nil {
 		return err
 	}

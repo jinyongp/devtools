@@ -17,9 +17,6 @@ import (
 
 const crashProfile = "profiles/61.json"
 const crashReceipt = "backup-receipts/values-61-00000000-0000-4000-8000-000000000001.json"
-const crashRegistry = "ports/registry.json"
-const crashRenameNames = "profile-renames/names.json"
-const crashRenameReceipt = "profile-renames/00000000-0000-4000-8000-000000000001.json"
 
 // Test-only subprocess driver: production code has no environment failpoint.
 // Opaque profile/receipt bytes isolate the storage engine's atomicity contract;
@@ -46,14 +43,6 @@ func TestValueReceiptTransactionCrashHelper(t *testing.T) {
 		if err != nil || string(body) != want {
 			t.Fatal("profile recovery disagreed with durable commit", err)
 		}
-		wantRegistry := "registry-old"
-		if committed {
-			wantRegistry = "registry-new"
-		}
-		body, err = Read(filepath.Join(root, crashRegistry), 1024)
-		if err != nil || string(body) != wantRegistry {
-			t.Fatal("registry recovery disagreed with durable commit", err)
-		}
 		body, err = Read(filepath.Join(root, crashReceipt), 1024)
 		if committed {
 			if err != nil || string(body) != "saved-result-new" {
@@ -61,22 +50,6 @@ func TestValueReceiptTransactionCrashHelper(t *testing.T) {
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			t.Fatal("uncommitted receipt survived", err)
-		}
-		body, err = Read(filepath.Join(root, crashRenameNames), 1024)
-		if committed {
-			if err != nil || string(body) != "reserved-old" {
-				t.Fatal("committed profile lost the name reservation", err)
-			}
-		} else if !errors.Is(err, os.ErrNotExist) {
-			t.Fatal("uncommitted name reservation survived", err)
-		}
-		body, err = Read(filepath.Join(root, crashRenameReceipt), 1024)
-		if committed {
-			if err != nil || string(body) != "rename-complete" {
-				t.Fatal("committed profile lost the rename receipt", err)
-			}
-		} else if !errors.Is(err, os.ErrNotExist) {
-			t.Fatal("uncommitted rename receipt survived", err)
 		}
 		fmt.Println("verified")
 		return
@@ -86,13 +59,7 @@ func TestValueReceiptTransactionCrashHelper(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer release()
-	files := map[string][]byte{
-		crashProfile:       []byte("profile-new"),
-		crashReceipt:       []byte("saved-result-new"),
-		crashRegistry:      []byte("registry-new"),
-		crashRenameNames:   []byte("reserved-old"),
-		crashRenameReceipt: []byte("rename-complete"),
-	}
+	files := map[string][]byte{crashProfile: []byte("profile-new"), crashReceipt: []byte("saved-result-new")}
 	if mode == "response" {
 		if err := Replace(root, files); err != nil {
 			t.Fatal(err)
@@ -145,9 +112,6 @@ func TestValueReceiptTransactionSurvivesRealProcessKill(t *testing.T) {
 				t.Fatal(err)
 			}
 			err = Write(filepath.Join(root, crashProfile), []byte("profile-old"))
-			if err == nil {
-				err = Write(filepath.Join(root, crashRegistry), []byte("registry-old"))
-			}
 			release()
 			if err != nil {
 				t.Fatal(err)

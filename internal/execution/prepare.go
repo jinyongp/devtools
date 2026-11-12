@@ -49,7 +49,7 @@ func DependenciesFor(command Command, dataRoot, configRoot string) (Dependencies
 		if err != nil {
 			return Dependencies{}, err
 		}
-		dependencies.Ports = ports.ForDataRoot(dataRoot)
+		dependencies.Ports = ports.Store{Directory: filepath.Join(dataRoot, "ports")}
 		dependencies.PortDefaults = defaults
 	}
 	return dependencies, nil

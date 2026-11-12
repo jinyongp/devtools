@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
-	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/vault"
@@ -58,9 +57,6 @@ func capturePublicProfile(ctx context.Context, root, profile string) (*vault.Pro
 		return nil, false, VaultError(ctx, err)
 	}
 	defer release()
-	if condition := profilekey.RequireCurrentHeld(root, profile); condition != nil {
-		return nil, false, condition
-	}
 	if err = vault.CheckPublicRootHeld(root); err != nil {
 		return nil, false, VaultError(ctx, err)
 	}

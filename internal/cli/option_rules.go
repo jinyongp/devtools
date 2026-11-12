@@ -174,8 +174,6 @@ func optionRules(c *Command) []staticOptionRule {
 	switch c.Name {
 	case "init":
 		add("forbid", "interaction-selection", "Choose either --interactive or --no-interactive.", supplied("interactive"), supplied("no-interactive"))
-	case "profile rename":
-		add("together", "apply-request-id", "Supply --apply and --request-id together.", supplied("apply"), supplied("request-id"))
 	case "profile export", "profile import":
 		sources := []optionTest{supplied("passphrase-file"), activated("passphrase-stdin")}
 		if c.Name == "profile export" {

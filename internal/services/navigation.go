@@ -101,7 +101,7 @@ func (s Store) Navigation(ctx context.Context, q NavigationSelection, declaratio
 		return nil, e
 	}
 	if !q.History && declarations == nil {
-		declarations, e = s.navigationDeclarations(ctx, q, stored)
+		declarations, e = s.navigationDeclarations(q, stored)
 		if e != nil {
 			return nil, e
 		}
@@ -209,36 +209,6 @@ func (s Store) navigationRecordsContext(ctx context.Context) ([]Record, *protoco
 }
 
 func (s Store) StoredMetadata() ([]Record, *protocol.Error) { return s.navigationRecords() }
-
-// ProfileRenameRecordsHeld checks process ownership without contacting a
-// supervisor. The caller excludes new process and foreground admissions.
-func (s Store) ProfileRenameRecordsHeld(ctx context.Context, source, target string) ([]Record, *protocol.Error) {
-	matches := func(profile string) bool { return source == "" || profile == source || profile == target }
-	records, err := s.navigationRecordsContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	selected := []Record{}
-	for _, record := range records {
-		if !matches(record.Profile) {
-			continue
-		}
-		if record.EndedAt == nil && record.State != "interrupted" || !s.leaseFree(ctx, record.ID) {
-			return nil, failure("process_active")
-		}
-		selected = append(selected, record)
-	}
-	attempts, err := s.StoredAttempts()
-	if err != nil {
-		return nil, err
-	}
-	for _, attempt := range attempts {
-		if matches(attempt.Profile) && attempt.ExecutionID == "" && attempt.EndedAt == nil {
-			return nil, failure("process_pending")
-		}
-	}
-	return selected, nil
-}
 
 func serviceKey(profile, directory, command string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(profile+"\x00"+directory+"\x00"+command)))

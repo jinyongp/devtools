@@ -196,7 +196,7 @@ func Inspect(ctx context.Context, input Input) (Report, *protocol.Error) {
 		report.Profiles.Items = profiles
 	}
 
-	portState, portErr := ports.ForDataRoot(input.Data).ReadContext(ctx)
+	portState, portErr := (ports.Store{Directory: filepath.Join(input.Data, "ports")}).Read()
 	if portErr != nil {
 		report.Ports.Section = Section{Status: "fail", ErrorCode: portErr.Code}
 		report.issue("ports", portErr)

@@ -61,9 +61,6 @@ func LockExclusive(ctx context.Context, path string) (func(), error) {
 }
 
 func recoveryNeeded(root string) (bool, error) {
-	if err := checkRuntimeTransition(root); err != nil {
-		return false, err
-	}
 	if _, err := os.Lstat(pendingPath(root)); err == nil {
 		p, legacy, _, readErr := readPointer(root)
 		if readErr != nil {
@@ -104,10 +101,6 @@ func acquireMaintenanceGate(ctx context.Context, root string, mode lockMode) (fu
 func AcquireExclusive(ctx context.Context, root string) (func(), error) {
 	release, err := acquireMaintenanceGate(ctx, root, lockExclusive)
 	if err != nil {
-		return nil, err
-	}
-	if err := checkRuntimeTransition(root); err != nil {
-		release()
 		return nil, err
 	}
 	if err := recoverPending(root); err != nil {

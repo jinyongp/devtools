@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jinyongp/devtools/internal/maintenance"
-	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -124,11 +122,6 @@ func (s Store) RecordPreparationFailure(ctx context.Context, q Request, conditio
 	if condition == nil || !validID(q.RequestID) || q.Action != "start" && q.Action != "restart" {
 		return nil
 	}
-	ctx, releaseExecution, err := maintenance.AcquireExecution(ctx, s.Data)
-	if err != nil {
-		return storageErrorAt("lock_execution_admission", err)
-	}
-	defer releaseExecution()
 	release, e := tasks.Lock(ctx, filepath.Join(s.root(), "operation-locks", "request-"+q.RequestID+".lock"))
 	if e != nil {
 		return storageErrorAt("lock_attempt", e)
@@ -140,14 +133,9 @@ func (s Store) RecordPreparationFailure(ctx context.Context, q Request, conditio
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return storageErrorAt("read_attempt", err)
 	}
-	a, attemptErr := s.prepareAttempt(q)
-	if attemptErr != nil {
-		return attemptErr
-	}
-	if a.ID != "" {
-		if condition := profilekey.RequireCurrentForExecution(ctx, s.Data, a.Profile); condition != nil {
-			return condition
-		}
+	a, err := s.prepareAttempt(q)
+	if err != nil {
+		return err
 	}
 	return s.saveAttempt(a, Result{}, condition)
 }

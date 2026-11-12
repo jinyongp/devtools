@@ -24,20 +24,6 @@ const forwardCanary = "synthetic-forward-transition-secret"
 func TestStorageUpgradeEngineResumesEncryptedForwardIntent(t *testing.T) {
 	store, _, after, key := forwardFixture(t)
 	defer key.Destroy()
-	release, err := maintenance.AcquireExclusive(context.Background(), store.Root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = maintenance.FenceLegacyRecoveryHeld(store.Root)
-	release()
-	if err != nil {
-		t.Fatal(err)
-	}
-	legacyPath := filepath.Join(store.Root, ".maintenance", "restore-pending.json")
-	legacyBefore, err := os.ReadFile(legacyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
 	id, _ := NewID()
 	request := forwardFixtureRequest{VaultID: store.VaultID, ID: id, Fingerprint: strings.Repeat("1", 64), CrashAt: "intent-published", Master: store.Master.CopyBytes(), After: after}
 	raw, err := json.Marshal(request)
@@ -88,10 +74,6 @@ func TestStorageUpgradeEngineResumesEncryptedForwardIntent(t *testing.T) {
 		}
 	}
 	scanForwardCanaries(t, store.Root, nil)
-	legacyAfter, err := os.ReadFile(legacyPath)
-	if err != nil || !bytes.Equal(legacyAfter, legacyBefore) {
-		t.Fatal("protected forward recovery reopened the legacy protocol", err)
-	}
 }
 
 type forwardFixtureRequest struct {
@@ -328,7 +310,7 @@ func TestCommittedRecoveryNeverRollsBackLaterMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 	pointer, _ := json.Marshal(forwardPointer{Version: forwardVersion, ID: id, Phase: "committed", VaultID: store.VaultID})
-	if err := maintenance.Write(filepath.Join(store.Root, maintenance.RecoveryPointerRelative(store.Root)), pointer); err != nil {
+	if err := maintenance.Write(filepath.Join(store.Root, forwardPending), pointer); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Recover(context.Background()); err != nil {

@@ -70,14 +70,6 @@ for local_env in (source, target):
     api(local_env, 'vault', 'init', '--backend', 'passphrase', '--passphrase-stdin', input='synthetic-test-vault-passphrase\n')
 api(source, 'sec', 'set', 'TOKEN', '--profile', 'portable', '--stdin', input=canary)
 task = mutate('add', body={'title': 'Portable task'})['item']['id']
-rename = api(source, 'profile', 'rename', 'portable', 'renamed')
-assert rename['source_profile'] == 'portable' and rename['target_profile'] == 'renamed', rename
-assert rename['values'] is True and rename['tasks'] is True and rename['ports'] is False, rename
-assert rename['storage_upgrade_required'] and not rename['changed'], rename
-assert len(rename['digest']) == 64 and api(source, 'profile', 'rename', 'portable', 'renamed') == rename
-assert [item['profile'] for item in api(source, 'profile', 'list')['items']] == ['portable']
-assert api(source, 'task', 'show', task, '--profile', 'portable')['item']['id'] == task
-api(source, 'profile', 'rename', 'renamed', 'portable', error='profile_exists')
 workstream = mutate('workstream create', body={'title': 'Portable workstream'})['item']['id']
 mutate('workstream spec set', workstream, {
     'body': 'Keep the complete definition during transfer.',
@@ -202,31 +194,4 @@ api(source, 'profile', 'export', '--profile', 'portable', '--recipient', public,
 for env in (source, target):
     assert api(env, 'backup', 'status')['item']['configured'] is False
     assert not list(Path(env['HOME']).rglob('backup.json'))
-
-rename = api(source, 'profile', 'rename', 'portable', 'renamed')
-rename_args = ['profile', 'rename', 'portable', 'renamed', '--apply', rename['digest'], '--request-id', str(uuid.uuid4())]
-with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-    results = list(pool.map(lambda _: api(source, *rename_args), range(2)))
-assert sorted(item['replayed'] for item in results) == [False, True]
-assert all(item['changed'] and item['digest'] == rename['digest'] for item in results)
-assert api(source, 'task', 'show', task, '--profile', 'renamed')['item']['id'] == task
-assert api(source, 'var', 'get', 'MODE', '--profile', 'renamed', '--env', 'local')['value'] == 'override'
-api(source, 'var', 'set', 'MODE', '--profile', 'portable', '--value', 'collision', error='profile_renamed')
-secret_check = subprocess.run(
-    [str(binary), 'command', 'run', '--profile', 'renamed', '--', '/bin/sh', '-c',
-     'test "$TOKEN" = "$EXPECTED_TRANSFER_TOKEN"'],
-    env=dict(source, EXPECTED_TRANSFER_TOKEN=canary), cwd=source['HOME'],
-    text=True, capture_output=True, timeout=30,
-)
-assert secret_check.returncode == 0 and secret_check.stdout == '' and secret_check.stderr == '', 'secret after rename'
-reverse = api(source, 'profile', 'rename', 'renamed', 'portable')
-assert not reverse['storage_upgrade_required']
-api(source, 'profile', 'rename', 'renamed', 'portable', '--apply', reverse['digest'], '--request-id', str(uuid.uuid4()))
-assert api(source, *rename_args)['replayed']
-assert api(source, 'task', 'show', task, '--profile', 'portable')['item']['id'] == task
-replay_text = subprocess.run(
-    [str(binary), '--format', 'text', *rename_args], env=source, cwd=source['HOME'],
-    text=True, capture_output=True, timeout=30,
-)
-assert replay_text.returncode == 0 and 'Replayed the saved profile rename result.' in replay_text.stdout
-print('Installed profile transfer, rename, restore, secret preservation, and concurrent replay passed')
+print('Installed source-first one-archive passphrase transfer, recovery, advanced recipient compatibility, privacy and concurrent replay passed')

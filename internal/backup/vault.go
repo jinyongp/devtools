@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/jinyongp/devtools/internal/maintenance"
-	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
@@ -53,9 +52,6 @@ func (e Engine) vaultStore() vault.FileStore {
 	return vault.FileStore{Root: e.Data, VaultID: e.vaultID, CatalogKey: e.vaultMaster}
 }
 func (e Engine) valueSnapshotHeld(ctx context.Context, name string) ([]byte, error) {
-	if condition := profilekey.RequireCurrentHeld(e.Data, name); condition != nil {
-		return nil, condition
-	}
 	if e.vaultMaster != nil {
 		return e.vaultStore().LogicalSnapshotHeld(ctx, name)
 	}

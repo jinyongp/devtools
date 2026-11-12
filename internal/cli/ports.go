@@ -20,9 +20,7 @@ func portFailure(code string) *protocol.Error {
 }
 func (a *App) portStore() (ports.Store, *protocol.Error) {
 	d, e := a.dataDirectory()
-	store := ports.ForDataRoot(filepath.Dir(d))
-	store.Probe = a.portProbe
-	return store, e
+	return ports.Store{Directory: filepath.Join(filepath.Dir(d), "ports"), Probe: a.portProbe}, e
 }
 func (a *App) portDefaults() ([]int, *protocol.Error) {
 	d, e := a.currentPaths()
@@ -181,7 +179,7 @@ func instanceResult(i ports.Instance) map[string]any {
 	return map[string]any{"profile": i.Profile, "instance_id": i.ID, "alias": i.Alias, "directory": i.Directory, "location_status": status}
 }
 func checkRelease(ctx context.Context, s ports.Store, st *ports.State, id string) *protocol.Error {
-	if e := (services.Store{Data: s.DataRoot()}).Active(ctx, id); e != nil {
+	if e := (services.Store{Data: filepath.Dir(s.Directory)}).Active(ctx, id); e != nil {
 		return e
 	}
 	for _, a := range st.Assignments {
@@ -389,7 +387,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 		e = s.Update(ctx, apply)
 	} else {
 		var st *ports.State
-		st, e = s.ReadContext(ctx)
+		st, e = s.Read()
 		if e == nil {
 			_, e = apply(st)
 		}
@@ -482,7 +480,7 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 		case "show":
 			result = map[string]any{"item": instanceResult(*i)}
 		case "move":
-			if e := (services.Store{Data: s.DataRoot()}).Active(ctx, i.ID); e != nil {
+			if e := (services.Store{Data: filepath.Dir(s.Directory)}).Active(ctx, i.ID); e != nil {
 				return false, e
 			}
 			p, e := project.Resolve(destination, "")
@@ -508,7 +506,7 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 			result = map[string]any{"item": instanceResult(*i), "changed": changed}
 			return changed, nil
 		case "remove":
-			if e := (services.Store{Data: s.DataRoot()}).Active(ctx, i.ID); e != nil {
+			if e := (services.Store{Data: filepath.Dir(s.Directory)}).Active(ctx, i.ID); e != nil {
 				return false, e
 			}
 			for _, v := range st.Assignments {
@@ -530,7 +528,7 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 	}
 	if action == "list" || action == "show" {
 		var st *ports.State
-		st, e = s.ReadContext(ctx)
+		st, e = s.Read()
 		if e == nil {
 			_, e = apply(st)
 		}

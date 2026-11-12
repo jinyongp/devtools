@@ -14,8 +14,7 @@ import (
 func LogStorageUpgradeAdapter() storageupgrade.Adapter {
 	return storageupgrade.Adapter{Name: "process_logs", InspectHeld: func(ctx context.Context, root string) ([]storageupgrade.Step, error) {
 		out := []storageupgrade.Step{}
-		directory := Directory(root)
-		entries, err := os.ReadDir(directory)
+		entries, err := os.ReadDir(filepath.Join(root, "processes"))
 		if errors.Is(err, os.ErrNotExist) {
 			return out, nil
 		}
@@ -30,7 +29,7 @@ func LogStorageUpgradeAdapter() storageupgrade.Adapter {
 			if err := ctx.Err(); err != nil {
 				return append(out, step.InspectionFailed(err)), err
 			}
-			path := filepath.Join(directory, entry.Name(), "output.log")
+			path := filepath.Join(root, "processes", entry.Name(), "output.log")
 			if _, err := platformfs.StatPrivate(path); errors.Is(err, os.ErrNotExist) {
 				continue
 			} else if err != nil {
@@ -57,7 +56,7 @@ func LogStorageUpgradeAdapter() storageupgrade.Adapter {
 			return false, err
 		}
 		defer release()
-		path := filepath.Join(Directory(root), step.Resource, "output.log")
+		path := filepath.Join(root, "processes", step.Resource, "output.log")
 		if _, err := platformfs.StatPrivate(path + ".lock"); err == nil {
 			return false, nil
 		} else if !errors.Is(err, os.ErrNotExist) {

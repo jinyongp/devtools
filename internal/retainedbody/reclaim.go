@@ -102,11 +102,11 @@ func (s Store) ReclaimBatch(ctx context.Context, limit int, dry bool) (ReclaimRe
 		return nil
 	}
 	for _, domain := range []string{"processes", "archives", "exposures"} {
-		if err := collect(maintenance.RuntimeDirectory(s.Root, domain), domain); err != nil {
+		if err := collect(filepath.Join(s.Root, domain), domain); err != nil {
 			return result, err
 		}
 	}
-	if err := collect(filepath.Join(maintenance.RuntimeDirectory(s.Root, "processes"), "receipts"), "receipts"); err != nil {
+	if err := collect(filepath.Join(s.Root, "processes", "receipts"), "receipts"); err != nil {
 		return result, err
 	}
 	entries, err := os.ReadDir(s.directory())

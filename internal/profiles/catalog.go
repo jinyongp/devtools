@@ -121,9 +121,6 @@ func (c Catalog) WithPresence(ctx context.Context, name string, use func(bool) *
 		return catalogError("storage_error", err)
 	}
 	defer release()
-	if condition := profilekey.RequireCurrentHeld(c.Data, name); condition != nil {
-		return condition
-	}
 	names, failure := c.namesHeld(ctx)
 	if failure != nil {
 		return failure
@@ -170,7 +167,7 @@ func (c Catalog) namesHeld(ctx context.Context) ([]string, *protocol.Error) {
 		}
 		add(items)
 	}
-	portState, err := ports.ForDataRoot(c.Data).ReadHeld()
+	portState, err := (ports.Store{Directory: filepath.Join(c.Data, "ports")}).Read()
 	if err != nil {
 		return nil, err
 	}
@@ -182,18 +179,9 @@ func (c Catalog) namesHeld(ctx context.Context) ([]string, *protocol.Error) {
 		return nil, processErr
 	}
 	add(processProfiles)
-	renames, readErr := profilekey.ReadRenameNamesHeld(c.Data)
-	if readErr != nil {
-		return nil, catalogError("invalid_storage", readErr)
-	}
-	for _, current := range renames.Current {
-		seen[current] = true
-	}
 	items := make([]string, 0, len(seen))
 	for profile := range seen {
-		if renames.CurrentName(profile) == profile {
-			items = append(items, profile)
-		}
+		items = append(items, profile)
 	}
 	sort.Strings(items)
 	return items, nil

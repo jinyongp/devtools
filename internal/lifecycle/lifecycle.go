@@ -12,9 +12,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/network"
-	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -138,7 +136,7 @@ func projectKey(profile, root string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (m Manager) base() string { return maintenance.RuntimeDirectory(m.Data, "project-operations") }
+func (m Manager) base() string { return filepath.Join(m.Data, "project-operations") }
 func (m Manager) receiptPath(id string) string {
 	return filepath.Join(m.base(), "receipts", id+".json")
 }
@@ -722,14 +720,6 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 	if err := validateRequest(request); err != nil {
 		return Result{}, err
 	}
-	ctx, releaseExecution, admissionErr := maintenance.AcquireExecution(ctx, m.Data)
-	if admissionErr != nil {
-		if condition := protocol.ContextError(ctx.Err()); condition != nil {
-			return Result{}, condition
-		}
-		return Result{}, storageError(admissionErr)
-	}
-	defer releaseExecution()
 	requestUnlock, err := tasks.Lock(ctx, m.requestLock(request.RequestID))
 	if err != nil {
 		if ctx.Err() != nil {
@@ -761,11 +751,6 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 		if request.RecoverOnly {
 			return Result{}, services.RequestRecoveryError("project", request.RequestID)
 		}
-		if request.Action != ActionDown {
-			if condition := profilekey.RequireCurrentForExecution(ctx, m.Data, request.Project.Profile); condition != nil {
-				return Result{}, condition
-			}
-		}
 		if err := validateDefinitions(request); err != nil {
 			return Result{}, err
 		}
@@ -791,11 +776,6 @@ func (m Manager) Apply(ctx context.Context, request Request) (Result, *protocol.
 			return result, failure
 		}
 		return result, nil
-	}
-	if replayed && request.Action != ActionDown {
-		if condition := profilekey.RequireCurrentForExecution(ctx, m.Data, request.Project.Profile); condition != nil {
-			return value.result(replayed), condition
-		}
 	}
 	needsNetwork := request.Action == ActionUp && request.ProxyMode || request.Action == ActionRestart && value.hasProxyExecutions()
 	if needsNetwork && !value.NetworkPrepared {

@@ -56,7 +56,7 @@ func operationDefinition(command string) Definition {
 	case "config check", "port check":
 		base.Family = "diagnostic"
 		return base
-	case "cleanup preview", "proxy hosts preview", "profile rename":
+	case "cleanup preview", "proxy hosts preview":
 		base.Family = "preview"
 		return base
 	}

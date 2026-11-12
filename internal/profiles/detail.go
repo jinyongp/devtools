@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/ports"
-	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
@@ -94,7 +93,7 @@ func (c Catalog) listHeld(ctx context.Context) ([]Summary, *protocol.Error) {
 	}
 	valuesPresent, tasksPresent := nameSet(valueNames), nameSet(taskNames)
 
-	portState, err := ports.ForDataRoot(c.Data).ReadHeld()
+	portState, err := (ports.Store{Directory: filepath.Join(c.Data, "ports")}).Read()
 	if err != nil {
 		return nil, err
 	}
@@ -106,16 +105,11 @@ func (c Catalog) listHeld(ctx context.Context) ([]Summary, *protocol.Error) {
 	if err != nil {
 		return nil, err
 	}
-	renames, readErr := profilekey.ReadRenameNamesHeld(c.Data)
-	if readErr != nil {
-		return nil, catalogError("invalid_storage", readErr)
-	}
 	processCounts, activeCounts := map[string]int{}, map[string]int{}
 	for _, record := range processRecords {
-		owner := renames.CurrentName(record.Profile)
-		processCounts[owner]++
+		processCounts[record.Profile]++
 		if record.EndedAt == nil && record.State != "interrupted" {
-			activeCounts[owner]++
+			activeCounts[record.Profile]++
 		}
 	}
 
@@ -152,9 +146,6 @@ func (c Catalog) inspectHeld(ctx context.Context, profile string) (Detail, *prot
 	var detail Detail
 	if !project.ValidProfile(profile) {
 		return detail, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, map[string]any{"field": "profile"})
-	}
-	if condition := profilekey.RequireCurrentHeld(c.Data, profile); condition != nil {
-		return detail, condition
 	}
 	summaries, err := c.listHeld(ctx)
 	if err != nil {
@@ -222,7 +213,7 @@ func (c Catalog) inspectHeld(ctx context.Context, profile string) (Detail, *prot
 		})
 	}
 
-	portState, portErr := ports.ForDataRoot(c.Data).ReadHeld()
+	portState, portErr := (ports.Store{Directory: filepath.Join(c.Data, "ports")}).Read()
 	if portErr != nil {
 		return Detail{}, portErr
 	}
@@ -240,19 +231,12 @@ func (c Catalog) inspectHeld(ctx context.Context, profile string) (Detail, *prot
 
 	statusContext, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	renames, readErr := profilekey.ReadRenameNamesHeld(c.Data)
-	if readErr != nil {
-		return Detail{}, catalogError("invalid_storage", readErr)
+	processes, processErr := (services.Store{Data: c.Data}).List(statusContext, profile)
+	if processErr != nil {
+		return Detail{}, processErr
 	}
-	originals := append([]string{profile}, renames.PreviousNames(profile)...)
-	for _, original := range originals {
-		processes, processErr := (services.Store{Data: c.Data}).List(statusContext, original)
-		if processErr != nil {
-			return Detail{}, processErr
-		}
-		for _, record := range processes {
-			detail.Processes = append(detail.Processes, Process{ID: record.ID, Command: record.Command, Env: record.Env, State: record.State, ReadyConfigured: record.ReadyConfigured, Readiness: record.Readiness})
-		}
+	for _, record := range processes {
+		detail.Processes = append(detail.Processes, Process{ID: record.ID, Command: record.Command, Env: record.Env, State: record.State, ReadyConfigured: record.ReadyConfigured, Readiness: record.Readiness})
 	}
 	return detail, nil
 }

@@ -2,42 +2,16 @@ package lifecycle
 
 import (
 	"context"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
-
-func TestProjectAdmissionPrecedesRequestReceipt(t *testing.T) {
-	p := testProject(t, "web")
-	processes := &fakeProcesses{}
-	manager := Manager{Data: t.TempDir(), Processes: processes}
-	release, err := maintenance.AcquireExclusiveExecution(context.Background(), manager.Data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer release()
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-	request := Request{Action: ActionUp, Project: p, Commands: []string{"web"}, Timeout: time.Second, RequestID: tasks.ID()}
-	_, condition := manager.Apply(ctx, request)
-	if condition == nil || condition.Code != "deadline_exceeded" {
-		t.Fatalf("project operation bypassed admission: %v", condition)
-	}
-	if _, err := os.Stat(manager.base()); !os.IsNotExist(err) {
-		t.Fatalf("blocked project operation prepared request storage: %v", err)
-	}
-	if len(processes.calls) != 0 {
-		t.Fatal("blocked project operation called a child")
-	}
-}
 
 type fakeProcesses struct {
 	mu        sync.Mutex

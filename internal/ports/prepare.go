@@ -124,7 +124,7 @@ func (s Store) PrepareForLauncher(ctx context.Context, p project.Context, c proj
 	var e *protocol.Error
 	if preview {
 		var st *State
-		st, e = s.ReadContext(ctx)
+		st, e = s.Read()
 		if e == nil {
 			_, e = change(st)
 		}

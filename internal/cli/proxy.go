@@ -168,5 +168,5 @@ func proxyStatusResult(status proxy.Status) map[string]any {
 }
 
 func managerPortStore(manager proxy.Manager) ports.Store {
-	return ports.ForDataRoot(manager.Data)
+	return ports.Store{Directory: filepath.Join(manager.Data, "ports")}
 }

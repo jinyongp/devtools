@@ -311,6 +311,9 @@ def probe_application(legacy, candidate, scratch):
             return json.loads(result.stdout)["data"]
 
     select("old")
+    legacy_version = call(legacy, "version")
+    if legacy_version["protocol_version"] != 25:
+        raise RuntimeError("Supply a protocol-25 legacy binary")
     call(legacy, "var", "set", "FIXTURE", "--value", "original")
     task = call(legacy, "task", "add", "--title", "Legacy task")["item"]["id"]
     call(legacy, "instance", "name", "local")
@@ -320,13 +323,20 @@ def probe_application(legacy, candidate, scratch):
         raise RuntimeError(f"Preview missed legacy domains: {plan!r}")
     request = ("profile", "rename", "old", "new", "--apply", plan["digest"], "--request-id", str(uuid.uuid4()))
     root = scratch / "data"
-    if os.name != "nt":
-        import fcntl
-        with (root / "processes" / "publication.lock").open("r+b") as gate:
+    with (root / "processes" / "publication.lock").open("r+b") as gate:
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(gate.fileno(), msvcrt.LK_NBLCK, 1)
+            try:
+                call(candidate, *request, error="runtime_writer_active")
+            finally:
+                msvcrt.locking(gate.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
             fcntl.flock(gate, fcntl.LOCK_EX)
             call(candidate, *request, error="runtime_writer_active")
-        if not (root / "processes").is_dir() or (root / ".runtime-v26" / "transition").exists():
-            raise RuntimeError("A busy legacy writer started the transition")
+    if not (root / "processes").is_dir() or (root / ".runtime-v26" / "transition").exists():
+        raise RuntimeError("A busy legacy writer started the transition")
     result = call(candidate, *request)
     replay = call(candidate, *request)
     if not result["changed"] or result["replayed"] or not replay["replayed"]:
@@ -352,18 +362,29 @@ def probe_application(legacy, candidate, scratch):
     call(candidate, "run", "probe")
     if effects.read_text() != "xx":
         raise RuntimeError("Candidate did not execute exactly one child at the new name")
-    return {"legacy_writes_denied": 6, "request_replayed": True, "preserved_task_and_value": True}
+    return {
+        "legacy_version": legacy_version,
+        "busy_writer_denied_before_transition": True,
+        "legacy_writes_denied": 6,
+        "request_replayed": True,
+        "preserved_task_and_value": True,
+    }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--legacy", type=Path, required=True)
     parser.add_argument("--candidate", type=Path)
+    parser.add_argument("--apply-only", action="store_true", help="Run only the actual rename application")
     args = parser.parse_args()
-    with temporary_fixture(prefix="devtools-rename-legacy-") as scratch:
-        candidate = args.candidate.resolve(strict=True) if args.candidate else None
-        legacy = args.legacy.resolve(strict=True)
-        result = probe(legacy, scratch, candidate)
+    if args.apply_only and not args.candidate:
+        parser.error("--apply-only requires --candidate")
+    candidate = args.candidate.resolve(strict=True) if args.candidate else None
+    legacy = args.legacy.resolve(strict=True)
+    result = {}
+    if not args.apply_only:
+        with temporary_fixture(prefix="devtools-rename-legacy-") as scratch:
+            result = probe(legacy, scratch, candidate)
     if candidate:
         with temporary_fixture(prefix="devtools-rename-apply-") as scratch:
             result["actual_apply"] = probe_application(legacy, candidate, scratch)

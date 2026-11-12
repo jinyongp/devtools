@@ -17,6 +17,9 @@ import (
 const registryFile = "profile-names.json"
 const registryLimit = 4 << 20
 
+// RegistryPath identifies the atomically published name mapping.
+func RegistryPath(root string) string { return filepath.Join(root, registryFile) }
+
 // Profile has a stable identity and storage address. Existing runtime clients
 // continue to use Storage when a newer client changes Name.
 type Profile struct {
@@ -34,7 +37,7 @@ type Registry struct {
 // ReadRegistry is safe without a maintenance lease: publication replaces one
 // complete file. Mutating callers hold the exclusive maintenance lease.
 func ReadRegistry(root string) (Registry, *protocol.Error) {
-	path := filepath.Join(root, registryFile)
+	path := RegistryPath(root)
 	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
 		return Registry{Version: 1, Names: map[string]string{}, Profiles: map[string]Profile{}}, nil
 	} else if err != nil {
@@ -106,7 +109,7 @@ func (r Registry) Publish(root string) *protocol.Error {
 	if err != nil || len(body) > registryLimit {
 		return registryError(errors.New("profile name registry exceeds its storage limit"))
 	}
-	if err := maintenance.Write(filepath.Join(root, registryFile), body); err != nil {
+	if err := maintenance.Write(RegistryPath(root), body); err != nil {
 		return registryError(err)
 	}
 	return nil

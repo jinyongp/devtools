@@ -121,11 +121,17 @@ type cachedRegistry struct {
 	valid    bool
 }
 
+type cachedProfileNames struct {
+	identity fileIdentity
+	names    profilekey.Registry
+}
+
 type resolverCache struct {
 	listGate chan struct{}
 	mu       sync.Mutex
 	entries  map[string]cachedProject
 	registry cachedRegistry
+	profiles *cachedProfileNames
 	items    []Item
 	itemsOK  bool
 	routing  *routingSnapshot
@@ -171,6 +177,29 @@ func (r Resolver) readPorts() (*ports.State, bool, *protocol.Error) {
 	return state, true, nil
 }
 
+// Called with listGate held so profile names, config, and the route snapshot
+// advance together even when the port registry and project files stay put.
+func (r Resolver) readProfileNames() (profilekey.Registry, bool, *protocol.Error) {
+	root := filepath.Dir(r.Ports.Directory)
+	if r.cache == nil {
+		names, failure := profilekey.ReadRegistry(root)
+		return names, true, failure
+	}
+	identity, err := privateRegistryIdentity(profilekey.RegistryPath(root))
+	if err != nil {
+		names, failure := profilekey.ReadRegistry(root)
+		return names, true, failure
+	}
+	if cached := r.cache.profiles; cached != nil && cached.identity.same(identity) {
+		return cached.names, false, nil
+	}
+	names, failure := profilekey.ReadRegistry(root)
+	if failure == nil {
+		r.cache.profiles = &cachedProfileNames{identity: identity, names: names}
+	}
+	return names, true, failure
+}
+
 func filterRouteItems(items []Item, profile string) []Item {
 	filtered := make([]Item, 0, len(items))
 	for _, item := range items {
@@ -196,7 +225,7 @@ func copyRoutePointer[T any](value *T) *T {
 
 func (r Resolver) resolveProject(instance ports.Instance) (project.Context, *protocol.Error, bool) {
 	if r.cache == nil {
-		config, err := profilekey.ResolveProject(filepath.Dir(r.Ports.Directory), instance.Directory, "")
+		config, err := project.Resolve(instance.Directory, "")
 		return config, err, true
 	}
 	path := filepath.Join(instance.Directory, project.Filename)
@@ -206,7 +235,7 @@ func (r Resolver) resolveProject(instance ports.Instance) (project.Context, *pro
 		_, existed := r.cache.entries[path]
 		delete(r.cache.entries, path)
 		r.cache.mu.Unlock()
-		config, err := profilekey.ResolveProject(filepath.Dir(r.Ports.Directory), instance.Directory, "")
+		config, err := project.Resolve(instance.Directory, "")
 		return config, err, existed || statErr != nil || !identity.exists
 	}
 	r.cache.mu.Lock()
@@ -216,7 +245,7 @@ func (r Resolver) resolveProject(instance ports.Instance) (project.Context, *pro
 	if ok && canonicalErr == nil && cached.canonicalDirectory == canonicalDirectory && cached.identity.same(identity) {
 		return cached.config, cached.err, false
 	}
-	config, err := profilekey.ResolveProject(filepath.Dir(r.Ports.Directory), instance.Directory, "")
+	config, err := project.Resolve(instance.Directory, "")
 	r.cache.mu.Lock()
 	r.cache.entries[path] = cachedProject{identity: identity, canonicalDirectory: canonicalDirectory, config: config, err: err}
 	r.cache.mu.Unlock()
@@ -255,6 +284,10 @@ func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnaps
 	if err != nil {
 		return nil, err
 	}
+	profiles, profilesChanged, err := r.readProfileNames()
+	if err != nil {
+		return nil, err
+	}
 	if snapshot != nil {
 		snapshot.state = state
 	}
@@ -265,7 +298,7 @@ func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnaps
 		err      *protocol.Error
 	}
 	resolved := make([]resolution, 0, len(state.Instances))
-	stable := r.cache != nil && !registryChanged && (snapshot == nil || snapshot.routingOnly)
+	stable := r.cache != nil && !registryChanged && !profilesChanged && (snapshot == nil || snapshot.routingOnly)
 	if state.Network != nil {
 		for _, a := range state.Network.Activations {
 			if a.Mode == "active" {
@@ -326,6 +359,7 @@ func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnaps
 			continue
 		}
 		config := current.config
+		config.Profile = profiles.Resolve(config.Profile).Storage
 		if config.Root != instance.Directory || config.Profile != instance.Profile {
 			items = append(items, diagnostic(instance, StatusInstanceConflict))
 			continue

@@ -7,8 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/testfs"
 )
 
 func TestRoutingSnapshotKeepsListenerAndDuplicateSemantics(t *testing.T) {
@@ -78,5 +81,47 @@ func TestRoutingLookupRefreshesRegistryConfigAndGlobalConflicts(t *testing.T) {
 	register(t, store, "other", other, nil, 30532)
 	if request("new.localhost") != http.StatusServiceUnavailable {
 		t.Fatal("global host conflict bypassed")
+	}
+}
+
+func TestRoutingLookupRefreshesProfileNames(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(testfs.TempDir(t), "data")
+	privateRoot, err := platformfs.OpenRoot(root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := privateRoot.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store := ports.Store{Directory: filepath.Join(root, "ports")}
+	directory := t.TempDir()
+	writeConfig(t, directory, "renamed", "route.localhost")
+	instance := register(t, store, "app", directory, nil, 30530)
+	registry, failure := profilekey.ReadRegistry(root)
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	profile, failure := registry.Register("app")
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	if failure := registry.Publish(root); failure != nil {
+		t.Fatal(failure)
+	}
+	resolver := NewResolver(store)
+	before, failure := resolver.lookupRoute(ctx, "", "route.localhost")
+	if failure != nil || before.matches != 0 {
+		t.Fatal("unassigned name resolved to an instance", before, failure)
+	}
+
+	profile.Name = "renamed"
+	registry.Names[profile.Name], registry.Profiles[profile.ID] = profile.ID, profile
+	if failure := registry.Publish(root); failure != nil {
+		t.Fatal(failure)
+	}
+	after, failure := resolver.lookupRoute(ctx, "", "route.localhost")
+	if failure != nil || after.matches != 1 || after.item.InstanceID != instance.ID || after.item.Profile != "app" {
+		t.Fatal("profile name publication did not refresh routing to the original instance", after, failure)
 	}
 }

@@ -20,6 +20,7 @@ def api(*args, **kwargs): return call(['devtools', *args], **kwargs)
 call(['sh',os.environ['DEVTOOLS_TEST_INSTALLER'],'install','--version','0.0.0-test.1','--source',os.environ['DEVTOOLS_TEST_RELEASES']])
 identity, recipient = str(home / 'identity'), str(home / 'recipient')
 api('backup','keygen','--identity-file',identity,'--recipient-file',recipient)
+assert Path(recipient).read_text().startswith('age1pq1')
 api('backup','configure','--directory',str(home / 'backups'),'--recipient-file',recipient)
 api('vault','init','--backend','passphrase','--passphrase-stdin',input='synthetic-test-vault-passphrase\n')
 api('sec','set','TOKEN','--profile','fixture','--stdin',input='BACKUP_CANARY')
@@ -27,7 +28,9 @@ api('var','set','MODE','--profile','fixture','--value','development')
 task = api('task','add','--profile','fixture','--title','Recover me','--request-id',str(uuid.uuid4()))
 api('task','claim',task['item']['id'],'--profile','fixture','--request-id',str(uuid.uuid4()))
 archive = api('backup','create')['item']['path']
-assert b'BACKUP_CANARY' not in Path(archive).read_bytes()
+encrypted = Path(archive).read_bytes()
+assert b'BACKUP_CANARY' not in encrypted
+assert b'\n-> mlkem768x25519 ' in encrypted
 assert api('backup','inspect','--file',archive,'--identity-file',identity)['item']['profiles'][0]['profile'] == 'fixture'
 transfer = str(home / 'fixture-transfer.age')
 exported = api('profile','export','--profile','fixture','--output',transfer,'--recipient-file',recipient)

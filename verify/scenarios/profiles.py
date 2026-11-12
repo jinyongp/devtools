@@ -34,7 +34,7 @@ def api(env, *args, input=None, error=None):
     assert canary not in result.stdout + result.stderr, 'profile response disclosed a value'
     assert transfer_passphrase not in result.stdout + result.stderr, 'profile response disclosed the transfer passphrase'
     assert 'AGE-SECRET-KEY-' not in result.stdout + result.stderr, 'identity disclosure'
-    assert 'identity.txt' not in result.stdout + result.stderr, 'internal identity path disclosure'
+    assert not any(name in result.stdout + result.stderr for name in ('identity.txt', 'identity-pq.txt')), 'internal identity path disclosure'
     assert (result.returncode != 0) == bool(error), (args, result.returncode, result.stderr)
     assert not (result.stdout and result.stderr), 'mixed response streams'
     envelope = json.loads(result.stderr if error else result.stdout)
@@ -176,12 +176,12 @@ assert not difference['different'] and not difference['secrets']
 api(target, 'env', 'create', 'staging', '--profile', 'copy')
 difference = api(target, 'profile', 'diff', 'portable', 'copy')
 assert difference['envs'] == [{'name': 'staging', 'action': 'added'}]
-# Advanced recipient compatibility remains available and is no longer the default flow.
+# The advanced recipient flow prepares a hybrid key and selects it automatically on import.
 with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
     prepared = list(pool.map(lambda _: api(target, 'profile', 'transfer', 'prepare'), range(2)))
 assert sorted(item['changed'] for item in prepared) == [False, True]
 public = prepared[0]['item']['recipient']
-assert public.startswith('age1') and prepared[1]['item']['recipient'] == public
+assert public.startswith('age1pq1') and prepared[1]['item']['recipient'] == public
 recipient_archive = outbox / 'recipient-portable.age'
 api(source, 'profile', 'export', '--profile', 'portable', '--recipient', public, '--output', str(recipient_archive))
 recipient_preview = api(target, 'profile', 'import', '--file', str(recipient_archive), '--as', 'recipient-copy')

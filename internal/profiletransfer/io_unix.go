@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"filippo.io/age"
 	"github.com/jinyongp/devtools/internal/platformfs"
 )
 
@@ -18,7 +17,7 @@ func ensurePrivateDirectory(path string) error {
 	if err := privateDirectory(path); err != nil {
 		return err
 	}
-	// Persist the directory entry too: syncing identity.txt's containing
+	// Persist the directory entry too: syncing the identity's containing
 	// directory alone cannot make a newly created transfer directory durable.
 	// Repeat this on reuse so a previous uncertain publication can finish.
 	if err := syncDirectory(filepath.Dir(path)); err != nil {
@@ -36,12 +35,11 @@ func syncDirectory(path string) error {
 	return dir.Sync()
 }
 
-func stageIdentity(path string, identity *age.X25519Identity) error {
+func stageIdentity(path string, body []byte) error {
 	file, err := platformfs.OpenNoFollow(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
-	body := []byte(identity.String() + "\n")
 	_, writeErr := file.Write(body)
 	if writeErr == nil {
 		writeErr = file.Sync()
@@ -60,28 +58,18 @@ func stageIdentity(path string, identity *age.X25519Identity) error {
 	return syncDirectory(filepath.Dir(path))
 }
 
-func publishPendingIdentity(pending, target string) (*age.X25519Identity, error) {
-	identity, err := readIdentity(pending)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, ErrIdentityMissing
-		}
-		return nil, ErrInvalidIdentity
-	}
+func publishIdentity(pending, target string) error {
 	if err := os.Link(pending, target); err != nil {
-		return nil, err
+		return err
 	}
 	directory := filepath.Dir(target)
 	if err := syncDirectory(directory); err != nil {
-		return nil, err
+		return err
 	}
 	if err := os.Remove(pending); err != nil {
-		return nil, err
+		return err
 	}
-	if err := syncDirectory(directory); err != nil {
-		return nil, err
-	}
-	return identity, nil
+	return syncDirectory(directory)
 }
 
 func reconcilePendingIdentity(pending, target string) error {

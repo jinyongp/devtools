@@ -9,13 +9,13 @@ import (
 	"strings"
 
 	"filippo.io/age"
+	"github.com/jinyongp/devtools/internal/archivekey"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
 )
 
 const (
-	identityLimit           = 4096
-	pendingIdentityFilename = ".identity-pending"
+	identityLimit = 4096
 )
 
 var (
@@ -33,9 +33,12 @@ type Prepared struct {
 }
 
 func (s Store) directory() string    { return filepath.Join(s.Data, "profile-transfer") }
-func (s Store) identityPath() string { return filepath.Join(s.directory(), "identity.txt") }
+func (s Store) identityPath() string { return filepath.Join(s.directory(), "identity-pq.txt") }
+func (s Store) legacyIdentityPath() string {
+	return filepath.Join(s.directory(), "identity.txt")
+}
 func (s Store) pendingIdentityPath() string {
-	return filepath.Join(s.directory(), pendingIdentityFilename)
+	return filepath.Join(s.directory(), ".identity-pq-pending")
 }
 
 func (s Store) RecoveryDirectory() string { return filepath.Join(s.directory(), "recovery") }
@@ -54,7 +57,7 @@ func privateDirectory(path string) error {
 	return nil
 }
 
-func (s Store) ExistingIdentityPath() (string, error) {
+func (s Store) ExistingIdentityPath(format archivekey.Format) (string, error) {
 	if !filepath.IsAbs(s.Data) {
 		return "", ErrInvalidIdentity
 	}
@@ -64,8 +67,24 @@ func (s Store) ExistingIdentityPath() (string, error) {
 	if err := privateDirectory(s.directory()); err != nil {
 		return "", err
 	}
-	path := s.identityPath()
-	if _, err := readIdentity(path); err != nil {
+	var path string
+	var err error
+	switch format {
+	case archivekey.Hybrid:
+		path = s.identityPath()
+		_, err = readIdentity(path)
+	case archivekey.X25519:
+		path = s.legacyIdentityPath()
+		var body []byte
+		body, err = maintenance.Read(path, identityLimit)
+		defer clear(body)
+		if err == nil {
+			_, err = age.ParseX25519Identity(strings.TrimSpace(string(body)))
+		}
+	default:
+		return "", ErrInvalidIdentity
+	}
+	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", ErrIdentityMissing
 		}
@@ -74,16 +93,32 @@ func (s Store) ExistingIdentityPath() (string, error) {
 	return path, nil
 }
 
-func readIdentity(path string) (*age.X25519Identity, error) {
+func readIdentity(path string) (*age.HybridIdentity, error) {
 	body, err := maintenance.Read(path, identityLimit)
+	defer clear(body)
 	if err != nil {
 		return nil, err
 	}
-	identity, err := age.ParseX25519Identity(strings.TrimSpace(string(body)))
+	identity, err := age.ParseHybridIdentity(strings.TrimSpace(string(body)))
 	if err != nil {
 		return nil, ErrInvalidIdentity
 	}
 	return identity, nil
+}
+
+func (s Store) publishPendingIdentity() (Prepared, error) {
+	pending := s.pendingIdentityPath()
+	identity, err := readIdentity(pending)
+	if errors.Is(err, os.ErrNotExist) {
+		return Prepared{}, ErrIdentityMissing
+	}
+	if err != nil {
+		return Prepared{}, ErrInvalidIdentity
+	}
+	if err := publishIdentity(pending, s.identityPath()); err != nil {
+		return Prepared{}, err
+	}
+	return Prepared{Recipient: identity.Recipient().String(), Changed: true}, nil
 }
 
 func (s Store) Prepare(ctx context.Context) (Prepared, error) {
@@ -115,22 +150,20 @@ func (s Store) Prepare(ctx context.Context) (Prepared, error) {
 		return Prepared{}, ErrInvalidIdentity
 	}
 
-	if published, pendingErr := publishPendingIdentity(pending, path); pendingErr == nil {
-		return Prepared{Recipient: published.Recipient().String(), Changed: true}, nil
+	if prepared, pendingErr := s.publishPendingIdentity(); pendingErr == nil {
+		return prepared, nil
 	} else if !errors.Is(pendingErr, ErrIdentityMissing) {
 		return Prepared{}, pendingErr
 	}
 
-	identity, err = age.GenerateX25519Identity()
+	identity, err = age.GenerateHybridIdentity()
 	if err != nil {
 		return Prepared{}, err
 	}
-	if err := stageIdentity(pending, identity); err != nil {
+	body := []byte(identity.String() + "\n")
+	defer clear(body)
+	if err := stageIdentity(pending, body); err != nil {
 		return Prepared{}, err
 	}
-	published, err := publishPendingIdentity(pending, path)
-	if err != nil {
-		return Prepared{}, err
-	}
-	return Prepared{Recipient: published.Recipient().String(), Changed: true}, nil
+	return s.publishPendingIdentity()
 }

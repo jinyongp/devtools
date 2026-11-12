@@ -534,7 +534,7 @@ Protocol v4 자동화 중 profile transfer 입력·discovery를 사용하는 코
 passphrase는 argv나 환경변수 입력으로 제공하지 않습니다. interactive export는 두 번,
 interactive import는 한 번 echo 없이 입력합니다. 자동화에서는 regular file 또는 piped
 stdin을 사용합니다. `profile transfer prepare`, `--recipient`, `--recipient-file`,
-`--identity-file`은 기존 X25519 자동화를 위한 advanced compatibility 경로로 유지됩니다.
+`--identity-file`은 recipient 기반 전송에서 파일에 맞는 혼합 키 또는 기존 X25519 키를 지정합니다.
 
 ## protocol v4 마이그레이션
 

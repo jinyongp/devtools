@@ -31,7 +31,7 @@ func profileIdentifierOption(name string, required bool) Option {
 }
 
 func publicRecipientOption() Option {
-	return Option{Name: "recipient", MinLength: 1, Description: "Public age X25519 recipient."}
+	return Option{Name: "recipient", MinLength: 1, Description: "Public age recipient. New keys use ML-KEM-768 + X25519."}
 }
 
 func recipientInputOneOf() []map[string]any {
@@ -90,7 +90,7 @@ func (a *App) registerBackup() {
 			return map[string]any{"item": result, "changed": true}, nil
 		}})
 	}
-	add("keygen", "Generate private identity and public recipient files without printing key material.", []Option{filePathOption("identity-file", true), filePathOption("recipient-file", true)}, func(_ context.Context, _ backup.Engine, r Request) (any, *protocol.Error) {
+	add("keygen", "Generate an age ML-KEM-768 + X25519 key pair without printing key material.", []Option{filePathOption("identity-file", true), filePathOption("recipient-file", true)}, func(_ context.Context, _ backup.Engine, r Request) (any, *protocol.Error) {
 		return backup.Keygen(r.Options["identity-file"], r.Options["recipient-file"])
 	})
 	add("configure", "Store the default backup directory and public recipient.", []Option{filePathOption("directory", true), filePathOption("recipient-file", true)}, func(_ context.Context, e backup.Engine, r Request) (any, *protocol.Error) {

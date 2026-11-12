@@ -2,7 +2,8 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-`devtools backup`은 변수·secret·env와 task/workstream을 age X25519 공개키로 암호화해 보관한다.
+`devtools backup`은 변수·secret·env와 task/workstream을 age 공개키로 암호화해 보관한다.
+새 키는 양자내성 혼합 방식인 ML-KEM-768 + X25519를 사용한다.
 
 <a id="다른-환경으로-profile-이동"></a>
 
@@ -26,7 +27,12 @@ devtools backup configure --directory /backups/devtools --recipient-file /secure
 
 생성된 두 파일은 사용자 전용 권한을 가진다. 개인키는 비밀번호 관리자나 오프라인 저장소에 별도로 보관하고, 복구할 때 파일로 제공한다. 공개키와 절대 백업 경로는 devtools 설정 경로의 `backup.json`에 저장한다. 이 파일은 기존 `config.toml`의 port 설정과 함께 사용할 수 있다.
 
-암호화는 age X25519 recipient를 사용한다. 개인키 파일은 keygen이 생성한 한 줄짜리 age identity이며, 암호화된 파일은 age 형식의 JSON 스냅샷이다. 백업 문서 버전은 프로그램이 관리한다.
+`backup keygen`이 만드는 공개키는 `age1pq1…`, 개인키는 `AGE-SECRET-KEY-PQ-1…` 형식이다.
+개인키 파일은 한 줄이며, 암호화된 파일은 age로 감싼 JSON 스냅샷이다.
+기존 X25519 백업은 기존 개인키로 계속 검사하고 복원할 수 있다.
+
+기존 X25519 설정은 현재 공개키로 백업을 생성한다. 새 혼합 키 쌍을 만들고 `backup configure`로
+새 공개키를 등록하면 이후 기본 백업에 사용된다. 이전 백업에 맞는 개인키는 따로 보관한다.
 
 기본 설정을 다시 확인하려면 `devtools backup status`를 사용한다. `data.item`에
 `configured`, `directory`, 공개 `recipient`를 반환하며 개인 identity는 읽거나 출력하지 않는다.

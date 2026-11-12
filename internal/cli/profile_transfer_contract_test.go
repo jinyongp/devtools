@@ -68,7 +68,7 @@ func TestProfileTransferFailureRemedies(t *testing.T) {
 					t.Fatal("incomplete remedy contract")
 				}
 			}
-			for _, forbidden := range []string{"Backup operation could not be completed", "backup configure", "AGE-SECRET-KEY-", "identity.txt"} {
+			for _, forbidden := range []string{"Backup operation could not be completed", "backup configure", "AGE-SECRET-KEY-", "identity.txt", "identity-pq.txt"} {
 				if strings.Contains(diagnostic, forbidden) {
 					t.Fatalf("transfer error contains forbidden diagnostic category %q", forbidden)
 				}
@@ -94,7 +94,7 @@ func TestProfileTransferUnsafeParentReturnsIdentityError(t *testing.T) {
 		t.Fatal(profileErr)
 	}
 	directory := filepath.Join(filepath.Dir(profiles), "profile-transfer")
-	identity := filepath.Join(directory, "identity.txt")
+	identity := filepath.Join(directory, "identity-pq.txt")
 	before, err := os.ReadFile(identity)
 	if err != nil {
 		t.Fatal(err)

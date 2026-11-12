@@ -16,10 +16,10 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"filippo.io/age"
+	"github.com/jinyongp/devtools/internal/archivekey"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/profilekey"
@@ -33,6 +33,7 @@ import (
 )
 
 const limit int64 = 128 << 20
+const configLimit = 16 << 10
 
 // Pin the existing age export preset and bound received archive cost to it.
 // scrypt r=8 uses about 256 MiB at logN=18; age's broader import default permits
@@ -185,7 +186,7 @@ func failure(code string, causes ...error) *protocol.Error {
 	}
 	message := map[string]string{
 		"backup_not_configured": "No backup destination or recipient is configured. Configure backups or supply an explicit public recipient and output path.",
-		"invalid_recipient":     "The backup recipient is not a valid age X25519 public recipient. Use the recipient file produced by backup keygen.",
+		"invalid_recipient":     "The backup recipient is not a supported public age recipient. Use the recipient file produced by backup keygen.",
 		"invalid_backup":        "The selected archive could not be authenticated or has an unsupported backup structure. Verify its identity file and preserve the original archive.",
 		"not_found":             "The requested profile is not present in the selected backup or store. Inspect the archive and profile selection.",
 		"profile_exists":        "The target profile already exists. Preview the restore and explicitly permit replacement when intended.",
@@ -234,7 +235,7 @@ func Keygen(identityPath, recipientPath string) (any, *protocol.Error) {
 	if filepath.Clean(identityPath) == filepath.Clean(recipientPath) {
 		return nil, protocol.NewError("invalid_argument", "The identity and recipient output paths must be different.", 2, nil)
 	}
-	id, e := age.GenerateX25519Identity()
+	id, e := age.GenerateHybridIdentity()
 	if e != nil {
 		return nil, failure("backup_error")
 	}
@@ -248,7 +249,7 @@ func Keygen(identityPath, recipientPath string) (any, *protocol.Error) {
 	return map[string]string{"identity_file": identityPath, "recipient_file": recipientPath}, nil
 }
 func canonicalRecipient(value string) (string, error) {
-	r, err := age.ParseX25519Recipient(strings.TrimSpace(value))
+	r, err := archivekey.ParseRecipient(value)
 	if err != nil {
 		return "", err
 	}
@@ -270,11 +271,14 @@ func (e Engine) Configure(directory, recipientPath string) (any, *protocol.Error
 	if err != nil {
 		return nil, failure("invalid_recipient")
 	}
+	c := Config{d, r}
+	b, _ := json.Marshal(c)
+	if len(b) > configLimit {
+		return nil, failure("invalid_argument")
+	}
 	if err = ensureConfigDirectory(e.Config); err != nil {
 		return nil, failure("backup_error")
 	}
-	c := Config{d, r}
-	b, _ := json.Marshal(c)
 	if err = maintenance.Write(filepath.Join(e.Config, "backup.json"), b); err != nil {
 		return nil, failure("backup_error")
 	}
@@ -282,7 +286,7 @@ func (e Engine) Configure(directory, recipientPath string) (any, *protocol.Error
 }
 func (e Engine) config() (Config, error) {
 	var c Config
-	b, err := maintenance.Read(filepath.Join(e.Config, "backup.json"), 4096)
+	b, err := maintenance.Read(filepath.Join(e.Config, "backup.json"), configLimit)
 	if err == nil {
 		err = json.Unmarshal(b, &c)
 	}
@@ -393,7 +397,7 @@ func encodeTo(s Snapshot, recipient age.Recipient) ([]byte, error) {
 }
 
 func encode(s Snapshot, r string) ([]byte, error) {
-	rec, err := age.ParseX25519Recipient(r)
+	rec, err := archivekey.ParseRecipient(r)
 	if err != nil {
 		return nil, err
 	}
@@ -588,7 +592,7 @@ func decode(path, identityPath string) (Snapshot, []byte, string, error) {
 	if err != nil {
 		return snapshot, nil, "", protocol.InputError("identity", "read_input", err)
 	}
-	identity, err := age.ParseX25519Identity(strings.TrimSpace(string(key)))
+	identity, recipient, err := archivekey.ParseIdentity(string(key))
 	if err != nil {
 		return snapshot, nil, "", err
 	}
@@ -596,7 +600,7 @@ func decode(path, identityPath string) (Snapshot, []byte, string, error) {
 	if err != nil {
 		return snapshot, nil, "", err
 	}
-	return snapshot, cipher, identity.Recipient().String(), nil
+	return snapshot, cipher, recipient.String(), nil
 }
 
 func decodePassphrase(path, passphrase string) (Snapshot, []byte, error) {
@@ -608,7 +612,7 @@ func decodePassphrase(path, passphrase string) (Snapshot, []byte, error) {
 	if err != nil {
 		return snapshot, nil, err
 	}
-	if mode != ArchiveEncryptionPassphrase {
+	if mode != archivekey.Passphrase {
 		return snapshot, nil, errors.New("invalid passphrase archive")
 	}
 	identity, err := age.NewScryptIdentity(passphrase)
@@ -621,16 +625,11 @@ func decodePassphrase(path, passphrase string) (Snapshot, []byte, error) {
 	return decodeWithIdentity(path, identity)
 }
 
-const (
-	ArchiveEncryptionPassphrase = "passphrase"
-	ArchiveEncryptionRecipient  = "recipient"
-)
-
 type archiveProbeIdentity struct{}
 
 func (archiveProbeIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 	for _, stanza := range stanzas {
-		if stanza.Type != "scrypt" {
+		if archivekey.Format(stanza.Type) != archivekey.Passphrase {
 			continue
 		}
 		if len(stanza.Args) != 2 {
@@ -644,7 +643,7 @@ func (archiveProbeIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 	return nil, age.ErrIncorrectIdentity
 }
 
-func ArchiveEncryptionMode(path string) (string, error) {
+func ArchiveEncryptionMode(path string) (archivekey.Format, error) {
 	file, err := platformfs.OpenExternalPrivate(path, os.O_RDONLY, 0)
 	if err != nil {
 		return "", protocol.InputError("archive", "open_input", err)
@@ -667,22 +666,18 @@ func ArchiveEncryptionMode(path string) (string, error) {
 	if !errors.As(err, &noMatch) || len(noMatch.StanzaTypes) == 0 {
 		return "", errors.New("invalid age archive")
 	}
-	all := func(expected string) bool {
-		for _, stanzaType := range noMatch.StanzaTypes {
-			if stanzaType != expected {
-				return false
-			}
-		}
-		return true
-	}
-	switch {
-	case all("scrypt"):
-		return ArchiveEncryptionPassphrase, nil
-	case all("X25519"):
-		return ArchiveEncryptionRecipient, nil
+	format := archivekey.Format(noMatch.StanzaTypes[0])
+	switch format {
+	case archivekey.Passphrase, archivekey.X25519, archivekey.Hybrid:
 	default:
 		return "", errors.New("unsupported age recipient")
 	}
+	for _, stanzaType := range noMatch.StanzaTypes[1:] {
+		if archivekey.Format(stanzaType) != format || format == archivekey.Passphrase {
+			return "", errors.New("mixed or invalid age recipients")
+		}
+	}
+	return format, nil
 }
 
 func Inspect(path, identityPath string) (Metadata, *protocol.Error) {

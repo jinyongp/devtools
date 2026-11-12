@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"filippo.io/age"
+	"github.com/jinyongp/devtools/internal/archivekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
@@ -28,7 +30,7 @@ func TestPassphraseArchiveCreateImportAndRecovery(t *testing.T) {
 		t.Fatalf("passphrase create: %v", err)
 	}
 	mode, err := ArchiveEncryptionMode(archive)
-	if err != nil || mode != ArchiveEncryptionPassphrase {
+	if err != nil || mode != archivekey.Passphrase {
 		t.Fatalf("archive mode = %q, %v", mode, err)
 	}
 
@@ -67,7 +69,7 @@ func TestPassphraseArchiveCreateImportAndRecovery(t *testing.T) {
 		t.Fatalf("replace: %#v %v", replaced.Plan, importErr)
 	}
 	recoveryMode, err := ArchiveEncryptionMode(replaced.Plan.SafetyBackup)
-	if err != nil || recoveryMode != ArchiveEncryptionPassphrase {
+	if err != nil || recoveryMode != archivekey.Passphrase {
 		t.Fatalf("recovery mode = %q, %v", recoveryMode, err)
 	}
 	recoveryPreview, importErr := target.Import(context.Background(), ImportRequest{Path: replaced.Plan.SafetyBackup, Passphrase: passphrase, Target: "recovered"})
@@ -92,11 +94,15 @@ func TestPassphraseArchiveCreateImportAndRecovery(t *testing.T) {
 	}
 }
 
-func TestArchiveEncryptionModeRecognizesX25519(t *testing.T) {
+func TestLegacyX25519BackupCanBeRestored(t *testing.T) {
 	root := privateTestRoot(t)
 	engine := Engine{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Cache: filepath.Join(root, "cache")}
-	identity, recipient := filepath.Join(root, "identity"), filepath.Join(root, "recipient")
-	if _, err := Keygen(identity, recipient); err != nil {
+	legacy, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := filepath.Join(root, "legacy-identity")
+	if err := fixtureWriteFile(identity, []byte(legacy.String()+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	store := values.ModernStore{Directory: filepath.Join(engine.Data, "profiles"), Profile: "portable"}
@@ -106,12 +112,34 @@ func TestArchiveEncryptionModeRecognizesX25519(t *testing.T) {
 		t.Fatal(err)
 	}
 	archive := filepath.Join(root, "portable.age")
-	if _, err := engine.Create(context.Background(), "portable", archive, recipient); err != nil {
+	// Use the age library's original X25519 recipient directly to build a
+	// compatibility fixture independent of the current key generation path.
+	if _, err := engine.createArchive(context.Background(), "portable", archive, func(snapshot Snapshot) ([]byte, error) {
+		return encodeTo(snapshot, legacy.Recipient())
+	}); err != nil {
 		t.Fatal(err)
 	}
 	mode, err := ArchiveEncryptionMode(archive)
-	if err != nil || mode != ArchiveEncryptionRecipient {
+	if err != nil || mode != archivekey.X25519 {
 		t.Fatalf("archive mode = %q, %v", mode, err)
+	}
+	ctx := context.Background()
+	preview, failure := engine.Restore(ctx, archive, identity, "portable", "restored", "", "", false)
+	if failure != nil || preview.Applied || preview.Digest == "" {
+		t.Fatalf("restore preview: %#v %v", preview, failure)
+	}
+	result, failure := engine.Restore(ctx, archive, identity, "portable", "restored", preview.Digest, tasks.ID(), false)
+	if failure != nil || !result.Applied {
+		t.Fatalf("restore apply: %#v %v", result, failure)
+	}
+	store.Profile = "restored"
+	state, readErr := store.Read(ctx)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	env, envErr := state.Environment("")
+	if envErr != nil || env["VALUE"] != "x25519" {
+		t.Fatalf("restored value: %#v %v", env, envErr)
 	}
 }
 

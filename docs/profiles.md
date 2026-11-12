@@ -81,19 +81,21 @@ task/workstream/validation 데이터가 들어갑니다. `devtools.toml`, port �
 passphrase archive는 age scrypt `logN=18`로 생성합니다.
 복호화는 KDF 실행 전에 `logN>18`과 잘못된 비용 표기를 거절해
 인증 전 메모리 사용을 약 256 MiB로 제한합니다. 별도 도구로 더 높은 비용을 지정한
-archive는 지원하지 않습니다. X25519 recipient 전송에는 이 제한을 적용하지 않습니다.
+archive는 지원하지 않습니다. 공개키 전송은 passphrase KDF를 사용하지 않습니다.
 
 ### 고급 recipient 방식
 
-자동화에서 public-key 방식을 유지해야 하면 기존 X25519 transfer도 계속 사용할 수 있습니다.
-이 경우에만 대상 기기에서 recipient를 먼저 준비합니다.
+공개키로 전송하려면 대상 기기에서 recipient를 먼저 준비합니다. `profile transfer prepare`는
+ML-KEM-768 + X25519 혼합 키를 만들고, 이미 준비한 혼합 키가 있으면 재사용합니다.
+기존 X25519 개인키는 별도로 보관되며, 가져오기는 파일 형식에 맞는 로컬 키를 선택합니다.
+기존 공개키를 명시해서 내보내는 자동화도 계속 동작합니다.
 
 ```sh
 # 대상 기기
 devtools profile transfer prepare
 
 # 원본 기기
-devtools profile export --recipient age1...
+devtools profile export --recipient age1pq1...
 # 또는 --recipient-file /secure/recipient.txt
 ```
 
@@ -150,7 +152,8 @@ non-interactive에서는 preview/apply 모두 같은 `--passphrase-file` 또는
 `passphrase_mismatch`는 interactive export의 두 입력이 다르다는 뜻입니다.
 `invalid_backup`은 archive 손상 또는 passphrase/identity 불일치를 포함합니다.
 `transfer_identity_missing`·`transfer_identity_invalid`는 advanced recipient archive에
-사용할 로컬 X25519 identity가 없거나 안전하지 않은 경우입니다. `output_exists`는 기존
+사용할 로컬 identity가 없거나 안전하지 않은 경우입니다. 해당 파일에 맞는 개인키를
+`--identity-file`로 지정할 수 있습니다. `output_exists`는 기존
 파일을 보존하므로 다른 `--output`을 선택해야 합니다.
 
 미리보기는 `changed: false`, `replayed: false`입니다. 적용은 `changed: true`를 반환합니다.

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+
+	"github.com/jinyongp/devtools/internal/archivekey"
 )
 
 // Mode probing is deliberately authentication-free and never runs a KDF. This
@@ -22,7 +24,7 @@ func TestArchiveModeRejectsExcessiveOrNoncanonicalKDFBeforePassword(t *testing.T
 			}
 			mode, err := ArchiveEncryptionMode(path)
 			if factor == "18" {
-				if err != nil || mode != ArchiveEncryptionPassphrase {
+				if err != nil || mode != archivekey.Passphrase {
 					t.Fatal("own export factor not recognized", err)
 				}
 				return

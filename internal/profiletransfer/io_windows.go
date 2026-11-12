@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"filippo.io/age"
 	"github.com/jinyongp/devtools/internal/platformfs"
 )
 
@@ -20,34 +19,24 @@ func ensurePrivateDirectory(path string) error {
 	}
 	return r.Close()
 }
-func stageIdentity(path string, identity *age.X25519Identity) error {
+func stageIdentity(path string, body []byte) error {
 	r, err := platformfs.OpenRoot(filepath.Dir(path), false)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
-	return r.WriteFile(context.Background(), filepath.Base(path), []byte(identity.String()+"\n"), false)
+	return r.WriteFile(context.Background(), filepath.Base(path), body, false)
 }
-func publishPendingIdentity(pending, target string) (*age.X25519Identity, error) {
-	identity, err := readIdentity(pending)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, ErrIdentityMissing
-	}
-	if err != nil {
-		return nil, ErrInvalidIdentity
-	}
+func publishIdentity(pending, target string) error {
 	r, err := platformfs.OpenRoot(filepath.Dir(pending), false)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer r.Close()
 	if filepath.Dir(pending) != filepath.Dir(target) {
-		return nil, ErrInvalidIdentity
+		return ErrInvalidIdentity
 	}
-	if err = r.PublishFile(context.Background(), filepath.Base(pending), filepath.Base(target), false); err != nil {
-		return nil, err
-	}
-	return identity, nil
+	return r.PublishFile(context.Background(), filepath.Base(pending), filepath.Base(target), false)
 }
 func reconcilePendingIdentity(pending, target string) error {
 	// MoveFileEx publishes the single pending image atomically. Coexisting names

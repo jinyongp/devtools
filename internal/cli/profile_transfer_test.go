@@ -2,15 +2,18 @@ package cli
 
 import (
 	"context"
-	"github.com/jinyongp/devtools/internal/testfixture"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"filippo.io/age"
+	"github.com/jinyongp/devtools/internal/archivekey"
 	"github.com/jinyongp/devtools/internal/backup"
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
+	"github.com/jinyongp/devtools/internal/testfixture"
 )
 
 func TestProfileTransferPrepareCreatesAndReusesLocalIdentity(t *testing.T) {
@@ -25,7 +28,7 @@ func TestProfileTransferPrepareCreatesAndReusesLocalIdentity(t *testing.T) {
 	if code != 0 || diagnostic != "" {
 		t.Fatalf("prepare failed: code=%d out=%s err=%s", code, out, diagnostic)
 	}
-	if strings.Contains(out, "AGE-SECRET-KEY-") || strings.Contains(out, "identity.txt") {
+	if strings.Contains(out, "AGE-SECRET-KEY-") || strings.Contains(out, "identity-pq.txt") {
 		t.Fatalf("prepare disclosed private identity metadata: %s", out)
 	}
 	first := outputData(t, app, []string{"profile", "transfer", "prepare"})
@@ -34,7 +37,7 @@ func TestProfileTransferPrepareCreatesAndReusesLocalIdentity(t *testing.T) {
 	}
 	item := first["item"].(map[string]any)
 	recipient, _ := item["recipient"].(string)
-	if !strings.HasPrefix(recipient, "age1") {
+	if !strings.HasPrefix(recipient, "age1pq1") {
 		t.Fatalf("invalid recipient: %#v", item)
 	}
 
@@ -42,7 +45,7 @@ func TestProfileTransferPrepareCreatesAndReusesLocalIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity := filepath.Join(filepath.Dir(profiles), "profile-transfer", "identity.txt")
+	identity := filepath.Join(filepath.Dir(profiles), "profile-transfer", "identity-pq.txt")
 	testfixture.AssertPrivate(t, identity, 0600)
 }
 
@@ -61,7 +64,7 @@ func TestProfileTransferPrepareRejectsUnsafeIdentity(t *testing.T) {
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		t.Fatal(err)
 	}
-	identity := filepath.Join(directory, "identity.txt")
+	identity := filepath.Join(directory, "identity-pq.txt")
 	if err := os.WriteFile(identity, []byte("not-an-identity\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +285,7 @@ func TestProfileSourceFirstInteractiveRoundTrip(t *testing.T) {
 		t.Fatalf("export prompt count = %d", sourcePrompts)
 	}
 	mode, err := backup.ArchiveEncryptionMode(archive)
-	if err != nil || mode != backup.ArchiveEncryptionPassphrase {
+	if err != nil || mode != archivekey.Passphrase {
 		t.Fatalf("interactive archive mode = %q, %v", mode, err)
 	}
 
@@ -301,7 +304,7 @@ func TestProfileSourceFirstInteractiveRoundTrip(t *testing.T) {
 	if pathErr != nil {
 		t.Fatal(pathErr)
 	}
-	if _, err := os.Lstat(filepath.Join(filepath.Dir(profiles), "profile-transfer", "identity.txt")); !os.IsNotExist(err) {
+	if _, err := os.Lstat(filepath.Join(filepath.Dir(profiles), "profile-transfer")); !os.IsNotExist(err) {
 		t.Fatalf("source-first import created prepared identity: %v", err)
 	}
 }
@@ -348,6 +351,9 @@ func TestProfileImportUsesLocalTransferIdentityAndRecoveryArchive(t *testing.T) 
 		t.Fatalf("unexpected safety archive path: %s", safety)
 	}
 	testfixture.AssertPrivate(t, safety, 0600)
+	if mode, err := backup.ArchiveEncryptionMode(safety); err != nil || mode != archivekey.Hybrid {
+		t.Fatalf("safety archive mode = %q, %v", mode, err)
+	}
 
 	recoveryBase := []string{"profile", "import", "--file", safety, "--as", "recovered"}
 	recoveryPreview := outputData(t, target, recoveryBase)
@@ -359,6 +365,47 @@ func TestProfileImportUsesLocalTransferIdentityAndRecoveryArchive(t *testing.T) 
 	oldValue := outputData(t, target, []string{"var", "get", "MODE", "--profile", "recovered"})
 	if oldValue["value"] != "changed" {
 		t.Fatalf("safety archive did not preserve pre-replace state: %#v", oldValue)
+	}
+}
+
+func TestProfileImportSelectsLegacyIdentityAfterHybridPrepare(t *testing.T) {
+	root := privateTempDir(t)
+	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	source, target := testApp(t), testApp(t)
+	outputData(t, source, []string{"var", "set", "MODE", "--profile", "portable", "--value", "legacy"})
+	legacy, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(root, "legacy.age")
+	outputData(t, source, []string{"profile", "export", "--profile", "portable", "--output", archive, "--recipient", legacy.Recipient().String()})
+
+	store, failure := target.profileTransferStore()
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	legacyPath := filepath.Join(store.Data, "profile-transfer", "identity.txt")
+	if err := tasks.PrivateDir(filepath.Dir(legacyPath)); err != nil {
+		t.Fatal(err)
+	}
+	if err := maintenance.Write(legacyPath, []byte(legacy.String()+"\n")); err != nil {
+		t.Fatal(err)
+	}
+	prepared := outputData(t, target, []string{"profile", "transfer", "prepare"})
+	if !strings.HasPrefix(prepared["item"].(map[string]any)["recipient"].(string), "age1pq1") {
+		t.Fatal("prepare reused the legacy recipient")
+	}
+	if body, err := os.ReadFile(legacyPath); err != nil || strings.TrimSpace(string(body)) != legacy.String() {
+		t.Fatal("prepare altered the legacy identity")
+	}
+	base := []string{"profile", "import", "--file", archive, "--as", "restored"}
+	preview := outputData(t, target, base)
+	outputData(t, target, append(base, "--apply", preview["digest"].(string)))
+	if got := outputData(t, target, []string{"var", "get", "MODE", "--profile", "restored"}); got["value"] != "legacy" {
+		t.Fatalf("legacy import value = %#v", got)
 	}
 }
 
@@ -392,7 +439,7 @@ func TestProfileImportRecipientArchiveWithoutPreparedIdentityFailsWithoutCreatin
 	if pathErr != nil {
 		t.Fatal(pathErr)
 	}
-	localIdentity := filepath.Join(filepath.Dir(profiles), "profile-transfer", "identity.txt")
+	localIdentity := filepath.Join(filepath.Dir(profiles), "profile-transfer", "identity-pq.txt")
 	if _, err := os.Lstat(localIdentity); !os.IsNotExist(err) {
 		t.Fatalf("import created identity implicitly: %v", err)
 	}

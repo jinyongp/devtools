@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jinyongp/devtools/internal/archivekey"
 	"github.com/jinyongp/devtools/internal/backup"
 	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
 	"github.com/jinyongp/devtools/internal/profiletransfer"
@@ -193,7 +194,7 @@ func (a *App) registerProfiles() {
 		},
 		Command{
 			Name:        "profile transfer prepare",
-			Description: "Prepare a local X25519 identity for advanced recipient-based profile transfers.",
+			Description: "Prepare a local age ML-KEM-768 + X25519 identity for recipient-based profile transfers.",
 			Output: changedItemOutput(object(map[string]any{
 				"recipient": stringSchema(),
 			}, "recipient")),
@@ -206,8 +207,8 @@ func (a *App) registerProfiles() {
 				profileIdentifierOption("profile", false),
 				{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory used when profile is omitted."},
 				{Name: "output", MinLength: 1, Description: "Output file or existing directory; directories use <profile>.age and omission defaults to ./<profile>.age."},
-				{Name: "recipient-file", MinLength: 1, Description: "Advanced mode: destination public age X25519 recipient file; mutually exclusive with passphrase input."},
-				{Name: "recipient", MinLength: 1, Description: "Advanced mode: destination public age X25519 recipient; mutually exclusive with passphrase input."},
+				{Name: "recipient-file", MinLength: 1, Description: "Advanced mode: destination public age recipient file; mutually exclusive with passphrase input."},
+				{Name: "recipient", MinLength: 1, Description: "Advanced mode: destination public age recipient; mutually exclusive with passphrase input."},
 				{Name: "passphrase-file", MinLength: 1, Description: "Read the transfer passphrase from a regular file instead of prompting."},
 				{Name: "passphrase-stdin", Boolean: true, Description: "Read the transfer passphrase from piped stdin instead of prompting."},
 			},
@@ -220,7 +221,7 @@ func (a *App) registerProfiles() {
 			Description: "Preview an encrypted profile import; passphrase archives prompt by default and recipient archives use an identity.",
 			Options: []Option{
 				filePathOption("file", true),
-				{Name: "identity-file", MinLength: 1, Description: "Advanced mode: private age X25519 identity file for recipient-encrypted archives."},
+				{Name: "identity-file", MinLength: 1, Description: "Advanced mode: matching private age identity file for recipient-encrypted archives."},
 				{Name: "passphrase-file", MinLength: 1, Description: "Read the archive passphrase from a regular file instead of prompting."},
 				{Name: "passphrase-stdin", Boolean: true, Description: "Read the archive passphrase from piped stdin instead of prompting."},
 				profileIdentifierOption("profile", false),
@@ -255,8 +256,14 @@ func (a *App) profileTransferStore() (profiletransfer.Store, *protocol.Error) {
 func transferIdentityError(err error) *protocol.Error {
 	switch {
 	case errors.Is(err, profiletransfer.ErrIdentityMissing):
-		return protocol.NewError("transfer_identity_missing", "No local profile transfer identity is prepared.", 3, map[string]any{
+		return protocol.NewError("transfer_identity_missing", "No local profile transfer identity is available for this archive format.", 3, map[string]any{
 			"remedies": []protocol.Remedy{{
+				Relation:       protocol.SameStoreAction,
+				Argv:           []string{"devtools", "profile", "import"},
+				Effect:         "value_write",
+				RequiredInputs: []string{"file", "identity-file"},
+				Message:        "If you have the matching private identity, supply it with --identity-file.",
+			}, {
 				Relation:       protocol.SameStoreAction,
 				Argv:           []string{"devtools", "profile", "transfer", "prepare"},
 				Effect:         "value_write",
@@ -286,7 +293,7 @@ func transferArchiveError(err *protocol.Error) *protocol.Error {
 	switch err.Code {
 	case "invalid_recipient":
 		remedy.Relation = protocol.DestinationAction
-		message = "Supply a valid public age X25519 recipient for the destination device."
+		message = "Supply a valid public age recipient for the destination device."
 		remedy.Argv = []string{"devtools", "profile", "transfer", "prepare"}
 		remedy.Message = "Run this on the destination device, then copy its public recipient into --recipient or --recipient-file on the source device."
 	case "invalid_backup":
@@ -485,7 +492,7 @@ func (a *App) importProfile(ctx context.Context, streams IO, request Request) (a
 			}
 			return nil, transferArchiveError(protocol.NewError("invalid_backup", "Cannot inspect the profile archive encryption mode.", 3, nil))
 		}
-		if mode == backup.ArchiveEncryptionPassphrase {
+		if mode == archivekey.Passphrase {
 			var passphraseErr *protocol.Error
 			passphrase, passphraseErr = acquireTransferPassphrase(ctx, streams, request.Options, "import", false, a.passphrasePrompt)
 			if passphraseErr != nil {
@@ -493,7 +500,7 @@ func (a *App) importProfile(ctx context.Context, streams IO, request Request) (a
 			}
 		} else {
 			var identityErr error
-			identityPath, identityErr = transferStore.ExistingIdentityPath()
+			identityPath, identityErr = transferStore.ExistingIdentityPath(mode)
 			if identityErr != nil {
 				return nil, transferIdentityError(identityErr)
 			}

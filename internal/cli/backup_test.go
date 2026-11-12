@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jinyongp/devtools/internal/archivekey"
+	"github.com/jinyongp/devtools/internal/backup"
 )
 
 func TestBackupStatusAndDirectRecipientCLI(t *testing.T) {
@@ -36,6 +39,9 @@ func TestBackupStatusAndDirectRecipientCLI(t *testing.T) {
 	}
 	identityValue := strings.TrimSpace(string(identityBytes))
 	recipientValue := strings.TrimSpace(string(recipientBytes))
+	if !strings.HasPrefix(recipientValue, "age1pq1") || !strings.HasPrefix(identityValue, "AGE-SECRET-KEY-PQ-1") {
+		t.Fatal("backup keygen did not generate hybrid keys")
+	}
 	if code, _, diagnostic := invoke(t, app, "", "var", "set", "VALUE", "--profile", "app", "--value", "portable"); code != 0 {
 		t.Fatal(diagnostic)
 	}
@@ -69,6 +75,9 @@ func TestBackupStatusAndDirectRecipientCLI(t *testing.T) {
 	fallbackPath, _ := fallback["item"].(map[string]any)["path"].(string)
 	if fallback["changed"] != true || filepath.Dir(fallbackPath) != backupDirectory {
 		t.Fatalf("configured recipient fallback failed: %#v", fallback)
+	}
+	if mode, err := backup.ArchiveEncryptionMode(fallbackPath); err != nil || mode != archivekey.Hybrid {
+		t.Fatalf("configured backup mode = %q, %v", mode, err)
 	}
 
 	externalIdentity := filepath.Join(root, "external-identity.txt")

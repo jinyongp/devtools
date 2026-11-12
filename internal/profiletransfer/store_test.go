@@ -105,11 +105,11 @@ func TestPrepareRecoversPendingIdentityWithoutGeneratingAnotherKey(t *testing.T)
 	if err := ensurePrivateDirectory(store.directory()); err != nil {
 		t.Fatal(err)
 	}
-	pendingIdentity, err := age.GenerateX25519Identity()
+	pendingIdentity, err := age.GenerateHybridIdentity()
 	if err != nil {
 		t.Fatal(err)
 	}
-	pending := filepath.Join(store.directory(), ".identity-pending")
+	pending := store.pendingIdentityPath()
 	if err := fixtureWriteFile(pending, []byte(pendingIdentity.String()+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestPrepareRejectsAmbiguousPendingIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := age.GenerateX25519Identity()
+	other, err := age.GenerateHybridIdentity()
 	if err != nil {
 		t.Fatal(err)
 	}

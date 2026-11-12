@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/jinyongp/devtools/internal/execution"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/redact"
@@ -47,7 +48,7 @@ func (s Store) InspectRecordValues(ctx context.Context, r Record) values.InputOb
 }
 
 func (s Store) currentRecordValues(ctx context.Context, r Record) (*values.InputVersion, *protocol.Error) {
-	p, e := project.Resolve(r.Directory, "")
+	p, e := profilekey.ResolveProject(s.Data, r.Directory, "")
 	if e != nil {
 		return nil, e
 	}

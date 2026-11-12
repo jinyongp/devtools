@@ -14,6 +14,7 @@ import (
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -195,7 +196,7 @@ func copyRoutePointer[T any](value *T) *T {
 
 func (r Resolver) resolveProject(instance ports.Instance) (project.Context, *protocol.Error, bool) {
 	if r.cache == nil {
-		config, err := project.Resolve(instance.Directory, "")
+		config, err := profilekey.ResolveProject(filepath.Dir(r.Ports.Directory), instance.Directory, "")
 		return config, err, true
 	}
 	path := filepath.Join(instance.Directory, project.Filename)
@@ -205,7 +206,7 @@ func (r Resolver) resolveProject(instance ports.Instance) (project.Context, *pro
 		_, existed := r.cache.entries[path]
 		delete(r.cache.entries, path)
 		r.cache.mu.Unlock()
-		config, err := project.Resolve(instance.Directory, "")
+		config, err := profilekey.ResolveProject(filepath.Dir(r.Ports.Directory), instance.Directory, "")
 		return config, err, existed || statErr != nil || !identity.exists
 	}
 	r.cache.mu.Lock()
@@ -215,7 +216,7 @@ func (r Resolver) resolveProject(instance ports.Instance) (project.Context, *pro
 	if ok && canonicalErr == nil && cached.canonicalDirectory == canonicalDirectory && cached.identity.same(identity) {
 		return cached.config, cached.err, false
 	}
-	config, err := project.Resolve(instance.Directory, "")
+	config, err := profilekey.ResolveProject(filepath.Dir(r.Ports.Directory), instance.Directory, "")
 	r.cache.mu.Lock()
 	r.cache.entries[path] = cachedProject{identity: identity, canonicalDirectory: canonicalDirectory, config: config, err: err}
 	r.cache.mu.Unlock()

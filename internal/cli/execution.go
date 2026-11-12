@@ -71,7 +71,7 @@ func (a *App) preflightProjectCommand(ctx context.Context, p project.Context, na
 	return a.checkSelectedProjectCommand(ctx, p, name, envOverride, nil, false)
 }
 func (a *App) checkSelectedProjectCommand(ctx context.Context, p project.Context, name string, envOverride, bundle *string, validate bool) *protocol.Error {
-	current, err := project.Resolve(p.Root, "")
+	current, err := a.resolveStoredProject(p.Root, "")
 	if err != nil {
 		return err
 	}

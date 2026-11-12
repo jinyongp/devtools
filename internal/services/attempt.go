@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -60,7 +61,7 @@ func (s Store) prepareAttempt(q Request) (Attempt, *protocol.Error) {
 		} else if e.Code != "process_not_found" {
 			return a, e
 		} else {
-			p, e := project.Resolve(q.Directory, "")
+			p, e := profilekey.ResolveProject(s.Data, q.Directory, "")
 			if e != nil {
 				return a, e
 			}

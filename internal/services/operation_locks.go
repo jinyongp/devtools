@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/jinyongp/devtools/internal/network"
-	"github.com/jinyongp/devtools/internal/project"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
@@ -32,7 +32,7 @@ func (s Store) operationIdentity(q Request) (string, *protocol.Error) {
 	} else if q.Action != "start" || e.Code != "process_not_found" {
 		return "", e
 	}
-	p, e := project.Resolve(q.Directory, "")
+	p, e := profilekey.ResolveProject(s.Data, q.Directory, "")
 	if e != nil {
 		return "", e
 	}
@@ -58,7 +58,8 @@ func (s Store) singletonRecords(ctx context.Context, profile, directory, command
 	return items, nil
 }
 
-func (s Store) publicationLock(ctx context.Context) (func(), *protocol.Error) {
+// LockPublication covers launch registration and its storage identity check.
+func (s Store) LockPublication(ctx context.Context) (func(), *protocol.Error) {
 	release, e := tasks.Lock(ctx, filepath.Join(s.root(), "publication.lock"))
 	if e != nil {
 		return nil, storageErrorAt("lock_launch_publication", e)
@@ -67,11 +68,14 @@ func (s Store) publicationLock(ctx context.Context) (func(), *protocol.Error) {
 }
 
 func (s Store) prepareLaunchContext(ctx context.Context, r Record, snapshots ...*network.ExecutionSnapshot) (*lockedLease, *protocol.Error) {
-	release, e := s.publicationLock(ctx)
+	release, e := s.LockPublication(ctx)
 	if e != nil {
 		return nil, e
 	}
 	defer release()
+	if failure := profilekey.CheckStorageAddress(ctx, s.Data, r.Profile); failure != nil {
+		return nil, failure
+	}
 	return s.prepareLaunchUnlocked(r, snapshots...)
 }
 
@@ -80,7 +84,7 @@ func (s Store) prepareLaunch(r Record, snapshots ...*network.ExecutionSnapshot) 
 }
 
 func (s Store) cleanupLaunchStagingContext(ctx context.Context) *protocol.Error {
-	release, e := s.publicationLock(ctx)
+	release, e := s.LockPublication(ctx)
 	if e != nil {
 		return e
 	}

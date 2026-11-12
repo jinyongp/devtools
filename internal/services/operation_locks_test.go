@@ -116,7 +116,7 @@ func TestIndependentOperationsAndSingletonExclusion(t *testing.T) {
 
 func TestPublicationLockProtectsLiveStagingFromCleanup(t *testing.T) {
 	s := Store{Data: privateTempDir(t)}
-	release, e := s.publicationLock(context.Background())
+	release, e := s.LockPublication(context.Background())
 	if e != nil {
 		t.Fatal(e)
 	}

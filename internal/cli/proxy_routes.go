@@ -105,7 +105,7 @@ func (a *App) registerProxyRoutes() {
 				if dir == "" {
 					dir = "."
 				}
-				p, e = project.Resolve(dir, "")
+				p, e = a.resolveStoredProject(dir, "")
 				if e != nil {
 					return nil, e
 				}

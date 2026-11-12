@@ -2,17 +2,18 @@ package cli
 
 import (
 	"context"
-	"github.com/jinyongp/devtools/internal/doctor"
 	"io"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
@@ -148,7 +149,7 @@ func (a *App) registerProcesses() {
 				return out, e
 			}
 			if action == "start" {
-				p, resolveErr := project.Resolve(r.Options["dir"], "")
+				p, resolveErr := a.resolveStoredProject(r.Options["dir"], "")
 				if resolveErr != nil {
 					recorded, readErr := s.HasRequest(q.RequestID)
 					if readErr != nil {
@@ -183,7 +184,7 @@ func (a *App) registerProcesses() {
 					return nil, e
 				}
 				if original.ProxyMode {
-					p, e := project.Resolve(original.Directory, "")
+					p, e := a.resolveStoredProject(original.Directory, "")
 					if e != nil {
 						return nil, e
 					}
@@ -254,7 +255,7 @@ func ServeProcessWithLease(ctx context.Context, data, id string, lease *os.File)
 func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 	s := services.Store{Data: data}
 	execute := func(ctx context.Context, r services.Record, runner process.Runner, output io.Writer) *protocol.Error {
-		p, err := project.Resolve(r.Directory, "")
+		p, err := profilekey.ResolveProject(data, r.Directory, "")
 		if err != nil {
 			return err
 		}
@@ -315,7 +316,11 @@ func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
 // prepareManagedInput performs all value/config/tool work before the launcher
 // is admitted and before a restart stops its old execution.
 func (a *App) prepareManagedInput(ctx context.Context, r services.Record, networkSnapshot *network.ExecutionSnapshot) (execution.Prepared, *protocol.Error) {
-	return services.PrepareFrozenInput(ctx, r, networkSnapshot, a.executionDependencies)
+	profiles, failure := a.dataDirectory()
+	if failure != nil {
+		return execution.Prepared{}, failure
+	}
+	return services.PrepareFrozenInput(ctx, filepath.Dir(profiles), r, networkSnapshot, a.executionDependencies)
 }
 
 func ServePreparedProcessWithLease(ctx context.Context, data, id string, lease *os.File) error {

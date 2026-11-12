@@ -3,13 +3,13 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"github.com/jinyongp/devtools/internal/doctor"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/lifecycle"
 	"github.com/jinyongp/devtools/internal/netops"
@@ -465,7 +465,7 @@ func (a *App) preflightNetworkSnapshot(ctx context.Context, p project.Context, n
 	return a.preflightSelectedNetworkSnapshot(ctx, p, name, env, snapshot, beforeStop, nil)
 }
 func (a *App) preflightSelectedNetworkSnapshot(ctx context.Context, p project.Context, name string, env *string, snapshot *network.ExecutionSnapshot, beforeStop bool, bundle *string) *protocol.Error {
-	current, e := project.Resolve(p.Root, "")
+	current, e := a.resolveStoredProject(p.Root, "")
 	if e != nil {
 		return e
 	}

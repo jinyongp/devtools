@@ -2,19 +2,19 @@ package services
 
 import (
 	"context"
-	"github.com/jinyongp/devtools/internal/doctor"
 	"os"
 
+	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/network"
-	"github.com/jinyongp/devtools/internal/project"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 // PrepareFrozenInput is shared by CLI and dashboard initiators. All value,
 // configuration and tool work finishes before admission or stopping an old app.
-func PrepareFrozenInput(ctx context.Context, r Record, n *network.ExecutionSnapshot, dependenciesFor func(execution.Command) (execution.Dependencies, *protocol.Error)) (execution.Prepared, *protocol.Error) {
-	p, e := project.Resolve(r.Directory, "")
+func PrepareFrozenInput(ctx context.Context, data string, r Record, n *network.ExecutionSnapshot, dependenciesFor func(execution.Command) (execution.Dependencies, *protocol.Error)) (execution.Prepared, *protocol.Error) {
+	p, e := profilekey.ResolveProject(data, r.Directory, "")
 	if e != nil {
 		return execution.Prepared{}, e
 	}

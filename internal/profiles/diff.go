@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -85,6 +86,11 @@ func (c Catalog) canonicalHeld(ctx context.Context, profile string) (Canonical, 
 	if !project.ValidProfile(profile) {
 		return result, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, map[string]any{"field": "profile"})
 	}
+	selected, failure := profilekey.ResolveName(c.Data, profile)
+	if failure != nil {
+		return result, failure
+	}
+	profile, result.Profile = selected.Storage, selected.Name
 	summaries, err := c.listHeld(ctx)
 	if err != nil {
 		return result, err

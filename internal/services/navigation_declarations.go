@@ -6,7 +6,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/ports"
-	"github.com/jinyongp/devtools/internal/project"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -33,7 +33,7 @@ func (s Store) navigationDeclarations(q NavigationSelection, records []Record) (
 			directories[q.Directory] = ""
 		}
 	} else if q.Instance == "" {
-		if p, e := project.Resolve(".", ""); e == nil && (q.Profile == "" || p.Profile == q.Profile) {
+		if p, e := profilekey.ResolveProject(s.Data, ".", ""); e == nil && (q.Profile == "" || p.Profile == q.Profile) {
 			if _, ok := directories[p.Root]; !ok {
 				directories[p.Root] = ""
 			}
@@ -46,7 +46,7 @@ func (s Store) navigationDeclarations(q NavigationSelection, records []Record) (
 	sort.Strings(ordered)
 	items := []ServiceDeclaration{}
 	for _, directory := range ordered {
-		p, e := project.Resolve(directory, "")
+		p, e := profilekey.ResolveProject(s.Data, directory, "")
 		// Retired/missing/invalid definitions do not erase observed running or
 		// unresolved executions. Their metadata remains in the service summary.
 		if e != nil || q.Profile != "" && p.Profile != q.Profile {

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/values"
@@ -185,6 +186,14 @@ func (st *State) bind(p project.Context, c project.Command, env string, state *v
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	var registry profilekey.Registry
+	if st.profileRoot != "" && len(keys) > 0 {
+		var failure *protocol.Error
+		registry, failure = profilekey.ReadRegistry(st.profileRoot)
+		if failure != nil {
+			return nil, nil, failure
+		}
+	}
 	for _, key := range keys {
 		binding := c.Bind[key]
 		if sec[key] {
@@ -193,7 +202,7 @@ func (st *State) bind(p project.Context, c project.Command, env string, state *v
 		if binding.Template != nil {
 			continue
 		}
-		profile := binding.Profile
+		profile := registry.Resolve(binding.Profile).Storage
 		if profile == "" {
 			profile = p.Profile
 		}
@@ -222,7 +231,7 @@ func (st *State) bind(p project.Context, c project.Command, env string, state *v
 			selected := p
 			if instance.Profile != p.Profile || instance.Directory != p.Root {
 				var e *protocol.Error
-				selected, e = project.Resolve(instance.Directory, "")
+				selected, e = st.resolveProject(instance.Directory)
 				if e != nil {
 					return nil, nil, e
 				}

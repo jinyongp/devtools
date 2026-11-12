@@ -159,7 +159,7 @@ func (a *App) registerCommands() {
 }
 
 func (a *App) listProjectCommands(_ context.Context, _ IO, request Request) (any, *protocol.Error) {
-	p, err := project.Resolve(request.Options["dir"], "")
+	p, err := a.resolveStoredProject(request.Options["dir"], "")
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +182,7 @@ func (a *App) listProjectCommands(_ context.Context, _ IO, request Request) (any
 }
 
 func (a *App) inspectProjectCommand(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
-	p, err := project.Resolve(request.Options["dir"], "")
+	p, err := a.resolveStoredProject(request.Options["dir"], "")
 	if err != nil {
 		return nil, err
 	}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/archivekey"
 	"github.com/jinyongp/devtools/internal/backup"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
 	"github.com/jinyongp/devtools/internal/profiletransfer"
 	"github.com/jinyongp/devtools/internal/project"
@@ -193,6 +194,16 @@ func (a *App) registerProfiles() {
 			Run:    a.diffProfiles,
 		},
 		Command{
+			Name:        "profile rename",
+			Description: "Change the name of a local profile in place.",
+			Arguments: []Argument{
+				{Name: "old", Required: true, Pattern: project.ProfilePattern, Completion: completeProfile},
+				{Name: "new", Required: true, Pattern: project.ProfilePattern},
+			},
+			Output: object(map[string]any{"profile_id": stringSchema(), "previous_profile": stringSchema(), "profile": stringSchema(), "changed": map[string]any{"type": "boolean"}}, "profile_id", "previous_profile", "profile", "changed"),
+			Run:    a.renameProfile,
+		},
+		Command{
 			Name:        "profile transfer prepare",
 			Description: "Prepare a local age ML-KEM-768 + X25519 identity for recipient-based profile transfers.",
 			Output: changedItemOutput(object(map[string]any{
@@ -372,6 +383,14 @@ func (a *App) diffProfiles(ctx context.Context, _ IO, request Request) (any, *pr
 	return catalog.Diff(ctx, request.Args[0], request.Args[1])
 }
 
+func (a *App) renameProfile(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
+	catalog, failure := a.profileCatalog()
+	if failure != nil {
+		return nil, failure
+	}
+	return catalog.Rename(ctx, request.Args[0], request.Args[1])
+}
+
 func profileExportOutputExists(path string) *protocol.Error {
 	return protocol.NewError("output_exists", "Profile export output already exists; choose another --output path.", 3, map[string]any{
 		"field": "output",
@@ -418,19 +437,23 @@ func (a *App) exportProfile(ctx context.Context, streams IO, request Request) (a
 	}
 	profile := request.Options["profile"]
 	if profile == "" {
-		p, err := project.Resolve(request.Options["dir"], "")
+		p, err := a.resolveStoredProject(request.Options["dir"], "")
 		if err != nil {
 			return nil, err
 		}
 		profile = p.Profile
 	}
-	output, outputErr := resolveProfileExportOutput(profile, request.Options["output"])
-	if outputErr != nil {
-		return nil, outputErr
-	}
 	engine, err := a.backupEngine()
 	if err != nil {
 		return nil, err
+	}
+	name, nameErr := profilekey.ResolveName(engine.Data, profile)
+	if nameErr != nil {
+		return nil, nameErr
+	}
+	output, outputErr := resolveProfileExportOutput(name.Name, request.Options["output"])
+	if outputErr != nil {
+		return nil, outputErr
 	}
 
 	var (

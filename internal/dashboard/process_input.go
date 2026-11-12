@@ -12,7 +12,7 @@ import (
 )
 
 func (s *Server) prepareManagedInput(ctx context.Context, r services.Record, n *network.ExecutionSnapshot) (execution.Prepared, *protocol.Error) {
-	return services.PrepareFrozenInput(ctx, r, n, func(command execution.Command) (execution.Dependencies, *protocol.Error) {
+	return services.PrepareFrozenInput(ctx, filepath.Dir(s.data), r, n, func(command execution.Command) (execution.Dependencies, *protocol.Error) {
 		configRoot := ""
 		if len(command.Bind)+len(command.Serve) > 0 {
 			directories, err := paths.Current()

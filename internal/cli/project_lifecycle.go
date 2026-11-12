@@ -227,8 +227,8 @@ func (a *App) registerProjectLifecycle() {
 	)
 }
 
-func resolveLifecycleProject(directory string) (project.Context, *protocol.Error) {
-	p, err := project.Resolve(directory, "")
+func (a *App) resolveLifecycleProject(directory string) (project.Context, *protocol.Error) {
+	p, err := a.resolveStoredProject(directory, "")
 	if err != nil {
 		return project.Context{}, err
 	}
@@ -277,7 +277,7 @@ func (a *App) projectMutation(ctx context.Context, streams IO, request Request, 
 	if out, recovered, e := manager.RecoverRequest(ctx, input, request.Options["dir"], mode); recovered || e != nil {
 		return out, e
 	}
-	p, err := resolveLifecycleProject(request.Options["dir"])
+	p, err := a.resolveLifecycleProject(request.Options["dir"])
 	if err != nil {
 		recorded, readErr := manager.HasRequest(input.RequestID)
 		if readErr != nil {
@@ -306,7 +306,7 @@ func (a *App) projectDown(ctx context.Context, streams IO, request Request) (any
 }
 
 func (a *App) projectStatus(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
-	p, err := resolveLifecycleProject(request.Options["dir"])
+	p, err := a.resolveLifecycleProject(request.Options["dir"])
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +343,7 @@ func (a *App) projectStatus(ctx context.Context, _ IO, request Request) (any, *p
 }
 
 func (a *App) projectLogs(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
-	p, err := resolveLifecycleProject(request.Options["dir"])
+	p, err := a.resolveLifecycleProject(request.Options["dir"])
 	if err != nil {
 		return nil, err
 	}

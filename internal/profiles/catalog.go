@@ -121,7 +121,11 @@ func (c Catalog) WithPresence(ctx context.Context, name string, use func(bool) *
 		return catalogError("storage_error", err)
 	}
 	defer release()
-	names, failure := c.namesHeld(ctx)
+	names, failure := c.storageNamesHeld(ctx)
+	if failure != nil {
+		return failure
+	}
+	selected, failure := profilekey.ResolveName(c.Data, name)
 	if failure != nil {
 		return failure
 	}
@@ -145,12 +149,28 @@ func (c Catalog) WithPresence(ctx context.Context, name string, use func(bool) *
 				return protocol.WithStoragePreparation(protocol.NewError("migration_required", "Storage conversion is required.", 3, nil), "migration_required", true)
 			}
 		}
-		present = present || profile == name
+		present = present || profile == selected.Storage
 	}
 	return use(present)
 }
 
 func (c Catalog) namesHeld(ctx context.Context) ([]string, *protocol.Error) {
+	storage, failure := c.storageNamesHeld(ctx)
+	if failure != nil {
+		return nil, failure
+	}
+	registry, failure := profilekey.ReadRegistry(c.Data)
+	if failure != nil {
+		return nil, failure
+	}
+	for i, name := range storage {
+		storage[i] = registry.Resolve(name).Name
+	}
+	sort.Strings(storage)
+	return storage, nil
+}
+
+func (c Catalog) storageNamesHeld(ctx context.Context) ([]string, *protocol.Error) {
 	seen := map[string]bool{}
 	add := func(items []string) {
 		for _, item := range items {
@@ -179,8 +199,18 @@ func (c Catalog) namesHeld(ctx context.Context) ([]string, *protocol.Error) {
 		return nil, processErr
 	}
 	add(processProfiles)
+	registry, failure := profilekey.ReadRegistry(c.Data)
+	if failure != nil {
+		return nil, failure
+	}
+	for _, profile := range registry.Profiles {
+		seen[profile.Storage] = true
+	}
 	items := make([]string, 0, len(seen))
 	for profile := range seen {
+		if registry.Resolve(profile).Storage != profile {
+			return nil, storageNameConflict(profile)
+		}
 		items = append(items, profile)
 	}
 	sort.Strings(items)

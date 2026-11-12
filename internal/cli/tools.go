@@ -27,7 +27,7 @@ func directoryError(cause error) *protocol.Error {
 }
 
 func (a *App) store(options map[string]string) (values.ModernStore, *protocol.Error) {
-	p, err := project.Resolve(".", options["profile"])
+	p, err := a.resolveStoredProject(".", options["profile"])
 	if err != nil {
 		return values.ModernStore{}, err
 	}

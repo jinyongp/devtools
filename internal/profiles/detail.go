@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
@@ -75,11 +76,23 @@ func (c Catalog) List(ctx context.Context) ([]Summary, *protocol.Error) {
 		return nil, err
 	}
 	defer release()
-	return c.listHeld(ctx)
+	items, failure := c.listHeld(ctx)
+	if failure != nil {
+		return nil, failure
+	}
+	registry, failure := profilekey.ReadRegistry(c.Data)
+	if failure != nil {
+		return nil, failure
+	}
+	for i := range items {
+		items[i].Profile = registry.Resolve(items[i].Profile).Name
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Profile < items[j].Profile })
+	return items, nil
 }
 
 func (c Catalog) listHeld(ctx context.Context) ([]Summary, *protocol.Error) {
-	names, err := c.namesHeld(ctx)
+	names, err := c.storageNamesHeld(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -147,6 +160,11 @@ func (c Catalog) inspectHeld(ctx context.Context, profile string) (Detail, *prot
 	if !project.ValidProfile(profile) {
 		return detail, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, map[string]any{"field": "profile"})
 	}
+	selected, failure := profilekey.ResolveName(c.Data, profile)
+	if failure != nil {
+		return detail, failure
+	}
+	profile = selected.Storage
 	summaries, err := c.listHeld(ctx)
 	if err != nil {
 		return detail, err
@@ -162,6 +180,7 @@ func (c Catalog) inspectHeld(ctx context.Context, profile string) (Detail, *prot
 	if !found {
 		return detail, protocol.NewError("profile_not_found", "The selected profile does not exist in devtools storage.", 3, map[string]any{"profile": profile})
 	}
+	detail.Profile = selected.Name
 	detail.Envs = []string{}
 	detail.Variables = []ValueScope{}
 	detail.Secrets = []ValueScope{}

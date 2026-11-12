@@ -11,6 +11,7 @@ import (
 	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/truststore"
@@ -80,7 +81,7 @@ func (m Manager) TeardownPreview(ctx context.Context, selection TeardownSelectio
 		if selected[network.ListenerName(item.Listener)] && item.Ref().Valid() {
 			refs[item.Ref().Key()] = item.Ref()
 			if item.Directory != "" {
-				p, e := project.Resolve(item.Directory, "")
+				p, e := profilekey.ResolveProject(m.Data, item.Directory, "")
 				if e == nil {
 					source, e := p.NetworkSources()
 					if e == nil {

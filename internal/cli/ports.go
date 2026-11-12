@@ -139,7 +139,7 @@ func (a *App) registerPorts() {
 }
 
 // Resolve the current location only when an explicit instance does not select it.
-func portTarget(r Request) (profile, selector, dir string, e *protocol.Error) {
+func (a *App) portTarget(r Request) (profile, selector, dir string, e *protocol.Error) {
 	profile, selector, dir = r.Options["profile"], r.Options["instance"], r.Options["dir"]
 	if selector != "" && dir != "" {
 		return "", "", "", argumentError("Choose instance or dir.", "instance")
@@ -150,7 +150,7 @@ func portTarget(r Request) (profile, selector, dir string, e *protocol.Error) {
 	if dir == "" {
 		dir = "."
 	}
-	p, e := project.Resolve(dir, "")
+	p, e := a.resolveStoredProject(dir, "")
 	if e != nil {
 		return "", "", "", e
 	}
@@ -214,7 +214,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 		}
 		defer unlock()
 	}
-	profile, selector, dir, e := portTarget(r)
+	profile, selector, dir, e := a.portTarget(r)
 	if (action == "list" || action == "prune") && r.Options["profile"] != "" && r.Options["instance"] == "" && r.Options["dir"] == "" {
 		profile, selector, dir, e = r.Options["profile"], "", "", nil
 	}
@@ -296,7 +296,7 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 			if root == "" {
 				return false, portFailure("instance_not_found")
 			}
-			p, e := project.Resolve(root, "")
+			p, e := a.resolveStoredProject(root, "")
 			if e != nil {
 				return false, e
 			}
@@ -424,7 +424,7 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 	if action == "move" || action == "remove" {
 		r.Options["instance"] = r.Args[0]
 	}
-	profile, selector, dir, e := portTarget(r)
+	profile, selector, dir, e := a.portTarget(r)
 	if action == "list" && r.Options["profile"] != "" && r.Options["instance"] == "" && r.Options["dir"] == "" {
 		profile, selector, dir, e = r.Options["profile"], "", "", nil
 	}
@@ -483,7 +483,7 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 			if e := (services.Store{Data: filepath.Dir(s.Directory)}).Active(ctx, i.ID); e != nil {
 				return false, e
 			}
-			p, e := project.Resolve(destination, "")
+			p, e := a.resolveStoredProject(destination, "")
 			if e != nil {
 				return false, e
 			}

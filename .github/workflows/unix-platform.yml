@@ -222,6 +222,18 @@ jobs:
           python3 -c 'from pathlib import Path; text=Path("native-unix-peer.log").read_text(); assert "--- SKIP" not in text; assert "--- PASS: TestNativeUnixPeersRejectOtherUID " in text; assert "--- PASS: TestNativeUnixPeersRejectOtherUID/runner_transport_rejects_other-user_client " in text'
       - name: Installed guarded mutations, operation recovery, cooperative runner and automatic proxies
         run: python3 -B verify/run.py secret_mutations value_handoff proxy_auto cli_presentation cli_reliability processes project_lifecycle readiness tty cli_guidance discovery completion_context
+      - name: Rename with an installed previous-version service and proxy
+        run: |
+          baseline=feaaf36882ddc214481b29f77d3bfadcefec09b6
+          fixture=$(mktemp -d)
+          trap 'rm -rf "$fixture"' EXIT
+          git fetch --no-tags --depth=1 origin "$baseline"
+          mkdir "$fixture/source"
+          git archive "$baseline" | tar -x -C "$fixture/source"
+          (cd "$fixture/source" && go build -buildvcs=false -ldflags "-X main.version=0.44.0 -X main.commit=$baseline" -o "$fixture/legacy" ./cmd/devtools)
+          candidate=$(git rev-parse HEAD)
+          go build -ldflags "-X main.commit=$candidate" -o "$fixture/candidate" ./cmd/devtools
+          python3 -B scripts/check-profile-live-rename.py --legacy "$fixture/legacy" --legacy-commit "$baseline" --candidate "$fixture/candidate" --candidate-commit "$candidate"
 
   automation-performance:
     name: Protected automation measurements

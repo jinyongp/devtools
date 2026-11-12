@@ -14,6 +14,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/platformfs"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -35,6 +36,7 @@ type Reservation struct {
 }
 type State struct {
 	readIndex    *registryReadIndex
+	profileRoot  string
 	Version      int           `json:"version"`
 	Instances    []Instance    `json:"instances"`
 	Assignments  []Assignment  `json:"assignments"`
@@ -103,9 +105,18 @@ func private(f *os.File) bool {
 	return platformfs.CheckFile(f) == nil
 }
 func (s Store) Read() (*State, *protocol.Error) {
+	var root string
+	if filepath.Base(s.Directory) == "ports" {
+		root = filepath.Dir(s.Directory)
+	}
+	blank := func() *State {
+		st := empty()
+		st.profileRoot = root
+		return st
+	}
 	_, e := os.Lstat(s.Directory)
 	if errors.Is(e, os.ErrNotExist) {
-		return empty(), nil
+		return blank(), nil
 	}
 	if e != nil {
 		return nil, storageError(e)
@@ -115,7 +126,7 @@ func (s Store) Read() (*State, *protocol.Error) {
 	}
 	f, e := platformfs.OpenPrivate(filepath.Join(s.Directory, "registry.json"), os.O_RDONLY, 0)
 	if errors.Is(e, os.ErrNotExist) {
-		return empty(), nil
+		return blank(), nil
 	}
 	if e != nil {
 		return nil, storageError(e)
@@ -138,6 +149,7 @@ func (s Store) Read() (*State, *protocol.Error) {
 		return nil, fail("invalid_storage")
 	}
 	st.readIndex = index
+	st.profileRoot = root
 	return &st, nil
 }
 func (state *State) valid() bool {
@@ -208,6 +220,17 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 	if e != nil || !changed {
 		return e
 	}
+	if st.profileRoot != "" {
+		registry, failure := profilekey.ReadRegistry(st.profileRoot)
+		if failure != nil {
+			return failure
+		}
+		for _, instance := range st.Instances {
+			if registry.Resolve(instance.Profile).Storage != instance.Profile {
+				return protocol.NewError("profile_storage_conflict", "A port instance uses a reserved profile name as its storage address.", 3, map[string]any{"profile": instance.Profile})
+			}
+		}
+	}
 	st.joinAssignments()
 	for id, current := range st.pinnedProjections() {
 		if previous, existed := pinned[id]; existed && previous != current {
@@ -232,6 +255,15 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 		return fail("invalid_storage")
 	}
 	return s.publishRegistry(b)
+}
+
+// LockRegistry serializes discovery and name publication with instance creation.
+func (s Store) LockRegistry(ctx context.Context) (func(), *protocol.Error) {
+	lock, failure := s.lock(ctx, "registry.lock", true, true)
+	if failure != nil {
+		return nil, failure
+	}
+	return func() { _ = lock.Close() }, nil
 }
 
 func (st *State) ByID(id string) *Instance {

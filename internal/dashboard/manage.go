@@ -3,17 +3,18 @@ package dashboard
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
+	"os"
 	"path/filepath"
 	"regexp"
 	"time"
 
-	"crypto/sha256"
-	"errors"
-	"fmt"
 	"github.com/jinyongp/devtools/internal/archivekey"
 	"github.com/jinyongp/devtools/internal/backup"
 	"github.com/jinyongp/devtools/internal/cleanup"
@@ -21,12 +22,12 @@ import (
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/paths"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
-	"os"
 )
 
 type actionRequest struct {
@@ -114,7 +115,7 @@ func (s *Server) preflightProjectCommand(ctx context.Context, p project.Context,
 	return s.checkSelectedProjectCommand(ctx, p, name, envOverride, nil, false)
 }
 func (s *Server) checkSelectedProjectCommand(ctx context.Context, p project.Context, name string, envOverride, bundle *string, validate bool) *protocol.Error {
-	current, err := project.Resolve(p.Root, "")
+	current, err := profilekey.ResolveProject(filepath.Dir(s.data), p.Root, "")
 	if err != nil {
 		return err
 	}
@@ -173,6 +174,14 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	if req.Vault != nil && req.Domain != "vault" || req.Cleanup != nil && req.Domain != "cleanup" || req.Backup != nil && req.Domain != "backup" || req.Network != nil && req.Domain != "network" {
 		s.invalidAction(w)
 		return
+	}
+	if req.Profile != "" {
+		profile, failure := profilekey.ResolveName(filepath.Dir(s.data), req.Profile)
+		if failure != nil {
+			s.apiError(w, failure)
+			return
+		}
+		req.Profile = profile.Storage
 	}
 	var result any
 	var err *protocol.Error
@@ -246,7 +255,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if req.Process.Action == "start" {
-			p, e := project.Resolve(req.Process.Directory, "")
+			p, e := profilekey.ResolveProject(filepath.Dir(s.data), req.Process.Directory, "")
 			if e != nil {
 				s.apiError(w, e)
 				return

@@ -2,19 +2,20 @@ package cli
 
 import (
 	"context"
-	"github.com/jinyongp/devtools/internal/project"
-	"github.com/jinyongp/devtools/internal/protocol"
-	"github.com/jinyongp/devtools/internal/tasks"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/jinyongp/devtools/internal/project"
+	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/tasks"
 )
 
 func (a *App) taskStore(r Request) (tasks.Store, *protocol.Error) {
-	p, e := project.Resolve(".", r.Options["profile"])
+	p, e := a.resolveStoredProject(".", r.Options["profile"])
 	if e != nil {
 		return tasks.Store{}, e
 	}

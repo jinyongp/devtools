@@ -57,7 +57,7 @@ func (a *App) registerExpose() {
 			ref = route.Ref()
 			endpoint, e = st.GlobalEndpoint(*route)
 		} else {
-			p, e = project.Resolve(r.Options["dir"], "")
+			p, e = a.resolveStoredProject(r.Options["dir"], "")
 			if e != nil {
 				return nil, e
 			}

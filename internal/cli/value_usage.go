@@ -54,7 +54,7 @@ func (a *App) registerValueUsage() {
 		return map[string]any{"profile": store.Profile, "env": r.Options["env"], "selection": r.Options["bundle"], "values": observation}, nil
 	}})
 	a.commands = append(a.commands, Command{Name: "values uses", Description: "Separate declared selections from recorded deliveries; this does not observe app reads.", Options: []Option{{Name: "dir", Default: ".", MinLength: 1, Description: "Project directory."}}, Output: object(map[string]any{"profile": stringSchema(), "items": arraySchema(valueUseSchema())}, "profile", "items"), Run: func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
-		p, e := project.Resolve(r.Options["dir"], "")
+		p, e := a.resolveStoredProject(r.Options["dir"], "")
 		if e != nil {
 			return nil, e
 		}

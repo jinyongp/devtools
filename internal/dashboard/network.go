@@ -8,6 +8,7 @@ import (
 	"github.com/jinyongp/devtools/internal/expose"
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/proxy"
@@ -78,7 +79,7 @@ func (s *Server) networkView(ctx context.Context, profile string) (any, *protoco
 				}
 			}
 		} else if route.Proxy != nil {
-			p, failure := project.Resolve(route.Directory, "")
+			p, failure := profilekey.ResolveProject(filepath.Dir(s.data), route.Directory, "")
 			if failure != nil {
 				err = failure
 			} else if instance := st.Find(route.Profile, "id:"+route.InstanceID, ""); instance != nil {

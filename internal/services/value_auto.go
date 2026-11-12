@@ -10,7 +10,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/process"
-	"github.com/jinyongp/devtools/internal/project"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"github.com/jinyongp/devtools/internal/values"
 	"github.com/jinyongp/devtools/internal/vault"
@@ -98,7 +98,7 @@ func (s Store) considerValueRestart(ctx context.Context, r Record, observation v
 	if _, e := s.readValueApply(r.ID); !errors.Is(e, os.ErrNotExist) {
 		return
 	}
-	p, e := project.Resolve(r.Directory, "")
+	p, e := profilekey.ResolveProject(s.Data, r.Directory, "")
 	if e != nil || p.Root != r.Directory || p.Profile != r.Profile || p.Commands[r.Command].ValuesUpdate != "restart" {
 		return
 	}

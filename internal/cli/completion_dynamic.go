@@ -471,7 +471,7 @@ func (a *App) completionNames(source string, query completionQuery) []string {
 	}
 	if source == "instance" {
 		// A move's --dir is its destination, not the profile owning its source.
-		p, e := project.Resolve(".", selected["profile"])
+		p, e := a.resolveStoredProject(".", selected["profile"])
 		if e != nil {
 			return nil
 		}
@@ -498,7 +498,7 @@ func (a *App) completionNames(source string, query completionQuery) []string {
 		return a.portCompletionNames(selected, source == "port-declaration")
 	}
 	if source == "command" || source == "route" || source == "tool" || source == "preset" {
-		p, e := project.Resolve(dir, "")
+		p, e := a.resolveStoredProject(dir, "")
 		if e != nil {
 			return nil
 		}
@@ -568,12 +568,12 @@ func (a *App) completionNames(source string, query completionQuery) []string {
 			stored, _ := catalog.CompletionNames(query.Context)
 			names = append(names, stored...)
 		}
-		if p, e := project.Resolve(dir, ""); e == nil {
+		if p, e := a.resolveStoredProject(dir, ""); e == nil {
 			names = append(names, p.Profile)
 		}
 		return names
 	}
-	p, e := project.Resolve(dir, selected["profile"])
+	p, e := a.resolveStoredProject(dir, selected["profile"])
 	if query.Command.Name == "process restart" && (source == "env" || source == "selection") {
 		if len(query.Arguments) == 0 {
 			return nil
@@ -635,7 +635,7 @@ func completionRouteAllowed(command string, state *ports.State, ref network.Rout
 }
 
 func (a *App) portCompletionNames(selected map[string]string, declared bool) []string {
-	profile, selector, dir, e := portTarget(Request{Options: selected})
+	profile, selector, dir, e := a.portTarget(Request{Options: selected})
 	if e != nil {
 		return nil
 	}
@@ -665,7 +665,7 @@ func (a *App) portCompletionNames(selected map[string]string, declared bool) []s
 	// Allocation needs declarations from this exact execution directory. Reading
 	// or releasing an existing assignment does not require its config to survive.
 	if declared {
-		if p, e := project.Resolve(dir, ""); e == nil && p.Profile == profile && p.Root == dir {
+		if p, e := a.resolveStoredProject(dir, ""); e == nil && p.Profile == profile && p.Root == dir {
 			for name := range p.Ports {
 				names = append(names, name)
 			}

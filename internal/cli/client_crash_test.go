@@ -19,7 +19,7 @@ import (
 func n05PreparedService(data string) services.Store {
 	s := services.Store{Data: data}
 	s.PrepareInput = func(ctx context.Context, r services.Record, n *network.ExecutionSnapshot) (execution.Prepared, *protocol.Error) {
-		return services.PrepareFrozenInput(ctx, r, n, func(command execution.Command) (execution.Dependencies, *protocol.Error) {
+		return services.PrepareFrozenInput(ctx, data, r, n, func(command execution.Command) (execution.Dependencies, *protocol.Error) {
 			return execution.DependenciesFor(command, data, "")
 		})
 	}

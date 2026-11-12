@@ -9,7 +9,6 @@ import (
 	"github.com/jinyongp/devtools/internal/execution"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/process"
-	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/redact"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -18,7 +17,7 @@ import (
 func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
 	var command execution.Command
 	if len(request.Args) == 1 {
-		p, err := project.Resolve(".", "")
+		p, err := a.resolveStoredProject(".", "")
 		if err != nil {
 			return nil, err
 		}
@@ -37,7 +36,7 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 		if len(request.Child) == 0 {
 			return nil, argumentError("Supply a configured command name or an executable after --.", "command")
 		}
-		p, err := project.Resolve(".", request.Options["profile"])
+		p, err := a.resolveStoredProject(".", request.Options["profile"])
 		if err != nil {
 			return nil, err
 		}

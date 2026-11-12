@@ -520,6 +520,9 @@ var reviewedExamples = map[string][]helpExample{
 	"profile diff": {
 		{Purpose: "Compare different profiles", Command: "devtools profile diff my-app staging-app"},
 	},
+	"profile rename": {
+		{Purpose: "Rename a local profile", Command: "devtools profile rename my-app renamed-app"},
+	},
 	"profile transfer prepare": {
 		{Purpose: "Prepare recipient on destination device", Command: "devtools profile transfer prepare"},
 	},

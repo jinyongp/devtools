@@ -161,16 +161,15 @@ type recoveryOptions struct {
 }
 
 type restoreRequest struct {
-	Snapshot             Snapshot
-	Cipher               []byte
-	Source               string
-	Target               string
-	Expected             string
-	RequestID            string
-	OperationFingerprint string
-	Replace              bool
-	Import               *importContext
-	Recovery             *recoveryOptions
+	Snapshot  Snapshot
+	Cipher    []byte
+	Source    string
+	Target    string
+	Expected  string
+	RequestID string
+	Replace   bool
+	Import    *importContext
+	Recovery  *recoveryOptions
 }
 type Target struct {
 	Source  string `json:"source"`
@@ -823,7 +822,6 @@ func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult
 	if canonicalErr != nil {
 		return result, failure("invalid_backup")
 	}
-	operationFingerprint := restoreFingerprint(restoreFingerprintInput{Cipher: cipher, Source: source.Profile, Target: target, Expected: request.Expected, Replace: request.Replace})
 	var recovery *recoveryOptions
 	if request.RecoveryDirectory != "" {
 		if !filepath.IsAbs(request.RecoveryDirectory) {
@@ -831,7 +829,7 @@ func (e Engine) Import(ctx context.Context, request ImportRequest) (ImportResult
 		}
 		recovery = &recoveryOptions{Directory: request.RecoveryDirectory, Recipient: identityRecipient, Passphrase: request.Passphrase, Prefix: "before-import-"}
 	}
-	plan, restoreErr := e.restore(ctx, restoreRequest{Snapshot: snapshot, Cipher: cipher, Source: source.Profile, Target: target, Expected: request.Expected, RequestID: request.RequestID, OperationFingerprint: operationFingerprint, Replace: request.Replace, Import: &importContext{Source: source, Canonical: sourceCanonical}, Recovery: recovery})
+	plan, restoreErr := e.restore(ctx, restoreRequest{Snapshot: snapshot, Cipher: cipher, Source: source.Profile, Target: target, Expected: request.Expected, RequestID: request.RequestID, Replace: request.Replace, Import: &importContext{Source: source, Canonical: sourceCanonical}, Recovery: recovery})
 	if restoreErr != nil {
 		return result, restoreErr
 	}
@@ -922,6 +920,11 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		return plan, failure("storage_error", err)
 	}
 	defer release()
+	profile, profileErr := profilekey.ResolveName(e.Data, target)
+	if profileErr != nil {
+		return plan, profileErr
+	}
+	target = profile.Storage
 	// A restore without a root key cannot publish profiles inside a protected
 	// root, including a previously absent target. The keyed
 	// logical restore adapter will own this path once configured.
@@ -936,6 +939,10 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 		return plan, failure("storage_error", err)
 	}
 	fingerprint := restoreFingerprint(restoreFingerprintInput{Cipher: cipher, Source: source, Target: target, Expected: expected, Replace: replace})
+	operationFingerprint := ""
+	if request.Import != nil {
+		operationFingerprint = fingerprint
+	}
 	receiptPath := "backup-receipts/" + requestID + ".json"
 	if expected != "" {
 		if !restoreRequestIDPattern.MatchString(requestID) {
@@ -953,8 +960,8 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 			if json.Unmarshal(b, &previous) != nil {
 				return plan, failure("storage_error")
 			}
-			if request.OperationFingerprint != "" {
-				if previous.OperationFingerprint != request.OperationFingerprint {
+			if operationFingerprint != "" {
+				if previous.OperationFingerprint != operationFingerprint {
 					return plan, failure("request_conflict")
 				}
 			} else if previous.OperationFingerprint != "" || previous.Fingerprint != fingerprint {
@@ -1103,7 +1110,7 @@ func (e Engine) restore(ctx context.Context, request restoreRequest) (Plan, *pro
 	}
 	appliedPlan := plan
 	appliedPlan.Applied = true
-	receipt, err := json.Marshal(restoreReceipt{Fingerprint: fingerprint, OperationFingerprint: request.OperationFingerprint, Plan: appliedPlan, Import: plan.importData})
+	receipt, err := json.Marshal(restoreReceipt{Fingerprint: fingerprint, OperationFingerprint: operationFingerprint, Plan: appliedPlan, Import: plan.importData})
 	if err != nil {
 		return plan, failure("storage_error", err)
 	}

@@ -2,6 +2,7 @@ package ports
 
 import (
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -105,9 +106,16 @@ func (st *State) GlobalEndpoint(route network.GlobalRoute) (RouteEndpoint, *prot
 	}
 	return endpoint, nil
 }
+func (st *State) resolveProject(directory string) (project.Context, *protocol.Error) {
+	if st.profileRoot == "" {
+		return project.Resolve(directory, "")
+	}
+	return profilekey.ResolveProject(st.profileRoot, directory, "")
+}
+
 func (st *State) EndpointConflict(selected RouteEndpoint) bool {
 	for _, instance := range st.Instances {
-		p, e := project.Resolve(instance.Directory, "")
+		p, e := st.resolveProject(instance.Directory)
 		if e != nil || p.Root != instance.Directory || p.Profile != instance.Profile {
 			continue
 		}

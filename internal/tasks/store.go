@@ -237,6 +237,9 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 			releaseGate()
 		}
 	}()
+	if failure := profilekey.CheckStorageAddress(ctx, maintenance.Root(s.Directory), s.Profile); failure != nil {
+		return nil, failure
+	}
 	def := Find(r.Action)
 	if def == nil {
 		return nil, failure("invalid_argument", "Unknown task action.")

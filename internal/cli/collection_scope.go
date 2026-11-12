@@ -5,7 +5,6 @@ import (
 
 	"github.com/jinyongp/devtools/internal/collectionquery"
 	"github.com/jinyongp/devtools/internal/location"
-	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -51,7 +50,7 @@ func (a *App) resolveCollectionScope(_ context.Context, c Command, r Request) (c
 		if err != nil {
 			return s, argumentError("Cannot resolve the selected directory.", "dir")
 		}
-		p, e := project.Resolve(directory, "")
+		p, e := a.resolveStoredProject(directory, "")
 		if e == nil {
 			if s.Profile != "" && s.Profile != p.Profile {
 				return s, argumentError("The selected directory belongs to another profile.", "profile")

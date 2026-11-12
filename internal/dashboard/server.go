@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/jinyongp/devtools/internal/process"
 	"io"
 	"net/http"
 	"os"
@@ -24,8 +23,9 @@ import (
 
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/ports"
+	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	profilecatalog "github.com/jinyongp/devtools/internal/profiles"
-	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/retention"
 	"github.com/jinyongp/devtools/internal/services"
@@ -386,6 +386,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			reply(status)
 			return
 		}
+		if query := r.URL.Query(); query.Get("profile") != "" {
+			profile, failure := profilekey.ResolveName(filepath.Dir(s.data), query.Get("profile"))
+			if failure != nil {
+				s.apiError(w, failure)
+				return
+			}
+			if profile.Storage != query.Get("profile") {
+				r = r.Clone(r.Context())
+				query.Set("profile", profile.Storage)
+				r.URL.RawQuery = query.Encode()
+			}
+		}
 		if r.URL.Path == "/api/values" {
 			result, e := s.valueStore(r.URL.Query().Get("profile")).Inspect(r.Context(), r.URL.Query().Get("env"))
 			if e != nil {
@@ -460,7 +472,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				s.invalidAction(w)
 				return
 			}
-			p, e := project.Resolve(i.Directory, "")
+			p, e := profilekey.ResolveProject(filepath.Dir(s.data), i.Directory, "")
 			if e != nil {
 				s.apiError(w, e)
 				return

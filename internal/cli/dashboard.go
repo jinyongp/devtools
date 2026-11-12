@@ -2,10 +2,10 @@ package cli
 
 import (
 	"context"
-	"github.com/jinyongp/devtools/internal/dashboard"
-	"github.com/jinyongp/devtools/internal/project"
-	"github.com/jinyongp/devtools/internal/protocol"
 	"path/filepath"
+
+	"github.com/jinyongp/devtools/internal/dashboard"
+	"github.com/jinyongp/devtools/internal/protocol"
 )
 
 func (a *App) registerDashboard() {
@@ -38,7 +38,7 @@ func (a *App) registerDashboard() {
 			}
 			profile := r.Options["profile"]
 			if action == "start" {
-				p, err := project.Resolve(".", profile)
+				p, err := a.resolveStoredProject(".", profile)
 				if err == nil {
 					profile = p.Profile
 				} else if profile != "" || err.Code != "project_not_found" {

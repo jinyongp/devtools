@@ -238,7 +238,7 @@ func New(version, commit string) *App {
 
 func (a *App) inspect(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
 	options := request.Options
-	p, err := project.Resolve(options["dir"], options["profile"])
+	p, err := a.resolveStoredProject(options["dir"], options["profile"])
 	if err != nil {
 		return nil, err
 	}
@@ -453,6 +453,9 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		}
 	}
 	request.OutputFormat, request.Agent = output.decision.Format, len(environment.Signals) > 0
+	if failure := a.resolveProfileOption(selected.Name, request); failure != nil {
+		return fail(failure)
+	}
 	runContext, finishProgress := output.progressContext(ctx, selected.OutputMode)
 	defer finishProgress()
 	data, err := selected.Run(runContext, streams, request)
@@ -483,6 +486,9 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		return fail(err)
 	}
 	output.handlerReturned = true
+	if selected.OutputMode == OutputJSON {
+		data = a.displayProfileNames(selected.Name, data)
+	}
 	if operationID != "" {
 		result := publicResultObject(data)
 		if result == nil {

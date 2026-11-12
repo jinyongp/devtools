@@ -296,6 +296,9 @@ func (s ModernStore) Update(ctx context.Context, change func(*Editor) (bool, *pr
 		return false, VaultError(ctx, err)
 	}
 	defer release()
+	if failure := profilekey.CheckStorageAddress(ctx, s.root(), s.Profile); failure != nil {
+		return false, failure
+	}
 	_, currentKey, currentExists, err := s.readHeld(ctx, master, vaultID)
 	if err != nil {
 		return false, VaultError(ctx, err)

@@ -42,6 +42,24 @@ managed process만 남아 있는 profile도 목록에 포함됩니다.
 변경으로 표시하지 않습니다. 특히 secret 값의 동일 여부나 해시를 제공하지 않으므로,
 `different: false`는 저장된 값까지 같다는 보증이 아닙니다.
 
+## 같은 기기에서 이름 변경
+
+```sh
+devtools profile rename myapp myapp-new
+```
+
+한 번 실행하면 `profile list`에 `myapp-new`가 표시됩니다. 기존 이름 `myapp`과
+새 이름 `myapp-new`로 같은 변수·secret·task와 실행 기록을 조회할 수 있습니다.
+이전 이름은 같은 profile에 예약되므로 별도 profile에 재사용할 수 없습니다.
+
+이미 실행 중인 서비스와 프록시는 계속 동작하며 `devtools.toml`도 그대로 유지됩니다.
+구버전이 같은 데이터를 사용 중이면 해당 버전에는 기존 이름을 계속 지정하세요.
+구버전 프록시를 사용하는 프로젝트의 `devtools.toml`에도 기존 이름을 유지하세요.
+
+대상 이름이 다른 profile에 이미 연결되어 있으면 `profile_exists`가 반환됩니다.
+구버전에서 새 이름으로 별도 데이터를 만든 경우, 목록과 이름 변경에서
+`profile_storage_conflict`로 충돌을 알립니다.
+
 ## 다른 기기로 내보내기
 
 기본 profile 이동은 **원본 기기에서 먼저** 시작합니다. 대상 기기를 미리 준비할 필요가
@@ -70,6 +88,8 @@ cat /secure/transfer-passphrase.txt | devtools profile export --passphrase-stdin
 `--output`을 생략하면 현재 디렉터리에 `./<profile>.age`를 만듭니다. 기존 디렉터리를
 지정하면 그 아래 `<profile>.age`를 자동으로 사용합니다. 최종 출력 파일이 이미 있으면
 snapshot을 만들기 전에 즉시 `output_exists`로 실패하고 기존 파일은 덮어쓰지 않습니다.
+이름을 변경한 profile의 기본 파일명에는 현재 이름을 쓰며, archive 안의 profile은
+기존 데이터와 호환되는 저장 이름으로 표시됩니다. 가져올 때 `--as`로 대상 이름을 정할 수 있습니다.
 
 생성된 `.age` 파일 하나만 대상 기기로 복사합니다. archive에는 변수·secret·env와
 task/workstream/validation 데이터가 들어갑니다. `devtools.toml`, port 할당, instance 연결,

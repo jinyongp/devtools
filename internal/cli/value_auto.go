@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/network"
-	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/vault"
@@ -49,7 +48,7 @@ func ServeValueRestart(ctx context.Context, data, body string) error {
 		store.PrepareInput = app.prepareManagedInput
 		store.IsolatedRoot = original.IsolatedRoot
 		if original.ProxyMode {
-			p, e := project.Resolve(original.Directory, "")
+			p, e := app.resolveStoredProject(original.Directory, "")
 			if e != nil {
 				return finish("", e.Code)
 			}

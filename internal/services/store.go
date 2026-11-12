@@ -26,6 +26,7 @@ import (
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/process"
+	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -849,7 +850,7 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 					break
 				}
 			}
-			p, e := project.Resolve(r.Directory, "")
+			p, e := profilekey.ResolveProject(s.Data, r.Directory, "")
 			if e != nil || p.Profile != r.Profile || p.Root != r.Directory || p.Commands[r.Command].ValuesUpdate != "restart" {
 				err = failure("values_update_disabled")
 				break
@@ -1038,7 +1039,7 @@ func (s Store) start(ctx context.Context, q Request, previous string) (result Re
 	} else if e.Code != "process_not_found" {
 		return out, e
 	}
-	p, e := project.Resolve(q.Directory, "")
+	p, e := profilekey.ResolveProject(s.Data, q.Directory, "")
 	if e != nil {
 		return out, e
 	}

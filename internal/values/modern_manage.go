@@ -392,6 +392,9 @@ func (s ModernStore) Apply(ctx context.Context, c Change) (outResult ChangeResul
 		return out, VaultError(ctx, err)
 	}
 	defer release()
+	if failure := profilekey.CheckStorageAddress(ctx, s.root(), s.Profile); failure != nil {
+		return out, failure
+	}
 	current, currentKey, currentExists, err = s.readHeld(ctx, master, vaultID)
 	if err != nil {
 		return out, VaultError(ctx, err)

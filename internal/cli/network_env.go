@@ -18,7 +18,7 @@ func (a *App) registerNetworkEnv() {
 	c := Command{Name: "command env", Aliases: []string{"cmd env"}, Description: "Read only public network bindings; returns pending diagnostics and excludes profile variables, secrets, and parent environment.", Arguments: []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern}}, Options: []Option{{Name: "dir", Default: ".", Description: "Project directory."}}, Output: publicEnvSchema()}
 	c.Arguments[0].Completion = completeCommand
 	c.Run = func(_ context.Context, _ IO, r Request) (any, *protocol.Error) {
-		p, e := project.Resolve(r.Options["dir"], "")
+		p, e := a.resolveStoredProject(r.Options["dir"], "")
 		if e != nil {
 			return nil, e
 		}
@@ -79,7 +79,7 @@ func (a *App) registerNetworkEnv() {
 				return nil, envErr
 			}
 		} else {
-			p, err := project.Resolve(r.Options["dir"], "")
+			p, err := a.resolveStoredProject(r.Options["dir"], "")
 			if err != nil {
 				return nil, err
 			}

@@ -83,10 +83,10 @@ func (a *App) diagnose(parent context.Context, _ IO, r Request) (any, *protocol.
 	}
 	report.Directory = dir
 	report.Checks = append(report.Checks, doctor.NewCheck("directory", "pass", "accessible", "The selected project directory is accessible."))
-	p, resolveErr := project.Resolve(dir, "")
+	p, resolveErr := a.resolveStoredProject(dir, "")
 	if resolveErr != nil {
 		if resolveErr.Code == "project_not_found" && r.Options["profile"] != "" && len(r.Args) == 0 {
-			p, resolveErr = project.Resolve(dir, r.Options["profile"])
+			p, resolveErr = a.resolveStoredProject(dir, r.Options["profile"])
 			p.Root = dir
 			report.Scope = "profile"
 		} else {

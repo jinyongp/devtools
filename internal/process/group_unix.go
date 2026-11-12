@@ -5,34 +5,46 @@ package process
 import (
 	"context"
 	"errors"
+	"runtime"
 	"syscall"
 	"time"
 )
 
 const stopGrace = 3 * time.Second
+const ownedGroupPoll = 10 * time.Millisecond
 
 func signalOwnedGroup(group int, signal syscall.Signal) error {
-	err := syscall.Kill(-group, signal)
-	if err == nil || errors.Is(err, syscall.ESRCH) {
-		return nil
-	}
-	// Darwin's killpg skips zombies and can return EPERM for an existing
-	// group with no live members. Only a fresh empty observation permits
-	// completion; a denied signal to a live or unobservable group still fails.
-	if errors.Is(err, syscall.EPERM) {
-		alive, inspectErr := ownedGroupAlive(group)
-		if inspectErr == nil && !alive {
+	deadline := time.Now().Add(stopGrace)
+	for {
+		err := syscall.Kill(-group, signal)
+		if err == nil || errors.Is(err, syscall.ESRCH) {
 			return nil
 		}
+		if !errors.Is(err, syscall.EPERM) {
+			return err
+		}
+		// Darwin can stop accepting group signals before the exiting member
+		// appears as a zombie. Reconcile that gap while the leader still owns
+		// the group ID. A persistent denial or failed inspection remains an error.
+		alive, inspectErr := ownedGroupAlive(group)
+		if inspectErr != nil {
+			return err
+		}
+		if !alive {
+			return nil
+		}
+		if runtime.GOOS != "darwin" || !time.Now().Before(deadline) {
+			return err
+		}
+		time.Sleep(ownedGroupPoll)
 	}
-	return err
 }
 
 // The direct child is deliberately not waited/reaped here: its PID reserves the
 // process-group identity through the final signal. Stream draining happens only
 // after cleanup, so an inherited pipe cannot hide an early parent exit.
 func waitOwnedGroup(ctx context.Context, pid int, tty *ttySession) error {
-	ticker := time.NewTicker(10 * time.Millisecond)
+	ticker := time.NewTicker(ownedGroupPoll)
 	defer ticker.Stop()
 	var deadline time.Time
 	forced := false

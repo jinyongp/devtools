@@ -33,8 +33,11 @@ func TestStartedChildOutputFailureHasPartialEffects(t *testing.T) {
 	}
 	defer prepared.Release()
 	_, failure := prepared.Execute(context.Background(), parent, nil, nil, failedSnapshotOutput{}, io.Discard)
-	if failure == nil || protocol.Public(failure, "command run").Details["effects"] != "partial" {
-		t.Fatal("a spawned child was reported as no change", failure)
+	if failure == nil {
+		t.Fatal("expected a protected output failure")
+	}
+	if effects := protocol.Public(failure, "command run").Details["effects"]; failure.Code != "output_protection_failed" || effects != "partial" {
+		t.Fatalf("expected output_protection_failed with partial effects, got %s with %v", failure.Code, effects)
 	}
 }
 

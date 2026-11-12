@@ -135,6 +135,16 @@ PORT = {{port = "web"}}
         assert fetch(frontend) == before
         records = call(candidate, "profile", "inspect", "new")["item"]["processes"]
         assert any(row["execution_id"] == execution and row["state"] == "running" for row in records)
+        # A newer client can also select the same execution from a project
+        # configured with the new name. Restore the previous proxy's input
+        # immediately so its route continues to use the original address.
+        try:
+            config_file.write_text(config.replace('profile = "old"', 'profile = "new"', 1), encoding="utf-8")
+            existing = call(candidate, "process", "start", "web", "--proxy")
+            assert not existing["changed"] and existing["item"]["id"] == execution
+        finally:
+            config_file.write_text(config, encoding="utf-8")
+        assert fetch(frontend) == before
         call(legacy, "process", "stop", execution)
         assert call(candidate, "process", "status", execution)["item"]["state"] == "stopped"
         execution = None

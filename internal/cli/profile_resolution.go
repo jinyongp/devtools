@@ -10,17 +10,26 @@ import (
 )
 
 func (a *App) resolveStoredProject(directory, explicit string) (project.Context, *protocol.Error) {
+	p, failure := project.Resolve(directory, explicit)
+	if failure != nil {
+		return project.Context{}, failure
+	}
 	profiles, failure := a.dataDirectory()
 	if failure != nil {
 		return project.Context{}, failure
 	}
-	return profilekey.ResolveProject(filepath.Dir(profiles), directory, explicit)
+	profile, failure := profilekey.ResolveName(filepath.Dir(profiles), p.Profile)
+	if failure != nil {
+		return project.Context{}, failure
+	}
+	p.Profile = profile.Storage
+	return p, nil
 }
 
 func (a *App) resolveProfileOption(command string, r Request) *protocol.Error {
 	name := r.Options["profile"]
-	// These selectors are names in an archive or literal configuration inputs.
-	if name == "" || command == "profile import" || command == "backup restore" || command == "init" || strings.HasPrefix(command, "config ") {
+	// Task handlers validate query input before resolving their own store.
+	if name == "" || strings.HasPrefix(command, "task ") || command == "profile import" || command == "backup restore" || command == "init" || strings.HasPrefix(command, "config ") {
 		return nil
 	}
 	profiles, failure := a.dataDirectory()

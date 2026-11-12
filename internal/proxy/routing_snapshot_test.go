@@ -120,8 +120,24 @@ func TestRoutingLookupRefreshesProfileNames(t *testing.T) {
 	if failure := registry.Publish(root); failure != nil {
 		t.Fatal(failure)
 	}
+	interrupted, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if _, failure := resolver.lookupRoute(cancelOnScan{interrupted, cancel}, "", "route.localhost"); failure == nil || failure.Code != "canceled" {
+		t.Fatal("canceled route lookup did not stop before publishing a snapshot", failure)
+	}
 	after, failure := resolver.lookupRoute(ctx, "", "route.localhost")
 	if failure != nil || after.matches != 1 || after.item.InstanceID != instance.ID || after.item.Profile != "app" {
 		t.Fatal("profile name publication did not refresh routing to the original instance", after, failure)
 	}
+}
+
+// Cancel at the first per-instance check, after the resolver reads its registries.
+type cancelOnScan struct {
+	context.Context
+	cancel context.CancelFunc
+}
+
+func (c cancelOnScan) Err() error {
+	c.cancel()
+	return c.Context.Err()
 }

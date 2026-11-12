@@ -267,7 +267,7 @@ func (r Resolver) List(ctx context.Context, profile string) ([]Item, *protocol.E
 	return r.list(ctx, profile, nil)
 }
 
-func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnapshot) ([]Item, *protocol.Error) {
+func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnapshot) (_ []Item, failure *protocol.Error) {
 	if profile != "" && !project.ValidProfile(profile) {
 		return nil, protocol.NewError("invalid_argument", "Invalid profile identifier.", 2, map[string]any{"field": "profile"})
 	}
@@ -278,7 +278,15 @@ func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnaps
 			return nil, protocol.NewError("canceled", "Request canceled.", 130, nil)
 		case r.cache.listGate <- struct{}{}:
 		}
-		defer func() { <-r.cache.listGate }()
+		defer func() {
+			if failure != nil {
+				// Input caches may have advanced before the aggregate was built.
+				r.cache.mu.Lock()
+				r.cache.itemsOK = false
+				r.cache.mu.Unlock()
+			}
+			<-r.cache.listGate
+		}()
 	}
 	state, registryChanged, err := r.readPorts()
 	if err != nil {

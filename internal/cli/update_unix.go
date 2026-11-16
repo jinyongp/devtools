@@ -3,7 +3,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"github.com/jinyongp/devtools/internal/installstorage"
@@ -74,20 +73,4 @@ func updatePlatform(ctx context.Context, executable string, options map[string]s
 		return nil, protocol.NewError("update_failed", "Cannot confirm update result. Run devtools version to check the installed version.", 1, map[string]any{"reason": "result_unconfirmed", "effects": "unknown", "retry": "inspect_first", "facts": map[string]any{"stage": "verify_result"}})
 	}
 	return finishExecutableUpdate(map[string]any{"action": response.Data.Action, "version": response.Data.Version, "alias": response.Data.Alias, "changed": response.Data.Changed, "binary_changed": response.Data.BinaryChanged, "storage": response.Data.Storage}, response.Data.Storage, response.Data.BinaryChanged)
-}
-
-type updateOutput struct {
-	bytes.Buffer
-	truncated bool
-}
-
-func (b *updateOutput) Write(p []byte) (int, error) {
-	n := len(p)
-	remaining := (64 << 10) - b.Len()
-	if len(p) > remaining {
-		p = p[:remaining]
-		b.truncated = true
-	}
-	_, _ = b.Buffer.Write(p)
-	return n, nil
 }

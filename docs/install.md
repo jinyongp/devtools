@@ -70,13 +70,14 @@ devtools version
 For Homebrew:
 
 ```sh
-brew upgrade jinyongp/tap/devtools
-devtools update --resume
+devtools update
 ```
 
-Homebrew manages its own files. Complete the user environment upgrade with
-`devtools update --resume` after Homebrew installs the new executable. The script
-installer runs this step as part of an update. The environment upgrade replaces a
+Devtools asks Homebrew to update its formula and then runs the environment upgrade
+with the newly installed executable. To move from a release that delegates updates
+to Homebrew, run `brew upgrade jinyongp/tap/devtools` followed by
+`devtools update --resume`. Use that resume command after a direct Homebrew update
+as well. The script installer runs the environment upgrade as part of an update. It replaces the
 running previous proxy daemon, restores its listeners, and reconciles incomplete
 share starts. If a share needs authentication again, the result identifies it.
 Restart managed processes and the dashboard to use the updated executable.

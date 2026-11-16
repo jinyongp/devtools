@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -11,6 +12,22 @@ import (
 
 // Set by package-manager builds to preserve ownership of installed files.
 var updateManager string
+
+type updateOutput struct {
+	bytes.Buffer
+	truncated bool
+}
+
+func (b *updateOutput) Write(p []byte) (int, error) {
+	n := len(p)
+	remaining := (64 << 10) - b.Len()
+	if len(p) > remaining {
+		p = p[:remaining]
+		b.truncated = true
+	}
+	_, _ = b.Buffer.Write(p)
+	return n, nil
+}
 
 func (a *App) registerUpdate(version string) {
 	a.commands = append(a.commands, Command{
@@ -63,6 +80,9 @@ func (a *App) registerUpdate(version string) {
 
 func updateExecutable(ctx context.Context, executable string, options map[string]string, streams ...IO) (any, *protocol.Error) {
 	if updateManager == "homebrew" {
+		if options["version"] == "" && options["source"] == "" {
+			return updateHomebrew(ctx, executable)
+		}
 		return nil, protocol.NewError("package_managed", "Update this Homebrew installation with brew upgrade jinyongp/tap/devtools, then run devtools update --resume.", 3, map[string]any{"manager": "homebrew", "command": "brew upgrade jinyongp/tap/devtools", "remedies": []protocol.Remedy{{Argv: []string{"brew", "upgrade", "jinyongp/tap/devtools"}, RequiredInputs: []string{}, Message: "Update with the package manager that owns this installation.", Effect: "system_write"}, {Argv: []string{"devtools", "update", "--resume"}, RequiredInputs: []string{}, Message: "Complete the environment upgrade with the installed executable.", Effect: "value_write"}}})
 	}
 	defer progress.Begin(ctx, "Updating the executable and preparing storage")()

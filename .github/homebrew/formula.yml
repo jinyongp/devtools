@@ -27,4 +27,5 @@ test: |
   system bin/"devtools", "init", "--profile", "homebrew-test"
   system bin/"devtools", "var", "set", "LEVEL", "--value", "debug"
   assert_match "debug", shell_output("#{bin}/devtools var get LEVEL")
-  assert_match "package_managed", shell_output("#{bin}/devtools update 2>&1", 3)
+  assert_match "package_managed", shell_output("#{bin}/devtools update --version 0.0.1 2>&1", 3)
+  assert_match version.to_s, shell_output("#{bin}/devtools update --resume")

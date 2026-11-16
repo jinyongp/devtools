@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -33,6 +34,96 @@ func RuntimeBuild(version, commit string) string {
 
 func (m Manager) UpgradeRequestID() string {
 	return upgradeOperationID("devtools/proxy-upgrade/" + m.Build)
+}
+
+type proxyUpgradeInput struct {
+	Action string
+	Build  string
+}
+
+const previousHomebrewBuild = "0.46.0/unknown"
+const previousArchiveBuild = "0.46.0/516ba782d68179cbdd348020cb3cc7d1af319ac6"
+
+type proxyUpgradeCheckpoint struct {
+	Build    string `json:"build"`
+	Request  string `json:"request_id"`
+	Complete bool   `json:"complete,omitempty"`
+}
+
+func (m Manager) upgradeCheckpoint() (proxyUpgradeCheckpoint, *protocol.Error) {
+	var checkpoint proxyUpgradeCheckpoint
+	err := tasks.ReadPrivate(m.path("upgrade.json"), &checkpoint)
+	if errors.Is(err, os.ErrNotExist) {
+		return checkpoint, nil
+	}
+	if err != nil || checkpoint.Build == "" || !protocol.ValidUUID(checkpoint.Request) {
+		return proxyUpgradeCheckpoint{}, proxyStorageError()
+	}
+	return checkpoint, nil
+}
+
+// Detect the upgrade before ordinary preparation takes project/network locks.
+func (m Manager) NeedsUpgrade(ctx context.Context) (bool, *protocol.Error) {
+	if m.Build == "" {
+		return false, nil
+	}
+	checkpoint, e := m.upgradeCheckpoint()
+	if e != nil || checkpoint.Request != "" && !checkpoint.Complete {
+		return e == nil, e
+	}
+	if m.RequireCurrentDaemon(ctx) != nil {
+		return true, nil
+	}
+	if checkpoint.Complete {
+		return false, nil
+	}
+	for _, build := range []string{previousHomebrewBuild, previousArchiveBuild} {
+		if build == m.Build {
+			continue
+		}
+		id := (Manager{Build: build}).UpgradeRequestID()
+		if _, err := os.Lstat(filepath.Join(m.Data, "network-operations", id+".json")); err == nil {
+			plan, _, e := m.readInterruptedUpgrade(proxyUpgradeCheckpoint{Build: build, Request: id})
+			if e != nil || plan.Previous != "" {
+				return e == nil, e
+			}
+		}
+	}
+	return false, nil
+}
+
+func (m Manager) readInterruptedUpgrade(checkpoint proxyUpgradeCheckpoint) (upgradeProxyPlan, []string, *protocol.Error) {
+	var journal netops.Journal
+	err := tasks.ReadPrivate(filepath.Join(m.Data, "network-operations", checkpoint.Request+".json"), &journal)
+	if errors.Is(err, os.ErrNotExist) {
+		return upgradeProxyPlan{}, nil, nil
+	}
+	input, _ := json.Marshal(proxyUpgradeInput{"proxy-upgrade", checkpoint.Build})
+	if err != nil || journal.Fingerprint != fmt.Sprintf("%x", sha256.Sum256(input)) {
+		return upgradeProxyPlan{}, nil, proxyStorageError()
+	}
+	if journal.Done {
+		return upgradeProxyPlan{}, nil, nil
+	}
+	var plan upgradeProxyPlan
+	found, e := journal.Get("upgrade", &plan)
+	if e != nil || !found {
+		return upgradeProxyPlan{}, nil, e
+	}
+	if !protocol.ValidUUID(plan.Previous) {
+		return upgradeProxyPlan{}, nil, proxyStorageError()
+	}
+	owners := []string{plan.Previous}
+	for _, key := range []string{"daemon_attempt", "listener_daemon"} {
+		var id string
+		if _, e := journal.Get(key, &id); e != nil {
+			return upgradeProxyPlan{}, nil, e
+		}
+		if id != "" {
+			owners = append(owners, id)
+		}
+	}
+	return plan, owners, nil
 }
 
 func upgradeOperationID(key string) string {
@@ -76,7 +167,40 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 	if !protocol.ValidUUID(requestID) {
 		return nil, proxyFailure("invalid_argument")
 	}
+	unlock, err := tasks.Lock(ctx, m.path("installation-upgrade.lock"))
+	if err != nil {
+		return nil, proxyFailure("proxy_pending")
+	}
+	defer unlock()
+	checkpoint, e := m.upgradeCheckpoint()
+	if e != nil {
+		return nil, e
+	}
+	var inherited upgradeProxyPlan
+	var owners []string
 	if _, err := os.Lstat(filepath.Join(m.Data, "network-operations", requestID+".json")); errors.Is(err, os.ErrNotExist) {
+		candidates := []proxyUpgradeCheckpoint{checkpoint}
+		if checkpoint.Request == "" {
+			for _, build := range []string{previousHomebrewBuild, previousArchiveBuild} {
+				if build != m.Build {
+					candidates = append(candidates, proxyUpgradeCheckpoint{Build: build, Request: (Manager{Build: build}).UpgradeRequestID()})
+				}
+			}
+		}
+		for _, previous := range candidates {
+			if previous.Request == "" || previous.Request == requestID || previous.Complete {
+				continue
+			}
+			inherited, owners, e = m.readInterruptedUpgrade(previous)
+			if e != nil {
+				return nil, e
+			}
+			if inherited.Previous != "" {
+				break
+			}
+		}
+	}
+	if _, err := os.Lstat(filepath.Join(m.Data, "network-operations", requestID+".json")); errors.Is(err, os.ErrNotExist) && inherited.Previous == "" {
 		status, e := m.Status(ctx)
 		if e != nil {
 			return nil, e
@@ -88,14 +212,32 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 			return m.reconcileCurrentUpgrade(ctx)
 		}
 	}
-	result, e := (netops.Store{Data: m.Data}).Apply(ctx, requestID, struct {
-		Action string
-		Build  string
-	}{"proxy-upgrade", m.Build}, []string{"exposures", "proxy-daemon"}, func(j *netops.Journal) (any, *protocol.Error) {
+	result, e := (netops.Store{Data: m.Data}).Apply(ctx, requestID, proxyUpgradeInput{"proxy-upgrade", m.Build}, []string{"exposures", "proxy-daemon"}, func(j *netops.Journal) (any, *protocol.Error) {
 		var plan upgradeProxyPlan
 		planned, e := j.Get("upgrade", &plan)
 		if e != nil {
 			return nil, e
+		}
+		if !planned && inherited.Previous != "" {
+			plan = inherited
+			status, e := m.Status(ctx)
+			if e != nil {
+				return nil, e
+			}
+			if status.Running {
+				live, err := m.rpc(ctx, "status")
+				if err != nil || !slices.Contains(owners, live.AttemptID) {
+					return nil, proxyFailure("proxy_pending")
+				}
+				plan.Previous = live.AttemptID
+			}
+			for i := range plan.Listeners {
+				plan.Listeners[i].AttemptID = tasks.ID()
+			}
+			if e := j.Set("upgrade", plan); e != nil {
+				return nil, e
+			}
+			planned = true
 		}
 		if !planned {
 			status, e := m.Status(ctx)
@@ -162,11 +304,27 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 			}
 		}
 		var settled bool
+		if m.Build != "" {
+			if err := m.write("upgrade.json", proxyUpgradeCheckpoint{Build: m.Build, Request: requestID}); err != nil {
+				return nil, proxyStorageError()
+			}
+		}
 		_, e = j.Get("old_daemon_stopped", &settled)
 		if e != nil {
 			return nil, e
 		}
 		if !settled {
+			state, e := m.portStore().Read()
+			if e != nil {
+				return nil, e
+			}
+			for _, target := range plan.Listeners {
+				definition := state.Listener(target.Definition.Name)
+				h, t, e := state.ListenerPorts(target.Definition.Name)
+				if e != nil || definition == nil || *definition != target.Definition || h != target.HTTPPort || t != target.HTTPSPort {
+					return nil, proxyFailure("request_conflict")
+				}
+			}
 			if e := m.checkUpgradeListenerPermissions(plan); e != nil {
 				return nil, e
 			}
@@ -238,6 +396,11 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 	outcome, ok := result.(map[string]any)
 	if !ok || outcome["restore"] == nil {
 		return result, nil
+	}
+	if m.Build != "" {
+		if err := m.write("upgrade.json", proxyUpgradeCheckpoint{Build: m.Build, Request: requestID, Complete: true}); err != nil {
+			return nil, proxyStorageError()
+		}
 	}
 	raw, err := json.Marshal(outcome["restore"])
 	var selections []upgradeExposure

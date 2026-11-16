@@ -52,6 +52,9 @@ func (a *App) prepareNetwork(ctx context.Context, p project.Context, names []str
 	if e != nil {
 		return nil, e
 	}
+	if e := ensureInstalledNetwork(ctx, m, hm, id); e != nil {
+		return nil, e
+	}
 	directories, pathErr := a.currentPaths()
 	if pathErr != nil {
 		return nil, portFailure("io_error")

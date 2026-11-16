@@ -80,7 +80,7 @@ func (a *App) registerProxy() {
 			command.Description = "Stop the user-local reverse proxy daemon while retaining its port."
 			command.Options = []Option{requestIDOption(uuidPattern)}
 		}
-		command.Run = func(ctx context.Context, _ IO, request Request) (any, *protocol.Error) {
+		command.Run = func(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
 			manager, err := a.proxyStore()
 			if err != nil {
 				return nil, err
@@ -94,6 +94,21 @@ func (a *App) registerProxy() {
 				name, all := request.Options["listener"], request.Options["all"] == "true"
 				if all && name != "" || all && request.Options["port"] != "" {
 					return nil, argumentError("--all excludes --listener and --port.", "")
+				}
+				if action == "start" {
+					if value := request.Options["port"]; value != "" {
+						parsed, err := strconv.Atoi(value)
+						if err != nil || parsed < 1 || parsed > 65535 {
+							return nil, argumentError("Expected TCP port 1..65535.", "port")
+						}
+					}
+					hm, e := a.hostsManager(ctx, streams)
+					if e != nil {
+						return nil, e
+					}
+					if e := ensureInstalledNetwork(ctx, manager, hm, q.RequestID); e != nil {
+						return nil, e
+					}
 				}
 				if enabled || name != "" && name != network.DefaultListener || all && action == "start" {
 					if action == "status" {

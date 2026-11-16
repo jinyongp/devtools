@@ -128,6 +128,11 @@ func (a *App) registerProxyRoutes() {
 					refs = append(refs, network.RouteRef{Scope: "project", Profile: p.Profile, InstanceID: instance.ID, Proxy: name})
 				}
 			}
+			if action == "up" {
+				if e := ensureInstalledNetwork(ctx, m, hm, r.Options["request-id"]); e != nil {
+					return nil, e
+				}
+			}
 			if !all {
 				if action == "up" {
 					return m.RouteUp(ctx, refs[0], p, os.Environ(), hm, r.Options["request-id"])

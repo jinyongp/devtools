@@ -75,13 +75,6 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 		}
 	}
 	if needed {
-		manager, e := a.proxyStore()
-		if e != nil {
-			return nil, e
-		}
-		if e := manager.RequireCurrentDaemon(ctx); e != nil {
-			return nil, e
-		}
 		var override *string
 		if env, explicit := request.Options["env"]; explicit {
 			override = &env

@@ -21,6 +21,17 @@ import (
 var uuid = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 type Store struct{ Data string }
+
+// Completed reports whether a request has a saved outcome. The operation's
+// usual replay path still verifies its fingerprint and selection.
+func (s Store) Completed(id string) bool {
+	if !uuid.MatchString(id) {
+		return false
+	}
+	var j Journal
+	return tasks.ReadPrivate(filepath.Join(s.Data, "network-operations", strings.ToLower(id)+".json"), &j) == nil && j.Done
+}
+
 type Journal struct {
 	TLSReferences []string                   `json:"tls_references,omitempty"`
 	Fingerprint   string                     `json:"fingerprint"`

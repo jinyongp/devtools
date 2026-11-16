@@ -89,6 +89,9 @@ func (a *App) registerExpose() {
 				return nil, argumentError("Serve port must be in 1..65535.", "serve-port")
 			}
 		}
+		if e := ensureInstalledNetwork(ctx, m, hm, r.Options["request-id"]); e != nil {
+			return nil, e
+		}
 		return m.ExposeStart(ctx, proxy.ExposureRequest{Route: ref, Provider: r.Options["provider"], Alias: r.Options["alias"], Auth: auth, NoAuth: r.Options["no-auth"] == "true", ServePort: servePort, RequestID: r.Options["request-id"]}, p, os.Environ(), hm)
 	}
 	a.commands = append(a.commands, c)

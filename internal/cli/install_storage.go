@@ -9,10 +9,25 @@ import (
 
 	"github.com/jinyongp/devtools/internal/configcontract"
 	"github.com/jinyongp/devtools/internal/dashboard"
+	"github.com/jinyongp/devtools/internal/hosts"
 	"github.com/jinyongp/devtools/internal/installstorage"
+	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/protocol"
+	"github.com/jinyongp/devtools/internal/proxy"
 	"github.com/jinyongp/devtools/internal/storageupgrade"
 )
+
+func ensureInstalledNetwork(ctx context.Context, manager proxy.Manager, hostManager hosts.Manager, request string) *protocol.Error {
+	if (netops.Store{Data: manager.Data}).Completed(request) {
+		return nil
+	}
+	needed, e := manager.NeedsUpgrade(ctx)
+	if e != nil || !needed {
+		return e
+	}
+	_, e = manager.UpgradeNetwork(ctx, manager.UpgradeRequestID(), hostManager)
+	return e
+}
 
 // RunInstallStorage is the installer's private, noninteractive entry point. It
 // resumes the installed environment with no backend selection or unlock.

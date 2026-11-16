@@ -132,8 +132,7 @@ serve = ["storefront"]
         call(broken, "expose", "stop", current[0]["id"], error="invalid_storage")
         config.write_text(initial + "\n# unrelated source edit\n", encoding="utf-8")
         call(broken, "run", "dev:storefront", error="pinned")
-        call(candidate, "run", "dev:storefront", error="old_daemon_version")
-        call(candidate, "update", "--resume")
+        call(candidate, "run", "dev:storefront", foreground=True)
         after = call(candidate, "proxy", "status")["item"]
         assert after["running"] and after["port"] == frontend and after["generation"] != before["generation"]
         assert call(candidate, "expose", "list")["items"] == []

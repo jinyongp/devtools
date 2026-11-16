@@ -10,11 +10,69 @@ import (
 
 	"github.com/jinyongp/devtools/internal/expose"
 	"github.com/jinyongp/devtools/internal/hosts"
+	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 )
+
+func TestUpgradeInheritsInterruptedReleasedBuild(t *testing.T) {
+	data := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	var daemons sync.WaitGroup
+	t.Cleanup(func() { cancel(); daemons.Wait() })
+	manager := func(build string) Manager {
+		m := Manager{Data: data, Build: build}
+		m.Spawn = func(_ string, attempt string) error {
+			daemons.Add(1)
+			go func() { defer daemons.Done(); _ = m.Serve(ctx, attempt) }()
+			return nil
+		}
+		return m
+	}
+	old, next := manager(previousHomebrewBuild), manager("0.47.0/next")
+	port := freeNetworkPort(t)
+	if _, e := old.Configure(ctx, "default", fmt.Sprintf("127.0.0.1:%d", port), "", true, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := old.NetworkApply(ctx, "start", "default", false, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	live, err := old.rpc(ctx, "status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, e := old.portStore().Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	plan := upgradeProxyPlan{Previous: live.AttemptID, Listeners: []listenerTarget{{Definition: *state.Listener("default"), HTTPPort: port, AttemptID: tasks.ID(), Create: true}}}
+	_, e = (netops.Store{Data: data}).Apply(ctx, old.UpgradeRequestID(), proxyUpgradeInput{"proxy-upgrade", old.Build}, []string{"proxy-daemon"}, func(j *netops.Journal) (any, *protocol.Error) {
+		if e := j.Set("upgrade", plan); e != nil {
+			return nil, e
+		}
+		if _, e := old.stop(ctx); e != nil {
+			return nil, e
+		}
+		return nil, proxyFailure("proxy_pending")
+	})
+	if e == nil || e.Code != "proxy_pending" {
+		t.Fatal(e)
+	}
+	if needed, e := next.NeedsUpgrade(ctx); e != nil || !needed {
+		t.Fatal(needed, e)
+	}
+	if _, e := next.UpgradeNetwork(ctx, next.UpgradeRequestID(), hosts.Manager{Data: data, Isolated: true}); e != nil {
+		t.Fatal(e)
+	}
+	if status, e := next.NetworkStatus(ctx, "default"); e != nil || status["running"] != true || status["port"] != float64(port) {
+		t.Fatal(status, e)
+	}
+	if needed, e := next.NeedsUpgrade(ctx); e != nil || needed {
+		t.Fatal(needed, e)
+	}
+}
 
 type upgradeRecoveryProvider struct {
 	fakeExposureProvider

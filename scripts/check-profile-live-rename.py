@@ -11,6 +11,7 @@ import socket
 import subprocess
 import sys
 import time
+import uuid
 from urllib.parse import urlsplit
 
 from fixture_paths import create_fixture_directory
@@ -81,6 +82,69 @@ def stop_controller(state):
         assert response.status == 200, "Owned proxy controller rejected shutdown"
     finally:
         connection.close()
+
+
+def verify_proxy_upgrade(root, legacy, broken, candidate):
+    root.mkdir()
+    state = root / "state"
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("DEVTOOLS_")}
+    frontend, backend = free_port(), free_port()
+    while frontend == backend:
+        backend = free_port()
+    config = root / "devtools.toml"
+    initial = f'''profile = "upgrade"
+[ports.storefront]
+port = {backend}
+[proxies.storefront]
+host = "storefront.localhost"
+port = "storefront"
+[commands."dev:storefront"]
+exec = {json.dumps([sys.executable, "-c", "pass"])}
+inject = false
+serve = ["storefront"]
+'''
+    config.write_text(initial, encoding="utf-8")
+
+    def call(binary, *args, error=None):
+        result = subprocess.run(
+            [str(binary), "--format", "json", "--isolated-root", str(state), *args],
+            cwd=root, env=environment, stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=35,
+        )
+        if error:
+            assert result.returncode != 0 and json.loads(result.stderr)["error"]["code"] == error, (args, result.stderr)
+            return
+        assert result.returncode == 0, (args, result.stderr)
+        return json.loads(result.stdout)["data"]
+
+    try:
+        call(legacy, "proxy", "configure", "--http-address", f"0.0.0.0:{frontend}", "--disable-https",
+             "--request-id", str(uuid.uuid4()))
+        call(legacy, "run", "dev:storefront", "--proxy")
+        before = call(legacy, "proxy", "status")["item"]
+        for provider in ("lan", "cloudflared"):
+            call(broken, "expose", "start", "storefront", "--provider", provider, "--no-auth", error="invalid_storage")
+        current = call(broken, "expose", "list")["items"]
+        assert len(current) == 2 and all(x["reason"] == "daemon_unavailable" for x in current)
+        call(broken, "expose", "stop", current[0]["id"], error="invalid_storage")
+        config.write_text(initial + "\n# unrelated source edit\n", encoding="utf-8")
+        call(broken, "run", "dev:storefront", error="pinned")
+        call(candidate, "run", "dev:storefront", error="old_daemon_version")
+        call(candidate, "update", "--resume")
+        after = call(candidate, "proxy", "status")["item"]
+        assert after["running"] and after["port"] == frontend and after["generation"] != before["generation"]
+        assert call(candidate, "expose", "list")["items"] == []
+        registry = json.loads((state / "data" / "ports" / "registry.json").read_text(encoding="utf-8"))
+        assert registry["network"]["pins"] == []
+        assert not any(x["name"].startswith("origin.") for x in registry["reservations"])
+        call(candidate, "run", "dev:storefront")
+        call(candidate, "update", "--resume")
+        assert call(candidate, "proxy", "status")["item"]["generation"] == after["generation"]
+    finally:
+        try:
+            stop_controller(state)
+        except ConnectionRefusedError:
+            pass
 
 
 def verify(root, legacy, candidate):
@@ -228,10 +292,16 @@ def main():
     parser.add_argument("--legacy-commit")
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--candidate-commit")
+    parser.add_argument("--upgrade-legacy", type=Path)
+    parser.add_argument("--upgrade-broken", type=Path)
     args = parser.parse_args()
     root = create_fixture_directory(prefix="devtools-profile-live-")
     try:
         result = verify(root, args.legacy.resolve(strict=True), args.candidate.resolve(strict=True))
+        if args.upgrade_legacy is not None and args.upgrade_broken is not None:
+            verify_proxy_upgrade(root / "upgrade", args.upgrade_legacy.resolve(strict=True),
+                                 args.upgrade_broken.resolve(strict=True), args.candidate.resolve(strict=True))
+            result["proxy_upgrade"] = "passed"
     finally:
         for attempt in range(20):
             try:

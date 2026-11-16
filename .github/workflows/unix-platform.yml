@@ -234,7 +234,20 @@ jobs:
           (cd "$fixture/source" && go build -buildvcs=false -ldflags "-X main.version=0.44.0 -X main.commit=$baseline" -o "$fixture/legacy" ./cmd/devtools)
           candidate=$(git rev-parse HEAD)
           go build -ldflags "-X main.commit=$candidate" -o "$fixture/candidate" ./cmd/devtools
-          python3 -B scripts/check-profile-live-rename.py --legacy "$fixture/legacy" --legacy-commit "$baseline" --candidate "$fixture/candidate" --candidate-commit "$candidate"
+          if [[ "${{ matrix.os }}" == macos-15 ]]; then
+            previous=46dfba1417e00b793fc2a5d2c3c4864d8ba1b28f
+            mixed=b8b31ecece30c60a689120673e22ebcadeb18d0c
+            git fetch --no-tags --depth=1 origin "$previous" "$mixed"
+            mkdir "$fixture/previous" "$fixture/mixed"
+            git archive "$previous" | tar -x -C "$fixture/previous"
+            git archive "$mixed" | tar -x -C "$fixture/mixed"
+            (cd "$fixture/previous" && go build -buildvcs=false -ldflags "-X main.version=0.40.0 -X main.commit=$previous" -o "$fixture/proxy-previous" ./cmd/devtools)
+            (cd "$fixture/mixed" && go build -buildvcs=false -ldflags "-X main.version=0.45.0 -X main.commit=$mixed" -o "$fixture/proxy-mixed" ./cmd/devtools)
+            upgrade=(--upgrade-legacy "$fixture/proxy-previous" --upgrade-broken "$fixture/proxy-mixed")
+          else
+            upgrade=()
+          fi
+          python3 -B scripts/check-profile-live-rename.py --legacy "$fixture/legacy" --legacy-commit "$baseline" --candidate "$fixture/candidate" --candidate-commit "$candidate" "${upgrade[@]}"
 
   automation-performance:
     name: Protected automation measurements

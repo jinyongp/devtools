@@ -394,7 +394,8 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 		return nil, e
 	}
 	outcome, ok := result.(map[string]any)
-	if !ok || outcome["restore"] == nil {
+	restore, captured := outcome["restore"]
+	if !ok || !captured {
 		return result, nil
 	}
 	if m.Build != "" {
@@ -402,7 +403,7 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 			return nil, proxyStorageError()
 		}
 	}
-	raw, err := json.Marshal(outcome["restore"])
+	raw, err := json.Marshal(restore)
 	var selections []upgradeExposure
 	if err != nil || json.Unmarshal(raw, &selections) != nil {
 		return nil, proxyFailure("invalid_storage")

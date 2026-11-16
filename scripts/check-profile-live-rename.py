@@ -6,6 +6,7 @@ import http.client
 import json
 import os
 from pathlib import Path
+import select
 import shutil
 import socket
 import subprocess
@@ -104,6 +105,7 @@ inject = false
 serve = ["storefront"]
 '''
     config.write_text(initial, encoding="utf-8")
+    foreground = None
 
     def call(binary, *args, error=None, foreground=False):
         result = subprocess.run(
@@ -132,7 +134,23 @@ serve = ["storefront"]
         call(broken, "expose", "stop", current[0]["id"], error="invalid_storage")
         config.write_text(initial + "\n# unrelated source edit\n", encoding="utf-8")
         call(broken, "run", "dev:storefront", error="pinned")
+        sibling = root / "other-project"
+        sibling.mkdir()
+        (sibling / "devtools.toml").write_text(
+            'profile = "other-project"\n[commands.stay]\ninject = false\nexec = '
+            + json.dumps([sys.executable, "-u", "-c", "import time; print('ready'); time.sleep(180)"]) + "\n"
+        )
+        foreground = subprocess.Popen(
+            [str(broken), "--format", "json", "--isolated-root", str(state), "run", "stay"],
+            cwd=sibling, env=environment, stdout=subprocess.PIPE, text=True,
+        )
+        assert select.select([foreground.stdout], [], [], 15)[0] and foreground.stdout.readline().strip() == "ready"
+        active = call(broken, "process", "list", "--profile", "other-project", "--mode", "foreground")["items"]
+        assert len(active) == 1 and active[0]["state"] == "running"
+        sibling_id = active[0]["execution_id"]
         call(candidate, "run", "dev:storefront", foreground=True)
+        observed = call(candidate, "process", "status", sibling_id)["item"]
+        assert observed["id"] == sibling_id and observed["state"] == "running" and foreground.poll() is None
         after = call(candidate, "proxy", "status")["item"]
         assert after["running"] and after["port"] == frontend and after["generation"] != before["generation"]
         assert call(candidate, "expose", "list")["items"] == []
@@ -143,6 +161,9 @@ serve = ["storefront"]
         call(candidate, "update", "--resume")
         assert call(candidate, "proxy", "status")["item"]["generation"] == after["generation"]
     finally:
+        if foreground is not None:
+            foreground.terminate()
+            foreground.communicate(timeout=10)
         try:
             stop_controller(state)
         except ConnectionRefusedError:

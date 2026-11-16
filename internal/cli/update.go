@@ -12,10 +12,10 @@ import (
 // Set by package-manager builds to preserve ownership of installed files.
 var updateManager string
 
-func (a *App) registerUpdate() {
+func (a *App) registerUpdate(version string) {
 	a.commands = append(a.commands, Command{
 		Name: "update", Description: "Update the installed executable while preserving user data.",
-		Options: []Option{{Name: "version", Description: "Release version; defaults to latest stable.", Pattern: `^0\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$`}, {Name: "source", Description: "Local release directory or HTTPS artifact directory; requires version.", MinLength: 1}},
+		Options: []Option{{Name: "version", Description: "Release version; defaults to latest stable.", Pattern: `^0\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$`}, {Name: "source", Description: "Local release directory or HTTPS artifact directory; requires version.", MinLength: 1}, {Name: "resume", Boolean: true, Description: "Complete the environment upgrade using the installed executable."}},
 		Output: object(map[string]any{
 			"changed":        map[string]any{"type": "boolean"},
 			"binary_changed": map[string]any{"type": "boolean"},
@@ -28,6 +28,17 @@ func (a *App) registerUpdate() {
 			}, "name", "status"),
 		}, "action", "version", "alias", "changed", "binary_changed", "storage"),
 		Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+			if r.Options["resume"] == "true" {
+				if r.Options["version"] != "" || r.Options["source"] != "" {
+					return nil, argumentError("--resume uses the installed version and excludes --version and --source.", "resume")
+				}
+				storage := a.resumeInstallation(ctx, streams)
+				changed := storage.Report != nil && storage.Report.Changed
+				if result, ok := storage.Proxy.(map[string]any); ok && result["changed"] == true {
+					changed = true
+				}
+				return finishExecutableUpdate(map[string]any{"action": "update", "version": version, "alias": map[string]any{"name": "dvt", "status": "unchanged"}, "changed": changed, "binary_changed": false, "storage": storage}, storage, false)
+			}
 			directories, pathErr := a.currentPaths()
 			if pathErr != nil {
 				return nil, portFailure("io_error")
@@ -52,7 +63,7 @@ func (a *App) registerUpdate() {
 
 func updateExecutable(ctx context.Context, executable string, options map[string]string, streams ...IO) (any, *protocol.Error) {
 	if updateManager == "homebrew" {
-		return nil, protocol.NewError("package_managed", "Update this Homebrew installation with brew upgrade jinyongp/tap/devtools, then run devtools doctor --storage --fix.", 3, map[string]any{"manager": "homebrew", "command": "brew upgrade jinyongp/tap/devtools", "remedies": []protocol.Remedy{{Argv: []string{"brew", "upgrade", "jinyongp/tap/devtools"}, RequiredInputs: []string{}, Message: "Update with the package manager that owns this installation.", Effect: "system_write"}, {Argv: []string{"devtools", "doctor", "--storage", "--fix"}, RequiredInputs: []string{}, Message: "After upgrading, prepare storage with the installed executable.", Effect: "value_write"}}})
+		return nil, protocol.NewError("package_managed", "Update this Homebrew installation with brew upgrade jinyongp/tap/devtools, then run devtools update --resume.", 3, map[string]any{"manager": "homebrew", "command": "brew upgrade jinyongp/tap/devtools", "remedies": []protocol.Remedy{{Argv: []string{"brew", "upgrade", "jinyongp/tap/devtools"}, RequiredInputs: []string{}, Message: "Update with the package manager that owns this installation.", Effect: "system_write"}, {Argv: []string{"devtools", "update", "--resume"}, RequiredInputs: []string{}, Message: "Complete the environment upgrade with the installed executable.", Effect: "value_write"}}})
 	}
 	defer progress.Begin(ctx, "Updating the executable and preparing storage")()
 	return updatePlatform(ctx, executable, options, streams...)

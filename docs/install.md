@@ -71,11 +71,16 @@ For Homebrew:
 
 ```sh
 brew upgrade jinyongp/tap/devtools
+devtools update --resume
 ```
 
-Homebrew manages its own files; `devtools update` returns `package_managed` for
-that installation. Restart managed processes, the proxy daemon, and the dashboard
-to use the updated executable. Your profile data and `devtools.toml` are preserved.
+Homebrew manages its own files. Complete the user environment upgrade with
+`devtools update --resume` after Homebrew installs the new executable. The script
+installer runs this step as part of an update. The environment upgrade replaces a
+running previous proxy daemon, restores its listeners, and reconciles incomplete
+share starts. If a share needs authentication again, the result identifies it.
+Restart managed processes and the dashboard to use the updated executable.
+Your profile data and `devtools.toml` are preserved.
 Downgrading the binary does not undo data-format upgrades; restore a compatible
 backup into a fresh data directory if you need an older release.
 

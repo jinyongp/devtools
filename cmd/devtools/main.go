@@ -59,7 +59,7 @@ func main() {
 	if len(os.Args) == 2 && os.Args[1] == "__install-storage" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
-		if cli.RunInstallStorage(ctx, os.Stdout) != nil {
+		if cli.RunInstallStorage(ctx, os.Stdout, version, commit) != nil {
 			os.Exit(1)
 		}
 		return
@@ -144,7 +144,7 @@ func main() {
 	if len(os.Args) == 4 && os.Args[1] == "__proxy-serve" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
-		if (proxy.Manager{Data: os.Args[2]}).Serve(ctx, os.Args[3]) != nil {
+		if (proxy.Manager{Data: os.Args[2], Build: proxy.RuntimeBuild(version, commit)}).Serve(ctx, os.Args[3]) != nil {
 			os.Exit(1)
 		}
 		return

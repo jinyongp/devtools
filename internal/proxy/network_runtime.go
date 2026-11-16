@@ -382,6 +382,7 @@ func (m Manager) serveNetwork(ctx context.Context, attemptID string) error {
 		}
 		active.State = "running"
 		active.StartedAt = &now
+		active.Build = m.Build
 		return true
 	})
 	if e != nil || !changed {

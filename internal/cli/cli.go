@@ -119,7 +119,9 @@ func New(version, commit string) *App {
 		actionContracts:  &sync.Map{},
 		passphrasePrompt: readTerminalPassphrase,
 		dataDirectory:    userDataDirectory,
-		proxyManager:     func(data string) proxy.Manager { return proxy.Manager{Data: data} },
+		proxyManager: func(data string) proxy.Manager {
+			return proxy.Manager{Data: data, Build: proxy.RuntimeBuild(version, commit)}
+		},
 		lifecycleManager: func(data string) lifecycle.Manager {
 			return lifecycle.Manager{Data: data, Processes: services.Store{Data: data}}
 		},
@@ -175,7 +177,7 @@ func New(version, commit string) *App {
 	a.registerProcessRequests()
 	a.registerProjectLifecycle()
 	a.registerCleanup()
-	a.registerUpdate()
+	a.registerUpdate(version)
 	a.registerCompletion()
 	for i := range a.commands {
 		if a.commands[i].Name == "proxy list" {

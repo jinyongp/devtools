@@ -13,20 +13,51 @@ import (
 )
 
 // RunInstallStorage is the installer's private, noninteractive entry point. It
-// calls exactly the doctor coordinator, with no backend selection or unlock.
-func RunInstallStorage(ctx context.Context, output io.Writer) error {
+// resumes the installed environment with no backend selection or unlock.
+func RunInstallStorage(ctx context.Context, output io.Writer, version, commit string) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	app := New("", "")
+	app := New(version, commit)
 	result := installstorage.Failed("storage_paths_unavailable")
 	directories, err := app.currentPaths()
 	if err == nil && directories.IsolatedRoot == "" {
-		report, failure := app.storageEngine(directories.Data).Fix(ctx)
-		result = installationStorageResult(report, failure)
+		result = app.resumeInstallation(ctx, IO{Out: io.Discard, Err: io.Discard})
 	} else if err == nil {
 		result = installstorage.Failed("isolated_operation_not_allowed")
 	}
 	return json.NewEncoder(output).Encode(result)
+}
+
+func (a *App) resumeInstallation(ctx context.Context, streams IO) installstorage.Result {
+	directories, err := a.currentPaths()
+	if err != nil {
+		return installstorage.Failed("storage_paths_unavailable")
+	}
+	manager, e := a.proxyStore()
+	if e != nil {
+		return installstorage.Failed(e.Code)
+	}
+	hostManager, e := a.hostsManager(ctx, streams)
+	if e != nil {
+		return installstorage.Failed(e.Code)
+	}
+	proxyResult, e := manager.UpgradeNetwork(ctx, manager.UpgradeRequestID(), hostManager)
+	if e != nil {
+		return installstorage.Result{Status: "pending", Diagnostic: protocol.ObservationDiagnostic(e)}
+	}
+	report, e := a.storageEngine(directories.Data).Fix(ctx)
+	result := installationStorageResult(report, e)
+	result.Proxy = proxyResult
+	if proxyResult, ok := proxyResult.(map[string]any); ok {
+		if exposures, ok := proxyResult["exposures"].([]map[string]any); ok {
+			for _, exposure := range exposures {
+				if exposure["state"] != "restored" && exposure["state"] != "closed" {
+					result.Ready, result.Status = false, "pending"
+				}
+			}
+		}
+	}
+	return result
 }
 
 func installationStorageResult(report storageupgrade.Report, failure *protocol.Error) installstorage.Result {
@@ -48,7 +79,7 @@ func installationStorageResult(report storageupgrade.Report, failure *protocol.E
 }
 
 func storageUpdateSchema() map[string]any {
-	return object(map[string]any{"status": map[string]any{"enum": []string{"ready", "pending", "blocked", "failed"}}, "ready": map[string]any{"type": "boolean"}, "report": configcontract.Definition("StorageUpgradeReport"), "diagnostic": configcontract.Definition("ObservationDiagnostic")}, "status", "ready")
+	return object(map[string]any{"status": map[string]any{"enum": []string{"ready", "pending", "blocked", "failed"}}, "ready": map[string]any{"type": "boolean"}, "report": configcontract.Definition("StorageUpgradeReport"), "diagnostic": configcontract.Definition("ObservationDiagnostic"), "proxy": map[string]any{"type": "object"}}, "status", "ready")
 }
 
 func finishExecutableUpdate(result any, storage installstorage.Result, binaryChanged bool) (any, *protocol.Error) {
@@ -62,8 +93,8 @@ func finishExecutableUpdate(result any, storage installstorage.Result, binaryCha
 			effects = "committed"
 		}
 	}
-	return nil, protocol.NewError("storage_upgrade_"+storage.Status, "The executable is installed; storage requires attention. Resolve the reported prerequisite and run doctor --storage --fix.", 3, map[string]any{
+	return nil, protocol.NewError("storage_upgrade_"+storage.Status, "The executable is installed; environment upgrade requires attention. Resolve the reported prerequisite and run devtools update --resume.", 3, map[string]any{
 		"phase": "observe", "reason": "storage_upgrade_" + storage.Status, "effects": effects, "retry": "after_dependency_change", "report": result,
-		"remedies": []protocol.Remedy{{Argv: []string{"devtools", "doctor", "--storage", "--fix"}, Effect: "value_write", RequiredInputs: []string{}, Message: "Resolve storage prerequisites and resume with the installed executable."}},
+		"remedies": []protocol.Remedy{protocol.LocalAction([]string{"devtools", "update", "--resume"}, nil, "Resume the environment upgrade with the installed executable.", "value_write").Remedy(protocol.InvocationContext{})},
 	})
 }

@@ -35,6 +35,7 @@ const noProxyAttempt = "none"
 
 type Record struct {
 	CreatedAt time.Time  `json:"created_at"`
+	Build     string     `json:"build,omitempty"`
 	AttemptID string     `json:"attempt_id,omitempty"`
 	RequestID string     `json:"request_id,omitempty"`
 	State     string     `json:"state"`
@@ -152,6 +153,7 @@ type Manager struct {
 	ExposureProviders map[string]expose.Provider
 	IsolatedRoot      string
 	Data              string
+	Build             string
 	Spawn             func(string, string) error
 	Listen            func(int) ([]net.Listener, error)
 	ControlListen     func() (net.Listener, error)

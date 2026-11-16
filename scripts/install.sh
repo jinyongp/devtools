@@ -188,7 +188,7 @@ result=$(printf '{"action":"%s","version":"%s","alias":{"name":"dvt","status":"%
 case "$storage" in
   *'"status":"ready","ready":true'*) printf '{"schema_version":1,"ok":true,"data":%s}\n' "$result" ;;
   *)
-    printf '{"schema_version":1,"ok":false,"error":{"code":"storage_upgrade_incomplete","message":"The executable is installed; storage requires attention. Resolve prerequisites and run devtools doctor --storage --fix.","details":{"operation":"%s","phase":"observe","reason":"storage_upgrade_incomplete","effects":"%s","retry":"after_dependency_change","report":%s,"remedies":[{"argv":["devtools","doctor","--storage","--fix"],"required_inputs":[],"message":"Resolve storage prerequisites and resume with the installed executable.","effect":"value_write"}]}}}\n' "$action" "$storage_effects" "$result" >&2
+    printf '{"schema_version":1,"ok":false,"error":{"code":"storage_upgrade_incomplete","message":"The executable is installed; environment upgrade requires attention. Resolve prerequisites and run devtools update --resume.","details":{"operation":"%s","phase":"observe","reason":"storage_upgrade_incomplete","effects":"%s","retry":"after_dependency_change","report":%s,"remedies":[{"argv":["devtools","update","--resume"],"required_inputs":[],"message":"Resume the environment upgrade with the installed executable.","effect":"value_write"}]}}}\n' "$action" "$storage_effects" "$result" >&2
     exit 3 ;;
 esac
 }

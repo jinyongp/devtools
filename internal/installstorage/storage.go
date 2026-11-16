@@ -19,6 +19,7 @@ type Result struct {
 	Ready      bool                   `json:"ready"`
 	Report     *storageupgrade.Report `json:"report,omitempty"`
 	Diagnostic map[string]any         `json:"diagnostic,omitempty"`
+	Proxy      any                    `json:"proxy,omitempty"`
 }
 
 func Failed(code string) Result {

@@ -29,6 +29,7 @@ type ExposureRequest struct {
 	NoAuth                bool
 	ServePort             int
 	RequestID             string
+	ExpectedIdentity      string
 }
 type exposureRPCRequest struct{ Action, ID, Generation, Auth string }
 type exposureRPCResult struct {
@@ -117,6 +118,9 @@ func (m Manager) ExposeStart(ctx context.Context, q ExposureRequest, p project.C
 	if e := expose.ValidateAuth(q.Auth, q.NoAuth); e != nil {
 		return nil, e
 	}
+	if e := m.RequireCurrentDaemon(ctx); e != nil {
+		return nil, e
+	}
 	policy := p.Proxies[q.Route.Proxy].HostPolicy.Canonical()
 	if q.Route.Scope == "global" {
 		st, err := m.portStore().Read()
@@ -143,7 +147,8 @@ func (m Manager) ExposeStart(ctx context.Context, q ExposureRequest, p project.C
 		NoAuth                      bool
 		ServePort                   int
 		HostPolicy                  network.HostPolicy `json:",omitempty"`
-	}{"expose-start", q.Route, q.Provider, q.Alias, commitment, q.NoAuth, q.ServePort, policy}, []string{"exposure-route/" + q.Route.Key(), "exposures"}, func(j *netops.Journal) (any, *protocol.Error) {
+		ExpectedIdentity            string             `json:",omitempty"`
+	}{"expose-start", q.Route, q.Provider, q.Alias, commitment, q.NoAuth, q.ServePort, policy, q.ExpectedIdentity}, []string{"exposure-route/" + q.Route.Key(), "exposures"}, func(j *netops.Journal) (any, *protocol.Error) {
 		var record expose.Record
 		present, e := j.Get("exposure", &record)
 		if e != nil {
@@ -174,6 +179,9 @@ func (m Manager) ExposeStart(ctx context.Context, q ExposureRequest, p project.C
 			// authorization can be obtained. The daemon never runs an OS helper.
 			_, _, _, readyErr := m.exposureIdentity(ctx, q.Route)
 			if readyErr != nil {
+				if q.ExpectedIdentity != "" {
+					return nil, expose.Failure("exposure_identity_changed")
+				}
 				if _, e := m.RouteUp(ctx, q.Route, p, parent, hm, prepareID); e != nil {
 					return nil, e
 				}
@@ -181,6 +189,9 @@ func (m Manager) ExposeStart(ctx context.Context, q ExposureRequest, p project.C
 			item, listener, digest, e := m.exposureIdentity(ctx, q.Route)
 			if e != nil {
 				return nil, e
+			}
+			if q.ExpectedIdentity != "" && digest != q.ExpectedIdentity {
+				return nil, expose.Failure("exposure_identity_changed")
 			}
 			if item.HostPolicy.Canonical() != policy {
 				return nil, proxyFailure("activation_required")
@@ -384,10 +395,18 @@ func (m Manager) ExposureStatus(ctx context.Context, id string) (expose.Public, 
 			return item, nil
 		}
 		r.State = "recovery_required"
-		r.Reason = "daemon_unavailable"
-		if r.Auth {
-			r.State = "auth_required"
-			r.Reason = "authentication_lost"
+		r.Reason = e.Code
+		if mismatch := m.RequireCurrentDaemon(ctx); mismatch != nil {
+			r.Reason = mismatch.Code
+		} else if e.Code == "proxy_pending" || e.Code == "proxy_unavailable" {
+			r.Reason = "daemon_unavailable"
+			if r.Auth {
+				daemon, failure := m.Status(ctx)
+				if failure == nil && (daemon.State == "interrupted" || daemon.State == "stopped") {
+					r.State = "auth_required"
+					r.Reason = "authentication_lost"
+				}
+			}
 		}
 	}
 	if r.State == "stopped" {

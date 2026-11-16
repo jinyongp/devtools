@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/jinyongp/devtools/internal/installstorage"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
@@ -23,136 +22,158 @@ type installedServiceTarget struct {
 	Previous string `json:"previous"`
 	Request  string `json:"request"`
 	Stopped  bool   `json:"stopped,omitempty"`
+	Started  bool   `json:"started,omitempty"`
 	Restored string `json:"restored,omitempty"`
 }
 
-func (a *App) upgradeInstalledServices(ctx context.Context, streams IO, next func() installstorage.Result) installstorage.Result {
+func (a *App) upgradeInstalledServices(ctx context.Context, streams IO, networkReady bool) ([]map[string]any, *protocol.Error) {
 	store, e := a.serviceStore()
 	if e != nil {
-		return pendingInstallService(e)
+		return nil, e
 	}
 	if _, err := os.Lstat(filepath.Join(store.Data, "processes")); errors.Is(err, os.ErrNotExist) || a.build == "" {
-		return next()
+		return nil, nil
 	}
 	path := filepath.Join(store.Data, ".installed-executions-upgrade.json")
 	release, err := tasks.Lock(ctx, filepath.Join(store.Data, ".installed-executions-upgrade.lock"))
 	if err != nil {
-		return pendingInstallService(protocol.NewError("process_pending", "Cannot acquire the execution upgrade lock.", 3, nil))
+		return nil, protocol.NewError("process_pending", "Cannot acquire the execution upgrade lock.", 3, nil)
 	}
 	defer release()
-	plan, e := a.stopInstalledServices(ctx, store, path)
-	if e != nil {
-		return pendingInstallService(e)
-	}
-	result := next()
-	if result.Report == nil || !result.Report.Ready {
-		return result
-	}
+	plan, condition := a.planInstalledServices(ctx, store, path)
 	restored := make([]map[string]any, 0, len(plan.Targets))
-	allRestored := true
+	remaining := make([]installedServiceTarget, 0, len(plan.Targets))
+	followUp := []installedServiceTarget{}
 	for i := range plan.Targets {
 		target := &plan.Targets[i]
-		if target.Restored == "" {
-			target.Restored, e = a.restoreInstalledService(ctx, streams, store, *target)
+		if !target.Started && !target.Stopped && target.Restored == "" {
+			original, _, e := store.UpgradeRecord(ctx, target.Previous)
 			if e != nil {
-				result.Ready, result.Status = false, "pending"
-				result.Diagnostic = protocol.ObservationDiagnostic(e)
-				allRestored = false
-				continue
-			}
-			if err := tasks.WritePrivate(path, plan); err != nil {
-				result.Ready, result.Status = false, "pending"
-				result.Diagnostic = protocol.ObservationDiagnostic(installServiceStorageError())
-				return result
-			}
-			result.RuntimeChanged = true
-		} else {
-			live, e := store.Status(ctx, target.Restored)
-			if e != nil || live.State != "running" || live.EndedAt != nil {
-				if e == nil {
-					e = protocol.NewError("process_pending", "The restored execution is no longer running.", 3, map[string]any{"target": map[string]any{"kind": "execution", "id": target.Restored}})
+				if condition == nil {
+					condition = e
 				}
-				result.Ready, result.Status = false, "pending"
-				result.Diagnostic = protocol.ObservationDiagnostic(e)
-				allRestored = false
+				remaining = append(remaining, *target)
 				continue
 			}
+			if original.EndedAt != nil {
+				continue
+			}
+			target.Started = true
+			if err := tasks.WritePrivate(path, plan); err != nil {
+				return restored, installServiceStorageError()
+			}
 		}
-		restored = append(restored, map[string]any{"previous_id": target.Previous, "execution_id": target.Restored})
-		result.Processes = restored
-	}
-	if !allRestored {
-		return result
-	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		result.Ready, result.Status = false, "pending"
-		result.Diagnostic = protocol.ObservationDiagnostic(installServiceStorageError())
-	}
-	return result
-}
-
-func (a *App) stopInstalledServices(ctx context.Context, store services.Store, path string) (installedServiceUpgrade, *protocol.Error) {
-	var plan installedServiceUpgrade
-	release, err := store.Lock(ctx)
-	if err != nil {
-		return plan, protocol.NewError("process_pending", "Cannot acquire the process operation lock.", 3, nil)
-	}
-	defer release()
-	err = tasks.ReadPrivate(path, &plan)
-	if errors.Is(err, os.ErrNotExist) {
-		records, e := store.SupersededExecutions(ctx)
+		id, e := a.restoreInstalledService(ctx, streams, store, *target, networkReady)
 		if e != nil {
-			return plan, e
-		}
-		plan.Build = a.build
-		for _, record := range records {
-			project, e := a.resolveStoredProject(record.Directory, "")
-			if e != nil {
-				return plan, e
+			if condition == nil {
+				condition = e
 			}
-			if _, ok := project.Commands[record.Command]; !ok {
-				return plan, protocol.NewError("command_not_found", "A running service no longer has its configured command.", 3, map[string]any{"target": map[string]any{"kind": "execution", "id": record.ID, "name": record.Command}})
-			}
-			if project.Profile != record.Profile || project.Root != record.Directory {
-				return plan, protocol.NewError("instance_conflict", "The running service belongs to a different project identity.", 3, map[string]any{"target": map[string]any{"kind": "execution", "id": record.ID, "name": record.Command}})
-			}
-			plan.Targets = append(plan.Targets, installedServiceTarget{Previous: record.ID, Request: tasks.ID()})
-		}
-		if len(plan.Targets) != 0 && tasks.WritePrivate(path, plan) != nil {
-			return plan, installServiceStorageError()
-		}
-	} else if err != nil || plan.Build != a.build {
-		return plan, installServiceStorageError()
-	}
-	for i := range plan.Targets {
-		target := &plan.Targets[i]
-		if target.Stopped {
+			remaining = append(remaining, *target)
 			continue
 		}
-		if e := store.StopForUpgrade(ctx, target.Previous); e != nil {
-			return plan, e
-		}
-		target.Stopped = true
+		target.Restored = id
 		if err := tasks.WritePrivate(path, plan); err != nil {
-			return plan, installServiceStorageError()
+			return restored, installServiceStorageError()
+		}
+		restored = append(restored, map[string]any{"previous_id": target.Previous, "execution_id": id})
+		if plan.Build != a.build {
+			needsUpgrade, e := store.UpgradeNeeded(ctx, id)
+			if e != nil {
+				if condition == nil {
+					condition = e
+				}
+				remaining = append(remaining, *target)
+				continue
+			}
+			if needsUpgrade {
+				followUp = append(followUp, installedServiceTarget{Previous: id, Request: tasks.ID()})
+			}
 		}
 	}
-	return plan, nil
+	remaining = append(remaining, followUp...)
+	if len(remaining) > 0 {
+		plan.Targets = remaining
+		if err := tasks.WritePrivate(path, plan); err != nil {
+			return restored, installServiceStorageError()
+		}
+		if condition == nil && len(followUp) > 0 {
+			condition = protocol.NewError("process_pending", "Restored executions from a previous build are queued for replacement.", 3, nil)
+		}
+	} else if len(plan.Targets) > 0 {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return restored, installServiceStorageError()
+		}
+	}
+	return restored, condition
 }
 
-func (a *App) restoreInstalledService(ctx context.Context, streams IO, store services.Store, target installedServiceTarget) (string, *protocol.Error) {
+func (a *App) planInstalledServices(ctx context.Context, store services.Store, path string) (installedServiceUpgrade, *protocol.Error) {
+	var plan installedServiceUpgrade
+	err := tasks.ReadPrivate(path, &plan)
+	if err == nil {
+		seen := map[string]bool{}
+		for _, target := range plan.Targets {
+			if !protocol.ValidUUID(target.Previous) || !protocol.ValidUUID(target.Request) || target.Previous == target.Request || seen[target.Previous] || target.Restored != "" && target.Restored != target.Request {
+				return installedServiceUpgrade{}, installServiceStorageError()
+			}
+			seen[target.Previous] = true
+		}
+		return plan, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return installedServiceUpgrade{}, installServiceStorageError()
+	}
+	records, e := store.SupersededExecutions(ctx)
+	plan.Build = a.build
+	for _, record := range records {
+		plan.Targets = append(plan.Targets, installedServiceTarget{Previous: record.ID, Request: tasks.ID()})
+	}
+	if len(plan.Targets) != 0 && tasks.WritePrivate(path, plan) != nil {
+		return installedServiceUpgrade{}, installServiceStorageError()
+	}
+	return plan, e
+}
+
+func (a *App) restoreInstalledService(ctx context.Context, streams IO, store services.Store, target installedServiceTarget, networkReady bool) (string, *protocol.Error) {
 	request := services.Request{Action: "restart", ID: target.Previous, RequestID: target.Request}
 	result, replayed, e := store.RecoverCompleted(ctx, request, "", network.PrepareAuto)
 	if e != nil {
 		return "", e
 	}
 	if !replayed {
-		original, e := store.Status(ctx, target.Previous)
+		original, legacy, e := store.UpgradeRecord(ctx, target.Previous)
 		if e != nil {
 			return "", e
 		}
+		p, e := a.resolveStoredProject(original.Directory, "")
+		if e != nil {
+			return "", e
+		}
+		if p.Profile != original.Profile || p.Root != original.Directory || original.Mode == "foreground" {
+			return "", protocol.NewError("instance_conflict", "The execution no longer matches its managed project identity.", 3, nil)
+		}
+		if original.ProxyMode && !networkReady {
+			return "", protocol.NewError("proxy_pending", "Restore the listener before replacing this managed execution.", 3, nil)
+		}
 		if e := a.prepareServiceRestart(ctx, streams, &request, original); e != nil {
 			return "", e
+		}
+		if legacy {
+			if e := request.RestartPreflight(ctx, original, services.RestartBeforeStop); e != nil {
+				return "", e
+			}
+			unlock, err := store.Lock(ctx)
+			if err != nil {
+				return "", installServiceStorageError()
+			}
+			e := store.StopForUpgrade(ctx, original.ID)
+			unlock()
+			if e != nil {
+				return "", e
+			}
+			if e := store.ConvertUpgradeRecord(ctx, original.ID); e != nil {
+				return "", protocol.WithEffects(e, "partial")
+			}
 		}
 		result, e = store.Apply(ctx, request)
 		if e != nil {
@@ -169,7 +190,7 @@ func (a *App) restoreInstalledService(ctx context.Context, streams IO, store ser
 			return "", e
 		}
 	}
-	if live.State != "running" || live.EndedAt != nil {
+	if live.Previous != target.Previous || live.State != "running" || live.EndedAt != nil {
 		return "", protocol.NewError("process_pending", "The replacement execution did not remain running.", 3, map[string]any{"target": map[string]any{"kind": "execution", "id": live.ID, "name": live.Command}})
 	}
 	return live.ID, nil
@@ -177,8 +198,4 @@ func (a *App) restoreInstalledService(ctx context.Context, streams IO, store ser
 
 func installServiceStorageError() *protocol.Error {
 	return protocol.NewError("process_upgrade_storage", "Cannot verify the pending execution upgrade for this installed build.", 3, nil)
-}
-
-func pendingInstallService(e *protocol.Error) installstorage.Result {
-	return installstorage.Result{Status: "pending", Diagnostic: protocol.ObservationDiagnostic(e)}
 }

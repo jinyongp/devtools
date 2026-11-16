@@ -31,12 +31,6 @@ func RunInstallStorage(ctx context.Context, output io.Writer, version, commit st
 }
 
 func (a *App) resumeInstallation(ctx context.Context, streams IO) installstorage.Result {
-	return a.upgradeInstalledServices(ctx, streams, func() installstorage.Result {
-		return a.resumeInstalledStorageAndNetwork(ctx, streams)
-	})
-}
-
-func (a *App) resumeInstalledStorageAndNetwork(ctx context.Context, streams IO) installstorage.Result {
 	directories, err := a.currentPaths()
 	if err != nil {
 		return installstorage.Failed("storage_paths_unavailable")
@@ -49,13 +43,13 @@ func (a *App) resumeInstalledStorageAndNetwork(ctx context.Context, streams IO) 
 	if e != nil {
 		return installstorage.Failed(e.Code)
 	}
-	proxyResult, e := manager.UpgradeNetwork(ctx, manager.UpgradeRequestID(), hostManager)
-	if e != nil {
-		return installstorage.Result{Status: "pending", Diagnostic: protocol.ObservationDiagnostic(e)}
-	}
+	proxyResult, networkFailure := manager.UpgradeNetwork(ctx, manager.UpgradeRequestID(), hostManager)
+	processes, processFailure := a.upgradeInstalledServices(ctx, streams, networkFailure == nil)
 	report, e := a.storageEngine(directories.Data).Fix(ctx)
 	result := installationStorageResult(report, e)
 	result.Proxy = proxyResult
+	result.Processes = processes
+	result.RuntimeChanged = len(processes) > 0
 	if result.Ready {
 		outcome, e := dashboard.UpgradeWithRoot(ctx, directories.Cache, filepath.Join(directories.Data, "tasks"), directories.IsolatedRoot, a.build)
 		if e != nil {
@@ -63,7 +57,17 @@ func (a *App) resumeInstalledStorageAndNetwork(ctx context.Context, streams IO) 
 			result.Diagnostic = protocol.ObservationDiagnostic(e)
 		} else {
 			result.Dashboard = outcome
-			result.RuntimeChanged = outcome["changed"] == true
+			result.RuntimeChanged = result.RuntimeChanged || outcome["changed"] == true
+		}
+	}
+	for _, failure := range []*protocol.Error{networkFailure, processFailure} {
+		if failure != nil {
+			if result.Ready {
+				result.Ready, result.Status = false, "pending"
+			}
+			if result.Diagnostic == nil {
+				result.Diagnostic = protocol.ObservationDiagnostic(failure)
+			}
 		}
 	}
 	if proxyResult, ok := proxyResult.(map[string]any); ok {
@@ -110,7 +114,7 @@ func finishExecutableUpdate(result any, storage installstorage.Result, binaryCha
 	effects := "unknown"
 	if storage.Report != nil {
 		effects = storage.Report.Effects
-		if binaryChanged && effects == "none" {
+		if (binaryChanged || storage.RuntimeChanged) && effects == "none" {
 			effects = "committed"
 		}
 	}

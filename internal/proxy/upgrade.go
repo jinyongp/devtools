@@ -8,11 +8,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
 
 	"github.com/jinyongp/devtools/internal/expose"
 	"github.com/jinyongp/devtools/internal/hosts"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/netops"
+	"github.com/jinyongp/devtools/internal/netsetup"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
@@ -163,6 +167,9 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 			return nil, e
 		}
 		if !settled {
+			if e := m.checkUpgradeListenerPermissions(plan); e != nil {
+				return nil, e
+			}
 			if _, e := m.stopAttempt(ctx, plan.Previous, func(string, string) *protocol.Error { return nil }); e != nil {
 				return nil, e
 			}
@@ -314,6 +321,44 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 	}
 	outcome["exposures"] = restored
 	return outcome, nil
+}
+
+func (m Manager) checkUpgradeListenerPermissions(plan upgradeProxyPlan) *protocol.Error {
+	if os.Geteuid() == 0 || runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		return nil
+	}
+	minimum := 1024
+	if runtime.GOOS == "linux" {
+		if raw, err := os.ReadFile("/proc/sys/net/ipv4/ip_unprivileged_port_start"); err == nil {
+			if port, err := strconv.Atoi(strings.TrimSpace(string(raw))); err == nil && port >= 0 {
+				minimum = port
+			}
+		}
+	}
+	requiresPrivilege := func(port int, host string) bool {
+		return port > 0 && port < minimum && (runtime.GOOS != "darwin" || host != "0.0.0.0" && host != "::")
+	}
+	protected := requiresPrivilege(plan.LegacyPort, "localhost")
+	for _, target := range plan.Listeners {
+		protected = protected || requiresPrivilege(target.HTTPPort, target.Definition.HTTPHost) || requiresPrivilege(target.HTTPSPort, target.Definition.HTTPSHost)
+	}
+	if !protected {
+		return nil
+	}
+	if runtime.GOOS == "linux" {
+		setup, e := (netsetup.Manager{Data: m.Data}).Check()
+		if e != nil {
+			return e
+		}
+		if setup["enabled"] == true {
+			return nil
+		}
+	}
+	e := proxyFailure("permission_required")
+	e.Details = map[string]any{"effects": "none", "remedies": []protocol.Remedy{
+		protocol.LocalAction([]string{"devtools", "proxy", "setup", "--check"}, nil, "Inspect low-port permissions on the installed executable.", "read").Remedy(protocol.InvocationContext{}),
+	}}
+	return e
 }
 
 func exposureStartAbandoned(record expose.Record) bool {

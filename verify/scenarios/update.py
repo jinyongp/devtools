@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import select
 import socket
 import subprocess
 import sys
@@ -38,8 +39,27 @@ project.mkdir()
 )
 service_before = execute(str(binary), 'process', 'start', 'service', '--dir', str(project))['data']['item']
 assert service_before['state'] == 'running'
-updated = execute(str(alias), 'update', '--version', '0.0.0-test.2', '--source',
-                  os.environ['DEVTOOLS_TEST_RELEASES'])
+foreground_project = home / 'upgrade-foreground'
+foreground_project.mkdir()
+(foreground_project / 'devtools.toml').write_text(
+    'profile = "upgrade-foreground"\n[commands.keep]\ninject = false\nexec = ' +
+    json.dumps([sys.executable, '-u', '-c', 'import time; print("ready"); time.sleep(300)']) + '\n'
+)
+foreground = subprocess.Popen([str(binary), 'run', 'keep'], cwd=foreground_project,
+                              stdout=subprocess.PIPE, text=True)
+try:
+    assert select.select([foreground.stdout], [], [], 15)[0] and foreground.stdout.readline().strip() == 'ready'
+    active = execute(str(binary), 'process', 'list', '--profile', 'upgrade-foreground', '--mode', 'foreground')['data']['items']
+    assert len(active) == 1 and active[0]['state'] == 'running'
+    foreground_id = active[0]['id']
+    updated = execute(str(alias), 'update', '--version', '0.0.0-test.2', '--source',
+                      os.environ['DEVTOOLS_TEST_RELEASES'])
+    still_running = execute(str(binary), 'process', 'status', foreground_id)['data']['item']
+    assert still_running['mode'] == 'foreground' and still_running['state'] == 'running'
+    assert still_running['id'] == foreground_id and foreground.poll() is None
+finally:
+    foreground.terminate()
+    foreground.communicate(timeout=10)
 assert updated['data']['changed'] is True
 assert updated['data']['binary_changed'] is True and updated['data']['storage']['ready'] is True
 assert updated['data']['alias'] == {'name': 'dvt', 'status': 'unchanged'}

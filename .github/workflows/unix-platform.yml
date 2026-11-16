@@ -150,6 +150,9 @@ jobs:
       - name: Native Go race tests
         if: matrix.lane != 'static'
         shell: bash
+        env:
+          # The macOS CLI package takes about nine minutes on a warm runner.
+          GOFLAGS: ${{ matrix.os == 'macos-15' && matrix.lane == 'cli' && '-timeout=14m' || '' }}
         run: |
           mkdir -p bin/ci-evidence
           date -u '+%Y-%m-%dT%H:%M:%SZ' > bin/ci-evidence/started-at.txt

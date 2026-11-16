@@ -372,7 +372,7 @@ func (m Manager) NetworkApply(ctx context.Context, action, name string, all bool
 				return nil, proxyFailure("request_conflict")
 			}
 			if (action == "stop" || action == "restart") && st.ListenerPinned(definition.ID) {
-				return nil, proxyFailure("pinned")
+				return nil, st.ListenerPinConflict(definition.ID)
 			}
 		}
 		if action != "stop" {

@@ -158,7 +158,7 @@ func (m Manager) RouteUp(ctx context.Context, ref network.RouteRef, p project.Co
 			return nil, e
 		}
 		if st.Pinned(ref) {
-			return nil, proxyFailure("pinned")
+			return nil, st.RoutePinConflict(ref)
 		}
 		if !present {
 			var host, listener, dns, configDigest, source string
@@ -442,7 +442,7 @@ func (m Manager) RemoveGlobals(ctx context.Context, names []string, all bool, hm
 		}
 		for _, target := range targets {
 			if st.Pinned(target.Ref()) {
-				return nil, proxyFailure("pinned")
+				return nil, st.RoutePinConflict(target.Ref())
 			}
 			if current := st.GlobalRoute(target.Name); current != nil && current.ID != target.ID {
 				return nil, proxyFailure("request_conflict")

@@ -99,7 +99,7 @@ func (st *State) SetActivation(a network.Activation) *protocol.Error {
 		return fail("invalid_argument")
 	}
 	if st.Pinned(a.Route) {
-		return fail("pinned")
+		return st.RoutePinConflict(a.Route)
 	}
 	st.UpgradeNetwork()
 	if current := st.Activation(a.Route); current != nil {
@@ -134,6 +134,31 @@ func (st *State) ListenerPinned(id string) bool {
 		}
 	}
 	return false
+}
+
+func (st *State) RoutePinConflict(ref network.RouteRef) *protocol.Error {
+	return st.pinConflict(func(pin network.Pin) bool { return pin.Route == ref })
+}
+
+func (st *State) ListenerPinConflict(id string) *protocol.Error {
+	return st.pinConflict(func(pin network.Pin) bool { return pin.ListenerID == id })
+}
+
+func (st *State) pinConflict(matches func(network.Pin) bool) *protocol.Error {
+	err := fail("pinned")
+	if st.Network == nil {
+		return err
+	}
+	var remedies []protocol.Remedy
+	for _, pin := range st.Network.Pins {
+		if matches(pin) {
+			remedies = append(remedies, protocol.LocalAction([]string{"devtools", "expose", "stop", pin.ID}, nil, "Stop this exposure and release its pin.", "value_write").Remedy(protocol.InvocationContext{}))
+		}
+	}
+	if len(remedies) != 0 {
+		err.Details = map[string]any{"remedies": remedies}
+	}
+	return err
 }
 
 func (st *State) ListenerPorts(name string) (int, int, *protocol.Error) {
@@ -199,7 +224,7 @@ func (s Store) ConfigureListener(ctx context.Context, name, httpAddress, httpsAd
 		current := st.Listener(name)
 		implicitHTTP := current == nil && name == network.DefaultListener && httpAddress == ""
 		if current != nil && st.ListenerPinned(current.ID) {
-			return false, fail("pinned")
+			return false, st.ListenerPinConflict(current.ID)
 		}
 		st.UpgradeNetwork()
 		if current == nil {
@@ -427,7 +452,7 @@ func (st *State) RemoveGlobal(name string) *protocol.Error {
 	}
 	ref := r.Ref()
 	if st.Pinned(ref) {
-		return fail("pinned")
+		return st.RoutePinConflict(ref)
 	}
 	key := r.Reservation
 	routes := st.Network.Routes[:0]

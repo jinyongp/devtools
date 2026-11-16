@@ -166,8 +166,7 @@ else:
         with lock:
             fault = None
         failed = [item for item in fixture.api("expose", "list", "--all-profiles", "--view", "history")["items"] if item["serve_port"] == 10443]
-        assert len(failed) == 1 and failed[0]["state"] == "recovery_required"
-        fixture.mutate("expose", "stop", failed[0]["id"])
+        assert not failed, "a permission refusal before an owned handler was recorded left an exposure"
         operation = str(uuid.uuid4())
         with lock:
             fault = "record-commit"

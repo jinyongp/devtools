@@ -190,7 +190,7 @@ func (m Manager) Teardown(ctx context.Context, selection TeardownSelection, dige
 				return nil, proxyFailure("request_conflict")
 			}
 			if st.ListenerPinned(listener.ID) {
-				return nil, proxyFailure("pinned")
+				return nil, st.ListenerPinConflict(listener.ID)
 			}
 			status, e := m.NetworkStatus(ctx, listener.Name)
 			if e != nil {
@@ -219,7 +219,7 @@ func (m Manager) Teardown(ctx context.Context, selection TeardownSelection, dige
 			if e := m.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
 				st.UpgradeNetwork()
 				if st.Pinned(ref) {
-					return false, proxyFailure("pinned")
+					return false, st.RoutePinConflict(ref)
 				}
 				if a := st.Activation(ref); a != nil && a.Mode == "disabled" {
 					return false, nil

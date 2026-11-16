@@ -80,7 +80,7 @@ func ConditionError(code string) *protocol.Error {
 		"port_not_found":      "The selected port assignment does not exist. Inspect port list for the selected project.",
 		"listener_not_found":  "The selected listener is not configured. Inspect proxy status or configure the listener first.",
 		"route_not_found":     "The selected route does not exist. Inspect proxy list in the same store.",
-		"pinned":              "An active exposure pins this resource. Stop the exposure before changing it.",
+		"pinned":              "An exposure still owns this resource. Stop the exposure to release its pin.",
 		"port_in_use":         "The requested port is occupied or reserved. Select a different port or stop its current owner.",
 		"host_conflict":       "Another route already uses this host and listener. Inspect the route declarations before changing them.",
 		"activation_required": "The route needs current network preparation. Activate it before running the selected command.",
@@ -232,10 +232,14 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 		}
 	}
 	st.joinAssignments()
+	conflicts := map[string]bool{}
 	for id, current := range st.pinnedProjections() {
 		if previous, existed := pinned[id]; existed && previous != current {
-			return fail("pinned")
+			conflicts[id] = true
 		}
+	}
+	if len(conflicts) != 0 {
+		return st.pinConflict(func(pin network.Pin) bool { return conflicts[pin.ID] })
 	}
 	if st.Version == 1 {
 		st.Version = 2

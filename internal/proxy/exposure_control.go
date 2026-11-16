@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +35,41 @@ type exposureRPCResult struct {
 	Item     expose.Public   `json:"item"`
 	Error    *protocol.Error `json:"error,omitempty"`
 	ExitCode int             `json:"error_exit_code,omitempty"`
+}
+
+// Only a failure observed before ingress publication is eligible for automatic
+// cleanup. Transport and provider commit failures keep their recovery records.
+func exposureStartCanRetire(record expose.Record, code string) bool {
+	if record.State != "recovery_required" || record.Reason != code {
+		return false
+	}
+	if record.ProviderOwner == "" {
+		return record.Provider == "cloudflared" || record.Provider == "tailscale"
+	}
+	return record.Provider == "cloudflared" && (code == "cloudflared_exited" || code == "cloudflared_exited_without_url" || code == "cloudflared_url_timeout")
+}
+
+func (m Manager) finishFailedExposureStart(ctx context.Context, record expose.Record, failure *receiptError) (any, *protocol.Error) {
+	store := expose.Store{Data: m.Data}
+	_, _, e := m.stopExposure(ctx, record)
+	if e != nil && e.Code != "exposure_not_found" {
+		return nil, e
+	}
+	if e != nil {
+		st, readErr := m.portStore().Read()
+		if readErr != nil {
+			return nil, readErr
+		}
+		if record.ReleasePending(st) {
+			return nil, expose.Failure("exposure_recovery_required")
+		}
+	}
+	// The caller has already persisted the failure and holds the exposure lock.
+	// A missing record on replay means the last removal was already applied.
+	if err := os.Remove(store.Path(record.ID)); err != nil && !os.IsNotExist(err) {
+		return nil, proxyStorageError()
+	}
+	return map[string]any{"failure": failure}, nil
 }
 
 func (m Manager) exposureIdentity(ctx context.Context, ref network.RouteRef) (Item, network.Listener, string, *protocol.Error) {
@@ -112,6 +148,15 @@ func (m Manager) ExposeStart(ctx context.Context, q ExposureRequest, p project.C
 		present, e := j.Get("exposure", &record)
 		if e != nil {
 			return nil, e
+		}
+		var failure receiptError
+		if failed, e := j.Get("start_failure", &failure); e != nil {
+			return nil, e
+		} else if failed {
+			if !present {
+				return nil, expose.Failure("invalid_storage")
+			}
+			return m.finishFailedExposureStart(ctx, record, &failure)
 		}
 		var prepareID string
 		prepared, e := j.Get("prepare_id", &prepareID)
@@ -290,6 +335,16 @@ func (m Manager) ExposeStart(ctx context.Context, q ExposureRequest, p project.C
 		}
 		active, e := m.exposureRPC(ctx, exposureRPCRequest{Action: "start", ID: record.ID, Generation: record.Generation, Auth: q.Auth})
 		if e != nil {
+			current, readErr := store.Read(record.ID)
+			if readErr == nil && current.Generation == record.Generation && exposureStartCanRetire(current, e.Code) {
+				failure := receiptError{Code: e.Code, Message: e.Message, ExitCode: e.ExitCode}
+				if saveErr := j.Set("start_failure", failure); saveErr != nil {
+					return nil, saveErr
+				}
+				if result, cleanupErr := m.finishFailedExposureStart(ctx, current, &failure); cleanupErr == nil {
+					return result, nil
+				}
+			}
 			return nil, e
 		}
 		return map[string]any{"item": active, "changed": true}, nil
@@ -299,6 +354,14 @@ func (m Manager) ExposeStart(ctx context.Context, q ExposureRequest, p project.C
 	}
 	// A receipt is historical. Reading current metadata never restores lost auth.
 	if value, ok := result.(map[string]any); ok {
+		if failed, ok := value["failure"]; ok {
+			var failure receiptError
+			encoded, err := json.Marshal(failed)
+			if err != nil || json.Unmarshal(encoded, &failure) != nil || failure.Code == "" || failure.ExitCode <= 0 {
+				return nil, expose.Failure("invalid_storage")
+			}
+			return nil, protocol.NewError(failure.Code, failure.Message, failure.ExitCode, nil)
+		}
 		encoded, _ := json.Marshal(value["item"])
 		var item expose.Public
 		if json.Unmarshal(encoded, &item) == nil {
@@ -377,7 +440,7 @@ func (m Manager) ExposeStop(ctx context.Context, id, requestID string) (any, *pr
 	})
 }
 
-// The caller holds the exposure and proxy-daemon operation locks.
+// The caller holds the exposure operation lock.
 func (m Manager) stopExposure(ctx context.Context, target expose.Record) (expose.Public, bool, *protocol.Error) {
 	record, e := (expose.Store{Data: m.Data}).Read(target.ID)
 	if e != nil {

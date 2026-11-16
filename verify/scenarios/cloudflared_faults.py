@@ -59,14 +59,17 @@ def gone(pid):
 
 with fixture.network():
     mode.write_text("fail")
-    start(error="cloudflared_exited_without_url")
-    failed = fixture.api("expose", "list", "--all-profiles", "--view", "history")["items"][0]
-    assert failed["state"] == "recovery_required"
-    with socket.socket() as probe:
-        probe.settimeout(.5)
-        assert probe.connect_ex(("127.0.0.1", failed["origin_port"])) != 0, "failed start left origin open"
-    fixture.mutate("expose", "stop", failed["id"])
+    failed_request = str(uuid.uuid4())
+    registry = fixture.state / "data/ports/registry.json"
+    before = json.loads(registry.read_text())
+    start(request_id=failed_request, error="cloudflared_exited_without_url")
+    assert fixture.api("expose", "list", "--all-profiles")["items"] == []
+    after = json.loads(registry.read_text())
+    assert after["network"]["pins"] == before["network"]["pins"]
+    assert after["reservations"] == before["reservations"]
     mode.write_text("active")
+    start(request_id=failed_request, error="cloudflared_exited_without_url")
+    assert fixture.api("expose", "list", "--all-profiles")["items"] == []
     first = start(auth="reader:CLOUD_FAULT_AUTH_CANARY\n")["item"]
     sibling = start()["item"]
     first_ws, sibling_ws = None, None
@@ -107,8 +110,12 @@ with fixture.network():
     old_route = fixture.api("proxy", "list", "--global")["items"][0]
     old_start, old_stop = str(uuid.uuid4()), str(uuid.uuid4())
     old = start(request_id=old_start)["item"]
-    fixture.mutate("proxy", "rm", "app", "--global", error="pinned")
-    fixture.api("expose", "stop", old["id"], "--request-id", old_stop)
+    blocked = fixture.mutate("proxy", "rm", "app", "--global", error="pinned")
+    recovery = blocked["details"]["remedies"][0]
+    assert recovery["state"] == "ready"
+    argv = recovery["argv"]
+    assert argv == ["devtools", "--isolated-root", str(fixture.state), "expose", "stop", old["id"]]
+    fixture.api(*argv[3:], "--request-id", old_stop)
     with socket.socket() as probe:
         probe.settimeout(.5)
         assert probe.connect_ex(("127.0.0.1", old["origin_port"])) != 0, "deleted exposure retained its bridge"

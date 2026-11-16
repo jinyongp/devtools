@@ -47,6 +47,30 @@ func renderFixed(t *testing.T, command string, data any) string {
 	return string(out)
 }
 
+func TestExposureListShowsRecoveryWithoutRepeatingDefaultScope(t *testing.T) {
+	data := map[string]any{
+		"items": []any{
+			map[string]any{"id": "exposure-one", "provider": "lan", "state": "active", "url": "https://app.local", "directory": "/work/app"},
+			map[string]any{"id": "exposure-two", "provider": "cloudflared", "state": "recovery_required", "reason": "release_pending", "url": "", "directory": "/work/app"},
+		},
+		"selection": map[string]any{
+			"view":    "current",
+			"scope":   map[string]any{"kind": "project", "profile": "app", "directory": "/work/app", "instance_id": "instance-key"},
+			"filters": map[string]any{"sort": "created", "order": "desc", "time_field": "created"},
+		},
+		"page": map[string]any{"count": 2, "has_more": false},
+	}
+	output := renderFixed(t, "expose list", data)
+	for _, want := range []string{"exposure-two", "cloudflared", "release_pending", "—"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("missing %q in %s", want, output)
+		}
+	}
+	if strings.Count(output, "2 results") != 1 || strings.Contains(output, "instance-key") || strings.Contains(output, "Time field") || strings.Contains(output, `""`) {
+		t.Fatal(output)
+	}
+}
+
 func TestExplicitAllBundleRemainsVisibleInDoctorScope(t *testing.T) {
 	b, _ := json.Marshal(map[string]any{"schema_version": 1, "ok": true, "data": map[string]any{"state": "ready", "ready": true, "checks": []any{}, "profile": "app", "mode": "foreground", "commands": []any{map[string]any{"name": "dev", "state": "ready", "selection": "all", "env": ""}}}})
 	for _, explicit := range []bool{false, true} {

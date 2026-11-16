@@ -70,7 +70,7 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 					return nil, proxyFailure("network_snapshot_changed")
 				}
 				if st.Pinned(a.Route) && !st.ActivationMatches(a) {
-					return nil, proxyFailure("pinned")
+					return nil, st.RoutePinConflict(a.Route)
 				}
 				definition, ok := p.Proxies[a.Route.Proxy]
 				if !ok {
@@ -201,7 +201,7 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 			if !st.ActivationMatches(route.Activation) {
 				committed = false
 				if st.Pinned(route.Activation.Route) {
-					return nil, proxyFailure("pinned")
+					return nil, st.RoutePinConflict(route.Activation.Route)
 				}
 			}
 		}

@@ -255,7 +255,7 @@ func (r *networkRuntime) stop(t listenerTarget, reason string) (ListenerStatus, 
 		return ListenerStatus{}, e
 	}
 	if reason == "stop_requested" && st.ListenerPinned(t.Definition.ID) {
-		return ListenerStatus{}, proxyFailure("pinned")
+		return ListenerStatus{}, st.ListenerPinConflict(t.Definition.ID)
 	}
 	group := r.groups[t.Definition.ID]
 	if group == nil {

@@ -46,7 +46,8 @@ func inventoryLayoutFor(d Definition) inventoryLayout {
 		l.columns = append(l.columns, ViewColumn{"reason", "Reason", "reason"})
 		l.optional = []int{3}
 	case "expose list":
-		l.columns[0].Label = "Exposure ID"
+		l.columns = []ViewColumn{{"id", "Exposure ID", ""}, {"provider", "Provider", "optional"}, {"state", "State", ""}, {"reason", "Reason", "optional"}, {"url", "URL", "optional"}}
+		l.optional = []int{3}
 	}
 	return l
 }
@@ -63,6 +64,10 @@ func inventoryView(d Definition, data map[string]any) cliui.Document {
 		}
 	}
 	if selection, ok := data["selection"].(map[string]any); ok {
+		scope := selection
+		if d.Command == "expose list" {
+			scope, _ = selection["scope"].(map[string]any)
+		}
 		// Collection order already reflects the selected query. Regrouping here
 		// would put text rows in a different order from JSON and its cursor.
 		layout.group = ""
@@ -76,10 +81,10 @@ func inventoryView(d Definition, data map[string]any) cliui.Document {
 		}
 		for _, value := range items {
 			row, _ := value.(map[string]any)
-			if text(selection["profile"]) == "" && text(row["profile"]) != "" {
+			if text(scope["profile"]) == "" && text(row["profile"]) != "" {
 				add("profile", "Profile")
 			}
-			if text(selection["directory"]) == "" && text(row["directory"]) != "" {
+			if text(scope["directory"]) == "" && text(row["directory"]) != "" {
 				add("directory", "Directory")
 			}
 		}
@@ -216,7 +221,7 @@ func inventoryView(d Definition, data map[string]any) cliui.Document {
 	if d.Command == "bundle list" && text(data["revision"]) != "" {
 		blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Revision"), Value: display(data["revision"])}))
 	}
-	blocks = append(blocks, inventoryNotes(data)...)
+	blocks = append(blocks, inventoryNotesWithScope(data, d.Command == "expose list")...)
 	return cliui.NewDocument(blocks...)
 }
 
@@ -302,6 +307,11 @@ func inventoryCell(item any, column ViewColumn) cliui.Text {
 		return cliui.Literal("Absent")
 	}
 	switch column.Display {
+	case "optional":
+		if s == "" {
+			return cliui.Literal("—")
+		}
+		return cliui.Literal(s)
 	case "attempt":
 		if attempt, ok := value.(map[string]any); ok {
 			state, _ := inventoryState(text(attempt["state"]))
@@ -482,13 +492,17 @@ func inventoryState(state string) (string, cliui.Role) {
 }
 
 func inventoryNotes(data map[string]any) []cliui.Block {
+	return inventoryNotesWithScope(data, false)
+}
+
+func inventoryNotesWithScope(data map[string]any, compact bool) []cliui.Block {
 	var blocks []cliui.Block
 	if selection, ok := data["selection"].(map[string]any); ok {
 		fields := []cliui.Field{}
-		if view := text(selection["view"]); view != "" {
+		if view := text(selection["view"]); view != "" && (!compact || view != "current") {
 			fields = append(fields, cliui.Field{Label: cliui.Literal("View"), Value: cliui.Literal(view)})
 		}
-		if chosen, ok := selection["scope"].(map[string]any); ok {
+		if chosen, ok := selection["scope"].(map[string]any); ok && !compact {
 			for _, key := range []string{"kind", "profile", "directory", "instance_id"} {
 				if value := text(chosen[key]); value != "" {
 					fields = append(fields, cliui.Field{Label: cliui.Literal(title(key)), Value: cliui.Literal(value)})
@@ -497,6 +511,9 @@ func inventoryNotes(data map[string]any) []cliui.Block {
 		}
 		if filters, ok := selection["filters"].(map[string]any); ok {
 			for _, key := range []string{"query", "sort", "order", "time_field", "since", "until"} {
+				if compact && (key == "sort" || key == "order" || key == "time_field") {
+					continue
+				}
 				if value := text(filters[key]); value != "" {
 					fields = append(fields, cliui.Field{Label: cliui.Literal(title(key)), Value: cliui.Literal(value)})
 				}
@@ -520,10 +537,14 @@ func inventoryNotes(data map[string]any) []cliui.Block {
 	}
 	if page, ok := data["page"].(map[string]any); ok {
 		message := fmt.Sprintf("Showing %v results on this page.", page["count"])
-		if page["has_more"] == true {
+		if compact && page["has_more"] == true {
+			message = "More results are available."
+		} else if page["has_more"] == true {
 			message += " More results are available."
 		}
-		blocks = append(blocks, cliui.Paragraph(cliui.Styled(message, cliui.Muted)))
+		if !compact || page["has_more"] == true {
+			blocks = append(blocks, cliui.Paragraph(cliui.Styled(message, cliui.Muted)))
+		}
 	}
 	for _, key := range []string{"issues", "warnings", "unresolved", "pending"} {
 		if rows, ok := data[key].([]any); ok {

@@ -80,37 +80,7 @@ func (r *networkRuntime) exposure(q exposureRPCRequest) (expose.Public, *protoco
 		if current != nil {
 			return current.stop("stop_requested")
 		}
-		if record.State == "stopped" {
-			return record.Public, nil
-		}
-		// A missing provider session cannot be reconstructed from a PID. LAN
-		// has no external side effects; providers reconcile their exact owner.
-		if record.Provider != "lan" && record.ProviderOwner != "" {
-			provider := r.manager.ExposureProviders[record.Provider]
-			if provider == nil && record.Provider == "tailscale" {
-				provider = expose.Tailscale{Data: r.manager.Data}
-			}
-			if provider == nil && record.Provider == "cloudflared" {
-				provider = expose.Cloudflared{Data: r.manager.Data}
-			}
-			recovery, ok := provider.(interface {
-				RecoverStop(context.Context, expose.Record) *protocol.Error
-			})
-			if !ok {
-				return record.Public, expose.Failure("provider_recovery_required")
-			}
-			if e := recovery.RecoverStop(r.ctx, record); e != nil {
-				return record.Public, e
-			}
-		}
-		record.State = "stopped"
-		now := time.Now().UTC()
-		record.EndedAt = &now
-		record.Reason = "stop_requested"
-		if e := store.Write(record); e != nil {
-			return record.Public, e
-		}
-		return record.Public, nil
+		return r.manager.stopDetachedExposure(r.ctx, record)
 	}
 	if q.Action != "start" {
 		return expose.Public{}, expose.Failure("invalid_argument")
@@ -379,6 +349,12 @@ func (x *exposureRuntime) stop(reason string) (expose.Public, *protocol.Error) {
 	record = x.record
 	x.mu.Unlock()
 	if e := store.Write(record); e != nil {
+		if record.State == "stopped" {
+			x.mu.Lock()
+			x.record.State = "stopping"
+			x.record.EndedAt = nil
+			x.mu.Unlock()
+		}
 		return record.Public, e
 	}
 	return record.Public, nil

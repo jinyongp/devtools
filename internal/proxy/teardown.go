@@ -3,7 +3,7 @@ package proxy
 import (
 	"context"
 	"sort"
-	"time"
+	"strings"
 
 	"github.com/jinyongp/devtools/internal/ca"
 	"github.com/jinyongp/devtools/internal/expose"
@@ -107,8 +107,10 @@ func (m Manager) TeardownPreview(ctx context.Context, selection TeardownSelectio
 		return plan, e
 	}
 	for _, r := range records {
-		if r.State != "stopped" && (selection.All || selected[r.Listener]) {
-			plan.Exposures = append(plan.Exposures, r.Public)
+		if selection.All || selected[r.Listener] {
+			if item, current := exposureCurrent(r, st); current {
+				plan.Exposures = append(plan.Exposures, item)
+			}
 		}
 	}
 	if selection.RemoveCA {
@@ -171,36 +173,7 @@ func (m Manager) Teardown(ctx context.Context, selection TeardownSelection, dige
 			if record.Generation != target.Generation {
 				return nil, proxyFailure("request_conflict")
 			}
-			if record.State != "stopped" {
-				_, e := m.exposureRPC(ctx, exposureRPCRequest{Action: "stop", ID: record.ID, Generation: record.Generation})
-				if e != nil {
-					daemon, statusErr := m.Status(ctx)
-					if statusErr != nil || daemon.Running {
-						return nil, e
-					}
-					if record.ProviderOwner != "" {
-						switch record.Provider {
-						case "tailscale":
-							e = (expose.Tailscale{Data: m.Data}).RecoverStop(ctx, record)
-						case "cloudflared":
-							e = (expose.Cloudflared{Data: m.Data}).RecoverStop(ctx, record)
-						default:
-							e = proxyFailure("provider_recovery_required")
-						}
-						if e != nil {
-							return nil, e
-						}
-					}
-					record.State = "stopped"
-					now := time.Now().UTC()
-					record.EndedAt = &now
-					record.Reason = "teardown"
-					if e := (expose.Store{Data: m.Data}).Write(record); e != nil {
-						return nil, e
-					}
-				}
-			}
-			if e := m.releaseExposure(ctx, record); e != nil {
+			if _, _, e := m.stopExposure(ctx, record); e != nil {
 				return nil, e
 			}
 		}
@@ -333,35 +306,43 @@ func (m Manager) Teardown(ctx context.Context, selection TeardownSelection, dige
 		return map[string]any{"item": plan, "changed": len(plan.Listeners) > 0 || len(plan.Routes) > 0 || len(plan.Exposures) > 0 || plan.CAFingerprint != ""}, nil
 	})
 }
-func (m Manager) releaseExposure(ctx context.Context, r expose.Record) *protocol.Error {
-	return m.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
-		if st.Network == nil {
-			return false, nil
-		}
-		pins := []network.Pin{}
-		removed := false
-		for _, pin := range st.Network.Pins {
-			if pin.ID == r.ID {
-				if pin != r.Pin {
+func (m Manager) releaseExposure(ctx context.Context, r expose.Record) (bool, *protocol.Error) {
+	removed := false
+	e := m.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
+		if st.Network != nil {
+			pins := []network.Pin{}
+			for _, pin := range st.Network.Pins {
+				if pin.ID != r.ID {
+					pins = append(pins, pin)
+					continue
+				}
+				expected := r.Pin
+				// Historical stopped records omit the forwarding policy.
+				if r.State == "stopped" && expected.HostPolicy == "" {
+					expected.HostPolicy = pin.HostPolicy
+				}
+				if pin != expected {
 					return false, proxyFailure("request_conflict")
 				}
 				removed = true
-			} else {
-				pins = append(pins, pin)
 			}
+			st.Network.Pins = pins
 		}
-		st.Network.Pins = pins
 		reservations := []ports.Reservation{}
 		for _, reservation := range st.Reservations {
-			if reservation.Name == r.Reservation {
-				removed = true
-			} else {
+			if reservation.Name != r.Reservation {
 				reservations = append(reservations, reservation)
+				continue
 			}
+			if r.Reservation != "origin."+strings.ReplaceAll(r.ID, "-", "") || r.OriginPort != 0 && reservation.Port != r.OriginPort {
+				return false, proxyFailure("request_conflict")
+			}
+			removed = true
 		}
 		st.Reservations = reservations
 		return removed, nil
 	})
+	return removed && e == nil, e
 }
 func (m Manager) noCAReferences() *protocol.Error {
 	st, e := m.portStore().Read()

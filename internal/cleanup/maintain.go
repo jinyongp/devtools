@@ -11,6 +11,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/expose"
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/progress"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/retainedbody"
@@ -199,6 +200,7 @@ func (e Engine) maintainPublic(ctx context.Context, profile string, limit int, d
 	}
 	end := min(start+limit, len(ownedItems))
 	now := time.Now().UTC()
+	var portState *ports.State
 	for _, owned := range ownedItems[start:end] {
 		if ctx.Err() != nil {
 			return out, protocol.ContextError(ctx.Err())
@@ -267,12 +269,22 @@ func (e Engine) maintainPublic(ctx context.Context, profile string, limit int, d
 			r := *owned.exposure
 			item.Kind = "exposure_detail"
 			if r.State == "stopped" && r.EndedAt != nil && now.Sub(*r.EndedAt) >= retention.CleanupCandidateAge {
-				item.Eligible, item.Reason = true, "detail_expired_replay_preserved"
-				if !dry {
-					if pe := (expose.Store{Data: e.Data}).Retire(ctx, r.ID); pe != nil {
-						return out, pe
+				if portState == nil {
+					portState, condition = (ports.Store{Directory: filepath.Join(e.Data, "ports")}).Read()
+					if condition != nil {
+						return out, condition
 					}
-					item.Changed = true
+				}
+				if r.ReleasePending(portState) {
+					item.Reason = "release_pending"
+				} else {
+					item.Eligible, item.Reason = true, "detail_expired_replay_preserved"
+					if !dry {
+						if pe := (expose.Store{Data: e.Data}).Retire(ctx, r.ID); pe != nil {
+							return out, pe
+						}
+						item.Changed = true
+					}
 				}
 			} else if r.EndedAt == nil {
 				item.Reason = "missing_end_time"

@@ -13,6 +13,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/expose"
 	"github.com/jinyongp/devtools/internal/hosts"
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/ports"
@@ -326,6 +327,14 @@ func (m Manager) ExposureStatus(ctx context.Context, id string) (expose.Public, 
 			r.Reason = "authentication_lost"
 		}
 	}
+	if r.State == "stopped" {
+		st, e := m.portStore().Read()
+		if e != nil {
+			return expose.Public{}, e
+		}
+		item, _ := exposureCurrent(r, st)
+		return item, nil
+	}
 	return r.Public, nil
 }
 func (m Manager) ExposureList(ctx context.Context) ([]expose.Public, *protocol.Error) {
@@ -345,7 +354,7 @@ func (m Manager) ExposureList(ctx context.Context) ([]expose.Public, *protocol.E
 }
 
 func (m Manager) ExposeStop(ctx context.Context, id, requestID string) (any, *protocol.Error) {
-	return (netops.Store{Data: m.Data}).Apply(ctx, requestID, struct{ Action, ID string }{"expose-stop", id}, []string{"exposures"}, func(j *netops.Journal) (any, *protocol.Error) {
+	return (netops.Store{Data: m.Data}).Apply(ctx, requestID, struct{ Action, ID string }{"expose-stop", id}, []string{"exposures", "proxy-daemon"}, func(j *netops.Journal) (any, *protocol.Error) {
 		var r expose.Record
 		present, e := j.Get("target", &r)
 		if e != nil {
@@ -360,34 +369,83 @@ func (m Manager) ExposeStop(ctx context.Context, id, requestID string) (any, *pr
 				return nil, e
 			}
 		}
-		if r.State == "stopped" {
-			return map[string]any{"item": r.Public, "changed": false}, nil
-		}
-		item, e := m.exposureRPC(ctx, exposureRPCRequest{Action: "stop", ID: r.ID, Generation: r.Generation})
+		item, changed, e := m.stopExposure(ctx, r)
 		if e != nil {
 			return nil, e
 		}
-		if e := m.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
-			pins := []network.Pin{}
-			for _, pin := range st.Network.Pins {
-				if pin.ID != r.ID {
-					pins = append(pins, pin)
-				}
-			}
-			st.Network.Pins = pins
-			reservations := []ports.Reservation{}
-			for _, p := range st.Reservations {
-				if p.Name != r.Reservation {
-					reservations = append(reservations, p)
-				}
-			}
-			st.Reservations = reservations
-			return true, nil
-		}); e != nil {
-			return nil, e
-		}
-		return map[string]any{"item": item, "changed": true}, nil
+		return map[string]any{"item": item, "changed": changed}, nil
 	})
+}
+
+// The caller holds the exposure and proxy-daemon operation locks.
+func (m Manager) stopExposure(ctx context.Context, target expose.Record) (expose.Public, bool, *protocol.Error) {
+	record, e := (expose.Store{Data: m.Data}).Read(target.ID)
+	if e != nil {
+		return expose.Public{}, false, e
+	}
+	if record.Generation != target.Generation || record.Route != target.Route {
+		return expose.Public{}, false, expose.Failure("request_conflict")
+	}
+	item := record.Public
+	wasRunning := record.State != "stopped"
+	if wasRunning {
+		item, e = m.exposureRPC(ctx, exposureRPCRequest{Action: "stop", ID: record.ID, Generation: record.Generation})
+		if e != nil {
+			// An unreachable control endpoint does not prove loss of ingress.
+			release, acquired, err := maintenance.TryLockExclusive(ctx, m.path("lease.lock"))
+			if err != nil || !acquired {
+				return expose.Public{}, false, e
+			}
+			defer release()
+			record, e = (expose.Store{Data: m.Data}).Read(target.ID)
+			if e != nil {
+				return expose.Public{}, false, e
+			}
+			if record.Generation != target.Generation || record.Route != target.Route {
+				return expose.Public{}, false, expose.Failure("request_conflict")
+			}
+			item, e = m.stopDetachedExposure(ctx, record)
+			if e != nil {
+				return expose.Public{}, false, e
+			}
+		}
+		if item.ID != record.ID || item.Generation != record.Generation || item.State != "stopped" {
+			return expose.Public{}, false, expose.Failure("exposure_recovery_required")
+		}
+	}
+	removed, e := m.releaseExposure(ctx, record)
+	return item, wasRunning || removed, e
+}
+
+// Called by the daemon with its runtime mutex held, or with the daemon lease held
+// by the stopping command. No provider session for this generation can start here.
+func (m Manager) stopDetachedExposure(ctx context.Context, record expose.Record) (expose.Public, *protocol.Error) {
+	if record.State == "stopped" {
+		return record.Public, nil
+	}
+	if record.Provider != "lan" && record.ProviderOwner != "" {
+		provider := m.ExposureProviders[record.Provider]
+		if provider == nil {
+			switch record.Provider {
+			case "cloudflared":
+				provider = expose.Cloudflared{Data: m.Data}
+			case "tailscale":
+				provider = expose.Tailscale{Data: m.Data}
+			}
+		}
+		recovery, ok := provider.(interface {
+			RecoverStop(context.Context, expose.Record) *protocol.Error
+		})
+		if !ok {
+			return record.Public, expose.Failure("provider_recovery_required")
+		}
+		if e := recovery.RecoverStop(ctx, record); e != nil {
+			return record.Public, e
+		}
+	}
+	now := time.Now().UTC()
+	record.State, record.Reason, record.EndedAt = "stopped", "stop_requested", &now
+	return record.Public, (expose.Store{Data: m.Data}).Write(record)
 }
 
 func (m Manager) exposureRPC(ctx context.Context, q exposureRPCRequest) (expose.Public, *protocol.Error) {

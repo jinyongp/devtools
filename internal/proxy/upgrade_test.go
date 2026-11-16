@@ -131,4 +131,25 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 	if st, e := current.portStore().Read(); e != nil || st.Pinned(route) {
 		t.Fatal("settled exposures still own the route", e)
 	}
+	// An earlier daemon can already have been replaced outside the upgrade
+	// process. Its abandoned startup still needs reconciliation.
+	if e := current.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
+		st.Network.Pins = append(st.Network.Pins, record.Pin)
+		return true, nil
+	}); e != nil {
+		t.Fatal(e)
+	}
+	if e := (expose.Store{Data: current.Data}).Write(record); e != nil {
+		t.Fatal(e)
+	}
+	result, e = current.UpgradeNetwork(ctx, tasks.ID(), hm)
+	if e != nil || result.(map[string]any)["changed"] != true {
+		t.Fatal(result, e)
+	}
+	if st, e := current.portStore().Read(); e != nil || st.Pinned(route) {
+		t.Fatal("current daemon left an abandoned exposure pinned", e)
+	}
+	if live, err := current.rpc(ctx, "status"); err != nil || live.AttemptID != after.AttemptID {
+		t.Fatal("local repair replaced the current daemon", live, err)
+	}
 }

@@ -49,6 +49,7 @@ func (a *App) upgradeInstalledServices(ctx context.Context, streams IO, next fun
 		return result
 	}
 	restored := make([]map[string]any, 0, len(plan.Targets))
+	allRestored := true
 	for i := range plan.Targets {
 		target := &plan.Targets[i]
 		if target.Restored == "" {
@@ -56,7 +57,8 @@ func (a *App) upgradeInstalledServices(ctx context.Context, streams IO, next fun
 			if e != nil {
 				result.Ready, result.Status = false, "pending"
 				result.Diagnostic = protocol.ObservationDiagnostic(e)
-				return result
+				allRestored = false
+				continue
 			}
 			if err := tasks.WritePrivate(path, plan); err != nil {
 				result.Ready, result.Status = false, "pending"
@@ -72,11 +74,15 @@ func (a *App) upgradeInstalledServices(ctx context.Context, streams IO, next fun
 				}
 				result.Ready, result.Status = false, "pending"
 				result.Diagnostic = protocol.ObservationDiagnostic(e)
-				return result
+				allRestored = false
+				continue
 			}
 		}
 		restored = append(restored, map[string]any{"previous_id": target.Previous, "execution_id": target.Restored})
 		result.Processes = restored
+	}
+	if !allRestored {
+		return result
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		result.Ready, result.Status = false, "pending"
@@ -106,6 +112,9 @@ func (a *App) stopInstalledServices(ctx context.Context, store services.Store, p
 			}
 			if _, ok := project.Commands[record.Command]; !ok {
 				return plan, protocol.NewError("command_not_found", "A running service no longer has its configured command.", 3, map[string]any{"target": map[string]any{"kind": "execution", "id": record.ID, "name": record.Command}})
+			}
+			if project.Profile != record.Profile || project.Root != record.Directory {
+				return plan, protocol.NewError("instance_conflict", "The running service belongs to a different project identity.", 3, map[string]any{"target": map[string]any{"kind": "execution", "id": record.ID, "name": record.Command}})
 			}
 			plan.Targets = append(plan.Targets, installedServiceTarget{Previous: record.ID, Request: tasks.ID()})
 		}

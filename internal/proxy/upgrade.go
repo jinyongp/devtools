@@ -78,10 +78,10 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 			return nil, e
 		}
 		if !status.Running && status.State != "unknown" && status.State != "starting" {
-			return map[string]any{"changed": false}, nil
+			return m.reconcileCurrentUpgrade(ctx)
 		}
 		if live, err := m.rpc(ctx, "status"); err == nil && live.Build == m.Build && (!enabled || m.networkCapable()) {
-			return map[string]any{"changed": false}, nil
+			return m.reconcileCurrentUpgrade(ctx)
 		}
 	}
 	result, e := (netops.Store{Data: m.Data}).Apply(ctx, requestID, struct {
@@ -288,10 +288,72 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 		if !ok || data["item"] == nil {
 			return nil, proxyFailure("invalid_storage")
 		}
-		row["state"], row["item"] = "restored", data["item"]
+		decoded, err := json.Marshal(data["item"])
+		var replacement expose.Public
+		if err != nil || json.Unmarshal(decoded, &replacement) != nil || replacement.ID == "" {
+			return nil, proxyFailure("invalid_storage")
+		}
+		switch replacement.State {
+		case "active":
+			row["state"], row["item"] = "restored", replacement
+		case "stopped":
+			row["state"] = "closed"
+		default:
+			row["state"], row["reason"], row["item"] = "recovery_required", replacement.Reason, replacement
+		}
 	}
 	outcome["exposures"] = restored
 	return outcome, nil
+}
+
+func exposureStartAbandoned(record expose.Record) bool {
+	return (record.State == "preparing" || record.State == "starting") && record.Daemon == "" && record.ProviderOwner == ""
+}
+
+// Repair abandoned starts even when the old daemon has already gone away.
+// Re-read under the same operation locks that serialize starts and stops.
+func (m Manager) reconcileCurrentUpgrade(ctx context.Context) (any, *protocol.Error) {
+	repairs, e := m.exposureUpgradeRepairs()
+	if e != nil || len(repairs) == 0 {
+		return map[string]any{"changed": false}, e
+	}
+	return (netops.Store{Data: m.Data}).Apply(ctx, tasks.ID(), struct{ Action string }{"repair-exposure-starts"},
+		[]string{"exposures", "proxy-daemon"}, func(_ *netops.Journal) (any, *protocol.Error) {
+			if e := m.RequireCurrentDaemon(ctx); e != nil {
+				return nil, e
+			}
+			repairs, e := m.exposureUpgradeRepairs()
+			if e != nil {
+				return nil, e
+			}
+			changed := false
+			for _, record := range repairs {
+				_, released, e := m.stopExposure(ctx, record)
+				if e != nil {
+					return nil, e
+				}
+				changed = changed || released
+			}
+			return map[string]any{"changed": changed}, nil
+		})
+}
+
+func (m Manager) exposureUpgradeRepairs() ([]expose.Record, *protocol.Error) {
+	records, e := (expose.Store{Data: m.Data}).List()
+	if e != nil || len(records) == 0 {
+		return nil, e
+	}
+	state, e := m.portStore().Read()
+	if e != nil {
+		return nil, e
+	}
+	var repairs []expose.Record
+	for _, record := range records {
+		if exposureStartAbandoned(record) || record.State == "stopped" && record.ReleasePending(state) {
+			repairs = append(repairs, record)
+		}
+	}
+	return repairs, nil
 }
 
 // Only starts that have not acquired provider ownership can be cancelled here.
@@ -303,7 +365,7 @@ func (m Manager) reconcileUnstartedExposures(ctx context.Context) *protocol.Erro
 		return e
 	}
 	for _, record := range records {
-		if (record.State == "preparing" || record.State == "starting") && record.Daemon == "" && record.ProviderOwner == "" {
+		if exposureStartAbandoned(record) {
 			if _, e := m.stopDetachedExposure(ctx, record); e != nil {
 				return e
 			}
@@ -318,7 +380,7 @@ func (m Manager) reconcileUnstartedExposures(ctx context.Context) *protocol.Erro
 }
 
 // Settle each provider after the listeners are back. The close receipt keeps
-// retries distinct from a user explicitly stopping a share before restoration.
+// retries distinct from a share already stopped when cleanup began.
 func (m Manager) closeUpgradeExposure(ctx context.Context, selected upgradeExposure) (bool, *protocol.Error) {
 	id := upgradeOperationID("devtools/proxy-upgrade-exposure-close/" + selected.RequestID)
 	outcome, e := (netops.Store{Data: m.Data}).Apply(ctx, id, struct{ Action, ID, Generation string }{

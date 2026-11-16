@@ -84,3 +84,31 @@ func observationDiagnosticBlocks(value any) []cliui.Block {
 	}
 	return []cliui.Block{cliui.Fields(fields...)}
 }
+
+func environmentUpgradeBlocks(storage map[string]any) []cliui.Block {
+	var blocks []cliui.Block
+	if report, ok := storage["report"].(map[string]any); ok && report["ready"] != true {
+		blocks = append(blocks, storageReportBlocks(report)...)
+	}
+	if diagnostic, ok := storage["diagnostic"].(map[string]any); ok {
+		if code := text(diagnostic["code"]); code != "" {
+			blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Upgrade issue"), Value: cliui.Literal(strings.ReplaceAll(code, "_", " "))}))
+		}
+		blocks = append(blocks, observationDiagnosticBlocks(diagnostic)...)
+	}
+	proxy, _ := storage["proxy"].(map[string]any)
+	exposures, _ := proxy["exposures"].([]any)
+	for _, value := range exposures {
+		row, _ := value.(map[string]any)
+		if row["state"] == "restored" || row["state"] == "closed" {
+			continue
+		}
+		label := "Share " + text(row["id"])
+		reason := strings.ReplaceAll(text(row["reason"]), "_", " ")
+		blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal(label), Value: cliui.Literal(reason)}))
+		if actions, ok := actionBlocks(row["next_actions"]); ok {
+			blocks = append(blocks, actions...)
+		}
+	}
+	return blocks
+}

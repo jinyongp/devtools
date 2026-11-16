@@ -90,6 +90,14 @@ jobs:
           FORMULA: ${{ needs.generate.outputs.formula }}
           VALIDATION_MODE: release
         run: bash automation/internal/scripts/validate-formula.sh
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: matrix.target.platform == 'macos-arm64'
+        with:
+          path: source
+          persist-credentials: false
+      - name: Upgrade an installed previous Formula and use the new executable
+        if: matrix.target.platform == 'macos-arm64'
+        run: python3 -B source/scripts/check-homebrew-upgrade.py "$FORMULA_PATH"
       - name: Record successful native checks
         env:
           VALIDATION_SUCCEEDED: 'true'

@@ -27,8 +27,9 @@ devtools doctor --storage --fix
 
 설치 업데이트는 새 실행파일에서 같은 coordinator를 호출한다. `binary_changed`와 `storage.ready/status`는
 별도 결과이며, 같은 실행파일의 업데이트를 반복해도 미완료 전환을 재개한다. Storage가 미완료면 exit 3이다.
-Homebrew에서 직접 `brew upgrade jinyongp/tap/devtools`를 실행했다면 `devtools update --resume`으로
-저장소와 실행 환경의 업데이트를 마친다. 이전 데이터가 필요하면 해당 버전의 백업을 새 데이터 디렉터리에 복원한다.
+Homebrew에서 직접 `brew upgrade jinyongp/tap/devtools`를 실행한 뒤 평소처럼 프로젝트 명령을 사용한다.
+사용에 필요한 전환은 새 CLI가 준비한다. 중단된 전환을 수동으로 계속하려면 `devtools update --resume`을 사용한다.
+이전 데이터가 필요하면 해당 버전의 백업을 새 데이터 디렉터리에 복원한다.
 
 ## 진행 표시와 대기
 

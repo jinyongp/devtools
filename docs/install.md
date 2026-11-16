@@ -74,10 +74,11 @@ devtools update
 ```
 
 Devtools asks Homebrew to update its formula and then runs the environment upgrade
-with the newly installed executable. To move from a release that delegates updates
-to Homebrew, run `brew upgrade jinyongp/tap/devtools` followed by
-`devtools update --resume`. Use that resume command after a direct Homebrew update
-as well. The script installer runs the environment upgrade as part of an update. It replaces the
+with the newly installed executable. After a direct `brew upgrade jinyongp/tap/devtools`,
+run your usual project command. It prepares the environment needed by that command
+and continues independent upgrade work separately. `devtools update --resume` can
+resume an interrupted upgrade manually. The script installer runs the environment
+upgrade as part of an update. It replaces the
 running previous proxy daemon, restores its listeners, and reconciles incomplete
 share starts. It also replaces the running dashboard and superseded managed
 processes, using their original project, environment and bundle selection. If a

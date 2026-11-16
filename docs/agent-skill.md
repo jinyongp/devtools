@@ -67,7 +67,7 @@ npx skills update devtools
 ```
 
 이전 CLI가 Homebrew로 업데이트하라고 안내하면 `brew upgrade jinyongp/tap/devtools`를 실행한 뒤
-`devtools update --resume`으로 실행 환경을 업데이트합니다.
+평소 쓰던 프로젝트 명령을 실행합니다.
 
 전역 Skill은 다음과 같이 업데이트합니다.
 

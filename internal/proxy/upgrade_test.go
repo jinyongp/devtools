@@ -66,6 +66,10 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 	if err != nil || before.Build != old.Build {
 		t.Fatal(before, err)
 	}
+	store := expose.Store{Data: old.Data}
+	if _, e := store.Commitment(ctx, tasks.ID(), "", true); e != nil {
+		t.Fatal(e)
+	}
 	id := tasks.ID()
 	record := expose.Record{Public: expose.Public{ID: id, Generation: tasks.ID(), Route: route, Provider: "lan", Listener: "default", State: "starting"}}
 	record.Directory = p.Root
@@ -77,7 +81,7 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 	}); e != nil {
 		t.Fatal(e)
 	}
-	if e := (expose.Store{Data: old.Data}).Write(record); e != nil {
+	if e := store.Write(record); e != nil {
 		t.Fatal(e)
 	}
 	blocked := record
@@ -91,7 +95,7 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 	}); e != nil {
 		t.Fatal(e)
 	}
-	if e := (expose.Store{Data: old.Data}).Write(blocked); e != nil {
+	if e := store.Write(blocked); e != nil {
 		t.Fatal(e)
 	}
 	_, _, identity, e := current.exposureIdentity(ctx, route)
@@ -108,7 +112,7 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 	}); e != nil {
 		t.Fatal(e)
 	}
-	if e := (expose.Store{Data: old.Data}).Write(sibling); e != nil {
+	if e := store.Write(sibling); e != nil {
 		t.Fatal(e)
 	}
 	row := func(result any, prior string) map[string]any {

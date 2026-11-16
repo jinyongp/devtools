@@ -511,7 +511,7 @@ func (a *App) Run(ctx context.Context, args []string, streams IO) int {
 		data = result
 	}
 	if selected.Name == "process start" || selected.Name == "project up" || selected.Name == "proxy start" || selected.Name == "proxy up" || selected.Name == "expose start" && request.Options["provider"] != "local" {
-		if item := publicResultObject(data); item["replayed"] != true && request.Options["no-proxy"] != "true" && request.Options["proxy"] != "false" {
+		if item := publicResultObject(data); item["changed"] == true && item["replayed"] != true && request.Options["no-proxy"] != "true" && request.Options["proxy"] != "false" {
 			a.scheduleInstallation(runContext)
 		}
 	}

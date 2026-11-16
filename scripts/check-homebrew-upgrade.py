@@ -26,6 +26,8 @@ def run(*args, env=None, cwd=None, timeout=400):
 def variant(formula, version, commit=None, digest=None):
     formula = formula.replace("class Devtools < Formula\n", "class DevtoolsUpgradeFixture < Formula\n  keg_only :versioned_formula\n", 1)
     assert "class DevtoolsUpgradeFixture < Formula" in formula
+    assert "std_go_args(ldflags: ldflags)" in formula
+    formula = formula.replace("std_go_args(ldflags: ldflags)", 'std_go_args(output: bin/"devtools", ldflags: ldflags)', 1)
     formula, count = re.subn(r'^  version "[^"]+"$', f'  version "{version}"', formula, count=1, flags=re.M)
     assert count == 1
     if commit:

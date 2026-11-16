@@ -79,6 +79,12 @@ func (a *App) scheduleInstallation(ctx context.Context) {
 }
 
 func (a *App) installationAlreadyScheduled(receipt installationReceipt) bool {
+	// Script installers record the published generation themselves. A loose
+	// executable sharing a data root may be used for compatibility checks and
+	// has no authority to replace independent controllers in that installation.
+	if updateManager != "homebrew" && receipt.Build != a.build {
+		return true
+	}
 	return !a.canResumeInstall(receipt) || receipt.Build == a.build && (receipt.Ready || time.Since(receipt.Attempted) < 30*time.Second)
 }
 

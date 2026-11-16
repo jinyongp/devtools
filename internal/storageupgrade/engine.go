@@ -74,10 +74,8 @@ type Engine struct {
 }
 
 type progress struct {
-	Version      int               `json:"version"`
-	Complete     bool              `json:"complete"`
-	Steps        []Step            `json:"steps"`
-	Fingerprints map[string]string `json:"fingerprints,omitempty"`
+	Version  int  `json:"version"`
+	Complete bool `json:"complete"`
 }
 
 func stepKey(step Step) string { return step.Domain + "/" + step.Profile + "/" + step.Resource }
@@ -158,18 +156,23 @@ func (e Engine) progressPath() string {
 }
 
 func (e Engine) pendingProgress() (bool, error) {
-	raw, err := maintenance.Read(e.progressPath(), 1<<20)
+	// Previous releases put their entire inspected inventory in this file.
+	// Allow the same bounded read used for legacy domain documents.
+	raw, err := maintenance.Read(e.progressPath(), 128<<20)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	var p progress
-	if json.Unmarshal(raw, &p) != nil || p.Version != 1 {
+	var p struct {
+		Version  int   `json:"version"`
+		Complete *bool `json:"complete"`
+	}
+	if json.Unmarshal(raw, &p) != nil || p.Version != 1 || p.Complete == nil {
 		return false, errors.New("unsupported upgrade progress")
 	}
-	return !p.Complete, nil
+	return !*p.Complete || len(raw) > 1<<20, nil
 }
 
 func (r *Report) finalize() {
@@ -399,10 +402,7 @@ func (e Engine) Fix(ctx context.Context) (report Report, condition *protocol.Err
 	if authorizedPlan != planFingerprint(plan.Items) {
 		return plan, protocol.NewError("stale_plan", "Storage changed during upgrade preparation. Inspect and retry.", 3, map[string]any{"effects": "committed", "retry": "after_input_change"})
 	}
-	p := progress{Version: 1, Steps: append([]Step{}, plan.Items...), Fingerprints: map[string]string{}}
-	for _, step := range plan.Items {
-		p.Fingerprints[stepKey(step)] = step.Fingerprint
-	}
+	p := progress{Version: 1}
 	if err := e.writeProgress(p); err != nil {
 		condition = failure("stage_upgrade", err)
 		condition.Details["effects"] = "unknown"
@@ -446,13 +446,8 @@ func (e Engine) Fix(ctx context.Context) (report Report, condition *protocol.Err
 				condition.Details["effects"] = "unknown"
 				return plan, condition
 			}
-			// Save resumable progress after each domain commit. This is routing
-			// metadata, never a replacement for inspecting and verifying data.
-			if err := e.writeProgress(p); err != nil {
-				condition = failure("record_progress", err)
-				condition.Details["effects"] = "unknown"
-				return plan, condition
-			}
+			// The pending marker stays in place. Each adapter commits its own
+			// transaction, which the next invocation observes again.
 			break
 		}
 	}

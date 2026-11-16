@@ -1,6 +1,7 @@
 package storageupgrade
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -145,6 +146,37 @@ func TestUnknownProgressIsPreserved(t *testing.T) {
 	raw, readErr := maintenance.Read(path, 1024)
 	if readErr != nil || string(raw) != `{"version":999,"complete":false}` {
 		t.Fatal("unknown progress overwritten", readErr)
+	}
+}
+
+func TestOversizedLegacyProgressIsReverifiedAndCompacted(t *testing.T) {
+	root := preparedRoot(t)
+	engine := Engine{Root: root}
+	legacy := make([]byte, 0, 2<<20)
+	legacy = append(legacy, `{"version":1,"complete":false,"steps":[`...)
+	for len(legacy) <= 1<<20 {
+		legacy = append(legacy, `{"domain":"processes","source":"process-v2","target":"process-v2","state":"current"},`...)
+	}
+	legacy[len(legacy)-1] = ']'
+	legacy = append(legacy, '}')
+	if err := maintenance.Write(engine.progressPath(), legacy); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	before, e := engine.Inspect(ctx)
+	if e != nil || before.Ready || before.State != "migration_required" {
+		t.Fatal(before, e)
+	}
+	retained, err := maintenance.Read(engine.progressPath(), 2<<20)
+	if err != nil || !bytes.Equal(retained, legacy) {
+		t.Fatal("inspection changed legacy marker", err)
+	}
+	if after, e := engine.Fix(ctx); e != nil || !after.Ready {
+		t.Fatal(after, e)
+	}
+	compact, err := maintenance.Read(engine.progressPath(), 1024)
+	if err != nil || string(compact) != `{"version":1,"complete":true}` {
+		t.Fatal(string(compact), err)
 	}
 }
 

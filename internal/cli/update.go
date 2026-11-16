@@ -49,7 +49,7 @@ func (a *App) registerUpdate(version string) {
 				if r.Options["version"] != "" || r.Options["source"] != "" {
 					return nil, argumentError("--resume uses the installed version and excludes --version and --source.", "resume")
 				}
-				storage := a.resumeInstallation(ctx, streams)
+				storage := a.resumeInstallation(ctx, streams).Compact()
 				changed := storage.RuntimeChanged || storage.Report != nil && storage.Report.Changed
 				return finishExecutableUpdate(map[string]any{"action": "update", "version": version, "alias": map[string]any{"name": "dvt", "status": "unchanged"}, "changed": changed, "binary_changed": false, "storage": storage}, storage, false)
 			}

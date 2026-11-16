@@ -25,6 +25,49 @@ type Result struct {
 	RuntimeChanged bool                   `json:"runtime_changed,omitempty"`
 }
 
+// Compact leaves room for the enclosing installer result and diagnostic in
+// the oldest supported reader's 64 KiB output buffer.
+func (r Result) Compact() Result {
+	const resultBudget = 48 << 10
+	fits := func(value Result) bool {
+		encoded, err := json.Marshal(value)
+		return err == nil && len(encoded) <= resultBudget
+	}
+	if fits(r) {
+		return r
+	}
+	result := r
+	result.Proxy, result.Dashboard, result.Processes = nil, nil, nil
+	if r.Report != nil {
+		report := *r.Report
+		report.Items = []storageupgrade.Step{{Domain: "coordinator", Source: "summary", Target: "storage", State: "current", Reason: "details_omitted"}}
+		result.Report = &report
+		for _, step := range r.Report.Items {
+			if step.State == "current" {
+				continue
+			}
+			report.Items = append(report.Items, step)
+			if len(report.Items) > 16 || !fits(result) {
+				report.Items = report.Items[:len(report.Items)-1]
+				break
+			}
+		}
+	}
+	result.Proxy = r.Proxy
+	if !fits(result) {
+		result.Proxy = nil
+	}
+	result.Dashboard = r.Dashboard
+	if !fits(result) {
+		result.Dashboard = nil
+	}
+	result.Processes = r.Processes
+	if !fits(result) {
+		result.Processes = nil
+	}
+	return result
+}
+
 func Failed(code string) Result {
 	return Result{Status: "failed", Diagnostic: protocol.ObservationDiagnostic(protocol.NewError(code, "", 1, nil))}
 }

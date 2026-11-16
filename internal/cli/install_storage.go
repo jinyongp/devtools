@@ -27,7 +27,7 @@ func RunInstallStorage(ctx context.Context, output io.Writer, version, commit st
 	} else if err == nil {
 		result = installstorage.Failed("isolated_operation_not_allowed")
 	}
-	return json.NewEncoder(output).Encode(result)
+	return json.NewEncoder(output).Encode(result.Compact())
 }
 
 func (a *App) resumeInstallation(ctx context.Context, streams IO) installstorage.Result {

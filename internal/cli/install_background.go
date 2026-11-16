@@ -104,7 +104,7 @@ func (a *App) resumeInstallation(ctx context.Context, streams IO, scheduled bool
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return installstorage.Failed("installation_upgrade_state_unavailable")
 	}
-	if !a.canResumeInstall(receipt) || scheduled && (receipt.Build != a.build || receipt.Ready) {
+	if scheduled && (receipt.Build != a.build || receipt.Ready) {
 		return installstorage.Failed("installation_upgrade_superseded")
 	}
 	result := a.upgradeInstallation(ctx, streams)

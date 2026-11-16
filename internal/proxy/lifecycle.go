@@ -796,6 +796,7 @@ func (m Manager) stopAttempt(ctx context.Context, expectedAttempt string, anchor
 		return current, nil
 	}
 	var control proxyControl
+	stopRequested := false
 	rpcErr := tasks.ReadPrivate(m.path("control.json"), &control)
 	if rpcErr == nil {
 		// Verify and stop using the same control credentials. The descriptor can
@@ -806,16 +807,19 @@ func (m Manager) stopAttempt(ctx context.Context, expectedAttempt string, anchor
 			if live.AttemptID != record.AttemptID {
 				return m.settledStop(expectedAttempt != "")
 			}
+			stopRequested = true
 			_, rpcErr = control.call(ctx, "stop")
 		}
 	}
-	if rpcErr != nil {
+	if rpcErr != nil && !stopRequested {
 		if m.leaseFree(ctx) {
 			current.State, current.Reason, current.Running = "interrupted", "supervisor_lost", false
 			return current, nil
 		}
 		return Status{}, proxyFailure("proxy_unavailable")
 	}
+	// A daemon can close its control socket before the stop response arrives.
+	// Observe the selected attempt and its lease to settle the outcome.
 	wait, cancel := context.WithTimeout(ctx, m.effectiveStopTimeout())
 	defer cancel()
 	ticker := time.NewTicker(25 * time.Millisecond)

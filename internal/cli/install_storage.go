@@ -160,9 +160,11 @@ func finishExecutableUpdate(result any, storage installstorage.Result, binaryCha
 			effects = "committed"
 		}
 	}
-	var actions []protocol.Remedy
-	if encoded, err := json.Marshal(storage.Diagnostic["next_actions"]); err == nil {
-		_ = json.Unmarshal(encoded, &actions)
+	actions := []protocol.Remedy{}
+	if next := storage.Diagnostic["next_actions"]; next != nil {
+		if encoded, err := json.Marshal(next); err == nil {
+			_ = json.Unmarshal(encoded, &actions)
+		}
 	}
 	return nil, protocol.NewError("storage_upgrade_"+storage.Status, "The executable is installed. Some environment changes still require attention.", 3, map[string]any{
 		"phase": "observe", "reason": "storage_upgrade_" + storage.Status, "effects": effects, "retry": "after_dependency_change", "report": result,

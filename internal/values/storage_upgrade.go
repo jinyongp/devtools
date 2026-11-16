@@ -288,3 +288,34 @@ func StorageUpgradeAdapter(root string) storageupgrade.Adapter {
 	}
 	return adapter
 }
+
+// UpgradeProfileForExecution resumes one confirmed legacy profile through the
+// same writer and key checks as the full upgrade. It does not finalize the
+// root's migration or attempt vault initialization or unlock.
+func UpgradeProfileForExecution(ctx context.Context, root, profile string) error {
+	release, err := maintenance.AcquirePassiveQuery(ctx, root)
+	if err != nil {
+		return err
+	}
+	step, err := storageupgrade.ProfileLayout(filepath.Join(root, "profiles"), profile, "values")
+	release()
+	if err != nil {
+		return err
+	}
+	if step.State == "current" {
+		return nil
+	}
+	if step.State != "migration_required" {
+		return storageupgrade.Required("values")
+	}
+	adapter := StorageUpgradeAdapter(root)
+	forget, err := adapter.Authorize(ctx, []storageupgrade.Step{step})
+	if err != nil {
+		return err
+	}
+	if forget != nil {
+		defer forget()
+	}
+	_, err = adapter.Apply(ctx, root, step)
+	return err
+}

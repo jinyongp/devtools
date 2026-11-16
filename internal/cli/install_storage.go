@@ -29,6 +29,29 @@ func ensureInstalledNetwork(ctx context.Context, manager proxy.Manager, hostMana
 	return e
 }
 
+func installationDiagnostic(failure *protocol.Error, root string) map[string]any {
+	diagnostic := protocol.ObservationDiagnostic(failure)
+	if failure == nil {
+		return diagnostic
+	}
+	target, _ := failure.Details["target"].(map[string]any)
+	fields := map[string]any{}
+	for _, key := range []string{"kind", "id", "name", "profile"} {
+		if value, ok := target[key].(string); ok && len(value) <= 256 {
+			fields[key] = value
+		}
+	}
+	if len(fields) > 0 {
+		diagnostic["target"] = fields
+	}
+	if id, _ := fields["id"].(string); fields["kind"] == "execution" && protocol.ValidUUID(id) {
+		diagnostic["next_actions"] = []protocol.Remedy{protocol.LocalAction([]string{"devtools", "process", "status", id}, nil, "Inspect the execution before retrying its upgrade.", "read").Remedy(protocol.InvocationContext{IsolatedRoot: root})}
+	} else if failure.Code == "permission_required" {
+		diagnostic["next_actions"] = []protocol.Remedy{protocol.LocalAction([]string{"devtools", "proxy", "setup", "--check"}, nil, "Inspect the installed executable's listener permissions.", "read").Remedy(protocol.InvocationContext{IsolatedRoot: root})}
+	}
+	return diagnostic
+}
+
 // RunInstallStorage is the installer's private, noninteractive entry point. It
 // resumes the installed environment with no backend selection or unlock.
 func RunInstallStorage(ctx context.Context, output io.Writer, version, commit string) error {
@@ -38,14 +61,14 @@ func RunInstallStorage(ctx context.Context, output io.Writer, version, commit st
 	result := installstorage.Failed("storage_paths_unavailable")
 	directories, err := app.currentPaths()
 	if err == nil && directories.IsolatedRoot == "" {
-		result = app.resumeInstallation(ctx, IO{Out: io.Discard, Err: io.Discard})
+		result = app.resumeInstallation(ctx, IO{Out: io.Discard, Err: io.Discard}, false)
 	} else if err == nil {
 		result = installstorage.Failed("isolated_operation_not_allowed")
 	}
 	return json.NewEncoder(output).Encode(result.Compact())
 }
 
-func (a *App) resumeInstallation(ctx context.Context, streams IO) installstorage.Result {
+func (a *App) upgradeInstallation(ctx context.Context, streams IO) installstorage.Result {
 	directories, err := a.currentPaths()
 	if err != nil {
 		return installstorage.Failed("storage_paths_unavailable")
@@ -69,7 +92,7 @@ func (a *App) resumeInstallation(ctx context.Context, streams IO) installstorage
 		outcome, e := dashboard.UpgradeWithRoot(ctx, directories.Cache, filepath.Join(directories.Data, "tasks"), directories.IsolatedRoot, a.build)
 		if e != nil {
 			result.Ready, result.Status = false, "pending"
-			result.Diagnostic = protocol.ObservationDiagnostic(e)
+			result.Diagnostic = installationDiagnostic(e, directories.IsolatedRoot)
 		} else {
 			result.Dashboard = outcome
 			result.RuntimeChanged = result.RuntimeChanged || outcome["changed"] == true
@@ -81,7 +104,7 @@ func (a *App) resumeInstallation(ctx context.Context, streams IO) installstorage
 				result.Ready, result.Status = false, "pending"
 			}
 			if result.Diagnostic == nil {
-				result.Diagnostic = protocol.ObservationDiagnostic(failure)
+				result.Diagnostic = installationDiagnostic(failure, directories.IsolatedRoot)
 			}
 		}
 	}
@@ -119,7 +142,11 @@ func installationStorageResult(report storageupgrade.Report, failure *protocol.E
 }
 
 func storageUpdateSchema() map[string]any {
-	return object(map[string]any{"status": map[string]any{"enum": []string{"ready", "pending", "blocked", "failed"}}, "ready": map[string]any{"type": "boolean"}, "report": configcontract.Definition("StorageUpgradeReport"), "diagnostic": configcontract.Definition("ObservationDiagnostic"), "proxy": map[string]any{"type": "object"}, "dashboard": map[string]any{"type": "object"}, "processes": arraySchema(object(map[string]any{"previous_id": stringSchema(), "execution_id": stringSchema()}, "previous_id", "execution_id")), "runtime_changed": boolSchema()}, "status", "ready")
+	diagnostic := configcontract.Definition("ObservationDiagnostic")
+	fields := diagnostic["$defs"].(map[string]any)["ObservationDiagnostic"].(map[string]any)["properties"].(map[string]any)
+	fields["target"] = object(map[string]any{"kind": stringSchema(), "id": stringSchema(), "name": stringSchema(), "profile": stringSchema()})
+	fields["next_actions"] = arraySchema(map[string]any{"type": "object"})
+	return object(map[string]any{"status": map[string]any{"enum": []string{"ready", "pending", "blocked", "failed"}}, "ready": map[string]any{"type": "boolean"}, "report": configcontract.Definition("StorageUpgradeReport"), "diagnostic": diagnostic, "proxy": map[string]any{"type": "object"}, "dashboard": map[string]any{"type": "object"}, "processes": arraySchema(object(map[string]any{"previous_id": stringSchema(), "execution_id": stringSchema()}, "previous_id", "execution_id")), "runtime_changed": boolSchema()}, "status", "ready")
 }
 
 func finishExecutableUpdate(result any, storage installstorage.Result, binaryChanged bool) (any, *protocol.Error) {
@@ -133,8 +160,12 @@ func finishExecutableUpdate(result any, storage installstorage.Result, binaryCha
 			effects = "committed"
 		}
 	}
-	return nil, protocol.NewError("storage_upgrade_"+storage.Status, "The executable is installed; environment upgrade requires attention. Resolve the reported prerequisite and run devtools update --resume.", 3, map[string]any{
+	var actions []protocol.Remedy
+	if encoded, err := json.Marshal(storage.Diagnostic["next_actions"]); err == nil {
+		_ = json.Unmarshal(encoded, &actions)
+	}
+	return nil, protocol.NewError("storage_upgrade_"+storage.Status, "The executable is installed. Some environment changes still require attention.", 3, map[string]any{
 		"phase": "observe", "reason": "storage_upgrade_" + storage.Status, "effects": effects, "retry": "after_dependency_change", "report": result,
-		"remedies": []protocol.Remedy{protocol.LocalAction([]string{"devtools", "update", "--resume"}, nil, "Resume the environment upgrade with the installed executable.", "value_write").Remedy(protocol.InvocationContext{})},
+		"remedies": actions,
 	})
 }

@@ -26,6 +26,13 @@ var version = "dev"
 var commit = "unknown"
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "__resume-installation" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		defer stop()
+		version, commit := buildVersion()
+		cli.RunInstallationWorker(ctx, version, commit)
+		return
+	}
 	if len(os.Args) == 4 && os.Args[1] == "__values-restart" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()

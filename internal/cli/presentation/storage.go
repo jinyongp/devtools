@@ -95,6 +95,9 @@ func environmentUpgradeBlocks(storage map[string]any) []cliui.Block {
 		blocks = append(blocks, storageReportBlocks(report)...)
 	}
 	if diagnostic, ok := storage["diagnostic"].(map[string]any); ok {
+		if target, ok := diagnostic["target"].(map[string]any); ok {
+			blocks = append(blocks, selectedFields(target, "profile", "name", "id"))
+		}
 		if code := text(diagnostic["code"]); code != "" {
 			blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Upgrade issue"), Value: cliui.Literal(strings.ReplaceAll(code, "_", " "))}))
 		}

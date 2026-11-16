@@ -347,10 +347,13 @@ func (e Engine) Fix(ctx context.Context) (report Report, condition *protocol.Err
 		release()
 		wrote = true
 	}
-	plan, condition := e.Inspect(ctx)
-	if condition != nil {
-		condition.Details["effects"] = "unknown"
-		return plan, condition
+	plan := before
+	if prepared {
+		plan, condition = e.Inspect(ctx)
+		if condition != nil {
+			condition.Details["effects"] = "unknown"
+			return plan, condition
+		}
 	}
 	if plan.Ready {
 		plan.Changed = prepared
@@ -479,10 +482,11 @@ func (e Engine) Fix(ctx context.Context) (report Report, condition *protocol.Err
 			condition.Details["effects"] = "unknown"
 			return result, condition
 		}
-		result, condition = e.Inspect(ctx)
-		if condition != nil {
-			condition.Details["effects"] = "unknown"
-			return result, condition
+		for i, step := range result.Items {
+			if step.Domain == "coordinator" {
+				result.Items = append(result.Items[:i], result.Items[i+1:]...)
+				break
+			}
 		}
 	}
 	result.Changed = changed

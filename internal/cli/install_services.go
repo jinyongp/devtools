@@ -65,6 +65,16 @@ func (a *App) upgradeInstalledServices(ctx context.Context, streams IO, networkR
 		}
 		id, e := a.restoreInstalledService(ctx, streams, store, *target, networkReady)
 		if e != nil {
+			if e.Details == nil {
+				e.Details = map[string]any{}
+			}
+			if e.Details["target"] == nil {
+				identity := map[string]any{"kind": "execution", "id": target.Previous}
+				if original, _, readErr := store.UpgradeRecord(ctx, target.Previous); readErr == nil {
+					identity["name"], identity["profile"] = original.Command, original.Profile
+				}
+				e.Details["target"] = identity
+			}
 			if condition == nil {
 				condition = e
 			}

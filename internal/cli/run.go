@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/jinyongp/devtools/internal/doctor"
@@ -12,6 +13,7 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/redact"
 	"github.com/jinyongp/devtools/internal/tasks"
+	"github.com/jinyongp/devtools/internal/values"
 )
 
 func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any, *protocol.Error) {
@@ -89,6 +91,13 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 		command.ExecutionID = tasks.ID()
 	}
 	prepared, err := a.prepareExecution(ctx, command, false, streams)
+	if err != nil && err.Code == "migration_required" && err.Details["domain"] == "values" && command.NeedsValues() {
+		if data, condition := a.dataDirectory(); condition == nil {
+			if values.UpgradeProfileForExecution(ctx, filepath.Dir(data), command.Project.Profile) == nil {
+				prepared, err = a.prepareExecution(ctx, command, false, streams)
+			}
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +106,9 @@ func (a *App) runCommand(ctx context.Context, streams IO, request Request) (any,
 	checks := prepared.Checks(ctx, os.Environ(), false)
 	if !execution.ChecksPassed(checks) {
 		return nil, doctor.FailureFor(checks, command.Diagnostic("foreground"))
+	}
+	if command.Name != "" && mode != network.PrepareOff {
+		a.scheduleInstallation(ctx)
 	}
 	exit := 0
 	if command.ExecutionID != "" {

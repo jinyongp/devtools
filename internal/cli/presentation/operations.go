@@ -98,6 +98,7 @@ func updateView(definition Definition, data map[string]any) (cliui.Document, boo
 			cliui.Field{Label: cliui.Literal("Executable changed"), Value: display(data["binary_changed"])},
 			cliui.Field{Label: cliui.Literal("Storage"), Value: display(storage["status"])},
 		))
+		blocks = append(blocks, environmentUpgradeBlocks(storage)...)
 	}
 	alias := data["alias"].(map[string]any)
 	name := alias["name"].(string)

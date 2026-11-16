@@ -100,7 +100,14 @@ func environmentUpgradeBlocks(storage map[string]any) []cliui.Block {
 	exposures, _ := proxy["exposures"].([]any)
 	for _, value := range exposures {
 		row, _ := value.(map[string]any)
-		if row["state"] == "restored" || row["state"] == "closed" {
+		if row["state"] == "restored" {
+			item, _ := row["item"].(map[string]any)
+			if url := text(item["url"]); url != "" && url != text(row["previous_url"]) {
+				blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("New share URL"), Value: cliui.Literal(url)}))
+			}
+			continue
+		}
+		if row["state"] == "closed" {
 			continue
 		}
 		label := "Share " + text(row["id"])

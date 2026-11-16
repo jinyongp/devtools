@@ -293,6 +293,16 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 		if err != nil || json.Unmarshal(decoded, &replacement) != nil || replacement.ID == "" {
 			return nil, proxyFailure("invalid_storage")
 		}
+		observed, failure := m.ExposureStatus(ctx, replacement.ID)
+		if failure != nil {
+			row["state"], row["reason"] = "recovery_required", failure.Code
+			continue
+		}
+		if observed.Generation != replacement.Generation {
+			row["state"], row["reason"] = "recovery_required", "request_conflict"
+			continue
+		}
+		replacement = observed
 		switch replacement.State {
 		case "active":
 			row["state"], row["item"] = "restored", replacement

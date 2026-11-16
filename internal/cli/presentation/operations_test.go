@@ -31,6 +31,13 @@ func TestUpdateReportsOutcomeAndShortcutWarningsWithoutDetails(t *testing.T) {
 	if strings.Contains(string(out), "preserved") || strings.Contains(string(out), "Details") {
 		t.Fatal(string(out))
 	}
+	data["storage"] = map[string]any{"status": "ready", "proxy": map[string]any{"exposures": []any{
+		map[string]any{"state": "restored", "previous_url": "https://old.example", "item": map[string]any{"url": "https://replacement.example"}},
+	}}}
+	out, _ = cliui.Render(publicDocument(t, "update", data), cliui.Options{})
+	if !strings.Contains(string(out), "https://replacement.example") {
+		t.Fatal("updated share URL missing", string(out))
+	}
 }
 
 func TestOperationStatesDoNotClaimNewEffects(t *testing.T) {

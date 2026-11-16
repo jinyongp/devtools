@@ -21,8 +21,8 @@ type upgradeRecoveryProvider struct {
 	available atomic.Bool
 }
 
-func (p *upgradeRecoveryProvider) RecoverStop(context.Context, expose.Record) *protocol.Error {
-	if !p.available.Load() {
+func (p *upgradeRecoveryProvider) RecoverStop(_ context.Context, record expose.Record) *protocol.Error {
+	if record.Auth && !p.available.Load() {
 		return expose.Failure("provider_recovery_required")
 	}
 	return nil
@@ -68,6 +68,7 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 	}
 	id := tasks.ID()
 	record := expose.Record{Public: expose.Public{ID: id, Generation: tasks.ID(), Route: route, Provider: "lan", Listener: "default", State: "starting"}}
+	record.Directory = p.Root
 	if e := old.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
 		listener := st.Listener("default")
 		record.Pin = network.Pin{ID: id, Route: route, ListenerID: listener.ID, ListenerGeneration: listener.Generation, NetworkDigest: strings.Repeat("a", 64), Port: st.Get(route.InstanceID, "web").Port, Provider: "lan", Service: "web"}
@@ -93,6 +94,33 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 	if e := (expose.Store{Data: old.Data}).Write(blocked); e != nil {
 		t.Fatal(e)
 	}
+	_, _, identity, e := current.exposureIdentity(ctx, route)
+	if e != nil {
+		t.Fatal(e)
+	}
+	sibling := blocked
+	sibling.ID, sibling.Generation = tasks.ID(), tasks.ID()
+	sibling.Auth, sibling.ProviderOwner, sibling.Identity = false, sibling.Generation, identity
+	sibling.Pin.ID, sibling.Pin.NetworkDigest = sibling.ID, identity
+	if e := old.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
+		st.Network.Pins = append(st.Network.Pins, sibling.Pin)
+		return true, nil
+	}); e != nil {
+		t.Fatal(e)
+	}
+	if e := (expose.Store{Data: old.Data}).Write(sibling); e != nil {
+		t.Fatal(e)
+	}
+	row := func(result any, prior string) map[string]any {
+		t.Helper()
+		for _, row := range result.(map[string]any)["exposures"].([]map[string]any) {
+			if row["id"] == prior {
+				return row
+			}
+		}
+		t.Fatalf("missing exposure %s in %v", prior, result)
+		return nil
+	}
 	if e := current.RequireCurrentDaemon(ctx); e == nil || e.Code != "old_daemon_version" {
 		t.Fatal(e)
 	}
@@ -100,8 +128,13 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 	if e != nil {
 		t.Fatal(e)
 	}
-	if rows := result.(map[string]any)["exposures"].([]map[string]any); len(rows) != 1 || rows[0]["reason"] != "provider_recovery_required" {
-		t.Fatal(rows)
+	if blockedRow := row(result, blocked.ID); blockedRow["reason"] != "provider_recovery_required" {
+		t.Fatal(blockedRow)
+	}
+	siblingRow := row(result, sibling.ID)
+	restored, ok := siblingRow["item"].(expose.Public)
+	if siblingRow["state"] != "restored" || !ok || restored.ID == sibling.ID || provider.starts.Load() != 1 {
+		t.Fatal("unrelated provider did not restore exactly once", siblingRow, provider.starts.Load())
 	}
 	after, err := current.rpc(ctx, "status")
 	if err != nil || after.Build != current.Build || after.AttemptID == before.AttemptID {
@@ -111,7 +144,7 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 	if e != nil || status["running"] != true {
 		t.Fatal(status, e)
 	}
-	if rows, e := current.ExposureNavigation(ctx, false, nil); e != nil || len(rows) != 1 || rows[0].ID != blocked.ID {
+	if rows, e := current.ExposureNavigation(ctx, false, nil); e != nil || len(rows) != 2 {
 		t.Fatal(rows, e)
 	}
 	if st, e := current.portStore().Read(); e != nil || !st.Pinned(route) {
@@ -122,11 +155,17 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 	if e != nil {
 		t.Fatal(e)
 	}
-	if rows := result.(map[string]any)["exposures"].([]map[string]any); len(rows) != 1 || rows[0]["state"] != "auth_required" {
-		t.Fatal(rows)
+	if blockedRow := row(result, blocked.ID); blockedRow["state"] != "auth_required" {
+		t.Fatal(blockedRow)
 	}
 	if live, err := current.rpc(ctx, "status"); err != nil || live.AttemptID != after.AttemptID {
 		t.Fatal("provider retry replaced the restored daemon", live, err)
+	}
+	if siblingRow := row(result, sibling.ID); siblingRow["state"] != "restored" || provider.starts.Load() != 1 {
+		t.Fatal("provider retry launched a duplicate sibling", siblingRow, provider.starts.Load())
+	}
+	if _, e := current.ExposeStop(ctx, restored.ID, tasks.ID()); e != nil {
+		t.Fatal(e)
 	}
 	if st, e := current.portStore().Read(); e != nil || st.Pinned(route) {
 		t.Fatal("settled exposures still own the route", e)

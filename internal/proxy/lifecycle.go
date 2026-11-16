@@ -795,7 +795,21 @@ func (m Manager) stopAttempt(ctx context.Context, expectedAttempt string, anchor
 	if !current.Running {
 		return current, nil
 	}
-	if _, rpcErr := m.rpc(ctx, "stop"); rpcErr != nil {
+	var control proxyControl
+	rpcErr := tasks.ReadPrivate(m.path("control.json"), &control)
+	if rpcErr == nil {
+		// Verify and stop using the same control credentials. The descriptor can
+		// be replaced after Status if the previous daemon exits on its own.
+		var live Record
+		live, rpcErr = control.call(ctx, "status")
+		if rpcErr == nil {
+			if live.AttemptID != record.AttemptID {
+				return m.settledStop(expectedAttempt != "")
+			}
+			_, rpcErr = control.call(ctx, "stop")
+		}
+	}
+	if rpcErr != nil {
 		if m.leaseFree(ctx) {
 			current.State, current.Reason, current.Running = "interrupted", "supervisor_lost", false
 			return current, nil
@@ -1101,8 +1115,15 @@ func (m Manager) changeAttempt(ctx context.Context, attemptID string, change fun
 
 func (m Manager) rpc(ctx context.Context, action string) (Record, error) {
 	var control proxyControl
+	if err := tasks.ReadPrivate(m.path("control.json"), &control); err != nil {
+		return Record{}, err
+	}
+	return control.call(ctx, action)
+}
+
+func (control proxyControl) call(ctx context.Context, action string) (Record, error) {
 	var record Record
-	if tasks.ReadPrivate(m.path("control.json"), &control) != nil || len(control.Token) != 64 || !strings.HasPrefix(control.Address, "http://127.0.0.1:") {
+	if len(control.Token) != 64 || !strings.HasPrefix(control.Address, "http://127.0.0.1:") {
 		return record, errors.New("unavailable")
 	}
 	parsed, err := url.Parse(control.Address)

@@ -945,6 +945,49 @@ func TestPendingStopDoesNotStopReplacementAttempt(t *testing.T) {
 	}
 }
 
+func TestStopDoesNotUseReplacementControlAfterStatus(t *testing.T) {
+	manager := testManager(t)
+	ctx := context.Background()
+	previous := Record{AttemptID: tasks.ID(), State: "running"}
+	next := Record{AttemptID: tasks.ID(), State: "running"}
+	replacement := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/stop" {
+			t.Error("stop was sent to the replacement daemon")
+			http.Error(response, "wrong daemon", http.StatusConflict)
+			return
+		}
+		_ = json.NewEncoder(response).Encode(next)
+	}))
+	defer replacement.Close()
+	old := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/status" {
+			http.NotFound(response, request)
+			return
+		}
+		if err := manager.write("record.json", next); err != nil {
+			t.Error(err)
+		}
+		if err := manager.write("control.json", proxyControl{Address: replacement.URL, Token: strings.Repeat("b", 64)}); err != nil {
+			t.Error(err)
+		}
+		_ = json.NewEncoder(response).Encode(previous)
+	}))
+	defer old.Close()
+	if err := manager.write("record.json", previous); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.write("control.json", proxyControl{Address: old.URL, Token: strings.Repeat("a", 64)}); err != nil {
+		t.Fatal(err)
+	}
+	status, e := manager.stopAttempt(ctx, previous.AttemptID, func(string, string) *protocol.Error { return nil })
+	if e != nil || status.Running || status.Reason != "target_stopped" {
+		t.Fatal(status, e)
+	}
+	if live, err := manager.rpc(ctx, "status"); err != nil || live.AttemptID != next.AttemptID || live.State != "running" {
+		t.Fatal(live, err)
+	}
+}
+
 func TestManagerReportsStorageFailureWhileExpiringAttempt(t *testing.T) {
 	manager := testManager(t)
 	manager.readyTimeout = 50 * time.Millisecond

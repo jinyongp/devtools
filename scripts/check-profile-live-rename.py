@@ -99,13 +99,13 @@ port = {backend}
 host = "storefront.localhost"
 port = "storefront"
 [commands."dev:storefront"]
-exec = {json.dumps([sys.executable, "-c", "pass"])}
+exec = {json.dumps([sys.executable, "-c", "print('storefront-started')"])}
 inject = false
 serve = ["storefront"]
 '''
     config.write_text(initial, encoding="utf-8")
 
-    def call(binary, *args, error=None):
+    def call(binary, *args, error=None, foreground=False):
         result = subprocess.run(
             [str(binary), "--format", "json", "--isolated-root", str(state), *args],
             cwd=root, env=environment, stdin=subprocess.DEVNULL,
@@ -115,12 +115,15 @@ serve = ["storefront"]
             assert result.returncode != 0 and json.loads(result.stderr)["error"]["code"] == error, (args, result.stderr)
             return
         assert result.returncode == 0, (args, result.stderr)
+        if foreground:
+            assert result.stdout.strip() == "storefront-started", (args, result.stdout, result.stderr)
+            return
         return json.loads(result.stdout)["data"]
 
     try:
         call(legacy, "proxy", "configure", "--http-address", f"0.0.0.0:{frontend}", "--disable-https",
              "--request-id", str(uuid.uuid4()))
-        call(legacy, "run", "dev:storefront", "--proxy")
+        call(legacy, "run", "dev:storefront", "--proxy", foreground=True)
         before = call(legacy, "proxy", "status")["item"]
         for provider in ("lan", "cloudflared"):
             call(broken, "expose", "start", "storefront", "--provider", provider, "--no-auth", error="invalid_storage")
@@ -137,7 +140,7 @@ serve = ["storefront"]
         registry = json.loads((state / "data" / "ports" / "registry.json").read_text(encoding="utf-8"))
         assert registry["network"]["pins"] == []
         assert not any(x["name"].startswith("origin.") for x in registry["reservations"])
-        call(candidate, "run", "dev:storefront")
+        call(candidate, "run", "dev:storefront", foreground=True)
         call(candidate, "update", "--resume")
         assert call(candidate, "proxy", "status")["item"]["generation"] == after["generation"]
     finally:

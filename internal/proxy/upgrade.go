@@ -13,6 +13,7 @@ import (
 	"github.com/jinyongp/devtools/internal/hosts"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/netops"
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -27,7 +28,11 @@ func RuntimeBuild(version, commit string) string {
 }
 
 func (m Manager) UpgradeRequestID() string {
-	b := sha256.Sum256([]byte("devtools/proxy-upgrade/" + m.Build))
+	return upgradeOperationID("devtools/proxy-upgrade/" + m.Build)
+}
+
+func upgradeOperationID(key string) string {
+	b := sha256.Sum256([]byte(key))
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
@@ -45,9 +50,10 @@ func (m Manager) RequireCurrentDaemon(ctx context.Context) *protocol.Error {
 }
 
 type upgradeProxyPlan struct {
-	Previous  string            `json:"previous"`
-	Listeners []listenerTarget  `json:"listeners"`
-	Exposures []upgradeExposure `json:"exposures"`
+	Previous   string            `json:"previous"`
+	LegacyPort int               `json:"legacy_port,omitempty"`
+	Listeners  []listenerTarget  `json:"listeners"`
+	Exposures  []upgradeExposure `json:"exposures"`
 }
 
 type upgradeExposure struct {
@@ -60,8 +66,8 @@ type upgradeExposure struct {
 // The caller must reuse requestID when resuming this upgrade.
 func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.Manager) (any, *protocol.Error) {
 	enabled, e := m.NetworkEnabled()
-	if e != nil || !enabled {
-		return map[string]any{"changed": false}, e
+	if e != nil {
+		return nil, e
 	}
 	if !protocol.ValidUUID(requestID) {
 		return nil, proxyFailure("invalid_argument")
@@ -74,7 +80,7 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 		if !status.Running && status.State != "unknown" && status.State != "starting" {
 			return map[string]any{"changed": false}, nil
 		}
-		if live, err := m.rpc(ctx, "status"); err == nil && live.Build == m.Build && m.networkCapable() {
+		if live, err := m.rpc(ctx, "status"); err == nil && live.Build == m.Build && (!enabled || m.networkCapable()) {
 			return map[string]any{"changed": false}, nil
 		}
 	}
@@ -102,7 +108,7 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 			if err != nil || live.State != "running" || live.AttemptID == "" {
 				return nil, proxyFailure("proxy_pending")
 			}
-			if m.Build != "" && live.Build == m.Build && m.networkCapable() {
+			if m.Build != "" && live.Build == m.Build && (!enabled || m.networkCapable()) {
 				return map[string]any{"changed": false}, nil
 			}
 			plan.Previous = live.AttemptID
@@ -110,10 +116,17 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 			if e != nil {
 				return nil, e
 			}
-			if st.Network == nil {
-				return nil, proxyFailure("request_conflict")
+			if st.Network == nil || len(st.Network.Listeners) == 0 {
+				if status.Port == 0 {
+					return nil, proxyStorageError()
+				}
+				plan.LegacyPort = status.Port
 			}
-			for _, definition := range st.Network.Listeners {
+			var listeners []network.Listener
+			if st.Network != nil {
+				listeners = st.Network.Listeners
+			}
+			for _, definition := range listeners {
 				var record Record
 				err := tasks.ReadPrivate(m.path(listenerRecord(definition.ID)), &record)
 				if errors.Is(err, os.ErrNotExist) {
@@ -159,9 +172,6 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 			}
 			e := m.reconcileUnstartedExposures(ctx)
 			if e == nil {
-				e = m.closeUpgradeExposures(ctx, plan.Exposures)
-			}
-			if e == nil {
 				e = j.Set("old_daemon_stopped", true)
 			}
 			release()
@@ -169,12 +179,38 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 				return nil, e
 			}
 		}
-		if e := m.bootNetwork(ctx, j); e != nil {
+		if plan.LegacyPort != 0 {
+			id := upgradeOperationID("devtools/proxy-upgrade-legacy-start/" + requestID)
+			started, e := m.Apply(ctx, Request{Action: "start", Port: &plan.LegacyPort, RequestID: id})
+			if e != nil {
+				return nil, e
+			}
+			if !started.Running || started.Port != plan.LegacyPort {
+				return nil, proxyFailure("proxy_pending")
+			}
+		} else if e := m.bootNetwork(ctx, j); e != nil {
 			return nil, e
 		}
 		live, err := m.rpc(ctx, "status")
 		if err != nil || live.State != "running" || live.AttemptID == plan.Previous || live.Build != m.Build {
 			return nil, proxyFailure("proxy_pending")
+		}
+		var restoredBy string
+		if _, e := j.Get("listener_daemon", &restoredBy); e != nil {
+			return nil, e
+		}
+		if restoredBy != "" && restoredBy != live.AttemptID {
+			for i := range plan.Listeners {
+				plan.Listeners[i].AttemptID = tasks.ID()
+			}
+			if e := j.Set("upgrade", plan); e != nil {
+				return nil, e
+			}
+		}
+		if restoredBy != live.AttemptID {
+			if e := j.Set("listener_daemon", live.AttemptID); e != nil {
+				return nil, e
+			}
 		}
 		items := make([]ListenerStatus, 0, len(plan.Listeners))
 		for _, target := range plan.Listeners {
@@ -207,6 +243,16 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 		item := selected.Item
 		row := map[string]any{"id": item.ID, "provider": item.Provider, "previous_url": item.URL}
 		restored = append(restored, row)
+		closed, failure := m.closeUpgradeExposure(ctx, selected)
+		if failure != nil {
+			row["state"], row["reason"] = "recovery_required", failure.Code
+			row["next_actions"] = []protocol.Remedy{protocol.LocalAction([]string{"devtools", "expose", "status", item.ID}, nil, "Inspect provider cleanup for this share.", "read").Remedy(protocol.InvocationContext{})}
+			continue
+		}
+		if closed {
+			row["state"] = "closed"
+			continue
+		}
 		if item.Auth {
 			closed, e := (expose.Store{Data: m.Data}).Read(item.ID)
 			if e == nil && closed.Generation == item.Generation && closed.State == "stopped" {
@@ -271,34 +317,58 @@ func (m Manager) reconcileUnstartedExposures(ctx context.Context) *protocol.Erro
 	return nil
 }
 
-func (m Manager) closeUpgradeExposures(ctx context.Context, selections []upgradeExposure) *protocol.Error {
-	store := expose.Store{Data: m.Data}
-	for _, selected := range selections {
+// Settle each provider after the listeners are back. The close receipt keeps
+// retries distinct from a user explicitly stopping a share before restoration.
+func (m Manager) closeUpgradeExposure(ctx context.Context, selected upgradeExposure) (bool, *protocol.Error) {
+	id := upgradeOperationID("devtools/proxy-upgrade-exposure-close/" + selected.RequestID)
+	outcome, e := (netops.Store{Data: m.Data}).Apply(ctx, id, struct{ Action, ID, Generation string }{
+		"upgrade-exposure-close", selected.Item.ID, selected.Item.Generation,
+	}, []string{"exposures", "proxy-daemon"}, func(j *netops.Journal) (any, *protocol.Error) {
+		store := expose.Store{Data: m.Data}
 		record, e := store.Read(selected.Item.ID)
+		if e != nil && e.Code == "exposure_not_found" {
+			return map[string]any{"closed": true}, nil
+		}
 		if e != nil {
-			return e
+			return nil, e
 		}
-		if record.Generation != selected.Item.Generation || record.Identity != selected.Identity {
-			return expose.Failure("request_conflict")
+		if record.Generation != selected.Item.Generation || record.Route != selected.Item.Route || record.Identity != selected.Identity {
+			return nil, expose.Failure("request_conflict")
 		}
-		if record.State != "auth_required" || record.EndedAt == nil {
-			if _, e := m.stopDetachedExposure(ctx, record); e != nil {
-				return e
+		var closing bool
+		if _, e := j.Get("closing", &closing); e != nil {
+			return nil, e
+		}
+		if !closing && record.State == "stopped" {
+			if _, _, e := m.stopExposure(ctx, record); e != nil {
+				return nil, e
+			}
+			return map[string]any{"closed": true}, nil
+		}
+		if !closing {
+			if e := j.Set("closing", true); e != nil {
+				return nil, e
 			}
 		}
-		if _, e := m.releaseExposure(ctx, record); e != nil {
-			return e
+		if record.State != "auth_required" || record.EndedAt == nil {
+			if _, _, e := m.stopExposure(ctx, record); e != nil {
+				return nil, e
+			}
 		}
 		if record.Auth {
 			closed, e := store.Read(record.ID)
 			if e != nil {
-				return e
+				return nil, e
 			}
 			closed.State, closed.Reason = "auth_required", "authentication_lost"
 			if e := store.Write(closed); e != nil {
-				return e
+				return nil, e
 			}
 		}
+		return map[string]any{"closed": false}, nil
+	})
+	if e != nil {
+		return false, e
 	}
-	return nil
+	return outcome.(map[string]any)["closed"] == true, nil
 }

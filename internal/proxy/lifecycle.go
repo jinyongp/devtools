@@ -1026,6 +1026,7 @@ func (m Manager) Serve(ctx context.Context, attemptID string) error {
 			return false
 		}
 		active.State, active.StartedAt, active.Reason = "running", &now, ""
+		active.Build = m.Build
 		return true
 	})
 	if err != nil || !changed {

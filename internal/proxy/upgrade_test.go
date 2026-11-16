@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jinyongp/devtools/internal/expose"
@@ -15,7 +16,20 @@ import (
 	"github.com/jinyongp/devtools/internal/tasks"
 )
 
+type upgradeRecoveryProvider struct {
+	fakeExposureProvider
+	available atomic.Bool
+}
+
+func (p *upgradeRecoveryProvider) RecoverStop(context.Context, expose.Record) *protocol.Error {
+	if !p.available.Load() {
+		return expose.Failure("provider_recovery_required")
+	}
+	return nil
+}
+
 func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T) {
+	data := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
 	var daemons sync.WaitGroup
 	t.Cleanup(func() {
@@ -26,8 +40,9 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 		return Manager{Build: build}
 	}
 	old, current := manager("0.40.0/old"), manager("0.45.0/new")
-	old.Data = t.TempDir()
-	current.Data = old.Data
+	old.Data, current.Data = data, data
+	provider := &upgradeRecoveryProvider{}
+	current.ExposureProviders = map[string]expose.Provider{"cloudflared": provider}
 	spawn := func(m Manager) func(string, string) error {
 		return func(_ string, attempt string) error {
 			daemons.Add(1)
@@ -64,13 +79,29 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 	if e := (expose.Store{Data: old.Data}).Write(record); e != nil {
 		t.Fatal(e)
 	}
+	blocked := record
+	blocked.ID, blocked.Generation = tasks.ID(), tasks.ID()
+	blocked.State, blocked.Daemon, blocked.Provider = "active", before.AttemptID, "cloudflared"
+	blocked.Auth, blocked.ProviderOwner, blocked.Identity = true, blocked.Generation, "previous-route"
+	blocked.Pin.ID, blocked.Pin.Provider = blocked.ID, blocked.Provider
+	if e := old.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
+		st.Network.Pins = append(st.Network.Pins, blocked.Pin)
+		return true, nil
+	}); e != nil {
+		t.Fatal(e)
+	}
+	if e := (expose.Store{Data: old.Data}).Write(blocked); e != nil {
+		t.Fatal(e)
+	}
 	if e := current.RequireCurrentDaemon(ctx); e == nil || e.Code != "old_daemon_version" {
 		t.Fatal(e)
 	}
-	for range 2 {
-		if _, e := current.UpgradeNetwork(ctx, current.UpgradeRequestID(), hm); e != nil {
-			t.Fatal(e)
-		}
+	result, e := current.UpgradeNetwork(ctx, current.UpgradeRequestID(), hm)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if rows := result.(map[string]any)["exposures"].([]map[string]any); len(rows) != 1 || rows[0]["reason"] != "provider_recovery_required" {
+		t.Fatal(rows)
 	}
 	after, err := current.rpc(ctx, "status")
 	if err != nil || after.Build != current.Build || after.AttemptID == before.AttemptID {
@@ -80,10 +111,24 @@ func TestUpgradeReplacesDaemonAndRestoresListenersWithAbandonedPins(t *testing.T
 	if e != nil || status["running"] != true {
 		t.Fatal(status, e)
 	}
-	if rows, e := current.ExposureNavigation(ctx, false, nil); e != nil || len(rows) != 0 {
+	if rows, e := current.ExposureNavigation(ctx, false, nil); e != nil || len(rows) != 1 || rows[0].ID != blocked.ID {
 		t.Fatal(rows, e)
 	}
+	if st, e := current.portStore().Read(); e != nil || !st.Pinned(route) {
+		t.Fatal("provider ownership was released without proof", e)
+	}
+	provider.available.Store(true)
+	result, e = current.UpgradeNetwork(ctx, current.UpgradeRequestID(), hm)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if rows := result.(map[string]any)["exposures"].([]map[string]any); len(rows) != 1 || rows[0]["state"] != "auth_required" {
+		t.Fatal(rows)
+	}
+	if live, err := current.rpc(ctx, "status"); err != nil || live.AttemptID != after.AttemptID {
+		t.Fatal("provider retry replaced the restored daemon", live, err)
+	}
 	if st, e := current.portStore().Read(); e != nil || st.Pinned(route) {
-		t.Fatal("abandoned exposure still owns the route", e)
+		t.Fatal("settled exposures still own the route", e)
 	}
 }

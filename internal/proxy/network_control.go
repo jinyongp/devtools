@@ -185,12 +185,21 @@ func (m Manager) bootNetwork(ctx context.Context, j *netops.Journal) *protocol.E
 		return proxyStorageError()
 	}
 	record, readErr := m.readRecord()
-	if readErr == nil && record.AttemptID == bootID && record.EndedAt == nil {
+	sameAttempt := readErr == nil && record.AttemptID == bootID && record.EndedAt == nil
+	if sameAttempt && status.State != "interrupted" {
 		unlock()
 	} else {
 		if !m.leaseFree(ctx) {
 			unlock()
 			return proxyFailure("proxy_pending")
+		}
+		// Fence any delayed launch from the interrupted operation.
+		if sameAttempt {
+			bootID = tasks.ID()
+			if e := j.Set("daemon_attempt", bootID); e != nil {
+				unlock()
+				return e
+			}
 		}
 		record = Record{CreatedAt: time.Now().UTC(), AttemptID: bootID, State: "starting"}
 		if e := m.write("record.json", record); e != nil {

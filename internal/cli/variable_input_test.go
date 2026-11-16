@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jinyongp/devtools/internal/tasks"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
@@ -226,16 +225,26 @@ func TestVariableInputReplayAcrossSourcesAndRemovedEnv(t *testing.T) {
 	}
 }
 
+type cancelingVariableInput struct {
+	*io.PipeReader
+	cancel context.CancelFunc
+}
+
+func (r cancelingVariableInput) Read(buffer []byte) (int, error) {
+	r.cancel()
+	return r.PipeReader.Read(buffer)
+}
+
 func TestVariableInputCancellationAndMissingStdin(t *testing.T) {
 	app := testApp(t)
 	reader, writer := io.Pipe()
 	defer reader.Close()
 	defer writer.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var out, diagnostic bytes.Buffer
 	args := []string{"var", "set", "TEXT", "--profile", "app", "--stdin"}
-	if code := app.Run(ctx, args, IO{In: reader, Out: &out, Err: &diagnostic}); code != 130 || out.Len() != 0 {
+	if code := app.Run(ctx, args, IO{In: cancelingVariableInput{reader, cancel}, Out: &out, Err: &diagnostic}); code != 130 || out.Len() != 0 {
 		t.Fatal("stdin cancellation failed", code, diagnostic.String())
 	}
 	out.Reset()

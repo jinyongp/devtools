@@ -59,19 +59,15 @@ CLI와 Agent Skill은 각각 사용하는 설치 도구로 업데이트합니다
 릴리즈 게시만으로 현재 설치본이 바뀌지는 않습니다. `devtools version`으로 실제 실행되는
 CLI 버전을 확인하고, 에이전트도 업데이트한 Skill을 다시 읽도록 새 세션에서 사용하세요.
 
-Homebrew로 devtools를 설치했다면:
-
-```sh
-brew upgrade jinyongp/tap/devtools
-npx skills update devtools
-```
-
-설치 스크립트를 사용했다면:
+CLI와 현재 프로젝트에 설치된 Skill을 업데이트합니다.
 
 ```sh
 devtools update
 npx skills update devtools
 ```
+
+이전 CLI가 Homebrew로 업데이트하라고 안내하면 `brew upgrade jinyongp/tap/devtools`를 실행한 뒤
+`devtools update --resume`으로 실행 환경을 업데이트합니다.
 
 전역 Skill은 다음과 같이 업데이트합니다.
 

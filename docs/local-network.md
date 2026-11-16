@@ -219,6 +219,9 @@ auth 파일은 사용자 전용 regular file에 `user:password`를 담는다. `-
 않고 daemon 메모리에서만 보유한다. daemon 종료 뒤 인증 복원은 `auth_required`로 닫힌 상태가 된다.
 stop 후 새 UUID로 다시 시작한다. 공유 중 route/listener/port/alias 변경은 pin으로 보호한다.
 source 변경이나 provider 실패는 대상 ingress와 열린 stream만 종료하고 복구 상태로 남긴다.
+`expose list`에는 진행 중인 공유와 아직 정리할 리소스가 남은 공유가 표시된다. 실패한 시작에서
+리소스 정리가 끝났다면 `expose list --view history`에서 결과를 확인할 수 있다. URL이 생성되기
+전에 실패한 공유의 URL 열은 `—`로 표시된다.
 
 LAN은 외부에서 도달 가능한 명시 listener 주소가 필요하다. 중지 상태에서
 `--http-address 0.0.0.0:18080 --https-address 0.0.0.0:18443`처럼 설정한다.

@@ -170,20 +170,15 @@ for configuration and updates.
 
 ## Update
 
-If you installed with Homebrew, update with Homebrew:
-
-```sh
-brew upgrade jinyongp/tap/devtools
-```
-
-If you used the install script, run `devtools update` to get the latest stable release:
-
 ```sh
 devtools update
 ```
 
-The update replaces the executable and preserves your profile data and project
-configuration. Check the new version with `devtools version`.
+The update replaces the executable, upgrades the running Devtools environment,
+and preserves your profile data and project configuration. Check the new version
+with `devtools version`. If an older CLI asks you to use Homebrew, run
+`brew upgrade jinyongp/tap/devtools`, then `devtools update --resume`.
+See the [installation guide](docs/install.md#update) for recovery details.
 For a build with vault support, follow [secret setup and migration](docs/secret-protection.md)
 before using existing secrets. Updating the executable alone does not encrypt old data.
 

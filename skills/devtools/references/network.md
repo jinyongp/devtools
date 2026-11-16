@@ -68,6 +68,7 @@
 - LAN needs a reachable configured listener and client DNS/trust; `.local` is not automatically advertised.
 - External providers must already exist. Tailscale needs login and HTTPS; Quick Tunnel does not support SSE.
 - Auth lives in daemon memory. Auth loss closes ingress with `auth_required`; reconcile/stop, then start a new operation. Source drift/provider failure revokes streams.
+- Use `expose list --view history` to find failed starts after cleanup. If the CLI reports a previous proxy daemon after an executable upgrade, run `devtools update --resume` with the same storage root before retrying the network change.
 - Public state excludes auth, commitments, private keys and provider ownership records. LocalAPI credentials remain in memory, never provider configuration.
 - Tailscale uses LocalAPI ETags and removes only its exact owned Serve handler; concurrent edits fail closed. Never reset all Serve configuration.
 

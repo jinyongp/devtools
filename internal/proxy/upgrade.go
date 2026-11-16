@@ -335,7 +335,7 @@ func (m Manager) UpgradeNetwork(ctx context.Context, requestID string, hm hosts.
 			if err != nil || !acquired {
 				return nil, proxyFailure("proxy_pending")
 			}
-			e := m.reconcileUnstartedExposures(ctx)
+			e = m.reconcileUnstartedExposures(ctx)
 			if e == nil {
 				e = j.Set("old_daemon_stopped", true)
 			}

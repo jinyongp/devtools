@@ -51,7 +51,7 @@ try:
     assert select.select([foreground.stdout], [], [], 15)[0] and foreground.stdout.readline().strip() == 'ready'
     active = execute(str(binary), 'process', 'list', '--profile', 'upgrade-foreground', '--mode', 'foreground')['data']['items']
     assert len(active) == 1 and active[0]['state'] == 'running'
-    foreground_id = active[0]['id']
+    foreground_id = active[0]['execution_id']
     updated = execute(str(alias), 'update', '--version', '0.0.0-test.2', '--source',
                       os.environ['DEVTOOLS_TEST_RELEASES'])
     still_running = execute(str(binary), 'process', 'status', foreground_id)['data']['item']

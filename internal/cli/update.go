@@ -50,10 +50,7 @@ func (a *App) registerUpdate(version string) {
 					return nil, argumentError("--resume uses the installed version and excludes --version and --source.", "resume")
 				}
 				storage := a.resumeInstallation(ctx, streams)
-				changed := storage.Report != nil && storage.Report.Changed
-				if result, ok := storage.Proxy.(map[string]any); ok && result["changed"] == true {
-					changed = true
-				}
+				changed := storage.RuntimeChanged || storage.Report != nil && storage.Report.Changed
 				return finishExecutableUpdate(map[string]any{"action": "update", "version": version, "alias": map[string]any{"name": "dvt", "status": "unchanged"}, "changed": changed, "binary_changed": false, "storage": storage}, storage, false)
 			}
 			directories, pathErr := a.currentPaths()

@@ -16,7 +16,7 @@ import (
 // The HTTP consumer uses the same parser, selection, paging and action binder.
 // Its capability is restricted to registered collection queries.
 func (a *App) DashboardContracts() dashboard.Contracts {
-	return dashboard.Contracts{ResolveAction: a.ResolveAction, Collection: func(ctx context.Context, command, data, cache string, options map[string][]string) (map[string]any, *protocol.Error) {
+	return dashboard.Contracts{Build: a.build, ResolveAction: a.ResolveAction, Collection: func(ctx context.Context, command, data, cache string, options map[string][]string) (map[string]any, *protocol.Error) {
 		if collectionFor(command) == nil {
 			return nil, argumentError("Select a collection query.", "")
 		}

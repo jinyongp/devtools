@@ -158,7 +158,7 @@ func main() {
 			os.Exit(1)
 		}
 		defer lease.Close()
-		if cli.ServePreparedProcessWithLease(ctx, os.Args[2], os.Args[3], lease) != nil {
+		if cli.ServePreparedProcessWithLease(ctx, os.Args[2], os.Args[3], lease, proxy.RuntimeBuild(version, commit)) != nil {
 			os.Exit(1)
 		}
 		return
@@ -171,7 +171,7 @@ func main() {
 			os.Exit(1)
 		}
 		defer lease.Close()
-		if cli.ServeProcessWithLease(ctx, os.Args[2], os.Args[3], lease) != nil {
+		if cli.ServeProcessWithLease(ctx, os.Args[2], os.Args[3], lease, proxy.RuntimeBuild(version, commit)) != nil {
 			os.Exit(1)
 		}
 		return

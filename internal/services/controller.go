@@ -63,6 +63,7 @@ func (s Store) newController(ctx context.Context, r Record) (*executionControlle
 			http.NotFound(w, q)
 			return
 		}
+		w.Header().Set("X-Devtools-Build", s.Build)
 		c.mu.Lock()
 		snapshot, check := c.record, c.probe
 		c.mu.Unlock()

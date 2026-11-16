@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/process"
@@ -121,6 +122,21 @@ func Manage(ctx context.Context, action, cache, data, profile string) (tasks.Obj
 }
 
 func ManageWithRoot(ctx context.Context, action, cache, data, profile, isolatedRoot string) (tasks.Object, *protocol.Error) {
+	return manage(ctx, action, cache, data, profile, isolatedRoot, "")
+}
+
+func UpgradeWithRoot(ctx context.Context, cache, data, isolatedRoot, build string) (tasks.Object, *protocol.Error) {
+	if build == "" {
+		return tasks.Object{"changed": false}, nil
+	}
+	dir := filepath.Join(cache, "dashboard")
+	if _, err := os.Lstat(dir); errors.Is(err, os.ErrNotExist) {
+		return tasks.Object{"changed": false}, nil
+	}
+	return manage(ctx, "upgrade", cache, data, "", isolatedRoot, build)
+}
+
+func manage(ctx context.Context, action, cache, data, profile, isolatedRoot, build string) (tasks.Object, *protocol.Error) {
 	if action == "status" {
 		return Status(ctx, cache)
 	}
@@ -132,9 +148,41 @@ func ManageWithRoot(ctx context.Context, action, cache, data, profile, isolatedR
 	defer unlock()
 	path := filepath.Join(dir, "server.json")
 	r := Registry{}
-	_ = tasks.ReadPrivate(path, &r)
+	readErr := tasks.ReadPrivate(path, &r)
 	status, e := admin(ctx, r, "status")
 	running := e == nil && status["server_id"] == r.ID
+	upgrade := action == "upgrade"
+	marker := filepath.Join(dir, "upgrade.json")
+	if upgrade {
+		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+			return nil, fail()
+		}
+		var intended string
+		err := tasks.ReadPrivate(marker, &intended)
+		if err != nil && !errors.Is(err, os.ErrNotExist) || intended != "" && intended != build {
+			return nil, fail()
+		}
+		if running && status["build"] == build {
+			if err := os.Remove(marker); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return nil, fail()
+			}
+			return tasks.Object{"changed": intended == build, "running": true}, nil
+		}
+		if !running {
+			release, acquired, err := maintenance.TryLockExclusive(ctx, filepath.Join(dir, "serve.lock"))
+			if err != nil || !acquired {
+				return nil, fail()
+			}
+			release()
+			if intended == "" {
+				return tasks.Object{"changed": false}, nil
+			}
+		} else if intended == "" {
+			if err := tasks.WritePrivate(marker, build); err != nil {
+				return nil, fail()
+			}
+		}
+	}
 	if action == "stop" {
 		if !running {
 			return tasks.Object{"stopped": false}, nil
@@ -144,7 +192,7 @@ func ManageWithRoot(ctx context.Context, action, cache, data, profile, isolatedR
 		}
 		return tasks.Object{"stopped": true}, nil
 	}
-	if running && !compatibleServer(status) {
+	if running && (upgrade || !compatibleServer(status)) {
 		if _, e = admin(ctx, r, "stop"); e != nil {
 			return nil, fail()
 		}
@@ -179,7 +227,7 @@ func ManageWithRoot(ctx context.Context, action, cache, data, profile, isolatedR
 			case <-time.After(50 * time.Millisecond):
 			}
 			if tasks.ReadPrivate(path, &r) == nil {
-				if _, e = admin(ctx, r, "status"); e == nil {
+				if status, e = admin(ctx, r, "status"); e == nil && (!upgrade || status["build"] == build) {
 					running = true
 					break
 				}
@@ -189,6 +237,12 @@ func ManageWithRoot(ctx context.Context, action, cache, data, profile, isolatedR
 			return nil, fail()
 		}
 	}
+	if upgrade {
+		if err := os.Remove(marker); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, fail()
+		}
+		return tasks.Object{"changed": true, "running": true}, nil
+	}
 	link, e := admin(ctx, r, "link")
 	if e != nil {
 		return nil, fail()
@@ -197,6 +251,7 @@ func ManageWithRoot(ctx context.Context, action, cache, data, profile, isolatedR
 }
 
 type Server struct {
+	build         string
 	cacheRoot     string
 	collection    func(context.Context, string, string, string, map[string][]string) (map[string]any, *protocol.Error)
 	resolveAction protocol.ActionResolver
@@ -240,6 +295,7 @@ func serve(ctx context.Context, dir, data string, assetRoot *os.Root, ready func
 		s.cacheRoot = dirs.Cache
 	}
 	if len(contracts) > 0 {
+		s.build = contracts[0].Build
 		s.resolveAction = contracts[0].ResolveAction
 		s.collection = contracts[0].Collection
 	}
@@ -292,7 +348,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		switch v.Action {
 		case "status":
-			reply(tasks.Object{"server_id": s.registry.ID, "auth_protocol": authProtocol, "asset_version": assetVersion, "task_protocol": tasks.ProjectionVersion})
+			reply(tasks.Object{"server_id": s.registry.ID, "auth_protocol": authProtocol, "asset_version": assetVersion, "task_protocol": tasks.ProjectionVersion, "build": s.build})
 		case "link":
 			s.mu.Lock()
 			now := time.Now()

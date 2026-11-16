@@ -15,11 +15,14 @@ import (
 )
 
 type Result struct {
-	Status     string                 `json:"status"`
-	Ready      bool                   `json:"ready"`
-	Report     *storageupgrade.Report `json:"report,omitempty"`
-	Diagnostic map[string]any         `json:"diagnostic,omitempty"`
-	Proxy      any                    `json:"proxy,omitempty"`
+	Status         string                 `json:"status"`
+	Ready          bool                   `json:"ready"`
+	Report         *storageupgrade.Report `json:"report,omitempty"`
+	Diagnostic     map[string]any         `json:"diagnostic,omitempty"`
+	Proxy          any                    `json:"proxy,omitempty"`
+	Dashboard      any                    `json:"dashboard,omitempty"`
+	Processes      []map[string]any       `json:"processes,omitempty"`
+	RuntimeChanged bool                   `json:"runtime_changed,omitempty"`
 }
 
 func Failed(code string) Result {

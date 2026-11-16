@@ -190,7 +190,7 @@ func apply(ctx context.Context, options Options, invoked string, load func(conte
 	// No binary rollback is possible after this point: doctor may have committed
 	// a newer storage format. Failure remains a separate observable outcome.
 	result.Storage = installstorage.Run(ctx, filepath.Join(directory, "devtools.exe"))
-	if result.Storage.Report != nil && result.Storage.Report.Changed {
+	if result.Storage.RuntimeChanged || result.Storage.Report != nil && result.Storage.Report.Changed {
 		result.Changed = true
 	}
 	return result, nil

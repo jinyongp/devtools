@@ -41,6 +41,7 @@ type Store struct {
 	PrepareInput func(context.Context, Record, *network.ExecutionSnapshot) (execution.Prepared, *protocol.Error)
 	Data         string
 	IsolatedRoot string
+	Build        string
 }
 
 func writePrivate(path string, v any) error {
@@ -58,6 +59,7 @@ func writePrivate(path string, v any) error {
 
 type Record struct {
 	controlObserved   bool
+	controlBuild      string
 	Control           ControlStatus        `json:"control"`
 	Cleanup           CleanupStatus        `json:"cleanup"`
 	Mode              string               `json:"mode,omitempty"`
@@ -570,6 +572,7 @@ func (s Store) rpc(ctx context.Context, id, action string) (Record, error) {
 		return out, errors.New("identity mismatch")
 	}
 	out.controlObserved = e == nil
+	out.controlBuild = response.Header.Get("X-Devtools-Build")
 	return out, e
 }
 func (s Store) statusRecord(ctx context.Context, r Record) (result Record, condition *protocol.Error) {

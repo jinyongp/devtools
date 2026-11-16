@@ -175,7 +175,7 @@ if "$destination" __install-storage > "$scratch/storage.json" 2> "$scratch/stora
   storage=$(cat "$scratch/storage.json")
 fi
 changed=$binary_changed
-if grep -F '"changed":true' "$scratch/storage.json" >/dev/null 2>&1; then changed=true; fi
+if grep -F -e '"changed":true' -e '"runtime_changed":true' "$scratch/storage.json" >/dev/null 2>&1; then changed=true; fi
 case "$storage" in
   *'"effects":"unknown"'*) storage_effects=unknown ;;
   *'"effects":"partial"'*) storage_effects=partial ;;

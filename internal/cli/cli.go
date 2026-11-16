@@ -69,6 +69,7 @@ type Command struct {
 }
 
 type App struct {
+	build            string
 	actionContracts  *sync.Map
 	observeOutput    func(IO) presentation.Environment
 	buildDocument    func(string, []byte) (cliui.Document, error)
@@ -116,6 +117,7 @@ func stringSchema() map[string]any { return map[string]any{"type": "string"} }
 
 func New(version, commit string) *App {
 	a := &App{
+		build:            proxy.RuntimeBuild(version, commit),
 		actionContracts:  &sync.Map{},
 		passphrasePrompt: readTerminalPassphrase,
 		dataDirectory:    userDataDirectory,

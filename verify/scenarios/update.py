@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import tempfile
 
 home = Path.home()
@@ -28,6 +29,15 @@ with socket.socket() as probe:
 execute(str(binary), 'proxy', 'configure', '--http-address', f'127.0.0.1:{listener_port}', '--disable-https')
 listener_before = execute(str(binary), 'proxy', 'start')['data']['item']
 assert listener_before['running'] is True and listener_before['port'] == listener_port
+dashboard_before = execute(str(binary), 'dashboard', '--profile', 'update')['data']['item']['server_id']
+project = home / 'upgrade-service'
+project.mkdir()
+(project / 'devtools.toml').write_text(
+    'profile = "update"\n[commands.service]\ninject = false\nexec = ' +
+    json.dumps([sys.executable, '-c', 'import time; time.sleep(300)']) + '\n'
+)
+service_before = execute(str(binary), 'process', 'start', 'service', '--dir', str(project))['data']['item']
+assert service_before['state'] == 'running'
 updated = execute(str(alias), 'update', '--version', '0.0.0-test.2', '--source',
                   os.environ['DEVTOOLS_TEST_RELEASES'])
 assert updated['data']['changed'] is True
@@ -38,6 +48,15 @@ listener_after = execute(str(binary), 'proxy', 'status')['data']['item']
 assert listener_after['running'] is True and listener_after['port'] == listener_port
 assert listener_after['generation'] != listener_before['generation']
 assert updated['data']['storage']['proxy']['listeners'][0]['generation'] == listener_after['generation']
+dashboard_after = execute(str(binary), 'dashboard', 'status')['data']['item']
+assert dashboard_after['running'] and dashboard_after['server_id'] != dashboard_before
+assert updated['data']['storage']['dashboard']['changed'] is True
+replaced = updated['data']['storage']['processes']
+assert len(replaced) == 1 and replaced[0]['previous_id'] == service_before['id']
+service_after = replaced[0]['execution_id']
+assert service_after != service_before['id']
+assert execute(str(binary), 'process', 'status', service_before['id'])['data']['item']['ended_at']
+assert execute(str(binary), 'process', 'status', service_after)['data']['item']['state'] == 'running'
 assert execute(str(binary), 'var', 'get', 'KEEP', '--profile', 'update')['data']['value'] == 'preserved'
 before = hashlib.sha256(binary.read_bytes()).digest()
 with tempfile.TemporaryDirectory() as empty:
@@ -96,4 +115,6 @@ assert execute(str(binary), 'vault', 'status')['data']['item']['idle_expires_at'
 assert hashlib.sha256(binary.read_bytes()).digest() == before
 plan = execute(str(binary), 'proxy', 'teardown', '--all')['data']['item']
 execute(str(binary), 'proxy', 'teardown', '--all', '--apply', plan['digest'])
+execute(str(binary), 'dashboard', 'stop')
+execute(str(binary), 'process', 'stop', service_after)
 print('Installed self-update and failure preservation passed')

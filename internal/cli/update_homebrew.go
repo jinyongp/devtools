@@ -58,10 +58,7 @@ func updateHomebrew(ctx context.Context, executable string) (any, *protocol.Erro
 	}
 	changed := candidate != previous
 	storage := installstorage.Run(ctx, candidate)
-	didWork := changed || storage.Report != nil && storage.Report.Changed
-	if proxyResult, ok := storage.Proxy.(map[string]any); ok && proxyResult["changed"] == true && proxyResult["replayed"] != true {
-		didWork = true
-	}
+	didWork := changed || storage.RuntimeChanged || storage.Report != nil && storage.Report.Changed
 	result := map[string]any{"action": "update", "version": observed.Data.Version, "alias": map[string]any{"name": "dvt", "status": "unchanged"}, "changed": didWork, "binary_changed": changed, "storage": storage}
 	return finishExecutableUpdate(result, storage, changed)
 }

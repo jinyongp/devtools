@@ -30,7 +30,7 @@ func (a *App) serviceStore() (services.Store, *protocol.Error) {
 	if err != nil {
 		return services.Store{}, portFailure("io_error")
 	}
-	return services.Store{Data: filepath.Dir(d), IsolatedRoot: directories.IsolatedRoot, PrepareInput: a.prepareManagedInput}, nil
+	return services.Store{Data: filepath.Dir(d), IsolatedRoot: directories.IsolatedRoot, PrepareInput: a.prepareManagedInput, Build: a.build}, nil
 }
 func (a *App) registerProcesses() {
 	descriptions := map[string]string{
@@ -183,38 +183,8 @@ func (a *App) registerProcesses() {
 				if e != nil {
 					return nil, e
 				}
-				if original.ProxyMode {
-					p, e := a.resolveStoredProject(original.Directory, "")
-					if e != nil {
-						return nil, e
-					}
-					if e := a.prepareManagedNetwork(ctx, p, &q, &original, network.PrepareAuto, streams); e != nil {
-						return nil, e
-					}
-				}
-				envOverride := q.Env
-				bundleOverride := q.Bundle
-				q.RestartPreflight = func(ctx context.Context, record services.Record, phase services.RestartPhase) *protocol.Error {
-					env := envOverride
-					if env == nil {
-						env = record.EnvOverride
-					}
-					bundle := bundleOverride
-					if bundle == nil {
-						bundle = record.BundleOverride
-					}
-					snapshot := project.Context{Root: record.Directory, Profile: record.Profile}
-					if q.Network != nil {
-						return a.preflightSelectedNetworkSnapshot(ctx, snapshot, record.Command, env, q.Network, phase == services.RestartBeforeStop, bundle)
-					}
-					switch phase {
-					case services.RestartBeforeStop:
-						return a.checkSelectedProjectCommand(ctx, snapshot, record.Command, env, bundle, true)
-					case services.RestartBeforeStart:
-						return a.checkSelectedProjectCommand(ctx, snapshot, record.Command, env, bundle, false)
-					default:
-						return protocol.NewError("internal_error", "Invalid restart preflight phase.", 1, nil)
-					}
+				if e := a.prepareServiceRestart(ctx, streams, &q, original); e != nil {
+					return nil, e
 				}
 			}
 			return s.Apply(ctx, q)
@@ -244,16 +214,58 @@ func (a *App) registerProcesses() {
 	}
 }
 
+func (a *App) prepareServiceRestart(ctx context.Context, streams IO, q *services.Request, original services.Record) *protocol.Error {
+	if original.ProxyMode {
+		p, e := a.resolveStoredProject(original.Directory, "")
+		if e != nil {
+			return e
+		}
+		if e := a.prepareManagedNetwork(ctx, p, q, &original, network.PrepareAuto, streams); e != nil {
+			return e
+		}
+	}
+	envOverride, bundleOverride, snapshot := q.Env, q.Bundle, q.Network
+	q.RestartPreflight = func(ctx context.Context, record services.Record, phase services.RestartPhase) *protocol.Error {
+		env, bundle := envOverride, bundleOverride
+		if env == nil {
+			env = record.EnvOverride
+		}
+		if bundle == nil {
+			bundle = record.BundleOverride
+		}
+		snapshotProject := project.Context{Root: record.Directory, Profile: record.Profile}
+		if snapshot != nil {
+			return a.preflightSelectedNetworkSnapshot(ctx, snapshotProject, record.Command, env, snapshot, phase == services.RestartBeforeStop, bundle)
+		}
+		switch phase {
+		case services.RestartBeforeStop:
+			return a.checkSelectedProjectCommand(ctx, snapshotProject, record.Command, env, bundle, true)
+		case services.RestartBeforeStart:
+			return a.checkSelectedProjectCommand(ctx, snapshotProject, record.Command, env, bundle, false)
+		default:
+			return protocol.NewError("internal_error", "Invalid restart preflight phase.", 1, nil)
+		}
+	}
+	return nil
+}
+
 func ServeProcess(ctx context.Context, data, id string) error {
-	return serveProcess(ctx, data, id, nil)
+	return serveProcess(ctx, data, id, nil, "")
 }
 
-func ServeProcessWithLease(ctx context.Context, data, id string, lease *os.File) error {
-	return serveProcess(ctx, data, id, lease)
+func ServeProcessWithLease(ctx context.Context, data, id string, lease *os.File, builds ...string) error {
+	return serveProcess(ctx, data, id, lease, optionalBuild(builds))
 }
 
-func serveProcess(ctx context.Context, data, id string, lease *os.File) error {
-	s := services.Store{Data: data}
+func optionalBuild(builds []string) string {
+	if len(builds) != 0 {
+		return builds[0]
+	}
+	return ""
+}
+
+func serveProcess(ctx context.Context, data, id string, lease *os.File, build string) error {
+	s := services.Store{Data: data, Build: build}
 	execute := func(ctx context.Context, r services.Record, runner process.Runner, output io.Writer) *protocol.Error {
 		p, err := profilekey.ResolveProject(data, r.Directory, "")
 		if err != nil {
@@ -323,8 +335,8 @@ func (a *App) prepareManagedInput(ctx context.Context, r services.Record, networ
 	return services.PrepareFrozenInput(ctx, filepath.Dir(profiles), r, networkSnapshot, a.executionDependencies)
 }
 
-func ServePreparedProcessWithLease(ctx context.Context, data, id string, lease *os.File) error {
-	store := services.Store{Data: data}
+func ServePreparedProcessWithLease(ctx context.Context, data, id string, lease *os.File, builds ...string) error {
+	store := services.Store{Data: data, Build: optionalBuild(builds)}
 	return store.ServeWithLease(ctx, id, lease, func(ctx context.Context, r services.Record, runner process.Runner, output io.Writer) *protocol.Error {
 		bound, e := services.ReceiveLauncherInput(ctx, os.Stdin, os.Stdout, r, data, output, output)
 		if e != nil {

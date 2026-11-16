@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"path/filepath"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/configcontract"
+	"github.com/jinyongp/devtools/internal/dashboard"
 	"github.com/jinyongp/devtools/internal/installstorage"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/storageupgrade"
@@ -29,6 +31,12 @@ func RunInstallStorage(ctx context.Context, output io.Writer, version, commit st
 }
 
 func (a *App) resumeInstallation(ctx context.Context, streams IO) installstorage.Result {
+	return a.upgradeInstalledServices(ctx, streams, func() installstorage.Result {
+		return a.resumeInstalledStorageAndNetwork(ctx, streams)
+	})
+}
+
+func (a *App) resumeInstalledStorageAndNetwork(ctx context.Context, streams IO) installstorage.Result {
 	directories, err := a.currentPaths()
 	if err != nil {
 		return installstorage.Failed("storage_paths_unavailable")
@@ -48,7 +56,20 @@ func (a *App) resumeInstallation(ctx context.Context, streams IO) installstorage
 	report, e := a.storageEngine(directories.Data).Fix(ctx)
 	result := installationStorageResult(report, e)
 	result.Proxy = proxyResult
+	if result.Ready {
+		outcome, e := dashboard.UpgradeWithRoot(ctx, directories.Cache, filepath.Join(directories.Data, "tasks"), directories.IsolatedRoot, a.build)
+		if e != nil {
+			result.Ready, result.Status = false, "pending"
+			result.Diagnostic = protocol.ObservationDiagnostic(e)
+		} else {
+			result.Dashboard = outcome
+			result.RuntimeChanged = outcome["changed"] == true
+		}
+	}
 	if proxyResult, ok := proxyResult.(map[string]any); ok {
+		if proxyResult["changed"] == true && proxyResult["replayed"] != true {
+			result.RuntimeChanged = true
+		}
 		if exposures, ok := proxyResult["exposures"].([]map[string]any); ok {
 			for _, exposure := range exposures {
 				if exposure["state"] != "restored" && exposure["state"] != "closed" {
@@ -79,7 +100,7 @@ func installationStorageResult(report storageupgrade.Report, failure *protocol.E
 }
 
 func storageUpdateSchema() map[string]any {
-	return object(map[string]any{"status": map[string]any{"enum": []string{"ready", "pending", "blocked", "failed"}}, "ready": map[string]any{"type": "boolean"}, "report": configcontract.Definition("StorageUpgradeReport"), "diagnostic": configcontract.Definition("ObservationDiagnostic"), "proxy": map[string]any{"type": "object"}}, "status", "ready")
+	return object(map[string]any{"status": map[string]any{"enum": []string{"ready", "pending", "blocked", "failed"}}, "ready": map[string]any{"type": "boolean"}, "report": configcontract.Definition("StorageUpgradeReport"), "diagnostic": configcontract.Definition("ObservationDiagnostic"), "proxy": map[string]any{"type": "object"}, "dashboard": map[string]any{"type": "object"}, "processes": arraySchema(object(map[string]any{"previous_id": stringSchema(), "execution_id": stringSchema()}, "previous_id", "execution_id")), "runtime_changed": boolSchema()}, "status", "ready")
 }
 
 func finishExecutableUpdate(result any, storage installstorage.Result, binaryChanged bool) (any, *protocol.Error) {

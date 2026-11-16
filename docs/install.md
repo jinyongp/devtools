@@ -79,8 +79,10 @@ to Homebrew, run `brew upgrade jinyongp/tap/devtools` followed by
 `devtools update --resume`. Use that resume command after a direct Homebrew update
 as well. The script installer runs the environment upgrade as part of an update. It replaces the
 running previous proxy daemon, restores its listeners, and reconciles incomplete
-share starts. If a share needs authentication again, the result identifies it.
-Restart managed processes and the dashboard to use the updated executable.
+share starts. It also replaces the running dashboard and superseded managed
+processes, using their original project, environment and bundle selection. If a
+share needs authentication again or an execution needs attention, the result
+identifies it. A foreground execution remains under its terminal's control.
 Your profile data and `devtools.toml` are preserved.
 Downgrading the binary does not undo data-format upgrades; restore a compatible
 backup into a fresh data directory if you need an older release.

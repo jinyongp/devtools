@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jinyongp/devtools/internal/collectionquery"
+	"github.com/jinyongp/devtools/internal/idref"
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -219,7 +220,7 @@ func (a *App) collectionContract(c *Command) {
 	for _, name := range mapKeys(contract.Query.Filters) {
 		o := Option{Name: name, MinLength: 1, Description: "Filter this public metadata field."}
 		if name == "task" || name == "workstream" {
-			o.Pattern = uuidPattern
+			o.Pattern = idref.UUIDPattern
 		}
 		if name == "recorded-result" {
 			o.Pattern = "^(none|pass|fail|blocked|skipped)$"

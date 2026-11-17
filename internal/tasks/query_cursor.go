@@ -1,8 +1,11 @@
 package tasks
 
 import (
+	"context"
 	"github.com/jinyongp/devtools/internal/collectionquery"
+	"github.com/jinyongp/devtools/internal/idref"
 	"github.com/jinyongp/devtools/internal/maintenance"
+	"maps"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -42,6 +45,9 @@ func (q Query) cursorProfile(storage string) string {
 }
 
 func queryFingerprint(profile string, q Query, directories ...string) string {
+	if q.referenceFingerprint != "" {
+		return q.referenceFingerprint
+	}
 	opts := Object{}
 	definition := NavigationDefinition(q.Command)
 	for key, value := range q.Options {
@@ -108,7 +114,7 @@ func (s Store) pageCursorFast(q Query, limit int) (Object, *protocol.Error) {
 	return nil, failure("cursor_invalid", "Start a new query; this snapshot format is no longer supported.")
 }
 
-func (s Store) graphCursorFast(q Query, kind string, limit int) (Object, *protocol.Error) {
+func (s Store) graphCursorFast(ctx context.Context, q Query, kind string, limit int) (Object, *protocol.Error) {
 	token := q.Options["cursor"]
 	if !validID(token) {
 		return nil, failure("cursor_invalid", "Start a new graph query.")
@@ -124,15 +130,34 @@ func (s Store) graphCursorFast(q Query, kind string, limit int) (Object, *protoc
 		time.Now().After(snapshot.Expires) {
 		return nil, failure("cursor_invalid", "Start a new graph query.")
 	}
+	if q.Target != "" && !validID(q.Target) {
+		id, e := idref.Resolve(ctx, idref.UUID, q.Target, maps.Keys(snapshot.Nodes))
+		if e != nil {
+			return nil, e
+		}
+		q.Target = id
+	}
 	if q.Target != "" && snapshot.Nodes[q.Target] == nil {
 		return nil, failure("not_found", "The requested item does not exist in this profile.")
+	}
+	workstream := q.Options["workstream"]
+	if workstream != "" && !validID(workstream) && q.Target == "" {
+		workstreams := map[string]struct{}{}
+		for _, node := range snapshot.Nodes {
+			workstreams[str(node, "workstream_id")] = struct{}{}
+		}
+		id, e := idref.Resolve(ctx, idref.UUID, workstream, maps.Keys(workstreams))
+		if e != nil {
+			return nil, e
+		}
+		workstream = id
 	}
 	direction, depth, err := graphOptions(q.Options)
 	if err != nil {
 		return nil, err
 	}
 	out := Object{"profile": name, "revision": snapshot.Revision}
-	for key, value := range snapshot.tree(q.Target, q.Options["workstream"], direction, depth, limit) {
+	for key, value := range snapshot.tree(q.Target, workstream, direction, depth, limit) {
 		out[key] = value
 	}
 	out["cursor"] = nil

@@ -172,7 +172,7 @@ func taskQueryOptionPattern(command, option string) string {
 		}
 		return `^(open|done|canceled|all)$`
 	case "workstream":
-		return uuidPattern
+		return idref.UUIDPattern
 	case "limit":
 		return `^([1-9]|[1-9][0-9]|1[0-9]{2}|200)$`
 	case "direction":
@@ -245,7 +245,7 @@ func (a *App) registerTasks() {
 		if def.Action == "run.claimed" || def.Action == "run.taken_over" {
 			opts = append(opts, Option{Name: "dir", Default: ".", Description: "Execution working directory."})
 			if def.Action == "run.claimed" {
-				opts = append(opts, Option{Name: "workstream", Pattern: uuidPattern, Completion: completeWorkstream, Description: "Select ready tasks in this workstream."})
+				opts = append(opts, Option{Name: "workstream", Pattern: idref.UUIDPattern, Completion: completeWorkstream, Description: "Select ready tasks in this workstream."})
 			} else {
 				opts = append(opts, Option{Name: "expected-run", Required: true, Pattern: uuidPattern, Description: "Observed current run UUID."})
 			}
@@ -257,6 +257,9 @@ func (a *App) registerTasks() {
 			pattern := ""
 			if strings.HasSuffix(f, "_id") || strings.HasSuffix(f, "_ids") || f == "depends_on" {
 				pattern = uuidPattern
+				if tasks.ReferenceKind(f, def.Kind) != "" {
+					pattern = idref.UUIDPattern
+				}
 			} else if f == "result" {
 				pattern = `^(pass|fail|blocked|skipped)$`
 			}
@@ -264,7 +267,7 @@ func (a *App) registerTasks() {
 		}
 		args := []Argument{}
 		if def.Target || def.OptionalTarget {
-			args = append(args, Argument{Name: taskTargetArgument(def.Kind), Required: def.Target, Pattern: uuidPattern, Completion: completionSource(def.Kind)})
+			args = append(args, Argument{Name: taskTargetArgument(def.Kind), Required: def.Target, Pattern: idref.UUIDPattern, Completion: completionSource(def.Kind)})
 		}
 		a.commands = append(a.commands, Command{Name: "task " + def.Command, CompletionAction: def.Action, Description: taskMutationDescription(def.Action), Options: opts, Arguments: args, BodySchema: taskBody(def), Output: taskOutput(true), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			store, _, e := a.taskStore(r)
@@ -311,7 +314,7 @@ func (a *App) registerTasks() {
 			if contextCapable && r.Options["context"] == "" {
 				r.Options["context"] = os.Getenv("DEVTOOLS_TASK_CONTEXT")
 			}
-			return store.Execute(ctx, tasks.Request{Action: def.Action, Target: target, Body: b, Options: r.Options})
+			return store.Execute(ctx, tasks.Request{Action: def.Action, Target: target, Body: b, Options: r.Options, CLIReferenceFields: !jsonInput})
 		}})
 	}
 	for _, name := range []string{"list", "show", "next", "current", "context", "history", "impact", "tree", "export", "checkpoint list", "workstream list", "workstream show", "workstream context", "workstream history", "workstream impact", "workstream tree", "workstream export", "workstream check", "workstream spec show", "workstream plan show", "validation list", "validation show"} {
@@ -364,10 +367,7 @@ func (a *App) registerTasks() {
 			case strings.HasPrefix(name, "validation "):
 				kind = "validation"
 			}
-			args = append(args, Argument{Name: taskTargetArgument(kind), Required: required, Pattern: uuidPattern, Completion: completionSource(kind)})
-			if name == "show" {
-				args[0].Pattern = idref.UUIDPattern
-			}
+			args = append(args, Argument{Name: taskTargetArgument(kind), Required: required, Pattern: idref.UUIDPattern, Completion: completionSource(kind)})
 		}
 		a.commands = append(a.commands, Command{Name: "task " + name, Description: taskQueryDescription(name), Options: opts, Arguments: args, Output: taskQueryOutput(name), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			if path, present := r.Options["query-cache-dir"]; present {

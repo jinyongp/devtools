@@ -41,8 +41,13 @@ func TestTaskCLIAndSchema(t *testing.T) {
 	if code, _, diagnostic := invoke(t, a, "", "task", "add", "--profile", "test", "--title", "Different task", "--request-id", requestID); code != 3 || !strings.Contains(diagnostic, "request_conflict") {
 		t.Fatal("generated task request ID accepted changed input", code, diagnostic)
 	}
-	claim := run("", "task", "claim", id, "--profile", "test", "--request-id", tasks.ID())
+	claimRequest := tasks.ID()
+	claim := run("", "task", "claim", id[:4], "--profile", "test", "--request-id", claimRequest)
 	runID := claim["run"].(map[string]any)["id"].(string)
+	replayClaim := run("", "task", "claim", id[:4], "--profile", "test", "--request-id", claimRequest)
+	if replayClaim["replayed"] != true || replayClaim["run"].(map[string]any)["id"] != runID {
+		t.Fatal("abbreviated claim replay did not preserve run", replayClaim)
+	}
 	var mismatchOut, mismatchErr bytes.Buffer
 	contextToken := claim["context"].(string)
 	code := a.Run(context.Background(), []string{"task", "checkpoint", id, "--summary", "Wrong target", "--profile", "test", "--context", contextToken, "--request-id", tasks.ID()}, IO{In: strings.NewReader(""), Out: &mismatchOut, Err: &mismatchErr})
@@ -59,7 +64,7 @@ func TestTaskCLIAndSchema(t *testing.T) {
 		t.Fatal("checkpoint mismatch contract", mismatchErr.String(), err)
 	}
 	run(`{"summary":"Saved progress"}`, "task", "checkpoint", runID, "--stdin", "--profile", "test", "--context", claim["context"].(string), "--request-id", tasks.ID())
-	rows := run("", "task", "checkpoint", "list", runID, "--profile", "test")
+	rows := run("", "task", "checkpoint", "list", runID[:4], "--profile", "test")
 	if len(rows["items"].([]any)) != 1 {
 		t.Fatal("longest command match")
 	}

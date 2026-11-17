@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/jinyongp/devtools/internal/collectionquery"
+	"maps"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -25,7 +26,8 @@ type Query struct {
 	ListOptions map[string][]string
 	Body        Object
 	// CursorProfile binds a cached result to the caller's original name.
-	CursorProfile string
+	CursorProfile        string
+	referenceFingerprint string
 }
 
 const contextResponseMax = 2 << 20
@@ -241,7 +243,7 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 	}
 	if cursor := q.Options["cursor"]; cursor != "" {
 		if cmd == "tree" {
-			return store.graphCursorFast(q, kind, limit)
+			return store.graphCursorFast(ctx, q, kind, limit)
 		}
 		if pagedQueryCommand(cmd) {
 			return store.pageCursorFast(q, limit)
@@ -292,10 +294,29 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		}
 		out["revision"] = s.Revision
 	}
-	if q.Command == "show" && q.Target != "" {
-		q.Target, e = s.resolveReference(ctx, kind, q.Target)
+	if pagedQueryCommand(cmd) && (q.Target != "" && !validID(q.Target) ||
+		q.Options["workstream"] != "" && !validID(q.Options["workstream"]) ||
+		q.Options["task"] != "" && !validID(q.Options["task"])) {
+		q.referenceFingerprint = queryFingerprint(name, q, store.Directory)
+	}
+	if q.Target != "" && !validID(q.Target) {
+		targetKind := kind
+		if cmd == "checkpoint list" {
+			targetKind = "run"
+		}
+		q.Target, e = s.resolveReference(ctx, targetKind, q.Target)
 		if e != nil {
 			return nil, e
+		}
+	}
+	for _, field := range []string{"workstream", "task"} {
+		if input := q.Options[field]; input != "" && !validID(input) {
+			id, condition := s.resolveReference(ctx, field, input)
+			if condition != nil {
+				return nil, condition
+			}
+			q.Options = maps.Clone(q.Options)
+			q.Options[field] = id
 		}
 	}
 	s.prepareReads()

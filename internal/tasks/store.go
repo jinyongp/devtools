@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/jinyongp/devtools/internal/idref"
 	"github.com/jinyongp/devtools/internal/location"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/platformfs"
@@ -195,6 +196,25 @@ func (s Store) CompletionIDsFor(kind, workstream string, filter CompletionFilter
 	if e != nil {
 		return nil, e
 	}
+	ctx := context.Background()
+	if workstream != "" && !validID(workstream) {
+		workstream, e = state.resolveReference(ctx, "workstream", workstream)
+		if e != nil {
+			return nil, e
+		}
+	}
+	if def := Find(filter.Action); def != nil && filter.Target != "" && !validID(filter.Target) {
+		filter.Target, e = state.resolveReference(ctx, def.Kind, filter.Target)
+		if e != nil {
+			return nil, e
+		}
+	}
+	if filter.Owner != "" && !validID(filter.Owner) {
+		filter.Owner, e = state.resolveReference(ctx, "task", filter.Owner)
+		if e != nil {
+			return nil, e
+		}
+	}
 	return state.completionIDs(kind, workstream, filter), nil
 }
 func (s Store) Profiles(ctx context.Context) ([]string, *protocol.Error) {
@@ -211,10 +231,11 @@ func (s Store) Profiles(ctx context.Context) ([]string, *protocol.Error) {
 }
 
 type Request struct {
-	Action  string
-	Target  string
-	Body    Object
-	Options map[string]string
+	Action             string
+	Target             string
+	Body               Object
+	Options            map[string]string
+	CLIReferenceFields bool
 }
 
 func (s Store) Execute(ctx context.Context, r Request) (Object, *protocol.Error) {
@@ -244,10 +265,10 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 	if def == nil {
 		return nil, failure("invalid_argument", "Unknown task action.")
 	}
-	if def.Target && !validID(r.Target) {
+	if def.Target && r.Target == "" {
 		return nil, failure("invalid_argument", "Provide a target UUID.")
 	}
-	if r.Target != "" && !validID(r.Target) {
+	if r.Target != "" && !idref.UUID.Valid(r.Target) {
 		return nil, failure("invalid_argument", "Invalid target UUID.")
 	}
 	if (r.Action == "run.claimed" || r.Action == "run.taken_over") && r.Options["dir"] != "" {
@@ -277,8 +298,11 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		return nil, bodyErr
 	}
 	r.Body = body
-	if e := validateBody(def, body); e != nil {
-		return nil, inputGuidance(r, e)
+	abbreviated := r.hasAbbreviatedReferences(def)
+	if !abbreviated {
+		if e := validateBody(def, body); e != nil {
+			return nil, inputGuidance(r, e)
+		}
 	}
 	if r.Action == "workstream.edited" && r.Options["dry-run"] == "true" {
 		profileRelease, lockErr := LockShared(ctx, s.path()+".lock")
@@ -289,6 +313,11 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		state, e := s.loadCurrent()
 		if e != nil {
 			return nil, e
+		}
+		if abbreviated {
+			if e := state.resolveRequestReferences(ctx, def, &r); e != nil {
+				return nil, e
+			}
 		}
 		if r.Options["if-revision"] != fmt.Sprint(state.Revision) {
 			return nil, state.explain(r, failure("revision_conflict", "Profile changed; read the latest revision."), s.Profile)
@@ -380,7 +409,36 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 			return s.execute(ctx, r, true)
 		}
 	}
+	// Preserve the spelling of CLI selectors in the request digest. The WAL
+	// result and events contain canonical IDs, so replay never resolves again.
+	fingerprint := hash(Object{"action": r.Action, "target": r.Target, "body": r.Body, "options": fingerprintOptions(r.Options)})
+	var v3Receipt receiptCoordination
+	var v3ReceiptExists bool
+	if storage.V3 != nil {
+		var readErr error
+		v3Receipt, v3ReceiptExists, readErr = readCommittedReceipt(*storage.V3, r.Options["request-id"])
+		if readErr != nil {
+			return nil, storageErrorAt("read_receipt", "task_receipt", readErr)
+		}
+	}
 	contextUsed := state.usesContext(r)
+	if abbreviated {
+		var legacyReceipt Receipt
+		var legacyReceiptExists bool
+		if j != nil {
+			legacyReceipt, legacyReceiptExists = j.Receipts[r.Options["request-id"]]
+		}
+		if v3ReceiptExists {
+			contextUsed = v3Receipt.ContextHash != ""
+		} else if legacyReceiptExists {
+			contextUsed = legacyReceipt.ContextHash != ""
+		} else {
+			if e := state.resolveRequestReferences(ctx, def, &r); e != nil {
+				return nil, e
+			}
+			contextUsed = state.usesContext(r)
+		}
+	}
 	if !contextUsed {
 		options := map[string]string{}
 		for key, value := range r.Options {
@@ -390,7 +448,6 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 		}
 		r.Options = options
 	}
-	fingerprint := hash(Object{"action": r.Action, "target": r.Target, "body": r.Body, "options": fingerprintOptions(r.Options)})
 	token := r.Options["context"]
 	var contextLookup ContextLookup
 	contextRunID := ""
@@ -411,11 +468,7 @@ func (s Store) execute(ctx context.Context, r Request, exclusive bool) (Object, 
 				}
 			}
 		}
-		old, exists, readErr := readCommittedReceipt(*storage.V3, r.Options["request-id"])
-		if readErr != nil {
-			return nil, storageErrorAt("read_receipt", "task_receipt", readErr)
-		}
-		if exists {
+		if old := v3Receipt; v3ReceiptExists {
 			if old.Fingerprint != fingerprint || contextUsed && old.ContextHash != hash(token) {
 				return nil, failure("request_conflict", "This request ID was used with different input.")
 			}

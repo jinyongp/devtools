@@ -111,6 +111,41 @@ func Resolve(ctx context.Context, format Format, input string, keys iter.Seq[str
 		map[string]any{"facts": map[string]any{"candidate_count": len(matches), "suggested_ids": suggestions}})
 }
 
+// ResolveMany reads a shared key space once for repeated selector options.
+func ResolveMany(ctx context.Context, format Format, inputs []string, keys iter.Seq[string]) ([]string, *protocol.Error) {
+	buckets := map[string][]string{}
+	for _, input := range inputs {
+		if !format.Exact(input) {
+			if !format.Valid(input) {
+				return nil, protocol.NewError("invalid_argument", "Enter at least four hexadecimal digits or the full ID.", 2, nil)
+			}
+			buckets[strings.ToLower(input[:MinDigits])] = nil
+		}
+	}
+	if len(buckets) != 0 {
+		for id := range keys {
+			if ctx.Err() != nil {
+				return nil, protocol.ContextError(ctx.Err())
+			}
+			if len(id) >= MinDigits {
+				key := strings.ToLower(id[:MinDigits])
+				if bucket, ok := buckets[key]; ok {
+					buckets[key] = append(bucket, id)
+				}
+			}
+		}
+	}
+	resolved := make([]string, 0, len(inputs))
+	for _, input := range inputs {
+		id, e := Resolve(ctx, format, input, slices.Values(buckets[strings.ToLower(input[:MinDigits])]))
+		if e != nil {
+			return nil, e
+		}
+		resolved = append(resolved, id)
+	}
+	return resolved, nil
+}
+
 func commonPrefix(a, b string) int {
 	for i := range min(len(a), len(b)) {
 		if a[i] != b[i] {

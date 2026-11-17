@@ -49,10 +49,7 @@ func (a *App) registerProcesses() {
 		if action == "list" {
 			c.Options = profileOptions(false)
 		} else {
-			c.Arguments = []Argument{{Name: "execution-id", Required: true, Pattern: uuidPattern, Completion: completeProcess}}
-		}
-		if action == "status" {
-			c.Arguments[0].Pattern = idref.UUIDPattern
+			c.Arguments = []Argument{{Name: "execution-id", Required: true, Pattern: idref.UUIDPattern, Completion: completeProcess}}
 		}
 		if action == "start" {
 			c.Arguments = []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern, Completion: completeCommand}}
@@ -82,7 +79,7 @@ func (a *App) registerProcesses() {
 		} else if action == "logs" {
 			c.Output = object(map[string]any{"id": stringSchema(), "content": stringSchema()}, "id", "content")
 		}
-		c.Run = func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
+		c.Run = func(ctx context.Context, streams IO, r Request) (_ any, condition *protocol.Error) {
 			s, e := a.serviceStore()
 			if e != nil {
 				return nil, e
@@ -102,30 +99,33 @@ func (a *App) registerProcesses() {
 				}
 				return map[string]any{"items": items, "values": map[string]values.InputObservation{}}, nil
 			}
-			if action == "status" {
-				id, err := s.ResolveExecution(ctx, r.Args[0])
-				if err != nil {
-					return nil, err
+			executionID := ""
+			if action != "start" && action != "stop" && action != "restart" {
+				executionID, e = s.ResolveExecution(ctx, r.Args[0])
+				if e != nil {
+					return nil, e
 				}
-				item, err := s.Status(ctx, id)
+			}
+			if action == "status" {
+				item, err := s.Status(ctx, executionID)
 				if err != nil {
 					return nil, err
 				}
 				return map[string]any{"item": item, "values": s.InspectRecordValues(ctx, item)}, nil
 			}
 			if action == "check" {
-				return s.Check(ctx, r.Args[0])
+				return s.Check(ctx, executionID)
 			}
 			if action == "wait" {
 				timeout, err := time.ParseDuration(r.Options["timeout"])
 				if err != nil || timeout <= 0 || timeout > 10*time.Minute {
 					return nil, argumentError("Expected a positive duration up to 10m.", "timeout")
 				}
-				return s.Wait(ctx, r.Args[0], timeout)
+				return s.Wait(ctx, executionID, timeout)
 			}
 			if action == "logs" {
-				content, e := s.Logs(ctx, r.Args[0])
-				return map[string]any{"id": r.Args[0], "content": content}, e
+				content, e := s.Logs(ctx, executionID)
+				return map[string]any{"id": executionID, "content": content}, e
 			}
 			q := services.Request{Action: action, RequestID: r.Options["request-id"]}
 			var startProject project.Context
@@ -144,6 +144,18 @@ func (a *App) registerProcesses() {
 			if capture, ok := r.Options["capture-logs"]; ok {
 				v := capture == "true"
 				q.Capture = &v
+			}
+			if action == "stop" || action == "restart" {
+				if e := s.BindExecutionRequest(ctx, &q); e != nil {
+					return nil, e
+				}
+			}
+			if action == "start" || action == "restart" {
+				defer func() {
+					if condition != nil {
+						_ = s.RecordPreparationFailure(ctx, q, condition)
+					}
+				}()
 			}
 			mode := network.PrepareAuto
 			if action == "start" {
@@ -196,27 +208,6 @@ func (a *App) registerProcesses() {
 				}
 			}
 			return s.Apply(ctx, q)
-		}
-		if action == "start" || action == "restart" {
-			run := c.Run
-			c.Run = func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
-				value, condition := run(ctx, streams, r)
-				if condition != nil && len(r.Args) > 0 {
-					if store, e := a.serviceStore(); e == nil {
-						q := services.Request{Action: action, RequestID: r.Options["request-id"]}
-						if action == "start" {
-							q.Directory, q.Command = r.Options["dir"], r.Args[0]
-						} else {
-							q.ID = r.Args[0]
-						}
-						if env, ok := r.Options["env"]; ok {
-							q.Env = &env
-						}
-						_ = store.RecordPreparationFailure(ctx, q, condition)
-					}
-				}
-				return value, condition
-			}
 		}
 		a.commands = append(a.commands, c)
 	}

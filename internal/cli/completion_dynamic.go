@@ -582,20 +582,15 @@ func (a *App) completionNames(source string, query completionQuery) []string {
 		if condition != nil {
 			return nil
 		}
-		records, condition := store.StoredMetadata()
+		id, condition := store.ResolveExecution(query.Context, query.Arguments[0])
 		if condition != nil {
 			return nil
 		}
-		found := false
-		for _, record := range records {
-			if record.ID == query.Arguments[0] && !record.DetailRetired {
-				p.Profile, e, found = record.Profile, nil, true
-				break
-			}
-		}
-		if !found {
+		records, condition := store.CompletionRecords(query.Context, services.CompletionSelection{Action: "status", Prefix: id})
+		if condition != nil || len(records) != 1 {
 			return nil
 		}
+		p.Profile, e = records[0].Profile, nil
 	}
 	if e != nil {
 		return nil

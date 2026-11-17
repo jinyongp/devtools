@@ -762,11 +762,16 @@ func (s Store) Apply(ctx context.Context, q Request) (Result, *protocol.Error) {
 		return out, storageErrorAt("lock_process_operation", e)
 	}
 	defer unlock()
-	requestUnlock, lockErr := tasks.Lock(ctx, filepath.Join(s.root(), "operation-locks", "request-"+q.RequestID+".lock"))
-	if lockErr != nil {
-		return out, storageErrorAt("lock_process_request", lockErr)
+	requestUnlock, bindingErr := s.lockExecutionRequest(ctx, q.RequestID)
+	if bindingErr != nil {
+		return out, bindingErr
 	}
 	defer requestUnlock()
+	if binding, exists, condition := s.readExecutionBinding(q.RequestID); condition != nil {
+		return out, condition
+	} else if exists && (q.ID != binding.ID || executionSelectionSignature(q) != binding.Signature) {
+		return out, failure("request_conflict")
+	}
 	b, _ := json.Marshal(q)
 	fingerprint := fmt.Sprintf("%x", sha256.Sum256(b))
 	receiptPath := filepath.Join(s.root(), "receipts", q.RequestID+".json")

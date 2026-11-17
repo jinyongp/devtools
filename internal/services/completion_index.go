@@ -98,9 +98,13 @@ func (s Store) publishCompletionIndex(ctx context.Context, records []Record, reb
 }
 
 func (s Store) completionMetadata(ctx context.Context, selection CompletionSelection) ([]Record, *protocol.Error) {
-	names, err := s.executionNames()
-	if err != nil {
-		return nil, storageErrorAt("enumerate_execution_ids", err)
+	names := []string{selection.Prefix}
+	if !idref.UUID.Exact(selection.Prefix) {
+		var err error
+		names, err = s.executionNames()
+		if err != nil {
+			return nil, storageErrorAt("enumerate_execution_ids", err)
+		}
 	}
 	var ended map[string]struct{}
 	switch selection.Action {

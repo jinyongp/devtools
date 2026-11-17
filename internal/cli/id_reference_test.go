@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -38,6 +39,12 @@ func TestProcessStatusResolvesUniquePrefix(t *testing.T) {
 	if stopped["item"].(map[string]any)["id"] != id {
 		t.Fatal(stopped)
 	}
+	// A process can be interrupted after binding its input and before the
+	// operation receipt is reserved. The resumed invocation must use that ID.
+	pending := services.Request{ID: "a453", Action: "stop", RequestID: tasks.ID()}
+	if e := store.BindExecutionRequest(context.Background(), &pending); e != nil || pending.ID != id {
+		t.Fatal(pending.ID, e)
+	}
 	insert("a453b000-0000-4000-8000-000000000002")
 	code, out, diagnostic := invoke(t, a, "", "process", "status", "a453")
 	if code == 0 || out != "" || !strings.Contains(diagnostic, "ambiguous_id") || !strings.Contains(diagnostic, "a4531") || !strings.Contains(diagnostic, "a453b") {
@@ -46,6 +53,10 @@ func TestProcessStatusResolvesUniquePrefix(t *testing.T) {
 	replayed := outputData(t, a, command)
 	if replayed["replayed"] != true || replayed["item"].(map[string]any)["id"] != id {
 		t.Fatal(replayed)
+	}
+	resumed := outputData(t, a, []string{"process", "stop", "a453", "--request-id", pending.RequestID})
+	if resumed["item"].(map[string]any)["id"] != id {
+		t.Fatal(resumed)
 	}
 	code, out, diagnostic = invoke(t, a, "", "process", "stop", "a453", "--request-id", tasks.ID())
 	if code == 0 || out != "" || !strings.Contains(diagnostic, "ambiguous_id") {

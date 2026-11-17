@@ -7,6 +7,8 @@ CI·로컬 검사 선택과 수동 진단의 구분은 [검증 구성](../docs/v
 `python3 -B verify/run.py completion_context`는 실제 foreground/managed 실행의
 stop·restart·readiness·로그 후보, 프로젝트 위치 범위, env 슬롯과 task run 전이를 검사한다.
 Tab이 준비 검사를 실행하지 않는 음성 대조와 공통 옵션 제약도 포함한다.
+종료 이력 1만 건이 있는 설치본에서 실제 zsh Tab 응답의 p95를 기록합니다.
+4자리 접두사 충돌이 종료를 수행하지 않고 동일 요청 재시도가 원래 대상을 반환하는지도 검사합니다.
 `discovery`의 실제 fish 검사, Go의 bash/zsh/fish 검사와 기존 native PowerShell 5.1/7
 completion 검사를 함께 사용한다. Unix workflow는 검사 전에 필요한 셸을 준비한다.
 

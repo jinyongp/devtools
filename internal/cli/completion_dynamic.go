@@ -304,6 +304,11 @@ func (a *App) completionCandidates(ctx context.Context, words []string, all bool
 		arg := cmd.Arguments[index]
 		source = arg.Completion
 		choices = patternChoices(arg.Pattern)
+		if cmd.Name == "process stop" && positionals == 0 && prefix == "" {
+			// The empty target slot is for running executions. Flags remain
+			// discoverable after '-' or after selecting the execution.
+			candidates = nil
+		}
 	}
 	if source == "" && len(choices) == 0 {
 		return filterCompletionCandidates(candidates, prefix)

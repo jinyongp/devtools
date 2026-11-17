@@ -15,15 +15,7 @@ func (s Store) ResolveExecution(ctx context.Context, input string) (string, *pro
 	if idref.UUID.Exact(input) {
 		return input, nil
 	}
-	root, err := os.Open(s.root())
-	if errors.Is(err, os.ErrNotExist) {
-		return idref.Resolve(ctx, idref.UUID, input, func(func(string) bool) {})
-	}
-	if err != nil {
-		return "", storageErrorAt("enumerate_execution_ids", err)
-	}
-	defer root.Close()
-	names, err := root.Readdirnames(-1)
+	names, err := s.executionNames()
 	if err != nil {
 		return "", storageErrorAt("enumerate_execution_ids", err)
 	}
@@ -34,4 +26,16 @@ func (s Store) ResolveExecution(ctx context.Context, input string) (string, *pro
 			}
 		}
 	})
+}
+
+func (s Store) executionNames() ([]string, error) {
+	root, err := os.Open(s.root())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.Readdirnames(-1)
 }

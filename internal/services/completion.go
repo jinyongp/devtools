@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/jinyongp/devtools/internal/completion"
@@ -20,7 +19,7 @@ type CompletionSelection struct {
 // CompletionRecords observes only the capabilities needed by the requested
 // operation. It never runs probes, renews values, or writes execution records.
 func (s Store) CompletionRecords(ctx context.Context, selection CompletionSelection) ([]Record, *protocol.Error) {
-	records, condition := s.StoredMetadata()
+	records, condition := s.completionMetadata(ctx, selection)
 	if condition != nil {
 		return nil, condition
 	}
@@ -44,7 +43,7 @@ func (s Store) CompletionRecords(ctx context.Context, selection CompletionSelect
 		if ctx.Err() != nil {
 			break
 		}
-		if record.DetailRetired || !strings.HasPrefix(record.ID, selection.Prefix) || !selectedNavigation(selection.NavigationSelection, record.Profile, record.Directory, record.Instance, record.Command, record.Env) {
+		if !selectedNavigation(selection.NavigationSelection, record.Profile, record.Directory, record.Instance, record.Command, record.Env) {
 			continue
 		}
 		if selection.ActiveOnly && (record.EndedAt != nil || record.State == "interrupted") {

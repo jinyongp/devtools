@@ -14,6 +14,7 @@ import (
 	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/proxy"
+	"github.com/jinyongp/devtools/internal/services"
 	"github.com/jinyongp/devtools/internal/storageupgrade"
 )
 
@@ -97,6 +98,9 @@ func (a *App) upgradeInstallation(ctx context.Context, streams IO) installstorag
 			result.Dashboard = outcome
 			result.RuntimeChanged = result.RuntimeChanged || outcome["changed"] == true
 		}
+	}
+	if result.Ready {
+		_ = (services.Store{Data: directories.Data}).PrepareCompletionIndex(ctx)
 	}
 	for _, failure := range []*protocol.Error{networkFailure, processFailure} {
 		if failure != nil {

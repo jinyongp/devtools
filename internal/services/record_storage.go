@@ -99,7 +99,13 @@ func writeRecordHeldContext(ctx context.Context, path string, r Record) error {
 		}
 		release()
 	}
-	return tasks.WritePrivate(path, diskRecord{Version: 2, Metadata: metadataRecord(r), Body: ref})
+	if err := tasks.WritePrivate(path, diskRecord{Version: 2, Metadata: metadataRecord(r), Body: ref}); err != nil {
+		return err
+	}
+	if r.EndedAt != nil && validID(r.ID) && filepath.Base(filepath.Dir(path)) == r.ID {
+		(Store{Data: root}).rememberCompletionEnd(r.ID)
+	}
+	return nil
 }
 
 func readDiskRecord(path string) (diskRecord, error) {

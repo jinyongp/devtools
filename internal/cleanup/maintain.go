@@ -131,6 +131,9 @@ func (e Engine) maintainPublic(ctx context.Context, profile string, limit int, d
 	if condition != nil {
 		return out, condition
 	}
+	if !dry {
+		manager.MaintainCompletionIndex(ctx, records)
+	}
 	blocked := manager.RetirementBlocks(ctx, records)
 	attempts, condition := manager.StoredAttempts()
 	if condition != nil {

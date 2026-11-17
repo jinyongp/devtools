@@ -176,6 +176,9 @@ func (a *App) diagnoseStorage(ctx context.Context, r Request) (any, *protocol.Er
 	var report storageupgrade.Report
 	if r.Options["fix"] == "true" {
 		report, condition = engine.Fix(ctx)
+		if condition == nil && report.Ready {
+			condition = (services.Store{Data: filepath.Dir(directory)}).PrepareCompletionIndex(ctx)
+		}
 	} else {
 		report, condition = engine.Inspect(ctx)
 	}

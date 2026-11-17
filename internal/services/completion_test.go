@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -85,5 +86,41 @@ func TestCompletionSelectsObservedCapabilitiesAndRetainedLogs(t *testing.T) {
 	items, issue := store.CompletionRecords(context.Background(), CompletionSelection{Action: "stop", Prefix: records["foreground"].ID[:12], NavigationSelection: NavigationSelection{Profile: "app", Directory: directory}})
 	if issue != nil || len(items) != 1 || items[0].ID != records["foreground"].ID {
 		t.Fatal(items, issue)
+	}
+}
+
+func TestActiveCompletionSkipsIndexedHistoryAndObservesNewControllers(t *testing.T) {
+	ctx := context.Background()
+	store := Store{Data: privateTempDir(t)}
+	now := time.Now().UTC()
+	ended := Record{ID: tasks.ID(), Profile: "app", Directory: store.Data, Command: "old", State: "exited", CreatedAt: now, EndedAt: &now}
+	if err := store.RestoreRecord(ended); err != nil {
+		t.Fatal(err)
+	}
+	if e := store.PrepareCompletionIndex(ctx); e != nil {
+		t.Fatal(e)
+	}
+	// A non-readable old artifact distinguishes skipping the metadata read from
+	// loading it and filtering it out afterward.
+	if err := os.WriteFile(store.path(ended.ID, "record.json"), []byte("invalid"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	live := Record{ID: tasks.ID(), Profile: "app", Directory: store.Data, Command: "old-build", State: "running", CreatedAt: now}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/status" {
+			t.Errorf("completion tried to invoke %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(live)
+	}))
+	defer server.Close()
+	if err := store.RestoreRecord(live); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePrivate(store.path(live.ID, "control.json"), control{ID: live.ID, Address: server.URL, Token: strings.Repeat("f", 64)}); err != nil {
+		t.Fatal(err)
+	}
+	items, e := store.CompletionRecords(ctx, CompletionSelection{Action: "stop"})
+	if e != nil || len(items) != 1 || items[0].ID != live.ID {
+		t.Fatal(items, e)
 	}
 }

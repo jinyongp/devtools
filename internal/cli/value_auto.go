@@ -42,7 +42,9 @@ func ServeValueRestart(ctx context.Context, data, body string) error {
 		if e != nil {
 			return finish("", e.Code)
 		}
-		app := New("dev", "unknown")
+		// A value restart reuses the execution's network. Installation entry
+		// points own daemon generation changes.
+		app := New("", "")
 		app.isolatedRoot = original.IsolatedRoot
 		app.dataDirectory = func() (string, *protocol.Error) { return filepath.Join(data, "profiles"), nil }
 		store.PrepareInput = app.prepareManagedInput

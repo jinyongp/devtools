@@ -124,6 +124,8 @@ try:
     up = api('project', 'up', 'web', '--proxy', '--request-id', str(uuid.uuid4()), '--timeout', '10s')
     first = up['items'][0]['item']
     assert first['proxy_mode'] is True
+    proxy = api('proxy', 'status')['item']
+    assert proxy['running'] and proxy['generation']
     certificate = home / 'value-update-ca.pem'
     api('proxy', 'ca', 'export', '--output', str(certificate))
     context = ssl.create_default_context(cafile=str(certificate))
@@ -144,6 +146,8 @@ try:
     current = wait(applied)
     assert current['proxy_mode'] is True and current['previous_id'] == first['id']
     assert current['state'] == 'running' and current['ended_at'] is None
+    active_proxy = api('proxy', 'status')['item']
+    assert active_proxy['running'] and active_proxy['generation'] == proxy['generation']
     actual = read_proxy()
     assert actual['revision'] == 'two' and actual['token_present'] is True
     assert actual['pid'] != original['pid']  # Comparison only; never a kill target.

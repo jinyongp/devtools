@@ -23,7 +23,7 @@ func TestResolve(t *testing.T) {
 			t.Fatalf("%q: %q %v", input, id, e)
 		}
 		if code == "ambiguous_id" {
-			got := e.Details["facts"].(map[string]any)["suggested_ids"].([]string)
+			got := e.Details["facts"].(map[string]any)["suggestions"].([]string)
 			if !slices.Equal(got, []string{"a4531", "a453b"}) {
 				t.Fatal(got)
 			}

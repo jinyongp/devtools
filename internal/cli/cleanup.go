@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/jinyongp/devtools/internal/cleanup"
+	"github.com/jinyongp/devtools/internal/idref"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -58,11 +59,11 @@ func (a *App) registerCleanup() {
 			c.Options = profileOptions(false)
 		}
 		if action == "apply" {
-			c.Arguments = []Argument{{Name: "plan-id", Required: true, Pattern: uuidPattern}}
-			c.Options = []Option{{Name: "item", Repeatable: true, Required: true, Pattern: uuidPattern, Description: "Candidate UUID; repeat for selected candidates."}, requestIDOption(uuidPattern)}
+			c.Arguments = []Argument{{Name: "plan-id", Required: true, Pattern: idref.UUIDPattern}}
+			c.Options = []Option{{Name: "item", Repeatable: true, Required: true, Pattern: idref.UUIDPattern, Description: "Candidate UUID or unique prefix; repeat for selected candidates."}, requestIDOption(uuidPattern)}
 		}
 		if action == "restore" || action == "purge" {
-			c.Arguments = []Argument{{Name: "archive-id", Required: true, Pattern: uuidPattern}}
+			c.Arguments = []Argument{{Name: "archive-id", Required: true, Pattern: idref.UUIDPattern}}
 		}
 		c.Run = func(ctx context.Context, _ IO, r Request) (any, *protocol.Error) {
 			dirs, err := a.currentPaths()

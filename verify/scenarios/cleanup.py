@@ -89,12 +89,12 @@ process_item=next(i for i in plan["items"] if i["kind"]=="completed_process" and
 log_item=next(i for i in plan["items"] if i["kind"]=="expired_log" and i["source"]==str(log_path))
 blocked=data/"archives"/log_item["id"];blocked.mkdir(mode=0o700,parents=True);(blocked/"payload").mkdir(mode=0o700)
 request_id=str(uuid.uuid4())
-failure=api("cleanup","apply",plan["id"],"--item",process_item["id"],"--item",log_item["id"],"--request-id",request_id,expected=1)
+failure=api("cleanup","apply",plan["id"][:8],"--item",process_item["id"][:8],"--item",log_item["id"][:8],"--request-id",request_id,expected=1)
 assert failure["code"]=="storage_error"
 assert not record_path.exists() and log_path.exists() and (process_dir/"record.archive.json").exists()
 (cache/"cleanup"/(plan["id"]+".json")).unlink()
 shutil.rmtree(blocked/"payload")
-resumed=api("cleanup","apply",plan["id"],"--item",process_item["id"],"--item",log_item["id"],"--request-id",request_id)
+resumed=api("cleanup","apply",plan["id"][:8],"--item",process_item["id"][:8],"--item",log_item["id"][:8],"--request-id",request_id)
 assert resumed["replayed"] and len(resumed["items"])==2 and not log_path.exists()
 assert all(i["id"]!=process_id for i in api("process","list","--profile","cleanup-fixture","--view","history")["items"])
 

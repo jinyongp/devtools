@@ -86,8 +86,9 @@ PATH={template="/bin:/usr/bin"}
 	if code != 3 || !strings.Contains(err, "binding_conflict") || strings.Contains(out+err, "secret-canary") {
 		t.Fatal(code, out, err)
 	}
-	call("port", "release", "web")
-	call("instance", "remove", "main")
+	instancePrefix := "id:" + response.Data.Item.InstanceID[:4]
+	call("port", "release", "web", "--instance", instancePrefix)
+	call("instance", "remove", instancePrefix)
 	t.Chdir(filepath.Dir(root))
 	call("port", "list", "--profile", "app")
 	call("instance", "list", "--profile", "app")

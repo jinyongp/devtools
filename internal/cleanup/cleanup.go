@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/idref"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/profilekey"
@@ -604,15 +606,8 @@ func (e Engine) archivedCandidate(c candidate) (Archive, []byte, bool, *protocol
 func (e Engine) Apply(ctx context.Context, planID string, ids []string, requestID string) (Result, *protocol.Error) {
 	defer progress.Begin(ctx, "Archiving selected cleanup items")()
 	out := Result{Archives: []Archive{}}
-	if !validID(planID) || !validID(requestID) || len(ids) == 0 {
+	if !idref.UUID.Valid(planID) || !validID(requestID) || len(ids) == 0 {
 		return out, fail("invalid_argument")
-	}
-	ids = append([]string{}, ids...)
-	sort.Strings(ids)
-	for n, id := range ids {
-		if !validID(id) || n > 0 && ids[n-1] == id {
-			return out, fail("invalid_argument")
-		}
 	}
 	release, err := e.lock(ctx)
 	if err != nil {
@@ -625,6 +620,17 @@ func (e Engine) Apply(ctx context.Context, planID string, ids []string, requestI
 	resumed := false
 	if readErr := tasks.ReadPrivate(receiptPath, &previous); readErr == nil {
 		resumed = true
+		planID, err = idref.Resolve(ctx, idref.UUID, planID, slices.Values([]string{previous.Plan}))
+		if err != nil {
+			return out, fail("request_conflict")
+		}
+		ids, err = resolveCleanupItems(ctx, ids, previous.IDs)
+		if err != nil {
+			if err.Code == "invalid_argument" || ctx.Err() != nil {
+				return out, err
+			}
+			return out, fail("request_conflict")
+		}
 		if previous.Plan != planID || strings.Join(previous.IDs, ",") != strings.Join(ids, ",") {
 			return out, fail("request_conflict")
 		}
@@ -679,8 +685,20 @@ func (e Engine) Apply(ctx context.Context, planID string, ids []string, requestI
 		out.Replayed = true
 	} else {
 		var plan snapshot
+		planID, err = resolveCleanupID(ctx, planID, filepath.Join(e.Cache, "cleanup"), ".json")
+		if err != nil {
+			return out, err
+		}
 		if tasks.ReadPrivate(filepath.Join(e.Cache, "cleanup", planID+".json"), &plan) != nil || plan.ID != planID || time.Now().After(plan.Expires) {
 			return out, fail("preview_expired")
+		}
+		keys := make([]string, 0, len(plan.Items))
+		for _, item := range plan.Items {
+			keys = append(keys, item.ID)
+		}
+		ids, err = resolveCleanupItems(ctx, ids, keys)
+		if err != nil {
+			return out, err
 		}
 		selected, err = e.selectedFromSnapshot(plan, ids)
 		if err != nil {
@@ -963,7 +981,7 @@ func (e Engine) restoreCompletedProcess(archive Archive, payload []byte) *protoc
 func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protocol.Error) {
 	defer progress.Begin(ctx, "Restoring archived data")()
 	var a Archive
-	if !validID(id) {
+	if !idref.UUID.Valid(id) {
 		return a, false, fail("invalid_argument")
 	}
 	release, err := e.lock(ctx)
@@ -971,6 +989,10 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 		return a, false, err
 	}
 	defer release()
+	id, err = resolveCleanupID(ctx, id, filepath.Join(e.Data, "archives"), "")
+	if err != nil {
+		return a, false, err
+	}
 	if tasks.ReadPrivate(e.archivePath(id, "entry.json"), &a) != nil || a.ID != id {
 		return a, false, fail("archive_not_found")
 	}
@@ -1073,7 +1095,7 @@ func (e Engine) Restore(ctx context.Context, id string) (Archive, bool, *protoco
 func (e Engine) Purge(ctx context.Context, id string) (Archive, bool, *protocol.Error) {
 	defer progress.Begin(ctx, "Removing the selected archive")()
 	var a Archive
-	if !validID(id) {
+	if !idref.UUID.Valid(id) {
 		return a, false, fail("invalid_argument")
 	}
 	release, err := e.lock(ctx)
@@ -1081,6 +1103,10 @@ func (e Engine) Purge(ctx context.Context, id string) (Archive, bool, *protocol.
 		return a, false, err
 	}
 	defer release()
+	id, err = resolveCleanupID(ctx, id, filepath.Join(e.Data, "archives"), "")
+	if err != nil {
+		return a, false, err
+	}
 	if tasks.ReadPrivate(e.archivePath(id, "entry.json"), &a) != nil || a.ID != id {
 		return a, false, fail("archive_not_found")
 	}

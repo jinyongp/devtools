@@ -7,13 +7,14 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/jinyongp/devtools/internal/idref"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/services"
 )
 
-const instanceSelectorPattern = `^([A-Za-z0-9][A-Za-z0-9._-]{0,127}|id:[0-9a-fA-F]{32})$`
+const instanceSelectorPattern = `^([A-Za-z0-9][A-Za-z0-9._-]{0,127}|id:` + idref.HexDigits + `)$`
 
 func portFailure(code string) *protocol.Error {
 	return ports.ConditionError(code)
@@ -227,6 +228,10 @@ func (a *App) portCommand(ctx context.Context, action string, r Request) (any, *
 	}
 	var result any
 	apply := func(st *ports.State) (bool, *protocol.Error) {
+		selector, condition := st.ResolveInstanceSelector(ctx, profile, "", selector)
+		if condition != nil {
+			return false, condition
+		}
 		i := st.Find(profile, selector, dir)
 		if action == "list" {
 			items := []map[string]any{}
@@ -437,6 +442,10 @@ func (a *App) instanceCommand(ctx context.Context, action string, r Request) (an
 	}
 	var result any
 	apply := func(st *ports.State) (bool, *protocol.Error) {
+		selector, condition := st.ResolveInstanceSelector(ctx, profile, "", selector)
+		if condition != nil {
+			return false, condition
+		}
 		i := st.Find(profile, selector, dir)
 		if action == "list" {
 			items := []map[string]any{}

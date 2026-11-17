@@ -10,7 +10,16 @@ import (
 )
 
 func (s *State) resolveReference(ctx context.Context, kind, input string) (string, *protocol.Error) {
-	return idref.Resolve(ctx, idref.UUID, input, s.referenceKeys(kind))
+	id, condition := idref.Resolve(ctx, idref.UUID, input, s.referenceKeys(kind))
+	return id, idref.DescribeAmbiguity(condition, func(candidate string) string {
+		if kind == "run" {
+			candidate = s.Runs[candidate].TaskID
+		}
+		if item := s.Items[candidate]; item != nil {
+			return item.Title
+		}
+		return ""
+	})
 }
 
 func (s *State) referenceKeys(kind string) iter.Seq[string] {

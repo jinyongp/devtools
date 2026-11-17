@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/jinyongp/devtools/internal/idref"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -24,25 +25,21 @@ func (s Store) ResolveExecution(ctx context.Context, input string) (string, *pro
 	if err != nil {
 		return "", storageErrorAt("enumerate_execution_ids", err)
 	}
-	return idref.Resolve(ctx, idref.UUID, input, func(yield func(string) bool) {
-		for _, name := range names {
-			if !yield(name) {
-				return
-			}
+	id, condition := idref.Resolve(ctx, idref.UUID, input, slices.Values(names))
+	return id, idref.DescribeAmbiguity(condition, func(candidate string) string {
+		if ctx.Err() != nil {
+			return ""
 		}
+		record, err := readDiskRecord(s.path(candidate, "record.json"))
+		if err != nil || !validRecord(candidate, record.Metadata) {
+			return ""
+		}
+		return record.Metadata.Command
 	})
 }
 
 func (s Store) executionNames() ([]string, error) {
-	root, err := os.Open(s.root())
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer root.Close()
-	return root.Readdirnames(-1)
+	return idref.DirectoryNames(s.root())
 }
 
 type executionBinding struct {

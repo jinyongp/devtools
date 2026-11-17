@@ -59,10 +59,10 @@ func TestExposureStopRecoversClosedAndAbandonedPins(t *testing.T) {
 			}
 		}
 		stop := tasks.ID()
-		if result, e := m.ExposeStop(ctx, id, stop); e != nil || result.(map[string]any)["changed"] != true {
+		if result, e := m.ExposeStop(ctx, id[:12], stop); e != nil || result.(map[string]any)["changed"] != true {
 			t.Fatal(result, e)
 		}
-		if result, e := m.ExposeStop(ctx, id, stop); e != nil || result.(map[string]any)["replayed"] != true {
+		if result, e := m.ExposeStop(ctx, id[:12], stop); e != nil || result.(map[string]any)["replayed"] != true {
 			t.Fatal(result, e)
 		}
 		current, e := m.ExposureNavigation(ctx, false, nil)

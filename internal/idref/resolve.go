@@ -14,7 +14,8 @@ import (
 const (
 	MinDigits   = 4
 	UUIDPattern = `^([0-9a-fA-F]{4,31}|[0-9a-fA-F]{8}-([0-9a-fA-F]{1,4}|[0-9a-fA-F]{4}-([0-9a-fA-F]{1,4}|[0-9a-fA-F]{4}-([0-9a-fA-F]{1,4}|[0-9a-fA-F]{4}-[0-9a-fA-F]{1,12}))))$`
-	HexPattern  = `^[0-9a-fA-F]{4,32}$`
+	HexDigits   = `[0-9a-fA-F]{4,32}`
+	HexPattern  = `^` + HexDigits + `$`
 )
 
 type Format uint8
@@ -92,6 +93,10 @@ func Resolve(ctx context.Context, format Format, input string, keys iter.Seq[str
 		}
 		return strings.Compare(a, b)
 	})
+	matches = slices.Compact(matches)
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
 	suggestions := make([]string, 0, min(5, len(matches)))
 	for i, id := range matches[:cap(suggestions)] {
 		key := digits(id)
@@ -108,7 +113,29 @@ func Resolve(ctx context.Context, format Format, input string, keys iter.Seq[str
 		suggestions = append(suggestions, id)
 	}
 	return "", protocol.NewError("ambiguous_id", "ID prefix is ambiguous. Use a longer ID such as "+strings.Join(suggestions, ", ")+".", 3,
-		map[string]any{"facts": map[string]any{"candidate_count": len(matches), "suggested_ids": suggestions}})
+		map[string]any{"ids": matches[:len(suggestions)], "facts": map[string]any{"suggestions": suggestions}})
+}
+
+// DescribeAmbiguity labels only the small set of public IDs in the diagnostic.
+func DescribeAmbiguity(condition *protocol.Error, name func(string) string) *protocol.Error {
+	if condition == nil || condition.Code != "ambiguous_id" {
+		return condition
+	}
+	ids, _ := condition.Details["ids"].([]string)
+	facts, _ := condition.Details["facts"].(map[string]any)
+	suggestions, _ := facts["suggestions"].([]string)
+	if len(ids) == 0 || len(ids) != len(suggestions) {
+		return condition
+	}
+	choices := make([]string, len(suggestions))
+	for i, prefix := range suggestions {
+		choices[i] = prefix
+		if label := strings.Join(strings.Fields(name(ids[i])), " "); label != "" {
+			choices[i] += " (" + label + ")"
+		}
+	}
+	condition.Message = "ID prefix is ambiguous. Use a longer ID such as " + strings.Join(choices, ", ") + "."
+	return condition
 }
 
 // ResolveMany reads a shared key space once for repeated selector options.

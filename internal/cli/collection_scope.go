@@ -25,7 +25,7 @@ func scopeRequired() *protocol.Error {
 	}})
 }
 
-func (a *App) resolveCollectionScope(_ context.Context, c Command, r Request) (collectionScope, *protocol.Error) {
+func (a *App) resolveCollectionScope(ctx context.Context, c Command, r Request) (collectionScope, *protocol.Error) {
 	r = cloneCollectionRequest(r)
 	if failure := a.resolveProfileOption(c.Name, r); failure != nil {
 		return collectionScope{}, failure
@@ -74,6 +74,10 @@ func (a *App) resolveCollectionScope(_ context.Context, c Command, r Request) (c
 			return s, e
 		}
 		state, e := store.Read()
+		if e != nil {
+			return s, e
+		}
+		selector, e = state.ResolveInstanceSelector(ctx, s.Profile, s.Directory, selector)
 		if e != nil {
 			return s, e
 		}

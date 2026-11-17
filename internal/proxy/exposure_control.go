@@ -385,7 +385,12 @@ func (m Manager) ExposeStart(ctx context.Context, q ExposureRequest, p project.C
 }
 
 func (m Manager) ExposureStatus(ctx context.Context, id string) (expose.Public, *protocol.Error) {
-	r, e := (expose.Store{Data: m.Data}).Read(id)
+	store := expose.Store{Data: m.Data}
+	id, e := store.ResolveID(ctx, id)
+	if e != nil {
+		return expose.Public{}, e
+	}
+	r, e := store.Read(id)
 	if e != nil {
 		return expose.Public{}, e
 	}
@@ -443,7 +448,12 @@ func (m Manager) ExposeStop(ctx context.Context, id, requestID string) (any, *pr
 			return nil, e
 		}
 		if !present {
-			r, e = (expose.Store{Data: m.Data}).Read(id)
+			store := expose.Store{Data: m.Data}
+			canonical, condition := store.ResolveID(ctx, id)
+			if condition != nil {
+				return nil, condition
+			}
+			r, e = store.Read(canonical)
 			if e != nil {
 				return nil, e
 			}

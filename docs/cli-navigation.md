@@ -76,6 +76,20 @@ preview의 ready 적용 명령은 제공한 공개 입력과 child argv를 보�
 설정이 바뀌면 digest/revision 대조에서 막히므로 새 preview가 필요하다.
 비밀 입력을 되살리기 위해 일반 조회에 영구 snapshot을 만들거나 vault를 unlock하지 않는다.
 
+## 짧은 ID로 대상 지정
+
+process 실행, task·workstream·validation·run, expose, cleanup plan·item·archive의
+대상 인자는 전체 ID 또는 최소 4자리의 16진수 접두사를 받습니다. 포트와 instance
+선택에는 `--instance id:a453`처럼 `id:`를 붙입니다.
+
+같은 종류와 저장소 범위에서 하나만 일치하면 그 대상을 사용합니다. 여럿이 일치하면
+더 긴 접두사를 표시하고 변경을 수행하지 않습니다. 프로세스 접두사가 유일한지 확인할
+때는 종료 이력도 포함합니다. cleanup의 `--item`은 지정한 plan 안에서 해석합니다.
+
+`--request-id`와 `--expected-run`에는 전체 UUID를 입력합니다. 접두사로 시작한 변경을
+같은 요청 ID로 재시도할 때는 처음 입력을 재사용합니다. JSON 입력과 응답은 전체 ID를
+사용합니다.
+
 ## 보관과 유지보수
 
 살아 있는 실행, 불명 결과, unresolved 최신 실패와 복구 참조는 보존한다.

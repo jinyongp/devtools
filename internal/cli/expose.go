@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jinyongp/devtools/internal/expose"
+	"github.com/jinyongp/devtools/internal/idref"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/ports"
@@ -100,7 +101,7 @@ func (a *App) registerExpose() {
 		if action == "list" {
 			c.Output = object(map[string]any{"items": map[string]any{"type": "array", "items": exposureSchema()}}, "items")
 		} else {
-			c.Arguments = []Argument{{Name: "id", Required: true, Pattern: uuidPattern, Completion: completeExposure}}
+			c.Arguments = []Argument{{Name: "id", Required: true, Pattern: idref.UUIDPattern, Completion: completeExposure}}
 		}
 		if action == "stop" {
 			c.Options = []Option{requestIDOption(uuidPattern)}

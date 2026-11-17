@@ -128,8 +128,9 @@ def measure_zsh_completion(execution_id):
         setup = r"""
 PS1='DVT> '
 autoload -Uz compinit
-compinit -D
+compinit -D -i
 source <(command dvt completion zsh)
+[[ "${_comps[dvt]-}" == _devtools ]] || { print -u2 'dvt completion was not registered'; exit 1; }
 bindkey '^I' complete-word
 report-buffer() {
   print -r -- $'\nDVT_BUFFER:'"${BUFFER%% }"

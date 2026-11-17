@@ -7,6 +7,7 @@ import (
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -138,8 +139,14 @@ func TestCLIIdentifierAndDescriptionContracts(t *testing.T) {
 		if argument["description"] != want {
 			t.Errorf("%s schema argument = %v, want %s", command, argument["description"], want)
 		}
-		if strings.HasSuffix(want, "-id") && argument["pattern"] != uuidPattern {
-			t.Errorf("%s schema does not validate its UUID argument", command)
+		if strings.HasSuffix(want, "-id") {
+			pattern, _ := argument["pattern"].(string)
+			selector, err := regexp.Compile(pattern)
+			if err != nil || !selector.MatchString("a453") ||
+				!selector.MatchString("a4531000-0000-4000-8000-000000000001") ||
+				selector.MatchString("a45") || selector.MatchString("not-an-id") {
+				t.Errorf("%s schema does not enforce the four-digit UUID reference contract", command)
+			}
 		}
 	}
 	var catalogEnvelope struct {

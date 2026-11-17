@@ -30,6 +30,9 @@ func TestTaskCLIAndSchema(t *testing.T) {
 	}
 	o := run("", "task", "add", "--profile", "test", "--title", "CLI task")
 	id := o["item"].(map[string]any)["id"].(string)
+	if item := run("", "task", "show", id[:4], "--profile", "test")["item"].(map[string]any); item["id"] != id {
+		t.Fatal("task prefix resolved a different item", item["id"])
+	}
 	requestID := o["request_id"].(string)
 	replayed := run("", "task", "add", "--profile", "test", "--title", "CLI task", "--request-id", requestID)
 	if replayed["replayed"] != true || replayed["request_id"] != requestID || replayed["item"].(map[string]any)["id"] != id {

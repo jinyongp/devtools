@@ -9,6 +9,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/doctor"
 	"github.com/jinyongp/devtools/internal/execution"
+	"github.com/jinyongp/devtools/internal/idref"
 	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/paths"
 	"github.com/jinyongp/devtools/internal/ports"
@@ -49,6 +50,9 @@ func (a *App) registerProcesses() {
 			c.Options = profileOptions(false)
 		} else {
 			c.Arguments = []Argument{{Name: "execution-id", Required: true, Pattern: uuidPattern, Completion: completeProcess}}
+		}
+		if action == "status" {
+			c.Arguments[0].Pattern = idref.UUIDPattern
 		}
 		if action == "start" {
 			c.Arguments = []Argument{{Name: "command", Required: true, Pattern: project.CommandPattern, Completion: completeCommand}}
@@ -99,7 +103,11 @@ func (a *App) registerProcesses() {
 				return map[string]any{"items": items, "values": map[string]values.InputObservation{}}, nil
 			}
 			if action == "status" {
-				item, err := s.Status(ctx, r.Args[0])
+				id, err := s.ResolveExecution(ctx, r.Args[0])
+				if err != nil {
+					return nil, err
+				}
+				item, err := s.Status(ctx, id)
 				if err != nil {
 					return nil, err
 				}

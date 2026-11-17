@@ -292,6 +292,12 @@ func (store Store) Query(ctx context.Context, q Query) (Object, *protocol.Error)
 		}
 		out["revision"] = s.Revision
 	}
+	if q.Command == "show" && q.Target != "" {
+		q.Target, e = s.resolveReference(ctx, kind, q.Target)
+		if e != nil {
+			return nil, e
+		}
+	}
 	s.prepareReads()
 	var item *Item
 	if q.Target != "" && q.Command != "checkpoint list" {

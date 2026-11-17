@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jinyongp/devtools/internal/idref"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
@@ -32,6 +33,8 @@ func inputRule(pattern string, minimum, maximum, actual int) (string, map[string
 	switch pattern {
 	case uuidPattern:
 		return "Use a UUID with hexadecimal groups of 8-4-4-4-12 characters.", facts
+	case idref.UUIDPattern, idref.HexPattern:
+		return "Use the full ID or a unique prefix of at least four hexadecimal digits.", facts
 	case project.ProfilePattern:
 		return "Use 1–128 ASCII letters, digits, dots, underscores or hyphens, beginning with a letter or digit.", facts
 	case positiveIntegerPattern:

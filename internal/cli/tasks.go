@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jinyongp/devtools/internal/idref"
 	"github.com/jinyongp/devtools/internal/profilekey"
 	"github.com/jinyongp/devtools/internal/project"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -364,6 +365,9 @@ func (a *App) registerTasks() {
 				kind = "validation"
 			}
 			args = append(args, Argument{Name: taskTargetArgument(kind), Required: required, Pattern: uuidPattern, Completion: completionSource(kind)})
+			if name == "show" {
+				args[0].Pattern = idref.UUIDPattern
+			}
 		}
 		a.commands = append(a.commands, Command{Name: "task " + name, Description: taskQueryDescription(name), Options: opts, Arguments: args, Output: taskQueryOutput(name), Run: func(ctx context.Context, streams IO, r Request) (any, *protocol.Error) {
 			if path, present := r.Options["query-cache-dir"]; present {

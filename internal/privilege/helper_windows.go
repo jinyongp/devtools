@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"runtime"
@@ -16,12 +17,20 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+func checkRequestSize(kind string, encoded []byte) *protocol.Error {
+	frame, err := json.Marshal(helperRequest{Version: 1, Kind: kind, Body: encoded})
+	if err != nil || len(frame) > helperLimit {
+		return protocol.NewError("invalid_argument", "Windows helper input exceeds its bounded request size.", 2, nil)
+	}
+	return nil
+}
+
 func runPlatform(ctx context.Context, kind string, encoded []byte, terminal bool, executable string) *protocol.Error {
 	if ctx.Err() != nil {
 		return helperCanceled(ctx)
 	}
-	if len(encoded) > helperLimit-256 {
-		return protocol.NewError("invalid_argument", "Windows helper input exceeds its bounded request size.", 2, nil)
+	if e := checkRequestSize(kind, encoded); e != nil {
+		return e
 	}
 	if kind == "trust" && !terminal {
 		return protocol.NewError("permission_required", "Windows CurrentUser trust changes require an interactive terminal and approval of the OS certificate confirmation. Export the public CA when preparing a separate client.", 3, nil)

@@ -18,7 +18,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const helperLimit = 1 << 20
+const helperLimit = BoundedBodySize
 const helperPrefix = `\\.\pipe\devtools-helper-`
 
 type helperRequest struct {

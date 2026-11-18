@@ -107,6 +107,7 @@ func (a *App) registerHosts() {
 				Action, Owner, Digest string
 				Mappings              any
 			}{action, owner, r.Options["apply"], desired}, []string{"hosts-repair"}, func(*netops.Journal) (any, *protocol.Error) {
+				hm := hm.ForRequest(r.Options["request-id"], "hosts-"+action, ref, listener.ID)
 				if action == "remove" {
 					e = hm.RemovePrefix(ctx, ref.Key()+"/")
 				} else {

@@ -269,12 +269,12 @@ func (m Manager) RouteUp(ctx context.Context, ref network.RouteRef, p project.Co
 					return e
 				}
 				if len(old) > 0 {
-					if e := hm.Sync(ctx, owner, nil, ""); e != nil {
+					if e := hm.ForRequest(id, "up-cleanup", ref, candidate.Listener.ID).Sync(ctx, owner, nil, ""); e != nil {
 						return e
 					}
 				}
 			}
-			return hm.RemoveOtherOwners(ctx, ref.Key()+"/", owner)
+			return hm.ForRequest(id, "up-cleanup", ref, candidate.Listener.ID).RemoveOtherOwners(ctx, ref.Key()+"/", owner)
 		}
 		if current := st.Activation(ref); current != nil && *current == a {
 			if e := cleanup(); e != nil {
@@ -314,13 +314,16 @@ func (m Manager) RouteUp(ctx context.Context, ref network.RouteRef, p project.Co
 			}
 		}
 		if len(mapping) > 0 {
-			if e := hm.Sync(ctx, owner, mapping, ""); e != nil {
+			if e := hm.ForRequest(id, "up-"+candidate.StartID, ref, candidate.Listener.ID).Sync(ctx, owner, mapping, ""); e != nil {
 				return nil, e
 			}
 		}
 		rollback := func() {
 			if len(mapping) > 0 {
-				_ = hm.Sync(context.Background(), owner, previous, "")
+				if e := hm.ForRequest(id, "up-rollback-"+candidate.StartID, ref, candidate.Listener.ID).Sync(context.Background(), owner, previous, ""); e == nil {
+					candidate.StartID = tasks.ID()
+					_ = j.Set("candidate", candidate)
+				}
 			}
 		}
 		if _, e := m.NetworkApply(ctx, "start", a.Listener, false, candidate.StartID); e != nil {
@@ -399,7 +402,7 @@ func (m Manager) RouteDown(ctx context.Context, ref network.RouteRef, hm hosts.M
 		if e != nil {
 			return nil, e
 		}
-		if e := hm.RemovePrefix(ctx, ref.Key()+"/"); e != nil {
+		if e := hm.ForRequest(id, "down", ref, "").RemovePrefix(ctx, ref.Key()+"/"); e != nil {
 			return nil, e
 		}
 		return map[string]any{"route_ref": ref, "changed": true}, nil
@@ -464,7 +467,7 @@ func (m Manager) RemoveGlobals(ctx context.Context, names []string, all bool, hm
 			}); e != nil {
 				return nil, e
 			}
-			if e := hm.RemovePrefix(ctx, target.Ref().Key()+"/"); e != nil {
+			if e := hm.ForRequest(id, "remove", target.Ref(), "").RemovePrefix(ctx, target.Ref().Key()+"/"); e != nil {
 				return nil, e
 			}
 			if e := m.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {

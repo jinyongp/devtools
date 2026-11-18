@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	"syscall"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -57,18 +58,46 @@ func readHosts(f *os.File) ([]byte, *protocol.Error) {
 	if e != nil || !info.Mode().IsRegular() {
 		return nil, failure("hosts_unavailable")
 	}
-	b, e := io.ReadAll(io.LimitReader(f, 1<<20+1))
-	if e != nil || len(b) > 1<<20 {
+	b, e := io.ReadAll(io.LimitReader(f, maxHostsSize+1))
+	if e != nil || len(b) > maxHostsSize {
 		return nil, failure("hosts_unavailable")
 	}
 	return b, nil
 }
 
 func (s System) Apply(ctx context.Context, q Request) *protocol.Error {
-	if ctx.Err() != nil {
-		return failure("canceled")
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	original, err := platformfs.OpenNoFollow(s.path(), os.O_RDONLY, 0)
+	if err != nil {
+		return failure("hosts_unavailable")
 	}
-	before, e := s.Read()
+	defer original.Close()
+	tick := time.NewTicker(15 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if ctx.Err() != nil {
+			return failure("canceled")
+		}
+		err = syscall.Flock(int(original.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EINTR) {
+			return failure("hosts_unavailable")
+		}
+		select {
+		case <-ctx.Done():
+			return failure("canceled")
+		case <-tick.C:
+		}
+	}
+	info, err := original.Stat()
+	named, nameErr := os.Lstat(s.path())
+	if err != nil || nameErr != nil || !os.SameFile(info, named) {
+		return failure("stale_preview")
+	}
+	before, e := readHosts(original)
 	if e != nil {
 		return e
 	}
@@ -81,10 +110,6 @@ func (s System) Apply(ctx context.Context, q Request) *protocol.Error {
 	}
 	if bytes.Equal(before, after) {
 		return nil
-	}
-	info, err := os.Lstat(s.path())
-	if err != nil || !info.Mode().IsRegular() {
-		return failure("hosts_unavailable")
 	}
 	f, err := os.CreateTemp(filepath.Dir(s.path()), ".devtools-hosts-*")
 	if err != nil {
@@ -107,13 +132,19 @@ func (s System) Apply(ctx context.Context, q Request) *protocol.Error {
 	if f.Sync() != nil || f.Close() != nil {
 		return failure("hosts_unavailable")
 	}
-	current, e := s.Read()
+	if _, err := original.Seek(0, io.SeekStart); err != nil {
+		return failure("hosts_unavailable")
+	}
+	current, e := readHosts(original)
 	if e != nil {
 		return e
 	}
 	currentInfo, err := os.Lstat(s.path())
 	if err != nil || !os.SameFile(info, currentInfo) || !bytes.Equal(current, before) {
 		return failure("stale_preview")
+	}
+	if ctx.Err() != nil {
+		return failure("canceled")
 	}
 	if err = os.Rename(name, s.path()); err == nil {
 		return nil
@@ -122,19 +153,23 @@ func (s System) Apply(ctx context.Context, q Request) *protocol.Error {
 		return failure("hosts_unavailable")
 	}
 	// WSL and containers can mount /etc/hosts as a single file. Keep its
-	// inode and metadata, lock the opened file, and recheck the frozen digest.
+	// inode and metadata. The original descriptor already holds the lock.
 	file, err := platformfs.OpenNoFollow(s.path(), os.O_RDWR, 0)
 	if err != nil {
 		return failure("permission_required")
 	}
 	defer file.Close()
-	if syscall.Flock(int(file.Fd()), syscall.LOCK_EX) != nil {
-		return failure("hosts_unavailable")
-	}
-	defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
-	current, err = io.ReadAll(io.LimitReader(file, 1<<20+1))
-	if err != nil || !bytes.Equal(current, before) {
+	writable, err := file.Stat()
+	named, nameErr = os.Lstat(s.path())
+	if err != nil || nameErr != nil || !os.SameFile(info, writable) || !os.SameFile(info, named) {
 		return failure("stale_preview")
+	}
+	current, e = readHosts(file)
+	if e != nil || !bytes.Equal(current, before) {
+		return failure("stale_preview")
+	}
+	if ctx.Err() != nil {
+		return failure("canceled")
 	}
 	if _, err = file.WriteAt(after, 0); err != nil {
 		_, _ = file.WriteAt(before, 0)

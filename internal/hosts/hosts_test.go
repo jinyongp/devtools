@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jinyongp/devtools/internal/network"
 	"github.com/jinyongp/devtools/internal/protocol"
 )
 
@@ -122,8 +123,12 @@ func TestHostsLostResponseReconcilesAndIsolatedBlocks(t *testing.T) {
 		return nil
 	}
 	mapping := []Mapping{{"app.test", "127.0.0.1"}}
+	m.intent = intent{RequestID: protocol.NewRequestID(), Operation: "test"}
 	if e := m.Sync(ctx, "a", mapping, ""); e == nil {
 		t.Fatal("injected error missing")
+	}
+	if e := m.ForRequest(protocol.NewRequestID(), "test", network.RouteRef{}, "").Sync(ctx, "a", mapping, ""); e == nil || e.Code != "recovery_required" || *calls != 1 {
+		t.Fatal("different request adopted a pending write", e, *calls)
 	}
 	if e := m.Sync(ctx, "a", mapping, ""); e != nil || *calls != 1 || !m.Prepared("a", mapping[0]) {
 		t.Fatal(e, *calls)
@@ -150,6 +155,41 @@ func TestHostsConcurrentOwners(t *testing.T) {
 	}
 }
 
+func TestHostsConcurrentSystemWriters(t *testing.T) {
+	m, _ := testManager(t)
+	before, e := m.System.Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	results := make(chan *protocol.Error, 2)
+	start := make(chan struct{})
+	for _, host := range []string{"first.test", "second.test"} {
+		go func() {
+			<-start
+			results <- m.System.Apply(context.Background(), Request{
+				Expected: digest(before),
+				Mappings: []Mapping{{host, "127.0.0.1"}},
+			})
+		}()
+	}
+	close(start)
+	success, stale := 0, 0
+	for range 2 {
+		e := <-results
+		switch {
+		case e == nil:
+			success++
+		case e.Code == "stale_preview":
+			stale++
+		default:
+			t.Fatal(e)
+		}
+	}
+	if success != 1 || stale != 1 {
+		t.Fatal(success, stale)
+	}
+}
+
 func TestHostsObservation(t *testing.T) {
 	a := Mapping{Host: "a.test", Address: "127.0.0.1"}
 	b := Mapping{Host: "b.test", Address: "127.0.0.1"}
@@ -164,7 +204,7 @@ func TestHostsObservation(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	st := state{Owners: old, Pending: &pending{planned, Request{Expected: digest(before)}, digest(after)}}
+	st := state{Owners: old, Pending: &pending{Owners: planned, Request: Request{Expected: digest(before)}, After: digest(after)}}
 	for _, body := range [][]byte{before, after, append([]byte("# external edit\n"), before...)} {
 		o := observe(st, body, false)
 		if issue := o.MappingIssue("b", b); issue != "" {

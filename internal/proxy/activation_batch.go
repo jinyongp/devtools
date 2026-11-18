@@ -31,6 +31,7 @@ type activationBatch struct {
 	DNS       []batchDNS
 	Listeners []batchListener
 	Rollback  bool
+	Attempt   string
 }
 
 // ActivateProjectBatch prepares every DNS mapping and socket before atomically
@@ -124,6 +125,16 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 				return nil, e
 			}
 		}
+		hostsStep := func(owner, phase string) hosts.Manager {
+			phase += "/" + batch.Attempt
+			for _, route := range batch.Routes {
+				ref := route.Activation.Route
+				if ref.Key()+"/"+route.Listener.ID == owner {
+					return hm.ForRequest(id, phase, ref, route.Listener.ID)
+				}
+			}
+			return hm.ForRequest(id, phase, network.RouteRef{}, "")
+		}
 		rollback := func() *protocol.Error {
 			for _, mapping := range batch.DNS {
 				current, e := hm.OwnerMappings(mapping.Owner)
@@ -132,7 +143,7 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 				}
 				if reflect.DeepEqual(current, mapping.Desired) || len(current) == 0 && len(mapping.Desired) == 0 {
 					if len(current) > 0 || len(mapping.Previous) > 0 {
-						if e := hm.Sync(context.Background(), mapping.Owner, mapping.Previous, ""); e != nil {
+						if e := hostsStep(mapping.Owner, "batch-rollback").Sync(context.Background(), mapping.Owner, mapping.Previous, ""); e != nil {
 							return e
 						}
 					}
@@ -169,6 +180,7 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 				listener.StartID = tasks.ID()
 			}
 			batch.Rollback = false
+			batch.Attempt = tasks.ID()
 			return j.Set("batch", batch)
 		}
 		if batch.Rollback {
@@ -222,13 +234,13 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 		if committed {
 			for _, mapping := range batch.DNS {
 				if len(mapping.Desired) == 0 && len(mapping.Previous) > 0 {
-					if e := hm.Sync(ctx, mapping.Owner, nil, ""); e != nil {
+					if e := hostsStep(mapping.Owner, "batch-cleanup").Sync(ctx, mapping.Owner, nil, ""); e != nil {
 						return nil, e
 					}
 				}
 			}
 			for _, route := range batch.Routes {
-				if e := hm.RemoveOtherOwners(ctx, route.Activation.Route.Key()+"/", route.Activation.Route.Key()+"/"+route.Listener.ID); e != nil {
+				if e := hm.ForRequest(id, "batch-cleanup", route.Activation.Route, route.Listener.ID).RemoveOtherOwners(ctx, route.Activation.Route.Key()+"/", route.Activation.Route.Key()+"/"+route.Listener.ID); e != nil {
 					return nil, e
 				}
 			}
@@ -260,7 +272,7 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 		}
 		for _, mapping := range batch.DNS {
 			if len(mapping.Desired) > 0 {
-				if e := hm.Sync(ctx, mapping.Owner, mapping.Desired, ""); e != nil {
+				if e := hostsStep(mapping.Owner, "batch-forward").Sync(ctx, mapping.Owner, mapping.Desired, ""); e != nil {
 					return fail(e)
 				}
 			}
@@ -318,13 +330,13 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 		}
 		for _, mapping := range batch.DNS {
 			if len(mapping.Desired) == 0 && len(mapping.Previous) > 0 {
-				if e := hm.Sync(ctx, mapping.Owner, nil, ""); e != nil {
+				if e := hostsStep(mapping.Owner, "batch-cleanup").Sync(ctx, mapping.Owner, nil, ""); e != nil {
 					return nil, e
 				}
 			}
 		}
 		for _, route := range batch.Routes {
-			if e := hm.RemoveOtherOwners(ctx, route.Activation.Route.Key()+"/", route.Activation.Route.Key()+"/"+route.Listener.ID); e != nil {
+			if e := hm.ForRequest(id, "batch-cleanup", route.Activation.Route, route.Listener.ID).RemoveOtherOwners(ctx, route.Activation.Route.Key()+"/", route.Activation.Route.Key()+"/"+route.Listener.ID); e != nil {
 				return nil, e
 			}
 		}

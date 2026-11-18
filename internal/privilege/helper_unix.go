@@ -11,6 +11,17 @@ import (
 	"os/exec"
 )
 
+func checkRequestSize(kind string, body []byte) *protocol.Error {
+	limit := BoundedBodySize
+	if kind == "netsetup" {
+		limit = 65536
+	}
+	if len(body) > limit {
+		return protocol.NewError("invalid_argument", "Helper input exceeds its bounded request size.", 2, nil)
+	}
+	return nil
+}
+
 func runPlatform(ctx context.Context, kind string, encoded []byte, terminal bool, executable string) *protocol.Error {
 	// sudo and the helper own stderr, including terminal authentication.
 	defer progress.Suspend(ctx)()

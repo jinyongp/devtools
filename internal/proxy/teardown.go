@@ -228,7 +228,7 @@ func (m Manager) Teardown(ctx context.Context, selection TeardownSelection, dige
 			}); e != nil {
 				return nil, e
 			}
-			if e := hm.RemovePrefix(ctx, ref.Key()+"/"); e != nil {
+			if e := hm.ForRequest(id, "teardown", ref, "").RemovePrefix(ctx, ref.Key()+"/"); e != nil {
 				return nil, e
 			}
 		}

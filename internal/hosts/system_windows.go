@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -42,8 +43,8 @@ func (s System) Read() ([]byte, *protocol.Error) {
 		return nil, failure("hosts_unavailable")
 	}
 	defer file.Close()
-	body, err := io.ReadAll(io.LimitReader(file, 1<<20+1))
-	if err != nil || len(body) > 1<<20 {
+	body, err := io.ReadAll(io.LimitReader(file, maxHostsSize+1))
+	if err != nil || len(body) > maxHostsSize {
 		return nil, failure("hosts_unavailable")
 	}
 	return body, nil
@@ -70,8 +71,36 @@ func (s System) Apply(ctx context.Context, request Request) *protocol.Error {
 		return windowsHostsFailure("hosts_unavailable", "open", err)
 	}
 	defer file.Close()
-	before, err := io.ReadAll(io.LimitReader(file, 1<<20+1))
-	if err != nil || len(before) > 1<<20 {
+	handle := windows.Handle(file.Fd())
+	// A byte beyond the read limit serializes helpers without blocking readers.
+	byteLock := windows.Overlapped{Offset: 2 * maxHostsSize}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	tick := time.NewTicker(15 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if ctx.Err() != nil {
+			return failure("canceled")
+		}
+		err = windows.LockFileEx(handle, windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, &byteLock)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, windows.ERROR_LOCK_VIOLATION) {
+			return windowsHostsFailure("hosts_unavailable", "lock", err)
+		}
+		select {
+		case <-ctx.Done():
+			return failure("canceled")
+		case <-tick.C:
+		}
+	}
+	defer windows.UnlockFileEx(handle, 0, 1, 0, &byteLock)
+	if err = sameHostsFile(handle, file.Name()); err != nil {
+		return windowsHostsFailure("stale_preview", "identity", err)
+	}
+	before, err := io.ReadAll(io.LimitReader(file, maxHostsSize+1))
+	if err != nil || len(before) > maxHostsSize {
 		return failure("hosts_unavailable")
 	}
 	if digest(before) != request.Expected {
@@ -80,9 +109,6 @@ func (s System) Apply(ctx context.Context, request Request) *protocol.Error {
 	after, failureResult := Render(before, request.Mappings)
 	if failureResult != nil {
 		return failureResult
-	}
-	if len(after) > 1<<20 {
-		return failure("invalid_argument")
 	}
 	if bytes.Equal(before, after) {
 		return nil

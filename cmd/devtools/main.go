@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/jinyongp/devtools/internal/hosts"
 	"github.com/jinyongp/devtools/internal/netsetup"
 	"github.com/jinyongp/devtools/internal/paths"
+	"github.com/jinyongp/devtools/internal/privilege"
 	"github.com/jinyongp/devtools/internal/process"
 	"github.com/jinyongp/devtools/internal/proxy"
 	"github.com/jinyongp/devtools/internal/services"
@@ -123,12 +125,18 @@ func main() {
 			os.Exit(3)
 		}
 		var request hosts.Request
-		decoder := json.NewDecoder(io.LimitReader(os.Stdin, 1<<20))
+		body, err := io.ReadAll(io.LimitReader(os.Stdin, privilege.BoundedBodySize+1))
+		if err != nil || len(body) > privilege.BoundedBodySize {
+			os.Exit(2)
+		}
+		decoder := json.NewDecoder(bytes.NewReader(body))
 		decoder.DisallowUnknownFields()
 		if decoder.Decode(&request) != nil || decoder.Decode(new(any)) != io.EOF {
 			os.Exit(2)
 		}
-		if (hosts.System{}).Apply(context.Background(), request) != nil {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if (hosts.System{}).Apply(ctx, request) != nil {
 			os.Exit(3)
 		}
 		return

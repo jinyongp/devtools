@@ -19,6 +19,7 @@ import (
 
 const begin = "# BEGIN devtools managed hosts"
 const end = "# END devtools managed hosts"
+const maxHostsSize = 1 << 20
 
 type Mapping struct {
 	Host    string `json:"host"`
@@ -140,6 +141,9 @@ func Render(before []byte, mappings []Mapping) ([]byte, *protocol.Error) {
 	block.WriteString(end + newline)
 	if len(outside) > 0 && outside[len(outside)-1] != '\n' {
 		outside = append(outside, []byte(newline)...)
+	}
+	if len(outside)+block.Len() > maxHostsSize {
+		return nil, failure("invalid_argument")
 	}
 	return append(outside, []byte(block.String())...), nil
 }

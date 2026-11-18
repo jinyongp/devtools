@@ -46,6 +46,7 @@ type Item struct {
 	Scope      string             `json:"scope,omitempty"`
 	RouteID    string             `json:"route_id,omitempty"`
 	HostPolicy network.HostPolicy `json:"host_policy,omitempty"`
+	DNSIssue   string             `json:"dns_issue,omitempty"`
 }
 
 func (i Item) Ref() network.RouteRef {
@@ -138,12 +139,19 @@ type resolverCache struct {
 }
 
 type Resolver struct {
-	Ports ports.Store
-	cache *resolverCache
+	Ports      ports.Store
+	cache      *resolverCache
+	hostSystem hosts.System
 }
 
 func NewResolver(store ports.Store) Resolver {
 	return Resolver{Ports: store, cache: &resolverCache{entries: map[string]cachedProject{}, listGate: make(chan struct{}, 1)}}
+}
+
+func (m Manager) resolver() Resolver {
+	r := NewResolver(m.portStore())
+	r.hostSystem = m.hostSystem
+	return r
 }
 
 func (r Resolver) readPorts() (*ports.State, bool, *protocol.Error) {
@@ -352,6 +360,9 @@ func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnaps
 	}
 
 	items := []Item{}
+	observeHosts := sync.OnceValue((hosts.Manager{
+		Data: filepath.Dir(r.Ports.Directory), System: r.hostSystem,
+	}).Observe)
 	for _, current := range resolved {
 		instance := current.instance
 		if current.status != "" {
@@ -400,7 +411,7 @@ func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnaps
 				}
 			}
 			if item.Status == StatusReady {
-				r.dnsStatus(state, &item, config.Proxies[name].DNS)
+				dnsStatus(state, &item, config.Proxies[name].DNS, observeHosts)
 			}
 			items = append(items, item)
 		}
@@ -416,7 +427,7 @@ func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnaps
 			}
 			if a := state.Activation(definition.Ref()); a != nil && a.Mode == "active" && item.TargetPort != nil {
 				item.Status = StatusReady
-				r.dnsStatus(state, &item, definition.DNS)
+				dnsStatus(state, &item, definition.DNS, observeHosts)
 			}
 			items = append(items, item)
 		}
@@ -430,6 +441,7 @@ func (r Resolver) list(ctx context.Context, profile string, snapshot *routeSnaps
 	for index := range items {
 		if items[index].Host != nil && conflicts[*items[index].Host] > 1 {
 			items[index].Status = StatusHostConflict
+			items[index].DNSIssue = ""
 		}
 	}
 	sort.Slice(items, func(left, right int) bool {
@@ -545,7 +557,7 @@ func route(state ports.State, instance ports.Instance, name string, definition p
 	return item
 }
 
-func (r Resolver) dnsStatus(state *ports.State, item *Item, dns string) {
+func dnsStatus(state *ports.State, item *Item, dns string, observe func() hosts.Observation) {
 	if dns == "" {
 		dns = "auto"
 	}
@@ -562,10 +574,14 @@ func (r Resolver) dnsStatus(state *ports.State, item *Item, dns string) {
 	desired, e := DNSMapping(*item.Host, dns, *listener)
 	if e != nil {
 		item.Status = "activation_required"
+		item.DNSIssue = e.Code
 		return
 	}
-	if len(desired) > 0 && !(hosts.Manager{Data: filepath.Dir(r.Ports.Directory)}).Prepared(item.Ref().Key()+"/"+listener.ID, desired[0]) {
-		item.Status = "activation_required"
+	for _, mapping := range desired {
+		if issue := observe().MappingIssue(item.Ref().Key()+"/"+listener.ID, mapping); issue != "" {
+			item.Status, item.DNSIssue = "activation_required", issue
+			break
+		}
 	}
 }
 

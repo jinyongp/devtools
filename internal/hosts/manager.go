@@ -3,7 +3,6 @@ package hosts
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -45,10 +44,11 @@ func (m Manager) Status() (map[string]any, *protocol.Error) {
 	}
 	count := 0
 	prepared := 0
+	observation := m.Observe()
 	for _, owner := range st.Owners {
 		count += len(owner.Mappings)
 		for _, mapping := range owner.Mappings {
-			if m.Prepared(owner.Key, mapping) {
+			if observation.MappingIssue(owner.Key, mapping) == "" {
 				prepared++
 			}
 		}
@@ -60,8 +60,7 @@ func (m Manager) ReferenceDigest() (string, *protocol.Error) {
 	if e != nil {
 		return "", e
 	}
-	data, _ := json.Marshal(st)
-	return digest(data), nil
+	return stateDigest(st), nil
 }
 
 func (m Manager) read() (state, *protocol.Error) {
@@ -80,35 +79,7 @@ func mappings(owners []Owner) []Mapping {
 	return out
 }
 func (m Manager) Prepared(owner string, mapping Mapping) bool {
-	st, e := m.read()
-	if e != nil || st.Pending != nil {
-		return false
-	}
-	for _, o := range st.Owners {
-		if o.Key == owner {
-			for _, v := range o.Mappings {
-				if v == mapping {
-					b, e := m.System.Read()
-					if e != nil {
-						return false
-					}
-					for _, line := range strings.Split(string(b), "\n") {
-						text, _, _ := strings.Cut(line, "#")
-						fields := strings.Fields(text)
-						if len(fields) > 1 && fields[0] == mapping.Address {
-							for _, host := range fields[1:] {
-								if host == mapping.Host {
-									return true
-								}
-							}
-						}
-					}
-					return false
-				}
-			}
-		}
-	}
-	return false
+	return m.Observe().MappingIssue(owner, mapping) == ""
 }
 func (m Manager) OwnerMappings(owner string) ([]Mapping, *protocol.Error) {
 	st, e := m.read()

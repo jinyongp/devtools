@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/jinyongp/devtools/internal/expose"
+	"github.com/jinyongp/devtools/internal/hosts"
 	"github.com/jinyongp/devtools/internal/maintenance"
 	"github.com/jinyongp/devtools/internal/ports"
 	"github.com/jinyongp/devtools/internal/protocol"
@@ -158,6 +159,7 @@ type Manager struct {
 	Listen            func(int) ([]net.Listener, error)
 	ControlListen     func() (net.Listener, error)
 	PortProbe         ports.AvailabilityProbe
+	hostSystem        hosts.System
 	commit            func(string, any) error
 	readyTimeout      time.Duration
 	stopTimeout       time.Duration
@@ -997,7 +999,7 @@ func (m Manager) Serve(ctx context.Context, attemptID string) error {
 	connections := &connectionRegistry{}
 	transport := loopbackTransport()
 	proxyServer := &http.Server{
-		Handler:           &Handler{Routes: NewResolver(m.portStore()), Transport: transport},
+		Handler:           &Handler{Routes: m.resolver(), Transport: transport},
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       time.Minute,
 	}

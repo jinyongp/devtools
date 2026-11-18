@@ -149,3 +149,36 @@ func TestHostsConcurrentOwners(t *testing.T) {
 		t.Fatal(string(b), e)
 	}
 }
+
+func TestHostsObservation(t *testing.T) {
+	a := Mapping{Host: "a.test", Address: "127.0.0.1"}
+	b := Mapping{Host: "b.test", Address: "127.0.0.1"}
+	old := []Owner{{"a", []Mapping{a}}, {"b", []Mapping{b}}}
+	planned := old[1:]
+	original := []byte("127.0.0.1 localhost\n")
+	before, e := Render(original, mappings(old))
+	if e != nil {
+		t.Fatal(e)
+	}
+	after, e := Render(before, mappings(planned))
+	if e != nil {
+		t.Fatal(e)
+	}
+	st := state{Owners: old, Pending: &pending{planned, Request{Expected: digest(before)}, digest(after)}}
+	for _, body := range [][]byte{before, after, append([]byte("# external edit\n"), before...)} {
+		o := observe(st, body, false)
+		if issue := o.MappingIssue("b", b); issue != "" {
+			t.Fatal(issue)
+		}
+		if issue := o.MappingIssue("a", a); issue != "hosts_recovery_required" {
+			t.Fatal(issue)
+		}
+	}
+	conflict := append([]byte("192.0.2.1 B.TEST\n"), before...)
+	if issue := observe(st, conflict, false).MappingIssue("b", b); issue != "hosts_conflict" {
+		t.Fatal(issue)
+	}
+	if issue := observe(st, conflict, true).MappingIssue("b", b); issue != "hosts_unavailable" {
+		t.Fatal(issue)
+	}
+}

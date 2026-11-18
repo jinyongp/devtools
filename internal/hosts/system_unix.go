@@ -30,6 +30,29 @@ func (s System) Read() ([]byte, *protocol.Error) {
 		return nil, failure("hosts_unavailable")
 	}
 	defer f.Close()
+	return readHosts(f)
+}
+
+func (s System) observe() ([]byte, bool, *protocol.Error) {
+	f, err := platformfs.OpenNoFollow(s.path(), os.O_RDONLY, 0)
+	if err != nil {
+		return nil, false, failure("hosts_unavailable")
+	}
+	defer f.Close()
+	err = syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB)
+	if err != nil && !errors.Is(err, syscall.EWOULDBLOCK) {
+		return nil, false, failure("hosts_unavailable")
+	}
+	b, e := readHosts(f)
+	held, heldErr := f.Stat()
+	named, nameErr := os.Lstat(s.path())
+	if heldErr != nil || nameErr != nil || !os.SameFile(held, named) {
+		return nil, false, failure("hosts_unavailable")
+	}
+	return b, err != nil, e
+}
+
+func readHosts(f *os.File) ([]byte, *protocol.Error) {
 	info, e := f.Stat()
 	if e != nil || !info.Mode().IsRegular() {
 		return nil, failure("hosts_unavailable")

@@ -75,7 +75,7 @@ func (m Manager) finishFailedExposureStart(ctx context.Context, record expose.Re
 
 func (m Manager) exposureIdentity(ctx context.Context, ref network.RouteRef) (Item, network.Listener, string, *protocol.Error) {
 	snapshot := &routeSnapshot{ref: ref}
-	items, e := NewResolver(m.portStore()).list(ctx, "", snapshot)
+	items, e := m.resolver().list(ctx, "", snapshot)
 	if e != nil {
 		return Item{}, network.Listener{}, "", e
 	}

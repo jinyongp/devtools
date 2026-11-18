@@ -55,8 +55,12 @@ func liveNetworkManager(t *testing.T) Manager {
 }
 
 func liveNetworkManagerWithControlListener(t *testing.T, listen func() (net.Listener, error)) Manager {
+	return liveNetworkFixture(t, listen, hosts.System{})
+}
+
+func liveNetworkFixture(t *testing.T, listen func() (net.Listener, error), system hosts.System) Manager {
 	t.Helper()
-	m := Manager{Data: t.TempDir(), ExposureProviders: map[string]expose.Provider{}, ControlListen: listen}
+	m := Manager{Data: t.TempDir(), ExposureProviders: map[string]expose.Provider{}, ControlListen: listen, hostSystem: system}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	started := false
@@ -76,6 +80,75 @@ func liveNetworkManagerWithControlListener(t *testing.T, listen func() (net.List
 		return nil
 	}
 	return m
+}
+
+func TestNetworkListenersHostsPending(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "hosts")
+	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	system := hosts.System{Path: path}
+	m := liveNetworkFixture(t, nil, system)
+	httpPort, tlsPort := freeNetworkPort(t), freeNetworkPort(t)
+	for tlsPort == httpPort {
+		tlsPort = freeNetworkPort(t)
+	}
+	if _, e := m.Configure(ctx, "default", fmt.Sprintf("127.0.0.1:%d", httpPort), fmt.Sprintf("127.0.0.1:%d", tlsPort), false, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	hm := hosts.Manager{Data: m.Data, System: system, Run: func(ctx context.Context, _ string, input any, _ bool) *protocol.Error {
+		return system.Apply(ctx, input.(hosts.Request))
+	}}
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }))
+	defer backend.Close()
+	if _, e := m.AddGlobal(ctx, "ops", backend.Listener.Addr().(*net.TCPAddr).Port, "ops.test", "", "hosts", tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	p, projectRef := networkRoute(t, m, "app.test", "default", freeNetworkPort(t))
+	st, e := m.portStore().Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e := m.RouteUp(ctx, st.GlobalRoute("ops").Ref(), project.Context{}, nil, hm, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := m.RouteUp(ctx, projectRef, p, nil, hm, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	authority, e := (ca.Store{Data: m.Data}).Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	roots := x509.NewCertPool()
+	roots.AppendCertsFromPEM(authority.PEM())
+	request := func() {
+		t.Helper()
+		client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{
+			DisableKeepAlives: true, TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: "ops.test"},
+		}}
+		req, err := http.NewRequest("GET", fmt.Sprintf("https://127.0.0.1:%d/", tlsPort), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = "ops.test"
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 204 {
+			t.Fatal(resp.Status)
+		}
+	}
+	request()
+	hm.Run = func(context.Context, string, any, bool) *protocol.Error {
+		return protocol.NewError("canceled", "fixture interrupted before applying", 130, nil)
+	}
+	if _, e := m.RouteDown(ctx, projectRef, hm, tasks.ID()); e == nil {
+		t.Fatal("expected interrupted hosts cleanup")
+	}
+	request()
 }
 
 // Network control returns proxy_pending while its bounded lease probe or a

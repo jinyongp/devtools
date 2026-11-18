@@ -102,6 +102,7 @@ func (a *App) registerNetworkEnv() {
 		for _, item := range items {
 			if item.Ref() == endpoint.Ref {
 				endpoint.Status = item.Status
+				endpoint.DNSIssue = item.DNSIssue
 			}
 		}
 		listener := any(nil)

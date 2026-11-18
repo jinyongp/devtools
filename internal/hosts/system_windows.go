@@ -48,6 +48,11 @@ func (s System) Read() ([]byte, *protocol.Error) {
 	}
 	return body, nil
 }
+
+func (s System) observe() ([]byte, bool, *protocol.Error) {
+	body, e := s.Read()
+	return body, false, e
+}
 func (s System) Apply(ctx context.Context, request Request) *protocol.Error {
 	if ctx.Err() != nil {
 		return failure("canceled")

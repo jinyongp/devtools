@@ -120,7 +120,7 @@ stdout 선택이 JSON이면 stderr만 TTY여도 JSON 오류입니다. 기존 pro
 
 `ok: true`는 요청을 처리했다는 뜻이지 진단 대상이 정상이라는 뜻은 아닙니다. `doctor`의 `data.ready`, `process check`의 `data.readiness.ready`, 작업 검사의 `valid` 등은 별도로 확인해야 합니다. 기존 종료 코드와 진단 판정 규칙은 유지합니다.
 
-`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 25`입니다.
+`schema_version`은 envelope 버전 1이며 CLI machine contract는 현재 `protocol_version: 26`입니다.
 
 v23은 현재 서비스·실행 이력 분리, 명시적 목록 범위·필터·정렬·페이지·text 열 선택,
 `ready`/`needs_input`/`manual` 복구 행동과 공유 압축 이력 저장을 추가합니다.

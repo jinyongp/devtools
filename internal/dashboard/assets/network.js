@@ -16,7 +16,7 @@ async function loadNetwork(panel, current, version) {
       act(`${listener.running?"Stop":"Start"} listener ${listener.name}`,{action:listener.running?"stop":"start",listener:listener.name});
     }
     for(const {route,endpoint,error_code} of data.routes){
-      text("p",`${route.scope==="global"?"Global":route.profile} / ${route.proxy||route.host}: ${endpoint.route_url||route.host||"pending"} · ${error_code||route.status}`,section);
+      text("p",`${route.scope==="global"?"Global":route.profile} / ${route.proxy||route.host}: ${endpoint.route_url||route.host||"pending"} · ${error_code||route.dns_issue||route.status}`,section);
     }
     for(const exposure of state.exposures){
       text("p",`${exposure.provider}: ${exposure.url||exposure.host} · ${exposure.state} · ${exposure.auth?"authentication enabled":"no authentication"}`,section);

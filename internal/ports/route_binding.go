@@ -17,6 +17,7 @@ type RouteEndpoint struct {
 	URL      string           `json:"url"`
 	RouteURL string           `json:"route_url"`
 	Status   string           `json:"status"`
+	DNSIssue string           `json:"dns_issue,omitempty"`
 }
 
 func (st *State) ProjectEndpoint(p project.Context, i Instance, name string) (RouteEndpoint, *protocol.Error) {

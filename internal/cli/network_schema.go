@@ -11,7 +11,7 @@ func routeRefSchema() map[string]any {
 	}}
 }
 func routeEndpointSchema() map[string]any {
-	return object(map[string]any{"route_ref": routeRefSchema(), "host": stringSchema(), "listener": stringSchema(), "port": map[string]any{"type": "integer", "minimum": 0, "maximum": 65535}, "url": stringSchema(), "route_url": stringSchema(), "status": stringSchema()}, "route_ref", "host", "listener", "port", "url", "route_url", "status")
+	return object(map[string]any{"route_ref": routeRefSchema(), "host": stringSchema(), "listener": stringSchema(), "port": map[string]any{"type": "integer", "minimum": 0, "maximum": 65535}, "url": stringSchema(), "route_url": stringSchema(), "status": stringSchema(), "dns_issue": stringSchema()}, "route_ref", "host", "listener", "port", "url", "route_url", "status")
 }
 func listenerDefinitionSchema() map[string]any {
 	f := map[string]any{}

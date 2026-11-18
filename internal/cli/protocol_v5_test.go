@@ -11,7 +11,7 @@ import (
 
 func TestProtocolV17DiscoveryContracts(t *testing.T) {
 	app := testApp(t)
-	if protocol.ProtocolVersion != 25 || protocol.EnvelopeVersion != 1 {
+	if protocol.ProtocolVersion != 26 || protocol.EnvelopeVersion != 1 {
 		t.Fatal("unexpected machine/envelope version")
 	}
 	for _, args := range [][]string{
@@ -26,7 +26,7 @@ func TestProtocolV17DiscoveryContracts(t *testing.T) {
 		{"schema", "project", "down"}, {"schema", "run"},
 	} {
 		data := outputData(t, app, args)
-		if data["protocol_version"] != float64(25) {
+		if data["protocol_version"] != float64(26) {
 			t.Fatalf("%v: missing protocol v25", args)
 		}
 	}

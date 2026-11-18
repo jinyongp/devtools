@@ -36,6 +36,7 @@ func proxyItemSchema() map[string]any {
 		"service":     map[string]any{"type": []string{"string", "null"}},
 		"target_port": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 65535},
 		"status":      stringSchema(),
+		"dns_issue":   stringSchema(),
 		"listener":    stringSchema(),
 		"host_policy": hostPolicySchema(),
 		"scope":       stringSchema(), "route_id": stringSchema(),

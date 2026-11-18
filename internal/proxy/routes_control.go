@@ -72,12 +72,13 @@ func (m Manager) AddGlobalWithHostPolicy(ctx context.Context, name string, port 
 }
 
 type routeCandidate struct {
-	Activation network.Activation `json:"activation"`
-	Listener   network.Listener   `json:"listener"`
-	Port       int                `json:"port"`
-	Service    string             `json:"service"`
-	StartID    string             `json:"start_id"`
-	HostPolicy network.HostPolicy `json:"host_policy,omitempty"`
+	Activation   network.Activation `json:"activation"`
+	Listener     network.Listener   `json:"listener"`
+	Port         int                `json:"port"`
+	Service      string             `json:"service"`
+	StartID      string             `json:"start_id"`
+	HostsAttempt string             `json:"hosts_attempt,omitempty"`
+	HostPolicy   network.HostPolicy `json:"host_policy,omitempty"`
 }
 
 func publicActivation(a network.Activation) map[string]any {
@@ -258,35 +259,34 @@ func (m Manager) RouteUp(ctx context.Context, ref network.RouteRef, p project.Co
 		}
 		a := candidate.Activation
 		owner := ref.Key() + "/" + candidate.Listener.ID
-		cleanup := func() *protocol.Error {
+		cleanup := func() (bool, *protocol.Error) {
+			changed := false
 			desired, e := DNSMapping(a.Host, a.DNS, candidate.Listener)
 			if e != nil {
-				return e
+				return false, e
 			}
 			if len(desired) == 0 {
 				old, e := hm.OwnerMappings(owner)
 				if e != nil {
-					return e
+					return false, e
 				}
 				if len(old) > 0 {
-					if e := hm.ForRequest(id, "up-cleanup", ref, candidate.Listener.ID).Sync(ctx, owner, nil, ""); e != nil {
-						return e
+					result, e := hm.ForRequest(id, "up-cleanup", ref, candidate.Listener.ID).Change(ctx, owner, nil, "")
+					if e != nil {
+						return false, e
 					}
+					changed = result["changed"] == true
 				}
 			}
-			return hm.ForRequest(id, "up-cleanup", ref, candidate.Listener.ID).RemoveOtherOwners(ctx, ref.Key()+"/", owner)
-		}
-		if current := st.Activation(ref); current != nil && *current == a {
-			if e := cleanup(); e != nil {
-				return nil, e
-			}
-			return map[string]any{"item": publicActivation(a), "changed": true}, nil
+			result, e := hm.ForRequest(id, "up-cleanup", ref, candidate.Listener.ID).RemoveOtherOwnersResult(ctx, ref.Key()+"/", owner)
+			return changed || result["changed"] == true, e
 		}
 		if e := m.validateCandidate(st, candidate, p); e != nil {
 			return nil, e
 		}
 		// Reject collisions before preparing DNS or starting a listener.
-		items, e := NewResolver(m.portStore()).List(ctx, "")
+		m.hostSystem = hm.System
+		items, e := m.resolver().List(ctx, "")
 		if e != nil {
 			return nil, e
 		}
@@ -313,37 +313,104 @@ func (m Manager) RouteUp(ctx context.Context, ref network.RouteRef, p project.Co
 				return nil, e
 			}
 		}
-		if len(mapping) > 0 {
-			if e := hm.ForRequest(id, "up-"+candidate.StartID, ref, candidate.Listener.ID).Sync(ctx, owner, mapping, ""); e != nil {
+		if candidate.HostsAttempt == "" {
+			candidate.HostsAttempt = candidate.StartID
+			if e := j.Set("candidate", candidate); e != nil {
 				return nil, e
 			}
 		}
-		rollback := func() {
-			if len(mapping) > 0 {
-				if e := hm.ForRequest(id, "up-rollback-"+candidate.StartID, ref, candidate.Listener.ID).Sync(context.Background(), owner, previous, ""); e == nil {
-					candidate.StartID = tasks.ID()
-					_ = j.Set("candidate", candidate)
+		type compensation struct {
+			Attempt string
+			Proof   *hosts.Publication
+			Cause   receiptError
+		}
+		rollback := func(plan compensation) *protocol.Error {
+			result, e := hm.ForRequest(id, "up-rollback-"+plan.Attempt, ref, candidate.Listener.ID).IfPublished(plan.Proof).Change(ctx, owner, previous, "")
+			if e != nil {
+				return activationRollbackFailure(plan.Cause, e)
+			}
+			if result["changed"] == true || result["replayed"] == true {
+				candidate.StartID, candidate.HostsAttempt = tasks.ID(), tasks.ID()
+				if e := j.Set("candidate", candidate); e != nil {
+					return e
 				}
 			}
+			return j.Set("compensation", nil)
 		}
-		if _, e := m.NetworkApply(ctx, "start", a.Listener, false, candidate.StartID); e != nil {
-			rollback()
+		var saved *compensation
+		if _, e := j.Get("compensation", &saved); e != nil {
 			return nil, e
 		}
+		if saved != nil {
+			if e := rollback(*saved); e != nil {
+				return nil, e
+			}
+		}
+		hostChanged := false
+		var published *hosts.Publication
+		if len(mapping) > 0 {
+			result, e := hm.ForRequest(id, "up-"+candidate.HostsAttempt, ref, candidate.Listener.ID).Change(ctx, owner, mapping, "")
+			if e != nil {
+				return nil, e
+			}
+			hostChanged, published = result["changed"] == true, hosts.Published(result)
+			if issue := hm.Observe().MappingIssue(owner, mapping[0]); issue != "" {
+				return nil, routeDNSFailure(issue)
+			}
+		}
+		fail := func(original *protocol.Error) *protocol.Error {
+			if !hostChanged || original.Code == "proxy_pending" || original.Code == "proxy_unavailable" || original.Code == "canceled" {
+				if hostChanged {
+					return protocol.WithOutcomes(original, "partial", routeOutcome(ref, "hosts", "committed", true))
+				}
+				return original
+			}
+			plan := compensation{candidate.HostsAttempt, published, receiptError{original.Code, original.Message, original.Details, original.ExitCode}}
+			if published == nil {
+				return activationRollbackFailure(plan.Cause, routeDNSFailure("hosts_unavailable"))
+			}
+			if e := j.Set("compensation", plan); e != nil {
+				return activationRollbackFailure(plan.Cause, e)
+			}
+			if e := rollback(plan); e != nil {
+				return e
+			}
+			return protocol.WithOutcomes(original, "none", routeOutcome(ref, "hosts", "rolled_back", true))
+		}
+		listenerChanged, e := m.prepareRouteListener(ctx, a.Listener, &candidate.StartID, func() *protocol.Error {
+			return j.Set("candidate", candidate)
+		})
+		if e != nil {
+			return nil, fail(e)
+		}
+		intentChanged := false
 		e = m.portStore().Update(ctx, func(current *ports.State) (bool, *protocol.Error) {
 			if e := m.validateCandidate(current, candidate, p); e != nil {
 				return false, e
 			}
+			if existing := current.Activation(ref); existing != nil && *existing == a {
+				return false, nil
+			}
+			intentChanged = true
 			return true, current.SetActivation(a)
 		})
 		if e != nil {
-			rollback()
+			return nil, fail(e)
+		}
+		cleaned, e := cleanup()
+		if e == nil {
+			e = m.VerifyRoutePrepared(ctx, ref, hm)
+		}
+		changed := hostChanged || listenerChanged || intentChanged || cleaned
+		if e != nil {
+			if changed {
+				e = protocol.WithOutcomes(e, "partial", routeOutcome(ref, "route", "committed", true))
+			}
 			return nil, e
 		}
-		if e := cleanup(); e != nil {
-			return nil, e
-		}
-		return map[string]any{"item": publicActivation(a), "changed": true}, nil
+		item := publicActivation(a)
+		item["prepared"] = true
+		return map[string]any{"item": item, "changed": changed}, nil
 	})
 }
 func (m Manager) validateCandidate(st *ports.State, c routeCandidate, p project.Context) *protocol.Error {

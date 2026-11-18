@@ -136,6 +136,9 @@ func variantView(d Definition, data map[string]any) (cliui.Document, bool) {
 				if active {
 					state = "Active"
 				}
+				if item["prepared"] == true {
+					state = "Prepared"
+				}
 			} else if d.Command == "proxy down" && result["changed"] == true {
 				state = "Inactive"
 			}
@@ -148,7 +151,18 @@ func variantView(d Definition, data map[string]any) (cliui.Document, bool) {
 			}
 			rows = append(rows, map[string]any{"route": name, "outcome": outcome, "state": state})
 		}
-		blocks := []cliui.Block{cliui.Heading(cliui.Literal(completedSentence(d)), 1)}
+		message := completedSentence(d)
+		if d.Command == "proxy up" {
+			switch {
+			case data["replayed"] == true:
+				message = "Saved result replayed."
+			case data["changed"] == false:
+				message = "Route already prepared."
+			default:
+				message = "Route prepared."
+			}
+		}
+		blocks := []cliui.Block{cliui.Heading(cliui.Literal(message), 1)}
 		if len(rows) > 0 {
 			blocks = append(blocks, inventoryTable(inventoryLayout{columns: []ViewColumn{{"route", "Route", ""}, {"outcome", "Outcome", ""}, {"state", "State", ""}}}, rows))
 		}

@@ -3091,7 +3091,7 @@
         "changed": {"type": "boolean"},
         "code": {"type": "string"}
       },
-      "required": ["kind", "name", "state", "changed"],
+      "required": ["kind", "name", "state"],
       "additionalProperties": false
     },
     "EffectiveReady": {

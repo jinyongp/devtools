@@ -151,6 +151,67 @@ func TestNetworkListenersHostsPending(t *testing.T) {
 	request()
 }
 
+func TestRouteUpHosts(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "hosts")
+	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	system := hosts.System{Path: path}
+	m := liveNetworkFixture(t, nil, system)
+	if _, e := m.Configure(ctx, "default", fmt.Sprintf("127.0.0.1:%d", freeNetworkPort(t)), "", false, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	hm := hosts.Manager{Data: m.Data, System: system}
+	hm.Run = func(ctx context.Context, _ string, input any, _ bool) *protocol.Error {
+		return system.Apply(ctx, input.(hosts.Request))
+	}
+	p, ref := networkRoute(t, m, "one.test", "default", freeNetworkPort(t))
+	_, other := networkRoute(t, m, "second.test", "default", freeNetworkPort(t))
+	id := tasks.ID()
+	up := func(id string) (map[string]any, *protocol.Error) {
+		result, e := m.RouteUp(ctx, ref, p, nil, hm, id)
+		if e != nil {
+			return nil, e
+		}
+		return result.(map[string]any), nil
+	}
+	if result, e := up(id); e != nil || result["changed"] != true || result["item"].(map[string]any)["prepared"] != true {
+		t.Fatal(result, e)
+	}
+	if result, e := up(tasks.ID()); e != nil || result["changed"] != false {
+		t.Fatal(result, e)
+	}
+	if _, e := m.NetworkApply(ctx, "stop", "default", false, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	if result, e := up(id); e != nil || result["replayed"] != true {
+		t.Fatal(result, e)
+	}
+	if status, e := m.NetworkStatus(ctx, "default"); e != nil || status["running"] != false {
+		t.Fatal("replay restarted the listener", status, e)
+	}
+	if result, e := up(tasks.ID()); e != nil || result["changed"] != true || result["item"].(map[string]any)["prepared"] != true {
+		t.Fatal("new up did not restore the listener", result, e)
+	}
+	st, e := m.portStore().Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	originalRunner := hm.Run
+	hm.Run = func(context.Context, string, any, bool) *protocol.Error {
+		return protocol.NewError("permission_required", "injected interruption", 3, nil)
+	}
+	owner := other.Key() + "/" + st.Listener("default").ID
+	if e := hm.ForRequest(tasks.ID(), "up", other, st.Listener("default").ID).Sync(ctx, owner, []hosts.Mapping{{Host: "second.test", Address: "127.0.0.1"}}, ""); e == nil {
+		t.Fatal("injected interruption did not persist pending")
+	}
+	hm.Run = originalRunner
+	if result, e := up(tasks.ID()); e != nil || result["changed"] != false {
+		t.Fatal("unrelated valid route lost preparation", result, e)
+	}
+}
+
 // Network control returns proxy_pending while its bounded lease probe or a
 // control response is uncertain.
 // Keep the operation identity frozen while establishing a definitive fixture

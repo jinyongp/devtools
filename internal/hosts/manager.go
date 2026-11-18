@@ -42,6 +42,7 @@ type Manager struct {
 	Run      privilege.Runner
 	Preview  func([]Mapping)
 	intent   intent
+	guard    *Publication
 }
 
 type intent struct {
@@ -52,11 +53,32 @@ type intent struct {
 }
 
 type stepInput struct {
-	Intent   intent    `json:"intent"`
-	ID       string    `json:"id"`
-	Owner    string    `json:"owner"`
-	Desired  []Mapping `json:"desired"`
-	Expected string    `json:"preview_digest,omitempty"`
+	Intent   intent       `json:"intent"`
+	ID       string       `json:"id"`
+	Owner    string       `json:"owner"`
+	Desired  []Mapping    `json:"desired"`
+	Expected string       `json:"preview_digest,omitempty"`
+	Guard    *Publication `json:"publication_guard,omitempty"`
+}
+
+// Publication is private evidence that a hosts step replaced the journal.
+type Publication struct {
+	Stamp  string
+	Digest string
+}
+
+func Published(result map[string]any) *Publication {
+	stamp, _ := result["publication_stamp"].(string)
+	hash, _ := result["references_digest"].(string)
+	if stamp == "" || hash == "" {
+		return nil
+	}
+	return &Publication{stamp, hash}
+}
+
+func (m Manager) IfPublished(publication *Publication) Manager {
+	m.guard = publication
+	return m
 }
 
 // ForRequest scopes subsequent mutations to one frozen operation and phase.
@@ -128,8 +150,11 @@ func (m Manager) OwnerMappings(owner string) ([]Mapping, *protocol.Error) {
 	return nil, nil
 }
 func (m Manager) RemoveOtherOwners(ctx context.Context, prefix, keep string) *protocol.Error {
-	_, e := m.removeOwners(ctx, prefix, keep)
+	_, e := m.RemoveOtherOwnersResult(ctx, prefix, keep)
 	return e
+}
+func (m Manager) RemoveOtherOwnersResult(ctx context.Context, prefix, keep string) (map[string]any, *protocol.Error) {
+	return m.removeOwners(ctx, prefix, keep)
 }
 func (m Manager) RemovePrefix(ctx context.Context, prefix string) *protocol.Error {
 	_, e := m.RemovePrefixResult(ctx, prefix)
@@ -290,7 +315,7 @@ func (m Manager) Change(ctx context.Context, owner string, desired []Mapping, ex
 	if m.Isolated && len(desired) > 0 {
 		return nil, isolatedWriteFailure()
 	}
-	step := stepInput{Intent: m.intent, Owner: owner, Desired: desired, Expected: expected}
+	step := stepInput{Intent: m.intent, Owner: owner, Desired: desired, Expected: expected, Guard: m.guard}
 	if m.intent.RequestID == "" {
 		step.ID = protocol.NewRequestID()
 	} else {
@@ -342,6 +367,7 @@ func (m Manager) changeLocked(ctx context.Context, step stepInput, j *netops.Jou
 			return nil, e
 		}
 		if present && published == referenceStamp(root) && verified["references_digest"] == stateDigest(st) {
+			verified["publication_stamp"] = published
 			return verified, nil
 		}
 		return nil, recoveryFailure("outcome_unconfirmed", st.Pending)
@@ -355,7 +381,7 @@ func (m Manager) changeLocked(ctx context.Context, step stepInput, j *netops.Jou
 	}
 	owners := replaceOwner(st.Owners, step.Owner, step.Desired)
 	if p := st.Pending; p != nil {
-		if p.Step != nil && p.Step.ID == step.ID && reflect.DeepEqual(*p.Step, step) {
+		if sameStep(p.Step, &step) {
 			if p.Approval != nil {
 				return nil, recoveryFailure("pending_hosts_operation", p)
 			}
@@ -379,6 +405,9 @@ func (m Manager) changeLocked(ctx context.Context, step stepInput, j *netops.Jou
 	if found {
 		return nil, recoveryFailure("outcome_unconfirmed", nil)
 	}
+	if step.Guard != nil && (step.Guard.Stamp != referenceStamp(root) || step.Guard.Digest != stateDigest(st)) {
+		return nil, recoveryFailure("outcome_unconfirmed", nil)
+	}
 	if step.Expected != "" && step.Expected != m.previewToken(st, before, step.Owner, step.Desired) {
 		return nil, failure("stale_preview")
 	}
@@ -399,7 +428,7 @@ func (m Manager) changeLocked(ctx context.Context, step stepInput, j *netops.Jou
 		if e := j.Set("verified", result); e != nil {
 			return nil, e
 		}
-		return result, publishState(root, st, j)
+		return result, publishState(root, st, j, result)
 	}
 	if m.Isolated {
 		return nil, isolatedWriteFailure()
@@ -523,10 +552,10 @@ func (m Manager) finishPending(ctx context.Context, root string, st state, befor
 	if e := j.Set("verified", result); e != nil {
 		return nil, e
 	}
-	return result, publishState(root, next, j)
+	return result, publishState(root, next, j, result)
 }
 
-func publishState(root string, st state, j *netops.Journal) *protocol.Error {
+func publishState(root string, st state, j *netops.Journal, result map[string]any) *protocol.Error {
 	if e := writeState(root, st); e != nil {
 		return e
 	}
@@ -534,6 +563,7 @@ func publishState(root string, st state, j *netops.Journal) *protocol.Error {
 	if stamp == "" {
 		return recoveryFailure("outcome_unconfirmed", nil)
 	}
+	result["publication_stamp"] = stamp
 	return j.Set("published", stamp)
 }
 

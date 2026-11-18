@@ -2,8 +2,6 @@ package proxy
 
 import (
 	"context"
-	"encoding/json"
-	"reflect"
 	"sort"
 
 	"github.com/jinyongp/devtools/internal/hosts"
@@ -18,6 +16,8 @@ import (
 type batchDNS struct {
 	Owner             string
 	Desired, Previous []hosts.Mapping
+	Published         *hosts.Publication
+	Undone            bool
 }
 type batchListener struct {
 	Target            listenerTarget
@@ -32,17 +32,20 @@ type activationBatch struct {
 	Listeners []batchListener
 	Rollback  bool
 	Attempt   string
+	Cause     *receiptError
+	UndoProof *hosts.Publication
 }
 
 // ActivateProjectBatch prepares every DNS mapping and socket before atomically
 // activating the routes. Backend assignment is an earlier, independent commit.
 func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, activations []network.Activation, hm hosts.Manager, id string, preserveDisabled ...bool) *protocol.Error {
+	m.hostSystem = hm.System
 	guardDisabled := len(preserveDisabled) > 0 && preserveDisabled[0]
 	resources := []string{}
 	for _, a := range activations {
 		resources = append(resources, "route/"+a.Route.Key())
 	}
-	_, e := (netops.Store{Data: m.Data}).Apply(ctx, id, struct {
+	result, e := (netops.Store{Data: m.Data}).Apply(ctx, id, struct {
 		Action           string
 		Routes           []network.Activation
 		PreserveDisabled bool `json:"preserve_disabled,omitempty"`
@@ -104,7 +107,7 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 				if e != nil {
 					return nil, e
 				}
-				batch.DNS = append(batch.DNS, batchDNS{owner, desired, previous})
+				batch.DNS = append(batch.DNS, batchDNS{Owner: owner, Desired: desired, Previous: previous})
 				if !listeners[a.Listener] {
 					listeners[a.Listener] = true
 					h, t, e := st.ListenerPorts(a.Listener)
@@ -136,20 +139,31 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 			return hm.ForRequest(id, phase, network.RouteRef{}, "")
 		}
 		rollback := func() *protocol.Error {
-			for _, mapping := range batch.DNS {
-				current, e := hm.OwnerMappings(mapping.Owner)
+			for i := len(batch.DNS) - 1; i >= 0; i-- {
+				mapping := &batch.DNS[i]
+				if mapping.Published == nil || mapping.Undone {
+					continue
+				}
+				if batch.UndoProof == nil {
+					batch.UndoProof = mapping.Published
+				}
+				result, e := hostsStep(mapping.Owner, "batch-rollback").IfPublished(batch.UndoProof).Change(ctx, mapping.Owner, mapping.Previous, "")
 				if e != nil {
 					return e
 				}
-				if reflect.DeepEqual(current, mapping.Desired) || len(current) == 0 && len(mapping.Desired) == 0 {
-					if len(current) > 0 || len(mapping.Previous) > 0 {
-						if e := hostsStep(mapping.Owner, "batch-rollback").Sync(context.Background(), mapping.Owner, mapping.Previous, ""); e != nil {
-							return e
-						}
-					}
+				mapping.Undone = true
+				if publication := hosts.Published(result); publication != nil {
+					batch.UndoProof = publication
+				}
+				if e := j.Set("batch", batch); e != nil {
+					return e
 				}
 			}
-			items, e := NewResolver(m.portStore()).List(context.Background(), "")
+			items, e := m.resolver().List(ctx, "")
+			if e != nil {
+				return e
+			}
+			st, e := m.portStore().Read()
 			if e != nil {
 				return e
 			}
@@ -164,37 +178,51 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 				}
 				used := false
 				for _, item := range items {
-					if item.Listener == listener.Target.Definition.Name && item.Status == StatusReady && !selected[item.Ref().Key()] {
+					ref := item.Ref()
+					active := st.Activation(ref)
+					if item.Listener == listener.Target.Definition.Name && ref.Valid() &&
+						(active != nil && active.Mode == "active" || !selected[ref.Key()] && item.Status != "inactive" && item.Status != "disabled") {
 						used = true
 					}
 				}
-				if used {
+				if used || st.ListenerPinned(listener.Target.Definition.ID) {
 					continue
 				}
 				target := listener.Target
 				target.AttemptID = listener.Started.Generation
-				if _, e := m.networkRPC(context.Background(), networkControlRequest{Action: "stop", Target: target}); e != nil && e.Code != "request_conflict" && e.Code != "pinned" {
+				if _, e := m.networkRPC(ctx, networkControlRequest{Action: "stop", Target: target}); e != nil && e.Code != "request_conflict" && e.Code != "pinned" {
 					return e
 				}
 				listener.Started = nil
 				listener.StartID = tasks.ID()
+				if e := j.Set("batch", batch); e != nil {
+					return e
+				}
 			}
 			batch.Rollback = false
 			batch.Attempt = tasks.ID()
+			batch.Cause, batch.UndoProof = nil, nil
+			for i := range batch.DNS {
+				batch.DNS[i].Published, batch.DNS[i].Undone = nil, false
+			}
 			return j.Set("batch", batch)
 		}
 		if batch.Rollback {
 			if e := rollback(); e != nil {
+				if batch.Cause != nil {
+					return nil, activationRollbackFailure(*batch.Cause, e)
+				}
 				return nil, e
 			}
 		}
 		fail := func(original *protocol.Error) (any, *protocol.Error) {
 			batch.Rollback = true
+			batch.Cause = &receiptError{original.Code, original.Message, original.Details, original.ExitCode}
 			if e := j.Set("batch", batch); e != nil {
 				return nil, e
 			}
 			if e := rollback(); e != nil {
-				return nil, protocol.NewError("recovery_required", "Network preparation failed and owned resources still need recovery; retry this request before starting another operation.", 3, map[string]any{"cause": original.Code, "recovery": e.Code})
+				return nil, activationRollbackFailure(*batch.Cause, e)
 			}
 			return nil, original
 		}
@@ -208,43 +236,12 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 		if len(batch.Routes) == 0 {
 			return map[string]any{"changed": false}, nil
 		}
-		committed := len(batch.Routes) > 0
 		for _, route := range batch.Routes {
 			if !st.ActivationMatches(route.Activation) {
-				committed = false
 				if st.Pinned(route.Activation.Route) {
 					return nil, st.RoutePinConflict(route.Activation.Route)
 				}
 			}
-		}
-		for _, listener := range batch.Listeners {
-			status, e := m.NetworkStatus(ctx, listener.Target.Definition.Name)
-			if e != nil {
-				return nil, e
-			}
-			if status["running"] != true {
-				committed = false
-			}
-		}
-		for _, mapping := range batch.DNS {
-			if !reflect.DeepEqual(mapping.Desired, mapping.Previous) || len(mapping.Desired) > 0 && !hm.Prepared(mapping.Owner, mapping.Desired[0]) {
-				committed = false
-			}
-		}
-		if committed {
-			for _, mapping := range batch.DNS {
-				if len(mapping.Desired) == 0 && len(mapping.Previous) > 0 {
-					if e := hostsStep(mapping.Owner, "batch-cleanup").Sync(ctx, mapping.Owner, nil, ""); e != nil {
-						return nil, e
-					}
-				}
-			}
-			for _, route := range batch.Routes {
-				if e := hm.ForRequest(id, "batch-cleanup", route.Activation.Route, route.Listener.ID).RemoveOtherOwners(ctx, route.Activation.Route.Key()+"/", route.Activation.Route.Key()+"/"+route.Listener.ID); e != nil {
-					return nil, e
-				}
-			}
-			return map[string]any{"changed": true}, nil
 		}
 		for _, route := range batch.Routes {
 			if e := m.validateCandidate(st, route, p); e != nil {
@@ -270,27 +267,59 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 				}
 			}
 		}
+		changed := false
+		for i := range batch.DNS {
+			mapping := &batch.DNS[i]
+			if len(mapping.Desired) > 0 {
+				result, e := hostsStep(mapping.Owner, "batch-forward").Change(ctx, mapping.Owner, mapping.Desired, "")
+				if e != nil {
+					// Keep the ordered forward receipts. No compensation may
+					// overtake a hosts write whose outcome is still pending.
+					if hm.RecoveryStatus().State != "none" {
+						if changed {
+							e = protocol.WithOutcomes(e, "partial", map[string]any{"kind": "hosts", "name": "Earlier mappings", "state": "committed", "changed": true})
+						}
+						return nil, e
+					}
+					return fail(e)
+				}
+				mapping.Published = hosts.Published(result)
+				changed = changed || result["changed"] == true
+				if e := j.Set("batch", batch); e != nil {
+					return nil, e
+				}
+			}
+		}
+		var observation *hosts.Observation
 		for _, mapping := range batch.DNS {
 			if len(mapping.Desired) > 0 {
-				if e := hostsStep(mapping.Owner, "batch-forward").Sync(ctx, mapping.Owner, mapping.Desired, ""); e != nil {
-					return fail(e)
+				if observation == nil {
+					value := hm.Observe()
+					observation = &value
+				}
+				if issue := observation.MappingIssue(mapping.Owner, mapping.Desired[0]); issue != "" {
+					return fail(routeDNSFailure(issue))
 				}
 			}
 		}
 		for index := range batch.Listeners {
 			listener := &batch.Listeners[index]
-			result, e := m.NetworkApply(ctx, "start", listener.Target.Definition.Name, false, listener.StartID)
+			name := listener.Target.Definition.Name
+			started, e := m.prepareRouteListener(ctx, name, &listener.StartID, func() *protocol.Error {
+				return j.Set("batch", batch)
+			})
 			if e != nil {
 				return fail(e)
 			}
-			encoded, _ := json.Marshal(result)
-			var wrapper struct {
-				Item ListenerStatus `json:"item"`
+			if started {
+				current, e := m.NetworkStatus(ctx, name)
+				if e != nil {
+					return fail(e)
+				}
+				generation, _ := current["generation"].(string)
+				listener.Started = &ListenerStatus{Generation: generation, Running: current["running"] == true}
+				changed = true
 			}
-			if json.Unmarshal(encoded, &wrapper) != nil {
-				return fail(proxyStorageError())
-			}
-			listener.Started = &wrapper.Item
 			if e := j.Set("batch", batch); e != nil {
 				return nil, e
 			}
@@ -300,15 +329,15 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 			if e != nil {
 				return fail(e)
 			}
-			if listener.Started == nil || current["running"] != true || current["generation"] != listener.Started.Generation {
-				return fail(proxyFailure("request_conflict"))
+			if e := m.verifyListener(ctx, listener.Target.Definition.Name, current); e != nil {
+				return fail(e)
 			}
 		}
+		activationChanged := false
 		e = m.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
 			if e := validateDisabledActivations(st, batch.Disabled); e != nil {
 				return false, e
 			}
-			changed := false
 			for _, route := range batch.Routes {
 				if current := st.Activation(route.Activation.Route); guardDisabled && current != nil && current.Mode == "disabled" {
 					return false, proxyFailure("network_snapshot_changed")
@@ -320,10 +349,10 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 					if e := st.SetActivation(route.Activation); e != nil {
 						return false, e
 					}
-					changed = true
+					activationChanged = true
 				}
 			}
-			return changed, nil
+			return activationChanged, nil
 		})
 		if e != nil {
 			return fail(e)
@@ -340,8 +369,22 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 				return nil, e
 			}
 		}
-		return map[string]any{"changed": len(batch.Routes) > 0}, nil
+		for _, route := range batch.Routes {
+			if e := m.verifyRoutePrepared(ctx, route.Activation.Route, hm, &route.Activation); e != nil {
+				return nil, protocol.WithOutcomes(e, "partial", routeOutcome(route.Activation.Route, "route", "committed", activationChanged))
+			}
+		}
+		return map[string]any{"changed": changed || activationChanged}, nil
 	})
+	if e == nil && result.(map[string]any)["replayed"] == true {
+		for _, activation := range activations {
+			if activation.Mode == "active" {
+				if e := m.verifyRoutePrepared(ctx, activation.Route, hm, &activation); e != nil {
+					return e
+				}
+			}
+		}
+	}
 	return e
 }
 

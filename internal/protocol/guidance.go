@@ -276,6 +276,36 @@ func PreserveRecovery(to, from *Error) {
 			to.Details[k] = v
 		}
 	}
+	if source, ok := from.Details["facts"].(map[string]any); ok {
+		facts, _ := to.Details["facts"].(map[string]any)
+		if facts == nil {
+			facts = map[string]any{}
+			to.Details["facts"] = facts
+		}
+		for _, key := range []string{"hosts", "outcomes"} {
+			if value, ok := source[key]; ok {
+				facts[key] = value
+			}
+		}
+	}
+}
+
+func WithOutcomes(e *Error, effects string, outcomes ...map[string]any) *Error {
+	if len(outcomes) == 0 {
+		return e
+	}
+	e = WithEffects(e, effects)
+	facts, _ := e.Details["facts"].(map[string]any)
+	if facts == nil {
+		facts = map[string]any{}
+		e.Details["facts"] = facts
+	}
+	rows := make([]any, 0, len(outcomes))
+	for _, row := range outcomes {
+		rows = append(rows, row)
+	}
+	facts["outcomes"] = append(rows, diagnosticArray(facts["outcomes"])...)
+	return e
 }
 
 func WithEffects(e *Error, effects string) *Error {

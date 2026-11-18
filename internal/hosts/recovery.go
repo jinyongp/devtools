@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -228,6 +229,7 @@ func (m Manager) Recover(ctx context.Context, id, token string) (any, *protocol.
 					return nil, e
 				}
 				if approved && found && stamp && referenceStamp(root) == published && verified["references_digest"] == stateDigest(st) {
+					verified["publication_stamp"] = published
 					return verified, nil
 				}
 				if approved {
@@ -303,5 +305,6 @@ func sameStep(a, b *stepInput) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
-	return a.ID == b.ID && a.Intent == b.Intent && a.Owner == b.Owner && a.Expected == b.Expected && slices.Equal(a.Desired, b.Desired)
+	return a.ID == b.ID && a.Intent == b.Intent && a.Owner == b.Owner && a.Expected == b.Expected &&
+		slices.Equal(a.Desired, b.Desired) && reflect.DeepEqual(a.Guard, b.Guard)
 }

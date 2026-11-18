@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 
@@ -22,7 +23,11 @@ func (a *App) hostsManager(ctx context.Context, streams IO) (hosts.Manager, *pro
 	if e != nil {
 		return hosts.Manager{}, portFailure("io_error")
 	}
-	return hosts.Manager{Data: d.Data, Isolated: d.IsolatedRoot != "", Terminal: interactive(streams), Preview: func(mappings []hosts.Mapping) {
+	profiles, failure := a.dataDirectory()
+	if failure != nil {
+		return hosts.Manager{}, failure
+	}
+	return hosts.Manager{Data: filepath.Dir(profiles), Isolated: d.IsolatedRoot != "", Terminal: interactive(streams), Preview: func(mappings []hosts.Mapping) {
 		if interactive(streams) && ctx.Value(responseFormatKey{}) != presentation.FormatJSON {
 			defer progress.Suspend(ctx)()
 			fmt.Fprintln(streams.Err, "Preparing devtools-owned hosts mappings:")
@@ -163,7 +168,9 @@ func (a *App) registerProxyRoutes() {
 					}
 				}
 				items := []any{}
-				for _, child := range selected {
+				outcomes := []map[string]any{}
+				changed := false
+				for index, child := range selected {
 					var result any
 					var e *protocol.Error
 					if action == "up" {
@@ -172,13 +179,49 @@ func (a *App) registerProxyRoutes() {
 						result, e = m.RouteDown(ctx, child.Ref, hm, child.ID)
 					}
 					if e != nil {
+						if changed {
+							for _, remaining := range selected[index+1:] {
+								outcomes = append(outcomes, routeOutcomeRow(remaining.Ref, "not_attempted", false))
+							}
+							e = protocol.WithOutcomes(e, "partial", outcomes...)
+						}
 						return nil, e
+					}
+					if childResult, ok := result.(map[string]any); ok {
+						childChanged := childResult["changed"] == true
+						changed = changed || childChanged
+						if action == "up" {
+							if childResult["replayed"] == true {
+								if e := m.VerifyRoutePrepared(ctx, child.Ref, hm); e != nil {
+									outcomes = append(outcomes, routeOutcomeRow(child.Ref, "committed", childChanged))
+									effects := "none"
+									if changed {
+										effects = "partial"
+									}
+									return nil, protocol.WithOutcomes(e, effects, outcomes...)
+								}
+								if item, ok := childResult["item"].(map[string]any); ok {
+									item["prepared"] = true
+								}
+							}
+							outcomes = append(outcomes, routeOutcomeRow(child.Ref, "prepared", childChanged))
+						} else {
+							outcomes = append(outcomes, routeOutcomeRow(child.Ref, "disabled", childChanged))
+						}
 					}
 					items = append(items, result)
 				}
-				return map[string]any{"items": items, "changed": len(items) > 0}, nil
+				return map[string]any{"items": items, "changed": changed}, nil
 			})
 		}
 		a.commands = append(a.commands, c)
 	}
+}
+
+func routeOutcomeRow(ref network.RouteRef, state string, changed bool) map[string]any {
+	name := ref.Proxy
+	if name == "" {
+		name = ref.RouteID
+	}
+	return map[string]any{"kind": "route", "name": name, "state": state, "changed": changed}
 }

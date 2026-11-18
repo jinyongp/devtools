@@ -56,7 +56,7 @@ func routeMutationSchema(action string) map[string]any {
 	}
 	var single map[string]any
 	if action == "up" {
-		single = mutationSchema(map[string]any{"item": object(map[string]any{"route_ref": routeRefSchema(), "active": boolSchema(), "host": stringSchema(), "listener": stringSchema(), "dns": stringSchema()}, "route_ref", "active", "host", "listener", "dns")}, "item")
+		single = mutationSchema(map[string]any{"item": object(map[string]any{"route_ref": routeRefSchema(), "active": boolSchema(), "host": stringSchema(), "listener": stringSchema(), "dns": stringSchema(), "prepared": boolSchema()}, "route_ref", "active", "host", "listener", "dns")}, "item")
 	} else {
 		single = mutationSchema(map[string]any{"route_ref": routeRefSchema()}, "route_ref")
 	}

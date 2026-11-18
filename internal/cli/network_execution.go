@@ -348,7 +348,26 @@ func (a *App) prepareNetwork(ctx context.Context, p project.Context, names []str
 			activations = snapshots[names[0]].Activations
 		}
 		if e := m.ActivateProjectBatch(ctx, p, activations, hm, fields.ActivationID, mode == network.PrepareAuto); e != nil {
-			return nil, e
+			outcomes := []map[string]any{}
+			effects := "none"
+			if len(names) > 0 {
+				services := make([]string, 0, len(snapshots[names[0]].Ports))
+				for service := range snapshots[names[0]].Ports {
+					services = append(services, service)
+				}
+				sort.Strings(services)
+				for _, service := range services {
+					outcomes = append(outcomes, map[string]any{"kind": "assignment", "name": service, "state": "committed"})
+					effects = "partial"
+				}
+			}
+			for _, name := range names {
+				outcomes = append(outcomes, map[string]any{"kind": "backend", "name": name, "state": "not_attempted", "changed": false})
+			}
+			if e.Details != nil && e.Details["effects"] == "partial" {
+				effects = "partial"
+			}
+			return nil, protocol.WithOutcomes(e, effects, outcomes...)
 		}
 		return map[string]any{"snapshots": snapshots, "changed": true}, nil
 	})
@@ -361,6 +380,17 @@ func (a *App) prepareNetwork(ctx context.Context, p project.Context, names []str
 	}
 	if json.Unmarshal(encoded, &decoded) != nil {
 		return nil, portFailure("invalid_storage")
+	}
+	if result.(map[string]any)["replayed"] == true && len(names) > 0 {
+		if snapshot := decoded.Snapshots[names[0]]; snapshot != nil {
+			for _, activation := range snapshot.Activations {
+				if activation.Mode == "active" {
+					if e := m.VerifyActivationPrepared(ctx, activation, hm); e != nil {
+						return nil, e
+					}
+				}
+			}
+		}
 	}
 	return decoded.Snapshots, nil
 }

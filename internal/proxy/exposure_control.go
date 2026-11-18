@@ -88,6 +88,9 @@ func (m Manager) exposureIdentity(ctx context.Context, ref network.RouteRef) (It
 			found = true
 		}
 	}
+	if selected.DNSIssue != "" {
+		return selected, network.Listener{}, "", routeDNSFailure(selected.DNSIssue)
+	}
 	if !found || selected.Status != StatusReady || selected.Host == nil || selected.TargetPort == nil {
 		return selected, network.Listener{}, "", proxyFailure("route_unavailable")
 	}

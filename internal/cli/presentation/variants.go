@@ -139,7 +139,7 @@ func variantView(d Definition, data map[string]any) (cliui.Document, bool) {
 				if item["prepared"] == true {
 					state = "Prepared"
 				}
-			} else if d.Command == "proxy down" && result["changed"] == true {
+			} else if d.Command == "proxy down" {
 				state = "Inactive"
 			}
 			outcome := "Applied"
@@ -161,6 +161,9 @@ func variantView(d Definition, data map[string]any) (cliui.Document, bool) {
 			default:
 				message = "Route prepared."
 			}
+		}
+		if d.Command == "proxy down" && data["changed"] == false && data["replayed"] != true {
+			message = "Route already disabled."
 		}
 		blocks := []cliui.Block{cliui.Heading(cliui.Literal(message), 1)}
 		if len(rows) > 0 {

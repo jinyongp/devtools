@@ -212,6 +212,90 @@ func TestRouteUpHosts(t *testing.T) {
 	}
 }
 
+func TestHostsCleanup(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "hosts")
+	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	system := hosts.System{Path: path}
+	m := liveNetworkFixture(t, nil, system)
+	if _, e := m.Configure(ctx, "default", fmt.Sprintf("127.0.0.1:%d", freeNetworkPort(t)), "", false, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	run := func(ctx context.Context, _ string, input any, _ bool) *protocol.Error {
+		return system.Apply(ctx, input.(hosts.Request))
+	}
+	hm := hosts.Manager{Data: m.Data, System: system, Run: run}
+	p, ref := networkRoute(t, m, "cleanup.test", "default", freeNetworkPort(t))
+	if _, e := m.RouteUp(ctx, ref, p, nil, hm, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	original, e := m.portStore().Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	listener := original.Listener("default")
+	orphan := "orphan/" + listener.ID
+	hm.Run = func(context.Context, string, any, bool) *protocol.Error {
+		return protocol.NewError("permission_required", "injected interruption", 3, nil)
+	}
+	if e := hm.ForRequest(tasks.ID(), "fixture", network.RouteRef{}, listener.ID).Sync(ctx, orphan, []hosts.Mapping{{Host: "orphan.test", Address: "127.0.0.1"}}, ""); e == nil {
+		t.Fatal("fixture did not create a pending request")
+	}
+	id := tasks.ID()
+	hm.Run = run
+	if _, e := m.RouteDown(ctx, ref, hm, id); e == nil || e.Code != "recovery_required" || e.Details["effects"] != "partial" {
+		t.Fatal("expected confirmed disable with blocked cleanup", e)
+	}
+	st, e := m.portStore().Read()
+	if e != nil || st.Activation(ref).Mode != "disabled" {
+		t.Fatal(st, e)
+	}
+	if _, e := hm.Recover(ctx, tasks.ID(), hm.RecoveryStatus().Digest); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := m.RouteUp(ctx, ref, p, nil, hm, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := m.RouteDown(ctx, ref, hm, id); e == nil || e.Code != "request_conflict" {
+		t.Fatal("old down request replaced a newer activation", e)
+	}
+	if e := m.VerifyRoutePrepared(ctx, ref, hm); e != nil {
+		t.Fatal(e)
+	}
+	selection := TeardownSelection{Listener: "default"}
+	plan, e := m.TeardownPreview(ctx, selection, hm)
+	if e != nil || len(plan.HostsOwners) != 2 {
+		t.Fatal(plan, e)
+	}
+	body, e := system.Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	edit := []byte("# Edited outside devtools\n")
+	if err := os.WriteFile(path, append(edit, body...), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, e := m.Teardown(ctx, selection, plan.Digest, tasks.ID(), hm, TeardownTrust{}); e == nil || e.Code != "stale_preview" {
+		t.Fatal("stale teardown applied", e)
+	}
+	if e := m.VerifyRoutePrepared(ctx, ref, hm); e != nil {
+		t.Fatal("stale teardown stopped the running route", e)
+	}
+	plan, e = m.TeardownPreview(ctx, selection, hm)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e := m.Teardown(ctx, selection, plan.Digest, tasks.ID(), hm, TeardownTrust{}); e != nil {
+		t.Fatal(e)
+	}
+	body, e = system.Read()
+	if e != nil || string(body) != string(edit)+"127.0.0.1 localhost\n" {
+		t.Fatal(string(body), e)
+	}
+}
+
 // Network control returns proxy_pending while its bounded lease probe or a
 // control response is uncertain.
 // Keep the operation identity frozen while establishing a definitive fixture

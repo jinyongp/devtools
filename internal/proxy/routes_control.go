@@ -463,16 +463,15 @@ func (m Manager) RouteDown(ctx context.Context, ref network.RouteRef, hm hosts.M
 		Action string
 		Route  network.RouteRef
 	}{"down", ref}, []string{"route/" + ref.Key()}, func(j *netops.Journal) (any, *protocol.Error) {
-		e := m.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
-			return true, st.SetActivation(network.Activation{Route: ref, Mode: "disabled"})
-		})
+		proof, e := m.disableRoute(ctx, ref, j, nil)
 		if e != nil {
 			return nil, e
 		}
-		if e := hm.ForRequest(id, "down", ref, "").RemovePrefix(ctx, ref.Key()+"/"); e != nil {
-			return nil, e
+		cleaned, e := m.cleanupDisabledRoute(ctx, ref, proof, hm.ForRequest(id, "down", ref, ""))
+		if e != nil {
+			return nil, cleanupFailure(e, ref, proof.Changed)
 		}
-		return map[string]any{"route_ref": ref, "changed": true}, nil
+		return map[string]any{"route_ref": ref, "changed": proof.Changed || cleaned}, nil
 	})
 }
 func (m Manager) RemoveGlobals(ctx context.Context, names []string, all bool, hm hosts.Manager, id string) (any, *protocol.Error) {
@@ -518,38 +517,75 @@ func (m Manager) RemoveGlobals(ctx context.Context, names []string, all bool, hm
 				return nil, proxyFailure("request_conflict")
 			}
 		}
-		for _, target := range targets {
-			if e := m.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
-				current := st.GlobalRoute(target.Name)
-				if current == nil {
-					return false, nil
-				}
-				if current.ID != target.ID {
-					return false, proxyFailure("request_conflict")
-				}
-				if e := m.portStore().Active(ctx, "global-"+target.ID, "backend"); e != nil {
-					return false, e
-				}
-				return true, st.SetActivation(network.Activation{Route: target.Ref(), Mode: "disabled"})
-			}); e != nil {
-				return nil, e
+		var ids map[string]string
+		known, e := j.Get("remove_ids", &ids)
+		if e != nil {
+			return nil, e
+		}
+		if !known {
+			ids = map[string]string{}
+			for _, target := range targets {
+				ids[target.ID] = tasks.ID()
 			}
-			if e := hm.ForRequest(id, "remove", target.Ref(), "").RemovePrefix(ctx, target.Ref().Key()+"/"); e != nil {
-				return nil, e
-			}
-			if e := m.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
-				current := st.GlobalRoute(target.Name)
-				if current == nil {
-					return false, nil
-				}
-				if current.ID != target.ID {
-					return false, proxyFailure("request_conflict")
-				}
-				return true, st.RemoveGlobal(target.Name)
-			}); e != nil {
+			if e := j.Set("remove_ids", ids); e != nil {
 				return nil, e
 			}
 		}
-		return map[string]any{"items": targets, "changed": len(targets) > 0}, nil
+		changed := false
+		outcomes := []map[string]any{}
+		for i, target := range targets {
+			ref := target.Ref()
+			result, e := (netops.Store{Data: m.Data}).Apply(ctx, ids[target.ID], target, []string{"route/" + ref.Key()}, func(child *netops.Journal) (any, *protocol.Error) {
+				var removed string
+				if known, e := child.Get("removed", &removed); e != nil {
+					return nil, e
+				} else if known {
+					return map[string]any{"changed": true}, nil
+				}
+				check := func(st *ports.State) *protocol.Error {
+					current := st.GlobalRoute(target.Name)
+					if current == nil || current.ID != target.ID {
+						return cleanupConflict()
+					}
+					return m.portStore().Active(ctx, "global-"+target.ID, "backend")
+				}
+				proof, e := m.disableRoute(ctx, ref, child, check)
+				if e != nil {
+					return nil, e
+				}
+				_, e = m.cleanupDisabledRoute(ctx, ref, proof, hm.ForRequest(id, "remove", ref, ""))
+				if e != nil {
+					return nil, cleanupFailure(e, ref, proof.Changed)
+				}
+				e = m.portStore().UpdateWithProof(ctx, func(st *ports.State, stamp string) (bool, *protocol.Error) {
+					if stamp != proof.After {
+						return false, cleanupConflict()
+					}
+					if e := check(st); e != nil {
+						return false, e
+					}
+					return true, st.RemoveGlobal(target.Name)
+				}, func(stamp string) *protocol.Error {
+					return child.Set("removed", stamp)
+				})
+				if e != nil {
+					return nil, cleanupFailure(e, ref, proof.Changed)
+				}
+				return map[string]any{"changed": true}, nil
+			})
+			if e != nil {
+				if changed {
+					for _, remaining := range targets[i+1:] {
+						outcomes = append(outcomes, map[string]any{"kind": "route", "name": remaining.Name, "id": remaining.ID, "state": "not_attempted", "changed": false})
+					}
+					e = protocol.WithOutcomes(e, "partial", outcomes...)
+				}
+				return nil, e
+			}
+			childChanged := result.(map[string]any)["changed"] == true
+			changed = changed || childChanged
+			outcomes = append(outcomes, map[string]any{"kind": "route", "name": target.Name, "id": target.ID, "state": "removed", "changed": childChanged})
+		}
+		return map[string]any{"items": targets, "changed": changed}, nil
 	})
 }

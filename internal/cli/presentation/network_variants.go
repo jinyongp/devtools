@@ -142,6 +142,11 @@ func teardownView(data, plan map[string]any) cliui.Document {
 			rows = append(rows, map[string]any{"listener": listener, "resource": resource, "action": action})
 		}
 	}
+	if owners, ok := plan["hosts_owners"].([]any); ok {
+		for _, owner := range owners {
+			rows = append(rows, map[string]any{"listener": "Hosts", "resource": text(owner), "action": action})
+		}
+	}
 	if fingerprint := text(plan["ca_fingerprint"]); fingerprint != "" {
 		if selection["remove_ca"] == true {
 			rows = append(rows, map[string]any{"listener": "Shared", "resource": "CA " + fingerprint, "action": action})

@@ -31,6 +31,9 @@ type TeardownPlan struct {
 	CAFingerprint string             `json:"ca_fingerprint"`
 	LegacyAttempt string             `json:"legacy_attempt"`
 	Runtime       map[string]string  `json:"runtime"`
+	HostsOwners   []string           `json:"hosts_owners,omitempty"`
+	hostsPlan     []hosts.CleanupStep
+	activations   map[string]*network.Activation
 }
 type TeardownTrust struct {
 	Untrust func(context.Context, *ca.Authority) *protocol.Error
@@ -38,7 +41,7 @@ type TeardownTrust struct {
 }
 
 func (m Manager) TeardownPreview(ctx context.Context, selection TeardownSelection, hm hosts.Manager) (TeardownPlan, *protocol.Error) {
-	plan := TeardownPlan{Selection: selection, Listeners: []network.Listener{}, Routes: []network.RouteRef{}, Exposures: []expose.Public{}, Runtime: map[string]string{}}
+	plan := TeardownPlan{Selection: selection, Listeners: []network.Listener{}, Routes: []network.RouteRef{}, Exposures: []expose.Public{}, Runtime: map[string]string{}, activations: map[string]*network.Activation{}}
 	if selection.All && selection.Listener != "" || selection.RemoveCA && !selection.All {
 		return plan, proxyFailure("invalid_argument")
 	}
@@ -100,6 +103,7 @@ func (m Manager) TeardownPreview(ctx context.Context, selection TeardownSelectio
 	}
 	for _, ref := range refs {
 		plan.Routes = append(plan.Routes, ref)
+		plan.activations[ref.Key()] = st.Activation(ref)
 	}
 	sort.Slice(plan.Routes, func(i, j int) bool { return plan.Routes[i].Key() < plan.Routes[j].Key() })
 	records, e := (expose.Store{Data: m.Data}).List()
@@ -122,18 +126,55 @@ func (m Manager) TeardownPreview(ctx context.Context, selection TeardownSelectio
 			plan.CAFingerprint = authority.Fingerprint()
 		}
 	}
-	hostsDigest, e := hm.ReferenceDigest()
+	plan.hostsPlan, e = hm.PreviewCleanup(plan.selectsOwner)
 	if e != nil {
 		return plan, e
+	}
+	for _, step := range plan.hostsPlan {
+		plan.HostsOwners = append(plan.HostsOwners, step.Owner)
 	}
 	plan.Digest = project.Digest(struct {
 		Plan    TeardownPlan
 		State   *ports.State
 		Records []expose.Record
-		Hosts   string
+		Hosts   []hosts.CleanupStep
 		Sources map[string]string
-	}{plan, st, records, hostsDigest, sources})
+	}{plan, st, records, plan.hostsPlan, sources})
 	return plan, nil
+}
+
+func (p TeardownPlan) selectsOwner(owner string) bool {
+	if p.Selection.All {
+		return true
+	}
+	for _, listener := range p.Listeners {
+		if strings.HasSuffix(owner, "/"+listener.ID) {
+			return true
+		}
+	}
+	return false
+}
+
+func teardownChanged(selection TeardownSelection) *protocol.Error {
+	argv := []string{"devtools", "proxy", "teardown"}
+	if selection.All {
+		argv = append(argv, "--all")
+	} else if selection.Listener != "" {
+		argv = append(argv, "--listener", selection.Listener)
+	}
+	if selection.RemoveCA {
+		argv = append(argv, "--remove-ca")
+	}
+	return protocol.NewError("stale_preview", "The selected teardown changed. Review the remaining effects and confirm them with a new request UUID.", 3, map[string]any{
+		"reason": "hosts_confirmation_changed", "retry": "after_refresh",
+		"remedies": []protocol.Remedy{protocol.LocalAction(argv, nil, "Review the current teardown scope.", "read").Remedy(protocol.InvocationContext{})},
+	})
+}
+
+type teardownProgress struct {
+	Done       map[string]bool
+	Outcomes   []map[string]any
+	RouteStamp string
 }
 
 func (m Manager) Teardown(ctx context.Context, selection TeardownSelection, digest, id string, hm hosts.Manager, trust TeardownTrust) (any, *protocol.Error) {
@@ -147,7 +188,35 @@ func (m Manager) Teardown(ctx context.Context, selection TeardownSelection, dige
 		Action    string
 		Selection TeardownSelection
 		Digest    string
-	}{"teardown", selection, digest}, resources, func(j *netops.Journal) (any, *protocol.Error) {
+	}{"teardown", selection, digest}, resources, func(j *netops.Journal) (result any, problem *protocol.Error) {
+		progress := teardownProgress{Done: map[string]bool{}}
+		if _, e := j.Get("teardown_phases", &progress); e != nil {
+			return nil, e
+		}
+		changed := func() bool {
+			for _, row := range progress.Outcomes {
+				if row["changed"] == true {
+					return true
+				}
+			}
+			return false
+		}
+		record := func(key string, outcome map[string]any) *protocol.Error {
+			progress.Done[key] = true
+			if outcome != nil {
+				progress.Outcomes = append(progress.Outcomes, outcome)
+			}
+			return j.Set("teardown_phases", progress)
+		}
+		defer func() {
+			if problem != nil && len(progress.Outcomes) > 0 {
+				effects := "none"
+				if changed() {
+					effects = "partial"
+				}
+				problem = protocol.WithOutcomes(problem, effects, progress.Outcomes...)
+			}
+		}()
 		var plan TeardownPlan
 		present, e := j.Get("plan", &plan)
 		if e != nil {
@@ -159,32 +228,60 @@ func (m Manager) Teardown(ctx context.Context, selection TeardownSelection, dige
 				return nil, e
 			}
 			if plan.Digest != digest {
-				return nil, proxyFailure("stale_preview")
+				return nil, teardownChanged(selection)
+			}
+			if e := j.Set("hosts_plan_v1", plan.hostsPlan); e != nil {
+				return nil, e
+			}
+			if e := j.Set("expected_activations_v1", plan.activations); e != nil {
+				return nil, e
 			}
 			if e := j.Set("plan", plan); e != nil {
 				return nil, e
 			}
 		}
+		var hostsPlan []hosts.CleanupStep
+		if found, e := j.Get("hosts_plan_v1", &hostsPlan); e != nil {
+			return nil, e
+		} else if !found {
+			return nil, teardownChanged(selection)
+		}
+		var expected map[string]*network.Activation
+		if found, e := j.Get("expected_activations_v1", &expected); e != nil {
+			return nil, e
+		} else if !found {
+			return nil, teardownChanged(selection)
+		}
 		for _, target := range plan.Exposures {
-			record, e := (expose.Store{Data: m.Data}).Read(target.ID)
+			key := "exposure/" + target.ID
+			if progress.Done[key] {
+				continue
+			}
+			exposure, e := (expose.Store{Data: m.Data}).Read(target.ID)
 			if e != nil {
 				return nil, e
 			}
-			if record.Generation != target.Generation {
+			if exposure.Generation != target.Generation {
 				return nil, proxyFailure("request_conflict")
 			}
-			if _, _, e := m.stopExposure(ctx, record); e != nil {
+			if _, stopped, e := m.stopExposure(ctx, exposure); e != nil {
+				return nil, e
+			} else if e := record(key, map[string]any{"kind": "exposure", "name": target.ID, "id": target.ID, "state": "stopped", "changed": stopped}); e != nil {
 				return nil, e
 			}
 		}
 		for _, listener := range plan.Listeners {
+			key := "listener/" + listener.ID
+			if progress.Done[key] {
+				continue
+			}
 			st, e := m.portStore().Read()
 			if e != nil {
 				return nil, e
 			}
 			current := st.Listener(listener.Name)
 			if current == nil {
-				continue
+				return nil, cleanupConflict()
 			}
 			if *current != listener {
 				return nil, proxyFailure("request_conflict")
@@ -196,11 +293,12 @@ func (m Manager) Teardown(ctx context.Context, selection TeardownSelection, dige
 			if e != nil {
 				return nil, e
 			}
-			if status["running"] == true {
-				generation, _ := status["generation"].(string)
-				if generation != plan.Runtime[listener.ID] {
-					return nil, proxyFailure("request_conflict")
-				}
+			generation, _ := status["generation"].(string)
+			if generation != plan.Runtime[listener.ID] {
+				return nil, cleanupConflict()
+			}
+			stopped := status["running"] == true
+			if stopped {
 				h, t, e := st.ListenerPorts(listener.Name)
 				if e != nil {
 					return nil, e
@@ -209,61 +307,130 @@ func (m Manager) Teardown(ctx context.Context, selection TeardownSelection, dige
 					return nil, e
 				}
 			}
+			if e := record(key, map[string]any{"kind": "listener", "name": listener.Name, "id": listener.ID, "state": "stopped", "changed": stopped}); e != nil {
+				return nil, e
+			}
 		}
-		if plan.LegacyAttempt != "" {
-			if _, e := m.stopAttempt(ctx, plan.LegacyAttempt, func(string, string) *protocol.Error { return nil }); e != nil {
+		if plan.LegacyAttempt != "" && !progress.Done["legacy"] {
+			status, e := m.Status(ctx)
+			if e != nil {
+				return nil, e
+			}
+			_, e = m.stopAttempt(ctx, plan.LegacyAttempt, func(string, string) *protocol.Error { return nil })
+			if e != nil {
+				return nil, e
+			}
+			if e := record("legacy", map[string]any{"kind": "listener", "name": "default", "state": "stopped", "changed": status.Running}); e != nil {
 				return nil, e
 			}
 		}
 		for _, ref := range plan.Routes {
-			if e := m.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
-				st.UpgradeNetwork()
-				if st.Pinned(ref) {
-					return false, st.RoutePinConflict(ref)
+			key := "route/" + ref.Key()
+			if progress.Done[key] {
+				continue
+			}
+			proof, e := m.disableRoute(ctx, ref, j, func(st *ports.State) *protocol.Error {
+				current, previous := st.Activation(ref), expected[ref.Key()]
+				if current == nil && previous == nil || current != nil && previous != nil && *current == *previous {
+					return nil
 				}
-				if a := st.Activation(ref); a != nil && a.Mode == "disabled" {
-					return false, nil
+				var existing disableProof
+				if _, e := j.Get("disable/"+ref.Key(), &existing); e != nil {
+					return e
 				}
-				return true, st.SetActivation(network.Activation{Route: ref, Mode: "disabled"})
-			}); e != nil {
+				if existing.After != "" && current != nil && current.Mode == "disabled" {
+					return nil
+				}
+				return cleanupConflict()
+			})
+			if e != nil {
 				return nil, e
 			}
-			if e := hm.ForRequest(id, "teardown", ref, "").RemovePrefix(ctx, ref.Key()+"/"); e != nil {
+			progress.RouteStamp = proof.After
+			if e := record(key, routeOutcome(ref, "route", "disabled", proof.Changed)); e != nil {
 				return nil, e
 			}
 		}
-		if e := m.portStore().Update(ctx, func(st *ports.State) (bool, *protocol.Error) {
-			if st.Network == nil {
-				return false, nil
+		for _, step := range hostsPlan {
+			key := "hosts/" + step.Owner
+			if progress.Done[key] {
+				continue
 			}
-			ids, keys := map[string]bool{}, map[string]bool{}
+			store := m.portStore()
+			unlock, e := store.LockRegistry(ctx)
+			if e != nil {
+				return nil, e
+			}
+			stamp, e := store.RegistryStamp()
+			if e == nil && progress.RouteStamp != "" && stamp != progress.RouteStamp {
+				e = cleanupConflict()
+			}
+			var changedHosts bool
+			if e == nil {
+				result, err := hm.ForRequest(id, "teardown", network.RouteRef{}, "").Change(ctx, step.Owner, nil, step.Token)
+				changedHosts, e = result["changed"] == true, err
+			}
+			unlock()
+			if e != nil {
+				if e.Code == "stale_preview" {
+					e = teardownChanged(selection)
+				}
+				return nil, e
+			}
+			if e := record(key, map[string]any{"kind": "hosts", "name": step.Owner, "state": "committed", "changed": changedHosts}); e != nil {
+				return nil, e
+			}
+		}
+		if !progress.Done["remove_listeners"] {
+			removed := false
 			for _, listener := range plan.Listeners {
-				if current := st.Listener(listener.Name); current != nil {
-					if *current != listener {
-						return false, proxyFailure("request_conflict")
+				status, e := m.NetworkStatus(ctx, listener.Name)
+				if e != nil {
+					return nil, e
+				}
+				if status["running"] == true || status["generation"] != plan.Runtime[listener.ID] {
+					return nil, cleanupConflict()
+				}
+			}
+			if e := m.portStore().UpdateWithProof(ctx, func(st *ports.State, stamp string) (bool, *protocol.Error) {
+				if progress.RouteStamp != "" && stamp != progress.RouteStamp {
+					return false, cleanupConflict()
+				}
+				if st.Network == nil {
+					return false, nil
+				}
+				ids, keys := map[string]bool{}, map[string]bool{}
+				for _, listener := range plan.Listeners {
+					if current := st.Listener(listener.Name); current != nil {
+						if *current != listener {
+							return false, proxyFailure("request_conflict")
+						}
+						ids[listener.ID] = true
+						keys[listener.HTTPReservation] = true
+						keys[listener.HTTPSReservation] = true
 					}
-					ids[listener.ID] = true
-					keys[listener.HTTPReservation] = true
-					keys[listener.HTTPSReservation] = true
 				}
-			}
-			listeners := []network.Listener{}
-			for _, l := range st.Network.Listeners {
-				if !ids[l.ID] {
-					listeners = append(listeners, l)
+				listeners := []network.Listener{}
+				for _, l := range st.Network.Listeners {
+					if !ids[l.ID] {
+						listeners = append(listeners, l)
+					}
 				}
-			}
-			st.Network.Listeners = listeners
-			reservations := []ports.Reservation{}
-			for _, r := range st.Reservations {
-				if !keys[r.Name] {
-					reservations = append(reservations, r)
+				st.Network.Listeners = listeners
+				reservations := []ports.Reservation{}
+				for _, r := range st.Reservations {
+					if !keys[r.Name] {
+						reservations = append(reservations, r)
+					}
 				}
+				st.Reservations = reservations
+				removed = len(ids) > 0
+				return removed, nil
+			}, func(string) *protocol.Error {
+				return record("remove_listeners", map[string]any{"kind": "listener", "name": "Selected definitions", "state": "removed", "changed": removed})
+			}); e != nil {
+				return nil, e
 			}
-			st.Reservations = reservations
-			return len(ids) > 0, nil
-		}); e != nil {
-			return nil, e
 		}
 		if selection.RemoveCA && plan.CAFingerprint != "" {
 			if e := m.noCAReferences(); e != nil {
@@ -303,7 +470,7 @@ func (m Manager) Teardown(ctx context.Context, selection TeardownSelection, dige
 				return nil, e
 			}
 		}
-		return map[string]any{"item": plan, "changed": len(plan.Listeners) > 0 || len(plan.Routes) > 0 || len(plan.Exposures) > 0 || plan.CAFingerprint != ""}, nil
+		return map[string]any{"item": plan, "changed": changed() || plan.CAFingerprint != ""}, nil
 	})
 }
 func (m Manager) releaseExposure(ctx context.Context, r expose.Record) (bool, *protocol.Error) {

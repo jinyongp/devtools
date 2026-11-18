@@ -13,6 +13,7 @@ import (
 
 	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/network"
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"github.com/jinyongp/devtools/internal/privilege"
 	"github.com/jinyongp/devtools/internal/protocol"
 	"github.com/jinyongp/devtools/internal/tasks"
@@ -597,6 +598,11 @@ func writeState(root string, st state) *protocol.Error {
 		return failure("io_error")
 	}
 	return nil
+}
+
+func referenceStamp(root string) string {
+	stamp, _ := platformfs.PrivateStamp(filepath.Join(root, "references.json"))
+	return stamp
 }
 func (m Manager) apply(ctx context.Context, q Request) *protocol.Error {
 	run := m.Run

@@ -205,6 +205,40 @@ func (state *State) validatedIndex() (*registryReadIndex, bool) {
 func sameAlias(a, b *string) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 
 func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Error)) *protocol.Error {
+	return s.update(ctx, fn, nil)
+}
+
+// RegistryStamp is available with the registry lock held by the caller.
+func (s Store) RegistryStamp() (string, *protocol.Error) {
+	stamp, err := platformfs.PrivateStamp(filepath.Join(s.Directory, "registry.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return "absent", nil
+	}
+	if err != nil {
+		return "", storageError(err)
+	}
+	return stamp, nil
+}
+
+// UpdateWithProof records the state before and after publication while the
+// normal registry writer lock is held, including when the update is a no-op.
+func (s Store) UpdateWithProof(ctx context.Context, change func(*State, string) (bool, *protocol.Error), committed func(string) *protocol.Error) *protocol.Error {
+	return s.update(ctx, func(st *State) (bool, *protocol.Error) {
+		stamp, e := s.RegistryStamp()
+		if e != nil {
+			return false, e
+		}
+		return change(st, stamp)
+	}, func() *protocol.Error {
+		stamp, e := s.RegistryStamp()
+		if e != nil {
+			return e
+		}
+		return committed(stamp)
+	})
+}
+
+func (s Store) update(ctx context.Context, fn func(*State) (bool, *protocol.Error), committed func() *protocol.Error) *protocol.Error {
 	l, e := s.lock(ctx, "registry.lock", true, true)
 	if e != nil {
 		return e
@@ -217,8 +251,14 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 	pinned := st.pinnedProjections()
 	st.readIndex = nil
 	changed, e := fn(st)
-	if e != nil || !changed {
+	if e != nil {
 		return e
+	}
+	if !changed {
+		if committed != nil {
+			return committed()
+		}
+		return nil
 	}
 	if st.profileRoot != "" {
 		registry, failure := profilekey.ReadRegistry(st.profileRoot)
@@ -258,7 +298,13 @@ func (s Store) Update(ctx context.Context, fn func(*State) (bool, *protocol.Erro
 	if len(b) > registryDocumentLimit {
 		return fail("invalid_storage")
 	}
-	return s.publishRegistry(b)
+	if e := s.publishRegistry(b); e != nil {
+		return e
+	}
+	if committed != nil {
+		return committed()
+	}
+	return nil
 }
 
 // LockRegistry serializes discovery and name publication with instance creation.

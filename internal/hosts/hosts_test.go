@@ -359,6 +359,14 @@ func TestHostsRecoveryPublicOrigin(t *testing.T) {
 	}
 }
 
+func TestHostsRecoveryUnknownWithoutPendingOffersCurrentDiagnostics(t *testing.T) {
+	e := recoveryFailure("outcome_unconfirmed", nil)
+	remedies := e.Details["remedies"].([]protocol.Remedy)
+	if e.Details["effects"] != "unknown" || len(remedies) != 1 || strings.Join(remedies[0].Argv, " ") != "devtools diagnostics" {
+		t.Fatal(e.Details)
+	}
+}
+
 func TestHostsObservation(t *testing.T) {
 	a := Mapping{Host: "a.test", Address: "127.0.0.1"}
 	b := Mapping{Host: "b.test", Address: "127.0.0.1"}

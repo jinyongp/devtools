@@ -234,7 +234,7 @@ try:
     assert p.returncode==0,(p.returncode,p.stdout,p.stderr)
     assert api("proxy","status","--listener","preview")["item"]["running"]
     assert api("proxy","env","external","--global",cwd=home)["item"]["status"]=="ready"
-    mutate("proxy", "add", "custom", str(free_port()), "--global", "--host", "custom.network.test", cwd=home)
+    mutate("proxy", "add", "custom", str(free_port()), "--global", "--listener", "preview", "--host", "custom.network.test", cwd=home)
     hosts_before=Path("/etc/hosts").read_bytes()
     hosts_state=api("proxy","hosts","status",cwd=home)
     assert hosts_state=={"item":{"state":"none","pending":False,"changes":[],"recovery_action":"none"},"next_actions":[]},hosts_state

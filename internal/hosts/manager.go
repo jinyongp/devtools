@@ -560,7 +560,12 @@ func recoveryFailure(reason string, p *pending) *protocol.Error {
 		problem.Message = "A different hosts operation is pending. Review its recorded mappings before changing hosts."
 	}
 	problem.Details = map[string]any{"reason": reason, "retry": "inspect_first", "effects": effects, "facts": map[string]any{"hosts": facts}}
-	problem.Details["remedies"] = []protocol.Remedy{StatusAction().Remedy(protocol.InvocationContext{})}
+	action := StatusAction()
+	if p == nil && reason == "outcome_unconfirmed" {
+		problem.Message = "The earlier hosts effect could not be confirmed. Inspect current network and hosts state."
+		action = protocol.LocalAction([]string{"devtools", "diagnostics"}, nil, "Inspect the current routes and hosts state in the same data store.", "read")
+	}
+	problem.Details["remedies"] = []protocol.Remedy{action.Remedy(protocol.InvocationContext{})}
 	return problem
 }
 

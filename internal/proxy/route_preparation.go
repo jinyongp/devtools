@@ -19,6 +19,10 @@ func routeOutcome(ref network.RouteRef, kind, state string, changed bool) map[st
 }
 
 func activationRollbackFailure(original receiptError, recovery *protocol.Error) *protocol.Error {
+	remedies := recovery.Details["remedies"]
+	if remedies == nil {
+		remedies = []protocol.Remedy{protocol.LocalAction([]string{"devtools", "diagnostics"}, nil, "Inspect the current network state and any pending cleanup.", "read").Remedy(protocol.InvocationContext{})}
+	}
 	recovery = protocol.Public(recovery, "proxy hosts status")
 	effects := "partial"
 	if original.Details["effects"] == "unknown" || recovery.Details["effects"] == "unknown" {
@@ -32,7 +36,7 @@ func activationRollbackFailure(original receiptError, recovery *protocol.Error) 
 			map[string]any{"id": "rollback", "code": recovery.Code, "message": recovery.Message, "details": recovery.Details},
 		},
 		"primary_cause_id": "preparation",
-		"remedies":         []protocol.Remedy{hosts.StatusAction().Remedy(protocol.InvocationContext{})},
+		"remedies":         remedies,
 	})
 }
 

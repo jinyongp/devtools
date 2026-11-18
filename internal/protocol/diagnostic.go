@@ -65,6 +65,7 @@ func Public(e *Error, operation string) *Error {
 			}
 		}
 		projectCorrectionFacts(facts, value)
+		projectHostsFacts(facts, diagnosticObject(value["hosts"]))
 	}
 	// Process failures expose outcome metadata, never the complete private record.
 	if value, ok := old["facts"].(map[string]any); ok {
@@ -315,6 +316,49 @@ func Public(e *Error, operation string) *Error {
 		copy.Details["report"] = report
 	}
 	return &copy
+}
+
+func projectHostsFacts(facts, input map[string]any) {
+	if input == nil {
+		return
+	}
+	out := map[string]any{}
+	for _, key := range []string{"origin_request_id", "step_id", "listener_id"} {
+		if id, ok := input[key].(string); ok && ValidUUID(id) {
+			out[key] = id
+		}
+	}
+	for key, allowed := range map[string][]string{
+		"file_state":    {"none", "before", "after", "diverged", "unavailable"},
+		"cleanup_state": {"pending", "committed", "unknown"},
+	} {
+		for _, value := range allowed {
+			if input[key] == value {
+				out[key] = value
+			}
+		}
+	}
+	ref := diagnosticObject(input["route_ref"])
+	name := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
+	instance := regexp.MustCompile(`^[a-f0-9]{32}$`)
+	stringField := func(key string) string {
+		value, _ := ref[key].(string)
+		return value
+	}
+	switch ref["scope"] {
+	case "global":
+		if id := stringField("route_id"); ValidUUID(id) {
+			out["route_ref"] = map[string]any{"scope": "global", "route_id": id}
+		}
+	case "project":
+		profile, id, proxy := stringField("profile"), stringField("instance_id"), stringField("proxy")
+		if name.MatchString(profile) && instance.MatchString(id) && name.MatchString(proxy) {
+			out["route_ref"] = map[string]any{"scope": "project", "profile": profile, "instance_id": id, "proxy": proxy}
+		}
+	}
+	if len(out) > 0 {
+		facts["hosts"] = out
+	}
 }
 
 var diagnosticName = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,127}$`)

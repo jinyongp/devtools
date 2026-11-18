@@ -1781,6 +1781,27 @@
           "type": "array",
           "items": {"$ref": "#/$defs/Outcome"}
         },
+        "hosts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "origin_request_id": {"type": "string", "format": "uuid"},
+            "step_id": {"type": "string", "format": "uuid"},
+            "listener_id": {"type": "string", "format": "uuid"},
+            "file_state": {"enum": ["none", "before", "after", "diverged", "unavailable"]},
+            "cleanup_state": {"enum": ["pending", "committed", "unknown"]},
+            "route_ref": {
+              "oneOf": [
+                {"type": "object", "additionalProperties": false,
+                 "properties": {"scope": {"const": "global"}, "route_id": {"type": "string", "format": "uuid"}},
+                 "required": ["scope", "route_id"]},
+                {"type": "object", "additionalProperties": false,
+                 "properties": {"scope": {"const": "project"}, "profile": {"type": "string"}, "instance_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"}, "proxy": {"type": "string"}},
+                 "required": ["scope", "profile", "instance_id", "proxy"]}
+              ]
+            }
+          }
+        },
         "expected_version": {
           "type": "string"
         },

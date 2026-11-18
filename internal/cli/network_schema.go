@@ -35,6 +35,7 @@ func proxyEnvironmentSchema() map[string]any {
 	f["item"] = routeEndpointSchema()
 	f["listener"] = map[string]any{"oneOf": []any{proxyStatusSchema(), map[string]any{"type": "null"}}}
 	f["upstream_ready"] = boolSchema()
+	f["next_actions"] = arraySchema(remedySchema())
 	return s
 }
 
@@ -64,5 +65,10 @@ func routeMutationSchema(action string) map[string]any {
 
 func networkDiagnosticsSchema() map[string]any {
 	remedy := remedySchema()
-	return diagnosticsSectionSchema(map[string]any{"listeners": arraySchema(proxyStatusSchema()), "routes": arraySchema(proxyItemSchema()), "exposures": arraySchema(exposureSchema()), "ca": caStatusSchema(), "trusted": boolSchema(), "setup": map[string]any{"type": "object"}, "hosts": map[string]any{"type": "object"}, "isolated": boolSchema(), "boundaries": arraySchema(stringSchema()), "remedies": arraySchema(remedy), "pending_operations": map[string]any{"type": []string{"array", "null"}, "items": stringSchema()}}, "listeners", "routes", "exposures", "ca", "trusted", "setup", "hosts", "isolated", "boundaries", "remedies", "pending_operations")
+	integer := map[string]any{"type": "integer", "minimum": 0}
+	hosts := object(map[string]any{
+		"owners": integer, "mappings": integer, "prepared": integer, "pending": boolSchema(),
+		"recovery": object(hostsRecoveryFields(), "state", "pending", "recovery_action"),
+	})
+	return diagnosticsSectionSchema(map[string]any{"listeners": arraySchema(proxyStatusSchema()), "routes": arraySchema(proxyItemSchema()), "exposures": arraySchema(exposureSchema()), "ca": caStatusSchema(), "trusted": boolSchema(), "setup": map[string]any{"type": "object"}, "hosts": hosts, "isolated": boolSchema(), "boundaries": arraySchema(stringSchema()), "remedies": arraySchema(remedy), "pending_operations": map[string]any{"type": []string{"array", "null"}, "items": stringSchema()}}, "listeners", "routes", "exposures", "ca", "trusted", "setup", "hosts", "isolated", "boundaries", "remedies", "pending_operations")
 }

@@ -99,10 +99,12 @@ func (a *App) registerNetworkEnv() {
 		if listErr != nil {
 			return nil, listErr
 		}
+		directory := ""
 		for _, item := range items {
 			if item.Ref() == endpoint.Ref {
 				endpoint.Status = item.Status
 				endpoint.DNSIssue = item.DNSIssue
+				directory = item.Directory
 			}
 		}
 		listener := any(nil)
@@ -123,6 +125,9 @@ func (a *App) registerNetworkEnv() {
 		result := map[string]any{"env": env, "env_keys": ports.EnvironmentKeys(env), "pending": pending, "listener": listener, "upstream_ready": endpoint.Port > 0 && ports.Reachable(ctx, endpoint.Port)}
 		if endpoint.Ref.Valid() {
 			result["item"] = endpoint
+			if action, ok := routeHostsAction(endpoint.DNSIssue, r.Args[0], directory, endpoint.Ref.Scope, r.Invocation); ok {
+				result["next_actions"] = []protocol.Remedy{action}
+			}
 		}
 		return result, nil
 	}

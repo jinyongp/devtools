@@ -14,6 +14,21 @@ func variantView(d Definition, data map[string]any) (cliui.Document, bool) {
 	switch d.Command {
 	case "proxy hosts preview":
 		return hostsPreviewView(data), true
+	case "proxy hosts status":
+		if item, ok := data["item"].(map[string]any); ok {
+			return hostsStatusView(data, item), true
+		}
+	case "proxy hosts recover":
+		if item, ok := data["item"].(map[string]any); ok {
+			message := "Hosts recovery recorded."
+			if data["replayed"] == true {
+				message = "Saved result replayed."
+			}
+			return cliui.NewDocument(outcomeHeading(message),
+				cliui.Paragraph(cliui.Literal(hostsWriteMessage(item["os_write"]))),
+				selectedFields(item, "method", "origin_request_id"),
+			), true
+		}
 	case "proxy hosts apply", "proxy hosts remove":
 		if ref, ok := data["route_ref"].(map[string]any); ok {
 			message := "Applied hosts mappings."
@@ -24,6 +39,9 @@ func variantView(d Definition, data map[string]any) (cliui.Document, bool) {
 				message = "No changes to hosts mappings."
 			}
 			blocks := []cliui.Block{outcomeHeading(message), cliui.Fields(cliui.Field{Label: cliui.Literal("Route"), Value: cliui.Literal(routeIdentity(ref))})}
+			if data["os_write"] != nil {
+				blocks = append(blocks, cliui.Paragraph(cliui.Literal(hostsWriteMessage(data["os_write"]))))
+			}
 			if data["replayed"] == true {
 				blocks = append(blocks, cliui.Paragraph(cliui.Literal("Saved result replayed.")))
 			}

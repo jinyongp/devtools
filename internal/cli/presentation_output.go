@@ -23,7 +23,10 @@ type outputController struct {
 	handlerReturned bool
 }
 
+type responseFormatKey struct{}
+
 func (o *outputController) progressContext(ctx context.Context, mode OutputMode) (context.Context, func()) {
+	ctx = context.WithValue(ctx, responseFormatKey{}, o.decision.Format)
 	if o.streams.Err == nil || o.decision.Format != presentation.FormatText || len(o.environment.Signals) > 0 || mode != OutputJSON && mode != OutputPassthrough {
 		return ctx, func() {}
 	}

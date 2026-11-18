@@ -62,7 +62,7 @@ func TestSubcommandHelpFollowsWorkflowsIncludingAliasScopes(t *testing.T) {
 		"secret":           {"list", "set", "generate", "unset"},
 		"sec":              {"list", "set", "generate", "unset"},
 		"vault":            {"status", "init", "unlock", "lock", "recover"},
-		"proxy hosts":      {"preview", "apply", "remove"},
+		"proxy hosts":      {"status", "recover", "preview", "apply", "remove"},
 		"proxy":            {"list", "add", "up", "down", "rm", "status", "start", "restart", "stop", "run", "ca"},
 		"values execution": {"prepare", "approve", "deliver", "report"},
 		"task validation":  {"basis", "record", "accept"},

@@ -208,7 +208,7 @@ func (a *App) commandSummary(name string) string {
 		"process request":         "Inspect saved process results without resuming work.",
 		"project request":         "Inspect saved project operation results without current configuration.",
 		"proxy ca":                "Manage the local certificate authority.",
-		"proxy hosts":             "Preview and apply local hostname mappings.",
+		"proxy hosts":             "Review local hostname mappings and recover an interrupted hosts operation.",
 		"profile transfer":        "Prepare encrypted profile transfers.",
 		"command":                 "List, inspect, and run configured project commands.",
 		"cmd":                     "List, inspect, and run configured project commands (alias of command).",

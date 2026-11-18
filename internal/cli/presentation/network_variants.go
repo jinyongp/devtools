@@ -2,6 +2,53 @@ package presentation
 
 import "github.com/jinyongp/devtools/internal/cliui"
 
+func hostsWriteMessage(effect any) string {
+	switch effect {
+	case "performed":
+		return "The OS hosts file was updated."
+	case "not_performed":
+		return "No OS hosts write was needed."
+	default:
+		return "The hosts step is recorded. The OS write could not be attributed to this invocation."
+	}
+}
+
+func hostsStatusView(data, item map[string]any) cliui.Document {
+	if item["state"] == "none" {
+		return cliui.NewDocument(outcomeHeading("No pending hosts operation."))
+	}
+	heading := "A hosts operation is pending."
+	if item["pending"] == nil {
+		heading = "The pending hosts operation could not be inspected."
+	}
+	blocks := []cliui.Block{outcomeHeading(heading)}
+	if ref, ok := item["route_ref"].(map[string]any); ok {
+		blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Route"), Value: cliui.Literal(routeIdentity(ref))}))
+	}
+	blocks = append(blocks, selectedFields(item, "state", "origin_request_id", "recovery_request_id"))
+	if rows, ok := item["changes"].([]any); ok && len(rows) > 0 {
+		blocks = append(blocks, inventoryTable(inventoryLayout{columns: []ViewColumn{
+			{"action", "Change", ""}, {"host", "Host", ""}, {"address", "Address", ""}, {"owner", "Owner", ""},
+		}}, rows))
+	}
+	if item["recovery_action"] == "blocked" {
+		reason := map[string]string{
+			"references_unavailable": "Restore access to the private hosts reference journal and check status again.",
+			"hosts_unavailable":      "Check that the OS hosts file is readable and its writer has finished.",
+			"ownership_unknown":      "Identify the owner of the managed hosts block before changing it.",
+			"mapping_conflict":       "Compare the listed mappings with the conflicting entries in the OS hosts file.",
+			"divergence_ambiguous":   "Compare the managed block with both the saved and planned mappings before changing it.",
+			"isolated_write":         "This operation requires an OS hosts write, which is unavailable in this isolated store.",
+			"helper_input_too_large": "The saved change exceeds the size supported by the OS hosts helper.",
+		}[text(item["reason"])]
+		if reason != "" {
+			blocks = append(blocks, cliui.Paragraph(cliui.Literal(reason)))
+		}
+	}
+	blocks = append(blocks, inventoryNotes(data)...)
+	return cliui.NewDocument(blocks...)
+}
+
 func hostsPreviewView(data map[string]any) cliui.Document {
 	blocks := []cliui.Block{outcomeHeading("Preview: Update hosts mappings.")}
 	if mappings, ok := data["mappings"].([]any); ok && len(mappings) > 0 {
@@ -10,7 +57,7 @@ func hostsPreviewView(data map[string]any) cliui.Document {
 		blocks = append(blocks, cliui.Paragraph(cliui.Literal("No hosts mappings required.")))
 	}
 	if data["changed"] == false {
-		blocks = append(blocks, cliui.Paragraph(cliui.Literal("No proposed changes.")))
+		blocks = append(blocks, cliui.Paragraph(cliui.Literal("The OS hosts file would stay the same.")))
 	}
 	blocks = append(blocks, selectedFields(data, "digest"), cliui.Paragraph(cliui.Literal("No files were changed.")))
 	blocks = append(blocks, inventoryNotes(data)...)

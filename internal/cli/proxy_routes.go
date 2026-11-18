@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/jinyongp/devtools/internal/cli/presentation"
 	"github.com/jinyongp/devtools/internal/hosts"
 	"github.com/jinyongp/devtools/internal/netops"
 	"github.com/jinyongp/devtools/internal/network"
@@ -22,7 +23,7 @@ func (a *App) hostsManager(ctx context.Context, streams IO) (hosts.Manager, *pro
 		return hosts.Manager{}, portFailure("io_error")
 	}
 	return hosts.Manager{Data: d.Data, Isolated: d.IsolatedRoot != "", Terminal: interactive(streams), Preview: func(mappings []hosts.Mapping) {
-		if interactive(streams) {
+		if interactive(streams) && ctx.Value(responseFormatKey{}) != presentation.FormatJSON {
 			defer progress.Suspend(ctx)()
 			fmt.Fprintln(streams.Err, "Preparing devtools-owned hosts mappings:")
 			for _, m := range mappings {

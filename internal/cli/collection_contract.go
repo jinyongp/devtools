@@ -116,7 +116,7 @@ func collectionFor(name string) *collectionContract {
 		c.Query.Filters["state"], c.Query.Filters["listener"] = "status", "listener"
 		c.Query.Keys = []string{"profile", "directory", "host", "proxy", "listener", "instance_id"}
 		c.States = []string{"ready", "activation_required", "alias_missing", "location_missing", "assignment_missing", "host_conflict", "config_unavailable", "instance_conflict", "host_invalid", "disabled", "unknown"}
-		columns("host", "target_port", "listener", "status", "profile", "directory")
+		columns("host", "target_port", "listener", "status", "dns_issue", "profile", "directory")
 	case "profile list":
 		c.Scope = "global"
 		names("profile")
@@ -477,6 +477,27 @@ func (a *App) collectionPage(c Command, r Request, out map[string]any, limit int
 	if cursor != "" {
 		argv := collectionArgv(c, r, cursor)
 		out["next_actions"] = []protocol.Remedy{protocol.LocalAction(argv, nil, "Read the next page with the same selection.", "read").Remedy(r.Invocation)}
+	}
+	if c.Name == "proxy list" {
+		actions, _ := out["next_actions"].([]protocol.Remedy)
+		pending := false
+		for _, value := range rows {
+			row, _ := value.(map[string]any)
+			issue, _ := row["dns_issue"].(string)
+			if issue == "hosts_recovery_required" && pending {
+				continue
+			}
+			name, _ := row["proxy"].(string)
+			dir, _ := row["directory"].(string)
+			scope, _ := row["scope"].(string)
+			if action, ok := routeHostsAction(issue, name, dir, scope, r.Invocation); ok {
+				actions = append(actions, action)
+				pending = pending || issue == "hosts_recovery_required"
+			}
+		}
+		if len(actions) > 0 {
+			out["next_actions"] = actions
+		}
 	}
 	return out
 }

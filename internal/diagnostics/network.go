@@ -15,22 +15,37 @@ import (
 
 type Network struct {
 	Section
-	Listeners         []map[string]any `json:"listeners"`
-	Routes            []proxy.Item     `json:"routes"`
-	Exposures         []expose.Public  `json:"exposures"`
-	CA                ca.Status        `json:"ca"`
-	Trusted           bool             `json:"trusted"`
-	Setup             map[string]any   `json:"setup"`
-	Hosts             map[string]any   `json:"hosts"`
-	Isolated          bool             `json:"isolated"`
-	Boundaries        []string         `json:"boundaries"`
-	Remedies          []map[string]any `json:"remedies"`
-	PendingOperations []string         `json:"pending_operations"`
+	Listeners         []map[string]any  `json:"listeners"`
+	Routes            []proxy.Item      `json:"routes"`
+	Exposures         []expose.Public   `json:"exposures"`
+	CA                ca.Status         `json:"ca"`
+	Trusted           bool              `json:"trusted"`
+	Setup             map[string]any    `json:"setup"`
+	Hosts             map[string]any    `json:"hosts"`
+	Isolated          bool              `json:"isolated"`
+	Boundaries        []string          `json:"boundaries"`
+	Remedies          []protocol.Remedy `json:"remedies"`
+	PendingOperations []string          `json:"pending_operations"`
 }
 
 func inspectNetwork(ctx context.Context, input Input) (Network, *protocol.Error) {
-	out := Network{Section: healthy(), Listeners: []map[string]any{}, Routes: []proxy.Item{}, Exposures: []expose.Public{}, Setup: map[string]any{}, Hosts: map[string]any{}, Isolated: input.IsolatedRoot != "", Boundaries: []string{"Kernel TCP ports and external provider configuration are shared with other applications."}, Remedies: []map[string]any{}}
+	out := Network{Section: healthy(), Listeners: []map[string]any{}, Routes: []proxy.Item{}, Exposures: []expose.Public{}, Setup: map[string]any{}, Hosts: map[string]any{}, Isolated: input.IsolatedRoot != "", Boundaries: []string{"Kernel TCP ports and external provider configuration are shared with other applications."}, Remedies: []protocol.Remedy{}}
 	m := proxy.Manager{Data: input.Data, IsolatedRoot: input.IsolatedRoot}
+	hm := hosts.Manager{Data: input.Data, Isolated: out.Isolated}
+	recovery := hm.RecoveryStatus()
+	summary := map[string]any{"state": recovery.State, "pending": recovery.Pending, "recovery_action": recovery.RecoveryAction}
+	if recovery.Reason != "" {
+		summary["reason"] = recovery.Reason
+	}
+	scope := protocol.InvocationContext{IsolatedRoot: input.IsolatedRoot}
+	if recovery.Pending == nil || *recovery.Pending {
+		out.Remedies = append(out.Remedies, hosts.StatusAction().Remedy(scope))
+	}
+	hostsState, hostsErr := hm.Status()
+	if hostsState != nil {
+		out.Hosts = hostsState
+	}
+	out.Hosts["recovery"] = summary
 	var e *protocol.Error
 	out.Listeners, e = m.NetworkStatuses(ctx)
 	if e != nil {
@@ -64,9 +79,8 @@ func inspectNetwork(ctx context.Context, input Input) (Network, *protocol.Error)
 	if e != nil {
 		return out, e
 	}
-	out.Hosts, e = (hosts.Manager{Data: input.Data, Isolated: out.Isolated}).Status()
-	if e != nil {
-		return out, e
+	if hostsErr != nil {
+		return out, hostsErr
 	}
 	out.PendingOperations, e = (netops.Store{Data: input.Data}).PendingTLS()
 	if e != nil {
@@ -76,16 +90,13 @@ func inspectNetwork(ctx context.Context, input Input) (Network, *protocol.Error)
 		out.Boundaries = append(out.Boundaries, "Config, data, cache and runtime state are isolated; shared hosts, OS trust and executable capability mutations are disabled.")
 	}
 	add := func(argv, required []string, message string) {
-		out.Remedies = append(out.Remedies, map[string]any{"argv": argv, "required_inputs": required, "message": message})
+		out.Remedies = append(out.Remedies, protocol.LocalAction(argv, required, message, "read").Remedy(scope))
 	}
 	if out.CA.Present && !out.Trusted {
 		add([]string{"devtools", "proxy", "ca", "export", "--output"}, []string{"public certificate output path"}, "The server can use HTTPS. Clients must trust the public CA or supply it explicitly.")
 	}
 	if out.Setup["recovery_required"] == true {
 		add([]string{"devtools", "proxy", "setup", "--request-id"}, []string{"request UUID"}, "Reapply low-port setup to the installed executable after replacement.")
-	}
-	if out.Hosts["pending"] == true {
-		add([]string{"devtools", "proxy", "hosts", "preview"}, []string{"route selection"}, "Review and resume the pending owned hosts operation from the initiating CLI.")
 	}
 	for _, item := range out.Exposures {
 		if item.State == "auth_required" || item.State == "recovery_required" {

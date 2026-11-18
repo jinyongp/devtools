@@ -190,6 +190,90 @@ func TestHostsConcurrentSystemWriters(t *testing.T) {
 	}
 }
 
+func TestHostsRecovery(t *testing.T) {
+	for _, tc := range []struct {
+		name, fileState, action, write string
+		applied, drift, conflict       bool
+	}{
+		{name: "before", fileState: "before", action: "apply_saved", write: "performed"},
+		{name: "after", fileState: "after", action: "finalize", write: "not_performed", applied: true},
+		{name: "rebase", fileState: "diverged", action: "rebase", write: "performed", drift: true},
+		{name: "finalize drift", fileState: "diverged", action: "finalize", write: "not_performed", applied: true, drift: true},
+		{name: "conflict", fileState: "diverged", action: "blocked", conflict: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, calls := testManager(t)
+			run := m.Run
+			m.Run = func(ctx context.Context, kind string, request any, tty bool) *protocol.Error {
+				if tc.applied {
+					if e := run(ctx, kind, request, tty); e != nil {
+						t.Fatal(e)
+					}
+				}
+				return failure("permission_required")
+			}
+			ctx := context.Background()
+			origin := protocol.NewRequestID()
+			owned := m.ForRequest(origin, "up", network.RouteRef{}, "")
+			desired := []Mapping{{"app.test", "127.0.0.1"}}
+			if e := owned.Sync(ctx, "a", desired, ""); e == nil {
+				t.Fatal("interruption was ignored")
+			}
+			edited := ""
+			if tc.drift {
+				edited = "# Keep this external edit\n"
+			} else if tc.conflict {
+				edited = "192.0.2.1 app.test\n"
+			}
+			if edited != "" {
+				body, e := m.System.Read()
+				if e != nil {
+					t.Fatal(e)
+				}
+				if err := os.WriteFile(m.System.Path, append([]byte(edited), body...), 0640); err != nil {
+					t.Fatal(err)
+				}
+			}
+			status := m.RecoveryStatus()
+			if status.State != tc.fileState || status.RecoveryAction != tc.action || status.OriginRequestID != origin || status.StepID == "" {
+				t.Fatal(status)
+			}
+			id := protocol.NewRequestID()
+			m.Run = run
+			if tc.action == "blocked" {
+				if status.Digest != "" {
+					t.Fatal("unsafe recovery offered", status)
+				}
+				return
+			}
+			if tc.action == "finalize" {
+				m.Isolated = true
+			}
+			result, e := m.Recover(ctx, id, status.Digest)
+			if e != nil || result.(map[string]any)["item"].(map[string]any)["os_write"] != tc.write {
+				t.Fatal(result, e)
+			}
+			if *calls != 1 || m.RecoveryStatus().State != "none" || !m.Prepared("a", desired[0]) {
+				t.Fatal(*calls, m.RecoveryStatus())
+			}
+			if e := owned.Sync(ctx, "a", desired, ""); e != nil || *calls != 1 {
+				t.Fatal("original child did not replay", e, *calls)
+			}
+			result, e = m.Recover(ctx, id, status.Digest)
+			if e != nil || result.(map[string]any)["replayed"] != true {
+				t.Fatal("recovery replay", result, e)
+			}
+			if _, e := m.Recover(ctx, protocol.NewRequestID(), status.Digest); e == nil || e.Code != "stale_preview" {
+				t.Fatal("new request accepted an expired digest", e)
+			}
+			body, issue := m.System.Read()
+			if issue != nil || !strings.Contains(string(body), edited) {
+				t.Fatal("external edit was lost", issue)
+			}
+		})
+	}
+}
+
 func TestHostsObservation(t *testing.T) {
 	a := Mapping{Host: "a.test", Address: "127.0.0.1"}
 	b := Mapping{Host: "b.test", Address: "127.0.0.1"}

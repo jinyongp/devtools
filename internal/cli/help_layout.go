@@ -55,7 +55,7 @@ var helpOrders = map[string]string{
 	"cleanup":          "archives preview apply restore purge",
 	"command":          "list inspect env run",
 	"profile":          "list inspect diff export import transfer",
-	"proxy hosts":      "preview apply remove",
+	"proxy hosts":      "status recover preview apply remove",
 	"secret":           "list set generate unset",
 	"values execution": "list status prepare approve deliver report cancel",
 	"values runner":    "address show register unregister",

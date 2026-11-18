@@ -411,6 +411,12 @@ var reviewedExamples = map[string][]helpExample{
 		{Purpose: "Project route mapping", Command: "devtools proxy hosts preview api"},
 		{Purpose: "Global route mapping", Command: "devtools proxy hosts preview api --global"},
 	},
+	"proxy hosts status": {
+		{Purpose: "Inspect a pending hosts operation", Command: "devtools proxy hosts status"},
+	},
+	"proxy hosts recover": {
+		{Purpose: "Resolve the confirmed hosts step", Command: "devtools proxy hosts recover --apply DIGEST"},
+	},
 	"proxy hosts apply": {
 		{Purpose: "Apply reviewed project mapping", Command: "devtools proxy hosts apply api --apply DIGEST"},
 		{Purpose: "Apply reviewed global mapping", Command: "devtools proxy hosts apply api --global --apply DIGEST"},

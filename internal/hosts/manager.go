@@ -27,11 +27,12 @@ type state struct {
 	Pending *pending `json:"pending,omitempty"`
 }
 type pending struct {
-	Owners   []Owner    `json:"owners"`
-	Request  Request    `json:"request"`
-	After    string     `json:"after"`
-	Step     *stepInput `json:"step,omitempty"`
-	Previous []Owner    `json:"previous,omitempty"`
+	Owners   []Owner           `json:"owners"`
+	Request  Request           `json:"request"`
+	After    string            `json:"after"`
+	Step     *stepInput        `json:"step,omitempty"`
+	Previous []Owner           `json:"previous,omitempty"`
+	Approval *recoveryApproval `json:"approval,omitempty"`
 }
 type Manager struct {
 	Data     string
@@ -127,12 +128,17 @@ func (m Manager) OwnerMappings(owner string) ([]Mapping, *protocol.Error) {
 	return nil, nil
 }
 func (m Manager) RemoveOtherOwners(ctx context.Context, prefix, keep string) *protocol.Error {
-	return m.removeOwners(ctx, prefix, keep)
+	_, e := m.removeOwners(ctx, prefix, keep)
+	return e
 }
 func (m Manager) RemovePrefix(ctx context.Context, prefix string) *protocol.Error {
+	_, e := m.RemovePrefixResult(ctx, prefix)
+	return e
+}
+func (m Manager) RemovePrefixResult(ctx context.Context, prefix string) (map[string]any, *protocol.Error) {
 	return m.removeOwners(ctx, prefix, "")
 }
-func (m Manager) removeOwners(ctx context.Context, prefix, keep string) *protocol.Error {
+func (m Manager) removeOwners(ctx context.Context, prefix, keep string) (map[string]any, *protocol.Error) {
 	selectOwners := func() ([]string, *protocol.Error) {
 		st, e := m.read()
 		if e != nil {
@@ -155,18 +161,24 @@ func (m Manager) removeOwners(ctx context.Context, prefix, keep string) *protoco
 		sort.Strings(keys)
 		return keys, nil
 	}
-	apply := func(keys []string) *protocol.Error {
+	apply := func(keys []string) (map[string]any, *protocol.Error) {
+		changed, write := false, "not_performed"
 		for _, key := range keys {
-			if e := m.Sync(ctx, key, nil, ""); e != nil {
-				return e
+			result, e := m.Change(ctx, key, nil, "")
+			if e != nil {
+				return nil, e
+			}
+			changed = changed || result["changed"] == true
+			if result["os_write"] == "performed" {
+				write = "performed"
 			}
 		}
-		return nil
+		return map[string]any{"changed": changed, "os_write": write}, nil
 	}
 	if m.intent.RequestID == "" {
 		keys, e := selectOwners()
 		if e != nil {
-			return e
+			return nil, e
 		}
 		return apply(keys)
 	}
@@ -174,7 +186,7 @@ func (m Manager) removeOwners(ctx context.Context, prefix, keep string) *protoco
 		Intent       intent
 		Prefix, Keep string
 	}{m.intent, prefix, keep}
-	_, e := (netops.Store{Data: m.Data}).Apply(ctx, stepID(input), input, nil, func(j *netops.Journal) (any, *protocol.Error) {
+	result, e := (netops.Store{Data: m.Data}).Apply(ctx, stepID(input), input, nil, func(j *netops.Journal) (any, *protocol.Error) {
 		var keys []string
 		found, e := j.Get("owners", &keys)
 		if e != nil {
@@ -189,21 +201,34 @@ func (m Manager) removeOwners(ctx context.Context, prefix, keep string) *protoco
 				return nil, e
 			}
 		}
-		return map[string]any{"owners": keys}, apply(keys)
+		return apply(keys)
 	})
-	return e
-}
-func (m Manager) PreviewChange(owner string, desired []Mapping) (map[string]any, *protocol.Error) {
-	before, e := m.System.Read()
 	if e != nil {
 		return nil, e
 	}
+	return result.(map[string]any), nil
+}
+func (m Manager) PreviewChange(owner string, desired []Mapping) (map[string]any, *protocol.Error) {
 	st, e := m.read()
 	if e != nil {
 		return nil, e
 	}
 	if st.Pending != nil {
-		return nil, failure("recovery_required")
+		return nil, recoveryFailure("pending_hosts_operation", st.Pending)
+	}
+	before, busy, e := m.System.observe()
+	if e != nil {
+		return nil, e
+	}
+	if busy {
+		return nil, recoveryFailure("outcome_unconfirmed", nil)
+	}
+	current, e := m.read()
+	if e != nil {
+		return nil, e
+	}
+	if stateDigest(current) != stateDigest(st) {
+		return nil, staleRecovery()
 	}
 	if e := validateOwnership(before, mappings(st.Owners)); e != nil {
 		return nil, e
@@ -213,12 +238,29 @@ func (m Manager) PreviewChange(owner string, desired []Mapping) (map[string]any,
 	if e != nil {
 		return nil, e
 	}
-	if !bytes.Equal(before, after) {
+	osChanged := !bytes.Equal(before, after)
+	if osChanged {
 		if e := privilege.CheckRequest("hosts", Request{Expected: digest(before), Mappings: mappings(owners)}); e != nil {
 			return nil, e
 		}
 	}
-	return map[string]any{"digest": digest(before), "changed": !bytes.Equal(before, after), "mappings": desired}, nil
+	effect := ""
+	if osChanged {
+		effect = "system_write"
+	} else if !sameOwner(st.Owners, owners, owner) {
+		effect = "value_write"
+	}
+	if m.Isolated && (osChanged || len(desired) > 0) {
+		effect = ""
+	}
+	if desired == nil {
+		desired = []Mapping{}
+	}
+	return map[string]any{"digest": m.previewToken(st, before, owner, desired), "changed": osChanged, "mappings": desired, "effect": effect}, nil
+}
+
+func (m Manager) previewToken(st state, before []byte, owner string, desired []Mapping) string {
+	return m.token("hosts-preview", stateDigest(st), digest(before), owner, append([]Mapping{}, desired...))
 }
 func replaceOwner(owners []Owner, key string, desired []Mapping) []Owner {
 	out := []Owner{}
@@ -314,12 +356,15 @@ func (m Manager) changeLocked(ctx context.Context, step stepInput, j *netops.Jou
 	owners := replaceOwner(st.Owners, step.Owner, step.Desired)
 	if p := st.Pending; p != nil {
 		if p.Step != nil && p.Step.ID == step.ID && reflect.DeepEqual(*p.Step, step) {
+			if p.Approval != nil {
+				return nil, recoveryFailure("pending_hosts_operation", p)
+			}
 			return m.finishPending(ctx, root, st, before, j)
 		}
 		if reflect.DeepEqual(owners, st.Owners) || len(owners) == 0 && len(st.Owners) == 0 {
-			if step.Expected == "" || step.Expected == digest(before) {
+			if step.Expected == "" || step.Expected == m.previewToken(st, before, step.Owner, step.Desired) {
 				if !sameOwner(st.Owners, p.Owners, step.Owner) {
-					return nil, recoveryFailure("foreign_pending", p)
+					return nil, recoveryFailure("pending_hosts_operation", p)
 				}
 				after, renderErr := Render(before, mappings(owners))
 				if renderErr == nil && bytes.Equal(before, after) && validateOwnership(before, mappings(owners)) == nil {
@@ -327,12 +372,14 @@ func (m Manager) changeLocked(ctx context.Context, step stepInput, j *netops.Jou
 				}
 			}
 		}
-		return nil, recoveryFailure("foreign_pending", p)
+		problem := recoveryFailure("pending_hosts_operation", p)
+		problem.Details["facts"].(map[string]any)["hosts"].(map[string]any)["file_state"] = m.recovery(st, before, false).Status.State
+		return nil, problem
 	}
 	if found {
 		return nil, recoveryFailure("outcome_unconfirmed", nil)
 	}
-	if step.Expected != "" && step.Expected != digest(before) {
+	if step.Expected != "" && step.Expected != m.previewToken(st, before, step.Owner, step.Desired) {
 		return nil, failure("stale_preview")
 	}
 	if e := validateOwnership(before, mappings(st.Owners)); e != nil {
@@ -388,7 +435,20 @@ func validPending(st state) bool {
 	if p == nil || !reflect.DeepEqual(p.Request.Mappings, mappings(p.Owners)) {
 		return false
 	}
-	return p.Step == nil || (reflect.DeepEqual(p.Previous, st.Owners) || len(p.Previous) == 0 && len(st.Owners) == 0) &&
+	if p.Step == nil {
+		owner := ""
+		for _, o := range append(append([]Owner{}, st.Owners...), p.Owners...) {
+			if sameOwner(st.Owners, p.Owners, o.Key) {
+				continue
+			}
+			if owner != "" && owner != o.Key {
+				return false
+			}
+			owner = o.Key
+		}
+		return owner != ""
+	}
+	return (reflect.DeepEqual(p.Previous, st.Owners) || len(p.Previous) == 0 && len(st.Owners) == 0) &&
 		reflect.DeepEqual(p.Owners, replaceOwner(st.Owners, p.Step.Owner, p.Step.Desired))
 }
 
@@ -401,13 +461,26 @@ func isolatedWriteFailure() *protocol.Error {
 }
 
 func recoveryFailure(reason string, p *pending) *protocol.Error {
-	facts := map[string]any{"state": reason}
+	facts := map[string]any{}
 	if p != nil && p.Step != nil {
 		facts["origin_request_id"] = p.Step.Intent.RequestID
 		facts["step_id"] = p.Step.ID
+		facts["listener_id"] = p.Step.Intent.Listener
+		if p.Step.Intent.Route.Valid() {
+			facts["route_ref"] = p.Step.Intent.Route
+		}
+	}
+	effects := "none"
+	if reason == "outcome_unconfirmed" || reason == "file_diverged" {
+		effects = "unknown"
+		reason = "outcome_unconfirmed"
 	}
 	problem := netops.Failure("recovery_required", "Inspect the pending hosts operation with devtools proxy hosts status.")
-	problem.Details = map[string]any{"facts": map[string]any{"hosts": facts}}
+	if reason == "pending_hosts_operation" {
+		problem.Message = "A different hosts operation is pending. Review its recorded mappings before changing hosts."
+	}
+	problem.Details = map[string]any{"reason": reason, "retry": "inspect_first", "effects": effects, "facts": map[string]any{"hosts": facts}}
+	problem.Details["remedies"] = []protocol.Remedy{StatusAction().Remedy(protocol.InvocationContext{})}
 	return problem
 }
 
@@ -474,8 +547,15 @@ func (m Manager) applyPending(ctx context.Context, p *pending) *protocol.Error {
 		return recoveryFailure("outcome_unconfirmed", p)
 	}
 	currentDigest := digest(current)
-	if problem != nil && (currentDigest == p.Request.Expected || currentDigest == p.After) {
+	if problem != nil && currentDigest == p.Request.Expected {
+		if problem.Details == nil {
+			problem.Details = map[string]any{}
+		}
+		problem.Details["remedies"] = []protocol.Remedy{StatusAction().Remedy(protocol.InvocationContext{})}
 		return problem
+	}
+	if problem != nil && currentDigest == p.After {
+		return recoveryFailure("outcome_unconfirmed", p)
 	}
 	if currentDigest != p.After {
 		return recoveryFailure("outcome_unconfirmed", p)

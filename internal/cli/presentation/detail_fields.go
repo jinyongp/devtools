@@ -66,7 +66,7 @@ var detailFieldMembership = map[string]map[string]string{
 	},
 	"proxy env": {
 		"":     "env env_keys item listener pending upstream_ready",
-		"item": "host listener port route_ref route_url status url",
+		"item": "dns_issue host listener port route_ref route_url status url",
 	},
 	"proxy status": {
 		"":     "item items",

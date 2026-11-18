@@ -40,7 +40,8 @@ func inventoryLayoutFor(d Definition) inventoryLayout {
 		l.columns = []ViewColumn{{"name", "Name", ""}, {"port", "Port", ""}}
 		l.group = "project"
 	case "proxy list":
-		l.columns = []ViewColumn{{"host", "Host / Route", "route"}, {"target_port", "Port", ""}, {"listener", "Listener", "listener"}, {"status", "State", "state"}}
+		l.columns = []ViewColumn{{"host", "Host / Route", "route"}, {"target_port", "Port", ""}, {"listener", "Listener", "listener"}, {"status", "State", "state"}, {"dns_issue", "DNS issue", ""}}
+		l.optional = []int{4}
 		l.group = "proxy"
 	case "proxy logs":
 		l.columns = append(l.columns, ViewColumn{"reason", "Reason", "reason"})

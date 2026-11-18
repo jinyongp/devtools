@@ -274,6 +274,53 @@ func TestHostsRecovery(t *testing.T) {
 	}
 }
 
+func TestHostsRecoveryRetainsInterruptedRebaseApproval(t *testing.T) {
+	m, calls := testManager(t)
+	ctx := context.Background()
+	run := m.Run
+	m.Run = func(context.Context, string, any, bool) *protocol.Error { return failure("permission_required") }
+	origin := m.ForRequest(protocol.NewRequestID(), "up", network.RouteRef{}, "")
+	mapping := []Mapping{{"rebase.test", "127.0.0.1"}}
+	if e := origin.Sync(ctx, "a", mapping, ""); e == nil {
+		t.Fatal("expected pending request")
+	}
+	body, e := m.System.Read()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if err := os.WriteFile(m.System.Path, append([]byte("# preserved\n"), body...), 0640); err != nil {
+		t.Fatal(err)
+	}
+	first := m.RecoveryStatus()
+	if first.RecoveryAction != "rebase" || first.Digest == "" {
+		t.Fatal(first)
+	}
+	id := protocol.NewRequestID()
+	m.Run = func(ctx context.Context, kind string, request any, terminal bool) *protocol.Error {
+		if e := run(ctx, kind, request, terminal); e != nil {
+			return e
+		}
+		return failure("permission_required")
+	}
+	if _, e := m.Recover(ctx, id, first.Digest); e == nil || e.Code != "recovery_required" {
+		t.Fatal("lost helper response was reported as complete", e)
+	}
+	after := m.RecoveryStatus()
+	if after.State != "after" || after.RecoveryAction != "finalize" || after.Digest != first.Digest || after.RecoveryRequestID != id {
+		t.Fatal(after)
+	}
+	if e := origin.Sync(ctx, "a", mapping, ""); e == nil || e.Code != "recovery_required" {
+		t.Fatal("origin adopted explicit rebase permission", e)
+	}
+	if _, e := m.Recover(ctx, protocol.NewRequestID(), after.Digest); e == nil || e.Code != "stale_preview" {
+		t.Fatal("different recovery request adopted the approval", e)
+	}
+	result, e := m.Recover(ctx, id, first.Digest)
+	if e != nil || result.(map[string]any)["item"].(map[string]any)["os_write"] != "unknown" || *calls != 1 {
+		t.Fatal(result, e, *calls)
+	}
+}
+
 func TestHostsObservation(t *testing.T) {
 	a := Mapping{Host: "a.test", Address: "127.0.0.1"}
 	b := Mapping{Host: "b.test", Address: "127.0.0.1"}

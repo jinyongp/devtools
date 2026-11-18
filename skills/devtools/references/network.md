@@ -37,7 +37,9 @@
 - Stopping retains the listener port reservation; change it by starting the stopped daemon with an explicit new port. Active exposure pins protect route/listener/port identity.
 - Project routes select host, service port, optional listener and DNS policy. `.localhost` needs no hosts change; `dns = "external"` uses user-prepared DNS.
 - Auto custom-host preparation is performed by the initiating CLI, with preview and OS authentication. Noninteractive operation uses preauthorized `sudo -n`; missing permission returns `permission_required`.
-- Queries and daemon watches never edit system files. Hosts repair: `proxy hosts preview ROUTE`, then apply the unchanged digest with `proxy hosts apply ROUTE --apply DIGEST`. Protocol 23 generates an omitted request ID; older schemas may require it explicitly.
+- Queries and daemon watches never edit system files. With protocol 26, run `proxy hosts status` in the same data store to inspect an interrupted change. Execute its ready `proxy hosts recover --apply DIGEST --request-id UUID` action when available. Keep the recovery UUID for retries. A recovered hosts step lets you resume the original command under its original UUID.
+- For a selected mapping without a pending step, use `proxy hosts preview ROUTE` and its confirmation action. An output indicating `prepared: true` confirms current route, local DNS, and listener preparation. Backend health and client trust have separate checks.
+- Before downgrading below protocol 26, confirm `proxy hosts status` reports `none` with the current CLI.
 - Preserve unrelated hosts entries. DNS, known URL, backend readiness and client trust are separate outcomes.
 - Root `env_files` resolve relative to the project. Precedence: process env → earlier file → later file. `${NAME}` is required; `${NAME:-fallback}` covers unset/empty. Expansion is single-pass, with no shell.
 - Environment-backed routes use activation snapshots: file edits require reactivation; shell edits apply on next up.

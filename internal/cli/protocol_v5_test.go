@@ -27,7 +27,7 @@ func TestProtocolV17DiscoveryContracts(t *testing.T) {
 	} {
 		data := outputData(t, app, args)
 		if data["protocol_version"] != float64(26) {
-			t.Fatalf("%v: missing protocol v25", args)
+			t.Fatalf("%v: missing protocol v26", args)
 		}
 	}
 	doctor := outputData(t, app, []string{"schema", "doctor"})

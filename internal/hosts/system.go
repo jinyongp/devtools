@@ -32,7 +32,14 @@ type Request struct {
 type System struct{ Path string }
 
 func failure(code string) *protocol.Error {
-	return protocol.NewError(code, "Hosts preparation could not safely apply the selected mappings.", 3, nil)
+	exit := 3
+	if code == "invalid_argument" {
+		exit = 2
+	}
+	if code == "canceled" {
+		return protocol.NewError(code, "The hosts operation was canceled.", 130, nil)
+	}
+	return protocol.NewError(code, "Hosts preparation could not safely apply the selected mappings.", exit, nil)
 }
 func digest(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
 

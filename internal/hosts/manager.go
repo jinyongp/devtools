@@ -388,13 +388,12 @@ func (m Manager) changeLocked(ctx context.Context, step stepInput, j *netops.Jou
 			}
 			return m.finishPending(ctx, root, st, before, j)
 		}
-		if reflect.DeepEqual(owners, st.Owners) || len(owners) == 0 && len(st.Owners) == 0 {
+		if sameOwner(st.Owners, owners, step.Owner) {
 			if step.Expected == "" || step.Expected == m.previewToken(st, before, step.Owner, step.Desired) {
 				if !sameOwner(st.Owners, p.Owners, step.Owner) {
 					return nil, recoveryFailure("pending_hosts_operation", p)
 				}
-				after, renderErr := Render(before, mappings(owners))
-				if renderErr == nil && bytes.Equal(before, after) && validateOwnership(before, mappings(owners)) == nil {
+				if confirmedNoop(st, before, step) {
 					return stepResult(step.ID, false, "not_performed", st), nil
 				}
 			}
@@ -411,6 +410,9 @@ func (m Manager) changeLocked(ctx context.Context, step stepInput, j *netops.Jou
 	}
 	if step.Expected != "" && step.Expected != m.previewToken(st, before, step.Owner, step.Desired) {
 		return nil, failure("stale_preview")
+	}
+	if step.Expected == "" && sameOwner(st.Owners, owners, step.Owner) && confirmedNoop(st, before, step) {
+		return stepResult(step.ID, false, "not_performed", st), nil
 	}
 	if e := validateOwnership(before, mappings(st.Owners)); e != nil {
 		return nil, e
@@ -446,6 +448,19 @@ func (m Manager) changeLocked(ctx context.Context, step stepInput, j *netops.Jou
 		return nil, e
 	}
 	return m.finishPending(ctx, root, st, before, j)
+}
+
+func confirmedNoop(st state, body []byte, step stepInput) bool {
+	o := observe(st, body, false)
+	if o.issue != "" {
+		return false
+	}
+	for _, mapping := range step.Desired {
+		if o.MappingIssue(step.Owner, mapping) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func sameOwner(a, b []Owner, key string) bool {
@@ -574,6 +589,15 @@ func (m Manager) applyPending(ctx context.Context, p *pending) *protocol.Error {
 	}
 	problem := m.apply(ctx, p.Request)
 	current, busy, e := m.System.observe()
+	if ctx.Err() != nil {
+		canceled := failure("canceled")
+		observed := recoveryFailure("outcome_unconfirmed", p)
+		canceled.Details = observed.Details
+		if e == nil && !busy && digest(current) == p.Request.Expected {
+			canceled.Details["effects"] = "none"
+		}
+		return canceled
+	}
 	if e != nil || busy {
 		return recoveryFailure("outcome_unconfirmed", p)
 	}

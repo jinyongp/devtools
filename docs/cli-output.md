@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [설치와 첫 실행](../README.ko.md)
 
-이 문서는 현재 소스의 CLI protocol v25 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
+이 문서는 현재 소스의 CLI protocol v26 입력·출력 규칙을 설명합니다. v6의 run 인자 규칙은 유지합니다.
 이전 v0.22.3은 protocol v5입니다. 이전 protocol 전환과 JSON 경로 변경은
 아래 마이그레이션 절에 정리했습니다. 저장 파일 형식과 dashboard HTTP API는 CLI protocol
 버전과 별개이며, `devtools.toml`에는 버전 필드를 두지 않습니다.
@@ -272,6 +272,21 @@ text 렌더 실패 시 기존 오류는 전체 escaped public 진단과 원 종�
 | `task`·workstream·validation | 기존 `item`·`items`와 리비전·변경·재시도 메타데이터; context·tree·export·검사는 보고서 |
 | `diagnostics` | 전체 로컬 subsystem의 안전한 metadata 상태 보고서와 `ready`·`issues` |
 | `version`, `update`, `import`, `doctor`, `schema` | 각 기능의 보고서; `update`와 `import`는 변경 여부 포함 |
+
+## protocol v26 hosts 계약
+
+- `proxy hosts status`의 `item.state`는 `none`, `before`, `after`, `diverged`,
+  `unavailable`이다. `pending`은 장부가 읽히면 boolean이고 판독 실패 시 null이다.
+  승인할 수 있는 단계가 있을 때만 `digest`와 `next_actions`의 실행 명령을 제공한다.
+- `proxy hosts recover`의 `item.method`는 `apply_saved`, `finalize`, `rebase`다.
+  `item.os_write`의 `performed`, `not_performed`, `unknown`은 이번 요청의
+  OS 효과를 나타낸다. `request_id`는 복구 호출이며 `item.origin_request_id`는
+  확인된 원래 작업이다. 새 hosts apply/remove에는 선택적 `data.os_write`가 있다.
+- 새 `proxy up`의 `prepared: true`는 확인 시점 준비 상태다. 완료 영수증에는
+  당시 필드가 보존된다. `changed`는 확정된 자원 효과를 의미한다.
+- 영향받는 라우트에 선택적 `dns_issue`를 제공한다. 실패에서 `details.facts.hosts`와
+  `details.facts.outcomes`는 확인된 원래 단계와 부분 효과를 전달한다.
+  `details.target.request_id`는 실패한 현재 호출이다.
 
 ## protocol v20 마이그레이션
 

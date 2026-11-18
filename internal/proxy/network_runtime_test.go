@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -94,7 +95,7 @@ func TestNetworkListenersHostsPending(t *testing.T) {
 	for tlsPort == httpPort {
 		tlsPort = freeNetworkPort(t)
 	}
-	if _, e := m.Configure(ctx, "default", fmt.Sprintf("127.0.0.1:%d", httpPort), fmt.Sprintf("127.0.0.1:%d", tlsPort), false, tasks.ID()); e != nil {
+	if _, e := m.Configure(ctx, "default", fmt.Sprintf("0.0.0.0:%d", httpPort), fmt.Sprintf("0.0.0.0:%d", tlsPort), false, tasks.ID()); e != nil {
 		t.Fatal(e)
 	}
 	hm := hosts.Manager{Data: m.Data, System: system, Run: func(ctx context.Context, _ string, input any, _ bool) *protocol.Error {
@@ -106,6 +107,24 @@ func TestNetworkListenersHostsPending(t *testing.T) {
 		t.Fatal(e)
 	}
 	p, projectRef := networkRoute(t, m, "app.test", "default", freeNetworkPort(t))
+	continueStream := make(chan struct{})
+	peerBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/stream" {
+			w.WriteHeader(204)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: before\n\n")
+		w.(http.Flusher).Flush()
+		select {
+		case <-continueStream:
+			fmt.Fprint(w, "data: during\n\n")
+			w.(http.Flusher).Flush()
+		case <-r.Context().Done():
+		}
+	}))
+	defer peerBackend.Close()
+	peer, peerRef := networkRouteProfile(t, m, "peer-profile", "peer.test", "default", peerBackend.Listener.Addr().(*net.TCPAddr).Port)
 	st, e := m.portStore().Read()
 	if e != nil {
 		t.Fatal(e)
@@ -116,39 +135,74 @@ func TestNetworkListenersHostsPending(t *testing.T) {
 	if _, e := m.RouteUp(ctx, projectRef, p, nil, hm, tasks.ID()); e != nil {
 		t.Fatal(e)
 	}
+	if _, e := m.RouteUp(ctx, peerRef, peer, nil, hm, tasks.ID()); e != nil {
+		t.Fatal(e)
+	}
+	result, e := m.ExposeStart(ctx, ExposureRequest{Route: peerRef, Provider: "lan", Alias: "share.peer.local", Auth: "reader:fixture", RequestID: tasks.ID()}, peer, nil, hm)
+	if e != nil {
+		t.Fatal(e.Code, e)
+	}
+	exposure := result.(map[string]any)["item"].(expose.Public)
 	authority, e := (ca.Store{Data: m.Data}).Read()
 	if e != nil {
 		t.Fatal(e)
 	}
 	roots := x509.NewCertPool()
 	roots.AppendCertsFromPEM(authority.PEM())
-	request := func() {
+	request := func(host, path string, authenticate bool) *http.Response {
 		t.Helper()
-		client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{
-			DisableKeepAlives: true, TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: "ops.test"},
+		client := &http.Client{Timeout: 20 * time.Second, Transport: &http.Transport{
+			DisableKeepAlives: true, TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: host},
 		}}
-		req, err := http.NewRequest("GET", fmt.Sprintf("https://127.0.0.1:%d/", tlsPort), nil)
+		req, err := http.NewRequest("GET", fmt.Sprintf("https://127.0.0.1:%d%s", tlsPort, path), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		req.Host = "ops.test"
+		req.Host = fmt.Sprintf("%s:%d", host, tlsPort)
+		if authenticate {
+			req.SetBasicAuth("reader", "fixture")
+		}
 		resp, err := client.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 204 {
-			t.Fatal(resp.Status)
+		return resp
+	}
+	assertRoutes := func() {
+		t.Helper()
+		for _, host := range []string{"ops.test", "peer.test", exposure.Host} {
+			resp := request(host, "/", host == exposure.Host)
+			resp.Body.Close()
+			if resp.StatusCode != 204 {
+				t.Fatal(host, resp.Status)
+			}
 		}
 	}
-	request()
+	assertRoutes()
+	stream := request(exposure.Host, "/stream", true)
+	defer stream.Body.Close()
+	lines := bufio.NewReader(stream.Body)
+	if line, err := lines.ReadString('\n'); err != nil || line != "data: before\n" {
+		t.Fatal(line, err)
+	}
+	if _, err := lines.ReadString('\n'); err != nil {
+		t.Fatal(err)
+	}
 	hm.Run = func(context.Context, string, any, bool) *protocol.Error {
 		return protocol.NewError("canceled", "fixture interrupted before applying", 130, nil)
 	}
 	if _, e := m.RouteDown(ctx, projectRef, hm, tasks.ID()); e == nil {
 		t.Fatal("expected interrupted hosts cleanup")
 	}
-	request()
+	assertRoutes()
+	close(continueStream)
+	if line, err := lines.ReadString('\n'); err != nil || line != "data: during\n" {
+		t.Fatal(line, err)
+	}
+	exposures, e := m.ExposureList(ctx)
+	if e != nil || len(exposures) != 1 || exposures[0].Generation != exposure.Generation || exposures[0].State != "active" {
+		t.Fatal(exposures, e)
+	}
 }
 
 func TestRouteUpHosts(t *testing.T) {
@@ -325,8 +379,13 @@ func settledNetworkApply(t *testing.T, ctx context.Context, m Manager, action, n
 
 func networkRoute(t *testing.T, m Manager, host, listener string, backend int) (project.Context, network.RouteRef) {
 	t.Helper()
+	return networkRouteProfile(t, m, "app", host, listener, backend)
+}
+
+func networkRouteProfile(t *testing.T, m Manager, profile, host, listener string, backend int) (project.Context, network.RouteRef) {
+	t.Helper()
 	dir := t.TempDir()
-	content := fmt.Sprintf("profile='app'\n[ports.web]\nport=%d\n[proxies.app]\nhost='%s'\nport='web'\nlistener='%s'\n", backend, host, listener)
+	content := fmt.Sprintf("profile='%s'\n[ports.web]\nport=%d\n[proxies.app]\nhost='%s'\nport='web'\nlistener='%s'\n", profile, backend, host, listener)
 	if e := os.WriteFile(filepath.Join(dir, "devtools.toml"), []byte(content), 0600); e != nil {
 		t.Fatal(e)
 	}

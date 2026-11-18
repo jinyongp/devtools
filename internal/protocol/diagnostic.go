@@ -339,7 +339,7 @@ func projectHostsFacts(facts, input map[string]any) {
 		}
 	}
 	ref := diagnosticObject(input["route_ref"])
-	name := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
+	name := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 	instance := regexp.MustCompile(`^[a-f0-9]{32}$`)
 	stringField := func(key string) string {
 		value, _ := ref[key].(string)

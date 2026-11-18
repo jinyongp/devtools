@@ -235,11 +235,24 @@ try:
     assert api("proxy","status","--listener","preview")["item"]["running"]
     assert api("proxy","env","external","--global",cwd=home)["item"]["status"]=="ready"
     mutate("proxy", "add", "custom", str(free_port()), "--global", "--host", "custom.network.test", cwd=home)
+    hosts_before=Path("/etc/hosts").read_bytes()
+    hosts_state=api("proxy","hosts","status",cwd=home)
+    assert hosts_state=={"item":{"state":"none","pending":False,"changes":[],"recovery_action":"none"},"next_actions":[]},hosts_state
+    preview=api("proxy","hosts","preview","custom","--global",cwd=home)
+    assert preview["changed"] and not preview["next_actions"],preview
+    mutate("proxy","hosts","apply","custom","--global","--apply",preview["digest"],cwd=home,error="isolated_operation_not_allowed")
+    rejected=mutate("proxy","hosts","recover","--apply","0"*64,cwd=home,error="stale_preview")
+    [status_action]=rejected["details"]["remedies"]
+    argv=status_action["argv"]
+    assert status_action["state"]=="ready" and status_action["effect"]=="read" and argv[0]=="devtools"
+    action=subprocess.run([str(binary),*argv[1:]],cwd=home,env=env,text=True,capture_output=True,timeout=15,check=True)
+    assert json.loads(action.stdout)["data"]==hosts_state and not action.stderr
     api("proxy", "up", "custom", "--global", "--request-id", str(uuid.uuid4()), cwd=home, error="isolated_operation_not_allowed")
+    assert Path("/etc/hosts").read_bytes()==hosts_before
     assert tree_digest(normal) == normal_before, "explicit root changed normal user data"
     for group in (("schema","proxy","configure"),("schema","proxy","teardown"),("schema","expose","start"),("schema","command","env")):
         assert api(*group)["output_mode"] == "json"
-    print(json.dumps({"result":"pass","fresh_batch":True,"peer_dependent_restart":True,"verified_https":True,"selected_teardown":True,"busy_backend":True,"projectless_foreground":True,"isolated":True}))
+    print(json.dumps({"result":"pass","fresh_batch":True,"peer_dependent_restart":True,"verified_https":True,"selected_teardown":True,"busy_backend":True,"projectless_foreground":True,"isolated":True,"isolated_hosts_recovery":True}))
 finally:
     if external:
         external.terminate();external.wait(timeout=5)

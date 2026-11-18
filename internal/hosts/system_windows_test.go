@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jinyongp/devtools/internal/platformfs"
 	"golang.org/x/sys/windows"
 )
 
@@ -119,6 +122,36 @@ func TestWindowsSystemHostsRestoresDisposableRunner(t *testing.T) {
 		t.Skip("requires disposable native OS hosts fixture")
 	}
 	system := System{}
+	if expected := os.Getenv("DEVTOOLS_TEST_HOSTS_EXPECTED"); expected != "" {
+		gate := os.Getenv("DEVTOOLS_TEST_HOSTS_GATE")
+		wait, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		for {
+			if _, err := os.Stat(gate); err == nil {
+				break
+			}
+			select {
+			case <-wait.Done():
+				t.Fatal("writer gate did not open")
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+		request := Request{Expected: expected, Mappings: []Mapping{{Host: os.Getenv("DEVTOOLS_TEST_HOSTS_MAPPING"), Address: "127.0.0.1"}}}
+		ctx, cancelWrite := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancelWrite()
+		e := system.Apply(ctx, request)
+		switch {
+		case e == nil:
+			t.Log("HOSTS_RESULT=applied")
+		case e.Code == "stale_preview":
+			t.Log("HOSTS_RESULT=stale")
+		case e.Code == "canceled":
+			t.Log("HOSTS_RESULT=canceled")
+		default:
+			t.Fatalf("%s: %v", e.Code, e.Details)
+		}
+		return
+	}
 	before, failure := system.Read()
 	if failure != nil {
 		t.Fatalf("%s: %v", failure.Code, failure.Details)
@@ -127,7 +160,6 @@ func TestWindowsSystemHostsRestoresDisposableRunner(t *testing.T) {
 		t.Fatal("disposable runner already has an owned hosts block")
 	}
 	security := hostsSecurity(t, system.path())
-	request := Request{Expected: digest(before), Mappings: []Mapping{{Host: "devtools-ci-hosts.localhost", Address: "127.0.0.1"}}}
 	t.Cleanup(func() {
 		current, failure := system.Read()
 		if failure != nil {
@@ -146,12 +178,89 @@ func TestWindowsSystemHostsRestoresDisposableRunner(t *testing.T) {
 			t.Error("system hosts ACL/owner not restored")
 		}
 	})
-	if failure = system.Apply(context.Background(), request); failure != nil {
-		t.Fatalf("%s: %v", failure.Code, failure.Details)
+	gate := filepath.Join(t.TempDir(), "start")
+	worker := func(host string) *exec.Cmd {
+		command := exec.Command(os.Args[0], "-test.v", "-test.run", "^TestWindowsSystemHostsRestoresDisposableRunner$")
+		command.Env = append(os.Environ(), "DEVTOOLS_TEST_HOSTS_EXPECTED="+digest(before), "DEVTOOLS_TEST_HOSTS_GATE="+gate, "DEVTOOLS_TEST_HOSTS_MAPPING="+host)
+		return command
 	}
-
+	checkLock := func() {
+		release, err := enableHostsMetadataPrivileges()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer release()
+		file, err := platformfs.OpenPublicNoFollow(system.path(), true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer file.Close()
+		handle := windows.Handle(file.Fd())
+		lock := windows.Overlapped{Offset: 2 * maxHostsSize}
+		if err := windows.LockFileEx(handle, windows.LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &lock); err != nil {
+			t.Fatal(err)
+		}
+		defer windows.UnlockFileEx(handle, 0, 1, 0, &lock)
+		if err := os.WriteFile(gate, nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+		result := make(chan []byte, 1)
+		go func() {
+			body, _ := system.Read()
+			result <- body
+		}()
+		select {
+		case body := <-result:
+			if !bytes.Equal(body, before) {
+				t.Fatal("hosts read changed under helper lock")
+			}
+		case <-time.After(time.Second):
+			t.Fatal("hosts read blocked behind the helper lock")
+		}
+		output, err := worker("devtools-ci-hosts-canceled.test").CombinedOutput()
+		if err != nil || !bytes.Contains(output, []byte("HOSTS_RESULT=canceled")) {
+			t.Fatalf("waiting helper did not cancel: %v %s", err, output)
+		}
+		t.Log("Native hosts readers and lock cancellation verified")
+	}
+	checkLock()
+	if err := os.Remove(gate); err != nil {
+		t.Fatal(err)
+	}
+	type outcome struct {
+		output []byte
+		err    error
+	}
+	results := make(chan outcome, 2)
+	for _, host := range []string{"devtools-ci-hosts-one.test", "devtools-ci-hosts-two.test"} {
+		go func() {
+			output, err := worker(host).CombinedOutput()
+			results <- outcome{output, err}
+		}()
+	}
+	if err := os.WriteFile(gate, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	applied, stale := 0, 0
+	for range 2 {
+		result := <-results
+		switch {
+		case result.err != nil:
+			t.Fatal(result.err, string(result.output))
+		case bytes.Contains(result.output, []byte("HOSTS_RESULT=applied")):
+			applied++
+		case bytes.Contains(result.output, []byte("HOSTS_RESULT=stale")):
+			stale++
+		default:
+			t.Fatal(string(result.output))
+		}
+	}
+	if applied != 1 || stale != 1 {
+		t.Fatal("expected one publication and one stale concurrent writer", applied, stale)
+	}
+	t.Log("Two concurrent native hosts writers produced only one publication")
 	current, failure := system.Read()
-	if failure != nil || !bytes.HasPrefix(current, before) || !bytes.Contains(current, []byte("devtools-ci-hosts.localhost")) {
+	if failure != nil || !bytes.HasPrefix(current, before) || bytes.Count(current, []byte("devtools-ci-hosts-")) != 1 {
 		t.Fatalf("system hosts mutation: %q %v", current, failure)
 	}
 	if hostsSecurity(t, system.path()) != security {

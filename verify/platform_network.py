@@ -11,10 +11,36 @@ import socket
 import ssl
 import subprocess
 import sys
+import time
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from fixture_paths import create_fixture_directory
+
+def verify_linux_in_place(binary, root, sudo_path):
+    fixture=root/"bind-mounted-hosts"
+    fixture.write_bytes(b"127.0.0.1 localhost\n# mount fixture\n")
+    script = """
+import hashlib,json,os,subprocess,sys
+fixture,binary=sys.argv[1:]
+subprocess.run(["mount","--bind",fixture,"/etc/hosts"],check=True)
+with open(fixture,"rb") as stream: before=stream.read()
+inode=os.stat(fixture).st_ino
+expected=hashlib.sha256(before).hexdigest()
+workers=[]
+for host in ("mount-one.test","mount-two.test"):
+    request=json.dumps({"expected_digest":expected,"mappings":[{"host":host,"address":"127.0.0.1"}]}).encode()
+    process=subprocess.Popen([binary,"__network-helper","hosts"],stdin=subprocess.PIPE)
+    process.stdin.write(request)
+    process.stdin.close()
+    workers.append(process)
+assert sorted(process.wait(timeout=10) for process in workers)==[0,3]
+with open(fixture,"rb") as stream: after=stream.read()
+assert after.startswith(before) and after.count(b".test")==1 and os.stat(fixture).st_ino==inode
+"""
+    subprocess.run([sudo_path,"-n","unshare","--mount","--propagation","private","--",
+                    sys.executable,"-c",script,str(fixture),str(binary)],
+                   check=True,capture_output=True,timeout=30)
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -63,10 +89,10 @@ PORT={{port='web'}}
 exec=['python3','-c',"import os,socket; socket.create_connection(('127.0.0.1',int(os.environ['PORT'])),timeout=1).close()"]
 timeout='10s'
 ''')
-        def api(*words,error=None,env_override=None):
+        def api(*words,error=None,env_override=None,directory=None):
             argv=[str(binary),*words]
             execution_env=env if env_override is None else env_override
-            p=subprocess.Popen(argv,cwd=project,env=execution_env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            p=subprocess.Popen(argv,cwd=directory or project,env=execution_env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
             try:
                 try:
                     stdout,stderr=p.communicate(timeout=30 if sys.platform=="darwin" else 45)
@@ -102,7 +128,33 @@ timeout='10s'
             assert code==0,result
             return result['data']
         def mutate(*words,**kwargs):return api(*words,"--request-id",str(uuid.uuid4()),**kwargs)
+        def recover(status):
+            [action]=status["next_actions"]
+            assert action["state"]=="ready" and action["argv"][0]=="devtools",status
+            result=api(*action["argv"][1:])
+            assert result["item"]["state"]=="resolved" and result["changed"]
+            assert result["item"]["step_id"]==status["item"]["step_id"]
+            assert api("proxy","hosts","status")["item"]["state"]=="none"
+            return result
+
+        def free_port():
+            with socket.socket() as sock:
+                sock.bind(("127.0.0.1",0))
+                return sock.getsockname()[1]
+
+        def verify_https(host):
+            assert "127.0.0.1" in socket.gethostbyname_ex(host)[2]
+            connection=http.client.HTTPSConnection(host,443,context=ssl.create_default_context(cafile=str(ca_path)),timeout=5)
+            try:
+                connection.request("GET","/")
+                response=connection.getresponse();response.read()
+                assert response.status==200,response.status
+            finally:
+                connection.close()
+
         sibling_env=None
+        peer=None
+        global_backend=None
         def trust_settings():
             path=root/"trust-settings.plist"
             subprocess.run(["/usr/bin/security","trust-settings-export","-d",str(path)],capture_output=True,text=True,timeout=10,check=True)
@@ -131,6 +183,9 @@ timeout='10s'
                 assert sudo.with_name("sudo.first-arg").read_text()=="-n"
                 assert not api("process","list","--profile","platform-network","--view","history")["items"]
             finally:env["PATH"]=previous_path
+            status=api("proxy","hosts","status")
+            assert status["item"]["state"]=="before",status
+            assert recover(status)["item"]["os_write"]=="performed"
             mutate("project","up","web")
             assert "127.0.0.1" in socket.gethostbyname_ex(hostname)[2]
             c=http.client.HTTPConnection(hostname,80,timeout=5)
@@ -142,6 +197,75 @@ timeout='10s'
             # A public-CA client verifies transport independently of Python's OS-store integration.
             c=http.client.HTTPSConnection(hostname,443,context=ssl.create_default_context(cafile=str(ca_path)),timeout=5)
             c.request("GET","/");r=c.getresponse();r.read();assert r.status==200,r.status;c.close()
+
+            # All three routes use the same daemon, CA and genuine OS hosts file.
+            peer=root/"peer";peer.mkdir()
+            peer_port,global_port=free_port(),free_port()
+            while peer_port==global_port or global_port==backend:global_port=free_port()
+            while peer_port in (backend,global_port):peer_port=free_port()
+            peer_host="peer-"+uuid.uuid4().hex[:12]+".test"
+            global_host="ops-"+uuid.uuid4().hex[:12]+".test"
+            shutil.copy2(project/"server.py",peer/"server.py")
+            (peer/"devtools.toml").write_text((project/"devtools.toml").read_text()
+                .replace("platform-network","platform-network-peer")
+                .replace(str(backend),str(peer_port))
+                .replace(hostname,peer_host))
+            mutate("project","up","web",directory=peer)
+            global_backend=subprocess.Popen([sys.executable,str(project/"server.py")],cwd=project,env=dict(env,PORT=str(global_port)),
+                stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            for attempt in range(50):
+                try:
+                    with socket.create_connection(("127.0.0.1",global_port),timeout=1):break
+                except OSError:time.sleep(.05)
+            else:raise AssertionError("Global fixture backend never bound")
+            mutate("proxy","add","ops",str(global_port),"--global","--host",global_host)
+            mutate("proxy","up","ops","--global")
+            for host in (hostname,peer_host,global_host):verify_https(host)
+
+            sudo_path=shutil.which("sudo",path=previous_path)
+            assert sudo_path
+            sudo.write_text("""#!/bin/sh
+if [ "$#" = 5 ] && [ "$4" = __network-helper ] && [ "$5" = hosts ]; then
+    if [ "$DEVTOOLS_FIXTURE_INTERRUPTION" = before ]; then exit 1; fi
+    "$DEVTOOLS_FIXTURE_REAL_SUDO" "$@" || exit $?
+    exit 1
+fi
+exec "$DEVTOOLS_FIXTURE_REAL_SUDO" "$@"
+""")
+            report["hosts_recovery"]=[]
+            for state,interruption,method,write in (
+                ("before","before","apply_saved","performed"),
+                ("after","after","finalize","not_performed"),
+                ("diverged","before","rebase","performed"),
+            ):
+                stop_id=str(uuid.uuid4())
+                fault_env=dict(env,PATH=str(denied)+os.pathsep+previous_path,
+                    DEVTOOLS_FIXTURE_REAL_SUDO=sudo_path,DEVTOOLS_FIXTURE_INTERRUPTION=interruption)
+                expected_error="recovery_required" if state=="after" else "permission_required"
+                failure=api("proxy","down","web","--request-id",stop_id,error=expected_error,env_override=fault_env)
+                assert failure["details"]["facts"]["outcomes"][0]["state"]=="disabled",failure
+                comment=("# devtools native recovery fixture "+uuid.uuid4().hex+"\n").encode()
+                if state=="diverged":
+                    subprocess.run([sudo_path,"-n","tee","-a","/etc/hosts"],input=comment,stdout=subprocess.DEVNULL,check=True,timeout=10)
+                try:
+                    status=api("proxy","hosts","status")
+                    assert status["item"]["state"]==state and status["item"]["origin_request_id"]==stop_id,status
+                    assert status["item"]["recovery_action"]==method,status
+                    assert api("diagnostics")["network"]["hosts"]["recovery"]["state"]==state
+                    for host in (peer_host,global_host):verify_https(host)
+                    result=recover(status)
+                    assert result["item"]["method"]==method and result["item"]["os_write"]==write,result
+                    if state=="diverged":assert comment in Path("/etc/hosts").read_bytes()
+                    api("proxy","down","web","--request-id",stop_id)
+                    assert hostname.encode() not in Path("/etc/hosts").read_bytes()
+                    for host in (peer_host,global_host):verify_https(host)
+                    report["hosts_recovery"].append({"state":state,"method":method,"os_write":write,"peer_https":True,"global_https":True})
+                finally:
+                    if state=="diverged":
+                        remove_comment="from pathlib import Path; import sys; p=Path('/etc/hosts'); data=p.read_bytes(); marker=sys.stdin.buffer.read(); assert data.count(marker)==1; p.write_bytes(data.replace(marker,b'',1))"
+                        subprocess.run([sudo_path,"-n",sys.executable,"-c",remove_comment],input=comment,check=True,timeout=10)
+                mutate("proxy","up","web")
+                verify_https(hostname)
             if sys.platform=="linux":
                 c=http.client.HTTPSConnection(hostname,443,context=ssl.create_default_context(),timeout=5)
                 try:
@@ -175,6 +299,8 @@ timeout='10s'
             result=subprocess.run(["curl","--noproxy","*","--silent","--show-error","--fail","--max-time","5",f"https://{hostname}/"],env=env,capture_output=True,text=True,timeout=10)
             assert result.returncode==0,result.stderr
             if sys.platform=="linux":
+                verify_linux_in_place(binary,root,sudo_path)
+                report["linux_bind_mount_single_writer"]=True
                 replacement=binary.with_name("replacement")
                 shutil.copy2(source,replacement);os.replace(replacement,binary)
                 setup=api("proxy","setup","--check")["item"]
@@ -186,6 +312,10 @@ timeout='10s'
             report.update(hosts_automatic=True,os_trust_confirmed=True,verified_https_443=True,http_80_redirect=True,system_root_https=True,noninteractive=True,noninteractive_no_child=True)
         finally:
             try:
+                if peer is not None:
+                    mutate("project","down",directory=peer)
+                if global_backend is not None:
+                    global_backend.terminate();global_backend.wait(timeout=10)
                 mutate("project","down")
                 plan=api("proxy","teardown","--all","--remove-ca")["item"]
                 mutate("proxy","teardown","--all","--remove-ca","--apply",plan["digest"])

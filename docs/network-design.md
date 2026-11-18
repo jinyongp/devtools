@@ -212,13 +212,46 @@ HTTPS authority before authentication, preserving the request path and query. LA
 forwarded scheme reflects the actual connection. Provider bridges remain HTTP on
 loopback after upstream TLS termination and use the committed public scheme.
 
-Lock order: UUID → sorted resource keys → registry. Runtime probes under the registry
-lock are nonblocking. OS/provider/IPC work runs outside it; commit rechecks operation,
-generation, and digest. Journals precede side effects. Selected teardown preserves
+Lock order for normal network operations is UUID → sorted resource keys → registry.
+Hosts operations take the parent request, child step, reference journal and physical
+file locks in that order. Staged route cleanup can hold the registry proof while
+checking and applying its hosts step. Provider and daemon IPC run outside that
+registry lock. Journals precede side effects. Selected teardown preserves
 shared CA/trust. Explicit `--all --remove-ca` rechecks surviving TLS listener/active/
 pending/recovery references and confirms untrust before key deletion. Failure preserves
 keys/recovery data. Inactive declarations alone do not permanently pin the CA. General
 backup/transfer excludes host-local live resources.
+
+## Hosts recovery and route availability
+
+CLI protocol 26 exposes route-specific `dns_issue`, `proxy hosts status` and
+`proxy hosts recover --apply DIGEST`. Runtime route resolution reads one hosts
+image and checks that the reference journal agrees before and after the read.
+Each route needs matching committed ownership and an unambiguous live mapping.
+The mapping must also be unchanged by any pending transition. The affected routes
+fail closed and independently verified routes remain eligible for HTTP and TLS.
+
+Only the frozen request and step can implicitly resume a pending write. A separate
+recovery UUID can explicitly confirm it against current file bytes, ownership,
+data root and planned effect. An exact before image allows the saved write. An
+exact after image allows a journal-only finalization. An external edit can be
+preserved when exactly one of the committed and planned projections is proved.
+Neither matching projection or both matching leaves the pending record in place.
+
+The permission helper locks the actual file across compare and publish. Unix
+checks the pathname against the locked inode, including the in-place bind-mount
+fallback. Windows uses a byte-range lock beyond the maximum read size and retains
+its reparse, ACL, owner and publication checks. The invoking CLI verifies the
+result, then publishes the reference journal. Permission transport errors can
+leave an unknown outcome and require a fresh observation.
+
+New route activation confirms current preparation and reports whether the request
+changed a resource. Historical successful receipts still replay their saved data.
+If down publishes its tombstone before hosts cleanup fails, diagnostics include the
+effect and the remaining cleanup state. Teardown approval also binds the ordered
+owner cleanup to the live file, including orphan owners in the selected scope.
+Recover pending steps with the current version before downgrading to a strict older
+reader.
 
 Tailscale node metadata comes from the installed CLI. Serve configuration mutations
 use LocalAPI GET ETags and conditional POST, preserving unknown/unselected fields.

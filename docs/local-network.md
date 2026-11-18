@@ -152,7 +152,36 @@ Windows trust/untrust는 대화형 터미널과 OS 인증서 확인이 필요하
 암호 입력 없이 `permission_required`다. daemon과 조회 명령은 OS를 수정하지 않는다.
 `dns = "external"`은 사용자가 준비한 DNS, `dns = "hosts"`는 명시 hosts 준비다.
 외부 mapping과 충돌하면 덮어쓰지 않는다. 공유 mapping은 마지막 소유 참조 해제 시 제거한다.
-복구용 `proxy hosts preview/apply/remove`도 제공한다.
+새 `proxy up`의 `item.prepared: true`는 선택 라우트, 로컬 DNS 매핑, 실행 중인
+리스너의 준비를 확인했다는 뜻이다. HTTPS는 서버 TLS 준비까지 확인한다. backend 응답과
+클라이언트 CA 신뢰는 `proxy env`와 `diagnostics`에서 따로 확인한다. 같은 요청 UUID의
+재생은 과거 결과를 반환한다.
+
+### 미완료 hosts 변경 복구
+
+```sh
+devtools proxy hosts status
+```
+
+중단된 작업이 있으면 현재 파일이 변경 전인지, 변경 후인지, 외부 편집으로 달라졌는지
+표시한다. 원래 대상이나 프로젝트가 삭제된 뒤에도 데이터 저장소에서 조회할 수 있다.
+미완료 매핑에 영향을 받는 라우트는 `proxy list`, `proxy env`, Dashboard에서 원인을
+확인할 수 있다. 공용 파일에 소유권과 매핑이 확인되는 다른 라우트는 계속 서비스한다.
+
+상태가 보여 주는 `devtools proxy hosts recover --apply DIGEST --request-id UUID`를
+같은 데이터 저장소에서 실행한다. 외부 편집이 있으면 명령이 표시한 관리 매핑의 추가와
+삭제를 검토한다. 적용 전에는 저장된 변경을 실행하고, 적용 후에는 장부만 확정한다.
+이전 매핑만 입증되는 외부 편집은 승인을 갱신해 보존할 수 있다. 안전한 다음 쓰기를
+판정할 수 없는 경우에는 명령이 필요한 비교를 안내한다.
+
+복구 UUID는 원래 요청 UUID와 별개다. 복구 명령이 출력한 동일 UUID는 그 복구의 재시도에
+쓴다. hosts 단계가 확정되면 원래 명령의 나머지 단계는 원래 요청 UUID로 재개한다.
+격리 저장소는 공유 OS 변경을 거부한다. 이미 적용된 파일의 장부 확정은 가능하다.
+`proxy hosts preview/apply/remove`는 평상시 특정 라우트의 소유 매핑을 관리하는 명령이다.
+일반 preview 토큰도 실제 파일과 선택 대상에 바인딩된다.
+
+이전 CLI로 돌아가기 전에 현재 CLI에서 `proxy hosts status`가 `none`인지 확인한다.
+미완료 레코드의 새 필드는 구버전의 엄격한 reader가 거부할 수 있다.
 
 `env_files`는 프로젝트 루트 기준이다. process 환경 > 앞쪽 파일 > 뒤쪽 파일 순서다.
 없는 파일은 무시하고 읽기 실패나 잘못된 dotenv는 파일·행 오류로 보고한다.

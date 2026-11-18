@@ -32,6 +32,8 @@ Windows UAC·CurrentUser trust의 실제 사용자 확인 창을 아래 Unix 결
 | 변경 감지·선택 revoke·복구 | `exposure`, `http2_exposure`: stop/TOML/env 수정 후 열린 SSE/WS/HTTP2 종료 및 다른 route heartbeat. `internal/expose/sessions_test.go`: 같은 HTTP/2 연결의 다른 exposure stream 보존. `cloudflared_faults`, `tailscale_simulated`: crash·불확실 commit 복구. |
 | 진단·schema·docs·UI | CLI/catalog·diagnostics Go 검사, `network` 공개 output schema 검사, dashboard Node 검사 및 Linux CI browser 검사, Skill/release 검사. 자동 browser 검사가 실제 PC의 사용자 조작 전체를 검증하지는 않는다. |
 | teardown·transfer | `network`: 선택 listener 정리와 공유 CA·다른 backend 보존. `internal/proxy/teardown_test.go`: drift·untrust 실패/미확정 시 key 보존. backup/transfer 검사: host-local private key·인증·live session 제외. native job: 실제 untrust 확인 후 key 제거. |
+| hosts 중단 복구 | `TestHostsRecovery`, `TestNetworkListenersHostsPending`, `TestRouteUpHosts`, `TestHostsCleanup`: 전후 이미지, 외부 편집, 다른 라우트의 새 TLS, 요청 재생, 오래된 정리 차단. 설치형 `network`는 격리 저장소에서 OS 쓰기 거부, 공개 schema와 상태 조회 argv 실행을 확인한다. |
+| hosts 실제 OS 경합 | 기존 Release의 macOS/Linux system network는 실제 helper 중단 전후와 외부 편집을 두 프로필 및 글로벌 HTTPS로 확인한다. Linux는 private mount namespace에서 in-place 경합을 실행한다. 기존 Windows network focus는 네이티브 helper 경합, 읽기·취소, ACL과 원본 복원을 확인한다. |
 | 실제 플랫폼·provider evidence | Linux/macOS archive·native OS 검사는 CI에서 실행한다. WSL+Windows 브라우저 DNS/CA, Windows mount, 실제 LAN peer·Cloudflared 공개 ingress·두 장치 Tailscale은 실제 대상 환경의 evidence를 별도로 요구한다. |
 
 ## Host 정책 호환성

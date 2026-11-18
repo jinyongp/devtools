@@ -92,6 +92,7 @@ port show
 port check
 instance show
 proxy status
+proxy hosts status
 expose status
 proxy ca status
 backup status
@@ -246,6 +247,7 @@ proxy restart
 proxy hosts preview
 proxy hosts apply
 proxy hosts remove
+proxy hosts recover
 expose start
 expose stop
 proxy add

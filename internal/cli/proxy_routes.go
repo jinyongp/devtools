@@ -27,15 +27,20 @@ func (a *App) hostsManager(ctx context.Context, streams IO) (hosts.Manager, *pro
 	if failure != nil {
 		return hosts.Manager{}, failure
 	}
-	return hosts.Manager{Data: filepath.Dir(profiles), Isolated: d.IsolatedRoot != "", Terminal: interactive(streams), Preview: func(mappings []hosts.Mapping) {
-		if interactive(streams) && ctx.Value(responseFormatKey{}) != presentation.FormatJSON {
+	response, fromCLI := ctx.Value(responseContextKey{}).(responseContext)
+	manager := hosts.Manager{Data: filepath.Dir(profiles), Isolated: d.IsolatedRoot != "", Terminal: interactive(streams), Preview: func(mappings []hosts.Mapping) {
+		if interactive(streams) && response.format != presentation.FormatJSON {
 			defer progress.Suspend(ctx)()
 			fmt.Fprintln(streams.Err, "Preparing devtools-owned hosts mappings:")
 			for _, m := range mappings {
 				fmt.Fprintf(streams.Err, "  %s %s\n", m.Address, m.Host)
 			}
 		}
-	}}, nil
+	}}
+	if fromCLI {
+		manager = manager.WithOrigin(response.requestID)
+	}
+	return manager, nil
 }
 func (a *App) registerProxyRoutes() {
 	a.registerHosts()

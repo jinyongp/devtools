@@ -20,8 +20,12 @@ func routeOutcome(ref network.RouteRef, kind, state string, changed bool) map[st
 
 func activationRollbackFailure(original receiptError, recovery *protocol.Error) *protocol.Error {
 	recovery = protocol.Public(recovery, "proxy hosts status")
+	effects := "partial"
+	if original.Details["effects"] == "unknown" || recovery.Details["effects"] == "unknown" {
+		effects = "unknown"
+	}
 	return protocol.NewError("recovery_required", "Route preparation failed and hosts rollback could not be confirmed.", 3, map[string]any{
-		"reason": "rollback_incomplete", "effects": recovery.Details["effects"], "retry": "inspect_first",
+		"reason": "rollback_incomplete", "effects": effects, "retry": "inspect_first",
 		"facts": recovery.Details["facts"],
 		"causes": []any{
 			map[string]any{"id": "preparation", "code": original.Code, "message": original.Message, "details": original.Details},
@@ -45,37 +49,79 @@ func routeDNSFailure(issue string) *protocol.Error {
 	})
 }
 
-func (m Manager) prepareRouteListener(ctx context.Context, name string, attempt *string, save func() *protocol.Error) (bool, *protocol.Error) {
+type listenerPreparation struct {
+	Changed    bool
+	Generation string
+}
+
+func (m Manager) prepareRouteListener(ctx context.Context, name string, attempt *string, save func() *protocol.Error) (listenerPreparation, *protocol.Error) {
 	status, e := m.NetworkStatus(ctx, name)
 	if e != nil {
-		return false, e
+		return listenerPreparation{}, e
 	}
 	completed := (netops.Store{Data: m.Data}).Completed(*attempt)
 	if status["running"] != true {
 		daemon, e := m.Status(ctx)
 		if e != nil {
-			return false, e
+			return listenerPreparation{}, e
 		}
 		if daemon.State == "unknown" || daemon.State == "starting" {
-			return false, proxyFailure("proxy_pending")
+			return listenerPreparation{}, proxyFailure("proxy_pending")
 		}
 		if completed {
 			*attempt = tasks.ID()
 			if e := save(); e != nil {
-				return false, e
+				return listenerPreparation{}, e
 			}
 			completed = false
 		}
 	} else if !completed {
-		return false, m.verifyListener(ctx, name, status)
+		return listenerPreparation{}, m.verifyListener(ctx, name, status)
 	}
 	result, e := m.NetworkApply(ctx, "start", name, false, *attempt)
 	if e != nil {
-		return false, e
+		return listenerPreparation{}, e
 	}
 	prepared := result.(map[string]any)
 	item, _ := prepared["item"].(map[string]any)
-	return prepared["changed"] == true, m.verifyListener(ctx, name, item)
+	generation, _ := item["generation"].(string)
+	return listenerPreparation{Changed: prepared["changed"] == true, Generation: generation}, m.verifyListener(ctx, name, item)
+}
+
+func (m Manager) stopUnusedPreparationListener(ctx context.Context, listener network.Listener, generation string, selected map[string]bool) *protocol.Error {
+	st, e := m.portStore().Read()
+	if e != nil {
+		return e
+	}
+	if current := st.Listener(listener.Name); current == nil || *current != listener || st.ListenerPinned(listener.ID) {
+		return nil
+	}
+	items, e := m.resolver().List(ctx, "")
+	if e != nil {
+		return e
+	}
+	for _, item := range items {
+		ref := item.Ref()
+		if item.Kind == "instance" && item.Status != StatusReady {
+			return nil
+		}
+		if item.Listener != listener.Name || !ref.Valid() {
+			continue
+		}
+		active := st.Activation(ref)
+		if active != nil && active.Mode == "active" || !selected[ref.Key()] && item.Status != "inactive" && item.Status != "disabled" {
+			return nil
+		}
+	}
+	h, t, e := st.ListenerPorts(listener.Name)
+	if e != nil {
+		return e
+	}
+	_, e = m.networkRPC(ctx, networkControlRequest{Action: "stop", Target: listenerTarget{Definition: listener, HTTPPort: h, HTTPSPort: t, AttemptID: generation}})
+	if e != nil && (e.Code == "request_conflict" || e.Code == "pinned") {
+		return nil
+	}
+	return e
 }
 
 func (m Manager) verifyListener(ctx context.Context, name string, status map[string]any) *protocol.Error {

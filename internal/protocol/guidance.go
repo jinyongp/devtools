@@ -291,8 +291,11 @@ func PreserveRecovery(to, from *Error) {
 }
 
 func WithOutcomes(e *Error, effects string, outcomes ...map[string]any) *Error {
-	if len(outcomes) == 0 {
+	if e == nil || len(outcomes) == 0 {
 		return e
+	}
+	if effects == "none" && (e.Details["effects"] == "partial" || e.Details["effects"] == "committed") {
+		effects = e.Details["effects"].(string)
 	}
 	e = WithEffects(e, effects)
 	facts, _ := e.Details["facts"].(map[string]any)

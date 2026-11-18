@@ -192,14 +192,15 @@ func TestHostsConcurrentSystemWriters(t *testing.T) {
 
 func TestHostsRecovery(t *testing.T) {
 	for _, tc := range []struct {
-		name, fileState, action, write string
-		applied, drift, conflict       bool
+		name, fileState, action, write   string
+		applied, drift, conflict, suffix bool
 	}{
 		{name: "before", fileState: "before", action: "apply_saved", write: "performed"},
 		{name: "after", fileState: "after", action: "finalize", write: "not_performed", applied: true},
 		{name: "rebase", fileState: "diverged", action: "rebase", write: "performed", drift: true},
 		{name: "finalize drift", fileState: "diverged", action: "finalize", write: "not_performed", applied: true, drift: true},
 		{name: "conflict", fileState: "diverged", action: "blocked", conflict: true},
+		{name: "noncanonical block", fileState: "diverged", action: "blocked", applied: true, drift: true, suffix: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m, calls := testManager(t)
@@ -230,7 +231,11 @@ func TestHostsRecovery(t *testing.T) {
 				if e != nil {
 					t.Fatal(e)
 				}
-				if err := os.WriteFile(m.System.Path, append([]byte(edited), body...), 0640); err != nil {
+				current := append([]byte(edited), body...)
+				if tc.suffix {
+					current = append(body, edited...)
+				}
+				if err := os.WriteFile(m.System.Path, current, 0640); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -318,6 +323,39 @@ func TestHostsRecoveryRetainsInterruptedRebaseApproval(t *testing.T) {
 	result, e := m.Recover(ctx, id, first.Digest)
 	if e != nil || result.(map[string]any)["item"].(map[string]any)["os_write"] != "unknown" || *calls != 1 {
 		t.Fatal(result, e, *calls)
+	}
+}
+
+func TestHostsRecoveryPublicOrigin(t *testing.T) {
+	for _, visible := range []bool{true, false} {
+		t.Run(map[bool]string{true: "public parent", false: "passthrough"}[visible], func(t *testing.T) {
+			m, _ := testManager(t)
+			parent := ""
+			if visible {
+				parent = protocol.NewRequestID()
+			}
+			child := protocol.NewRequestID()
+			ref := network.RouteRef{Scope: "global", RouteID: protocol.NewRequestID()}
+			listener := protocol.NewRequestID()
+			m = m.WithOrigin(parent).ForRequest(child, "batch-forward", ref, "")
+			m.Run = func(context.Context, string, any, bool) *protocol.Error { return failure("permission_required") }
+			ctx := context.Background()
+			if e := m.Sync(ctx, ref.Key()+"/"+listener, []Mapping{{"origin.test", "127.0.0.1"}}, ""); e == nil {
+				t.Fatal("expected pending")
+			}
+			status := m.RecoveryStatus()
+			if status.OriginRequestID != parent || status.ListenerID != listener || status.RouteRef == nil || *status.RouteRef != ref {
+				t.Fatal(status)
+			}
+			if _, e := m.Recover(ctx, child, status.Digest); e == nil || e.Code != "invalid_argument" {
+				t.Fatal("internal request ID accepted as explicit recovery", e)
+			}
+			if visible {
+				if _, e := m.Recover(ctx, parent, status.Digest); e == nil || e.Code != "invalid_argument" {
+					t.Fatal("public request ID accepted as explicit recovery", e)
+				}
+			}
+		})
 	}
 }
 

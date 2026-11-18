@@ -44,10 +44,12 @@ type Manager struct {
 	Preview  func([]Mapping)
 	intent   intent
 	guard    *Publication
+	origin   *string
 }
 
 type intent struct {
 	RequestID string           `json:"request_id"`
+	OriginID  *string          `json:"origin_request_id,omitempty"`
 	Operation string           `json:"operation"`
 	Route     network.RouteRef `json:"route"`
 	Listener  string           `json:"listener_id,omitempty"`
@@ -84,8 +86,23 @@ func (m Manager) IfPublished(publication *Publication) Manager {
 
 // ForRequest scopes subsequent mutations to one frozen operation and phase.
 func (m Manager) ForRequest(id, operation string, route network.RouteRef, listener string) Manager {
-	m.intent = intent{strings.ToLower(id), operation, route, listener}
+	m.intent = intent{RequestID: strings.ToLower(id), OriginID: m.origin, Operation: operation, Route: route, Listener: listener}
 	return m
+}
+
+// WithOrigin binds child phases to the initiating public request. An empty
+// origin records that the invocation did not expose an operation UUID.
+func (m Manager) WithOrigin(id string) Manager {
+	id = strings.ToLower(id)
+	m.origin = &id
+	return m
+}
+
+func (i intent) publicOrigin() string {
+	if i.OriginID != nil {
+		return *i.OriginID
+	}
+	return i.RequestID
 }
 
 func stepID(input any) string {
@@ -317,6 +334,13 @@ func (m Manager) Change(ctx context.Context, owner string, desired []Mapping, ex
 		return nil, isolatedWriteFailure()
 	}
 	step := stepInput{Intent: m.intent, Owner: owner, Desired: desired, Expected: expected, Guard: m.guard}
+	if step.Intent.Listener == "" {
+		if i := strings.LastIndexByte(owner, '/'); i >= 0 && protocol.ValidUUID(owner[i+1:]) {
+			if route := ownerRoute(owner[:i]); route.Valid() && (!step.Intent.Route.Valid() || route == step.Intent.Route) {
+				step.Intent.Route, step.Intent.Listener = route, owner[i+1:]
+			}
+		}
+	}
 	if m.intent.RequestID == "" {
 		step.ID = protocol.NewRequestID()
 	} else {
@@ -332,6 +356,17 @@ func (m Manager) Change(ctx context.Context, owner string, desired []Mapping, ex
 		return nil, e
 	}
 	return result.(map[string]any), nil
+}
+
+func ownerRoute(key string) network.RouteRef {
+	parts := strings.Split(key, "/")
+	if len(parts) == 2 && parts[0] == "global" {
+		return network.RouteRef{Scope: "global", RouteID: parts[1]}
+	}
+	if len(parts) == 4 && parts[0] == "project" {
+		return network.RouteRef{Scope: "project", Profile: parts[1], InstanceID: parts[2], Proxy: parts[3]}
+	}
+	return network.RouteRef{}
 }
 
 func (m Manager) lock(ctx context.Context) (string, func(), *protocol.Error) {
@@ -508,7 +543,7 @@ func isolatedWriteFailure() *protocol.Error {
 func recoveryFailure(reason string, p *pending) *protocol.Error {
 	facts := map[string]any{}
 	if p != nil && p.Step != nil {
-		facts["origin_request_id"] = p.Step.Intent.RequestID
+		facts["origin_request_id"] = p.Step.Intent.publicOrigin()
 		facts["step_id"] = p.Step.ID
 		facts["listener_id"] = p.Step.Intent.Listener
 		if p.Step.Intent.Route.Valid() {

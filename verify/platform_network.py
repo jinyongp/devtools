@@ -246,7 +246,8 @@ exec "$DEVTOOLS_FIXTURE_REAL_SUDO" "$@"
                 assert failure["details"]["facts"]["outcomes"][0]["state"]=="disabled",failure
                 comment=("# devtools native recovery fixture "+uuid.uuid4().hex+"\n").encode()
                 if state=="diverged":
-                    subprocess.run([sudo_path,"-n","tee","-a","/etc/hosts"],input=comment,stdout=subprocess.DEVNULL,check=True,timeout=10)
+                    insert_comment="from pathlib import Path; import sys; p=Path('/etc/hosts'); p.write_bytes(sys.stdin.buffer.read()+p.read_bytes())"
+                    subprocess.run([sudo_path,"-n",sys.executable,"-c",insert_comment],input=comment,check=True,timeout=10)
                 try:
                     status=api("proxy","hosts","status")
                     assert status["item"]["state"]==state and status["item"]["origin_request_id"]==stop_id,status
@@ -312,10 +313,13 @@ exec "$DEVTOOLS_FIXTURE_REAL_SUDO" "$@"
             report.update(hosts_automatic=True,os_trust_confirmed=True,verified_https_443=True,http_80_redirect=True,system_root_https=True,noninteractive=True,noninteractive_no_child=True)
         finally:
             try:
-                if peer is not None:
-                    mutate("project","down",directory=peer)
                 if global_backend is not None:
                     global_backend.terminate();global_backend.wait(timeout=10)
+                status=api("proxy","hosts","status")
+                if status["next_actions"]:
+                    recover(status)
+                if peer is not None:
+                    mutate("project","down",directory=peer)
                 mutate("project","down")
                 plan=api("proxy","teardown","--all","--remove-ca")["item"]
                 mutate("proxy","teardown","--all","--remove-ca","--apply",plan["digest"])

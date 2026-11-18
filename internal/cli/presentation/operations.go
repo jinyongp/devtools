@@ -18,7 +18,7 @@ var mutationCommands = []string{
 	"import", "bundle set", "bundle rename", "bundle remove", "values execution approve", "values execution cancel",
 	"values execution deliver", "values execution report", "values execution prepare", "values runner address", "values runner register", "values runner unregister",
 	"dashboard", "dashboard stop", "port allocate", "port release", "port prune", "instance name", "instance move", "instance remove",
-	"proxy start", "proxy stop", "proxy setup", "proxy teardown", "proxy configure", "proxy restart", "proxy hosts apply", "proxy hosts remove",
+	"proxy start", "proxy stop", "proxy setup", "proxy teardown", "proxy configure", "proxy restart", "proxy hosts apply", "proxy hosts remove", "proxy hosts recover",
 	"expose start", "expose stop", "proxy add", "proxy rm", "proxy clear", "proxy up", "proxy down", "proxy ca init", "proxy ca export", "proxy trust", "proxy untrust",
 	"backup keygen", "backup configure", "backup create", "backup restore", "profile diff", "profile transfer prepare", "profile export", "profile import",
 	"process start", "process stop", "process restart", "project up", "project restart", "project down", "cleanup apply", "cleanup archives", "cleanup restore", "cleanup purge", "update",

@@ -49,7 +49,7 @@ func TestOperationIDsAreOptionalAcrossPublishedCommands(t *testing.T) {
 			}
 		}
 	}
-	if operations != 80 || selectors != 1 {
+	if operations != 81 || selectors != 1 {
 		t.Fatal("operation/selector inventory changed", operations, selectors)
 	}
 	if e := app.ResolveAction([]string{"devtools", "values", "execution", "status"}); e == nil {

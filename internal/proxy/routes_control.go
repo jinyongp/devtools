@@ -377,10 +377,13 @@ func (m Manager) RouteUp(ctx context.Context, ref network.RouteRef, p project.Co
 			}
 			return protocol.WithOutcomes(original, "none", routeOutcome(ref, "hosts", "rolled_back", true))
 		}
-		listenerChanged, e := m.prepareRouteListener(ctx, a.Listener, &candidate.StartID, func() *protocol.Error {
+		listener, e := m.prepareRouteListener(ctx, a.Listener, &candidate.StartID, func() *protocol.Error {
 			return j.Set("candidate", candidate)
 		})
 		if e != nil {
+			if listener.Changed {
+				e = protocol.WithOutcomes(e, "partial", routeOutcome(ref, "listener", "prepared", true))
+			}
 			return nil, fail(e)
 		}
 		intentChanged := false
@@ -395,13 +398,19 @@ func (m Manager) RouteUp(ctx context.Context, ref network.RouteRef, p project.Co
 			return true, current.SetActivation(a)
 		})
 		if e != nil {
+			if listener.Changed && e.Code != "io_error" && e.Code != "canceled" {
+				if stopErr := m.stopUnusedPreparationListener(ctx, candidate.Listener, listener.Generation, map[string]bool{ref.Key(): true}); stopErr != nil {
+					original := receiptError{e.Code, e.Message, e.Details, e.ExitCode}
+					return nil, activationRollbackFailure(original, stopErr)
+				}
+			}
 			return nil, fail(e)
 		}
 		cleaned, e := cleanup()
 		if e == nil {
 			e = m.VerifyRoutePrepared(ctx, ref, hm)
 		}
-		changed := hostChanged || listenerChanged || intentChanged || cleaned
+		changed := hostChanged || listener.Changed || intentChanged || cleaned
 		if e != nil {
 			if changed {
 				e = protocol.WithOutcomes(e, "partial", routeOutcome(ref, "route", "committed", true))
@@ -465,6 +474,9 @@ func (m Manager) RouteDown(ctx context.Context, ref network.RouteRef, hm hosts.M
 	}{"down", ref}, []string{"route/" + ref.Key()}, func(j *netops.Journal) (any, *protocol.Error) {
 		proof, e := m.disableRoute(ctx, ref, j, nil)
 		if e != nil {
+			if proof.After != "" {
+				e = cleanupFailure(e, ref, proof.Changed)
+			}
 			return nil, e
 		}
 		cleaned, e := m.cleanupDisabledRoute(ctx, ref, proof, hm.ForRequest(id, "down", ref, ""))

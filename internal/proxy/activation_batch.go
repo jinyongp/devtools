@@ -159,14 +159,6 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 					return e
 				}
 			}
-			items, e := m.resolver().List(ctx, "")
-			if e != nil {
-				return e
-			}
-			st, e := m.portStore().Read()
-			if e != nil {
-				return e
-			}
 			selected := map[string]bool{}
 			for _, route := range batch.Routes {
 				selected[route.Activation.Route.Key()] = true
@@ -176,21 +168,7 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 				if listener.PreviouslyRunning || listener.Started == nil {
 					continue
 				}
-				used := false
-				for _, item := range items {
-					ref := item.Ref()
-					active := st.Activation(ref)
-					if item.Listener == listener.Target.Definition.Name && ref.Valid() &&
-						(active != nil && active.Mode == "active" || !selected[ref.Key()] && item.Status != "inactive" && item.Status != "disabled") {
-						used = true
-					}
-				}
-				if used || st.ListenerPinned(listener.Target.Definition.ID) {
-					continue
-				}
-				target := listener.Target
-				target.AttemptID = listener.Started.Generation
-				if _, e := m.networkRPC(ctx, networkControlRequest{Action: "stop", Target: target}); e != nil && e.Code != "request_conflict" && e.Code != "pinned" {
+				if e := m.stopUnusedPreparationListener(ctx, listener.Target.Definition, listener.Started.Generation, selected); e != nil {
 					return e
 				}
 				listener.Started = nil
@@ -311,13 +289,8 @@ func (m Manager) ActivateProjectBatch(ctx context.Context, p project.Context, ac
 			if e != nil {
 				return fail(e)
 			}
-			if started {
-				current, e := m.NetworkStatus(ctx, name)
-				if e != nil {
-					return fail(e)
-				}
-				generation, _ := current["generation"].(string)
-				listener.Started = &ListenerStatus{Generation: generation, Running: current["running"] == true}
+			if started.Changed {
+				listener.Started = &ListenerStatus{Generation: started.Generation, Running: true}
 				changed = true
 			}
 			if e := j.Set("batch", batch); e != nil {

@@ -98,7 +98,7 @@ func (m Manager) recovery(st state, body []byte, unavailable bool) recoveryPlan 
 	}
 	info := &out.Status
 	if p.Step != nil && validPending(st) {
-		info.OriginRequestID = p.Step.Intent.RequestID
+		info.OriginRequestID = p.Step.Intent.publicOrigin()
 		info.StepID = p.Step.ID
 		info.ListenerID = p.Step.Intent.Listener
 		if p.Step.Intent.Route.Valid() {
@@ -181,7 +181,7 @@ func (m Manager) Recover(ctx context.Context, id, token string) (any, *protocol.
 	store := netops.Store{Data: m.Data}
 	if !store.Completed(id) {
 		if st, e := m.read(); e == nil && st.Pending != nil && st.Pending.Step != nil {
-			if step := st.Pending.Step; id == step.ID || id == step.Intent.RequestID {
+			if st.Pending.Step.ownsRequest(id) {
 				return nil, netops.Failure("invalid_argument", "Use a recovery UUID distinct from the original request and hosts step.")
 			}
 		}
@@ -203,7 +203,7 @@ func (m Manager) Recover(ctx context.Context, id, token string) (any, *protocol.
 			}
 			plan.Step = st.Pending.Step
 		}
-		if plan.Step != nil && (id == plan.Step.ID || id == plan.Step.Intent.RequestID) {
+		if plan.Step != nil && plan.Step.ownsRequest(id) {
 			return nil, netops.Failure("invalid_argument", "Use a recovery UUID distinct from the original request and hosts step.")
 		}
 		effect := "unknown"
@@ -305,6 +305,10 @@ func sameStep(a, b *stepInput) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
-	return a.ID == b.ID && a.Intent == b.Intent && a.Owner == b.Owner && a.Expected == b.Expected &&
+	return a.ID == b.ID && reflect.DeepEqual(a.Intent, b.Intent) && a.Owner == b.Owner && a.Expected == b.Expected &&
 		slices.Equal(a.Desired, b.Desired) && reflect.DeepEqual(a.Guard, b.Guard)
+}
+
+func (s stepInput) ownsRequest(id string) bool {
+	return id == s.ID || id == s.Intent.RequestID || id == s.Intent.publicOrigin()
 }

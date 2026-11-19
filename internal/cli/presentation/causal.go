@@ -92,6 +92,7 @@ func causalErrorView(e map[string]any) (cliui.Document, bool) {
 			blocks = append(blocks, storageReportBlocks(report)...)
 		case details["operation"] == "update" && report["storage"] != nil:
 			storage, _ := report["storage"].(map[string]any)
+			blocks = append(blocks, selectedFields(report, "version"))
 			blocks = append(blocks, environmentUpgradeBlocks(storage)...)
 		case report["changes"] != nil:
 			if path := text(report["config_path"]); path != "" {

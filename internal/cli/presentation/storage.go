@@ -18,7 +18,12 @@ func storageReportBlocks(data map[string]any) []cliui.Block {
 	} else if data["changed"] == true || data["effects"] == "committed" || data["effects"] == "unknown" {
 		state = "Storage upgrade is incomplete."
 	}
-	blocks := []cliui.Block{outcomeHeading(state), selectedFields(data, "directory", "effects")}
+	blocks := []cliui.Block{outcomeHeading(state), selectedFields(data, "directory")}
+	if data["ready"] == true && data["effects"] == "none" {
+		blocks = append(blocks, cliui.Paragraph(cliui.Words("No changes.")))
+	} else {
+		blocks = append(blocks, selectedFields(data, "effects"))
+	}
 	items, _ := data["items"].([]any)
 	if data["ready"] != true {
 		priority := func(item any) int {
@@ -42,7 +47,7 @@ func storageReportBlocks(data map[string]any) []cliui.Block {
 			blocks = append(blocks, cliui.Paragraph(cliui.Literal("Inspect the full storage report with devtools doctor --storage.")))
 			continue
 		}
-		if data["ready"] != true && row["state"] == "current" && text(row["reason"]) == "" && row["diagnostic"] == nil {
+		if row["state"] == "current" && text(row["reason"]) == "" && row["diagnostic"] == nil {
 			current++
 			continue
 		}
@@ -98,7 +103,13 @@ func environmentUpgradeBlocks(storage map[string]any) []cliui.Block {
 		if target, ok := diagnostic["target"].(map[string]any); ok {
 			blocks = append(blocks, selectedFields(target, "profile", "name", "id"))
 		}
-		if code := text(diagnostic["code"]); code != "" {
+		switch code := text(diagnostic["code"]); code {
+		case "storage_upgrade_result_invalid":
+			blocks = append(blocks, cliui.Paragraph(cliui.Words("The updater could not read the installed executable's upgrade result.")))
+		case "storage_upgrade_result_unavailable":
+			blocks = append(blocks, cliui.Paragraph(cliui.Words("The installed executable did not return an upgrade result the updater could use.")))
+		case "":
+		default:
 			blocks = append(blocks, cliui.Fields(cliui.Field{Label: cliui.Literal("Upgrade issue"), Value: cliui.Literal(strings.ReplaceAll(code, "_", " "))}))
 		}
 		blocks = append(blocks, observationDiagnosticBlocks(diagnostic)...)

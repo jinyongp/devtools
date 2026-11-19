@@ -146,6 +146,21 @@ try {
         $actual | ConvertTo-Json | Set-Content -Encoding utf8 windows-install-emulated-runtime.json
         $shells += $emulatedShell
     }
+    if (-not $PackageCommit) {
+        $legacyBin = Join-Path $root 'v0.43.0 self-update'
+        $legacy = Invoke-Json $shells[0] @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Json', '-NoPath', '-Version', '0.43.0', '-BinDir', $legacyBin)
+        Require ($legacy.ok -and $legacy.data.alias.status -ceq 'created') 'Cannot prepare the released v0.43.0 alias updater.'
+        $legacyAlias = Join-Path $legacyBin 'dvt.exe'
+        $beforeUpgrade = Invoke-Json $legacyAlias @('--format', 'json', 'version')
+        Require ($beforeUpgrade.data.version -ceq '0.43.0' -and $beforeUpgrade.data.commit -ceq '79ac7153f24f1993bbedfd9d70b3d9789fc4fb11') 'Legacy updater identity mismatch.'
+        $legacySelfUpdate = Invoke-Json $legacyAlias @('--format', 'json', 'update', '--version', '0.0.0-test.2', '--source', $releases)
+        Require ($legacySelfUpdate.ok -and $legacySelfUpdate.data.binary_changed -and $legacySelfUpdate.data.storage.ready) 'Released v0.43.0 failed to acknowledge the candidate update.'
+        foreach ($name in @('devtools.exe', 'dvt.exe')) {
+            $afterUpgrade = Invoke-Json (Join-Path $legacyBin $name) @('--format', 'json', 'version')
+            Require ($afterUpgrade.data.version -ceq '0.0.0-test.2' -and $afterUpgrade.data.commit -ceq $Commit) 'Legacy self-update did not publish the candidate executable.'
+        }
+        Remove-Item -LiteralPath $legacyBin -Recurse -Force
+    }
     if ($StartupProbes -gt 0) {
         $interopProbe = @'
 Add-Type -TypeDefinition @"

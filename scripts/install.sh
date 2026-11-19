@@ -171,7 +171,7 @@ fi
 # may roll back executable ownership/setup. A repeated same-image update resumes it.
 installer_stage=storage_upgrade
 storage='{"status":"failed","ready":false,"diagnostic":{"code":"storage_upgrade_result_unavailable","details":{}}}'
-if "$destination" __install-storage > "$scratch/storage.json" 2> "$scratch/storage.error" && [ ! -s "$scratch/storage.error" ] && grep -F '"status":' "$scratch/storage.json" >/dev/null && grep -F '"ready":' "$scratch/storage.json" >/dev/null; then
+if DEVTOOLS_INSTALL_STORAGE_REPORT=environment "$destination" __install-storage > "$scratch/storage.json" 2> "$scratch/storage.error" && [ ! -s "$scratch/storage.error" ] && grep -F '"status":' "$scratch/storage.json" >/dev/null && grep -F '"ready":' "$scratch/storage.json" >/dev/null; then
   storage=$(cat "$scratch/storage.json")
 fi
 changed=$binary_changed

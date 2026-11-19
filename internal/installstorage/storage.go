@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
 	"os/exec"
 
 	"github.com/jinyongp/devtools/internal/progress"
@@ -23,6 +24,26 @@ type Result struct {
 	Dashboard      any                    `json:"dashboard,omitempty"`
 	Processes      []map[string]any       `json:"processes,omitempty"`
 	RuntimeChanged bool                   `json:"runtime_changed,omitempty"`
+}
+
+// Existing updaters strictly decode the original four fields. New callers
+// request the environment report through the child environment so the same
+// invocation still works with candidates that predate the richer report.
+const reportEnvironmentKey = "DEVTOOLS_INSTALL_STORAGE_REPORT"
+const environmentReport = "environment"
+
+func WriteResult(output io.Writer, result Result) error {
+	result = result.Compact()
+	encoder := json.NewEncoder(output)
+	if os.Getenv(reportEnvironmentKey) == environmentReport {
+		return encoder.Encode(result)
+	}
+	return encoder.Encode(struct {
+		Status     string                 `json:"status"`
+		Ready      bool                   `json:"ready"`
+		Report     *storageupgrade.Report `json:"report,omitempty"`
+		Diagnostic map[string]any         `json:"diagnostic,omitempty"`
+	}{result.Status, result.Ready, result.Report, result.Diagnostic})
 }
 
 // Compact leaves room for the enclosing installer result and diagnostic in
@@ -77,6 +98,7 @@ func Failed(code string) Result {
 func Run(ctx context.Context, executable string) Result {
 	defer progress.Begin(ctx, "Preparing storage with the installed executable")()
 	command := exec.CommandContext(ctx, executable, "__install-storage")
+	command.Env = append(command.Environ(), reportEnvironmentKey+"="+environmentReport)
 	var output, diagnostic boundedOutput
 	command.Stdout, command.Stderr = &output, &diagnostic
 	if command.Run() != nil || output.truncated || diagnostic.Len() != 0 {

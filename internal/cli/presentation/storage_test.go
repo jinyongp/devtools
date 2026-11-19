@@ -20,7 +20,11 @@ func TestStorageReportDistinguishesUpgradeFromBlockedAndPartialEffects(t *testin
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			out := renderFixed(t, "doctor", map[string]any{"scope": "storage", "state": test.state, "ready": test.ready, "changed": test.changed, "effects": test.effects, "directory": "/data", "items": []any{}})
-			if !strings.HasPrefix(out, test.heading) || strings.Contains(out, "--fix") != test.upgrade || !strings.Contains(out, test.effects) {
+			effects := test.effects
+			if test.ready && test.effects == "none" {
+				effects = "No changes."
+			}
+			if !strings.HasPrefix(out, test.heading) || strings.Contains(out, "--fix") != test.upgrade || !strings.Contains(out, effects) {
 				t.Fatal(out)
 			}
 		})
@@ -45,9 +49,9 @@ func TestStorageFailureShowsBlockedTargetsBeforeSuccessfulInventory(t *testing.T
 	if blocked < 0 || upgrade < blocked || warning < blocked {
 		t.Fatal("the blocking target must be visible before other inventory", out)
 	}
-	current := renderFixed(t, "doctor", map[string]any{"scope": "storage", "state": "current", "ready": true, "effects": "none", "directory": "/data", "items": items[:1]})
-	if !strings.Contains(current, "current-000") {
-		t.Fatal("a successful storage inventory lost its requested detail", current)
+	current := renderFixed(t, "doctor", map[string]any{"scope": "storage", "state": "current", "ready": true, "effects": "none", "directory": "/data", "items": items[:201]})
+	if strings.Contains(current, "current-") || !strings.Contains(current, "200 storage items are current.") || !strings.Contains(current, "metadata warning") || !strings.Contains(current, "No changes.") {
+		t.Fatal("a successful storage inventory should summarize verified items and retain warnings", current)
 	}
 }
 

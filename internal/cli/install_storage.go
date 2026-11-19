@@ -66,7 +66,7 @@ func RunInstallStorage(ctx context.Context, output io.Writer, version, commit st
 	} else if err == nil {
 		result = installstorage.Failed("isolated_operation_not_allowed")
 	}
-	return json.NewEncoder(output).Encode(result.Compact())
+	return installstorage.WriteResult(output, result)
 }
 
 func (a *App) upgradeInstallation(ctx context.Context, streams IO) installstorage.Result {
@@ -169,6 +169,9 @@ func finishExecutableUpdate(result any, storage installstorage.Result, binaryCha
 		if encoded, err := json.Marshal(next); err == nil {
 			_ = json.Unmarshal(encoded, &actions)
 		}
+	}
+	if len(actions) == 0 {
+		actions = append(actions, protocol.LocalAction([]string{"devtools", "update", "--resume"}, nil, "Resume the environment upgrade with the installed executable.", "value_write").Remedy(protocol.InvocationContext{}))
 	}
 	return nil, protocol.NewError("storage_upgrade_"+storage.Status, "The executable is installed. Some environment changes still require attention.", 3, map[string]any{
 		"phase": "observe", "reason": "storage_upgrade_" + storage.Status, "effects": effects, "retry": "after_dependency_change", "report": result,

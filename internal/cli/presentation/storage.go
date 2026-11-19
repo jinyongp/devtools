@@ -44,7 +44,7 @@ func storageReportBlocks(data map[string]any) []cliui.Block {
 	for _, item := range items {
 		row, _ := item.(map[string]any)
 		if row["domain"] == "coordinator" && row["reason"] == "details_omitted" {
-			blocks = append(blocks, cliui.Paragraph(cliui.Literal("Inspect the full storage report with devtools doctor --storage.")))
+			blocks = append(blocks, cliui.Paragraph(cliui.Words("For the full report, run devtools --format json doctor --storage in the same storage context.")))
 			continue
 		}
 		if row["state"] == "current" && text(row["reason"]) == "" && row["diagnostic"] == nil {

@@ -155,6 +155,7 @@ with (progress_root / 'data/.maintenance/lock').open('r+b') as lock:
         assert ('Waiting for storage access' in error) == expected_feedback, error
         if tty and not extra:
             assert '\r\x1b[2K' in error and 'Error:' in error.rsplit('\r\x1b[2K', 1)[1], error
+            assert re.search(r'\x1b\[36m[\u2800-\u28ff]', error), error
         elif not tty or extra.get('TERM') == 'dumb':
             assert '\x1b' not in error and '\r' not in error, error
     code, output, error = call('--format', 'json', *progress_args, '--timeout', '700ms',
@@ -237,9 +238,13 @@ try:
     assert broken.read_bytes() == corrupt, 'diagnosis rewrote unreadable fixture data'
 finally:
     broken.write_bytes(original)
-code, output, error = call('--format', 'json', 'doctor', '--storage', '--check',
-                           '--isolated-root', str(progress_root))
-assert code == 0 and not error and json.loads(output)['data']['ready'], (code, output, error)
+code, output, error = call('--format', 'json', *progress_args)
+report = json.loads(output)['data']
+assert code == 0 and not error and report['ready'] and report['effects'] == 'none', (code, output, error)
+assert {item.get('profile') for item in report['items']} >= {'a-checked', 'b-broken', 'c-unchecked'}, report
+code, output, error = call('--format', 'text', *progress_args)
+assert code == 0 and 'Storage is current.' in output and '4 storage items are current.' in output and 'No changes.' in output, (code, output, error)
+assert all(profile not in output for profile in ('a-checked', 'b-broken', 'c-unchecked')), output
 
 # A foreground program owns both streams for its whole lifetime. Its exit status
 # and output remain native even when it is quiet for longer than the UI delay.

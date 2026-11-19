@@ -36,7 +36,7 @@ func (o *outputController) progressContext(ctx context.Context, mode OutputMode)
 		return ctx, func() {}
 	}
 	options := textOptions(o.environment, true)
-	feedback := cliui.NewProgress(o.streams.Err, cliui.ProgressOptions{Animate: options.SGR, Width: options.Width})
+	feedback := cliui.NewProgress(o.streams.Err, cliui.ProgressOptions{Animate: options.SGR, Color: options.Color, Width: options.Width})
 	ctx = progress.WithObserver(ctx, feedback.Observe)
 	finish := progress.Begin(ctx, "Running devtools "+o.operation)
 	return ctx, func() {

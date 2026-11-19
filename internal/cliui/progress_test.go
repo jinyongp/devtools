@@ -39,8 +39,29 @@ func TestPlainProgressThrottlesHeartbeatsWithoutTerminalControls(t *testing.T) {
 	finish()
 	p.Close()
 	output := out.String()
-	if strings.Count(output, "Waiting for another storage upgrade") != 2 || strings.ContainsAny(output, "\r\x1b") || !strings.Contains(output, "(2s)") {
+	if strings.Count(output, "Waiting for another storage upgrade") != 2 || strings.ContainsAny(output, "\r\x1b") || !strings.Contains(output, "(2s elapsed)") {
 		t.Fatalf("invalid plain progress: %q", output)
+	}
+}
+
+func TestProgressFitsNarrowTerminalAndKeepsColorOptional(t *testing.T) {
+	for _, color := range []bool{false, true} {
+		var out bytes.Buffer
+		p := NewProgress(&out, ProgressOptions{Animate: true, Color: color, Width: 14})
+		finish := progress.Begin(progress.WithObserver(context.Background(), p.Observe), "저장소 액세스 기다리는 중")
+		p.render(p.started.Add(2 * time.Second))
+		p.render(p.started.Add(3 * time.Second))
+		finish()
+		p.Close()
+		output := out.String()
+		if strings.Contains(output, "\x1b[36m") != color {
+			t.Fatalf("incorrect color policy: %q", output)
+		}
+		plain := strings.NewReplacer("\x1b[36m", "", "\x1b[0m", "").Replace(output)
+		frames := strings.Split(plain, "\r\x1b[2K")
+		if len(frames) != 4 || frames[1] == frames[2] || !strings.HasSuffix(frames[1], "…") || cellWidth(frames[1]) >= 14 || cellWidth(frames[2]) >= 14 {
+			t.Fatalf("invalid progress frames: %q", frames)
+		}
 	}
 }
 

@@ -1,7 +1,6 @@
 package cliui
 
 import (
-	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -12,8 +11,11 @@ import (
 
 type ProgressOptions struct {
 	Animate bool
+	Color   bool
 	Width   int
 }
+
+var progressFrames = [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 type progressActivity struct {
 	id      uint64
@@ -114,33 +116,56 @@ func (p *Progress) render(now time.Time) {
 		}
 	}
 	message := strings.ReplaceAll(Escape(activity.message), "\n", "\\n")
-	suffix := fmt.Sprintf(" (%s)", now.Sub(p.started).Round(time.Second))
-	prefix := "... "
+	elapsed := now.Sub(p.started).Truncate(time.Second)
+	prefix, suffix := "", ""
+	if elapsed >= time.Second {
+		suffix = " (" + elapsed.String() + " elapsed)"
+	}
 	if p.options.Animate {
-		prefix = string("|/-\\"[p.frame%4]) + " "
+		prefix = progressFrames[p.frame%len(progressFrames)] + "  "
 		p.frame++
+		if suffix != "" {
+			suffix = "  ·  " + elapsed.String()
+		}
 	}
 	width := p.options.Width
-	if width < 20 {
+	if width <= 0 {
 		width = 80
 	}
 	limit := width - cellWidth(prefix+suffix) - 1
+	if limit < 8 && suffix != "" {
+		suffix = ""
+		limit = width - cellWidth(prefix) - 1
+	}
+	if limit < 1 {
+		return
+	}
 	if cellWidth(message) > limit {
+		ellipsis := "..."
+		if p.options.Animate {
+			ellipsis = "…"
+		}
+		if cellWidth(ellipsis) > limit {
+			ellipsis = ""
+		}
 		var clipped strings.Builder
+		remaining := limit - cellWidth(ellipsis)
 		for _, r := range message {
-			if cellWidth(clipped.String()+string(r)) > limit-3 {
+			cells := cellWidth(string(r))
+			if cells > remaining {
 				break
 			}
 			clipped.WriteRune(r)
+			remaining -= cells
 		}
-		message = clipped.String() + "..."
+		message = clipped.String() + ellipsis
 	}
-	line := prefix + message + suffix
 	if p.options.Animate {
-		p.write("\r\x1b[2K" + line)
+		style := renderer{options: Options{SGR: true, Color: p.options.Color}}
+		p.write("\r\x1b[2K" + style.styled(prefix, Info, false) + message + style.styled(suffix, Muted, false))
 		p.painted = true
 	} else {
-		p.write(line + "\n")
+		p.write(message + suffix + "\n")
 	}
 	p.lastID, p.lastLine = activity.id, now
 }

@@ -155,7 +155,7 @@ with (progress_root / 'data/.maintenance/lock').open('r+b') as lock:
         assert ('Waiting for storage access' in error) == expected_feedback, error
         if tty and not extra:
             assert '\r\x1b[2K' in error and 'Error:' in error.rsplit('\r\x1b[2K', 1)[1], error
-            assert re.search(r'\x1b\[36m[\u2800-\u28ff]', error), error
+            assert re.findall(r'\r\x1b\[2K\x1b\[36m([\u2800-\u28ff])', error)[:1] == ['⠁'], error
         elif not tty or extra.get('TERM') == 'dumb':
             assert '\x1b' not in error and '\r' not in error, error
     code, output, error = call('--format', 'json', *progress_args, '--timeout', '700ms',

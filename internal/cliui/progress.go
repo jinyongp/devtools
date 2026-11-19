@@ -15,7 +15,16 @@ type ProgressOptions struct {
 	Width   int
 }
 
-var progressFrames = [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+const progressFrameInterval = 80 * time.Millisecond
+
+// Sand from cli-spinners. The source and license are in the third-party notices.
+var progressFrames = [...]string{
+	"⠁", "⠂", "⠄", "⡀", "⡈", "⡐", "⡠", "⣀",
+	"⣁", "⣂", "⣄", "⣌", "⣔", "⣤", "⣥", "⣦",
+	"⣮", "⣶", "⣷", "⣿", "⡿", "⠿", "⢟", "⠟",
+	"⡛", "⠛", "⠫", "⢋", "⠋", "⠍", "⡉", "⠉",
+	"⠑", "⠡", "⢁",
+}
 
 type progressActivity struct {
 	id      uint64
@@ -172,7 +181,7 @@ func (p *Progress) render(now time.Time) {
 
 func (p *Progress) run() {
 	defer close(p.done)
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(progressFrameInterval)
 	defer ticker.Stop()
 	for {
 		select {

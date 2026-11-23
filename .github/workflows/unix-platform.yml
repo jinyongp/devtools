@@ -59,7 +59,7 @@ jobs:
         with:
           ref: ${{ inputs.commit || github.sha }}
           fetch-depth: 0
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
       - name: Install Linux sandbox launcher
@@ -122,7 +122,7 @@ jobs:
         run: |
           mkdir -p bin
           printf '%s\n' '${{ matrix.lane }}' > bin/.devtools-ci-cache-scope
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: true
@@ -134,7 +134,7 @@ jobs:
         if: matrix.lane == 'static'
         with:
           node-version: '24'
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         if: matrix.lane == 'static'
         with:
           enable-cache: false
@@ -199,7 +199,7 @@ jobs:
         run: |
           mkdir -p bin
           printf '%s\n' handoff > bin/.devtools-ci-cache-scope
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: true
@@ -207,7 +207,7 @@ jobs:
             go.mod
             go.sum
             bin/.devtools-ci-cache-scope
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: false
       - name: Verify actual native architecture
@@ -272,7 +272,7 @@ jobs:
         with:
           ref: 7c5811f1830b08922c5c7f2ffbc89307bcb81cfa
           path: handoff-baseline
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: candidate/go.mod
           cache: false
